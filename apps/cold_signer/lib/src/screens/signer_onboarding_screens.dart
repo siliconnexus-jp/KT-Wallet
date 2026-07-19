@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 const _t = AppTheme.signer;
 const _mnemonic = ['ripple', 'canyon', 'script', 'harbor', 'velvet', 'noble', 'orbit', 'meadow', 'signal', 'pledge', 'quartz', 'ember'];
 
-Widget _signerBtn(String label, {bool contrast = false}) =>
-    KtPrimaryButton(label: label, style: contrast ? KtButtonStyle.signerContrast : KtButtonStyle.signer, onPressed: () {});
+Widget _signerBtn(String label, {bool contrast = false, VoidCallback? onPressed}) =>
+    KtPrimaryButton(label: label, style: contrast ? KtButtonStyle.signerContrast : KtButtonStyle.signer, onPressed: onPressed ?? () {});
 
 Widget _wordGrid(List<String> words) => Column(children: [
       for (var r = 0; r < (words.length / 2).ceil(); r++)
@@ -69,7 +70,7 @@ class SignerWelcomeScreen extends StatelessWidget {
     return KtScreen(
       theme: _t,
       gap: 24,
-      bottom: Column(children: [_signerBtn('创建新钱包', contrast: true), const SizedBox(height: 12), _signerBtn('导入已有钱包')]),
+      bottom: Column(children: [_signerBtn('创建新钱包', contrast: true, onPressed: () => context.push('/mnemonic-warn')), const SizedBox(height: 12), _signerBtn('导入已有钱包', onPressed: () => context.push('/mnemonic-import'))]),
       children: [
         const SizedBox(height: 8),
         Column(children: [
@@ -107,7 +108,7 @@ class SignerMnemonicWarnScreen extends StatelessWidget {
     return KtScreen(
       theme: _t,
       navBar: KtNavBar(title: '安全提示', theme: _t, onBack: () => Navigator.of(context).maybePop(), trailingText: '1 / 4'),
-      bottom: _signerBtn('显示助记词'),
+      bottom: _signerBtn('显示助记词', onPressed: () => context.push('/mnemonic-show')),
       children: [
         Column(children: [
           Container(width: 72, height: 72, decoration: BoxDecoration(color: SignerColors.danger.withValues(alpha: 0.08), shape: BoxShape.circle), child: const Icon(Icons.key, size: 34, color: SignerColors.danger)),
@@ -130,7 +131,7 @@ class SignerMnemonicShowScreen extends StatelessWidget {
         theme: _t,
         gap: 18,
         navBar: KtNavBar(title: '备份助记词', theme: _t, onBack: () => Navigator.of(context).maybePop(), trailingText: '2 / 4'),
-        bottom: _signerBtn('我已手写备份，开始验证'),
+        bottom: _signerBtn('我已手写备份，开始验证', onPressed: () => context.push('/mnemonic-verify')),
         children: [
           const Text('请按顺序手写抄录以下 12 个单词，并保存在安全的物理位置。', style: TextStyle(fontSize: 14, height: 1.6, color: SignerColors.text2)),
           Container(
@@ -157,7 +158,7 @@ class SignerMnemonicVerifyScreen extends StatelessWidget {
       theme: _t,
       gap: 24,
       navBar: KtNavBar(title: '验证备份', theme: _t, onBack: () => Navigator.of(context).maybePop(), trailingText: '3 / 4'),
-      bottom: _signerBtn('确认'),
+      bottom: _signerBtn('确认', onPressed: () => context.push('/set-password')),
       children: [
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           for (final done in [true, true, false])
@@ -207,7 +208,7 @@ class SignerMnemonicImportScreen extends StatelessWidget {
       theme: _t,
       gap: 18,
       navBar: KtNavBar(title: '导入钱包', theme: _t, onBack: () => Navigator.of(context).maybePop()),
-      bottom: _signerBtn('导入'),
+      bottom: _signerBtn('导入', onPressed: () => context.push('/set-password')),
       children: [
         const KtSegmented(theme: _t, options: ['12 个单词', '18 个单词', '24 个单词'], selected: 0),
         Column(children: [
@@ -286,7 +287,7 @@ class SignerBiometricScreen extends StatelessWidget {
         theme: _t,
         gap: 28,
         navBar: KtNavBar(title: '生物识别', theme: _t),
-        bottom: Column(children: [_signerBtn('启用 Face ID'), const SizedBox(height: 12), const Text('暂不启用，仅使用密码', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2))]),
+        bottom: Column(children: [_signerBtn('启用 Face ID', onPressed: () => context.push('/created')), const SizedBox(height: 12), const Text('暂不启用，仅使用密码', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2))]),
         children: [
           const SizedBox(height: 24),
           Center(child: Container(width: 120, height: 120, decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(60), border: Border.all(color: SignerColors.border)), child: const Icon(Icons.face, size: 60, color: SignerColors.blue))),
@@ -306,7 +307,7 @@ class SignerCreatedScreen extends StatelessWidget {
   Widget build(BuildContext context) => KtScreen(
         theme: _t,
         gap: 24,
-        bottom: Column(children: [_signerBtn('导出公开地址'), const SizedBox(height: 12), const Text('稍后再说', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2))]),
+        bottom: Column(children: [_signerBtn('导出公开地址', onPressed: () => context.push('/export')), const SizedBox(height: 12), const Text('稍后再说', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2))]),
         children: [
           const SizedBox(height: 48),
           Center(child: Container(width: 96, height: 96, decoration: BoxDecoration(color: SignerColors.ok.withValues(alpha: 0.08), shape: BoxShape.circle), child: Center(child: Container(width: 68, height: 68, decoration: const BoxDecoration(color: SignerColors.ok, shape: BoxShape.circle), child: const Icon(Icons.check, size: 34, color: Color(0xFF0A0C0F)))))),

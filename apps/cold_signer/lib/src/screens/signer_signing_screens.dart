@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 const _t = AppTheme.signer;
@@ -44,20 +45,23 @@ class SignerHomeScreen extends StatelessWidget {
             Icon(Icons.chevron_right, size: 16, color: SignerColors.ok),
           ]),
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
-          decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(18), border: Border.all(color: SignerColors.border)),
-          child: Column(children: [
-            Container(width: 64, height: 64, decoration: BoxDecoration(color: SignerColors.blue.withValues(alpha: 0.12), shape: BoxShape.circle), child: const Icon(Icons.qr_code_scanner, size: 30, color: SignerColors.blue)),
-            const SizedBox(height: 12),
-            const Text('扫描待签名交易', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: SignerColors.text)),
-            const SizedBox(height: 6),
-            const Text('扫描联网钱包生成的动态二维码', style: TextStyle(fontSize: 13, color: SignerColors.text2)),
-          ]),
+        GestureDetector(
+          onTap: () => context.push('/scan'),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+            decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(18), border: Border.all(color: SignerColors.border)),
+            child: Column(children: [
+              Container(width: 64, height: 64, decoration: BoxDecoration(color: SignerColors.blue.withValues(alpha: 0.12), shape: BoxShape.circle), child: const Icon(Icons.qr_code_scanner, size: 30, color: SignerColors.blue)),
+              const SizedBox(height: 12),
+              const Text('扫描待签名交易', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: SignerColors.text)),
+              const SizedBox(height: 6),
+              const Text('扫描联网钱包生成的动态二维码', style: TextStyle(fontSize: 13, color: SignerColors.text2)),
+            ]),
+          ),
         ),
         Row(children: [
-          for (final (icon, label) in const [(Icons.qr_code, '导出地址'), (Icons.history, '签名记录'), (Icons.shield_outlined, '安全检查'), (Icons.wallet, '钱包管理')]) ...[
-            Expanded(child: Container(margin: const EdgeInsets.symmetric(horizontal: 4), padding: const EdgeInsets.symmetric(vertical: 14), decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(12)), child: Column(children: [Icon(icon, size: 20, color: SignerColors.text), const SizedBox(height: 8), Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: SignerColors.text2))]))),
+          for (final (icon, label, route) in const [(Icons.qr_code, '导出地址', '/export'), (Icons.history, '签名记录', '/records'), (Icons.shield_outlined, '安全检查', '/security-check'), (Icons.wallet, '钱包管理', '/wallet')]) ...[
+            Expanded(child: GestureDetector(onTap: () => context.push(route), child: Container(margin: const EdgeInsets.symmetric(horizontal: 4), padding: const EdgeInsets.symmetric(vertical: 14), decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(12)), child: Column(children: [Icon(icon, size: 20, color: SignerColors.text), const SizedBox(height: 8), Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: SignerColors.text2))])))),
           ],
         ]),
       ],
@@ -139,11 +143,14 @@ class SignerScanScreen extends StatelessWidget {
           const KtStatusBar(theme: _t),
           Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: KtNavBar(title: '扫描待签名交易', theme: _t, leading: Icons.close, onBack: () => Navigator.of(context).maybePop())),
           const SizedBox(height: 24),
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 20),
-            height: 360,
-            decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(20)),
-            child: Center(child: Container(width: 240, height: 240, decoration: BoxDecoration(border: Border.all(color: SignerColors.ok, width: 2), borderRadius: BorderRadius.circular(16)), child: const Icon(Icons.qr_code_2, size: 64, color: SignerColors.border))),
+          GestureDetector(
+            onTap: () => context.push('/parse'),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              height: 360,
+              decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(20)),
+              child: Center(child: Container(width: 240, height: 240, decoration: BoxDecoration(border: Border.all(color: SignerColors.ok, width: 2), borderRadius: BorderRadius.circular(16)), child: const Icon(Icons.qr_code_2, size: 64, color: SignerColors.border))),
+            ),
           ),
           const SizedBox(height: 24),
           const Text('接收分片 5 / 8', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: SignerColors.text)),
@@ -165,9 +172,9 @@ class SignerParseScreen extends StatelessWidget {
       gap: 16,
       navBar: KtNavBar(title: '确认交易内容', theme: _t, leading: Icons.close, onBack: () => Navigator.of(context).maybePop()),
       bottom: Row(children: [
-        SizedBox(width: 120, height: 52, child: OutlinedButton(onPressed: () {}, style: OutlinedButton.styleFrom(backgroundColor: SignerColors.surface, side: const BorderSide(color: SignerColors.border), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text('拒绝', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: SignerColors.danger)))),
+        SizedBox(width: 120, height: 52, child: OutlinedButton(onPressed: () => context.pop(), style: OutlinedButton.styleFrom(backgroundColor: SignerColors.surface, side: const BorderSide(color: SignerColors.border), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text('拒绝', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: SignerColors.danger)))),
         const SizedBox(width: 12),
-        Expanded(child: SizedBox(height: 52, child: FilledButton.icon(onPressed: () {}, icon: const Icon(Icons.edit, size: 18, color: Color(0xFF0A0C0F)), label: const Text('确认签名', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF0A0C0F))), style: FilledButton.styleFrom(backgroundColor: SignerColors.ok, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))))),
+        Expanded(child: SizedBox(height: 52, child: FilledButton.icon(onPressed: () => context.push('/auth'), icon: const Icon(Icons.edit, size: 18, color: Color(0xFF0A0C0F)), label: const Text('确认签名', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF0A0C0F))), style: FilledButton.styleFrom(backgroundColor: SignerColors.ok, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))))),
       ]),
       children: [
         Container(
@@ -239,7 +246,7 @@ class SignerAuthScreen extends StatelessWidget {
         theme: _t,
         gap: 28,
         navBar: KtNavBar(title: '身份验证', theme: _t, onBack: () => Navigator.of(context).maybePop()),
-        bottom: Column(children: [KtPrimaryButton(label: '使用 Face ID 验证', style: KtButtonStyle.signer, onPressed: () {}), const SizedBox(height: 12), const Text('改用设备密码', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2))]),
+        bottom: Column(children: [KtPrimaryButton(label: '使用 Face ID 验证', style: KtButtonStyle.signer, onPressed: () => context.push('/result-qr')), const SizedBox(height: 12), const Text('改用设备密码', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2))]),
         children: [
           const SizedBox(height: 24),
           Center(child: Container(width: 112, height: 112, decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(56), border: Border.all(color: SignerColors.border)), child: const Icon(Icons.face, size: 56, color: SignerColors.blue))),
@@ -261,7 +268,7 @@ class SignerResultQrScreen extends StatelessWidget {
         theme: _t,
         gap: 16,
         navBar: KtNavBar(title: '签名完成', theme: _t),
-        bottom: Column(children: [KtPrimaryButton(label: '完成', style: KtButtonStyle.signer, onPressed: () {}), const SizedBox(height: 12), const Text('作废本次签名', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.danger))]),
+        bottom: Column(children: [KtPrimaryButton(label: '完成', style: KtButtonStyle.signer, onPressed: () => context.go('/home')), const SizedBox(height: 12), const Text('作废本次签名', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.danger))]),
         children: [
           Container(
             padding: const EdgeInsets.all(24),
