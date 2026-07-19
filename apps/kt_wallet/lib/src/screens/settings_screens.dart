@@ -69,15 +69,22 @@ class AddressBookScreen extends StatelessWidget {
 }
 
 /// W17 Token 管理.
-class TokenManageScreen extends StatelessWidget {
+class TokenManageScreen extends StatefulWidget {
   const TokenManageScreen({super.key});
+  @override
+  State<TokenManageScreen> createState() => _TokenManageScreenState();
+}
+
+class _TokenManageScreenState extends State<TokenManageScreen> {
   static const _tokens = [
-    (Color(0xFF26A17B), '₮', 'USDT', 'TRON · TRC-20', true),
-    (Color(0xFF26A17B), '₮', 'USDT', 'Ethereum · ERC-20', true),
-    (Color(0xFF2775CA), r'$', 'USDC', 'Solana · SPL', true),
-    (Color(0xFFF0B90B), 'B', 'BUSD', 'Ethereum · ERC-20', false),
-    (Color(0xFFFF007A), 'U', 'UNI', 'Ethereum · ERC-20', false),
+    (Color(0xFF26A17B), '₮', 'USDT', 'TRON · TRC-20'),
+    (Color(0xFF26A17B), '₮', 'USDT', 'Ethereum · ERC-20'),
+    (Color(0xFF2775CA), r'$', 'USDC', 'Solana · SPL'),
+    (Color(0xFFF0B90B), 'B', 'BUSD', 'Ethereum · ERC-20'),
+    (Color(0xFFFF007A), 'U', 'UNI', 'Ethereum · ERC-20'),
   ];
+  final _enabled = [true, true, true, false, false];
+
   @override
   Widget build(BuildContext context) {
     return KtScreen(
@@ -98,7 +105,7 @@ class TokenManageScreen extends StatelessWidget {
                     Text(_tokens[i].$4, style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
                   ]),
                 ),
-                _switch(_tokens[i].$5),
+                _switch(_enabled[i], onTap: () => setState(() => _enabled[i] = !_enabled[i])),
               ]),
             ],
           ]),
