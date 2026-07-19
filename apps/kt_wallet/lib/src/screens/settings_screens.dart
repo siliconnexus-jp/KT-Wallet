@@ -20,16 +20,28 @@ Widget _switch(bool on, {VoidCallback? onTap}) => GestureDetector(
     );
 
 /// W16 地址管理.
-class AddressBookScreen extends StatelessWidget {
+class AddressBookScreen extends StatefulWidget {
   const AddressBookScreen({super.key});
+  @override
+  State<AddressBookScreen> createState() => _AddressBookScreenState();
+}
+
+class _AddressBookScreenState extends State<AddressBookScreen> {
   static const _contacts = [
     ('A', 'Alice', '0x71c8B2…9F3dA24', 'Ethereum', ChainColors.ethereum),
     ('B', 'Bob 交易所', 'TWd4qCEU…nMxR38uQz', 'TRON', ChainColors.tron),
     ('冷', '冷钱包备份', '0x8f3C2a…7E19bE1', 'Polygon', ChainColors.polygon),
     ('D', 'Dana', '6yKp…Vr2W', 'Solana', ChainColors.solana),
   ];
+
+  String _query = '';
+
   @override
   Widget build(BuildContext context) {
+    final q = _query.trim().toLowerCase();
+    final results = q.isEmpty
+        ? _contacts
+        : _contacts.where((c) => c.$2.toLowerCase().contains(q) || c.$3.toLowerCase().contains(q) || c.$4.toLowerCase().contains(q)).toList();
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(title: '地址管理', onBack: () => Navigator.of(context).maybePop(), trailing: Icons.add, onTrailing: () {}),
@@ -38,31 +50,52 @@ class AddressBookScreen extends StatelessWidget {
           height: 44,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(color: WalletColors.surface, borderRadius: BorderRadius.circular(12)),
-          child: const Row(children: [Icon(Icons.search, size: 18, color: WalletColors.text3), SizedBox(width: 8), Text('搜索名称或地址', style: TextStyle(fontSize: 14, color: WalletColors.text3))]),
-        ),
-        KtCard(
-          child: Column(children: [
-            for (var i = 0; i < _contacts.length; i++) ...[
-              if (i > 0) const SizedBox(height: 16),
-              Row(children: [
-                KtAvatar(color: const Color(0xFFF2F4F7), initial: _contacts[i].$1, size: 40),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [
-                      Text(_contacts[i].$2, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WalletColors.text)),
-                      const SizedBox(width: 8),
-                      NetworkBadge(label: _contacts[i].$4, dotColor: _contacts[i].$5),
-                    ]),
-                    const SizedBox(height: 3),
-                    Text(_contacts[i].$3, style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text3)),
-                  ]),
+          child: Row(children: [
+            const Icon(Icons.search, size: 18, color: WalletColors.text3),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                onChanged: (v) => setState(() => _query = v),
+                style: const TextStyle(fontSize: 14, color: WalletColors.text),
+                decoration: const InputDecoration(
+                  isCollapsed: true,
+                  border: InputBorder.none,
+                  hintText: '搜索名称或地址',
+                  hintStyle: TextStyle(fontSize: 14, color: WalletColors.text3),
                 ),
-                const Icon(Icons.more_vert, size: 18, color: WalletColors.text3),
-              ]),
-            ],
+              ),
+            ),
           ]),
         ),
+        if (results.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 32),
+            child: Center(child: Text('没有匹配的联系人', style: TextStyle(fontSize: 14, color: WalletColors.text3))),
+          )
+        else
+          KtCard(
+            child: Column(children: [
+              for (var i = 0; i < results.length; i++) ...[
+                if (i > 0) const SizedBox(height: 16),
+                Row(children: [
+                  KtAvatar(color: const Color(0xFFF2F4F7), initial: results[i].$1, size: 40),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        Text(results[i].$2, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WalletColors.text)),
+                        const SizedBox(width: 8),
+                        NetworkBadge(label: results[i].$4, dotColor: results[i].$5),
+                      ]),
+                      const SizedBox(height: 3),
+                      Text(results[i].$3, style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text3)),
+                    ]),
+                  ),
+                  const Icon(Icons.more_vert, size: 18, color: WalletColors.text3),
+                ]),
+              ],
+            ]),
+          ),
       ],
     );
   }

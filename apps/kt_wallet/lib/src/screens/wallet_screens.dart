@@ -1,5 +1,6 @@
 import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
@@ -272,16 +273,69 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
   }
 }
 
-/// W26 助记词输入.
-class MnemonicImportScreen extends StatelessWidget {
+/// W26 助记词输入. Live: 12 editable word fields; 导入 enables once every
+/// field is filled, and paste distributes a whole phrase across the fields.
+class MnemonicImportScreen extends StatefulWidget {
   const MnemonicImportScreen({super.key});
   @override
+  State<MnemonicImportScreen> createState() => _MnemonicImportScreenState();
+}
+
+class _MnemonicImportScreenState extends State<MnemonicImportScreen> {
+  final _controllers = List.generate(12, (_) => TextEditingController());
+
+  @override
+  void dispose() {
+    for (final c in _controllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  bool get _complete => _controllers.every((c) => c.text.trim().isNotEmpty);
+
+  Future<void> _paste() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final words = (data?.text ?? '').trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    if (words.isEmpty) return;
+    setState(() {
+      for (var i = 0; i < _controllers.length; i++) {
+        _controllers[i].text = i < words.length ? words[i] : '';
+      }
+    });
+    if (mounted) await Clipboard.setData(const ClipboardData(text: ''));
+  }
+
+  void _import() {
+    final controller = WalletScope.of(context);
+    final n = controller.count + 1;
+    final id = 'w${DateTime.now().microsecondsSinceEpoch}';
+    controller.add(HotWallet(
+      id: id,
+      name: '导入钱包 $n',
+      avatarColor: AddWalletScreen._palette[controller.count % AddWalletScreen._palette.length],
+      addresses: ChainAddresses(
+        eth: '0x${id.substring(1, 9)}00000000000000000000000000000000',
+        polygon: '0x${id.substring(1, 9)}00000000000000000000000000000000',
+        tron: 'T${id.substring(1, 9)}000000000000000000000000000',
+        solana: '${id.substring(1, 9)}0000000000000000000000000000',
+      ),
+      sortOrder: controller.count,
+      backedUp: true, // an imported mnemonic is already recorded elsewhere
+    ));
+    controller.select(id);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(const SnackBar(content: Text('助记词已导入')));
+    context.go('/home');
+  }
+
+  @override
   Widget build(BuildContext context) {
-    const typed = ['gentle', 'harbor', 'planet', 'autumn', 'circle', '', '', '', '', '', '', ''];
     return KtScreen(
       gap: 18,
       navBar: KtNavBar(title: '导入助记词', onBack: () => Navigator.of(context).maybePop()),
-      bottom: KtPrimaryButton(label: '导入', onPressed: () {}),
+      bottom: KtPrimaryButton(label: '导入', onPressed: _complete ? _import : null),
       children: [
         const KtSegmented(options: ['12 个单词', '18 个单词', '24 个单词'], selected: 0),
         Column(children: [
@@ -293,17 +347,26 @@ class MnemonicImportScreen extends StatelessWidget {
                   if (c > 0) const SizedBox(width: 10),
                   Expanded(child: () {
                     final idx = r * 2 + c;
-                    final active = idx == 5;
                     return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                       decoration: BoxDecoration(
                         color: WalletColors.surface, borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: active ? WalletColors.accent : WalletColors.border, width: active ? 1.5 : 1),
+                        border: Border.all(color: WalletColors.border),
                       ),
                       child: Row(children: [
                         Text((idx + 1).toString().padLeft(2, '0'), style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text3)),
                         const SizedBox(width: 10),
-                        Text(typed[idx], style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, fontFamily: KtFonts.mono, color: WalletColors.text)),
+                        Expanded(
+                          child: TextField(
+                            controller: _controllers[idx],
+                            onChanged: (_) => setState(() {}),
+                            textInputAction: TextInputAction.next,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, fontFamily: KtFonts.mono, color: WalletColors.text),
+                            decoration: const InputDecoration(isCollapsed: true, border: InputBorder.none, contentPadding: EdgeInsets.symmetric(vertical: 8)),
+                          ),
+                        ),
                       ]),
                     );
                   }()),
@@ -311,7 +374,12 @@ class MnemonicImportScreen extends StatelessWidget {
               ]),
             ),
         ]),
-        const Center(child: Text('粘贴助记词（解析后自动清空剪贴板）', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.accent))),
+        Center(
+          child: GestureDetector(
+            onTap: _paste,
+            child: const Text('粘贴助记词（解析后自动清空剪贴板）', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.accent)),
+          ),
+        ),
       ],
     );
   }
