@@ -149,25 +149,46 @@ class SignerMnemonicShowScreen extends StatelessWidget {
 }
 
 /// C4 助记词校验.
-class SignerMnemonicVerifyScreen extends StatelessWidget {
+class SignerMnemonicVerifyScreen extends StatefulWidget {
   const SignerMnemonicVerifyScreen({super.key});
   @override
+  State<SignerMnemonicVerifyScreen> createState() => _SignerMnemonicVerifyScreenState();
+}
+
+class _SignerMnemonicVerifyScreenState extends State<SignerMnemonicVerifyScreen> {
+  static const _challengePosition = 9; // 1-based
+  static const _options = ['harbor', 'signal', 'quartz', 'meadow', 'orbit', 'pledge'];
+  String get _correct => _mnemonic[_challengePosition - 1]; // 'signal'
+
+  String? _selected;
+
+  void _confirm() {
+    if (_selected == null) return;
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    if (_selected == _correct) {
+      context.push('/set-password');
+    } else {
+      setState(() => _selected = null);
+      messenger.showSnackBar(const SnackBar(content: Text('选择有误，请对照您手写的备份重试')));
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    const options = ['harbor', 'signal', 'quartz', 'meadow', 'orbit', 'pledge'];
     return KtScreen(
       theme: _t,
       gap: 24,
       navBar: KtNavBar(title: '验证备份', theme: _t, onBack: () => Navigator.of(context).maybePop(), trailingText: '3 / 4'),
-      bottom: _signerBtn('确认', onPressed: () => context.push('/set-password')),
+      bottom: _signerBtn('确认', onPressed: _selected == null ? null : _confirm),
       children: [
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           for (final done in [true, true, false])
             Container(width: 28, height: 4, margin: const EdgeInsets.symmetric(horizontal: 4), decoration: BoxDecoration(color: done ? SignerColors.ok : SignerColors.border, borderRadius: BorderRadius.circular(2))),
         ]),
-        Column(children: const [
-          Text('第 9 个单词是？', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: SignerColors.text)),
-          SizedBox(height: 8),
-          Text('从下列单词中选择正确的一项', style: TextStyle(fontSize: 13, color: SignerColors.text2)),
+        Column(children: [
+          Text('第 $_challengePosition 个单词是？', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: SignerColors.text)),
+          const SizedBox(height: 8),
+          const Text('从下列单词中选择正确的一项', style: TextStyle(fontSize: 13, color: SignerColors.text2)),
         ]),
         Column(children: [
           for (var r = 0; r < 3; r++)
@@ -177,16 +198,20 @@ class SignerMnemonicVerifyScreen extends StatelessWidget {
                 for (var c = 0; c < 2; c++) ...[
                   if (c > 0) const SizedBox(width: 10),
                   Expanded(child: () {
-                    final word = options[r * 2 + c];
-                    final sel = word == 'signal';
-                    return Container(
-                      height: 48, alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: sel ? SignerColors.ok.withValues(alpha: 0.08) : SignerColors.surface,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: sel ? SignerColors.ok : SignerColors.border, width: sel ? 1.5 : 1),
+                    final word = _options[r * 2 + c];
+                    final sel = word == _selected;
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => setState(() => _selected = word),
+                      child: Container(
+                        height: 48, alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: sel ? SignerColors.ok.withValues(alpha: 0.08) : SignerColors.surface,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: sel ? SignerColors.ok : SignerColors.border, width: sel ? 1.5 : 1),
+                        ),
+                        child: Text(word, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, fontFamily: KtFonts.mono, color: sel ? SignerColors.ok : SignerColors.text)),
                       ),
-                      child: Text(word, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, fontFamily: KtFonts.mono, color: sel ? SignerColors.ok : SignerColors.text)),
                     );
                   }()),
                 ],

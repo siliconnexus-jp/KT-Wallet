@@ -101,48 +101,63 @@ class TransferInputScreen extends StatelessWidget {
 }
 
 /// W31 手续费选择.
-class FeeSelectScreen extends StatelessWidget {
+class FeeSelectScreen extends StatefulWidget {
   const FeeSelectScreen({super.key});
   @override
+  State<FeeSelectScreen> createState() => _FeeSelectScreenState();
+}
+
+class _FeeSelectScreenState extends State<FeeSelectScreen> {
+  static const _tiers = [
+    ('慢', '≈ 3-5 分钟', '6.8 TRX', r'$0.94'),
+    ('标准', '≈ 1 分钟', '13.7 TRX', r'$1.90'),
+    ('快', '≈ 15 秒', '27.4 TRX', r'$3.80'),
+  ];
+  int _selected = 1; // default 标准
+
+  @override
   Widget build(BuildContext context) {
-    const tiers = [
-      ('慢', '≈ 3-5 分钟', '6.8 TRX', r'$0.94', false),
-      ('标准', '≈ 1 分钟', '13.7 TRX', r'$1.90', true),
-      ('快', '≈ 15 秒', '27.4 TRX', r'$3.80', false),
-    ];
     return KtScreen(
       navBar: KtNavBar(title: '网络手续费', onBack: () => Navigator.of(context).maybePop()),
-      bottom: KtPrimaryButton(label: '确认手续费', onPressed: () {}),
+      bottom: KtPrimaryButton(label: '确认手续费', onPressed: () => context.pop(_tiers[_selected].$1)),
       children: [
         const Text('手续费越高，交易确认越快。费用支付给网络，不进入本 App。',
             style: TextStyle(fontSize: 13, height: 1.5, color: WalletColors.text2)),
         Column(children: [
-          for (final (name, eta, fee, fiat, sel) in tiers)
+          for (final (i, tier) in _tiers.indexed)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: sel ? WalletColors.accent.withValues(alpha: 0.04) : WalletColors.surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: sel ? WalletColors.accent : WalletColors.border, width: sel ? 1.5 : 1),
-                ),
-                child: Row(children: [
-                  Icon(sel ? Icons.radio_button_checked : Icons.radio_button_unchecked, size: 20, color: sel ? WalletColors.accent : const Color(0xFFD2D7E0)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
-                      const SizedBox(height: 3),
-                      Text(eta, style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _selected = i),
+                child: () {
+                  final sel = i == _selected;
+                  final (name, eta, fee, fiat) = tier;
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: sel ? WalletColors.accent.withValues(alpha: 0.04) : WalletColors.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: sel ? WalletColors.accent : WalletColors.border, width: sel ? 1.5 : 1),
+                    ),
+                    child: Row(children: [
+                      Icon(sel ? Icons.radio_button_checked : Icons.radio_button_unchecked, size: 20, color: sel ? WalletColors.accent : const Color(0xFFD2D7E0)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
+                          const SizedBox(height: 3),
+                          Text(eta, style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
+                        ]),
+                      ),
+                      Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                        Text(fee, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, fontFamily: KtFonts.mono, color: WalletColors.text)),
+                        const SizedBox(height: 3),
+                        Text(fiat, style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
+                      ]),
                     ]),
-                  ),
-                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                    Text(fee, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, fontFamily: KtFonts.mono, color: WalletColors.text)),
-                    const SizedBox(height: 3),
-                    Text(fiat, style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
-                  ]),
-                ]),
+                  );
+                }(),
               ),
             ),
         ]),

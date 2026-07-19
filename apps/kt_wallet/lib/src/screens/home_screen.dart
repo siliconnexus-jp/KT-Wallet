@@ -8,47 +8,220 @@ import '../wallets/wallet_model.dart';
 /// KT Wallet home screen (Pencil W1/W20). Reads the current wallet from
 /// [WalletScope], so switching wallets rebuilds it live; hot vs watch wallets
 /// change the action row and the backup banner (ui-m.md §8.1).
-class HomeScreen extends StatelessWidget {
+/// Stateful shell: the bottom tab bar switches between the four top-level tabs
+/// (home / assets / records / settings) via an IndexedStack.
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.assets = demoAssets});
-
   final List<AssetRow> assets;
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _tab = 0;
 
   @override
   Widget build(BuildContext context) {
-    final wallet = WalletScope.of(context).current!;
-    final isHot = wallet is HotWallet;
     return Scaffold(
       backgroundColor: WalletColors.bg,
       body: SafeArea(
         child: Column(
           children: [
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+              child: IndexedStack(
+                index: _tab,
                 children: [
-                  _Header(wallet: wallet, onTapPill: () => context.push('/switcher')),
-                  if (isHot && !wallet.backedUp) ...[
-                    const SizedBox(height: 20),
-                    const _BackupBanner(),
-                  ],
-                  const SizedBox(height: 24),
-                  const _Balance(amount: r'$862.40', change: '+\$12.06 (+1.4%) 过去24小时'),
-                  const SizedBox(height: 24),
-                  _ActionRow(isHot: isHot),
-                  const SizedBox(height: 24),
-                  const _NetworkChips(),
-                  const SizedBox(height: 24),
-                  _AssetsCard(assets: assets),
+                  _HomeTab(assets: widget.assets),
+                  const _AssetsTab(),
+                  const _RecordsTab(),
+                  const _SettingsTab(),
                 ],
               ),
             ),
-            const _TabBar(),
+            _TabBar(selected: _tab, onTap: (i) => setState(() => _tab = i)),
           ],
         ),
       ),
     );
   }
 }
+
+class _HomeTab extends StatelessWidget {
+  const _HomeTab({required this.assets});
+  final List<AssetRow> assets;
+  @override
+  Widget build(BuildContext context) {
+    final wallet = WalletScope.of(context).current!;
+    final isHot = wallet is HotWallet;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      children: [
+        _Header(wallet: wallet, onTapPill: () => context.push('/switcher')),
+        if (isHot && !wallet.backedUp) ...[
+          const SizedBox(height: 20),
+          const _BackupBanner(),
+        ],
+        const SizedBox(height: 24),
+        const _Balance(amount: r'$862.40', change: '+\$12.06 (+1.4%) 过去24小时'),
+        const SizedBox(height: 24),
+        _ActionRow(isHot: isHot),
+        const SizedBox(height: 24),
+        const _NetworkChips(),
+        const SizedBox(height: 24),
+        _AssetsCard(assets: assets),
+      ],
+    );
+  }
+}
+
+class _AssetsTab extends StatelessWidget {
+  const _AssetsTab();
+  @override
+  Widget build(BuildContext context) => ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        children: [
+          const SizedBox(height: 8),
+          const Text('资产', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
+          const SizedBox(height: 4),
+          const Text('按持仓价值排序', style: TextStyle(fontSize: 13, color: WalletColors.text3)),
+          const SizedBox(height: 20),
+          _AssetsCard(assets: demoAssets),
+        ],
+      );
+}
+
+class _RecordsTab extends StatelessWidget {
+  const _RecordsTab();
+  @override
+  Widget build(BuildContext context) => ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        children: [
+          const SizedBox(height: 8),
+          const Text('交易记录', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
+          const SizedBox(height: 20),
+          KtCard(
+            child: Column(
+              children: [
+                for (final (i, r) in _demoRecords.indexed) ...[
+                  if (i > 0) Divider(height: 1, color: WalletColors.text.withValues(alpha: 0.06)),
+                  _RecordRow(record: r, onTap: () => context.push('/tx-detail')),
+                ],
+              ],
+            ),
+          ),
+        ],
+      );
+}
+
+class _RecordRow extends StatelessWidget {
+  const _RecordRow({required this.record, this.onTap});
+  final _TxRecord record;
+  final VoidCallback? onTap;
+  @override
+  Widget build(BuildContext context) {
+    final sent = record.outgoing;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(color: (sent ? WalletColors.text3 : WalletColors.green).withValues(alpha: 0.12), shape: BoxShape.circle),
+              child: Icon(sent ? Icons.arrow_upward : Icons.arrow_downward, size: 20, color: sent ? WalletColors.text3 : WalletColors.green),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(sent ? '转出' : '收款', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
+                  const SizedBox(height: 2),
+                  Text(record.time, style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
+                ],
+              ),
+            ),
+            Text('${sent ? '-' : '+'}${record.amount}', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: sent ? WalletColors.text : WalletColors.green)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TxRecord {
+  const _TxRecord(this.outgoing, this.amount, this.time);
+  final bool outgoing;
+  final String amount, time;
+}
+
+const _demoRecords = [
+  _TxRecord(true, '120.00 USDT', '今天 14:32'),
+  _TxRecord(false, '0.05 ETH', '昨天 09:11'),
+  _TxRecord(true, '1.2 SOL', '7月17日 20:04'),
+  _TxRecord(false, '300.00 USDT', '7月15日 11:47'),
+];
+
+class _SettingsTab extends StatelessWidget {
+  const _SettingsTab();
+  @override
+  Widget build(BuildContext context) => ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        children: [
+          const SizedBox(height: 8),
+          const Text('设置', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
+          const SizedBox(height: 20),
+          KtCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                for (final (i, item) in _settingsItems.indexed) ...[
+                  if (i > 0) Divider(height: 1, indent: 56, color: WalletColors.text.withValues(alpha: 0.06)),
+                  _SettingsRow(item: item, onTap: () => context.push(item.route)),
+                ],
+              ],
+            ),
+          ),
+        ],
+      );
+}
+
+class _SettingsRow extends StatelessWidget {
+  const _SettingsRow({required this.item, this.onTap});
+  final _SettingsItem item;
+  final VoidCallback? onTap;
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          child: Row(
+            children: [
+              Icon(item.icon, size: 20, color: WalletColors.accent),
+              const SizedBox(width: 16),
+              Expanded(child: Text(item.label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: WalletColors.text))),
+              const Icon(Icons.chevron_right, size: 20, color: WalletColors.text3),
+            ],
+          ),
+        ),
+      );
+}
+
+class _SettingsItem {
+  const _SettingsItem(this.icon, this.label, this.route);
+  final IconData icon;
+  final String label, route;
+}
+
+const _settingsItems = [
+  _SettingsItem(Icons.account_balance_wallet_outlined, '钱包管理', '/wallet-manage'),
+  _SettingsItem(Icons.shield_outlined, '安全设置', '/security'),
+  _SettingsItem(Icons.contacts_outlined, '地址簿', '/address-book'),
+  _SettingsItem(Icons.hub_outlined, '网络', '/network'),
+  _SettingsItem(Icons.toll_outlined, '代币管理', '/token-manage'),
+];
 
 const demoAssets = [
   AssetRow(Color(0xFF26A17B), '₮', 'USDT', '500.00 USDT · TRON', r'$500.00', '0.0%', WalletColors.text3),
@@ -119,16 +292,20 @@ class _Avatar extends StatelessWidget {
 class _BackupBanner extends StatelessWidget {
   const _BackupBanner();
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(color: WalletColors.amber.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
-        child: Row(
-          children: [
-            const Icon(Icons.warning_amber_rounded, size: 16, color: WalletColors.amber),
-            const SizedBox(width: 10),
-            const Expanded(child: Text('尚未备份助记词，存在丢失风险', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF9A6503)))),
-            Text('立即备份', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: WalletColors.amber)),
-          ],
+  Widget build(BuildContext context) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => context.push('/create-warn'),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(color: WalletColors.amber.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
+          child: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, size: 16, color: WalletColors.amber),
+              const SizedBox(width: 10),
+              const Expanded(child: Text('尚未备份助记词，存在丢失风险', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF9A6503)))),
+              Text('立即备份', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: WalletColors.amber)),
+            ],
+          ),
         ),
       );
 }
@@ -276,7 +453,17 @@ class _AssetTile extends StatelessWidget {
 }
 
 class _TabBar extends StatelessWidget {
-  const _TabBar();
+  const _TabBar({required this.selected, required this.onTap});
+  final int selected;
+  final ValueChanged<int> onTap;
+
+  static const _tabs = [
+    ('首页', Icons.home_filled),
+    ('资产', Icons.pie_chart),
+    ('记录', Icons.history),
+    ('设置', Icons.settings),
+  ];
+
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -290,17 +477,21 @@ class _TabBar extends StatelessWidget {
           ),
           child: Row(
             children: [
-              for (final (label, icon, sel) in const [('首页', Icons.home_filled, true), ('资产', Icons.pie_chart, false), ('记录', Icons.history, false), ('设置', Icons.settings, false)])
+              for (final (i, tab) in _tabs.indexed)
                 Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(color: sel ? WalletColors.accent.withValues(alpha: 0.08) : null, borderRadius: BorderRadius.circular(22)),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(icon, size: 22, color: sel ? WalletColors.accent : WalletColors.text3),
-                        const SizedBox(height: 2),
-                        Text(label, style: TextStyle(fontSize: 10, fontWeight: sel ? FontWeight.w600 : FontWeight.w500, color: sel ? WalletColors.accent : WalletColors.text3)),
-                      ],
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => onTap(i),
+                    child: Container(
+                      decoration: BoxDecoration(color: i == selected ? WalletColors.accent.withValues(alpha: 0.08) : null, borderRadius: BorderRadius.circular(22)),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(tab.$2, size: 22, color: i == selected ? WalletColors.accent : WalletColors.text3),
+                          const SizedBox(height: 2),
+                          Text(tab.$1, style: TextStyle(fontSize: 10, fontWeight: i == selected ? FontWeight.w600 : FontWeight.w500, color: i == selected ? WalletColors.accent : WalletColors.text3)),
+                        ],
+                      ),
                     ),
                   ),
                 ),

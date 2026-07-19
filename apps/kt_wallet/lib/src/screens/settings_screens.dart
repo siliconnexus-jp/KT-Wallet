@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:ui_kit/ui_kit.dart';
 
-Widget _switch(bool on) => Container(
-      width: 44, height: 26,
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(color: on ? WalletColors.accent : const Color(0xFFE1E4EA), borderRadius: BorderRadius.circular(13)),
-      child: Align(
-        alignment: on ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(width: 22, height: 22, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
+Widget _switch(bool on, {VoidCallback? onTap}) => GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        width: 44, height: 26,
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(color: on ? WalletColors.accent : const Color(0xFFE1E4EA), borderRadius: BorderRadius.circular(13)),
+        child: AnimatedAlign(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          alignment: on ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(width: 22, height: 22, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
+        ),
       ),
     );
 
@@ -148,8 +156,16 @@ class NetworkSettingsScreen extends StatelessWidget {
 }
 
 /// W19 安全设置.
-class SecuritySettingsScreen extends StatelessWidget {
+class SecuritySettingsScreen extends StatefulWidget {
   const SecuritySettingsScreen({super.key});
+  @override
+  State<SecuritySettingsScreen> createState() => _SecuritySettingsScreenState();
+}
+
+class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
+  bool _appLock = true;
+  bool _privacy = false;
+
   @override
   Widget build(BuildContext context) {
     return KtScreen(
@@ -159,11 +175,11 @@ class SecuritySettingsScreen extends StatelessWidget {
         const Text('访问控制', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: WalletColors.text2)),
         KtCard(
           child: Column(children: [
-            _row(Icons.lock_outline, 'App 锁', '打开 App 时需要 Face ID', _switch(true)),
+            _row(Icons.lock_outline, 'App 锁', '打开 App 时需要 Face ID', _switch(_appLock, onTap: () => setState(() => _appLock = !_appLock))),
             const SizedBox(height: 16),
             _row(Icons.timer_outlined, '自动锁定', '后台超过时限后重新锁定', const Row(mainAxisSize: MainAxisSize.min, children: [Text('1 分钟', style: TextStyle(fontSize: 13, color: WalletColors.text2)), Icon(Icons.chevron_right, size: 16, color: WalletColors.text3)])),
             const SizedBox(height: 16),
-            _row(Icons.visibility_off_outlined, '隐私模式', '首页默认隐藏余额', _switch(false)),
+            _row(Icons.visibility_off_outlined, '隐私模式', '首页默认隐藏余额', _switch(_privacy, onTap: () => setState(() => _privacy = !_privacy))),
           ]),
         ),
         const Text('数据', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: WalletColors.text2)),

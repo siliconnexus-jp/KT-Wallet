@@ -100,7 +100,7 @@ class CreateWarnScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return KtScreen(
       navBar: KtNavBar(title: '创建普通钱包', onBack: () => Navigator.of(context).maybePop(), trailingText: '1 / 3'),
-      bottom: KtPrimaryButton(label: '显示助记词', onPressed: () {}),
+      bottom: KtPrimaryButton(label: '显示助记词', onPressed: () => context.push('/mnemonic-show')),
       children: [
         Column(children: [
           Container(width: 72, height: 72, decoration: BoxDecoration(color: WalletColors.amber.withValues(alpha: 0.08), shape: BoxShape.circle), child: const Icon(Icons.key, size: 34, color: WalletColors.amber)),
@@ -140,7 +140,7 @@ class MnemonicShowScreen extends StatelessWidget {
     return KtScreen(
       gap: 18,
       navBar: KtNavBar(title: '备份助记词', onBack: () => Navigator.of(context).maybePop(), trailingText: '2 / 3'),
-      bottom: KtPrimaryButton(label: '我已手写备份，开始校验', onPressed: () {}),
+      bottom: KtPrimaryButton(label: '我已手写备份，开始校验', onPressed: () => context.push('/mnemonic-verify')),
       children: [
         Container(
           padding: const EdgeInsets.all(14),
@@ -158,25 +158,51 @@ class MnemonicShowScreen extends StatelessWidget {
 }
 
 /// W25 助记词校验.
-class MnemonicVerifyScreen extends StatelessWidget {
+class MnemonicVerifyScreen extends StatefulWidget {
   const MnemonicVerifyScreen({super.key});
   @override
+  State<MnemonicVerifyScreen> createState() => _MnemonicVerifyScreenState();
+}
+
+class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
+  // Challenge the 4th word; options include the correct one plus distractors.
+  static const _challengePosition = 4; // 1-based
+  static const _options = ['fossil', 'stadium', 'breeze', 'mosaic', 'anchor', 'copper'];
+  String get _correct => _mnemonic[_challengePosition - 1]; // 'stadium'
+
+  String? _selected;
+
+  void _confirm() {
+    if (_selected == null) return;
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    if (_selected == _correct) {
+      final controller = WalletScope.of(context);
+      final current = controller.current;
+      if (current != null) controller.markBackedUp(current.id);
+      messenger.showSnackBar(const SnackBar(content: Text('备份已验证，助记词记录正确')));
+      context.go('/home');
+    } else {
+      setState(() => _selected = null);
+      messenger.showSnackBar(const SnackBar(content: Text('选择有误，请对照您手写的备份重试')));
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    const options = ['fossil', 'stadium', 'breeze', 'mosaic', 'anchor', 'copper'];
     return KtScreen(
       gap: 24,
       navBar: KtNavBar(title: '校验备份', onBack: () => Navigator.of(context).maybePop(), trailingText: '3 / 3'),
-      bottom: KtPrimaryButton(label: '确认', onPressed: () {}),
+      bottom: KtPrimaryButton(label: '确认', onPressed: _selected == null ? null : _confirm),
       children: [
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           for (final done in [true, false, false]) ...[
             Container(width: 28, height: 4, margin: const EdgeInsets.symmetric(horizontal: 4), decoration: BoxDecoration(color: done ? WalletColors.green : WalletColors.border, borderRadius: BorderRadius.circular(2))),
           ],
         ]),
-        Column(children: const [
-          Text('第 4 个单词是？', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: WalletColors.text)),
-          SizedBox(height: 8),
-          Text('从下列单词中选择正确的一项', style: TextStyle(fontSize: 13, color: WalletColors.text2)),
+        Column(children: [
+          Text('第 $_challengePosition 个单词是？', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: WalletColors.text)),
+          const SizedBox(height: 8),
+          const Text('从下列单词中选择正确的一项', style: TextStyle(fontSize: 13, color: WalletColors.text2)),
         ]),
         Column(children: [
           for (var r = 0; r < 3; r++)
@@ -186,16 +212,20 @@ class MnemonicVerifyScreen extends StatelessWidget {
                 for (var c = 0; c < 2; c++) ...[
                   if (c > 0) const SizedBox(width: 10),
                   Expanded(child: () {
-                    final word = options[r * 2 + c];
-                    final sel = word == 'stadium';
-                    return Container(
-                      height: 48, alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: sel ? WalletColors.green.withValues(alpha: 0.06) : WalletColors.surface,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: sel ? WalletColors.green : WalletColors.border, width: sel ? 1.5 : 1),
+                    final word = _options[r * 2 + c];
+                    final sel = word == _selected;
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => setState(() => _selected = word),
+                      child: Container(
+                        height: 48, alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: sel ? WalletColors.green.withValues(alpha: 0.06) : WalletColors.surface,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: sel ? WalletColors.green : WalletColors.border, width: sel ? 1.5 : 1),
+                        ),
+                        child: Text(word, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, fontFamily: KtFonts.mono, color: sel ? WalletColors.green : WalletColors.text)),
                       ),
-                      child: Text(word, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, fontFamily: KtFonts.mono, color: sel ? WalletColors.green : WalletColors.text)),
                     );
                   }()),
                 ],

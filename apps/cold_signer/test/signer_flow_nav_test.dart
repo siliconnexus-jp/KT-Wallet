@@ -26,6 +26,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('第 9 个单词是？'), findsOneWidget); // C4 verify
 
+    // Must pick the correct 9th word before 确认 is enabled.
+    await tester.tap(find.text('signal'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('确认'));
     await tester.pumpAndSettle();
     expect(find.text('设置 6 位密码'), findsOneWidget); // C14 password
