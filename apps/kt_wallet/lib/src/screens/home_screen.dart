@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
-import '../wallets/wallet_manager.dart';
+import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
 
-/// KT Wallet home screen (Pencil W1/W20). Renders from a [WalletManager];
-/// hot vs watch wallets change the action row and the backup banner
-/// (ui-m.md §8.1). Built with ui_kit tokens/components to match the design.
+/// KT Wallet home screen (Pencil W1/W20). Reads the current wallet from
+/// [WalletScope], so switching wallets rebuilds it live; hot vs watch wallets
+/// change the action row and the backup banner (ui-m.md §8.1).
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key, required this.manager, required this.assets});
+  const HomeScreen({super.key, this.assets = demoAssets});
 
-  final WalletManager manager;
   final List<AssetRow> assets;
 
   @override
   Widget build(BuildContext context) {
-    final wallet = manager.current!;
+    final wallet = WalletScope.of(context).current!;
     final isHot = wallet is HotWallet;
     return Scaffold(
       backgroundColor: WalletColors.bg,
@@ -26,7 +26,7 @@ class HomeScreen extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                 children: [
-                  _Header(wallet: wallet),
+                  _Header(wallet: wallet, onTapPill: () => context.push('/switcher')),
                   if (isHot && !wallet.backedUp) ...[
                     const SizedBox(height: 20),
                     const _BackupBanner(),
@@ -50,6 +50,12 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
+const demoAssets = [
+  AssetRow(Color(0xFF26A17B), '₮', 'USDT', '500.00 USDT · TRON', r'$500.00', '0.0%', WalletColors.text3),
+  AssetRow(Color(0xFF627EEA), 'Ξ', 'Ethereum', '0.0842 ETH', r'$279.80', '+2.4%', WalletColors.green),
+  AssetRow(Color(0xFF9945FF), '◎', 'Solana', '0.531 SOL', r'$82.60', '+5.1%', WalletColors.green),
+];
+
 class AssetRow {
   const AssetRow(this.color, this.letter, this.name, this.sub, this.value, this.change, this.changeColor);
   final Color color;
@@ -58,15 +64,18 @@ class AssetRow {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.wallet});
+  const _Header({required this.wallet, this.onTapPill});
   final Wallet wallet;
+  final VoidCallback? onTapPill;
   @override
   Widget build(BuildContext context) {
     final kind = wallet is HotWallet ? WalletKind.hot : WalletKind.watch;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Container(
+        GestureDetector(
+          onTap: onTapPill,
+          child: Container(
           padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
           decoration: BoxDecoration(
             color: WalletColors.surface,
@@ -84,6 +93,7 @@ class _Header extends StatelessWidget {
               const Icon(Icons.keyboard_arrow_down, size: 18, color: WalletColors.text2),
             ],
           ),
+        ),
         ),
         const Icon(Icons.settings_outlined, size: 22, color: WalletColors.text2),
       ],

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
+
+import '../state/wallet_scope.dart';
+import '../wallets/wallet_model.dart';
 
 const _mnemonic = ['walnut', 'breeze', 'copper', 'stadium', 'lyric', 'fossil', 'drift', 'mosaic', 'tunnel', 'prairie', 'zebra', 'anchor'];
 
@@ -361,62 +365,78 @@ class ImportConfirmScreen extends StatelessWidget {
   }
 }
 
-/// W21 钱包切换器 (bottom sheet).
+/// W21 钱包切换器 (bottom sheet). Live: reads wallets from [WalletScope] and
+/// switches the current wallet on tap, then closes — the home screen rebuilds.
 class WalletSwitcherSheet extends StatelessWidget {
   const WalletSwitcherSheet({super.key});
-  static const _wallets = [
-    (Color(0xFFF59E0B), '日', '日常钱包', WalletKind.hot, r'$862.40', true, false),
-    (Color(0xFF8B5CF6), '储', '储蓄钱包', WalletKind.hot, r'$3,210.55', false, true),
-    (Color(0xFF0C1220), '主', '主钱包', WalletKind.watch, r'$12,847.32', false, false),
-  ];
+
+  static const _demoValue = {'daily': r'$862.40', 'savings': r'$3,210.55', 'cold': r'$12,847.32'};
+
   @override
   Widget build(BuildContext context) {
+    final controller = WalletScope.of(context);
     return Scaffold(
       backgroundColor: WalletColors.text.withValues(alpha: 0.5),
-      body: Align(
-        alignment: Alignment.bottomCenter,
-        child: Container(
-          width: double.infinity,
-          decoration: const BoxDecoration(color: WalletColors.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 16),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: const [
-              Text('钱包', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: WalletColors.text)),
-              Row(children: [Icon(Icons.settings, size: 15, color: WalletColors.text2), SizedBox(width: 4), Text('管理', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2))]),
-            ]),
-            const SizedBox(height: 16),
-            for (final (color, initial, name, kind, val, current, unbacked) in _wallets)
-              Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  color: current ? WalletColors.accent.withValues(alpha: 0.04) : WalletColors.bg,
-                  borderRadius: BorderRadius.circular(14),
-                  border: current ? Border.all(color: WalletColors.accent, width: 1.5) : null,
-                ),
-                child: Row(children: [
-                  Stack(clipBehavior: Clip.none, children: [
-                    KtAvatar(color: color, initial: initial),
-                    if (unbacked) Positioned(right: -2, top: -2, child: Container(width: 12, height: 12, decoration: BoxDecoration(color: WalletColors.red, shape: BoxShape.circle, border: Border.all(color: WalletColors.surface, width: 2)))),
-                  ]),
-                  const SizedBox(width: 12),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [
-                      Text(name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
-                      const SizedBox(width: 8),
-                      WalletTypeBadge(kind: kind),
-                    ]),
-                    const SizedBox(height: 3),
-                    Text(val, style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
-                  ])),
-                  if (current) const Icon(Icons.check_circle, size: 20, color: WalletColors.accent),
+      body: GestureDetector(
+        onTap: () => context.pop(),
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: GestureDetector(
+            onTap: () {},
+            child: Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(color: WalletColors.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2))),
+                const SizedBox(height: 16),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  const Text('钱包', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: WalletColors.text)),
+                  GestureDetector(
+                    onTap: () { context.pop(); context.push('/wallet-manage'); },
+                    child: const Row(children: [Icon(Icons.settings, size: 15, color: WalletColors.text2), SizedBox(width: 4), Text('管理', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2))]),
+                  ),
                 ]),
-              ),
-            const SizedBox(height: 8),
-            KtPrimaryButton(label: '添加钱包', onPressed: () {}),
-          ]),
+                const SizedBox(height: 16),
+                for (final w in controller.wallets)
+                  () {
+                    final current = w.id == controller.current?.id;
+                    final unbacked = w is HotWallet && !w.backedUp;
+                    return GestureDetector(
+                      onTap: () { controller.select(w.id); context.pop(); },
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: current ? WalletColors.accent.withValues(alpha: 0.04) : WalletColors.bg,
+                          borderRadius: BorderRadius.circular(14),
+                          border: current ? Border.all(color: WalletColors.accent, width: 1.5) : null,
+                        ),
+                        child: Row(children: [
+                          Stack(clipBehavior: Clip.none, children: [
+                            KtAvatar(color: Color(w.avatarColor), initial: w.name.characters.first),
+                            if (unbacked) Positioned(right: -2, top: -2, child: Container(width: 12, height: 12, decoration: BoxDecoration(color: WalletColors.red, shape: BoxShape.circle, border: Border.all(color: WalletColors.surface, width: 2)))),
+                          ]),
+                          const SizedBox(width: 12),
+                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Row(children: [
+                              Text(w.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
+                              const SizedBox(width: 8),
+                              WalletTypeBadge(kind: w is HotWallet ? WalletKind.hot : WalletKind.watch),
+                            ]),
+                            const SizedBox(height: 3),
+                            Text(_demoValue[w.id] ?? '\$0.00', style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
+                          ])),
+                          if (current) const Icon(Icons.check_circle, size: 20, color: WalletColors.accent),
+                        ]),
+                      ),
+                    );
+                  }(),
+                const SizedBox(height: 8),
+                KtPrimaryButton(label: '添加钱包', onPressed: () { context.pop(); context.push('/add-wallet'); }),
+              ]),
+            ),
+          ),
         ),
       ),
     );

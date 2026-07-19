@@ -1,4 +1,3 @@
-import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -8,25 +7,6 @@ import 'screens/home_screen.dart';
 import 'screens/settings_screens.dart';
 import 'screens/transfer_screens.dart';
 import 'screens/wallet_screens.dart';
-import 'wallets/wallet_manager.dart';
-import 'wallets/wallet_model.dart';
-
-const _demoAddrs = ChainAddresses(
-  eth: '0x8f3C2a71c8B29b3d4b79E19bE1',
-  polygon: '0x8f3C2a71c8B29b3d4b79E19bE1',
-  tron: 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
-  solana: '6yKpXwMWd4qmDqVr2W',
-);
-
-WalletManager demoManager() => WalletManager(initial: [
-      HotWallet(id: 'daily', name: '日常钱包', avatarColor: 0xFFF59E0B, addresses: _demoAddrs, backedUp: false),
-    ]);
-
-const demoAssets = [
-  AssetRow(Color(0xFF26A17B), '₮', 'USDT', '500.00 USDT · TRON', r'$500.00', '0.0%', WalletColors.text3),
-  AssetRow(Color(0xFF627EEA), 'Ξ', 'Ethereum', '0.0842 ETH', r'$279.80', '+2.4%', WalletColors.green),
-  AssetRow(Color(0xFF9945FF), '◎', 'Solana', '0.531 SOL', r'$82.60', '+5.1%', WalletColors.green),
-];
 
 /// Registry of every implemented screen, powering both the router and a gallery
 /// index (so each screen can be opened and compared against its Pencil design).
@@ -40,7 +20,7 @@ final screenRegistry = <String, (String, WidgetBuilder)>{
   'W11 连接离线钱包': ('/connect-cold', (c) => const ConnectColdScreen()),
   'W12 扫描账户二维码': ('/scan-account', (c) => const ScanAccountScreen()),
   'W13 导入确认': ('/import-confirm', (c) => const ImportConfirmScreen()),
-  'W1/W20 首页': ('/home', (c) => HomeScreen(manager: demoManager(), assets: demoAssets)),
+  'W1/W20 首页': ('/home', (c) => const HomeScreen()),
   'W21 钱包切换器': ('/switcher', (c) => const WalletSwitcherSheet()),
   'W27 钱包管理': ('/wallet-manage', (c) => const WalletManageScreen()),
   'W28 钱包详情编辑': ('/wallet-detail', (c) => const WalletDetailScreen()),
