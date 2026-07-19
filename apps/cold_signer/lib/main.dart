@@ -1,50 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:ui_kit/ui_kit.dart';
+
+import 'src/signer_router.dart';
 
 void main() {
-  runApp(const ColdSignerApp());
+  runApp(ColdSignerApp());
 }
 
 class ColdSignerApp extends StatelessWidget {
-  const ColdSignerApp({super.key});
+  ColdSignerApp({super.key});
+
+  final _router = buildSignerRouter();
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'Cold Signer',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
+        fontFamily: 'Inter',
         brightness: Brightness.dark,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF34D77B),
-          brightness: Brightness.dark,
-        ),
-        scaffoldBackgroundColor: const Color(0xFF0A0C0F),
+        colorScheme: ColorScheme.fromSeed(seedColor: SignerColors.ok, brightness: Brightness.dark),
+        scaffoldBackgroundColor: SignerColors.bg,
       ),
-      home: const PlaceholderHomePage(),
-    );
-  }
-}
-
-class PlaceholderHomePage extends StatelessWidget {
-  const PlaceholderHomePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.shield, size: 64, color: Color(0xFF34D77B)),
-            SizedBox(height: 16),
-            Text(
-              'Cold Signer',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
-            ),
-            SizedBox(height: 4),
-            Text('P0 placeholder', style: TextStyle(color: Color(0xFF8E97A5))),
-          ],
-        ),
-      ),
+      routerConfig: _router,
     );
   }
 }

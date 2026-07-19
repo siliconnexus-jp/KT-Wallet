@@ -1,0 +1,329 @@
+import 'package:flutter/material.dart';
+import 'package:ui_kit/ui_kit.dart';
+
+const _t = AppTheme.signer;
+
+Widget _kv(String k, String v, {bool mono = false, Color? color}) => Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(k, style: const TextStyle(fontSize: 14, color: SignerColors.text2)),
+        const SizedBox(width: 16),
+        Expanded(child: Text(v, textAlign: TextAlign.right, style: TextStyle(fontSize: mono ? 13 : 14, fontWeight: FontWeight.w500, fontFamily: mono ? KtFonts.mono : KtFonts.ui, color: color ?? SignerColors.text))),
+      ],
+    );
+
+Widget _card(Widget child) => Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(14)), child: child);
+
+/// C5 离线首页.
+class SignerHomeScreen extends StatelessWidget {
+  const SignerHomeScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return KtScreen(
+      theme: _t,
+      children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+            Text('主钱包', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: SignerColors.text)),
+            SizedBox(height: 4),
+            Row(children: [
+              _Dot(SignerColors.ok),
+              SizedBox(width: 6),
+              Text('已持续离线 42 天', style: TextStyle(fontSize: 13, color: SignerColors.ok)),
+            ]),
+          ]),
+          const Icon(Icons.settings_outlined, size: 22, color: SignerColors.text2),
+        ]),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(color: SignerColors.ok.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(12)),
+          child: Row(children: const [
+            Icon(Icons.verified_user, size: 18, color: SignerColors.ok),
+            SizedBox(width: 10),
+            Expanded(child: Text('安全检查通过 · 飞行模式已开启', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: SignerColors.ok))),
+            Icon(Icons.chevron_right, size: 16, color: SignerColors.ok),
+          ]),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+          decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(18), border: Border.all(color: SignerColors.border)),
+          child: Column(children: [
+            Container(width: 64, height: 64, decoration: BoxDecoration(color: SignerColors.blue.withValues(alpha: 0.12), shape: BoxShape.circle), child: const Icon(Icons.qr_code_scanner, size: 30, color: SignerColors.blue)),
+            const SizedBox(height: 12),
+            const Text('扫描待签名交易', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: SignerColors.text)),
+            const SizedBox(height: 6),
+            const Text('扫描联网钱包生成的动态二维码', style: TextStyle(fontSize: 13, color: SignerColors.text2)),
+          ]),
+        ),
+        Row(children: [
+          for (final (icon, label) in const [(Icons.qr_code, '导出地址'), (Icons.history, '签名记录'), (Icons.shield_outlined, '安全检查'), (Icons.wallet, '钱包管理')]) ...[
+            Expanded(child: Container(margin: const EdgeInsets.symmetric(horizontal: 4), padding: const EdgeInsets.symmetric(vertical: 14), decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(12)), child: Column(children: [Icon(icon, size: 20, color: SignerColors.text), const SizedBox(height: 8), Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: SignerColors.text2))]))),
+          ],
+        ]),
+      ],
+    );
+  }
+}
+
+class _Dot extends StatelessWidget {
+  const _Dot(this.color, {this.size = 7});
+  final Color color;
+  final double size;
+  @override
+  Widget build(BuildContext context) => Container(width: size, height: size, decoration: BoxDecoration(color: color, shape: BoxShape.circle));
+}
+
+/// C2 离线安全检查.
+class SignerSecurityCheckScreen extends StatelessWidget {
+  const SignerSecurityCheckScreen({super.key});
+  static const _items = [
+    (Icons.airplanemode_active, '飞行模式', '已开启', 'ok'),
+    (Icons.wifi_off, 'Wi-Fi', '已关闭', 'ok'),
+    (Icons.signal_cellular_alt, '蜂窝网络', '已关闭', 'ok'),
+    (Icons.bluetooth, '蓝牙', '检测到开启', 'warn'),
+    (Icons.lock, '设备密码', '已启用', 'ok'),
+    (Icons.face, '生物识别', '已启用', 'ok'),
+    (Icons.screenshot_monitor, '屏幕录制', '未检测到', 'ok'),
+  ];
+  @override
+  Widget build(BuildContext context) {
+    return KtScreen(
+      theme: _t,
+      navBar: KtNavBar(title: '离线安全检查', theme: _t, onBack: () => Navigator.of(context).maybePop()),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: SignerColors.warn.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(14)),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+            Icon(Icons.warning_amber_rounded, size: 22, color: SignerColors.warn),
+            SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('存在风险 · 暂不能签名', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: SignerColors.warn)),
+              SizedBox(height: 4),
+              Text('检测到蓝牙处于开启状态，请关闭后重新检测。', style: TextStyle(fontSize: 13, height: 1.5, color: SignerColors.text2)),
+            ])),
+          ]),
+        ),
+        _card(Column(children: [
+          for (var i = 0; i < _items.length; i++) ...[
+            if (i > 0) const SizedBox(height: 13),
+            () {
+              final (icon, label, val, s) = _items[i];
+              final ok = s == 'ok';
+              return Row(children: [
+                Icon(icon, size: 18, color: ok ? SignerColors.text2 : SignerColors.warn),
+                const SizedBox(width: 12),
+                Expanded(child: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text))),
+                Text(val, style: TextStyle(fontSize: 13, color: ok ? SignerColors.ok : SignerColors.warn)),
+                const SizedBox(width: 8),
+                Icon(ok ? Icons.check_circle : Icons.error, size: 16, color: ok ? SignerColors.ok : SignerColors.warn),
+              ]);
+            }(),
+          ],
+        ])),
+      ],
+    );
+  }
+}
+
+/// Dark camera scaffold shared by C6.
+class SignerScanScreen extends StatelessWidget {
+  const SignerScanScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: SignerColors.bg,
+      body: SafeArea(
+        bottom: false,
+        child: Column(children: [
+          const KtStatusBar(theme: _t),
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: KtNavBar(title: '扫描待签名交易', theme: _t, leading: Icons.close, onBack: () => Navigator.of(context).maybePop())),
+          const SizedBox(height: 24),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 20),
+            height: 360,
+            decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(20)),
+            child: Center(child: Container(width: 240, height: 240, decoration: BoxDecoration(border: Border.all(color: SignerColors.ok, width: 2), borderRadius: BorderRadius.circular(16)), child: const Icon(Icons.qr_code_2, size: 64, color: SignerColors.border))),
+          ),
+          const SizedBox(height: 24),
+          const Text('接收分片 5 / 8', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: SignerColors.text)),
+          const SizedBox(height: 10),
+          const ShardProgressBar(received: 5, total: 8, color: SignerColors.ok, trackColor: SignerColors.border, width: 240),
+        ]),
+      ),
+    );
+  }
+}
+
+/// C7 交易解析确认.
+class SignerParseScreen extends StatelessWidget {
+  const SignerParseScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return KtScreen(
+      theme: _t,
+      gap: 16,
+      navBar: KtNavBar(title: '确认交易内容', theme: _t, leading: Icons.close, onBack: () => Navigator.of(context).maybePop()),
+      bottom: Row(children: [
+        SizedBox(width: 120, height: 52, child: OutlinedButton(onPressed: () {}, style: OutlinedButton.styleFrom(backgroundColor: SignerColors.surface, side: const BorderSide(color: SignerColors.border), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text('拒绝', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: SignerColors.danger)))),
+        const SizedBox(width: 12),
+        Expanded(child: SizedBox(height: 52, child: FilledButton.icon(onPressed: () {}, icon: const Icon(Icons.edit, size: 18, color: Color(0xFF0A0C0F)), label: const Text('确认签名', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF0A0C0F))), style: FilledButton.styleFrom(backgroundColor: SignerColors.ok, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))))),
+      ]),
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(12)),
+          child: Row(children: const [
+            _Dot(ChainColors.tron, size: 8),
+            SizedBox(width: 10),
+            Expanded(child: Text('TRON · Token Transfer（TRC-20）', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: SignerColors.text))),
+            Text('REQ-7F3A2C', style: TextStyle(fontSize: 11, fontFamily: KtFonts.mono, color: Color(0xFF5A616C))),
+          ]),
+        ),
+        _card(Column(children: const [
+          Text('120.00 USDT', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700, fontFamily: KtFonts.mono, color: SignerColors.text)),
+          SizedBox(height: 6),
+          Text('原始数量 120,000,000（精度 6）', style: TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: SignerColors.text2)),
+        ])),
+        _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const SignerDetailRow(label: '转出账户（From）', value: 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa'),
+          const SizedBox(height: 16),
+          const SignerDetailRow(label: '收款地址（To）', value: 'TWd4qCEUYAJgLtSpQ2dK7wY9nMxR38uQz'),
+        ])),
+      ],
+    );
+  }
+}
+
+/// C17 风险警告.
+class SignerRiskScreen extends StatelessWidget {
+  const SignerRiskScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return KtScreen(
+      theme: _t,
+      gap: 24,
+      navBar: KtNavBar(title: '风险警告', theme: _t, leading: Icons.close, onBack: () => Navigator.of(context).maybePop()),
+      bottom: Column(children: [
+        SizedBox(width: double.infinity, height: 52, child: OutlinedButton(onPressed: () {}, style: OutlinedButton.styleFrom(backgroundColor: SignerColors.surface, side: const BorderSide(color: SignerColors.border), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text('返回首页', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: SignerColors.text)))),
+        const SizedBox(height: 12),
+        const Text('查看原始交易数据', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2)),
+      ]),
+      children: [
+        const SizedBox(height: 8),
+        Center(child: Container(width: 96, height: 96, decoration: BoxDecoration(color: SignerColors.danger.withValues(alpha: 0.08), shape: BoxShape.circle), child: const Icon(Icons.dangerous, size: 48, color: SignerColors.danger))),
+        Column(children: const [
+          Text('已禁止签名', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: SignerColors.danger)),
+          SizedBox(height: 8),
+          Text('该交易包含无法安全解析的内容，Cold Signer 已拒绝签名以保护你的资产。', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, height: 1.6, color: SignerColors.text2)),
+        ]),
+        _card(Row(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+          Icon(Icons.description, size: 18, color: SignerColors.danger),
+          SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('检测到未知合约调用：approve', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: SignerColors.text)),
+            SizedBox(height: 4),
+            Text('V1 仅支持原生币和 Token 转账。approve、permit 等授权类调用一律拒绝。', style: TextStyle(fontSize: 12, height: 1.5, color: SignerColors.text2)),
+          ])),
+        ])),
+      ],
+    );
+  }
+}
+
+/// C8 身份验证.
+class SignerAuthScreen extends StatelessWidget {
+  const SignerAuthScreen({super.key});
+  @override
+  Widget build(BuildContext context) => KtScreen(
+        theme: _t,
+        gap: 28,
+        navBar: KtNavBar(title: '身份验证', theme: _t, onBack: () => Navigator.of(context).maybePop()),
+        bottom: Column(children: [KtPrimaryButton(label: '使用 Face ID 验证', style: KtButtonStyle.signer, onPressed: () {}), const SizedBox(height: 12), const Text('改用设备密码', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2))]),
+        children: [
+          const SizedBox(height: 24),
+          Center(child: Container(width: 112, height: 112, decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(56), border: Border.all(color: SignerColors.border)), child: const Icon(Icons.face, size: 56, color: SignerColors.blue))),
+          Column(children: const [
+            Text('验证以完成签名', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: SignerColors.text)),
+            SizedBox(height: 10),
+            Text('每次签名都需要通过 Face ID 或设备密码验证', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, height: 1.6, color: SignerColors.text2)),
+          ]),
+          _card(Column(children: [_kv('金额', '120.00 USDT', mono: true), const SizedBox(height: 8), _kv('请求 ID', 'REQ-7F3A2C', mono: true)])),
+        ],
+      );
+}
+
+/// C9 签名结果二维码.
+class SignerResultQrScreen extends StatelessWidget {
+  const SignerResultQrScreen({super.key});
+  @override
+  Widget build(BuildContext context) => KtScreen(
+        theme: _t,
+        gap: 16,
+        navBar: KtNavBar(title: '签名完成', theme: _t),
+        bottom: Column(children: [KtPrimaryButton(label: '完成', style: KtButtonStyle.signer, onPressed: () {}), const SizedBox(height: 12), const Text('作废本次签名', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.danger))]),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+            child: Column(children: const [
+              KtQrPlaceholder(size: 220),
+              SizedBox(height: 14),
+              Text('动态分片 2 / 6', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF626B7A))),
+              SizedBox(height: 8),
+              ShardProgressBar(received: 2, total: 6, color: WalletColors.green, trackColor: WalletColors.border),
+            ]),
+          ),
+          const Center(child: Text('请使用联网钱包「扫描签名结果」读取此二维码', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: SignerColors.text2))),
+        ],
+      );
+}
+
+/// C10 地址导出.
+class SignerAddressExportScreen extends StatelessWidget {
+  const SignerAddressExportScreen({super.key});
+  static const _addrs = [
+    (ChainColors.ethereum, 'Ethereum', '0x8f3C2a…7E19bE1', "m/44'/60'/0'/0/0"),
+    (ChainColors.polygon, 'Polygon', '0x8f3C2a…7E19bE1', "m/44'/60'/0'/0/0"),
+    (ChainColors.tron, 'TRON', 'TQm9…L3kFa', "m/44'/195'/0'/0/0"),
+    (ChainColors.solana, 'Solana', '6yKp…Vr2W', "m/44'/501'/0'"),
+  ];
+  @override
+  Widget build(BuildContext context) {
+    return KtScreen(
+      theme: _t,
+      gap: 16,
+      navBar: KtNavBar(title: '导出公开地址', theme: _t, onBack: () => Navigator.of(context).maybePop()),
+      bottom: KtPrimaryButton(label: '完成', style: KtButtonStyle.signer, onPressed: () {}),
+      children: [
+        const KtSegmented(theme: _t, options: ['全部地址', 'Ethereum', 'Polygon'], selected: 0),
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+          child: Column(children: const [
+            KtQrPlaceholder(size: 200),
+            SizedBox(height: 12),
+            Text('包含 4 条链公开地址 · 不含任何私密数据', style: TextStyle(fontSize: 12, color: Color(0xFF626B7A))),
+          ]),
+        ),
+        _card(Column(children: [
+          for (var i = 0; i < _addrs.length; i++) ...[
+            if (i > 0) const SizedBox(height: 12),
+            Row(children: [
+              _Dot(_addrs[i].$1, size: 8),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(_addrs[i].$2, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text)),
+                const SizedBox(height: 3),
+                Text(_addrs[i].$4, style: const TextStyle(fontSize: 11, fontFamily: KtFonts.mono, color: Color(0xFF5A616C))),
+              ])),
+              Text(_addrs[i].$3, style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: SignerColors.text2)),
+              const SizedBox(width: 8),
+              const Icon(Icons.qr_code, size: 16, color: SignerColors.text2),
+            ]),
+          ],
+        ])),
+      ],
+    );
+  }
+}
