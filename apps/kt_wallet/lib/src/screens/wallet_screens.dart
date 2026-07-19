@@ -1,8 +1,10 @@
+import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../state/wallet_scope.dart';
+import '../wallets/wallet_manager.dart';
 import '../wallets/wallet_model.dart';
 
 const _mnemonic = ['walnut', 'breeze', 'copper', 'stadium', 'lyric', 'fossil', 'drift', 'mosaic', 'tunnel', 'prairie', 'zebra', 'anchor'];
@@ -57,37 +59,70 @@ class SplashScreen extends StatelessWidget {
 /// W22 添加钱包.
 class AddWalletScreen extends StatelessWidget {
   const AddWalletScreen({super.key});
+
+  static const _palette = [0xFF0EA5E9, 0xFF10B981, 0xFFEF4444, 0xFFF59E0B, 0xFF8B5CF6, 0xFFEC4899];
+
+  /// Creates a fresh hot wallet in the live controller and returns home. Real
+  /// key generation happens natively; here we add the wallet record so the
+  /// multi-wallet switcher reflects it immediately.
+  void _createHotWallet(BuildContext context) {
+    final controller = WalletScope.of(context);
+    final n = controller.count + 1;
+    final id = 'w${DateTime.now().microsecondsSinceEpoch}';
+    controller.add(HotWallet(
+      id: id,
+      name: '钱包 $n',
+      avatarColor: _palette[controller.count % _palette.length],
+      addresses: ChainAddresses(
+        eth: '0x${id.substring(1, 9)}00000000000000000000000000000000',
+        polygon: '0x${id.substring(1, 9)}00000000000000000000000000000000',
+        tron: 'T${id.substring(1, 9)}000000000000000000000000000',
+        solana: '${id.substring(1, 9)}0000000000000000000000000000',
+      ),
+      sortOrder: controller.count,
+    ));
+    controller.select(id);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(const SnackBar(content: Text('新钱包已创建，记得尽快备份助记词')));
+    context.go('/home');
+  }
+
   @override
   Widget build(BuildContext context) {
-    Widget entry(IconData icon, String t, String s, {bool dark = false}) => Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: dark ? const Color(0xFF0C1220) : WalletColors.surface, borderRadius: BorderRadius.circular(16)),
-          child: Row(children: [
-            Container(
-              width: 44, height: 44,
-              decoration: BoxDecoration(color: dark ? SignerColors.surface2 : WalletColors.accent.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(14)),
-              child: Icon(icon, size: 20, color: dark ? SignerColors.ok : WalletColors.accent),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(t, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: dark ? Colors.white : WalletColors.text)),
-                const SizedBox(height: 3),
-                Text(s, style: TextStyle(fontSize: 12, height: 1.5, color: dark ? SignerColors.text2 : WalletColors.text2)),
-              ]),
-            ),
-            Icon(Icons.chevron_right, size: 18, color: dark ? const Color(0xFF5A616C) : WalletColors.text3),
-          ]),
+    Widget entry(IconData icon, String t, String s, {bool dark = false, VoidCallback? onTap}) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: dark ? const Color(0xFF0C1220) : WalletColors.surface, borderRadius: BorderRadius.circular(16)),
+            child: Row(children: [
+              Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(color: dark ? SignerColors.surface2 : WalletColors.accent.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(14)),
+                child: Icon(icon, size: 20, color: dark ? SignerColors.ok : WalletColors.accent),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(t, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: dark ? Colors.white : WalletColors.text)),
+                  const SizedBox(height: 3),
+                  Text(s, style: TextStyle(fontSize: 12, height: 1.5, color: dark ? SignerColors.text2 : WalletColors.text2)),
+                ]),
+              ),
+              Icon(Icons.chevron_right, size: 18, color: dark ? const Color(0xFF5A616C) : WalletColors.text3),
+            ]),
+          ),
         );
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(title: '添加钱包', onBack: () => Navigator.of(context).maybePop()),
       children: [
         const Text('普通钱包 · 便捷', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: WalletColors.text2)),
-        entry(Icons.add, '创建新钱包', '在本机生成新的助记词，立即可用'),
-        entry(Icons.key, '导入助记词', '已有 12 / 18 / 24 个单词的助记词'),
+        entry(Icons.add, '创建新钱包', '在本机生成新的助记词，立即可用', onTap: () => _createHotWallet(context)),
+        entry(Icons.key, '导入助记词', '已有 12 / 18 / 24 个单词的助记词', onTap: () => context.push('/mnemonic-import')),
         const Text('离线钱包组合 · 高安全', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: WalletColors.text2)),
-        entry(Icons.verified_user, '连接离线钱包', '扫码配对 Cold Signer，私钥永不进入本机', dark: true),
+        entry(Icons.verified_user, '连接离线钱包', '扫码配对 Cold Signer，私钥永不进入本机', dark: true, onTap: () => context.push('/connect-cold')),
       ],
     );
   }
@@ -473,38 +508,74 @@ class WalletSwitcherSheet extends StatelessWidget {
   }
 }
 
-/// W27 钱包管理.
+/// W27 钱包管理. Live: reads the wallet list from [WalletScope] and supports
+/// deleting a wallet (with confirmation) and adding a new one.
 class WalletManageScreen extends StatelessWidget {
   const WalletManageScreen({super.key});
-  static const _wallets = [
-    (Color(0xFFF59E0B), '日', '日常钱包', WalletKind.hot, r'$862.40', '未备份', true),
-    (Color(0xFF8B5CF6), '储', '储蓄钱包', WalletKind.hot, r'$3,210.55', '已备份', false),
-    (Color(0xFF0C1220), '主', '主钱包', WalletKind.watch, r'$12,847.32', 'Cold Signer', false),
-  ];
+
+  Future<void> _confirmDelete(BuildContext context, Wallet w) async {
+    final controller = WalletScope.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除钱包'),
+        content: Text('确定删除「${w.name}」？此操作仅移除本机记录，不影响链上资产。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('删除', style: TextStyle(color: WalletColors.red)),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && context.mounted) {
+      controller.remove(w.id);
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text('已删除「${w.name}」')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final controller = WalletScope.of(context);
+    final wallets = controller.wallets;
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(title: '钱包管理', onBack: () => Navigator.of(context).maybePop(), trailingText: '排序'),
-      bottom: KtPrimaryButton(label: '添加钱包', onPressed: () {}),
+      bottom: KtPrimaryButton(
+        label: '添加钱包',
+        onPressed: controller.canAddMore ? () => context.push('/add-wallet') : null,
+      ),
       children: [
-        const Text('共 3 个钱包 · 上限 20 个', style: TextStyle(fontSize: 13, color: WalletColors.text3)),
-        for (final (color, initial, name, kind, val, state, unbacked) in _wallets)
-          KtCard(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(children: [
-              const Icon(Icons.drag_indicator, size: 16, color: Color(0xFFD2D7E0)),
-              const SizedBox(width: 8),
-              KtAvatar(color: color, initial: initial),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [Flexible(child: Text(name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text))), const SizedBox(width: 8), WalletTypeBadge(kind: kind)]),
-                const SizedBox(height: 3),
-                Row(children: [Flexible(child: Text('$val · $state', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, fontWeight: unbacked ? FontWeight.w600 : FontWeight.w400, color: unbacked ? WalletColors.red : WalletColors.text3)))]),
-              ])),
-              const Icon(Icons.chevron_right, size: 18, color: WalletColors.text3),
-            ]),
-          ),
+        Text('共 ${wallets.length} 个钱包 · 上限 ${WalletManager.maxWallets} 个', style: const TextStyle(fontSize: 13, color: WalletColors.text3)),
+        for (final w in wallets)
+          () {
+            final kind = w is HotWallet ? WalletKind.hot : WalletKind.watch;
+            final unbacked = w is HotWallet && !w.backedUp;
+            final state = switch (w) {
+              HotWallet(backedUp: true) => '已备份',
+              HotWallet() => '未备份',
+              WatchWallet() => 'Cold Signer',
+            };
+            return KtCard(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(children: [
+                KtAvatar(color: Color(w.avatarColor), initial: w.name.characters.first),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [Flexible(child: Text(w.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text))), const SizedBox(width: 8), WalletTypeBadge(kind: kind)]),
+                  const SizedBox(height: 3),
+                  Text(state, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, fontWeight: unbacked ? FontWeight.w600 : FontWeight.w400, color: unbacked ? WalletColors.red : WalletColors.text3)),
+                ])),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 20, color: WalletColors.text3),
+                  onPressed: () => _confirmDelete(context, w),
+                ),
+              ]),
+            );
+          }(),
       ],
     );
   }
