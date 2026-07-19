@@ -1,0 +1,39 @@
+name: kt_wallet_workspace
+description: KT Wallet monorepo (KT Wallet + Cold Signer + shared packages)
+publish_to: none
+
+environment:
+  sdk: ^3.12.0
+
+workspace:
+  - apps/kt_wallet
+  - apps/cold_signer
+  - packages/core_crypto
+  - packages/core_crypto/example
+  - packages/airgap_protocol
+  - packages/chains
+  - packages/ui_kit
+  - packages/test_support
+  - packages/wallet_data
+
+dev_dependencies:
+  # melos is used as a globally-activated CLI (dart pub global activate melos),
+  # not a workspace dependency — pinning it here conflicts with drift_dev's
+  # cli_util constraint.
+  test_support:
+    path: packages/test_support
+
+melos:
+  name: kt_wallet_workspace
+  scripts:
+    analyze:
+      description: Run static analysis in all packages
+      run: dart analyze .
+    test:
+      description: Run all package tests
+      exec: flutter test
+      packageFilters:
+        dirExists: test
+    check-deps:
+      description: Enforce cold_signer dependency whitelist
+      run: dart run tool/check_deps.dart

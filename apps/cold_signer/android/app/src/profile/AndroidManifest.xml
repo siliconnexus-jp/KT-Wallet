@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Cold Signer is provably offline: NO INTERNET permission in profile or
+         release builds. (Only the debug manifest keeps it, for hot-reload.)
+         The release/main manifest is authoritative for the shipped APK. -->
+</manifest>

@@ -1,0 +1,149 @@
+import 'package:drift/drift.dart';
+
+/// Persistence schema for the online app (detailed-design.md §5.1).
+///
+/// Money is stored as decimal STRING (BigInt base units), never a numeric
+/// column — no float precision loss. All per-wallet business tables carry a
+/// `walletId` and are only reached through a wallet-scoped repository.
+///
+/// NOTE ON CASCADE: `.references(Wallets, #id)` documents the relationship but
+/// drift does not emit a SQL FOREIGN KEY clause for these tables in this build
+/// config, so there is NO database-level ON DELETE CASCADE. Child cleanup is
+/// done explicitly and transactionally by `WalletsRepository.deleteWallet` —
+/// that manual cascade is authoritative and must delete children before the
+/// parent wallet row.
+
+enum WalletType { hot, watch }
+
+enum TxDirection { incoming, outgoing }
+
+enum TxStatus {
+  draft,
+  awaitingSig,
+  signed,
+  broadcast,
+  confirmed,
+  failed,
+  expired,
+}
+
+enum SignMode { local, airgap }
+
+class Wallets extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text().withLength(min: 1, max: 64)();
+  IntColumn get type => intEnum<WalletType>()();
+  IntColumn get avatarColor => integer()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  BoolColumn get backedUp => boolean().withDefault(const Constant(false))();
+  TextColumn get coldWalletId => text().nullable()();
+  IntColumn get protocolVer => integer().nullable()();
+  IntColumn get createdAt => integer()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class Accounts extends Table {
+  TextColumn get walletId => text().references(Wallets, #id)();
+  TextColumn get coin => text()();
+  TextColumn get address => text()();
+  TextColumn get derivationPath => text()();
+  IntColumn get accountIndex => integer()();
+
+  @override
+  Set<Column> get primaryKey => {walletId, coin};
+}
+
+class Tokens extends Table {
+  TextColumn get walletId => text().references(Wallets, #id)();
+  TextColumn get coin => text()();
+  TextColumn get contract => text().withDefault(const Constant(''))();
+  TextColumn get symbol => text()();
+  IntColumn get decimals => integer()();
+  TextColumn get name => text()();
+  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
+  BoolColumn get trusted => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {walletId, coin, contract};
+}
+
+class Balances extends Table {
+  TextColumn get walletId => text().references(Wallets, #id)();
+  TextColumn get coin => text()();
+  TextColumn get contract => text().withDefault(const Constant(''))();
+
+  /// BigInt base units, decimal string.
+  TextColumn get raw => text()();
+  RealColumn get fiat => real().nullable()();
+  IntColumn get updatedAt => integer()();
+
+  @override
+  Set<Column> get primaryKey => {walletId, coin, contract};
+}
+
+class Transactions extends Table {
+  TextColumn get id => text()();
+  TextColumn get walletId => text().references(Wallets, #id)();
+  TextColumn get reqId => text().nullable()();
+  TextColumn get coin => text()();
+  TextColumn get contract => text().nullable()();
+  IntColumn get direction => intEnum<TxDirection>()();
+  TextColumn get fromAddr => text()();
+  TextColumn get toAddr => text()();
+  TextColumn get amountRaw => text()();
+  TextColumn get feeRaw => text().nullable()();
+  TextColumn get hash => text().nullable()();
+  IntColumn get status => intEnum<TxStatus>()();
+  IntColumn get signMode => intEnum<SignMode>()();
+  TextColumn get memo => text().nullable()();
+  IntColumn get createdAt => integer()();
+  IntColumn get broadcastAt => integer().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class AddressBook extends Table {
+  TextColumn get id => text()();
+  TextColumn get walletId => text().references(Wallets, #id)();
+  TextColumn get name => text()();
+  TextColumn get address => text()();
+  TextColumn get coin => text()();
+  IntColumn get createdAt => integer()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class SignRequests extends Table {
+  TextColumn get reqId => text()();
+  TextColumn get walletId => text().references(Wallets, #id)();
+  TextColumn get coin => text()();
+  BlobColumn get rawTx => blob()();
+  IntColumn get expiresAt => integer()();
+  TextColumn get status => text()();
+
+  @override
+  Set<Column> get primaryKey => {reqId};
+}
+
+/// Global settings (not per-wallet).
+class Settings extends Table {
+  TextColumn get key => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column> get primaryKey => {key};
+}
+
+/// Per-wallet settings.
+class WalletSettings extends Table {
+  TextColumn get walletId => text().references(Wallets, #id)();
+  TextColumn get key => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column> get primaryKey => {walletId, key};
+}

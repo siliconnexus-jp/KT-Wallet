@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Bootstrap workspace
+        run: dart pub get
+
+      - name: Code generation (drift)
+        run: cd packages/wallet_data && dart run build_runner build --delete-conflicting-outputs
+
+      - name: Static analysis
+        run: dart analyze apps packages tool
+
+      - name: Dependency firewall (cold_signer)
+        run: dart run tool/check_deps.dart
+
+      - name: Unit tests (pure Dart packages)
+        run: |
+          for p in packages/test_support packages/airgap_protocol packages/chains packages/wallet_data; do
+            if [ -d "$p/test" ]; then (cd "$p" && dart test); fi
+          done
+
+      - name: Widget tests (Flutter packages/apps)
+        run: |
+          for p in packages/ui_kit packages/core_crypto apps/kt_wallet apps/cold_signer; do
+            if [ -d "$p/test" ]; then (cd "$p" && flutter test); fi
+          done
