@@ -1,4 +1,6 @@
+import 'package:chains/chains.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
@@ -15,16 +17,77 @@ Widget _amberWarn(String text) => Container(
       ]),
     );
 
-/// W4 转账输入.
-class TransferInputScreen extends StatelessWidget {
+/// W4 转账输入. Live: recipient address is validated against the token's chain
+/// (rejecting mispastes and wrong-network addresses) and the amount is parsed
+/// with the tested [Amount] type and checked against the available balance.
+class TransferInputScreen extends StatefulWidget {
   const TransferInputScreen({super.key});
+  @override
+  State<TransferInputScreen> createState() => _TransferInputScreenState();
+}
+
+class _TransferInputScreenState extends State<TransferInputScreen> {
+  // Sending USDT on TRON (6 decimals). Available balance = 3120.00 USDT.
+  static const _chain = Chain.tron;
+  static const _decimals = 6;
+  static const _availableDisplay = '3120';
+  static final _available = Amount.parse('3120.00', _decimals, symbol: 'USDT');
+
+  final _addrController = TextEditingController(text: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t');
+  final _amountController = TextEditingController(text: '120.00');
+  final _feeTiers = const ['慢', '标准', '快'];
+  int _fee = 1;
+
+  @override
+  void dispose() {
+    _addrController.dispose();
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  AddressValidation get _addrCheck => Addresses.validate(_chain, _addrController.text.trim());
+
+  /// Returns the parsed amount if it is valid and within balance, else null.
+  Amount? get _amount {
+    final text = _amountController.text.trim();
+    if (text.isEmpty) return null;
+    try {
+      final a = Amount.parse(text, _decimals, symbol: 'USDT');
+      if (a.raw == BigInt.zero || !(_available >= a)) return null;
+      return a;
+    } on AmountError {
+      return null;
+    }
+  }
+
+  String? get _amountError {
+    final text = _amountController.text.trim();
+    if (text.isEmpty) return null; // don't nag before typing
+    try {
+      final a = Amount.parse(text, _decimals, symbol: 'USDT');
+      if (a.raw == BigInt.zero) return '金额需大于 0';
+      if (!(_available >= a)) return '余额不足';
+      return null;
+    } on AmountError {
+      return '金额格式不正确';
+    }
+  }
+
+  Future<void> _paste() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = (data?.text ?? '').trim();
+    if (text.isNotEmpty) setState(() => _addrController.text = text);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isHot = WalletScope.of(context).current is HotWallet;
+    final addrCheck = _addrCheck;
+    final canProceed = addrCheck.isValid && _amount != null;
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(title: '转账', onBack: () => Navigator.of(context).maybePop(), trailing: Icons.qr_code_scanner, onTrailing: () {}),
-      bottom: KtPrimaryButton(label: '下一步', onPressed: () => context.push(isHot ? '/confirm-hot' : '/confirm-watch')),
+      bottom: KtPrimaryButton(label: '下一步', onPressed: canProceed ? () => context.push(isHot ? '/confirm-hot' : '/confirm-watch') : null),
       children: [
         KtCard(
           padding: const EdgeInsets.all(14),
@@ -46,19 +109,38 @@ class TransferInputScreen extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text('收款地址', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
             const SizedBox(height: 12),
-            Row(children: const [
-              Expanded(child: Text('TWd4qCEUYAJgLtSpQ2dK7wY9nMxR38uQz', style: TextStyle(fontSize: 14, fontFamily: KtFonts.mono, color: WalletColors.text))),
-              SizedBox(width: 10),
-              Icon(Icons.content_paste, size: 18, color: WalletColors.accent),
-              SizedBox(width: 10),
-              Icon(Icons.qr_code_scanner, size: 18, color: WalletColors.accent),
+            Row(children: [
+              Expanded(
+                child: TextField(
+                  controller: _addrController,
+                  onChanged: (_) => setState(() {}),
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  maxLines: null,
+                  style: const TextStyle(fontSize: 14, fontFamily: KtFonts.mono, color: WalletColors.text),
+                  decoration: const InputDecoration(isCollapsed: true, border: InputBorder.none, hintText: '粘贴或输入地址', hintStyle: TextStyle(color: WalletColors.text3)),
+                ),
+              ),
+              const SizedBox(width: 10),
+              GestureDetector(onTap: _paste, child: const Icon(Icons.content_paste, size: 18, color: WalletColors.accent)),
+              const SizedBox(width: 10),
+              const Icon(Icons.qr_code_scanner, size: 18, color: WalletColors.accent),
             ]),
             const SizedBox(height: 12),
-            Row(children: const [
-              Icon(Icons.check_circle, size: 14, color: WalletColors.green),
-              SizedBox(width: 6),
-              Text('地址格式正确 · TRON 网络', style: TextStyle(fontSize: 12, color: WalletColors.green)),
-            ]),
+            if (_addrController.text.trim().isEmpty)
+              const Text('请输入 TRON 网络收款地址', style: TextStyle(fontSize: 12, color: WalletColors.text3))
+            else if (addrCheck.isValid)
+              Row(children: const [
+                Icon(Icons.check_circle, size: 14, color: WalletColors.green),
+                SizedBox(width: 6),
+                Text('地址格式正确 · TRON 网络', style: TextStyle(fontSize: 12, color: WalletColors.green)),
+              ])
+            else
+              Row(children: [
+                const Icon(Icons.error_outline, size: 14, color: WalletColors.red),
+                const SizedBox(width: 6),
+                Expanded(child: Text(addrCheck.reason ?? '地址无效', style: const TextStyle(fontSize: 12, color: WalletColors.red))),
+              ]),
           ]),
         ),
         KtCard(
@@ -66,33 +148,45 @@ class TransferInputScreen extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               const Text('金额', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(color: WalletColors.accent.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(6)),
-                child: const Text('最大', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: WalletColors.accent)),
+              GestureDetector(
+                onTap: () => setState(() => _amountController.text = _availableDisplay),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(color: WalletColors.accent.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(6)),
+                  child: const Text('最大', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: WalletColors.accent)),
+                ),
               ),
             ]),
             const SizedBox(height: 10),
-            Row(crossAxisAlignment: CrossAxisAlignment.end, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: const [
-              Text('120.00', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: WalletColors.text)),
-              Text('USDT', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: WalletColors.text2)),
+            Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Expanded(
+                child: TextField(
+                  controller: _amountController,
+                  onChanged: (_) => setState(() {}),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: WalletColors.text),
+                  decoration: const InputDecoration(isCollapsed: true, border: InputBorder.none, hintText: '0', hintStyle: TextStyle(color: WalletColors.text3)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Padding(padding: EdgeInsets.only(bottom: 4), child: Text('USDT', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: WalletColors.text2))),
             ]),
             const SizedBox(height: 10),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: const [
-              Text('≈ \$120.00', style: TextStyle(fontSize: 12, color: WalletColors.text3)),
-              Text('可用 3,120.00 USDT', style: TextStyle(fontSize: 12, color: WalletColors.text3)),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text(_amountError ?? '≈ \$${_amountController.text.trim().isEmpty ? '0.00' : _amountController.text.trim()}', style: TextStyle(fontSize: 12, color: _amountError == null ? WalletColors.text3 : WalletColors.red)),
+              const Text('可用 3,120.00 USDT', style: TextStyle(fontSize: 12, color: WalletColors.text3)),
             ]),
           ]),
         ),
         KtCard(
           padding: const EdgeInsets.all(14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: const [
-              Text('网络手续费', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
-              Text('自定义', style: TextStyle(fontSize: 12, color: WalletColors.accent)),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              const Text('网络手续费', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
+              GestureDetector(onTap: () => context.push('/fee'), child: const Text('自定义', style: TextStyle(fontSize: 12, color: WalletColors.accent))),
             ]),
             const SizedBox(height: 12),
-            const KtSegmented(options: ['慢', '标准', '快'], selected: 1),
+            KtSegmented(options: _feeTiers, selected: _fee, onChanged: (i) => setState(() => _fee = i)),
           ]),
         ),
       ],
