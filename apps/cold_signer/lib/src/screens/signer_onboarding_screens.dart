@@ -265,25 +265,63 @@ class SignerMnemonicImportScreen extends StatelessWidget {
   }
 }
 
-/// C14 设置密码 (numpad).
-class SignerSetPasswordScreen extends StatelessWidget {
+/// C14 设置密码 (numpad). Two-phase: enter 6 digits, then re-enter to confirm.
+class SignerSetPasswordScreen extends StatefulWidget {
   const SignerSetPasswordScreen({super.key});
   @override
+  State<SignerSetPasswordScreen> createState() => _SignerSetPasswordScreenState();
+}
+
+class _SignerSetPasswordScreenState extends State<SignerSetPasswordScreen> {
+  String _entry = '';
+  String? _first; // the first pass, once 6 digits entered
+
+  void _onKey(String k) {
+    if (k == 'del') {
+      if (_entry.isNotEmpty) setState(() => _entry = _entry.substring(0, _entry.length - 1));
+      return;
+    }
+    if (k.isEmpty || _entry.length >= 6) return;
+    setState(() => _entry += k);
+    if (_entry.length == 6) _onComplete();
+  }
+
+  void _onComplete() {
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    if (_first == null) {
+      // First pass done; ask for confirmation.
+      setState(() {
+        _first = _entry;
+        _entry = '';
+      });
+    } else if (_entry == _first) {
+      context.push('/biometric');
+    } else {
+      messenger.showSnackBar(const SnackBar(content: Text('两次输入不一致，请重新设置')));
+      setState(() {
+        _first = null;
+        _entry = '';
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final confirming = _first != null;
     return KtScreen(
       theme: _t,
       gap: 28,
       navBar: KtNavBar(title: '设置解锁密码', theme: _t, onBack: () => Navigator.of(context).maybePop(), trailingText: '4 / 4'),
       children: [
-        Column(children: const [
-          SizedBox(height: 8),
-          Text('设置 6 位密码', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: SignerColors.text)),
-          SizedBox(height: 8),
-          Text('用于解锁 App 和确认签名。密码仅保存在本机安全区域。', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, height: 1.6, color: SignerColors.text2)),
+        Column(children: [
+          const SizedBox(height: 8),
+          Text(confirming ? '再次输入以确认' : '设置 6 位密码', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: SignerColors.text)),
+          const SizedBox(height: 8),
+          const Text('用于解锁 App 和确认签名。密码仅保存在本机安全区域。', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, height: 1.6, color: SignerColors.text2)),
         ]),
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           for (var i = 0; i < 6; i++)
-            Container(width: 14, height: 14, margin: const EdgeInsets.symmetric(horizontal: 7), decoration: BoxDecoration(color: i < 3 ? SignerColors.text : SignerColors.surface2, shape: BoxShape.circle, border: i < 3 ? null : Border.all(color: SignerColors.border))),
+            Container(width: 14, height: 14, margin: const EdgeInsets.symmetric(horizontal: 7), decoration: BoxDecoration(color: i < _entry.length ? SignerColors.text : SignerColors.surface2, shape: BoxShape.circle, border: i < _entry.length ? null : Border.all(color: SignerColors.border))),
         ]),
         Column(children: [
           for (final row in const [['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['', '0', 'del']])
@@ -291,10 +329,14 @@ class SignerSetPasswordScreen extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 14),
               child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 for (final k in row)
-                  Container(
-                    width: 72, height: 72, margin: const EdgeInsets.symmetric(horizontal: 10), alignment: Alignment.center,
-                    decoration: BoxDecoration(color: k.isEmpty || k == 'del' ? null : SignerColors.surface, shape: BoxShape.circle),
-                    child: k == 'del' ? const Icon(Icons.backspace_outlined, size: 22, color: SignerColors.text2) : Text(k, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w500, color: SignerColors.text)),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _onKey(k),
+                    child: Container(
+                      width: 72, height: 72, margin: const EdgeInsets.symmetric(horizontal: 10), alignment: Alignment.center,
+                      decoration: BoxDecoration(color: k.isEmpty || k == 'del' ? null : SignerColors.surface, shape: BoxShape.circle),
+                      child: k == 'del' ? const Icon(Icons.backspace_outlined, size: 22, color: SignerColors.text2) : Text(k, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w500, color: SignerColors.text)),
+                    ),
                   ),
               ]),
             ),

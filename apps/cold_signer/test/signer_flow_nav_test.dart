@@ -34,6 +34,35 @@ void main() {
     expect(find.text('设置 6 位密码'), findsOneWidget); // C14 password
   });
 
+  testWidgets('set-password numpad: enter, mismatch resets, match advances',
+      (tester) async {
+    await _open(tester, 'C14 设置密码');
+    expect(find.text('设置 6 位密码'), findsOneWidget);
+
+    Future<void> enter(String digits) async {
+      for (final d in digits.split('')) {
+        await tester.tap(find.text(d).first);
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+    }
+
+    // First pass, then confirmation prompt appears.
+    await enter('123456');
+    expect(find.text('再次输入以确认'), findsOneWidget);
+
+    // Mismatch drops back to the first step.
+    await enter('654321');
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('设置 6 位密码'), findsOneWidget);
+
+    // Matching entries advance to biometric setup.
+    await enter('123456');
+    await enter('123456');
+    expect(find.text('启用 Face ID'), findsWidgets); // C15 biometric
+  });
+
   testWidgets('sign session: home → scan → parse → auth → result',
       (tester) async {
     await _open(tester, 'C5 离线首页');
