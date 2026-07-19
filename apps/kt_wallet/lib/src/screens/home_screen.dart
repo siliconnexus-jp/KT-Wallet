@@ -165,19 +165,35 @@ class _ActionRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         for (final (label, icon, primary) in actions)
-          Column(children: [
-            Container(
-              width: 54,
-              height: 54,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: primary ? WalletColors.accent : WalletColors.surface, shape: BoxShape.circle),
-              child: Icon(icon, size: 22, color: primary ? Colors.white : WalletColors.accent),
-            ),
-            const SizedBox(height: 8),
-            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: WalletColors.text2)),
-          ]),
+          GestureDetector(
+            onTap: () => _onAction(context, label),
+            child: Column(children: [
+              Container(
+                width: 54,
+                height: 54,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: primary ? WalletColors.accent : WalletColors.surface, shape: BoxShape.circle),
+                child: Icon(icon, size: 22, color: primary ? Colors.white : WalletColors.accent),
+              ),
+              const SizedBox(height: 8),
+              Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: WalletColors.text2)),
+            ]),
+          ),
       ],
     );
+  }
+
+  void _onAction(BuildContext context, String label) {
+    switch (label) {
+      case '转账':
+        context.push('/transfer');
+      case '收款':
+        context.push('/receive');
+      case '扫签名':
+        context.push('/scan-result');
+      case '记录':
+        context.push('/tx-detail');
+    }
   }
 }
 

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
+
+import '../state/wallet_scope.dart';
+import '../wallets/wallet_model.dart';
 
 Widget _amberWarn(String text) => Container(
       padding: const EdgeInsets.all(12),
@@ -16,10 +20,11 @@ class TransferInputScreen extends StatelessWidget {
   const TransferInputScreen({super.key});
   @override
   Widget build(BuildContext context) {
+    final isHot = WalletScope.of(context).current is HotWallet;
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(title: '转账', onBack: () => Navigator.of(context).maybePop(), trailing: Icons.qr_code_scanner, onTrailing: () {}),
-      bottom: KtPrimaryButton(label: '下一步', onPressed: () {}),
+      bottom: KtPrimaryButton(label: '下一步', onPressed: () => context.push(isHot ? '/confirm-hot' : '/confirm-watch')),
       children: [
         KtCard(
           padding: const EdgeInsets.all(14),
@@ -157,7 +162,7 @@ class TransferConfirmScreen extends StatelessWidget {
       gap: 16,
       navBar: KtNavBar(title: '确认交易', onBack: () => Navigator.of(context).maybePop()),
       bottom: Column(children: [
-        KtPrimaryButton(label: isHot ? '确认转账' : '生成待签名二维码', onPressed: () {}),
+        KtPrimaryButton(label: isHot ? '确认转账' : '生成待签名二维码', onPressed: () => context.push(isHot ? '/transfer-auth' : '/sign-qr')),
         const SizedBox(height: 10),
         Text(isHot ? '验证身份后本机签名并自动广播' : '二维码中不包含助记词或私钥',
             style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
@@ -237,16 +242,19 @@ class ScanResultScreen extends StatelessWidget {
             child: KtNavBar(title: '扫描签名结果', theme: AppTheme.signer, leading: Icons.close, onBack: () => Navigator.of(context).maybePop()),
           ),
           const SizedBox(height: 24),
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 20),
-            height: 380,
-            decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(20)),
-            child: Center(
-              child: Container(
-                width: 240,
-                height: 240,
-                decoration: BoxDecoration(border: Border.all(color: SignerColors.blue, width: 2), borderRadius: BorderRadius.circular(16)),
-                child: const Icon(Icons.qr_code_2, size: 64, color: SignerColors.border),
+          GestureDetector(
+            onTap: () => context.push('/broadcast-confirm'),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              height: 380,
+              decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(20)),
+              child: Center(
+                child: Container(
+                  width: 240,
+                  height: 240,
+                  decoration: BoxDecoration(border: Border.all(color: SignerColors.blue, width: 2), borderRadius: BorderRadius.circular(16)),
+                  child: const Icon(Icons.qr_code_2, size: 64, color: SignerColors.border),
+                ),
               ),
             ),
           ),
@@ -269,7 +277,7 @@ class BroadcastConfirmScreen extends StatelessWidget {
       gap: 16,
       navBar: KtNavBar(title: '广播交易', onBack: () => Navigator.of(context).maybePop()),
       bottom: Column(children: [
-        KtPrimaryButton(label: '广播交易', onPressed: () {}),
+        KtPrimaryButton(label: '广播交易', onPressed: () => context.go('/broadcast-result')),
         const SizedBox(height: 12),
         const Text('暂不广播', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text2)),
       ]),
@@ -310,7 +318,7 @@ class BroadcastResultScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return KtScreen(
       gap: 24,
-      bottom: KtPrimaryButton(label: '返回首页', onPressed: () {}),
+      bottom: KtPrimaryButton(label: '返回首页', onPressed: () => context.go('/home')),
       children: [
         const SizedBox(height: 24),
         Center(
@@ -409,7 +417,7 @@ class TransferAuthSheet extends StatelessWidget {
             const SizedBox(height: 8),
             const Text('每次转账都需要 Face ID 或密码验证', style: TextStyle(fontSize: 13, color: WalletColors.text2)),
             const SizedBox(height: 20),
-            KtPrimaryButton(label: '使用 Face ID 验证', onPressed: () {}),
+            KtPrimaryButton(label: '使用 Face ID 验证', onPressed: () => context.go('/broadcast-result')),
             const SizedBox(height: 12),
             const Text('改用密码', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text2)),
           ]),
