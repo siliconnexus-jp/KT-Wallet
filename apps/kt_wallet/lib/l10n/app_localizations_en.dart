@@ -327,10 +327,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pasteOrEnterAddress => 'Paste or enter address';
 
   @override
-  String get enterTronAddress => 'Enter a TRON network recipient address';
+  String enterChainAddress(String network) {
+    return 'Enter a $network network recipient address';
+  }
 
   @override
-  String get addressValidTron => 'Valid address · TRON network';
+  String addressValidOn(String network) {
+    return 'Valid address · $network network';
+  }
 
   @override
   String get addressInvalid => 'Invalid address';
@@ -339,9 +343,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get amountLabel => 'Amount';
 
   @override
-  String availableUsdt(String amount) {
-    return '$amount USDT available';
+  String availableBalance(String amount, String symbol) {
+    return '$amount $symbol available';
   }
+
+  @override
+  String get selectAsset => 'Select asset';
+
+  @override
+  String get scanAddressTitle => 'Scan address QR';
+
+  @override
+  String get scanAddressHint => 'Aim at the recipient address QR';
 
   @override
   String get networkFee => 'Network fee';
@@ -502,6 +515,12 @@ class AppLocalizationsEn extends AppLocalizations {
       'Only TRON network (TRC-20) assets are supported. Sending from other networks will lose funds.';
 
   @override
+  String get explorerLinkCopied => 'Block explorer link copied';
+
+  @override
+  String get addressCopied => 'Address copied';
+
+  @override
   String get addressBookTitle => 'Address book';
 
   @override
@@ -517,7 +536,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get contactColdBackup => 'Cold wallet backup';
 
   @override
+  String get addContactTitle => 'Add contact';
+
+  @override
+  String get nameLabel => 'Name';
+
+  @override
+  String get addressLabel => 'Address';
+
+  @override
+  String get invalidChainAddress => 'Not a valid chain address';
+
+  @override
+  String get actionSave => 'Save';
+
+  @override
   String get tokenManageTitle => 'Token management';
+
+  @override
+  String get addTokenTitle => 'Add token';
+
+  @override
+  String get tokenSymbolLabel => 'Symbol';
 
   @override
   String get networkSettingsTitle => 'Network settings';

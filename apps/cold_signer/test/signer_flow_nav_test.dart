@@ -9,6 +9,8 @@ Future<void> _open(WidgetTester tester, String galleryEntry) async {
   await tester.pumpWidget(ColdSignerApp());
   await tester.pumpAndSettle();
   await tester.scrollUntilVisible(find.text(galleryEntry), 200);
+  await tester.ensureVisible(find.text(galleryEntry));
+  await tester.pumpAndSettle();
   await tester.tap(find.text(galleryEntry));
   await tester.pumpAndSettle();
 }
@@ -83,5 +85,35 @@ void main() {
     await tester.tap(find.text('使用 Face ID 验证'));
     await tester.pumpAndSettle();
     expect(find.text('签名完成'), findsOneWidget); // C9 result QR
+  });
+
+  testWidgets('risk warning: back-to-home returns to the offline home',
+      (tester) async {
+    await _open(tester, 'C17 风险警告');
+    await tester.tap(find.text('返回首页'));
+    await tester.pumpAndSettle();
+    expect(find.text('扫描待签名交易'), findsOneWidget); // C5 home
+  });
+
+  testWidgets('address export: done returns to the offline home',
+      (tester) async {
+    await _open(tester, 'C10 地址导出');
+    await tester.tap(find.text('完成'));
+    await tester.pumpAndSettle();
+    expect(find.text('扫描待签名交易'), findsOneWidget); // C5 home
+  });
+
+  testWidgets('delete wallet: destructive confirm returns to onboarding',
+      (tester) async {
+    await _open(tester, 'C21 删除钱包');
+    await tester.tap(find.text('永久删除钱包'));
+    await tester.pumpAndSettle();
+    // On-screen warning card + the confirm dialog title.
+    expect(find.text('此操作不可恢复'), findsNWidgets(2));
+
+    // The dialog's destructive action navigates back to C1 welcome.
+    await tester.tap(find.text('永久删除钱包').last);
+    await tester.pumpAndSettle();
+    expect(find.text('创建新钱包'), findsOneWidget); // C1 welcome
   });
 }

@@ -27,12 +27,26 @@ class TransferInputScreen extends StatefulWidget {
   State<TransferInputScreen> createState() => _TransferInputScreenState();
 }
 
+/// A demo asset selectable on the transfer screen (mirrors the home list).
+class _TransferAsset {
+  const _TransferAsset(this.symbol, this.network, this.networkName, this.chain, this.decimals, this.available, this.availableLabel, this.color, this.initial);
+  final String symbol, network, networkName;
+  final Chain chain;
+  final int decimals;
+  final String available, availableLabel;
+  final Color color;
+  final String initial;
+  Amount get availableAmount => Amount.parse(available, decimals, symbol: symbol);
+}
+
 class _TransferInputScreenState extends State<TransferInputScreen> {
-  // Sending USDT on TRON (6 decimals). Available balance = 3120.00 USDT.
-  static const _chain = Chain.tron;
-  static const _decimals = 6;
-  static const _availableDisplay = '3120';
-  static final _available = Amount.parse('3120.00', _decimals, symbol: 'USDT');
+  static const _assets = [
+    _TransferAsset('USDT', 'TRON · TRC-20', 'TRON', Chain.tron, 6, '3120.00', '3,120.00', Color(0xFF26A17B), '₮'),
+    _TransferAsset('ETH', 'Ethereum', 'Ethereum', Chain.ethereum, 18, '0.0842', '0.0842', Color(0xFF627EEA), 'Ξ'),
+    _TransferAsset('SOL', 'Solana', 'Solana', Chain.solana, 9, '0.531', '0.531', Color(0xFF9945FF), '◎'),
+  ];
+  int _assetIndex = 0;
+  _TransferAsset get _asset => _assets[_assetIndex];
 
   final _addrController = TextEditingController(text: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t');
   final _amountController = TextEditingController(text: '120.00');
@@ -45,15 +59,15 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     super.dispose();
   }
 
-  AddressValidation get _addrCheck => Addresses.validate(_chain, _addrController.text.trim());
+  AddressValidation get _addrCheck => Addresses.validate(_asset.chain, _addrController.text.trim());
 
   /// Returns the parsed amount if it is valid and within balance, else null.
   Amount? get _amount {
     final text = _amountController.text.trim();
     if (text.isEmpty) return null;
     try {
-      final a = Amount.parse(text, _decimals, symbol: 'USDT');
-      if (a.raw == BigInt.zero || !(_available >= a)) return null;
+      final a = Amount.parse(text, _asset.decimals, symbol: _asset.symbol);
+      if (a.raw == BigInt.zero || !(_asset.availableAmount >= a)) return null;
       return a;
     } on AmountError {
       return null;
@@ -64,9 +78,9 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     final text = _amountController.text.trim();
     if (text.isEmpty) return null; // don't nag before typing
     try {
-      final a = Amount.parse(text, _decimals, symbol: 'USDT');
+      final a = Amount.parse(text, _asset.decimals, symbol: _asset.symbol);
       if (a.raw == BigInt.zero) return l10n.amountMustBePositive;
-      if (!(_available >= a)) return l10n.insufficientBalance;
+      if (!(_asset.availableAmount >= a)) return l10n.insufficientBalance;
       return null;
     } on AmountError {
       return l10n.amountFormatInvalid;
@@ -79,6 +93,56 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     if (text.isNotEmpty) setState(() => _addrController.text = text);
   }
 
+  /// Opens the mock address scanner; a simulated scan pops with the address.
+  Future<void> _scanAddress() async {
+    final scanned = await context.push<String>('/scan-address');
+    if (scanned != null && mounted) setState(() => _addrController.text = scanned);
+  }
+
+  /// Opens the custom fee screen and maps its result back onto the segmented
+  /// tier selection.
+  Future<void> _customFee() async {
+    final tier = await context.push<int>('/fee');
+    if (tier != null && mounted) setState(() => _fee = tier);
+  }
+
+  /// Bottom sheet listing the demo assets (same visual pattern as the language
+  /// picker sheet); selecting one switches chain / decimals / symbol / balance.
+  Future<void> _pickAsset() async {
+    final l10n = AppLocalizations.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: WalletColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 12),
+          Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(children: [
+              Text(l10n.selectAsset, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: WalletColors.text)),
+            ]),
+          ),
+          const SizedBox(height: 8),
+          for (var i = 0; i < _assets.length; i++)
+            ListTile(
+              leading: KtAvatar(color: _assets[i].color, initial: _assets[i].initial, size: 36),
+              title: Text(_assets[i].symbol, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
+              subtitle: Text('${_assets[i].network} · ${l10n.availableBalance(_assets[i].availableLabel, _assets[i].symbol)}', style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
+              trailing: i == _assetIndex ? const Icon(Icons.check, size: 20, color: WalletColors.accent) : null,
+              onTap: () {
+                setState(() => _assetIndex = i);
+                Navigator.of(ctx).pop();
+              },
+            ),
+          const SizedBox(height: 12),
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -87,23 +151,27 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     final canProceed = addrCheck.isValid && _amount != null;
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: l10n.actionSend, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.qr_code_scanner, onTrailing: () {}),
+      navBar: KtNavBar(title: l10n.actionSend, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.qr_code_scanner, onTrailing: _scanAddress),
       bottom: KtPrimaryButton(label: l10n.actionNext, onPressed: canProceed ? () => context.push(isHot ? '/confirm-hot' : '/confirm-watch') : null),
       children: [
         KtCard(
           padding: const EdgeInsets.all(14),
-          child: Row(children: const [
-            KtAvatar(color: Color(0xFF26A17B), initial: '₮', size: 36),
-            SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('USDT', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
-                SizedBox(height: 2),
-                Text('TRON · TRC-20', style: TextStyle(fontSize: 12, color: WalletColors.text2)),
-              ]),
-            ),
-            Icon(Icons.keyboard_arrow_down, size: 18, color: WalletColors.text3),
-          ]),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _pickAsset,
+            child: Row(children: [
+              KtAvatar(color: _asset.color, initial: _asset.initial, size: 36),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(_asset.symbol, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
+                  const SizedBox(height: 2),
+                  Text(_asset.network, style: const TextStyle(fontSize: 12, color: WalletColors.text2)),
+                ]),
+              ),
+              const Icon(Icons.keyboard_arrow_down, size: 18, color: WalletColors.text3),
+            ]),
+          ),
         ),
         KtCard(
           padding: const EdgeInsets.all(14),
@@ -125,16 +193,16 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
               const SizedBox(width: 10),
               GestureDetector(onTap: _paste, child: const Icon(Icons.content_paste, size: 18, color: WalletColors.accent)),
               const SizedBox(width: 10),
-              const Icon(Icons.qr_code_scanner, size: 18, color: WalletColors.accent),
+              GestureDetector(onTap: _scanAddress, child: const Icon(Icons.qr_code_scanner, size: 18, color: WalletColors.accent)),
             ]),
             const SizedBox(height: 12),
             if (_addrController.text.trim().isEmpty)
-              Text(l10n.enterTronAddress, style: const TextStyle(fontSize: 12, color: WalletColors.text3))
+              Text(l10n.enterChainAddress(_asset.networkName), style: const TextStyle(fontSize: 12, color: WalletColors.text3))
             else if (addrCheck.isValid)
               Row(children: [
                 const Icon(Icons.check_circle, size: 14, color: WalletColors.green),
                 const SizedBox(width: 6),
-                Text(l10n.addressValidTron, style: const TextStyle(fontSize: 12, color: WalletColors.green)),
+                Text(l10n.addressValidOn(_asset.networkName), style: const TextStyle(fontSize: 12, color: WalletColors.green)),
               ])
             else
               Row(children: [
@@ -150,7 +218,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               Text(l10n.amountLabel, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
               GestureDetector(
-                onTap: () => setState(() => _amountController.text = _availableDisplay),
+                onTap: () => setState(() => _amountController.text = _asset.available),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(color: WalletColors.accent.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(6)),
@@ -170,7 +238,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              const Padding(padding: EdgeInsets.only(bottom: 4), child: Text('USDT', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: WalletColors.text2))),
+              Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(_asset.symbol, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: WalletColors.text2))),
             ]),
             const SizedBox(height: 10),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -178,7 +246,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                 final amountError = _amountErrorFor(l10n);
                 return Text(amountError ?? '≈ \$${_amountController.text.trim().isEmpty ? '0.00' : _amountController.text.trim()}', style: TextStyle(fontSize: 12, color: amountError == null ? WalletColors.text3 : WalletColors.red));
               }),
-              Text(l10n.availableUsdt('3,120.00'), style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
+              Text(l10n.availableBalance(_asset.availableLabel, _asset.symbol), style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
             ]),
           ]),
         ),
@@ -187,7 +255,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               Text(l10n.networkFee, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
-              GestureDetector(onTap: () => context.push('/fee'), child: Text(l10n.feeCustom, style: const TextStyle(fontSize: 12, color: WalletColors.accent))),
+              GestureDetector(onTap: _customFee, child: Text(l10n.feeCustom, style: const TextStyle(fontSize: 12, color: WalletColors.accent))),
             ]),
             const SizedBox(height: 12),
             KtSegmented(options: [l10n.feeSlow, l10n.feeStandard, l10n.feeFast], selected: _fee, onChanged: (i) => setState(() => _fee = i)),
@@ -218,7 +286,9 @@ class _FeeSelectScreenState extends State<FeeSelectScreen> {
     ];
     return KtScreen(
       navBar: KtNavBar(title: l10n.networkFee, onBack: () => Navigator.of(context).maybePop()),
-      bottom: KtPrimaryButton(label: l10n.confirmFee, onPressed: () => context.pop(tiers[_selected].$1)),
+      // Pops the selected tier index so the transfer screen can mirror it in
+      // its slow/standard/fast segmented control.
+      bottom: KtPrimaryButton(label: l10n.confirmFee, onPressed: () => context.pop(_selected)),
       children: [
         Text(l10n.feeExplainer,
             style: const TextStyle(fontSize: 13, height: 1.5, color: WalletColors.text2)),
@@ -475,12 +545,26 @@ class BroadcastResultScreen extends StatelessWidget {
 /// W15 交易详情.
 class TxDetailScreen extends StatelessWidget {
   const TxDetailScreen({super.key});
+
+  /// Demo tx hash of the displayed transaction (matches the broadcast flow).
+  static const _txHash = '8f6d2c…a94e07';
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: l10n.txDetailTitle, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.open_in_new, onTrailing: () {}),
+      navBar: KtNavBar(
+        title: l10n.txDetailTitle,
+        onBack: () => Navigator.of(context).maybePop(),
+        trailing: Icons.open_in_new,
+        onTrailing: () {
+          Clipboard.setData(const ClipboardData(text: 'https://tronscan.org/#/transaction/$_txHash'));
+          ScaffoldMessenger.of(context)
+            ..clearSnackBars()
+            ..showSnackBar(SnackBar(content: Text(l10n.explorerLinkCopied)));
+        },
+      ),
       children: [
         Column(children: [
           Container(

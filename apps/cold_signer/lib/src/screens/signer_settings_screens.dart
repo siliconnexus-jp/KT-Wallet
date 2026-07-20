@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
@@ -275,6 +276,33 @@ class SignerSecuritySettingsScreen extends StatelessWidget {
 /// C21 删除钱包.
 class SignerDeleteScreen extends StatelessWidget {
   const SignerDeleteScreen({super.key});
+
+  /// Destructive confirmation; the signer is demo-stateless, so on confirm the
+  /// delete outcome is returning to onboarding.
+  Future<void> _confirmDelete(BuildContext context) async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: SignerColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(l10n.irreversibleAction, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: SignerColors.text)),
+        content: Text(l10n.deleteWalletWarningDesc, style: const TextStyle(fontSize: 14, height: 1.6, color: SignerColors.text2)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.actionCancel, style: const TextStyle(color: SignerColors.text2)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.permanentlyDeleteWallet, style: const TextStyle(color: SignerColors.danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) context.go('/welcome');
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -283,7 +311,7 @@ class SignerDeleteScreen extends StatelessWidget {
       gap: 20,
       navBar: KtNavBar(title: l10n.deleteWallet, theme: _t, onBack: () => Navigator.of(context).maybePop()),
       bottom: Column(children: [
-        SizedBox(width: double.infinity, height: 52, child: FilledButton.icon(onPressed: () {}, icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFF0A0C0F)), label: Text(l10n.permanentlyDeleteWallet, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF0A0C0F))), style: FilledButton.styleFrom(backgroundColor: SignerColors.danger, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))))),
+        SizedBox(width: double.infinity, height: 52, child: FilledButton.icon(onPressed: () => _confirmDelete(context), icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFF0A0C0F)), label: Text(l10n.permanentlyDeleteWallet, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF0A0C0F))), style: FilledButton.styleFrom(backgroundColor: SignerColors.danger, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))))),
         const SizedBox(height: 12),
         Text(l10n.actionCancel, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2)),
       ]),

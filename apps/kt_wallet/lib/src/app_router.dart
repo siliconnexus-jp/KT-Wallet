@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import 'screens/assets_screens.dart';
+import 'screens/camera_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/settings_screens.dart';
 import 'screens/transfer_screens.dart';
@@ -47,6 +48,9 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
       initialLocation: initialLocation,
       routes: [
         GoRoute(path: '/', builder: (c, s) => const _Gallery()),
+        // Flow-only screen: deliberately outside the gallery registry so it is
+        // not enumerated by the design gallery / golden tests.
+        GoRoute(path: '/scan-address', builder: (c, s) => const ScanAddressScreen()),
         for (final entry in screenRegistry.entries)
           GoRoute(path: entry.value.$1, builder: (c, s) => entry.value.$2(c)),
       ],

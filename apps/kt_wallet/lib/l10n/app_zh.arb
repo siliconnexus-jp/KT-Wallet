@@ -168,18 +168,38 @@
   "amountFormatInvalid": "金额格式不正确",
   "recipientAddress": "收款地址",
   "pasteOrEnterAddress": "粘贴或输入地址",
-  "enterTronAddress": "请输入 TRON 网络收款地址",
-  "addressValidTron": "地址格式正确 · TRON 网络",
-  "addressInvalid": "地址无效",
-  "amountLabel": "金额",
-  "availableUsdt": "可用 {amount} USDT",
-  "@availableUsdt": {
+  "enterChainAddress": "请输入 {network} 网络收款地址",
+  "@enterChainAddress": {
     "placeholders": {
-      "amount": {
+      "network": {
         "type": "String"
       }
     }
   },
+  "addressValidOn": "地址格式正确 · {network} 网络",
+  "@addressValidOn": {
+    "placeholders": {
+      "network": {
+        "type": "String"
+      }
+    }
+  },
+  "addressInvalid": "地址无效",
+  "amountLabel": "金额",
+  "availableBalance": "可用 {amount} {symbol}",
+  "@availableBalance": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
+  "selectAsset": "选择资产",
+  "scanAddressTitle": "扫描地址二维码",
+  "scanAddressHint": "对准收款地址二维码",
   "networkFee": "网络手续费",
   "feeCustom": "自定义",
   "feeSlow": "慢",
@@ -258,12 +278,21 @@
   "change24h": "24h 涨跌",
   "contractAddress": "合约地址",
   "receiveWarning": "仅支持接收 TRON 网络（TRC-20）资产。从其他网络转入将导致资产丢失。",
+  "explorerLinkCopied": "区块浏览器链接已复制",
+  "addressCopied": "地址已复制",
   "addressBookTitle": "地址管理",
   "searchNameOrAddress": "搜索名称或地址",
   "noMatchingContacts": "没有匹配的联系人",
   "contactBobExchange": "Bob 交易所",
   "contactColdBackup": "冷钱包备份",
+  "addContactTitle": "添加联系人",
+  "nameLabel": "名称",
+  "addressLabel": "地址",
+  "invalidChainAddress": "不是有效的链地址",
+  "actionSave": "保存",
   "tokenManageTitle": "Token 管理",
+  "addTokenTitle": "添加代币",
+  "tokenSymbolLabel": "代币符号",
   "networkSettingsTitle": "网络设置",
   "rpcTimeout": "超时",
   "rpcNode": "RPC 节点",

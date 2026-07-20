@@ -219,7 +219,7 @@ class SignerRiskScreen extends StatelessWidget {
       gap: 24,
       navBar: KtNavBar(title: l10n.riskWarningTitle, theme: _t, leading: Icons.close, onBack: () => Navigator.of(context).maybePop()),
       bottom: Column(children: [
-        SizedBox(width: double.infinity, height: 52, child: OutlinedButton(onPressed: () {}, style: OutlinedButton.styleFrom(backgroundColor: SignerColors.surface, side: const BorderSide(color: SignerColors.border), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: Text(l10n.backToHome, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: SignerColors.text)))),
+        SizedBox(width: double.infinity, height: 52, child: OutlinedButton(onPressed: () => context.go('/home'), style: OutlinedButton.styleFrom(backgroundColor: SignerColors.surface, side: const BorderSide(color: SignerColors.border), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: Text(l10n.backToHome, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: SignerColors.text)))),
         const SizedBox(height: 12),
         Text(l10n.viewRawTxData, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2)),
       ]),
@@ -315,7 +315,7 @@ class SignerAddressExportScreen extends StatelessWidget {
       theme: _t,
       gap: 16,
       navBar: KtNavBar(title: l10n.exportPublicAddress, theme: _t, onBack: () => Navigator.of(context).maybePop()),
-      bottom: KtPrimaryButton(label: l10n.done, style: KtButtonStyle.signer, onPressed: () {}),
+      bottom: KtPrimaryButton(label: l10n.done, style: KtButtonStyle.signer, onPressed: () => context.go('/home')),
       children: [
         KtSegmented(theme: _t, options: [l10n.allAddresses, 'Ethereum', 'Polygon'], selected: 0),
         Container(

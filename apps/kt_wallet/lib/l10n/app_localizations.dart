@@ -676,17 +676,17 @@ abstract class AppLocalizations {
   /// **'粘贴或输入地址'**
   String get pasteOrEnterAddress;
 
-  /// No description provided for @enterTronAddress.
+  /// No description provided for @enterChainAddress.
   ///
   /// In zh, this message translates to:
-  /// **'请输入 TRON 网络收款地址'**
-  String get enterTronAddress;
+  /// **'请输入 {network} 网络收款地址'**
+  String enterChainAddress(String network);
 
-  /// No description provided for @addressValidTron.
+  /// No description provided for @addressValidOn.
   ///
   /// In zh, this message translates to:
-  /// **'地址格式正确 · TRON 网络'**
-  String get addressValidTron;
+  /// **'地址格式正确 · {network} 网络'**
+  String addressValidOn(String network);
 
   /// No description provided for @addressInvalid.
   ///
@@ -700,11 +700,29 @@ abstract class AppLocalizations {
   /// **'金额'**
   String get amountLabel;
 
-  /// No description provided for @availableUsdt.
+  /// No description provided for @availableBalance.
   ///
   /// In zh, this message translates to:
-  /// **'可用 {amount} USDT'**
-  String availableUsdt(String amount);
+  /// **'可用 {amount} {symbol}'**
+  String availableBalance(String amount, String symbol);
+
+  /// No description provided for @selectAsset.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择资产'**
+  String get selectAsset;
+
+  /// No description provided for @scanAddressTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'扫描地址二维码'**
+  String get scanAddressTitle;
+
+  /// No description provided for @scanAddressHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'对准收款地址二维码'**
+  String get scanAddressHint;
 
   /// No description provided for @networkFee.
   ///
@@ -994,6 +1012,18 @@ abstract class AppLocalizations {
   /// **'仅支持接收 TRON 网络（TRC-20）资产。从其他网络转入将导致资产丢失。'**
   String get receiveWarning;
 
+  /// No description provided for @explorerLinkCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'区块浏览器链接已复制'**
+  String get explorerLinkCopied;
+
+  /// No description provided for @addressCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址已复制'**
+  String get addressCopied;
+
   /// No description provided for @addressBookTitle.
   ///
   /// In zh, this message translates to:
@@ -1024,11 +1054,53 @@ abstract class AppLocalizations {
   /// **'冷钱包备份'**
   String get contactColdBackup;
 
+  /// No description provided for @addContactTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加联系人'**
+  String get addContactTitle;
+
+  /// No description provided for @nameLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'名称'**
+  String get nameLabel;
+
+  /// No description provided for @addressLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址'**
+  String get addressLabel;
+
+  /// No description provided for @invalidChainAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'不是有效的链地址'**
+  String get invalidChainAddress;
+
+  /// No description provided for @actionSave.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存'**
+  String get actionSave;
+
   /// No description provided for @tokenManageTitle.
   ///
   /// In zh, this message translates to:
   /// **'Token 管理'**
   String get tokenManageTitle;
+
+  /// No description provided for @addTokenTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加代币'**
+  String get addTokenTitle;
+
+  /// No description provided for @tokenSymbolLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'代币符号'**
+  String get tokenSymbolLabel;
 
   /// No description provided for @networkSettingsTitle.
   ///

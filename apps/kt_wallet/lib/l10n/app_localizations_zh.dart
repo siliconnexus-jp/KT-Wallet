@@ -315,10 +315,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pasteOrEnterAddress => '粘贴或输入地址';
 
   @override
-  String get enterTronAddress => '请输入 TRON 网络收款地址';
+  String enterChainAddress(String network) {
+    return '请输入 $network 网络收款地址';
+  }
 
   @override
-  String get addressValidTron => '地址格式正确 · TRON 网络';
+  String addressValidOn(String network) {
+    return '地址格式正确 · $network 网络';
+  }
 
   @override
   String get addressInvalid => '地址无效';
@@ -327,9 +331,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get amountLabel => '金额';
 
   @override
-  String availableUsdt(String amount) {
-    return '可用 $amount USDT';
+  String availableBalance(String amount, String symbol) {
+    return '可用 $amount $symbol';
   }
+
+  @override
+  String get selectAsset => '选择资产';
+
+  @override
+  String get scanAddressTitle => '扫描地址二维码';
+
+  @override
+  String get scanAddressHint => '对准收款地址二维码';
 
   @override
   String get networkFee => '网络手续费';
@@ -483,6 +496,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get receiveWarning => '仅支持接收 TRON 网络（TRC-20）资产。从其他网络转入将导致资产丢失。';
 
   @override
+  String get explorerLinkCopied => '区块浏览器链接已复制';
+
+  @override
+  String get addressCopied => '地址已复制';
+
+  @override
   String get addressBookTitle => '地址管理';
 
   @override
@@ -498,7 +517,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get contactColdBackup => '冷钱包备份';
 
   @override
+  String get addContactTitle => '添加联系人';
+
+  @override
+  String get nameLabel => '名称';
+
+  @override
+  String get addressLabel => '地址';
+
+  @override
+  String get invalidChainAddress => '不是有效的链地址';
+
+  @override
+  String get actionSave => '保存';
+
+  @override
   String get tokenManageTitle => 'Token 管理';
+
+  @override
+  String get addTokenTitle => '添加代币';
+
+  @override
+  String get tokenSymbolLabel => '代币符号';
 
   @override
   String get networkSettingsTitle => '网络设置';

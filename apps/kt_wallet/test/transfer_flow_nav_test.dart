@@ -4,15 +4,17 @@ import 'package:kt_wallet/main.dart';
 
 /// Walks the full transfer navigation, proving the screens are wired into one
 /// flow driven by the current wallet type.
-Future<void> _openHome(WidgetTester tester) async {
+Future<void> _open(WidgetTester tester, String galleryEntry) async {
   tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
   addTearDown(tester.platformDispatcher.clearLocalesTestValue);
   await tester.pumpWidget(KtWalletApp());
   await tester.pumpAndSettle();
-  await tester.scrollUntilVisible(find.text('W1/W20 首页'), 200);
-  await tester.tap(find.text('W1/W20 首页'));
+  await tester.scrollUntilVisible(find.text(galleryEntry), 200);
+  await tester.tap(find.text(galleryEntry));
   await tester.pumpAndSettle();
 }
+
+Future<void> _openHome(WidgetTester tester) => _open(tester, 'W1/W20 首页');
 
 void main() {
   testWidgets('hot wallet: home → transfer → confirm → auth → result → home',
@@ -60,5 +62,21 @@ void main() {
     await tester.tap(find.text('生成待签名二维码'));
     await tester.pumpAndSettle();
     expect(find.text('待签名交易'), findsOneWidget); // W6 QR screen
+  });
+
+  testWidgets('token detail: send opens the transfer input screen',
+      (tester) async {
+    await _open(tester, 'W3 Token 详情');
+    await tester.tap(find.text('转账'));
+    await tester.pumpAndSettle();
+    expect(find.text('收款地址'), findsOneWidget); // W4 transfer input
+  });
+
+  testWidgets('token detail: receive opens the receive screen',
+      (tester) async {
+    await _open(tester, 'W3 Token 详情');
+    await tester.tap(find.text('收款'));
+    await tester.pumpAndSettle();
+    expect(find.text('TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa'), findsOneWidget); // W14 receive
   });
 }

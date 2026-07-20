@@ -1,8 +1,38 @@
+import 'package:chains/chains.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../state/locale_controller.dart';
+
+/// Display name + badge color per validated chain (address book rows).
+const _chainTags = [
+  (Chain.ethereum, 'Ethereum', ChainColors.ethereum),
+  (Chain.polygon, 'Polygon', ChainColors.polygon),
+  (Chain.tron, 'TRON', ChainColors.tron),
+  (Chain.solana, 'Solana', ChainColors.solana),
+];
+
+String _abbrevAddress(String a) => a.length <= 18 ? a : '${a.substring(0, 8)}…${a.substring(a.length - 8)}';
+
+/// Bottom-sheet form field matching the app's card inputs.
+Widget _sheetField(TextEditingController controller, {required String label, bool mono = false, VoidCallback? onChanged}) =>
+    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
+      const SizedBox(height: 8),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(color: WalletColors.bg, borderRadius: BorderRadius.circular(12), border: Border.all(color: WalletColors.border)),
+        child: TextField(
+          controller: controller,
+          onChanged: (_) => onChanged?.call(),
+          autocorrect: false,
+          enableSuggestions: false,
+          style: TextStyle(fontSize: 14, fontFamily: mono ? KtFonts.mono : KtFonts.ui, color: WalletColors.text),
+          decoration: const InputDecoration(isCollapsed: true, border: InputBorder.none),
+        ),
+      ),
+    ]);
 
 Widget _switch(bool on, {VoidCallback? onTap}) => GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -47,6 +77,69 @@ class AddressBookScreen extends StatefulWidget {
 class _AddressBookScreenState extends State<AddressBookScreen> {
   String _query = '';
 
+  /// Contacts added in this session via the "+" sheet (in-memory demo state).
+  final _added = <(String, String, String, String, Color)>[];
+
+  /// "+" bottom sheet: name + address; the address must validate against one
+  /// of the supported chains, whose tag/color the new row inherits.
+  Future<void> _addContact() async {
+    final l10n = AppLocalizations.of(context);
+    final nameController = TextEditingController();
+    final addrController = TextEditingController();
+    String? error;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: WalletColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2)))),
+                const SizedBox(height: 16),
+                Text(l10n.addContactTitle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: WalletColors.text)),
+                const SizedBox(height: 16),
+                _sheetField(nameController, label: l10n.nameLabel, onChanged: () => setSheetState(() {})),
+                const SizedBox(height: 14),
+                _sheetField(addrController, label: l10n.addressLabel, mono: true, onChanged: () => setSheetState(() {})),
+                if (error != null) ...[
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    const Icon(Icons.error_outline, size: 14, color: WalletColors.red),
+                    const SizedBox(width: 6),
+                    Expanded(child: Text(error!, style: const TextStyle(fontSize: 12, color: WalletColors.red))),
+                  ]),
+                ],
+                const SizedBox(height: 18),
+                KtPrimaryButton(
+                  label: l10n.actionSave,
+                  onPressed: nameController.text.trim().isEmpty || addrController.text.trim().isEmpty
+                      ? null
+                      : () {
+                          final name = nameController.text.trim();
+                          final addr = addrController.text.trim();
+                          final match = _chainTags.where((t) => Addresses.validate(t.$1, addr).isValid).firstOrNull;
+                          if (match == null) {
+                            setSheetState(() => error = l10n.invalidChainAddress);
+                            return;
+                          }
+                          setState(() => _added.add((name.characters.first.toUpperCase(), name, _abbrevAddress(addr), match.$2, match.$3)));
+                          Navigator.of(ctx).pop();
+                        },
+                ),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
+    // Not disposed here: the sheet's exit animation still holds the fields.
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -55,6 +148,7 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
       ('B', l10n.contactBobExchange, 'TWd4qCEU…nMxR38uQz', 'TRON', ChainColors.tron),
       ('冷', l10n.contactColdBackup, '0x8f3C2a…7E19bE1', 'Polygon', ChainColors.polygon),
       ('D', 'Dana', '6yKp…Vr2W', 'Solana', ChainColors.solana),
+      ..._added,
     ];
     final q = _query.trim().toLowerCase();
     final results = q.isEmpty
@@ -62,7 +156,7 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
         : contacts.where((c) => c.$2.toLowerCase().contains(q) || c.$3.toLowerCase().contains(q) || c.$4.toLowerCase().contains(q)).toList();
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: l10n.addressBookTitle, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.add, onTrailing: () {}),
+      navBar: KtNavBar(title: l10n.addressBookTitle, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.add, onTrailing: _addContact),
       children: [
         Container(
           height: 44,
@@ -127,21 +221,75 @@ class TokenManageScreen extends StatefulWidget {
 }
 
 class _TokenManageScreenState extends State<TokenManageScreen> {
-  static const _tokens = [
-    (Color(0xFF26A17B), '₮', 'USDT', 'TRON · TRC-20'),
-    (Color(0xFF26A17B), '₮', 'USDT', 'Ethereum · ERC-20'),
-    (Color(0xFF2775CA), r'$', 'USDC', 'Solana · SPL'),
-    (Color(0xFFF0B90B), 'B', 'BUSD', 'Ethereum · ERC-20'),
-    (Color(0xFFFF007A), 'U', 'UNI', 'Ethereum · ERC-20'),
+  final _tokens = <(Color, String, String, String)>[
+    (const Color(0xFF26A17B), '₮', 'USDT', 'TRON · TRC-20'),
+    (const Color(0xFF26A17B), '₮', 'USDT', 'Ethereum · ERC-20'),
+    (const Color(0xFF2775CA), r'$', 'USDC', 'Solana · SPL'),
+    (const Color(0xFFF0B90B), 'B', 'BUSD', 'Ethereum · ERC-20'),
+    (const Color(0xFFFF007A), 'U', 'UNI', 'Ethereum · ERC-20'),
   ];
   final _enabled = [true, true, true, false, false];
+
+  /// "+" bottom sheet: symbol + name + contract address; a saved token is
+  /// appended to the in-memory list as an enabled row.
+  Future<void> _addToken() async {
+    final l10n = AppLocalizations.of(context);
+    final symbolController = TextEditingController();
+    final nameController = TextEditingController();
+    final contractController = TextEditingController();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: WalletColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2)))),
+                const SizedBox(height: 16),
+                Text(l10n.addTokenTitle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: WalletColors.text)),
+                const SizedBox(height: 16),
+                _sheetField(symbolController, label: l10n.tokenSymbolLabel, onChanged: () => setSheetState(() {})),
+                const SizedBox(height: 14),
+                _sheetField(nameController, label: l10n.nameLabel, onChanged: () => setSheetState(() {})),
+                const SizedBox(height: 14),
+                _sheetField(contractController, label: l10n.contractAddress, mono: true, onChanged: () => setSheetState(() {})),
+                const SizedBox(height: 18),
+                KtPrimaryButton(
+                  label: l10n.actionSave,
+                  onPressed: symbolController.text.trim().isEmpty || nameController.text.trim().isEmpty
+                      ? null
+                      : () {
+                          final symbol = symbolController.text.trim().toUpperCase();
+                          final name = nameController.text.trim();
+                          final contract = contractController.text.trim();
+                          final sub = contract.isEmpty ? name : '$name · ${_abbrevAddress(contract)}';
+                          setState(() {
+                            _tokens.add((const Color(0xFF64748B), symbol.characters.first, symbol, sub));
+                            _enabled.add(true);
+                          });
+                          Navigator.of(ctx).pop();
+                        },
+                ),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
+    // Not disposed here: the sheet's exit animation still holds the fields.
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: l10n.tokenManageTitle, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.add, onTrailing: () {}),
+      navBar: KtNavBar(title: l10n.tokenManageTitle, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.add, onTrailing: _addToken),
       children: [
         KtCard(
           child: Column(children: [

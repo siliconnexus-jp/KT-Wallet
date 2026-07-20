@@ -317,10 +317,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String get pasteOrEnterAddress => 'アドレスを貼り付けまたは入力';
 
   @override
-  String get enterTronAddress => 'TRONネットワークの受取アドレスを入力してください';
+  String enterChainAddress(String network) {
+    return '$networkネットワークの受取アドレスを入力してください';
+  }
 
   @override
-  String get addressValidTron => 'アドレス形式は正しい · TRONネットワーク';
+  String addressValidOn(String network) {
+    return 'アドレス形式は正しい · $networkネットワーク';
+  }
 
   @override
   String get addressInvalid => '無効なアドレス';
@@ -329,9 +333,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get amountLabel => '金額';
 
   @override
-  String availableUsdt(String amount) {
-    return '利用可能 $amount USDT';
+  String availableBalance(String amount, String symbol) {
+    return '利用可能 $amount $symbol';
   }
+
+  @override
+  String get selectAsset => '資産を選択';
+
+  @override
+  String get scanAddressTitle => 'アドレスQRをスキャン';
+
+  @override
+  String get scanAddressHint => '受取アドレスのQRコードに合わせてください';
 
   @override
   String get networkFee => 'ネットワーク手数料';
@@ -487,6 +500,12 @@ class AppLocalizationsJa extends AppLocalizations {
       'TRONネットワーク（TRC-20）資産のみ対応。他のネットワークからの送金は資産の損失につながります。';
 
   @override
+  String get explorerLinkCopied => 'ブロックエクスプローラーのリンクをコピーしました';
+
+  @override
+  String get addressCopied => 'アドレスをコピーしました';
+
+  @override
   String get addressBookTitle => 'アドレス帳';
 
   @override
@@ -502,7 +521,28 @@ class AppLocalizationsJa extends AppLocalizations {
   String get contactColdBackup => 'コールドウォレットのバックアップ';
 
   @override
+  String get addContactTitle => '連絡先を追加';
+
+  @override
+  String get nameLabel => '名前';
+
+  @override
+  String get addressLabel => 'アドレス';
+
+  @override
+  String get invalidChainAddress => '有効なチェーンアドレスではありません';
+
+  @override
+  String get actionSave => '保存';
+
+  @override
   String get tokenManageTitle => 'トークン管理';
+
+  @override
+  String get addTokenTitle => 'トークンを追加';
+
+  @override
+  String get tokenSymbolLabel => 'シンボル';
 
   @override
   String get networkSettingsTitle => 'ネットワーク設定';

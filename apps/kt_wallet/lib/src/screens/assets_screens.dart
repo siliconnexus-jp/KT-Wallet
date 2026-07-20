@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
@@ -19,7 +21,7 @@ class AssetsListScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return KtScreen(
-      navBar: KtNavBar(title: l10n.tabAssets, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.add, onTrailing: () {}),
+      navBar: KtNavBar(title: l10n.tabAssets, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.add, onTrailing: () => context.push('/token-manage')),
       children: [
         _SearchBar(),
         KtSegmented(options: [l10n.viewAll, 'Ethereum', 'Polygon', 'TRON', 'Solana'], selected: 0),
@@ -78,11 +80,25 @@ class _AssetTile extends StatelessWidget {
 /// W3 Token 详情 — hero balance + info card + recent tx.
 class TokenDetailScreen extends StatelessWidget {
   const TokenDetailScreen({super.key});
+
+  /// Demo USDT TRC-20 contract address shown on the info card.
+  static const _contract = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return KtScreen(
-      navBar: KtNavBar(title: 'USDT', onBack: () => Navigator.of(context).maybePop(), trailing: Icons.open_in_new, onTrailing: () {}),
+      navBar: KtNavBar(
+        title: 'USDT',
+        onBack: () => Navigator.of(context).maybePop(),
+        trailing: Icons.open_in_new,
+        onTrailing: () {
+          Clipboard.setData(const ClipboardData(text: 'https://tronscan.org/#/token20/$_contract'));
+          ScaffoldMessenger.of(context)
+            ..clearSnackBars()
+            ..showSnackBar(SnackBar(content: Text(l10n.explorerLinkCopied)));
+        },
+      ),
       children: [
         Column(children: [
           const KtAvatar(color: Color(0xFF26A17B), initial: '₮', size: 56),
@@ -94,13 +110,13 @@ class TokenDetailScreen extends StatelessWidget {
           const NetworkBadge(label: 'TRON · TRC-20', dotColor: ChainColors.tron),
         ]),
         Row(children: [
-          Expanded(child: KtPrimaryButton(label: l10n.actionSend, icon: Icons.north_east, onPressed: () {})),
+          Expanded(child: KtPrimaryButton(label: l10n.actionSend, icon: Icons.north_east, onPressed: () => context.push('/transfer'))),
           const SizedBox(width: 12),
           Expanded(
             child: SizedBox(
               height: 48,
               child: OutlinedButton.icon(
-                onPressed: () {},
+                onPressed: () => context.push('/receive'),
                 icon: const Icon(Icons.qr_code, size: 18, color: WalletColors.accent),
                 label: Text(l10n.actionReceive, style: const TextStyle(color: WalletColors.accent, fontWeight: FontWeight.w600)),
                 style: OutlinedButton.styleFrom(backgroundColor: WalletColors.surface, side: BorderSide.none, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
@@ -125,11 +141,25 @@ class TokenDetailScreen extends StatelessWidget {
 /// W14 收款 — token selector + QR + address + warning.
 class ReceiveScreen extends StatelessWidget {
   const ReceiveScreen({super.key});
+
+  /// The receive address rendered under the QR placeholder.
+  static const _address = 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa';
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return KtScreen(
-      navBar: KtNavBar(title: l10n.actionReceive, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.ios_share, onTrailing: () {}),
+      navBar: KtNavBar(
+        title: l10n.actionReceive,
+        onBack: () => Navigator.of(context).maybePop(),
+        trailing: Icons.ios_share,
+        onTrailing: () {
+          Clipboard.setData(const ClipboardData(text: _address));
+          ScaffoldMessenger.of(context)
+            ..clearSnackBars()
+            ..showSnackBar(SnackBar(content: Text(l10n.addressCopied)));
+        },
+      ),
       children: [
         Center(
           child: Container(
@@ -149,7 +179,7 @@ class ReceiveScreen extends StatelessWidget {
           child: Column(children: const [
             KtQrPlaceholder(size: 220),
             SizedBox(height: 18),
-            Text('TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
+            Text(_address,
                 textAlign: TextAlign.center, style: TextStyle(fontSize: 14, fontFamily: KtFonts.mono, height: 1.6, color: WalletColors.text)),
           ]),
         ),
