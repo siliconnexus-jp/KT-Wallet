@@ -44,6 +44,12 @@ final screenRegistry = <String, (String, WidgetBuilder)>{
   'W19 安全设置': ('/security', (c) => const SecuritySettingsScreen()),
 };
 
+/// Sheet-style screens (translucent scrim over the previous screen). Pushed as
+/// ordinary routes they would sit on an opaque page — the screen below never
+/// renders and the 50%-alpha scrim reads as solid black. A non-opaque page
+/// keeps the underlying screen visible and dimmed, matching the design.
+const _sheetRoutes = {'/switcher', '/transfer-auth'};
+
 GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
       initialLocation: initialLocation,
       routes: [
@@ -52,14 +58,26 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
         // not enumerated by the design gallery / golden tests.
         GoRoute(path: '/scan-address', builder: (c, s) => const ScanAddressScreen()),
         for (final entry in screenRegistry.entries)
-          GoRoute(
-            path: entry.value.$1,
-            // Wallet detail accepts ?id=<walletId> when pushed from the manage
-            // list; without it (gallery / goldens) it shows the current wallet.
-            builder: entry.value.$1 == '/wallet-detail'
-                ? (c, s) => WalletDetailScreen(walletId: s.uri.queryParameters['id'])
-                : (c, s) => entry.value.$2(c),
-          ),
+          if (_sheetRoutes.contains(entry.value.$1))
+            GoRoute(
+              path: entry.value.$1,
+              pageBuilder: (c, s) => CustomTransitionPage(
+                key: s.pageKey,
+                opaque: false,
+                child: entry.value.$2(c),
+                transitionsBuilder: (c, animation, _, child) =>
+                    FadeTransition(opacity: animation, child: child),
+              ),
+            )
+          else
+            GoRoute(
+              path: entry.value.$1,
+              // Wallet detail accepts ?id=<walletId> when pushed from the manage
+              // list; without it (gallery / goldens) it shows the current wallet.
+              builder: entry.value.$1 == '/wallet-detail'
+                  ? (c, s) => WalletDetailScreen(walletId: s.uri.queryParameters['id'])
+                  : (c, s) => entry.value.$2(c),
+            ),
       ],
     );
 
