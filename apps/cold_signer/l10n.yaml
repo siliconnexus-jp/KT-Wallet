@@ -1,0 +1,8 @@
+# Flutter gen-l10n configuration. The Chinese ARB is the template / base locale;
+# untranslated keys fall back to it. Run `flutter gen-l10n` (or any build) to
+# regenerate lib/l10n/app_localizations.dart.
+arb-dir: lib/l10n
+template-arb-file: app_zh.arb
+output-localization-file: app_localizations.dart
+output-class: AppLocalizations
+nullable-getter: false

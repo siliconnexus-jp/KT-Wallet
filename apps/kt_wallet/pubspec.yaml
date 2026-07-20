@@ -30,6 +30,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+  shared_preferences: ^2.2.0
   core_crypto:
     path: ../../packages/core_crypto
   airgap_protocol:
@@ -40,6 +44,11 @@ dependencies:
     path: ../../packages/ui_kit
   wallet_data:
     path: ../../packages/wallet_data
+  # The offline signer, embedded behind the first-launch device-mode picker so
+  # one installer can serve both roles. cold_signer remains independently
+  # buildable as a standalone app.
+  cold_signer:
+    path: ../cold_signer
   http: ^1.2.0
   drift: ^2.20.0
   sqlite3_flutter_libs: ^0.5.0
@@ -69,6 +78,9 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+
+  # Generate the AppLocalizations class from the ARB files (see l10n.yaml).
+  generate: true
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

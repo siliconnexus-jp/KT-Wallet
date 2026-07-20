@@ -1,0 +1,591 @@
+// ignore: unused_import
+import 'package:intl/intl.dart' as intl;
+import 'app_localizations.dart';
+
+// ignore_for_file: type=lint
+
+/// The translations for Japanese (`ja`).
+class AppLocalizationsJa extends AppLocalizations {
+  AppLocalizationsJa([String locale = 'ja']) : super(locale);
+
+  @override
+  String get appTagline => '二台構成のコールドウォレット・オンライン監視端末';
+
+  @override
+  String get actionConfirm => '確認';
+
+  @override
+  String get actionCancel => 'キャンセル';
+
+  @override
+  String get actionDelete => '削除';
+
+  @override
+  String get actionNext => '次へ';
+
+  @override
+  String get actionImport => 'インポート';
+
+  @override
+  String get manage => '管理';
+
+  @override
+  String get viewAll => 'すべて';
+
+  @override
+  String get max => '最大';
+
+  @override
+  String get tabHome => 'ホーム';
+
+  @override
+  String get tabAssets => '資産';
+
+  @override
+  String get tabRecords => '履歴';
+
+  @override
+  String get tabSettings => '設定';
+
+  @override
+  String get walletKindHot => '通常';
+
+  @override
+  String get walletKindWatch => '監視';
+
+  @override
+  String get walletStateBackedUp => 'バックアップ済み';
+
+  @override
+  String get walletStateNotBackedUp => '未バックアップ';
+
+  @override
+  String get walletSeedDaily => '日常ウォレット';
+
+  @override
+  String get walletSeedMain => 'メインウォレット';
+
+  @override
+  String walletDefaultName(int index) {
+    return 'ウォレット $index';
+  }
+
+  @override
+  String walletImportedName(int index) {
+    return 'インポートウォレット $index';
+  }
+
+  @override
+  String get backupBannerText => 'リカバリーフレーズが未バックアップ — 紛失の恐れがあります';
+
+  @override
+  String get backupNow => '今すぐバックアップ';
+
+  @override
+  String get balanceTitle => '総資産評価額 (USD)';
+
+  @override
+  String get balanceChangePeriod => '過去24時間';
+
+  @override
+  String get actionReceive => '受取';
+
+  @override
+  String get actionSend => '送金';
+
+  @override
+  String get actionMore => 'その他';
+
+  @override
+  String get actionScanSign => '署名スキャン';
+
+  @override
+  String get assetsSortByValue => '保有額の高い順';
+
+  @override
+  String get recordsTitle => '取引履歴';
+
+  @override
+  String get txSent => '送信';
+
+  @override
+  String get txReceived => '受取';
+
+  @override
+  String get dateToday => '今日';
+
+  @override
+  String get dateYesterday => '昨日';
+
+  @override
+  String monthDay(int month, int day) {
+    return '$month月$day日';
+  }
+
+  @override
+  String get settingsWalletManage => 'ウォレット管理';
+
+  @override
+  String get settingsSecurity => 'セキュリティ設定';
+
+  @override
+  String get settingsAddressBook => 'アドレス帳';
+
+  @override
+  String get settingsNetwork => 'ネットワーク';
+
+  @override
+  String get settingsTokenManage => 'トークン管理';
+
+  @override
+  String get addWalletTitle => 'ウォレットを追加';
+
+  @override
+  String get addWalletStandardSection => '通常ウォレット・手軽';
+
+  @override
+  String get createNewWallet => '新規ウォレットを作成';
+
+  @override
+  String get createNewWalletDesc => '端末で新しいリカバリーフレーズを生成し、すぐに使えます';
+
+  @override
+  String get importMnemonic => 'リカバリーフレーズをインポート';
+
+  @override
+  String get importMnemonicDesc => '12 / 18 / 24 単語の既存フレーズ';
+
+  @override
+  String get coldWalletSection => 'オフラインウォレット構成・高セキュリティ';
+
+  @override
+  String get connectColdWallet => 'オフラインウォレットを接続';
+
+  @override
+  String get connectColdWalletDesc => 'QRでCold Signerとペアリング。秘密鍵は端末に入りません';
+
+  @override
+  String get createWalletTitle => '通常ウォレットを作成';
+
+  @override
+  String get showMnemonic => 'リカバリーフレーズを表示';
+
+  @override
+  String get mnemonicWillGenerate => '次にリカバリーフレーズを生成します';
+
+  @override
+  String get hotWalletNotice =>
+      'これはホットウォレットです。リカバリーフレーズは端末のセキュアエリアに保存されます。少額の日常利用に適しており、多額の資産にはオフラインウォレット構成を推奨します。';
+
+  @override
+  String get ruleFullControlTitle => 'リカバリーフレーズは資産の完全な管理権です';
+
+  @override
+  String get ruleFullControlDesc => 'この12単語を得た者は、あなたの全資産を送金できます';
+
+  @override
+  String get ruleHandwriteTitle => '紙とペンで手書きバックアップのみ';
+
+  @override
+  String get ruleHandwriteDesc => '写真・クラウド・メモ・チャットアプリに保存しないでください';
+
+  @override
+  String get backupMnemonicTitle => 'リカバリーフレーズをバックアップ';
+
+  @override
+  String get mnemonicShowConfirmBtn => '手書きしました — 確認へ';
+
+  @override
+  String get mnemonicShowWarning =>
+      '順番通りに手書きしてください。スクリーンショットや撮影は禁止です。フレーズを得た者が資産を管理できます。';
+
+  @override
+  String get verifyBackupTitle => 'バックアップを確認';
+
+  @override
+  String mnemonicWordChallenge(int position) {
+    return '$position 番目の単語は？';
+  }
+
+  @override
+  String get mnemonicChallengeHint => '下から正しい単語を選択してください';
+
+  @override
+  String get verifyWrong => '選択が違います。手書きバックアップを確認して再試行してください';
+
+  @override
+  String get walletCreatedBackedUp => 'ウォレットを作成しバックアップしました';
+
+  @override
+  String get backupVerified => 'バックアップを確認しました — フレーズは正しいです';
+
+  @override
+  String get mnemonicInvalid => 'リカバリーフレーズが無効です。各単語を確認して再試行してください';
+
+  @override
+  String get mnemonicImported => 'リカバリーフレーズをインポートしました';
+
+  @override
+  String wordsCount(int count) {
+    return '$count 単語';
+  }
+
+  @override
+  String get pasteMnemonic => 'フレーズを貼り付け（解析後クリップボードを消去）';
+
+  @override
+  String get scanAccountQr => 'アカウントQRをスキャン';
+
+  @override
+  String get connectColdSubtitle => 'オフライン端末から公開アドレスをインポートして監視ウォレットを作成';
+
+  @override
+  String get connectColdSafety => '端末はフレーズ・秘密鍵・シードを一切受信・保存しません。';
+
+  @override
+  String get scanAccountHint => 'Cold SignerのアドレスQRに合わせてください';
+
+  @override
+  String get importConfirmTitle => 'インポートを確認';
+
+  @override
+  String get createWatchWallet => '監視ウォレットを作成';
+
+  @override
+  String walletIdProtocol(String id, int version) {
+    return 'Wallet ID: $id · プロトコル v$version';
+  }
+
+  @override
+  String get walletsTitle => 'ウォレット';
+
+  @override
+  String get deleteWalletTitle => 'ウォレットを削除';
+
+  @override
+  String deleteWalletConfirm(String name) {
+    return '「$name」を削除しますか？端末の記録のみ削除され、オンチェーン資産には影響しません。';
+  }
+
+  @override
+  String deletedWallet(String name) {
+    return '「$name」を削除しました';
+  }
+
+  @override
+  String get sortAction => '並べ替え';
+
+  @override
+  String walletCountLimit(int count, int max) {
+    return 'ウォレット $count 個 · 上限 $max 個';
+  }
+
+  @override
+  String get walletDetailTitle => 'ウォレット詳細';
+
+  @override
+  String get walletTypeLabel => 'ウォレット種別';
+
+  @override
+  String get standardWallet => '通常ウォレット';
+
+  @override
+  String get backupNotYet => 'リカバリーフレーズが未バックアップです';
+
+  @override
+  String get viewMnemonic => 'リカバリーフレーズを表示';
+
+  @override
+  String get viewMnemonicDesc => 'Face IDまたはパスコードが必要です';
+
+  @override
+  String get deleteWalletDesc => '認証が必要です。削除前にバックアップ状態を再確認します';
+
+  @override
+  String get amountMustBePositive => '金額は0より大きくしてください';
+
+  @override
+  String get insufficientBalance => '残高不足';
+
+  @override
+  String get amountFormatInvalid => '金額の形式が正しくありません';
+
+  @override
+  String get recipientAddress => '受取アドレス';
+
+  @override
+  String get pasteOrEnterAddress => 'アドレスを貼り付けまたは入力';
+
+  @override
+  String get enterTronAddress => 'TRONネットワークの受取アドレスを入力してください';
+
+  @override
+  String get addressValidTron => 'アドレス形式は正しい · TRONネットワーク';
+
+  @override
+  String get addressInvalid => '無効なアドレス';
+
+  @override
+  String get amountLabel => '金額';
+
+  @override
+  String availableUsdt(String amount) {
+    return '利用可能 $amount USDT';
+  }
+
+  @override
+  String get networkFee => 'ネットワーク手数料';
+
+  @override
+  String get feeCustom => 'カスタム';
+
+  @override
+  String get feeSlow => '低速';
+
+  @override
+  String get feeStandard => '標準';
+
+  @override
+  String get feeFast => '高速';
+
+  @override
+  String get confirmFee => '手数料を確認';
+
+  @override
+  String get feeExplainer => '手数料が高いほど確認が早くなります。手数料はネットワークに支払われ、アプリには入りません。';
+
+  @override
+  String get feeEtaSlow => '≈ 3〜5分';
+
+  @override
+  String get feeEtaStandard => '≈ 1分';
+
+  @override
+  String get feeEtaFast => '≈ 15秒';
+
+  @override
+  String get feeLowWarning =>
+      '手数料が低すぎると、取引が長時間未確認のままになったり失敗したりする場合があります。TRON Energyが不足するとTRXを消費して補います。';
+
+  @override
+  String get confirmTransactionTitle => '取引を確認';
+
+  @override
+  String get confirmTransfer => '送金を確認';
+
+  @override
+  String get generateSignQr => '署名用QRを生成';
+
+  @override
+  String get hotConfirmHint => '認証後、この端末が署名し自動で送信します';
+
+  @override
+  String get watchConfirmHint => 'QRにフレーズや秘密鍵は含まれません';
+
+  @override
+  String get fromAddress => '送信元';
+
+  @override
+  String get totalSpend => '合計支出';
+
+  @override
+  String get unbackedTransferWarning =>
+      'このウォレットはリカバリーフレーズが未バックアップです。送金前にバックアップを推奨します。';
+
+  @override
+  String get pendingSignTitle => '署名待ち取引';
+
+  @override
+  String dynamicShard(int received, int total) {
+    return '動的シャード $received / $total';
+  }
+
+  @override
+  String get networkRow => 'ネットワーク';
+
+  @override
+  String get requestId => 'リクエストID';
+
+  @override
+  String get scanWithOfflinePhone => 'このQRをオフライン署名端末でスキャンしてください';
+
+  @override
+  String get scanSignResultTitle => '署名結果をスキャン';
+
+  @override
+  String recognizedShard(int received, int total) {
+    return '認識済みシャード $received / $total';
+  }
+
+  @override
+  String get broadcastTitle => '取引をブロードキャスト';
+
+  @override
+  String get dontBroadcastYet => 'まだ送信しない';
+
+  @override
+  String get signatureVerified => '署名を確認 · 署名者はウォレットアドレスと一致し、内容は改ざんされていません';
+
+  @override
+  String get signerAddress => '署名アドレス';
+
+  @override
+  String get txHashPreview => '取引ハッシュのプレビュー';
+
+  @override
+  String get backToHome => 'ホームへ戻る';
+
+  @override
+  String get txSubmitted => '取引を送信しました';
+
+  @override
+  String get txHash => '取引ハッシュ';
+
+  @override
+  String get statusLabel => 'ステータス';
+
+  @override
+  String confirming(int received, int total) {
+    return '確認中 ($received/$total)';
+  }
+
+  @override
+  String get txDetailTitle => '取引詳細';
+
+  @override
+  String get confirmedPrefix => '確認済み';
+
+  @override
+  String get confirmations => '確認数';
+
+  @override
+  String get authToConfirmTransfer => '認証して送金を確認';
+
+  @override
+  String get authEveryTransfer => '送金ごとにFace IDまたはパスコードが必要です';
+
+  @override
+  String get useFaceId => 'Face IDで認証';
+
+  @override
+  String get usePasscode => 'パスコードを使う';
+
+  @override
+  String get searchAssetHint => '名称 / シンボル / コントラクトを検索';
+
+  @override
+  String get price => '価格';
+
+  @override
+  String get change24h => '24時間変動';
+
+  @override
+  String get contractAddress => 'コントラクトアドレス';
+
+  @override
+  String get receiveWarning =>
+      'TRONネットワーク（TRC-20）資産のみ対応。他のネットワークからの送金は資産の損失につながります。';
+
+  @override
+  String get addressBookTitle => 'アドレス帳';
+
+  @override
+  String get searchNameOrAddress => '名称またはアドレスを検索';
+
+  @override
+  String get noMatchingContacts => '一致する連絡先がありません';
+
+  @override
+  String get contactBobExchange => 'Bob 取引所';
+
+  @override
+  String get contactColdBackup => 'コールドウォレットのバックアップ';
+
+  @override
+  String get tokenManageTitle => 'トークン管理';
+
+  @override
+  String get networkSettingsTitle => 'ネットワーク設定';
+
+  @override
+  String get rpcTimeout => 'タイムアウト';
+
+  @override
+  String get rpcNode => 'RPCノード';
+
+  @override
+  String get accessControl => 'アクセス制御';
+
+  @override
+  String get appLock => 'アプリロック';
+
+  @override
+  String get appLockDesc => 'アプリ起動時にFace IDを要求';
+
+  @override
+  String get autoLock => '自動ロック';
+
+  @override
+  String get autoLockDesc => 'バックグラウンドで一定時間後に再ロック';
+
+  @override
+  String get autoLockValue => '1分';
+
+  @override
+  String get privacyMode => 'プライバシーモード';
+
+  @override
+  String get privacyModeDesc => 'ホームで残高を既定で非表示';
+
+  @override
+  String get dataSection => 'データ';
+
+  @override
+  String get fiatUnit => '法定通貨';
+
+  @override
+  String get displayLanguage => '表示言語';
+
+  @override
+  String get deleteWatchWallet => '監視ウォレットを削除';
+
+  @override
+  String get deleteWatchWalletDesc => '公開アドレスとローカル記録のみ削除。資産に影響はありません';
+
+  @override
+  String get languageSystem => 'システムに従う';
+
+  @override
+  String get modeSelectTitle => 'デバイスモードを選択';
+
+  @override
+  String get modeSelectSubtitle => 'はじめに、この端末の役割を選んでください';
+
+  @override
+  String get modeWalletTitle => 'オンラインウォレット';
+
+  @override
+  String get modeWalletDesc => '日常利用・残高の確認・送金の実行';
+
+  @override
+  String get modeSignerTitle => 'オフライン署名機';
+
+  @override
+  String get modeSignerDesc => 'ネットに一切接続しない端末にインストールし、秘密鍵をオフラインで保管して署名します';
+
+  @override
+  String get modeSignerConfirmTitle => 'オフライン署名機を有効化';
+
+  @override
+  String get modeSignerConfirmBody =>
+      'このモードはオフライン端末専用です。機内モードをオンにし、この端末を絶対にネットへ接続しないでください。';
+
+  @override
+  String get deviceMode => 'デバイスモード';
+
+  @override
+  String get deviceModeSwitchTitle => 'デバイスモードを切り替え';
+
+  @override
+  String get deviceModeSwitchDesc => '切り替えると、モード選択画面に戻ります。';
+}

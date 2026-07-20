@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_manager.dart';
 import '../wallets/wallet_model.dart';
@@ -12,7 +13,7 @@ const _mnemonic = ['walnut', 'breeze', 'copper', 'stadium', 'lyric', 'fossil', '
 
 /// The mnemonic shown in the backup flow: the one just generated during
 /// create-onboarding, or the demo constant when the screen is opened standalone
-/// (design gallery / goldens / the "立即备份" banner path).
+/// (design gallery / goldens / the backup banner path).
 List<String> _activeMnemonic(BuildContext context) {
   final pending = WalletScope.of(context).pendingMnemonic;
   if (pending == null) return _mnemonic;
@@ -48,22 +49,25 @@ Widget _wordGrid(List<String> words) {
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
   @override
-  Widget build(BuildContext context) => Scaffold(
-        backgroundColor: WalletColors.bg,
-        body: Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Container(
-              width: 96, height: 96,
-              decoration: BoxDecoration(color: WalletColors.accent, borderRadius: BorderRadius.circular(26)),
-              child: const Icon(Icons.account_balance_wallet, size: 48, color: Colors.white),
-            ),
-            const SizedBox(height: 20),
-            const Text('KT Wallet', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: WalletColors.text)),
-            const SizedBox(height: 8),
-            const Text('双机离线钱包 · 联网观察端', style: TextStyle(fontSize: 14, color: WalletColors.text2)),
-          ]),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Scaffold(
+      backgroundColor: WalletColors.bg,
+      body: Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 96, height: 96,
+            decoration: BoxDecoration(color: WalletColors.accent, borderRadius: BorderRadius.circular(26)),
+            child: const Icon(Icons.account_balance_wallet, size: 48, color: Colors.white),
+          ),
+          const SizedBox(height: 20),
+          const Text('KT Wallet', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: WalletColors.text)),
+          const SizedBox(height: 8),
+          Text(l10n.appTagline, style: const TextStyle(fontSize: 14, color: WalletColors.text2)),
+        ]),
+      ),
+    );
+  }
 }
 
 /// W22 添加钱包.
@@ -79,6 +83,7 @@ class AddWalletScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     Widget entry(IconData icon, String t, String s, {bool dark = false, VoidCallback? onTap}) => GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
@@ -105,13 +110,13 @@ class AddWalletScreen extends StatelessWidget {
         );
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: '添加钱包', onBack: () => Navigator.of(context).maybePop()),
+      navBar: KtNavBar(title: l10n.addWalletTitle, onBack: () => Navigator.of(context).maybePop()),
       children: [
-        const Text('普通钱包 · 便捷', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: WalletColors.text2)),
-        entry(Icons.add, '创建新钱包', '在本机生成新的助记词，立即可用', onTap: () => _createHotWallet(context)),
-        entry(Icons.key, '导入助记词', '已有 12 / 18 / 24 个单词的助记词', onTap: () => context.push('/mnemonic-import')),
-        const Text('离线钱包组合 · 高安全', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: WalletColors.text2)),
-        entry(Icons.verified_user, '连接离线钱包', '扫码配对 Cold Signer，私钥永不进入本机', dark: true, onTap: () => context.push('/connect-cold')),
+        Text(l10n.addWalletStandardSection, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: WalletColors.text2)),
+        entry(Icons.add, l10n.createNewWallet, l10n.createNewWalletDesc, onTap: () => _createHotWallet(context)),
+        entry(Icons.key, l10n.importMnemonic, l10n.importMnemonicDesc, onTap: () => context.push('/mnemonic-import')),
+        Text(l10n.coldWalletSection, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: WalletColors.text2)),
+        entry(Icons.verified_user, l10n.connectColdWallet, l10n.connectColdWalletDesc, dark: true, onTap: () => context.push('/connect-cold')),
       ],
     );
   }
@@ -122,23 +127,24 @@ class CreateWarnScreen extends StatelessWidget {
   const CreateWarnScreen({super.key});
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return KtScreen(
-      navBar: KtNavBar(title: '创建普通钱包', onBack: () => Navigator.of(context).maybePop(), trailingText: '1 / 3'),
-      bottom: KtPrimaryButton(label: '显示助记词', onPressed: () => context.push('/mnemonic-show')),
+      navBar: KtNavBar(title: l10n.createWalletTitle, onBack: () => Navigator.of(context).maybePop(), trailingText: '1 / 3'),
+      bottom: KtPrimaryButton(label: l10n.showMnemonic, onPressed: () => context.push('/mnemonic-show')),
       children: [
         Column(children: [
           Container(width: 72, height: 72, decoration: BoxDecoration(color: WalletColors.amber.withValues(alpha: 0.08), shape: BoxShape.circle), child: const Icon(Icons.key, size: 34, color: WalletColors.amber)),
           const SizedBox(height: 12),
-          const Text('接下来将生成助记词', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: WalletColors.text)),
+          Text(l10n.mnemonicWillGenerate, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: WalletColors.text)),
         ]),
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(color: WalletColors.accent.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(12)),
-          child: const Text('这是一个热钱包：助记词保存在本机安全区。适合小额日常使用，大额资产建议使用离线钱包组合。',
-              style: TextStyle(fontSize: 13, height: 1.5, color: Color(0xFF1D46B8))),
+          child: Text(l10n.hotWalletNotice,
+              style: const TextStyle(fontSize: 13, height: 1.5, color: Color(0xFF1D46B8))),
         ),
-        _rule(Icons.workspace_premium, '助记词等于资产的完全控制权', '任何人拿到这 12 个单词，即可转走你的全部资产'),
-        _rule(Icons.edit, '只用纸笔手写备份', '不要保存到相册、云盘、备忘录或聊天软件'),
+        _rule(Icons.workspace_premium, l10n.ruleFullControlTitle, l10n.ruleFullControlDesc),
+        _rule(Icons.edit, l10n.ruleHandwriteTitle, l10n.ruleHandwriteDesc),
       ],
     );
   }
@@ -161,18 +167,19 @@ class MnemonicShowScreen extends StatelessWidget {
   const MnemonicShowScreen({super.key});
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 18,
-      navBar: KtNavBar(title: '备份助记词', onBack: () => Navigator.of(context).maybePop(), trailingText: '2 / 3'),
-      bottom: KtPrimaryButton(label: '我已手写备份，开始校验', onPressed: () => context.push('/mnemonic-verify')),
+      navBar: KtNavBar(title: l10n.backupMnemonicTitle, onBack: () => Navigator.of(context).maybePop(), trailingText: '2 / 3'),
+      bottom: KtPrimaryButton(label: l10n.mnemonicShowConfirmBtn, onPressed: () => context.push('/mnemonic-verify')),
       children: [
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(color: WalletColors.red.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: const [
-            Icon(Icons.no_photography, size: 18, color: WalletColors.red),
-            SizedBox(width: 10),
-            Expanded(child: Text('请按顺序手写抄录，请勿截图或拍照。任何人获得助记词即可控制资产。', style: TextStyle(fontSize: 13, height: 1.5, color: WalletColors.red))),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Icon(Icons.no_photography, size: 18, color: WalletColors.red),
+            const SizedBox(width: 10),
+            Expanded(child: Text(l10n.mnemonicShowWarning, style: const TextStyle(fontSize: 13, height: 1.5, color: WalletColors.red))),
           ]),
         ),
         _wordGrid(_activeMnemonic(context)),
@@ -208,33 +215,36 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
 
   Future<void> _confirm() async {
     if (_selected == null) return;
+    final l10n = AppLocalizations.of(context);
     final controller = WalletScope.of(context);
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     if (_selected != _correct()) {
       setState(() => _selected = null);
-      messenger.showSnackBar(const SnackBar(content: Text('选择有误，请对照您手写的备份重试')));
+      messenger.showSnackBar(SnackBar(content: Text(l10n.verifyWrong)));
       return;
     }
     if (controller.pendingMnemonic != null) {
       // Create-onboarding: commit the new wallet now that backup is verified.
-      await controller.finalizeCreate();
-      messenger.showSnackBar(const SnackBar(content: Text('钱包已创建并完成备份')));
+      final name = l10n.walletDefaultName(controller.count + 1);
+      await controller.finalizeCreate(name: name);
+      messenger.showSnackBar(SnackBar(content: Text(l10n.walletCreatedBackedUp)));
     } else {
       // Standalone backup of the current wallet.
       final current = controller.current;
       if (current != null) controller.markBackedUp(current.id);
-      messenger.showSnackBar(const SnackBar(content: Text('备份已验证，助记词记录正确')));
+      messenger.showSnackBar(SnackBar(content: Text(l10n.backupVerified)));
     }
     if (mounted) context.go('/home');
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final options = _options();
     return KtScreen(
       gap: 24,
-      navBar: KtNavBar(title: '校验备份', onBack: () => Navigator.of(context).maybePop(), trailingText: '3 / 3'),
-      bottom: KtPrimaryButton(label: '确认', onPressed: _selected == null ? null : _confirm),
+      navBar: KtNavBar(title: l10n.verifyBackupTitle, onBack: () => Navigator.of(context).maybePop(), trailingText: '3 / 3'),
+      bottom: KtPrimaryButton(label: l10n.actionConfirm, onPressed: _selected == null ? null : _confirm),
       children: [
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           for (final done in [true, false, false]) ...[
@@ -242,9 +252,9 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
           ],
         ]),
         Column(children: [
-          Text('第 $_challengePosition 个单词是？', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: WalletColors.text)),
+          Text(l10n.mnemonicWordChallenge(_challengePosition), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: WalletColors.text)),
           const SizedBox(height: 8),
-          const Text('从下列单词中选择正确的一项', style: TextStyle(fontSize: 13, color: WalletColors.text2)),
+          Text(l10n.mnemonicChallengeHint, style: const TextStyle(fontSize: 13, color: WalletColors.text2)),
         ]),
         Column(children: [
           for (var r = 0; r < (options.length / 2).ceil(); r++)
@@ -281,7 +291,7 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
   }
 }
 
-/// W26 助记词输入. Live: 12 editable word fields; 导入 enables once every
+/// W26 助记词输入. Live: 12 editable word fields; import enables once every
 /// field is filled, and paste distributes a whole phrase across the fields.
 class MnemonicImportScreen extends StatefulWidget {
   const MnemonicImportScreen({super.key});
@@ -315,27 +325,30 @@ class _MnemonicImportScreenState extends State<MnemonicImportScreen> {
   }
 
   Future<void> _import() async {
+    final l10n = AppLocalizations.of(context);
     final controller = WalletScope.of(context);
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     final mnemonic = _controllers.map((c) => c.text.trim()).join(' ');
+    final name = l10n.walletImportedName(controller.count + 1);
     try {
-      await controller.importWallet(mnemonic);
+      await controller.importWallet(mnemonic, name: name);
     } on CoreCryptoException catch (_) {
-      messenger.showSnackBar(const SnackBar(content: Text('助记词无效，请检查每个单词后重试')));
+      messenger.showSnackBar(SnackBar(content: Text(l10n.mnemonicInvalid)));
       return;
     }
-    messenger.showSnackBar(const SnackBar(content: Text('助记词已导入')));
+    messenger.showSnackBar(SnackBar(content: Text(l10n.mnemonicImported)));
     if (mounted) context.go('/home');
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 18,
-      navBar: KtNavBar(title: '导入助记词', onBack: () => Navigator.of(context).maybePop()),
-      bottom: KtPrimaryButton(label: '导入', onPressed: _complete ? _import : null),
+      navBar: KtNavBar(title: l10n.importMnemonic, onBack: () => Navigator.of(context).maybePop()),
+      bottom: KtPrimaryButton(label: l10n.actionImport, onPressed: _complete ? _import : null),
       children: [
-        const KtSegmented(options: ['12 个单词', '18 个单词', '24 个单词'], selected: 0),
+        KtSegmented(options: [l10n.wordsCount(12), l10n.wordsCount(18), l10n.wordsCount(24)], selected: 0),
         Column(children: [
           for (var r = 0; r < 6; r++)
             Padding(
@@ -375,7 +388,7 @@ class _MnemonicImportScreenState extends State<MnemonicImportScreen> {
         Center(
           child: GestureDetector(
             onTap: _paste,
-            child: const Text('粘贴助记词（解析后自动清空剪贴板）', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.accent)),
+            child: Text(l10n.pasteMnemonic, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.accent)),
           ),
         ),
       ],
@@ -388,10 +401,11 @@ class ConnectColdScreen extends StatelessWidget {
   const ConnectColdScreen({super.key});
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 24,
-      navBar: KtNavBar(title: '连接离线钱包', onBack: () => Navigator.of(context).maybePop()),
-      bottom: KtPrimaryButton(label: '扫描账户二维码', onPressed: () {}),
+      navBar: KtNavBar(title: l10n.connectColdWallet, onBack: () => Navigator.of(context).maybePop()),
+      bottom: KtPrimaryButton(label: l10n.scanAccountQr, onPressed: () {}),
       children: [
         Column(children: [
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -400,17 +414,17 @@ class ConnectColdScreen extends StatelessWidget {
             Container(width: 72, height: 120, decoration: BoxDecoration(color: WalletColors.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: WalletColors.border, width: 1.5)), child: const Icon(Icons.qr_code_scanner, size: 32, color: WalletColors.accent)),
           ]),
           const SizedBox(height: 12),
-          const Text('连接离线钱包', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
+          Text(l10n.connectColdWallet, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
           const SizedBox(height: 8),
-          const Text('从离线手机导入公开地址，创建观察钱包', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, height: 1.6, color: WalletColors.text2)),
+          Text(l10n.connectColdSubtitle, textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, height: 1.6, color: WalletColors.text2)),
         ]),
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(color: WalletColors.green.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(12)),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: const [
-            Icon(Icons.verified_user, size: 18, color: WalletColors.green),
-            SizedBox(width: 10),
-            Expanded(child: Text('本机永远不会接收或保存助记词、私钥或 Seed。', style: TextStyle(fontSize: 13, height: 1.5, color: Color(0xFF0A7A45)))),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Icon(Icons.verified_user, size: 18, color: WalletColors.green),
+            const SizedBox(width: 10),
+            Expanded(child: Text(l10n.connectColdSafety, style: const TextStyle(fontSize: 13, height: 1.5, color: Color(0xFF0A7A45)))),
           ]),
         ),
       ],
@@ -422,7 +436,10 @@ class ConnectColdScreen extends StatelessWidget {
 class ScanAccountScreen extends StatelessWidget {
   const ScanAccountScreen({super.key});
   @override
-  Widget build(BuildContext context) => _CameraScreen(title: '扫描账户二维码', hint: '对准 Cold Signer 的地址二维码', onClose: () => Navigator.of(context).maybePop());
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return _CameraScreen(title: l10n.scanAccountQr, hint: l10n.scanAccountHint, onClose: () => Navigator.of(context).maybePop());
+  }
 }
 
 class _CameraScreen extends StatelessWidget {
@@ -462,19 +479,20 @@ class ImportConfirmScreen extends StatelessWidget {
   ];
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: '确认导入', onBack: () => Navigator.of(context).maybePop()),
-      bottom: KtPrimaryButton(label: '创建观察钱包', onPressed: () {}),
+      navBar: KtNavBar(title: l10n.importConfirmTitle, onBack: () => Navigator.of(context).maybePop()),
+      bottom: KtPrimaryButton(label: l10n.createWatchWallet, onPressed: () {}),
       children: [
         KtCard(
           child: Row(children: [
             Container(width: 48, height: 48, decoration: BoxDecoration(color: const Color(0xFF0C1220), borderRadius: BorderRadius.circular(14)), child: const Icon(Icons.verified_user, size: 24, color: SignerColors.ok)),
             const SizedBox(width: 14),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
-              Text('主钱包', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: WalletColors.text)),
-              SizedBox(height: 4),
-              Text('Wallet ID: WLT-3E8A91 · 协议 v1', style: TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text3)),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(l10n.walletSeedMain, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: WalletColors.text)),
+              const SizedBox(height: 4),
+              Text(l10n.walletIdProtocol('WLT-3E8A91', 1), style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text3)),
             ])),
           ]),
         ),
@@ -505,6 +523,7 @@ class WalletSwitcherSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final controller = WalletScope.of(context);
     return Scaffold(
       backgroundColor: WalletColors.text.withValues(alpha: 0.5),
@@ -522,17 +541,18 @@ class WalletSwitcherSheet extends StatelessWidget {
                 Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2))),
                 const SizedBox(height: 16),
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  const Text('钱包', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: WalletColors.text)),
+                  Text(l10n.walletsTitle, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: WalletColors.text)),
                   GestureDetector(
                     onTap: () { context.pop(); context.push('/wallet-manage'); },
-                    child: const Row(children: [Icon(Icons.settings, size: 15, color: WalletColors.text2), SizedBox(width: 4), Text('管理', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2))]),
+                    child: Row(children: [const Icon(Icons.settings, size: 15, color: WalletColors.text2), const SizedBox(width: 4), Text(l10n.manage, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2))]),
                   ),
                 ]),
                 const SizedBox(height: 16),
                 for (final w in controller.wallets)
                   () {
                     final current = w.id == controller.current?.id;
-                    final unbacked = w is HotWallet && !w.backedUp;
+                    final isHot = w is HotWallet;
+                    final unbacked = isHot && !w.backedUp;
                     return GestureDetector(
                       onTap: () { controller.select(w.id); context.pop(); },
                       child: Container(
@@ -553,7 +573,10 @@ class WalletSwitcherSheet extends StatelessWidget {
                             Row(children: [
                               Text(w.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
                               const SizedBox(width: 8),
-                              WalletTypeBadge(kind: w is HotWallet ? WalletKind.hot : WalletKind.watch),
+                              WalletTypeBadge(
+                                kind: isHot ? WalletKind.hot : WalletKind.watch,
+                                label: isHot ? l10n.walletKindHot : l10n.walletKindWatch,
+                              ),
                             ]),
                             const SizedBox(height: 3),
                             Text(_demoValue[w.id] ?? '\$0.00', style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
@@ -564,7 +587,7 @@ class WalletSwitcherSheet extends StatelessWidget {
                     );
                   }(),
                 const SizedBox(height: 8),
-                KtPrimaryButton(label: '添加钱包', onPressed: () { context.pop(); context.push('/add-wallet'); }),
+                KtPrimaryButton(label: l10n.addWalletTitle, onPressed: () { context.pop(); context.push('/add-wallet'); }),
               ]),
             ),
           ),
@@ -580,17 +603,18 @@ class WalletManageScreen extends StatelessWidget {
   const WalletManageScreen({super.key});
 
   Future<void> _confirmDelete(BuildContext context, Wallet w) async {
+    final l10n = AppLocalizations.of(context);
     final controller = WalletScope.of(context);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除钱包'),
-        content: Text('确定删除「${w.name}」？此操作仅移除本机记录，不影响链上资产。'),
+        title: Text(l10n.deleteWalletTitle),
+        content: Text(l10n.deleteWalletConfirm(w.name)),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l10n.actionCancel)),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('删除', style: TextStyle(color: WalletColors.red)),
+            child: Text(l10n.actionDelete, style: const TextStyle(color: WalletColors.red)),
           ),
         ],
       ),
@@ -599,30 +623,32 @@ class WalletManageScreen extends StatelessWidget {
       controller.remove(w.id);
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
-        ..showSnackBar(SnackBar(content: Text('已删除「${w.name}」')));
+        ..showSnackBar(SnackBar(content: Text(l10n.deletedWallet(w.name))));
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final controller = WalletScope.of(context);
     final wallets = controller.wallets;
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: '钱包管理', onBack: () => Navigator.of(context).maybePop(), trailingText: '排序'),
+      navBar: KtNavBar(title: l10n.settingsWalletManage, onBack: () => Navigator.of(context).maybePop(), trailingText: l10n.sortAction),
       bottom: KtPrimaryButton(
-        label: '添加钱包',
+        label: l10n.addWalletTitle,
         onPressed: controller.canAddMore ? () => context.push('/add-wallet') : null,
       ),
       children: [
-        Text('共 ${wallets.length} 个钱包 · 上限 ${WalletManager.maxWallets} 个', style: const TextStyle(fontSize: 13, color: WalletColors.text3)),
+        Text(l10n.walletCountLimit(wallets.length, WalletManager.maxWallets), style: const TextStyle(fontSize: 13, color: WalletColors.text3)),
         for (final w in wallets)
           () {
-            final kind = w is HotWallet ? WalletKind.hot : WalletKind.watch;
-            final unbacked = w is HotWallet && !w.backedUp;
+            final isHot = w is HotWallet;
+            final kind = isHot ? WalletKind.hot : WalletKind.watch;
+            final unbacked = isHot && !w.backedUp;
             final state = switch (w) {
-              HotWallet(backedUp: true) => '已备份',
-              HotWallet() => '未备份',
+              HotWallet(backedUp: true) => l10n.walletStateBackedUp,
+              HotWallet() => l10n.walletStateNotBackedUp,
               WatchWallet() => 'Cold Signer',
             };
             return KtCard(
@@ -631,7 +657,7 @@ class WalletManageScreen extends StatelessWidget {
                 KtAvatar(color: Color(w.avatarColor), initial: w.name.characters.first),
                 const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [Flexible(child: Text(w.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text))), const SizedBox(width: 8), WalletTypeBadge(kind: kind)]),
+                  Row(children: [Flexible(child: Text(w.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text))), const SizedBox(width: 8), WalletTypeBadge(kind: kind, label: isHot ? l10n.walletKindHot : l10n.walletKindWatch)]),
                   const SizedBox(height: 3),
                   Text(state, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, fontWeight: unbacked ? FontWeight.w600 : FontWeight.w400, color: unbacked ? WalletColors.red : WalletColors.text3)),
                 ])),
@@ -652,17 +678,18 @@ class WalletDetailScreen extends StatelessWidget {
   const WalletDetailScreen({super.key});
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: '钱包详情', onBack: () => Navigator.of(context).maybePop()),
+      navBar: KtNavBar(title: l10n.walletDetailTitle, onBack: () => Navigator.of(context).maybePop()),
       children: [
         Column(children: [
           const KtAvatar(color: Color(0xFFF59E0B), initial: '日', size: 72),
           const SizedBox(height: 12),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
-            Text('日常钱包', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: WalletColors.text)),
-            SizedBox(width: 8),
-            Icon(Icons.edit, size: 16, color: WalletColors.text3),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text(l10n.walletSeedDaily, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: WalletColors.text)),
+            const SizedBox(width: 8),
+            const Icon(Icons.edit, size: 16, color: WalletColors.text3),
           ]),
           const SizedBox(height: 12),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -675,10 +702,10 @@ class WalletDetailScreen extends StatelessWidget {
           ]),
         ]),
         KtCard(
-          child: Column(children: const [
-            KtDetailRow(label: '钱包类型', value: '普通钱包'),
-            SizedBox(height: 14),
-            KtDetailRow(label: 'Wallet ID', value: 'WLT-91A4C7', mono: true),
+          child: Column(children: [
+            KtDetailRow(label: l10n.walletTypeLabel, value: l10n.standardWallet),
+            const SizedBox(height: 14),
+            const KtDetailRow(label: 'Wallet ID', value: 'WLT-91A4C7', mono: true),
           ]),
         ),
         Container(
@@ -687,12 +714,12 @@ class WalletDetailScreen extends StatelessWidget {
           child: Row(children: [
             const Icon(Icons.warning_amber_rounded, size: 18, color: WalletColors.amber),
             const SizedBox(width: 10),
-            const Expanded(child: Text('尚未备份助记词', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF9A6503)))),
-            Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8), decoration: BoxDecoration(color: WalletColors.amber, borderRadius: BorderRadius.circular(999)), child: const Text('立即备份', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white))),
+            Expanded(child: Text(l10n.backupNotYet, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF9A6503)))),
+            Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8), decoration: BoxDecoration(color: WalletColors.amber, borderRadius: BorderRadius.circular(999)), child: Text(l10n.backupNow, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white))),
           ]),
         ),
-        KtCard(child: SecurityRow(Icons.key, '查看助记词', '需要 Face ID 或密码验证')),
-        KtCard(child: SecurityRow(Icons.delete_outline, '删除钱包', '需身份验证，删除前将再次确认备份状态', danger: true)),
+        KtCard(child: SecurityRow(Icons.key, l10n.viewMnemonic, l10n.viewMnemonicDesc)),
+        KtCard(child: SecurityRow(Icons.delete_outline, l10n.deleteWalletTitle, l10n.deleteWalletDesc, danger: true)),
       ],
     );
   }

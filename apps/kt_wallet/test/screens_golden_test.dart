@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/src/app_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
@@ -15,6 +16,9 @@ void main() {
 
       await tester.pumpWidget(MaterialApp(
         debugShowCheckedModeBanner: false,
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         theme: ThemeData(scaffoldBackgroundColor: WalletColors.bg),
         home: Builder(builder: entry.value.$2),
       ));

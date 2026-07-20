@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/src/screens/home_screen.dart';
 
 void main() {
@@ -9,9 +10,12 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
 
     // Reads the fallback WalletScope controller (日常钱包, not backed up).
-    await tester.pumpWidget(const MaterialApp(
+    await tester.pumpWidget(MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: HomeScreen(),
+      locale: const Locale('zh'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const HomeScreen(),
     ));
     await tester.pumpAndSettle();
 

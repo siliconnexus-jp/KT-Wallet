@@ -1,3 +1,4 @@
+import 'package:cold_signer/l10n/app_localizations.dart';
 import 'package:cold_signer/src/signer_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,6 +16,9 @@ void main() {
 
       await tester.pumpWidget(MaterialApp(
         debugShowCheckedModeBanner: false,
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         theme: ThemeData(brightness: Brightness.dark, scaffoldBackgroundColor: SignerColors.bg),
         home: Builder(builder: entry.value.$2),
       ));

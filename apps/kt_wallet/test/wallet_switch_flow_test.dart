@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/main.dart';
 
@@ -6,6 +7,8 @@ import 'package:kt_wallet/main.dart';
 void main() {
   testWidgets('wallet switcher changes the current wallet on the home screen',
       (tester) async {
+    tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
     await tester.pumpWidget(KtWalletApp());
     await tester.pumpAndSettle();
 
@@ -37,6 +40,8 @@ void main() {
 
   testWidgets('switching to the backed-up hot wallet hides the backup banner',
       (tester) async {
+    tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
     await tester.pumpWidget(KtWalletApp());
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('W1/W20 首页'), 200);

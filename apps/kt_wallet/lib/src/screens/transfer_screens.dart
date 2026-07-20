@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
 
@@ -35,7 +36,6 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
 
   final _addrController = TextEditingController(text: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t');
   final _amountController = TextEditingController(text: '120.00');
-  final _feeTiers = const ['慢', '标准', '快'];
   int _fee = 1;
 
   @override
@@ -60,16 +60,16 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     }
   }
 
-  String? get _amountError {
+  String? _amountErrorFor(AppLocalizations l10n) {
     final text = _amountController.text.trim();
     if (text.isEmpty) return null; // don't nag before typing
     try {
       final a = Amount.parse(text, _decimals, symbol: 'USDT');
-      if (a.raw == BigInt.zero) return '金额需大于 0';
-      if (!(_available >= a)) return '余额不足';
+      if (a.raw == BigInt.zero) return l10n.amountMustBePositive;
+      if (!(_available >= a)) return l10n.insufficientBalance;
       return null;
     } on AmountError {
-      return '金额格式不正确';
+      return l10n.amountFormatInvalid;
     }
   }
 
@@ -81,13 +81,14 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final isHot = WalletScope.of(context).current is HotWallet;
     final addrCheck = _addrCheck;
     final canProceed = addrCheck.isValid && _amount != null;
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: '转账', onBack: () => Navigator.of(context).maybePop(), trailing: Icons.qr_code_scanner, onTrailing: () {}),
-      bottom: KtPrimaryButton(label: '下一步', onPressed: canProceed ? () => context.push(isHot ? '/confirm-hot' : '/confirm-watch') : null),
+      navBar: KtNavBar(title: l10n.actionSend, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.qr_code_scanner, onTrailing: () {}),
+      bottom: KtPrimaryButton(label: l10n.actionNext, onPressed: canProceed ? () => context.push(isHot ? '/confirm-hot' : '/confirm-watch') : null),
       children: [
         KtCard(
           padding: const EdgeInsets.all(14),
@@ -107,7 +108,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
         KtCard(
           padding: const EdgeInsets.all(14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('收款地址', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
+            Text(l10n.recipientAddress, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
             const SizedBox(height: 12),
             Row(children: [
               Expanded(
@@ -118,7 +119,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                   enableSuggestions: false,
                   maxLines: null,
                   style: const TextStyle(fontSize: 14, fontFamily: KtFonts.mono, color: WalletColors.text),
-                  decoration: const InputDecoration(isCollapsed: true, border: InputBorder.none, hintText: '粘贴或输入地址', hintStyle: TextStyle(color: WalletColors.text3)),
+                  decoration: InputDecoration(isCollapsed: true, border: InputBorder.none, hintText: l10n.pasteOrEnterAddress, hintStyle: const TextStyle(color: WalletColors.text3)),
                 ),
               ),
               const SizedBox(width: 10),
@@ -128,18 +129,18 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
             ]),
             const SizedBox(height: 12),
             if (_addrController.text.trim().isEmpty)
-              const Text('请输入 TRON 网络收款地址', style: TextStyle(fontSize: 12, color: WalletColors.text3))
+              Text(l10n.enterTronAddress, style: const TextStyle(fontSize: 12, color: WalletColors.text3))
             else if (addrCheck.isValid)
-              Row(children: const [
-                Icon(Icons.check_circle, size: 14, color: WalletColors.green),
-                SizedBox(width: 6),
-                Text('地址格式正确 · TRON 网络', style: TextStyle(fontSize: 12, color: WalletColors.green)),
+              Row(children: [
+                const Icon(Icons.check_circle, size: 14, color: WalletColors.green),
+                const SizedBox(width: 6),
+                Text(l10n.addressValidTron, style: const TextStyle(fontSize: 12, color: WalletColors.green)),
               ])
             else
               Row(children: [
                 const Icon(Icons.error_outline, size: 14, color: WalletColors.red),
                 const SizedBox(width: 6),
-                Expanded(child: Text(addrCheck.reason ?? '地址无效', style: const TextStyle(fontSize: 12, color: WalletColors.red))),
+                Expanded(child: Text(addrCheck.reason ?? l10n.addressInvalid, style: const TextStyle(fontSize: 12, color: WalletColors.red))),
               ]),
           ]),
         ),
@@ -147,13 +148,13 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
           padding: const EdgeInsets.all(14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              const Text('金额', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
+              Text(l10n.amountLabel, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
               GestureDetector(
                 onTap: () => setState(() => _amountController.text = _availableDisplay),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(color: WalletColors.accent.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(6)),
-                  child: const Text('最大', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: WalletColors.accent)),
+                  child: Text(l10n.max, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: WalletColors.accent)),
                 ),
               ),
             ]),
@@ -173,8 +174,11 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
             ]),
             const SizedBox(height: 10),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text(_amountError ?? '≈ \$${_amountController.text.trim().isEmpty ? '0.00' : _amountController.text.trim()}', style: TextStyle(fontSize: 12, color: _amountError == null ? WalletColors.text3 : WalletColors.red)),
-              const Text('可用 3,120.00 USDT', style: TextStyle(fontSize: 12, color: WalletColors.text3)),
+              Builder(builder: (_) {
+                final amountError = _amountErrorFor(l10n);
+                return Text(amountError ?? '≈ \$${_amountController.text.trim().isEmpty ? '0.00' : _amountController.text.trim()}', style: TextStyle(fontSize: 12, color: amountError == null ? WalletColors.text3 : WalletColors.red));
+              }),
+              Text(l10n.availableUsdt('3,120.00'), style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
             ]),
           ]),
         ),
@@ -182,11 +186,11 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
           padding: const EdgeInsets.all(14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              const Text('网络手续费', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
-              GestureDetector(onTap: () => context.push('/fee'), child: const Text('自定义', style: TextStyle(fontSize: 12, color: WalletColors.accent))),
+              Text(l10n.networkFee, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
+              GestureDetector(onTap: () => context.push('/fee'), child: Text(l10n.feeCustom, style: const TextStyle(fontSize: 12, color: WalletColors.accent))),
             ]),
             const SizedBox(height: 12),
-            KtSegmented(options: _feeTiers, selected: _fee, onChanged: (i) => setState(() => _fee = i)),
+            KtSegmented(options: [l10n.feeSlow, l10n.feeStandard, l10n.feeFast], selected: _fee, onChanged: (i) => setState(() => _fee = i)),
           ]),
         ),
       ],
@@ -202,23 +206,24 @@ class FeeSelectScreen extends StatefulWidget {
 }
 
 class _FeeSelectScreenState extends State<FeeSelectScreen> {
-  static const _tiers = [
-    ('慢', '≈ 3-5 分钟', '6.8 TRX', r'$0.94'),
-    ('标准', '≈ 1 分钟', '13.7 TRX', r'$1.90'),
-    ('快', '≈ 15 秒', '27.4 TRX', r'$3.80'),
-  ];
   int _selected = 1; // default 标准
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final tiers = [
+      (l10n.feeSlow, l10n.feeEtaSlow, '6.8 TRX', r'$0.94'),
+      (l10n.feeStandard, l10n.feeEtaStandard, '13.7 TRX', r'$1.90'),
+      (l10n.feeFast, l10n.feeEtaFast, '27.4 TRX', r'$3.80'),
+    ];
     return KtScreen(
-      navBar: KtNavBar(title: '网络手续费', onBack: () => Navigator.of(context).maybePop()),
-      bottom: KtPrimaryButton(label: '确认手续费', onPressed: () => context.pop(_tiers[_selected].$1)),
+      navBar: KtNavBar(title: l10n.networkFee, onBack: () => Navigator.of(context).maybePop()),
+      bottom: KtPrimaryButton(label: l10n.confirmFee, onPressed: () => context.pop(tiers[_selected].$1)),
       children: [
-        const Text('手续费越高，交易确认越快。费用支付给网络，不进入本 App。',
-            style: TextStyle(fontSize: 13, height: 1.5, color: WalletColors.text2)),
+        Text(l10n.feeExplainer,
+            style: const TextStyle(fontSize: 13, height: 1.5, color: WalletColors.text2)),
         Column(children: [
-          for (final (i, tier) in _tiers.indexed)
+          for (final (i, tier) in tiers.indexed)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: GestureDetector(
@@ -255,7 +260,7 @@ class _FeeSelectScreenState extends State<FeeSelectScreen> {
               ),
             ),
         ]),
-        _amberWarn('手续费过低可能导致交易长时间未确认甚至失败。TRON Energy 不足时将燃烧 TRX 抵扣。'),
+        _amberWarn(l10n.feeLowWarning),
       ],
     );
   }
@@ -267,13 +272,14 @@ class TransferConfirmScreen extends StatelessWidget {
   final bool isHot;
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: '确认交易', onBack: () => Navigator.of(context).maybePop()),
+      navBar: KtNavBar(title: l10n.confirmTransactionTitle, onBack: () => Navigator.of(context).maybePop()),
       bottom: Column(children: [
-        KtPrimaryButton(label: isHot ? '确认转账' : '生成待签名二维码', onPressed: () => context.push(isHot ? '/transfer-auth' : '/sign-qr')),
+        KtPrimaryButton(label: isHot ? l10n.confirmTransfer : l10n.generateSignQr, onPressed: () => context.push(isHot ? '/transfer-auth' : '/sign-qr')),
         const SizedBox(height: 10),
-        Text(isHot ? '验证身份后本机签名并自动广播' : '二维码中不包含助记词或私钥',
+        Text(isHot ? l10n.hotConfirmHint : l10n.watchConfirmHint,
             style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
       ]),
       children: [
@@ -285,17 +291,17 @@ class TransferConfirmScreen extends StatelessWidget {
           NetworkBadge(label: 'TRON · TRC-20', dotColor: ChainColors.tron),
         ]),
         KtCard(
-          child: Column(children: const [
-            KtDetailRow(label: '转出地址', value: '主钱包 TQm9…3kFa', mono: true),
-            SizedBox(height: 14),
-            KtDetailRow(label: '收款地址', value: 'TWd4qCEU…nMxR38uQz', mono: true),
-            SizedBox(height: 14),
-            KtDetailRow(label: '网络手续费', value: '≈ 13.7 TRX（\$1.90）'),
-            SizedBox(height: 14),
-            KtDetailRow(label: '总支出', value: '120.00 USDT', valueColor: WalletColors.text),
+          child: Column(children: [
+            KtDetailRow(label: l10n.fromAddress, value: '主钱包 TQm9…3kFa', mono: true),
+            const SizedBox(height: 14),
+            KtDetailRow(label: l10n.recipientAddress, value: 'TWd4qCEU…nMxR38uQz', mono: true),
+            const SizedBox(height: 14),
+            KtDetailRow(label: l10n.networkFee, value: '≈ 13.7 TRX（\$1.90）'),
+            const SizedBox(height: 14),
+            KtDetailRow(label: l10n.totalSpend, value: '120.00 USDT', valueColor: WalletColors.text),
           ]),
         ),
-        if (isHot) _amberWarn('该钱包尚未备份助记词。建议先完成备份，再进行转账。'),
+        if (isHot) _amberWarn(l10n.unbackedTransferWarning),
       ],
     );
   }
@@ -306,30 +312,31 @@ class SignRequestQrScreen extends StatelessWidget {
   const SignRequestQrScreen({super.key});
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: '待签名交易', onBack: () => Navigator.of(context).maybePop(), trailingText: '取消'),
+      navBar: KtNavBar(title: l10n.pendingSignTitle, onBack: () => Navigator.of(context).maybePop(), trailingText: l10n.actionCancel),
       children: [
         KtCard(
           padding: const EdgeInsets.all(24),
-          child: Column(children: const [
-            KtQrPlaceholder(size: 240),
-            SizedBox(height: 16),
-            Text('动态分片 3 / 8', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
-            SizedBox(height: 8),
-            ShardProgressBar(received: 3, total: 8),
+          child: Column(children: [
+            const KtQrPlaceholder(size: 240),
+            const SizedBox(height: 16),
+            Text(l10n.dynamicShard(3, 8), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
+            const SizedBox(height: 8),
+            const ShardProgressBar(received: 3, total: 8),
           ]),
         ),
         KtCard(
-          child: Column(children: const [
-            KtDetailRow(label: '网络', value: 'TRON · TRC-20'),
-            SizedBox(height: 14),
-            KtDetailRow(label: '金额', value: '120.00 USDT'),
-            SizedBox(height: 14),
-            KtDetailRow(label: '请求 ID', value: 'REQ-7F3A2C', mono: true),
+          child: Column(children: [
+            KtDetailRow(label: l10n.networkRow, value: 'TRON · TRC-20'),
+            const SizedBox(height: 14),
+            KtDetailRow(label: l10n.amountLabel, value: '120.00 USDT'),
+            const SizedBox(height: 14),
+            KtDetailRow(label: l10n.requestId, value: 'REQ-7F3A2C', mono: true),
           ]),
         ),
-        const Center(child: Text('请使用离线签名手机扫描此二维码', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text))),
+        Center(child: Text(l10n.scanWithOfflinePhone, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text))),
       ],
     );
   }
@@ -340,6 +347,7 @@ class ScanResultScreen extends StatelessWidget {
   const ScanResultScreen({super.key});
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
       backgroundColor: SignerColors.bg,
       body: SafeArea(
@@ -348,7 +356,7 @@ class ScanResultScreen extends StatelessWidget {
           const KtStatusBar(theme: AppTheme.signer),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: KtNavBar(title: '扫描签名结果', theme: AppTheme.signer, leading: Icons.close, onBack: () => Navigator.of(context).maybePop()),
+            child: KtNavBar(title: l10n.scanSignResultTitle, theme: AppTheme.signer, leading: Icons.close, onBack: () => Navigator.of(context).maybePop()),
           ),
           const SizedBox(height: 24),
           GestureDetector(
@@ -368,7 +376,7 @@ class ScanResultScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          const Text('已识别分片 5 / 12', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white)),
+          Text(l10n.recognizedShard(5, 12), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white)),
           const SizedBox(height: 10),
           const ShardProgressBar(received: 5, total: 12, color: SignerColors.blue, trackColor: SignerColors.border, width: 240),
         ]),
@@ -382,23 +390,24 @@ class BroadcastConfirmScreen extends StatelessWidget {
   const BroadcastConfirmScreen({super.key});
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: '广播交易', onBack: () => Navigator.of(context).maybePop()),
+      navBar: KtNavBar(title: l10n.broadcastTitle, onBack: () => Navigator.of(context).maybePop()),
       bottom: Column(children: [
-        KtPrimaryButton(label: '广播交易', onPressed: () => context.go('/broadcast-result')),
+        KtPrimaryButton(label: l10n.broadcastTitle, onPressed: () => context.go('/broadcast-result')),
         const SizedBox(height: 12),
-        const Text('暂不广播', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text2)),
+        Text(l10n.dontBroadcastYet, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text2)),
       ]),
       children: [
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(color: WalletColors.green.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
-          child: Row(children: const [
-            Icon(Icons.verified_user, size: 18, color: WalletColors.green),
-            SizedBox(width: 10),
-            Expanded(child: Text('签名已验证 · 签名者与钱包地址一致，交易内容未被篡改',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF0A7A45)))),
+          child: Row(children: [
+            const Icon(Icons.verified_user, size: 18, color: WalletColors.green),
+            const SizedBox(width: 10),
+            Expanded(child: Text(l10n.signatureVerified,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF0A7A45)))),
           ]),
         ),
         Column(children: const [
@@ -407,12 +416,12 @@ class BroadcastConfirmScreen extends StatelessWidget {
           NetworkBadge(label: 'TRON · TRC-20', dotColor: ChainColors.tron),
         ]),
         KtCard(
-          child: Column(children: const [
-            KtDetailRow(label: '收款地址', value: 'TWd4qCEU…nMxR38uQz', mono: true),
-            SizedBox(height: 14),
-            KtDetailRow(label: '签名地址', value: 'TQm9xPa2…Vb7L3kFa', mono: true),
-            SizedBox(height: 14),
-            KtDetailRow(label: '交易 Hash 预览', value: '8f6d2c…a94e07', mono: true),
+          child: Column(children: [
+            KtDetailRow(label: l10n.recipientAddress, value: 'TWd4qCEU…nMxR38uQz', mono: true),
+            const SizedBox(height: 14),
+            KtDetailRow(label: l10n.signerAddress, value: 'TQm9xPa2…Vb7L3kFa', mono: true),
+            const SizedBox(height: 14),
+            KtDetailRow(label: l10n.txHashPreview, value: '8f6d2c…a94e07', mono: true),
           ]),
         ),
       ],
@@ -425,9 +434,10 @@ class BroadcastResultScreen extends StatelessWidget {
   const BroadcastResultScreen({super.key});
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 24,
-      bottom: KtPrimaryButton(label: '返回首页', onPressed: () => context.go('/home')),
+      bottom: KtPrimaryButton(label: l10n.backToHome, onPressed: () => context.go('/home')),
       children: [
         const SizedBox(height: 24),
         Center(
@@ -445,16 +455,16 @@ class BroadcastResultScreen extends StatelessWidget {
             ),
           ),
         ),
-        Column(children: const [
-          Text('交易已提交', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
-          SizedBox(height: 8),
-          Text('-120.00 USDT · TRON', style: TextStyle(fontSize: 14, color: WalletColors.text2)),
+        Column(children: [
+          Text(l10n.txSubmitted, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
+          const SizedBox(height: 8),
+          const Text('-120.00 USDT · TRON', style: TextStyle(fontSize: 14, color: WalletColors.text2)),
         ]),
         KtCard(
-          child: Column(children: const [
-            KtDetailRow(label: '交易 Hash', value: '8f6d2c…a94e07', mono: true),
-            SizedBox(height: 14),
-            KtDetailRow(label: '状态', value: '确认中 (3/19)', valueColor: WalletColors.accent),
+          child: Column(children: [
+            KtDetailRow(label: l10n.txHash, value: '8f6d2c…a94e07', mono: true),
+            const SizedBox(height: 14),
+            KtDetailRow(label: l10n.statusLabel, value: l10n.confirming(3, 19), valueColor: WalletColors.accent),
           ]),
         ),
       ],
@@ -467,9 +477,10 @@ class TxDetailScreen extends StatelessWidget {
   const TxDetailScreen({super.key});
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: '交易详情', onBack: () => Navigator.of(context).maybePop(), trailing: Icons.open_in_new, onTrailing: () {}),
+      navBar: KtNavBar(title: l10n.txDetailTitle, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.open_in_new, onTrailing: () {}),
       children: [
         Column(children: [
           Container(
@@ -480,19 +491,19 @@ class TxDetailScreen extends StatelessWidget {
           const SizedBox(height: 10),
           const Text('-120.00 USDT', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: WalletColors.text)),
           const SizedBox(height: 6),
-          const Text('已确认 · 今天 14:38', style: TextStyle(fontSize: 13, color: WalletColors.text3)),
+          Text('${l10n.confirmedPrefix} · ${l10n.dateToday} 14:38', style: const TextStyle(fontSize: 13, color: WalletColors.text3)),
         ]),
         KtCard(
-          child: Column(children: const [
-            KtDetailRow(label: '网络', value: 'TRON · TRC-20'),
-            SizedBox(height: 14),
-            KtDetailRow(label: '收款地址', value: 'TWd4qCEU…nMxR38uQz', mono: true),
-            SizedBox(height: 14),
-            KtDetailRow(label: '网络手续费', value: '13.72 TRX（\$1.91）'),
-            SizedBox(height: 14),
-            KtDetailRow(label: '确认数', value: '19 / 19'),
-            SizedBox(height: 14),
-            KtDetailRow(label: '请求 ID', value: 'REQ-7F3A2C', mono: true),
+          child: Column(children: [
+            KtDetailRow(label: l10n.networkRow, value: 'TRON · TRC-20'),
+            const SizedBox(height: 14),
+            KtDetailRow(label: l10n.recipientAddress, value: 'TWd4qCEU…nMxR38uQz', mono: true),
+            const SizedBox(height: 14),
+            KtDetailRow(label: l10n.networkFee, value: '13.72 TRX（\$1.91）'),
+            const SizedBox(height: 14),
+            KtDetailRow(label: l10n.confirmations, value: '19 / 19'),
+            const SizedBox(height: 14),
+            KtDetailRow(label: l10n.requestId, value: 'REQ-7F3A2C', mono: true),
           ]),
         ),
       ],
@@ -505,6 +516,7 @@ class TransferAuthSheet extends StatelessWidget {
   const TransferAuthSheet({super.key});
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
       backgroundColor: WalletColors.text.withValues(alpha: 0.5),
       body: Align(
@@ -522,13 +534,13 @@ class TransferAuthSheet extends StatelessWidget {
               child: const Icon(Icons.face, size: 44, color: WalletColors.accent),
             ),
             const SizedBox(height: 20),
-            const Text('验证以确认转账', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: WalletColors.text)),
+            Text(l10n.authToConfirmTransfer, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: WalletColors.text)),
             const SizedBox(height: 8),
-            const Text('每次转账都需要 Face ID 或密码验证', style: TextStyle(fontSize: 13, color: WalletColors.text2)),
+            Text(l10n.authEveryTransfer, style: const TextStyle(fontSize: 13, color: WalletColors.text2)),
             const SizedBox(height: 20),
-            KtPrimaryButton(label: '使用 Face ID 验证', onPressed: () => context.go('/broadcast-result')),
+            KtPrimaryButton(label: l10n.useFaceId, onPressed: () => context.go('/broadcast-result')),
             const SizedBox(height: 12),
-            const Text('改用密码', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text2)),
+            Text(l10n.usePasscode, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text2)),
           ]),
         ),
       ),

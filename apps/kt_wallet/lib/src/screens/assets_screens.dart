@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../l10n/app_localizations.dart';
+
 /// W2 资产列表 — search + network filter + full asset list.
 class AssetsListScreen extends StatelessWidget {
   const AssetsListScreen({super.key});
@@ -15,11 +17,12 @@ class AssetsListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return KtScreen(
-      navBar: KtNavBar(title: '资产', onBack: () => Navigator.of(context).maybePop(), trailing: Icons.add, onTrailing: () {}),
+      navBar: KtNavBar(title: l10n.tabAssets, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.add, onTrailing: () {}),
       children: [
         _SearchBar(),
-        const KtSegmented(options: ['全部', 'Ethereum', 'Polygon', 'TRON', 'Solana'], selected: 0),
+        KtSegmented(options: [l10n.viewAll, 'Ethereum', 'Polygon', 'TRON', 'Solana'], selected: 0),
         KtCard(
           child: Column(children: [
             for (var i = 0; i < _assets.length; i++) ...[
@@ -35,16 +38,19 @@ class AssetsListScreen extends StatelessWidget {
 
 class _SearchBar extends StatelessWidget {
   @override
-  Widget build(BuildContext context) => Container(
-        height: 44,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(color: WalletColors.surface, borderRadius: BorderRadius.circular(12)),
-        child: const Row(children: [
-          Icon(Icons.search, size: 18, color: WalletColors.text3),
-          SizedBox(width: 8),
-          Text('搜索名称 / Symbol / 合约地址', style: TextStyle(fontSize: 14, color: WalletColors.text3)),
-        ]),
-      );
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(color: WalletColors.surface, borderRadius: BorderRadius.circular(12)),
+      child: Row(children: [
+        const Icon(Icons.search, size: 18, color: WalletColors.text3),
+        const SizedBox(width: 8),
+        Text(l10n.searchAssetHint, style: const TextStyle(fontSize: 14, color: WalletColors.text3)),
+      ]),
+    );
+  }
 }
 
 class _AssetTile extends StatelessWidget {
@@ -74,6 +80,7 @@ class TokenDetailScreen extends StatelessWidget {
   const TokenDetailScreen({super.key});
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return KtScreen(
       navBar: KtNavBar(title: 'USDT', onBack: () => Navigator.of(context).maybePop(), trailing: Icons.open_in_new, onTrailing: () {}),
       children: [
@@ -87,7 +94,7 @@ class TokenDetailScreen extends StatelessWidget {
           const NetworkBadge(label: 'TRON · TRC-20', dotColor: ChainColors.tron),
         ]),
         Row(children: [
-          Expanded(child: KtPrimaryButton(label: '转账', icon: Icons.north_east, onPressed: () {})),
+          Expanded(child: KtPrimaryButton(label: l10n.actionSend, icon: Icons.north_east, onPressed: () {})),
           const SizedBox(width: 12),
           Expanded(
             child: SizedBox(
@@ -95,19 +102,19 @@ class TokenDetailScreen extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: () {},
                 icon: const Icon(Icons.qr_code, size: 18, color: WalletColors.accent),
-                label: const Text('收款', style: TextStyle(color: WalletColors.accent, fontWeight: FontWeight.w600)),
+                label: Text(l10n.actionReceive, style: const TextStyle(color: WalletColors.accent, fontWeight: FontWeight.w600)),
                 style: OutlinedButton.styleFrom(backgroundColor: WalletColors.surface, side: BorderSide.none, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
               ),
             ),
           ),
         ]),
         KtCard(
-          child: Column(children: const [
-            KtDetailRow(label: '价格', value: r'$1.00'),
-            SizedBox(height: 14),
-            KtDetailRow(label: '24h 涨跌', value: '+0.02%'),
-            SizedBox(height: 14),
-            KtDetailRow(label: '合约地址', value: 'TR7NHq…gjLj6t', mono: true),
+          child: Column(children: [
+            KtDetailRow(label: l10n.price, value: r'$1.00'),
+            const SizedBox(height: 14),
+            KtDetailRow(label: l10n.change24h, value: '+0.02%'),
+            const SizedBox(height: 14),
+            KtDetailRow(label: l10n.contractAddress, value: 'TR7NHq…gjLj6t', mono: true),
           ]),
         ),
       ],
@@ -120,8 +127,9 @@ class ReceiveScreen extends StatelessWidget {
   const ReceiveScreen({super.key});
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return KtScreen(
-      navBar: KtNavBar(title: '收款', onBack: () => Navigator.of(context).maybePop(), trailing: Icons.ios_share, onTrailing: () {}),
+      navBar: KtNavBar(title: l10n.actionReceive, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.ios_share, onTrailing: () {}),
       children: [
         Center(
           child: Container(
@@ -148,11 +156,11 @@ class ReceiveScreen extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(color: WalletColors.amber.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: const [
-            Icon(Icons.warning_amber_rounded, size: 16, color: WalletColors.amber),
-            SizedBox(width: 10),
-            Expanded(child: Text('仅支持接收 TRON 网络（TRC-20）资产。从其他网络转入将导致资产丢失。',
-                style: TextStyle(fontSize: 13, height: 1.5, color: Color(0xFF9A6503)))),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Icon(Icons.warning_amber_rounded, size: 16, color: WalletColors.amber),
+            const SizedBox(width: 10),
+            Expanded(child: Text(l10n.receiveWarning,
+                style: const TextStyle(fontSize: 13, height: 1.5, color: Color(0xFF9A6503)))),
           ]),
         ),
       ],

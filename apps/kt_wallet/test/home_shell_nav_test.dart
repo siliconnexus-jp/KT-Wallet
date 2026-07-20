@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/main.dart';
 
@@ -5,6 +6,8 @@ import 'package:kt_wallet/main.dart';
 /// verification quiz gates on the correct word before marking the wallet
 /// backed up.
 Future<void> _openHome(WidgetTester tester) async {
+  tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+  addTearDown(tester.platformDispatcher.clearLocalesTestValue);
   await tester.pumpWidget(KtWalletApp());
   await tester.pumpAndSettle();
   await tester.scrollUntilVisible(find.text('W1/W20 首页'), 200);

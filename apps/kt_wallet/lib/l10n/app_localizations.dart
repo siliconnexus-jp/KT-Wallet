@@ -1,0 +1,1236 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/intl.dart' as intl;
+
+import 'app_localizations_en.dart';
+import 'app_localizations_ja.dart';
+import 'app_localizations_zh.dart';
+
+// ignore_for_file: type=lint
+
+/// Callers can lookup localized strings with an instance of AppLocalizations
+/// returned by `AppLocalizations.of(context)`.
+///
+/// Applications need to include `AppLocalizations.delegate()` in their app's
+/// `localizationDelegates` list, and the locales they support in the app's
+/// `supportedLocales` list. For example:
+///
+/// ```dart
+/// import 'l10n/app_localizations.dart';
+///
+/// return MaterialApp(
+///   localizationsDelegates: AppLocalizations.localizationsDelegates,
+///   supportedLocales: AppLocalizations.supportedLocales,
+///   home: MyApplicationHome(),
+/// );
+/// ```
+///
+/// ## Update pubspec.yaml
+///
+/// Please make sure to update your pubspec.yaml to include the following
+/// packages:
+///
+/// ```yaml
+/// dependencies:
+///   # Internationalization support.
+///   flutter_localizations:
+///     sdk: flutter
+///   intl: any # Use the pinned version from flutter_localizations
+///
+///   # Rest of dependencies
+/// ```
+///
+/// ## iOS Applications
+///
+/// iOS applications define key application metadata, including supported
+/// locales, in an Info.plist file that is built into the application bundle.
+/// To configure the locales supported by your app, you’ll need to edit this
+/// file.
+///
+/// First, open your project’s ios/Runner.xcworkspace Xcode workspace file.
+/// Then, in the Project Navigator, open the Info.plist file under the Runner
+/// project’s Runner folder.
+///
+/// Next, select the Information Property List item, select Add Item from the
+/// Editor menu, then select Localizations from the pop-up menu.
+///
+/// Select and expand the newly-created Localizations item then, for each
+/// locale your application supports, add a new item and select the locale
+/// you wish to add from the pop-up menu in the Value field. This list should
+/// be consistent with the languages listed in the AppLocalizations.supportedLocales
+/// property.
+abstract class AppLocalizations {
+  AppLocalizations(String locale)
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+
+  final String localeName;
+
+  static AppLocalizations of(BuildContext context) {
+    return Localizations.of<AppLocalizations>(context, AppLocalizations)!;
+  }
+
+  static const LocalizationsDelegate<AppLocalizations> delegate =
+      _AppLocalizationsDelegate();
+
+  /// A list of this localizations delegate along with the default localizations
+  /// delegates.
+  ///
+  /// Returns a list of localizations delegates containing this delegate along with
+  /// GlobalMaterialLocalizations.delegate, GlobalCupertinoLocalizations.delegate,
+  /// and GlobalWidgetsLocalizations.delegate.
+  ///
+  /// Additional delegates can be added by appending to this list in
+  /// MaterialApp. This list does not have to be used at all if a custom list
+  /// of delegates is preferred or required.
+  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
+      <LocalizationsDelegate<dynamic>>[
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
+
+  /// A list of this localizations delegate's supported locales.
+  static const List<Locale> supportedLocales = <Locale>[
+    Locale('en'),
+    Locale('ja'),
+    Locale('zh'),
+  ];
+
+  /// No description provided for @appTagline.
+  ///
+  /// In zh, this message translates to:
+  /// **'双机离线钱包 · 联网观察端'**
+  String get appTagline;
+
+  /// No description provided for @actionConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认'**
+  String get actionConfirm;
+
+  /// No description provided for @actionCancel.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消'**
+  String get actionCancel;
+
+  /// No description provided for @actionDelete.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除'**
+  String get actionDelete;
+
+  /// No description provided for @actionNext.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一步'**
+  String get actionNext;
+
+  /// No description provided for @actionImport.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入'**
+  String get actionImport;
+
+  /// No description provided for @manage.
+  ///
+  /// In zh, this message translates to:
+  /// **'管理'**
+  String get manage;
+
+  /// No description provided for @viewAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部'**
+  String get viewAll;
+
+  /// No description provided for @max.
+  ///
+  /// In zh, this message translates to:
+  /// **'最大'**
+  String get max;
+
+  /// No description provided for @tabHome.
+  ///
+  /// In zh, this message translates to:
+  /// **'首页'**
+  String get tabHome;
+
+  /// No description provided for @tabAssets.
+  ///
+  /// In zh, this message translates to:
+  /// **'资产'**
+  String get tabAssets;
+
+  /// No description provided for @tabRecords.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录'**
+  String get tabRecords;
+
+  /// No description provided for @tabSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置'**
+  String get tabSettings;
+
+  /// No description provided for @walletKindHot.
+  ///
+  /// In zh, this message translates to:
+  /// **'普通'**
+  String get walletKindHot;
+
+  /// No description provided for @walletKindWatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'观察'**
+  String get walletKindWatch;
+
+  /// No description provided for @walletStateBackedUp.
+  ///
+  /// In zh, this message translates to:
+  /// **'已备份'**
+  String get walletStateBackedUp;
+
+  /// No description provided for @walletStateNotBackedUp.
+  ///
+  /// In zh, this message translates to:
+  /// **'未备份'**
+  String get walletStateNotBackedUp;
+
+  /// No description provided for @walletSeedDaily.
+  ///
+  /// In zh, this message translates to:
+  /// **'日常钱包'**
+  String get walletSeedDaily;
+
+  /// No description provided for @walletSeedMain.
+  ///
+  /// In zh, this message translates to:
+  /// **'主钱包'**
+  String get walletSeedMain;
+
+  /// No description provided for @walletDefaultName.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包 {index}'**
+  String walletDefaultName(int index);
+
+  /// No description provided for @walletImportedName.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入钱包 {index}'**
+  String walletImportedName(int index);
+
+  /// No description provided for @backupBannerText.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未备份助记词，存在丢失风险'**
+  String get backupBannerText;
+
+  /// No description provided for @backupNow.
+  ///
+  /// In zh, this message translates to:
+  /// **'立即备份'**
+  String get backupNow;
+
+  /// No description provided for @balanceTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'总资产估值 (USD)'**
+  String get balanceTitle;
+
+  /// No description provided for @balanceChangePeriod.
+  ///
+  /// In zh, this message translates to:
+  /// **'过去24小时'**
+  String get balanceChangePeriod;
+
+  /// No description provided for @actionReceive.
+  ///
+  /// In zh, this message translates to:
+  /// **'收款'**
+  String get actionReceive;
+
+  /// No description provided for @actionSend.
+  ///
+  /// In zh, this message translates to:
+  /// **'转账'**
+  String get actionSend;
+
+  /// No description provided for @actionMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多'**
+  String get actionMore;
+
+  /// No description provided for @actionScanSign.
+  ///
+  /// In zh, this message translates to:
+  /// **'扫签名'**
+  String get actionScanSign;
+
+  /// No description provided for @assetsSortByValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'按持仓价值排序'**
+  String get assetsSortByValue;
+
+  /// No description provided for @recordsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易记录'**
+  String get recordsTitle;
+
+  /// No description provided for @txSent.
+  ///
+  /// In zh, this message translates to:
+  /// **'转出'**
+  String get txSent;
+
+  /// No description provided for @txReceived.
+  ///
+  /// In zh, this message translates to:
+  /// **'收款'**
+  String get txReceived;
+
+  /// No description provided for @dateToday.
+  ///
+  /// In zh, this message translates to:
+  /// **'今天'**
+  String get dateToday;
+
+  /// No description provided for @dateYesterday.
+  ///
+  /// In zh, this message translates to:
+  /// **'昨天'**
+  String get dateYesterday;
+
+  /// No description provided for @monthDay.
+  ///
+  /// In zh, this message translates to:
+  /// **'{month}月{day}日'**
+  String monthDay(int month, int day);
+
+  /// No description provided for @settingsWalletManage.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包管理'**
+  String get settingsWalletManage;
+
+  /// No description provided for @settingsSecurity.
+  ///
+  /// In zh, this message translates to:
+  /// **'安全设置'**
+  String get settingsSecurity;
+
+  /// No description provided for @settingsAddressBook.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址簿'**
+  String get settingsAddressBook;
+
+  /// No description provided for @settingsNetwork.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络'**
+  String get settingsNetwork;
+
+  /// No description provided for @settingsTokenManage.
+  ///
+  /// In zh, this message translates to:
+  /// **'代币管理'**
+  String get settingsTokenManage;
+
+  /// No description provided for @addWalletTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加钱包'**
+  String get addWalletTitle;
+
+  /// No description provided for @addWalletStandardSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'普通钱包 · 便捷'**
+  String get addWalletStandardSection;
+
+  /// No description provided for @createNewWallet.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建新钱包'**
+  String get createNewWallet;
+
+  /// No description provided for @createNewWalletDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'在本机生成新的助记词，立即可用'**
+  String get createNewWalletDesc;
+
+  /// No description provided for @importMnemonic.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入助记词'**
+  String get importMnemonic;
+
+  /// No description provided for @importMnemonicDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'已有 12 / 18 / 24 个单词的助记词'**
+  String get importMnemonicDesc;
+
+  /// No description provided for @coldWalletSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'离线钱包组合 · 高安全'**
+  String get coldWalletSection;
+
+  /// No description provided for @connectColdWallet.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接离线钱包'**
+  String get connectColdWallet;
+
+  /// No description provided for @connectColdWalletDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'扫码配对 Cold Signer，私钥永不进入本机'**
+  String get connectColdWalletDesc;
+
+  /// No description provided for @createWalletTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建普通钱包'**
+  String get createWalletTitle;
+
+  /// No description provided for @showMnemonic.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示助记词'**
+  String get showMnemonic;
+
+  /// No description provided for @mnemonicWillGenerate.
+  ///
+  /// In zh, this message translates to:
+  /// **'接下来将生成助记词'**
+  String get mnemonicWillGenerate;
+
+  /// No description provided for @hotWalletNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'这是一个热钱包：助记词保存在本机安全区。适合小额日常使用，大额资产建议使用离线钱包组合。'**
+  String get hotWalletNotice;
+
+  /// No description provided for @ruleFullControlTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'助记词等于资产的完全控制权'**
+  String get ruleFullControlTitle;
+
+  /// No description provided for @ruleFullControlDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'任何人拿到这 12 个单词，即可转走你的全部资产'**
+  String get ruleFullControlDesc;
+
+  /// No description provided for @ruleHandwriteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'只用纸笔手写备份'**
+  String get ruleHandwriteTitle;
+
+  /// No description provided for @ruleHandwriteDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'不要保存到相册、云盘、备忘录或聊天软件'**
+  String get ruleHandwriteDesc;
+
+  /// No description provided for @backupMnemonicTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份助记词'**
+  String get backupMnemonicTitle;
+
+  /// No description provided for @mnemonicShowConfirmBtn.
+  ///
+  /// In zh, this message translates to:
+  /// **'我已手写备份，开始校验'**
+  String get mnemonicShowConfirmBtn;
+
+  /// No description provided for @mnemonicShowWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'请按顺序手写抄录，请勿截图或拍照。任何人获得助记词即可控制资产。'**
+  String get mnemonicShowWarning;
+
+  /// No description provided for @verifyBackupTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'校验备份'**
+  String get verifyBackupTitle;
+
+  /// No description provided for @mnemonicWordChallenge.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {position} 个单词是？'**
+  String mnemonicWordChallenge(int position);
+
+  /// No description provided for @mnemonicChallengeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'从下列单词中选择正确的一项'**
+  String get mnemonicChallengeHint;
+
+  /// No description provided for @verifyWrong.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择有误，请对照您手写的备份重试'**
+  String get verifyWrong;
+
+  /// No description provided for @walletCreatedBackedUp.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包已创建并完成备份'**
+  String get walletCreatedBackedUp;
+
+  /// No description provided for @backupVerified.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份已验证，助记词记录正确'**
+  String get backupVerified;
+
+  /// No description provided for @mnemonicInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'助记词无效，请检查每个单词后重试'**
+  String get mnemonicInvalid;
+
+  /// No description provided for @mnemonicImported.
+  ///
+  /// In zh, this message translates to:
+  /// **'助记词已导入'**
+  String get mnemonicImported;
+
+  /// No description provided for @wordsCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 个单词'**
+  String wordsCount(int count);
+
+  /// No description provided for @pasteMnemonic.
+  ///
+  /// In zh, this message translates to:
+  /// **'粘贴助记词（解析后自动清空剪贴板）'**
+  String get pasteMnemonic;
+
+  /// No description provided for @scanAccountQr.
+  ///
+  /// In zh, this message translates to:
+  /// **'扫描账户二维码'**
+  String get scanAccountQr;
+
+  /// No description provided for @connectColdSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'从离线手机导入公开地址，创建观察钱包'**
+  String get connectColdSubtitle;
+
+  /// No description provided for @connectColdSafety.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机永远不会接收或保存助记词、私钥或 Seed。'**
+  String get connectColdSafety;
+
+  /// No description provided for @scanAccountHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'对准 Cold Signer 的地址二维码'**
+  String get scanAccountHint;
+
+  /// No description provided for @importConfirmTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认导入'**
+  String get importConfirmTitle;
+
+  /// No description provided for @createWatchWallet.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建观察钱包'**
+  String get createWatchWallet;
+
+  /// No description provided for @walletIdProtocol.
+  ///
+  /// In zh, this message translates to:
+  /// **'Wallet ID: {id} · 协议 v{version}'**
+  String walletIdProtocol(String id, int version);
+
+  /// No description provided for @walletsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包'**
+  String get walletsTitle;
+
+  /// No description provided for @deleteWalletTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除钱包'**
+  String get deleteWalletTitle;
+
+  /// No description provided for @deleteWalletConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'确定删除「{name}」？此操作仅移除本机记录，不影响链上资产。'**
+  String deleteWalletConfirm(String name);
+
+  /// No description provided for @deletedWallet.
+  ///
+  /// In zh, this message translates to:
+  /// **'已删除「{name}」'**
+  String deletedWallet(String name);
+
+  /// No description provided for @sortAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'排序'**
+  String get sortAction;
+
+  /// No description provided for @walletCountLimit.
+  ///
+  /// In zh, this message translates to:
+  /// **'共 {count} 个钱包 · 上限 {max} 个'**
+  String walletCountLimit(int count, int max);
+
+  /// No description provided for @walletDetailTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包详情'**
+  String get walletDetailTitle;
+
+  /// No description provided for @walletTypeLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包类型'**
+  String get walletTypeLabel;
+
+  /// No description provided for @standardWallet.
+  ///
+  /// In zh, this message translates to:
+  /// **'普通钱包'**
+  String get standardWallet;
+
+  /// No description provided for @backupNotYet.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未备份助记词'**
+  String get backupNotYet;
+
+  /// No description provided for @viewMnemonic.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看助记词'**
+  String get viewMnemonic;
+
+  /// No description provided for @viewMnemonicDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要 Face ID 或密码验证'**
+  String get viewMnemonicDesc;
+
+  /// No description provided for @deleteWalletDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'需身份验证，删除前将再次确认备份状态'**
+  String get deleteWalletDesc;
+
+  /// No description provided for @amountMustBePositive.
+  ///
+  /// In zh, this message translates to:
+  /// **'金额需大于 0'**
+  String get amountMustBePositive;
+
+  /// No description provided for @insufficientBalance.
+  ///
+  /// In zh, this message translates to:
+  /// **'余额不足'**
+  String get insufficientBalance;
+
+  /// No description provided for @amountFormatInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'金额格式不正确'**
+  String get amountFormatInvalid;
+
+  /// No description provided for @recipientAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'收款地址'**
+  String get recipientAddress;
+
+  /// No description provided for @pasteOrEnterAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'粘贴或输入地址'**
+  String get pasteOrEnterAddress;
+
+  /// No description provided for @enterTronAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入 TRON 网络收款地址'**
+  String get enterTronAddress;
+
+  /// No description provided for @addressValidTron.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址格式正确 · TRON 网络'**
+  String get addressValidTron;
+
+  /// No description provided for @addressInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址无效'**
+  String get addressInvalid;
+
+  /// No description provided for @amountLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'金额'**
+  String get amountLabel;
+
+  /// No description provided for @availableUsdt.
+  ///
+  /// In zh, this message translates to:
+  /// **'可用 {amount} USDT'**
+  String availableUsdt(String amount);
+
+  /// No description provided for @networkFee.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络手续费'**
+  String get networkFee;
+
+  /// No description provided for @feeCustom.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义'**
+  String get feeCustom;
+
+  /// No description provided for @feeSlow.
+  ///
+  /// In zh, this message translates to:
+  /// **'慢'**
+  String get feeSlow;
+
+  /// No description provided for @feeStandard.
+  ///
+  /// In zh, this message translates to:
+  /// **'标准'**
+  String get feeStandard;
+
+  /// No description provided for @feeFast.
+  ///
+  /// In zh, this message translates to:
+  /// **'快'**
+  String get feeFast;
+
+  /// No description provided for @confirmFee.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认手续费'**
+  String get confirmFee;
+
+  /// No description provided for @feeExplainer.
+  ///
+  /// In zh, this message translates to:
+  /// **'手续费越高，交易确认越快。费用支付给网络，不进入本 App。'**
+  String get feeExplainer;
+
+  /// No description provided for @feeEtaSlow.
+  ///
+  /// In zh, this message translates to:
+  /// **'≈ 3-5 分钟'**
+  String get feeEtaSlow;
+
+  /// No description provided for @feeEtaStandard.
+  ///
+  /// In zh, this message translates to:
+  /// **'≈ 1 分钟'**
+  String get feeEtaStandard;
+
+  /// No description provided for @feeEtaFast.
+  ///
+  /// In zh, this message translates to:
+  /// **'≈ 15 秒'**
+  String get feeEtaFast;
+
+  /// No description provided for @feeLowWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'手续费过低可能导致交易长时间未确认甚至失败。TRON Energy 不足时将燃烧 TRX 抵扣。'**
+  String get feeLowWarning;
+
+  /// No description provided for @confirmTransactionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认交易'**
+  String get confirmTransactionTitle;
+
+  /// No description provided for @confirmTransfer.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认转账'**
+  String get confirmTransfer;
+
+  /// No description provided for @generateSignQr.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成待签名二维码'**
+  String get generateSignQr;
+
+  /// No description provided for @hotConfirmHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'验证身份后本机签名并自动广播'**
+  String get hotConfirmHint;
+
+  /// No description provided for @watchConfirmHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'二维码中不包含助记词或私钥'**
+  String get watchConfirmHint;
+
+  /// No description provided for @fromAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'转出地址'**
+  String get fromAddress;
+
+  /// No description provided for @totalSpend.
+  ///
+  /// In zh, this message translates to:
+  /// **'总支出'**
+  String get totalSpend;
+
+  /// No description provided for @unbackedTransferWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'该钱包尚未备份助记词。建议先完成备份，再进行转账。'**
+  String get unbackedTransferWarning;
+
+  /// No description provided for @pendingSignTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'待签名交易'**
+  String get pendingSignTitle;
+
+  /// No description provided for @dynamicShard.
+  ///
+  /// In zh, this message translates to:
+  /// **'动态分片 {received} / {total}'**
+  String dynamicShard(int received, int total);
+
+  /// No description provided for @networkRow.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络'**
+  String get networkRow;
+
+  /// No description provided for @requestId.
+  ///
+  /// In zh, this message translates to:
+  /// **'请求 ID'**
+  String get requestId;
+
+  /// No description provided for @scanWithOfflinePhone.
+  ///
+  /// In zh, this message translates to:
+  /// **'请使用离线签名手机扫描此二维码'**
+  String get scanWithOfflinePhone;
+
+  /// No description provided for @scanSignResultTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'扫描签名结果'**
+  String get scanSignResultTitle;
+
+  /// No description provided for @recognizedShard.
+  ///
+  /// In zh, this message translates to:
+  /// **'已识别分片 {received} / {total}'**
+  String recognizedShard(int received, int total);
+
+  /// No description provided for @broadcastTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'广播交易'**
+  String get broadcastTitle;
+
+  /// No description provided for @dontBroadcastYet.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂不广播'**
+  String get dontBroadcastYet;
+
+  /// No description provided for @signatureVerified.
+  ///
+  /// In zh, this message translates to:
+  /// **'签名已验证 · 签名者与钱包地址一致，交易内容未被篡改'**
+  String get signatureVerified;
+
+  /// No description provided for @signerAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'签名地址'**
+  String get signerAddress;
+
+  /// No description provided for @txHashPreview.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易 Hash 预览'**
+  String get txHashPreview;
+
+  /// No description provided for @backToHome.
+  ///
+  /// In zh, this message translates to:
+  /// **'返回首页'**
+  String get backToHome;
+
+  /// No description provided for @txSubmitted.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易已提交'**
+  String get txSubmitted;
+
+  /// No description provided for @txHash.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易 Hash'**
+  String get txHash;
+
+  /// No description provided for @statusLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'状态'**
+  String get statusLabel;
+
+  /// No description provided for @confirming.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认中 ({received}/{total})'**
+  String confirming(int received, int total);
+
+  /// No description provided for @txDetailTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易详情'**
+  String get txDetailTitle;
+
+  /// No description provided for @confirmedPrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'已确认'**
+  String get confirmedPrefix;
+
+  /// No description provided for @confirmations.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认数'**
+  String get confirmations;
+
+  /// No description provided for @authToConfirmTransfer.
+  ///
+  /// In zh, this message translates to:
+  /// **'验证以确认转账'**
+  String get authToConfirmTransfer;
+
+  /// No description provided for @authEveryTransfer.
+  ///
+  /// In zh, this message translates to:
+  /// **'每次转账都需要 Face ID 或密码验证'**
+  String get authEveryTransfer;
+
+  /// No description provided for @useFaceId.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用 Face ID 验证'**
+  String get useFaceId;
+
+  /// No description provided for @usePasscode.
+  ///
+  /// In zh, this message translates to:
+  /// **'改用密码'**
+  String get usePasscode;
+
+  /// No description provided for @searchAssetHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索名称 / Symbol / 合约地址'**
+  String get searchAssetHint;
+
+  /// No description provided for @price.
+  ///
+  /// In zh, this message translates to:
+  /// **'价格'**
+  String get price;
+
+  /// No description provided for @change24h.
+  ///
+  /// In zh, this message translates to:
+  /// **'24h 涨跌'**
+  String get change24h;
+
+  /// No description provided for @contractAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'合约地址'**
+  String get contractAddress;
+
+  /// No description provided for @receiveWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅支持接收 TRON 网络（TRC-20）资产。从其他网络转入将导致资产丢失。'**
+  String get receiveWarning;
+
+  /// No description provided for @addressBookTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址管理'**
+  String get addressBookTitle;
+
+  /// No description provided for @searchNameOrAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索名称或地址'**
+  String get searchNameOrAddress;
+
+  /// No description provided for @noMatchingContacts.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有匹配的联系人'**
+  String get noMatchingContacts;
+
+  /// No description provided for @contactBobExchange.
+  ///
+  /// In zh, this message translates to:
+  /// **'Bob 交易所'**
+  String get contactBobExchange;
+
+  /// No description provided for @contactColdBackup.
+  ///
+  /// In zh, this message translates to:
+  /// **'冷钱包备份'**
+  String get contactColdBackup;
+
+  /// No description provided for @tokenManageTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'Token 管理'**
+  String get tokenManageTitle;
+
+  /// No description provided for @networkSettingsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络设置'**
+  String get networkSettingsTitle;
+
+  /// No description provided for @rpcTimeout.
+  ///
+  /// In zh, this message translates to:
+  /// **'超时'**
+  String get rpcTimeout;
+
+  /// No description provided for @rpcNode.
+  ///
+  /// In zh, this message translates to:
+  /// **'RPC 节点'**
+  String get rpcNode;
+
+  /// No description provided for @accessControl.
+  ///
+  /// In zh, this message translates to:
+  /// **'访问控制'**
+  String get accessControl;
+
+  /// No description provided for @appLock.
+  ///
+  /// In zh, this message translates to:
+  /// **'App 锁'**
+  String get appLock;
+
+  /// No description provided for @appLockDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开 App 时需要 Face ID'**
+  String get appLockDesc;
+
+  /// No description provided for @autoLock.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动锁定'**
+  String get autoLock;
+
+  /// No description provided for @autoLockDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'后台超过时限后重新锁定'**
+  String get autoLockDesc;
+
+  /// No description provided for @autoLockValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'1 分钟'**
+  String get autoLockValue;
+
+  /// No description provided for @privacyMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'隐私模式'**
+  String get privacyMode;
+
+  /// No description provided for @privacyModeDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'首页默认隐藏余额'**
+  String get privacyModeDesc;
+
+  /// No description provided for @dataSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'数据'**
+  String get dataSection;
+
+  /// No description provided for @fiatUnit.
+  ///
+  /// In zh, this message translates to:
+  /// **'法币单位'**
+  String get fiatUnit;
+
+  /// No description provided for @displayLanguage.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示语言'**
+  String get displayLanguage;
+
+  /// No description provided for @deleteWatchWallet.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除观察钱包'**
+  String get deleteWatchWallet;
+
+  /// No description provided for @deleteWatchWalletDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅移除公开地址与本地记录，不影响资产'**
+  String get deleteWatchWalletDesc;
+
+  /// No description provided for @languageSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'跟随系统'**
+  String get languageSystem;
+
+  /// No description provided for @modeSelectTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择设备模式'**
+  String get modeSelectTitle;
+
+  /// No description provided for @modeSelectSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'首次使用前，请先确定这台手机的角色'**
+  String get modeSelectSubtitle;
+
+  /// No description provided for @modeWalletTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'联网钱包'**
+  String get modeWalletTitle;
+
+  /// No description provided for @modeWalletDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'日常使用、查看余额、发起转账'**
+  String get modeWalletDesc;
+
+  /// No description provided for @modeSignerTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'离线签名器'**
+  String get modeSignerTitle;
+
+  /// No description provided for @modeSignerDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'安装在永不联网的手机上，离线保管私钥并签名'**
+  String get modeSignerDesc;
+
+  /// No description provided for @modeSignerConfirmTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'启用离线签名器'**
+  String get modeSignerConfirmTitle;
+
+  /// No description provided for @modeSignerConfirmBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'此模式供离线设备使用，请开启飞行模式并保持设备永不联网。'**
+  String get modeSignerConfirmBody;
+
+  /// No description provided for @deviceMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备模式'**
+  String get deviceMode;
+
+  /// No description provided for @deviceModeSwitchTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换设备模式'**
+  String get deviceModeSwitchTitle;
+
+  /// No description provided for @deviceModeSwitchDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换后将返回模式选择页。'**
+  String get deviceModeSwitchDesc;
+}
+
+class _AppLocalizationsDelegate
+    extends LocalizationsDelegate<AppLocalizations> {
+  const _AppLocalizationsDelegate();
+
+  @override
+  Future<AppLocalizations> load(Locale locale) {
+    return SynchronousFuture<AppLocalizations>(lookupAppLocalizations(locale));
+  }
+
+  @override
+  bool isSupported(Locale locale) =>
+      <String>['en', 'ja', 'zh'].contains(locale.languageCode);
+
+  @override
+  bool shouldReload(_AppLocalizationsDelegate old) => false;
+}
+
+AppLocalizations lookupAppLocalizations(Locale locale) {
+  // Lookup logic when only language code is specified.
+  switch (locale.languageCode) {
+    case 'en':
+      return AppLocalizationsEn();
+    case 'ja':
+      return AppLocalizationsJa();
+    case 'zh':
+      return AppLocalizationsZh();
+  }
+
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
+}

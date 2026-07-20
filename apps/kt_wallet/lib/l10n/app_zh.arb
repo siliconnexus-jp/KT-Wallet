@@ -1,0 +1,259 @@
+{
+  "@@locale": "zh",
+
+  "appTagline": "双机离线钱包 · 联网观察端",
+  "actionConfirm": "确认",
+  "actionCancel": "取消",
+  "actionDelete": "删除",
+  "actionNext": "下一步",
+  "actionImport": "导入",
+  "manage": "管理",
+  "viewAll": "全部",
+  "max": "最大",
+
+  "tabHome": "首页",
+  "tabAssets": "资产",
+  "tabRecords": "记录",
+  "tabSettings": "设置",
+
+  "walletKindHot": "普通",
+  "walletKindWatch": "观察",
+  "walletStateBackedUp": "已备份",
+  "walletStateNotBackedUp": "未备份",
+
+  "walletSeedDaily": "日常钱包",
+  "walletSeedMain": "主钱包",
+  "walletDefaultName": "钱包 {index}",
+  "@walletDefaultName": {
+    "placeholders": { "index": { "type": "int" } }
+  },
+  "walletImportedName": "导入钱包 {index}",
+  "@walletImportedName": {
+    "placeholders": { "index": { "type": "int" } }
+  },
+
+  "backupBannerText": "尚未备份助记词，存在丢失风险",
+  "backupNow": "立即备份",
+  "balanceTitle": "总资产估值 (USD)",
+  "balanceChangePeriod": "过去24小时",
+  "actionReceive": "收款",
+  "actionSend": "转账",
+  "actionMore": "更多",
+  "actionScanSign": "扫签名",
+  "assetsSortByValue": "按持仓价值排序",
+  "recordsTitle": "交易记录",
+  "txSent": "转出",
+  "txReceived": "收款",
+
+  "dateToday": "今天",
+  "dateYesterday": "昨天",
+  "monthDay": "{month}月{day}日",
+  "@monthDay": {
+    "placeholders": { "month": { "type": "int" }, "day": { "type": "int" } }
+  },
+
+  "settingsWalletManage": "钱包管理",
+  "settingsSecurity": "安全设置",
+  "settingsAddressBook": "地址簿",
+  "settingsNetwork": "网络",
+  "settingsTokenManage": "代币管理",
+
+  "addWalletTitle": "添加钱包",
+  "addWalletStandardSection": "普通钱包 · 便捷",
+  "createNewWallet": "创建新钱包",
+  "createNewWalletDesc": "在本机生成新的助记词，立即可用",
+  "importMnemonic": "导入助记词",
+  "importMnemonicDesc": "已有 12 / 18 / 24 个单词的助记词",
+  "coldWalletSection": "离线钱包组合 · 高安全",
+  "connectColdWallet": "连接离线钱包",
+  "connectColdWalletDesc": "扫码配对 Cold Signer，私钥永不进入本机",
+
+  "createWalletTitle": "创建普通钱包",
+  "showMnemonic": "显示助记词",
+  "mnemonicWillGenerate": "接下来将生成助记词",
+  "hotWalletNotice": "这是一个热钱包：助记词保存在本机安全区。适合小额日常使用，大额资产建议使用离线钱包组合。",
+  "ruleFullControlTitle": "助记词等于资产的完全控制权",
+  "ruleFullControlDesc": "任何人拿到这 12 个单词，即可转走你的全部资产",
+  "ruleHandwriteTitle": "只用纸笔手写备份",
+  "ruleHandwriteDesc": "不要保存到相册、云盘、备忘录或聊天软件",
+
+  "backupMnemonicTitle": "备份助记词",
+  "mnemonicShowConfirmBtn": "我已手写备份，开始校验",
+  "mnemonicShowWarning": "请按顺序手写抄录，请勿截图或拍照。任何人获得助记词即可控制资产。",
+
+  "verifyBackupTitle": "校验备份",
+  "mnemonicWordChallenge": "第 {position} 个单词是？",
+  "@mnemonicWordChallenge": {
+    "placeholders": { "position": { "type": "int" } }
+  },
+  "mnemonicChallengeHint": "从下列单词中选择正确的一项",
+  "verifyWrong": "选择有误，请对照您手写的备份重试",
+  "walletCreatedBackedUp": "钱包已创建并完成备份",
+  "backupVerified": "备份已验证，助记词记录正确",
+
+  "mnemonicInvalid": "助记词无效，请检查每个单词后重试",
+  "mnemonicImported": "助记词已导入",
+  "wordsCount": "{count} 个单词",
+  "@wordsCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "pasteMnemonic": "粘贴助记词（解析后自动清空剪贴板）",
+
+  "scanAccountQr": "扫描账户二维码",
+  "connectColdSubtitle": "从离线手机导入公开地址，创建观察钱包",
+  "connectColdSafety": "本机永远不会接收或保存助记词、私钥或 Seed。",
+  "scanAccountHint": "对准 Cold Signer 的地址二维码",
+
+  "importConfirmTitle": "确认导入",
+  "createWatchWallet": "创建观察钱包",
+  "walletIdProtocol": "Wallet ID: {id} · 协议 v{version}",
+  "@walletIdProtocol": {
+    "placeholders": { "id": { "type": "String" }, "version": { "type": "int" } }
+  },
+
+  "walletsTitle": "钱包",
+
+  "deleteWalletTitle": "删除钱包",
+  "deleteWalletConfirm": "确定删除「{name}」？此操作仅移除本机记录，不影响链上资产。",
+  "@deleteWalletConfirm": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "deletedWallet": "已删除「{name}」",
+  "@deletedWallet": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "sortAction": "排序",
+  "walletCountLimit": "共 {count} 个钱包 · 上限 {max} 个",
+  "@walletCountLimit": {
+    "placeholders": { "count": { "type": "int" }, "max": { "type": "int" } }
+  },
+
+  "walletDetailTitle": "钱包详情",
+  "walletTypeLabel": "钱包类型",
+  "standardWallet": "普通钱包",
+  "backupNotYet": "尚未备份助记词",
+  "viewMnemonic": "查看助记词",
+  "viewMnemonicDesc": "需要 Face ID 或密码验证",
+  "deleteWalletDesc": "需身份验证，删除前将再次确认备份状态",
+
+  "amountMustBePositive": "金额需大于 0",
+  "insufficientBalance": "余额不足",
+  "amountFormatInvalid": "金额格式不正确",
+  "recipientAddress": "收款地址",
+  "pasteOrEnterAddress": "粘贴或输入地址",
+  "enterTronAddress": "请输入 TRON 网络收款地址",
+  "addressValidTron": "地址格式正确 · TRON 网络",
+  "addressInvalid": "地址无效",
+  "amountLabel": "金额",
+  "availableUsdt": "可用 {amount} USDT",
+  "@availableUsdt": {
+    "placeholders": { "amount": { "type": "String" } }
+  },
+  "networkFee": "网络手续费",
+  "feeCustom": "自定义",
+  "feeSlow": "慢",
+  "feeStandard": "标准",
+  "feeFast": "快",
+
+  "confirmFee": "确认手续费",
+  "feeExplainer": "手续费越高，交易确认越快。费用支付给网络，不进入本 App。",
+  "feeEtaSlow": "≈ 3-5 分钟",
+  "feeEtaStandard": "≈ 1 分钟",
+  "feeEtaFast": "≈ 15 秒",
+  "feeLowWarning": "手续费过低可能导致交易长时间未确认甚至失败。TRON Energy 不足时将燃烧 TRX 抵扣。",
+
+  "confirmTransactionTitle": "确认交易",
+  "confirmTransfer": "确认转账",
+  "generateSignQr": "生成待签名二维码",
+  "hotConfirmHint": "验证身份后本机签名并自动广播",
+  "watchConfirmHint": "二维码中不包含助记词或私钥",
+  "fromAddress": "转出地址",
+  "totalSpend": "总支出",
+  "unbackedTransferWarning": "该钱包尚未备份助记词。建议先完成备份，再进行转账。",
+
+  "pendingSignTitle": "待签名交易",
+  "dynamicShard": "动态分片 {received} / {total}",
+  "@dynamicShard": {
+    "placeholders": { "received": { "type": "int" }, "total": { "type": "int" } }
+  },
+  "networkRow": "网络",
+  "requestId": "请求 ID",
+  "scanWithOfflinePhone": "请使用离线签名手机扫描此二维码",
+
+  "scanSignResultTitle": "扫描签名结果",
+  "recognizedShard": "已识别分片 {received} / {total}",
+  "@recognizedShard": {
+    "placeholders": { "received": { "type": "int" }, "total": { "type": "int" } }
+  },
+
+  "broadcastTitle": "广播交易",
+  "dontBroadcastYet": "暂不广播",
+  "signatureVerified": "签名已验证 · 签名者与钱包地址一致，交易内容未被篡改",
+  "signerAddress": "签名地址",
+  "txHashPreview": "交易 Hash 预览",
+
+  "backToHome": "返回首页",
+  "txSubmitted": "交易已提交",
+  "txHash": "交易 Hash",
+  "statusLabel": "状态",
+  "confirming": "确认中 ({received}/{total})",
+  "@confirming": {
+    "placeholders": { "received": { "type": "int" }, "total": { "type": "int" } }
+  },
+
+  "txDetailTitle": "交易详情",
+  "confirmedPrefix": "已确认",
+  "confirmations": "确认数",
+
+  "authToConfirmTransfer": "验证以确认转账",
+  "authEveryTransfer": "每次转账都需要 Face ID 或密码验证",
+  "useFaceId": "使用 Face ID 验证",
+  "usePasscode": "改用密码",
+
+  "searchAssetHint": "搜索名称 / Symbol / 合约地址",
+  "price": "价格",
+  "change24h": "24h 涨跌",
+  "contractAddress": "合约地址",
+
+  "receiveWarning": "仅支持接收 TRON 网络（TRC-20）资产。从其他网络转入将导致资产丢失。",
+
+  "addressBookTitle": "地址管理",
+  "searchNameOrAddress": "搜索名称或地址",
+  "noMatchingContacts": "没有匹配的联系人",
+  "contactBobExchange": "Bob 交易所",
+  "contactColdBackup": "冷钱包备份",
+
+  "tokenManageTitle": "Token 管理",
+
+  "networkSettingsTitle": "网络设置",
+  "rpcTimeout": "超时",
+  "rpcNode": "RPC 节点",
+
+  "accessControl": "访问控制",
+  "appLock": "App 锁",
+  "appLockDesc": "打开 App 时需要 Face ID",
+  "autoLock": "自动锁定",
+  "autoLockDesc": "后台超过时限后重新锁定",
+  "autoLockValue": "1 分钟",
+  "privacyMode": "隐私模式",
+  "privacyModeDesc": "首页默认隐藏余额",
+  "dataSection": "数据",
+  "fiatUnit": "法币单位",
+  "displayLanguage": "显示语言",
+  "deleteWatchWallet": "删除观察钱包",
+  "deleteWatchWalletDesc": "仅移除公开地址与本地记录，不影响资产",
+
+  "languageSystem": "跟随系统",
+
+  "modeSelectTitle": "选择设备模式",
+  "modeSelectSubtitle": "首次使用前，请先确定这台手机的角色",
+  "modeWalletTitle": "联网钱包",
+  "modeWalletDesc": "日常使用、查看余额、发起转账",
+  "modeSignerTitle": "离线签名器",
+  "modeSignerDesc": "安装在永不联网的手机上，离线保管私钥并签名",
+  "modeSignerConfirmTitle": "启用离线签名器",
+  "modeSignerConfirmBody": "此模式供离线设备使用，请开启飞行模式并保持设备永不联网。",
+  "deviceMode": "设备模式",
+  "deviceModeSwitchTitle": "切换设备模式",
+  "deviceModeSwitchDesc": "切换后将返回模式选择页。"
+}

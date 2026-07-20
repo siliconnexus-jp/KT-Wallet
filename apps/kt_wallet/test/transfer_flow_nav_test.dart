@@ -1,9 +1,12 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/main.dart';
 
 /// Walks the full transfer navigation, proving the screens are wired into one
 /// flow driven by the current wallet type.
 Future<void> _openHome(WidgetTester tester) async {
+  tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+  addTearDown(tester.platformDispatcher.clearLocalesTestValue);
   await tester.pumpWidget(KtWalletApp());
   await tester.pumpAndSettle();
   await tester.scrollUntilVisible(find.text('W1/W20 首页'), 200);

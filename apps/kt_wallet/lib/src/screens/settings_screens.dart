@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../l10n/app_localizations.dart';
+import '../state/locale_controller.dart';
+
 Widget _switch(bool on, {VoidCallback? onTap}) => GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -19,6 +22,21 @@ Widget _switch(bool on, {VoidCallback? onTap}) => GestureDetector(
       ),
     );
 
+/// Native display name for each supported language (shown in its own script,
+/// the platform convention). "System" is localized.
+String _languageLabel(AppLocalizations l10n, Locale? locale) {
+  switch (locale?.languageCode) {
+    case 'zh':
+      return '简体中文';
+    case 'en':
+      return 'English';
+    case 'ja':
+      return '日本語';
+    default:
+      return l10n.languageSystem;
+  }
+}
+
 /// W16 地址管理.
 class AddressBookScreen extends StatefulWidget {
   const AddressBookScreen({super.key});
@@ -27,24 +45,24 @@ class AddressBookScreen extends StatefulWidget {
 }
 
 class _AddressBookScreenState extends State<AddressBookScreen> {
-  static const _contacts = [
-    ('A', 'Alice', '0x71c8B2…9F3dA24', 'Ethereum', ChainColors.ethereum),
-    ('B', 'Bob 交易所', 'TWd4qCEU…nMxR38uQz', 'TRON', ChainColors.tron),
-    ('冷', '冷钱包备份', '0x8f3C2a…7E19bE1', 'Polygon', ChainColors.polygon),
-    ('D', 'Dana', '6yKp…Vr2W', 'Solana', ChainColors.solana),
-  ];
-
   String _query = '';
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final contacts = <(String, String, String, String, Color)>[
+      ('A', 'Alice', '0x71c8B2…9F3dA24', 'Ethereum', ChainColors.ethereum),
+      ('B', l10n.contactBobExchange, 'TWd4qCEU…nMxR38uQz', 'TRON', ChainColors.tron),
+      ('冷', l10n.contactColdBackup, '0x8f3C2a…7E19bE1', 'Polygon', ChainColors.polygon),
+      ('D', 'Dana', '6yKp…Vr2W', 'Solana', ChainColors.solana),
+    ];
     final q = _query.trim().toLowerCase();
     final results = q.isEmpty
-        ? _contacts
-        : _contacts.where((c) => c.$2.toLowerCase().contains(q) || c.$3.toLowerCase().contains(q) || c.$4.toLowerCase().contains(q)).toList();
+        ? contacts
+        : contacts.where((c) => c.$2.toLowerCase().contains(q) || c.$3.toLowerCase().contains(q) || c.$4.toLowerCase().contains(q)).toList();
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: '地址管理', onBack: () => Navigator.of(context).maybePop(), trailing: Icons.add, onTrailing: () {}),
+      navBar: KtNavBar(title: l10n.addressBookTitle, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.add, onTrailing: () {}),
       children: [
         Container(
           height: 44,
@@ -57,20 +75,20 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
               child: TextField(
                 onChanged: (v) => setState(() => _query = v),
                 style: const TextStyle(fontSize: 14, color: WalletColors.text),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   isCollapsed: true,
                   border: InputBorder.none,
-                  hintText: '搜索名称或地址',
-                  hintStyle: TextStyle(fontSize: 14, color: WalletColors.text3),
+                  hintText: l10n.searchNameOrAddress,
+                  hintStyle: const TextStyle(fontSize: 14, color: WalletColors.text3),
                 ),
               ),
             ),
           ]),
         ),
         if (results.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 32),
-            child: Center(child: Text('没有匹配的联系人', style: TextStyle(fontSize: 14, color: WalletColors.text3))),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 32),
+            child: Center(child: Text(l10n.noMatchingContacts, style: const TextStyle(fontSize: 14, color: WalletColors.text3))),
           )
         else
           KtCard(
@@ -120,9 +138,10 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: 'Token 管理', onBack: () => Navigator.of(context).maybePop(), trailing: Icons.add, onTrailing: () {}),
+      navBar: KtNavBar(title: l10n.tokenManageTitle, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.add, onTrailing: () {}),
       children: [
         KtCard(
           child: Column(children: [
@@ -151,19 +170,20 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
 /// W18 网络设置.
 class NetworkSettingsScreen extends StatelessWidget {
   const NetworkSettingsScreen({super.key});
-  static const _nets = [
-    (ChainColors.ethereum, 'Ethereum', 'eth-mainnet.g.alchemy.com', '86 ms', true),
-    (ChainColors.polygon, 'Polygon', 'polygon-rpc.com', '112 ms', true),
-    (ChainColors.tron, 'TRON', 'api.trongrid.io', '64 ms', true),
-    (ChainColors.solana, 'Solana', 'api.mainnet-beta.solana.com', '超时', false),
-  ];
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final nets = <(Color, String, String, String, bool)>[
+      (ChainColors.ethereum, 'Ethereum', 'eth-mainnet.g.alchemy.com', '86 ms', true),
+      (ChainColors.polygon, 'Polygon', 'polygon-rpc.com', '112 ms', true),
+      (ChainColors.tron, 'TRON', 'api.trongrid.io', '64 ms', true),
+      (ChainColors.solana, 'Solana', 'api.mainnet-beta.solana.com', l10n.rpcTimeout, false),
+    ];
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: '网络设置', onBack: () => Navigator.of(context).maybePop()),
+      navBar: KtNavBar(title: l10n.networkSettingsTitle, onBack: () => Navigator.of(context).maybePop()),
       children: [
-        for (final (color, name, rpc, ms, ok) in _nets)
+        for (final (color, name, rpc, ms, ok) in nets)
           KtCard(
             padding: const EdgeInsets.all(14),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -181,7 +201,7 @@ class NetworkSettingsScreen extends StatelessWidget {
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('RPC 节点', style: TextStyle(fontSize: 12, color: WalletColors.text3)),
+                    Text(l10n.rpcNode, style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
                     const SizedBox(height: 2),
                     Text(rpc, style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text)),
                   ]),
@@ -206,32 +226,111 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
   bool _appLock = true;
   bool _privacy = false;
 
+  Future<void> _pickLanguage() async {
+    final l10n = AppLocalizations.of(context);
+    final controller = LocaleScope.of(context);
+    final current = controller.locale?.languageCode;
+    final options = <(String, Locale?)>[
+      (l10n.languageSystem, null),
+      ('简体中文', const Locale('zh')),
+      ('English', const Locale('en')),
+      ('日本語', const Locale('ja')),
+    ];
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: WalletColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 12),
+          Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(children: [
+              Text(l10n.displayLanguage, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: WalletColors.text)),
+            ]),
+          ),
+          const SizedBox(height: 8),
+          for (final (label, locale) in options)
+            ListTile(
+              title: Text(label, style: const TextStyle(fontSize: 15, color: WalletColors.text)),
+              trailing: (locale?.languageCode == current)
+                  ? const Icon(Icons.check, size: 20, color: WalletColors.accent)
+                  : null,
+              onTap: () {
+                controller.setLocale(locale);
+                Navigator.of(ctx).pop();
+              },
+            ),
+          const SizedBox(height: 12),
+        ]),
+      ),
+    );
+  }
+
+  /// Confirms leaving wallet mode; on confirm the combined installer returns
+  /// to the device-mode picker. Only reachable when a [DeviceModeScope] is
+  /// present (i.e. running inside the single-installer app).
+  Future<void> _confirmDeviceModeSwitch(DeviceModeScope scope) async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: WalletColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(l10n.deviceModeSwitchTitle, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: WalletColors.text)),
+        content: Text(l10n.deviceModeSwitchDesc, style: const TextStyle(fontSize: 14, height: 1.5, color: WalletColors.text2)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.actionCancel, style: const TextStyle(color: WalletColors.text2)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.actionConfirm, style: const TextStyle(color: WalletColors.accent)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) scope.exitMode();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final localeController = LocaleScope.of(context);
+    final modeScope = DeviceModeScope.maybeOf(context);
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: '安全设置', onBack: () => Navigator.of(context).maybePop()),
+      navBar: KtNavBar(title: l10n.settingsSecurity, onBack: () => Navigator.of(context).maybePop()),
       children: [
-        const Text('访问控制', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: WalletColors.text2)),
+        Text(l10n.accessControl, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: WalletColors.text2)),
         KtCard(
           child: Column(children: [
-            _row(Icons.lock_outline, 'App 锁', '打开 App 时需要 Face ID', _switch(_appLock, onTap: () => setState(() => _appLock = !_appLock))),
+            _row(Icons.lock_outline, l10n.appLock, l10n.appLockDesc, _switch(_appLock, onTap: () => setState(() => _appLock = !_appLock))),
             const SizedBox(height: 16),
-            _row(Icons.timer_outlined, '自动锁定', '后台超过时限后重新锁定', const Row(mainAxisSize: MainAxisSize.min, children: [Text('1 分钟', style: TextStyle(fontSize: 13, color: WalletColors.text2)), Icon(Icons.chevron_right, size: 16, color: WalletColors.text3)])),
+            _row(Icons.timer_outlined, l10n.autoLock, l10n.autoLockDesc, Row(mainAxisSize: MainAxisSize.min, children: [Text(l10n.autoLockValue, style: const TextStyle(fontSize: 13, color: WalletColors.text2)), const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3)])),
             const SizedBox(height: 16),
-            _row(Icons.visibility_off_outlined, '隐私模式', '首页默认隐藏余额', _switch(_privacy, onTap: () => setState(() => _privacy = !_privacy))),
+            _row(Icons.visibility_off_outlined, l10n.privacyMode, l10n.privacyModeDesc, _switch(_privacy, onTap: () => setState(() => _privacy = !_privacy))),
           ]),
         ),
-        const Text('数据', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: WalletColors.text2)),
+        Text(l10n.dataSection, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: WalletColors.text2)),
         KtCard(
-          child: Column(children: const [
-            _SimpleRow(Icons.attach_money, '法币单位', 'USD'),
-            SizedBox(height: 16),
-            _SimpleRow(Icons.language, '显示语言', '简体中文'),
+          child: Column(children: [
+            _SimpleRow(Icons.attach_money, l10n.fiatUnit, 'USD'),
+            const SizedBox(height: 16),
+            _SimpleRow(Icons.language, l10n.displayLanguage, _languageLabel(l10n, localeController.locale), onTap: _pickLanguage),
+            // Only in the combined single-installer app: switch back to the
+            // device-mode picker. Hidden in standalone/test setups.
+            if (modeScope != null) ...[
+              const SizedBox(height: 16),
+              _SimpleRow(Icons.devices_outlined, l10n.deviceMode, l10n.modeWalletTitle, onTap: () => _confirmDeviceModeSwitch(modeScope)),
+            ],
           ]),
         ),
         KtCard(
-          child: _row(Icons.delete_outline, '删除观察钱包', '仅移除公开地址与本地记录，不影响资产', const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3), danger: true),
+          child: _row(Icons.delete_outline, l10n.deleteWatchWallet, l10n.deleteWatchWalletDesc, const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3), danger: true),
         ),
       ],
     );
@@ -252,15 +351,20 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
 }
 
 class _SimpleRow extends StatelessWidget {
-  const _SimpleRow(this.icon, this.label, this.value);
+  const _SimpleRow(this.icon, this.label, this.value, {this.onTap});
   final IconData icon;
   final String label, value;
+  final VoidCallback? onTap;
   @override
-  Widget build(BuildContext context) => Row(children: [
-        Icon(icon, size: 19, color: WalletColors.text2),
-        const SizedBox(width: 12),
-        Expanded(child: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text))),
-        Text(value, style: const TextStyle(fontSize: 13, color: WalletColors.text2)),
-        const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3),
-      ]);
+  Widget build(BuildContext context) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Row(children: [
+          Icon(icon, size: 19, color: WalletColors.text2),
+          const SizedBox(width: 12),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text))),
+          Text(value, style: const TextStyle(fontSize: 13, color: WalletColors.text2)),
+          const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3),
+        ]),
+      );
 }

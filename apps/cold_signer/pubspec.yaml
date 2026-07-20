@@ -30,6 +30,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+  shared_preferences: ^2.2.0
   core_crypto:
     path: ../../packages/core_crypto
   airgap_protocol:
@@ -62,6 +66,9 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+
+  # Generate the AppLocalizations class from the ARB files (see l10n.yaml).
+  generate: true
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

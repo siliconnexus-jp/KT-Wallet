@@ -5,6 +5,8 @@ import 'package:kt_wallet/main.dart';
 /// Proves the add-wallet and delete-wallet paths mutate the live controller so
 /// the multi-wallet list actually grows and shrinks.
 Future<void> _openHome(WidgetTester tester) async {
+  tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+  addTearDown(tester.platformDispatcher.clearLocalesTestValue);
   await tester.pumpWidget(KtWalletApp());
   await tester.pumpAndSettle();
   await tester.scrollUntilVisible(find.text('W1/W20 首页'), 200);

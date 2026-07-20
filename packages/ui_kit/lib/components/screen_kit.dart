@@ -19,13 +19,31 @@ extension AppThemeColors on AppTheme {
       this == AppTheme.wallet ? WalletColors.accent : SignerColors.blue;
 }
 
+/// Controls whether shared screens render the design-mock device chrome
+/// (the iOS-style "9:41" status bar baked into the Pencil design). Absent
+/// (design galleries, golden tests) it defaults to true so screens match the
+/// mock 1:1; real app entrypoints set [mockStatusBar] to false so the OS
+/// status bar isn't duplicated on device.
+class KtDeviceChrome extends InheritedWidget {
+  const KtDeviceChrome({super.key, required this.mockStatusBar, required super.child});
+  final bool mockStatusBar;
+
+  static bool mockStatusBarOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<KtDeviceChrome>()?.mockStatusBar ?? true;
+
+  @override
+  bool updateShouldNotify(KtDeviceChrome oldWidget) => oldWidget.mockStatusBar != mockStatusBar;
+}
+
 /// iOS-style status bar (time + indicators). Signer variant swaps Wi-Fi for a
-/// green airplane icon (offline emphasis).
+/// green airplane icon (offline emphasis). Collapses to nothing when
+/// [KtDeviceChrome] disables mock chrome (i.e. on a real device).
 class KtStatusBar extends StatelessWidget {
   const KtStatusBar({super.key, this.theme = AppTheme.wallet});
   final AppTheme theme;
   @override
   Widget build(BuildContext context) {
+    if (!KtDeviceChrome.mockStatusBarOf(context)) return const SizedBox.shrink();
     final fg = theme.text;
     return SizedBox(
       height: 44,
@@ -90,18 +108,26 @@ class KtNavBar extends StatelessWidget {
                 ),
         ),
         Text(title, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: theme.text)),
-        SizedBox(
-          width: 44,
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: trailingText != null
-                ? GestureDetector(
-                    onTap: onTrailing,
-                    child: Text(trailingText!, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: theme.text2)))
-                : trailing != null
-                    ? IconButton(onPressed: onTrailing, icon: Icon(trailing, size: 22, color: theme.text2), padding: EdgeInsets.zero)
-                    : const SizedBox(),
-          ),
+        // Min 44 wide (mirrors the leading slot) but grows for longer action
+        // labels ("Reorder", "並べ替え") instead of wrapping them.
+        ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 44),
+          child: trailingText != null
+              ? GestureDetector(
+                  onTap: onTrailing,
+                  child: Text(trailingText!,
+                      maxLines: 1,
+                      textAlign: TextAlign.end,
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: theme.text2)))
+              : SizedBox(
+                  width: 44,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: trailing != null
+                        ? IconButton(onPressed: onTrailing, icon: Icon(trailing, size: 22, color: theme.text2), padding: EdgeInsets.zero)
+                        : const SizedBox(),
+                  ),
+                ),
         ),
       ],
     );

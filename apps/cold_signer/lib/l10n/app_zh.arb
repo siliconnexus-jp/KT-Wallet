@@ -1,0 +1,187 @@
+{
+  "@@locale": "zh",
+
+  "actionConfirm": "确认",
+  "actionCancel": "取消",
+  "actionImport": "导入",
+  "done": "完成",
+  "later": "稍后再说",
+
+  "splashTagline": "双机离线钱包 · 离线签名端",
+  "welcomeSubtitle": "离线签名 · 助记词永不触网",
+  "welcomeFeatOfflineTitle": "完全离线运行",
+  "welcomeFeatOfflineDesc": "本机不请求任何网络接口，建议全程开启飞行模式",
+  "welcomeFeatLocalTitle": "助记词只存在本机",
+  "welcomeFeatLocalDesc": "在本设备生成和加密保存，绝不进入联网手机",
+  "createNewWallet": "创建新钱包",
+  "importExistingWallet": "导入已有钱包",
+
+  "securityNoticeTitle": "安全提示",
+  "showMnemonic": "显示助记词",
+  "mnemonicWillGenerate": "接下来将生成助记词",
+  "ruleFullControlTitle": "助记词等于资产的完全控制权",
+  "ruleFullControlDesc": "任何人拿到这 12 个单词，即可在任何设备恢复并转走你的全部资产",
+  "ruleHandwriteTitle": "只用纸笔手写备份",
+  "ruleHandwriteDesc": "抄写两份，分开存放在安全的物理位置",
+  "ruleNoCaptureTitle": "永不拍照、截图或输入联网设备",
+  "ruleNoCaptureDesc": "不要保存到相册、云盘或聊天软件，本 App 已禁用截图",
+
+  "backupMnemonicTitle": "备份助记词",
+  "mnemonicShowConfirmBtn": "我已手写备份，开始验证",
+  "mnemonicShowInstruction": "请按顺序手写抄录以下 12 个单词，并保存在安全的物理位置。",
+  "mnemonicShowWarning": "请勿截图、拍照或抄录到任何联网设备。",
+
+  "verifyBackupTitle": "验证备份",
+  "mnemonicWordChallenge": "第 {position} 个单词是？",
+  "@mnemonicWordChallenge": {
+    "placeholders": { "position": { "type": "int" } }
+  },
+  "mnemonicChallengeHint": "从下列单词中选择正确的一项",
+  "verifyWrong": "选择有误，请对照您手写的备份重试",
+
+  "importWalletTitle": "导入钱包",
+  "wordCountOption": "{count} 个单词",
+  "@wordCountOption": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+
+  "setPasswordTitle": "设置解锁密码",
+  "setPasswordPrompt": "设置 6 位密码",
+  "setPasswordConfirmPrompt": "再次输入以确认",
+  "setPasswordDesc": "用于解锁 App 和确认签名。密码仅保存在本机安全区域。",
+  "passwordMismatch": "两次输入不一致，请重新设置",
+
+  "biometricTitle": "生物识别",
+  "enableFaceId": "启用 Face ID",
+  "biometricSkip": "暂不启用，仅使用密码",
+  "biometricDesc": "每次签名前都需要验证身份。启用 Face ID 可以更快完成验证，也可以随时改用设备密码。",
+
+  "exportPublicAddress": "导出公开地址",
+  "walletCreated": "钱包创建完成",
+  "mnemonicBackedUpVerified": "助记词已备份并通过验证",
+  "walletNameLabel": "钱包名称",
+  "walletMainName": "主钱包",
+  "mnemonicBackupLabel": "助记词备份",
+  "verified": "已验证",
+  "supportedNetworks": "支持网络",
+
+  "offlineForDays": "已持续离线 {days} 天",
+  "@offlineForDays": {
+    "placeholders": { "days": { "type": "int" } }
+  },
+  "securityCheckPassed": "安全检查通过 · 飞行模式已开启",
+  "scanPendingTx": "扫描待签名交易",
+  "scanPendingTxDesc": "扫描联网钱包生成的动态二维码",
+  "exportAddress": "导出地址",
+  "signRecords": "签名记录",
+  "securityCheck": "安全检查",
+  "walletManage": "钱包管理",
+
+  "offlineSecurityCheck": "离线安全检查",
+  "checkAirplaneMode": "飞行模式",
+  "checkCellular": "蜂窝网络",
+  "checkBluetooth": "蓝牙",
+  "checkDevicePasscode": "设备密码",
+  "checkBiometric": "生物识别",
+  "checkScreenRecording": "屏幕录制",
+  "statusOn": "已开启",
+  "statusOff": "已关闭",
+  "statusDetectedOn": "检测到开启",
+  "statusEnabled": "已启用",
+  "statusNotDetected": "未检测到",
+  "riskCannotSign": "存在风险 · 暂不能签名",
+  "bluetoothWarning": "检测到蓝牙处于开启状态，请关闭后重新检测。",
+
+  "receivingShard": "接收分片 {received} / {total}",
+  "@receivingShard": {
+    "placeholders": { "received": { "type": "int" }, "total": { "type": "int" } }
+  },
+
+  "confirmTxContent": "确认交易内容",
+  "reject": "拒绝",
+  "confirmSign": "确认签名",
+  "rawAmountPrecision": "原始数量 {amount}（精度 {precision}）",
+  "@rawAmountPrecision": {
+    "placeholders": { "amount": { "type": "String" }, "precision": { "type": "int" } }
+  },
+  "fromAccount": "转出账户（From）",
+  "toAddress": "收款地址（To）",
+
+  "riskWarningTitle": "风险警告",
+  "backToHome": "返回首页",
+  "viewRawTxData": "查看原始交易数据",
+  "signingBlocked": "已禁止签名",
+  "signingBlockedDesc": "该交易包含无法安全解析的内容，Cold Signer 已拒绝签名以保护你的资产。",
+  "unknownContractCallDetected": "检测到未知合约调用：{method}",
+  "@unknownContractCallDetected": {
+    "placeholders": { "method": { "type": "String" } }
+  },
+  "unknownContractCallDesc": "V1 仅支持原生币和 Token 转账。approve、permit 等授权类调用一律拒绝。",
+
+  "authTitle": "身份验证",
+  "useFaceIdVerify": "使用 Face ID 验证",
+  "useDevicePasscode": "改用设备密码",
+  "verifyToSign": "验证以完成签名",
+  "verifyToSignDesc": "每次签名都需要通过 Face ID 或设备密码验证",
+  "amountLabel": "金额",
+  "requestId": "请求 ID",
+
+  "signComplete": "签名完成",
+  "voidThisSignature": "作废本次签名",
+  "dynamicShard": "动态分片 {received} / {total}",
+  "@dynamicShard": {
+    "placeholders": { "received": { "type": "int" }, "total": { "type": "int" } }
+  },
+  "scanResultInstruction": "请使用联网钱包「扫描签名结果」读取此二维码",
+
+  "allAddresses": "全部地址",
+  "exportQrCaption": "包含 {count} 条链公开地址 · 不含任何私密数据",
+  "@exportQrCaption": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+
+  "filterAll": "全部",
+  "stateSigned": "已签名",
+  "stateRejected": "已拒绝",
+  "stateExpired": "已过期",
+  "unknownContractCallLabel": "未知合约调用",
+
+  "walletCreatedOn": "创建于 {date}",
+  "@walletCreatedOn": {
+    "placeholders": { "date": { "type": "String" } }
+  },
+  "backedUp": "已备份",
+  "editWalletName": "修改钱包名称",
+  "mnemonicBackupCheck": "助记词备份验证",
+  "mnemonicBackupCheckDesc": "定期抽查助记词是否仍能正确抄录",
+  "deleteWallet": "删除钱包",
+  "deleteWalletReqDesc": "需要密码、生物识别和确认文字",
+  "destroyAllData": "销毁全部钱包数据",
+  "destroyAllDataDesc": "不可恢复，仅在设备处置前使用",
+
+  "securitySettingsTitle": "安全设置",
+  "verificationPolicy": "验证策略",
+  "biometricUsageDesc": "Face ID 用于解锁与签名",
+  "verifyEverySign": "每次签名验证",
+  "verifyEverySignDesc": "不可关闭（V1 强制）",
+  "accessSection": "访问",
+  "changeAppPassword": "修改 App 密码",
+  "screenCaptureProtection": "截图与录屏防护",
+
+  "permanentlyDeleteWallet": "永久删除钱包",
+  "stepPassword": "密码",
+  "stepConfirmText": "确认文字",
+  "irreversibleAction": "此操作不可恢复",
+  "deleteWalletWarningDesc": "删除后，本机将清除该钱包的全部密钥数据。若助记词未备份或备份遗失，资产将永久无法找回。",
+  "typeToConfirmDelete": "请输入「删除钱包」以继续",
+
+  "displayLanguage": "显示语言",
+  "settingsTitle": "设置",
+  "fiatUnit": "法币单位",
+  "languageSystem": "跟随系统",
+
+  "deviceMode": "设备模式",
+  "deviceModeSigner": "离线签名器",
+  "deviceModeSwitchTitle": "切换设备模式",
+  "deviceModeSwitchDesc": "切换前请确认本机不再用作签名器。切换后将返回模式选择页。"
+}

@@ -31,8 +31,8 @@ final signerRegistry = <String, (String, WidgetBuilder)>{
   'C21 删除钱包': ('/delete', (c) => const SignerDeleteScreen()),
 };
 
-GoRouter buildSignerRouter() => GoRouter(
-      initialLocation: '/',
+GoRouter buildSignerRouter({String initialLocation = '/'}) => GoRouter(
+      initialLocation: initialLocation,
       routes: [
         GoRoute(path: '/', builder: (c, s) => const _Gallery()),
         for (final entry in signerRegistry.entries)

@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Future<void> _open(WidgetTester tester, String galleryEntry) async {
+  // Pin the locale so the localized UI asserted below is in Chinese.
+  tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+  addTearDown(tester.platformDispatcher.clearLocalesTestValue);
   await tester.pumpWidget(ColdSignerApp());
   await tester.pumpAndSettle();
   await tester.scrollUntilVisible(find.text(galleryEntry), 200);

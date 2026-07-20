@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/main.dart';
 
 Future<void> _open(WidgetTester tester, String galleryEntry) async {
+  tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+  addTearDown(tester.platformDispatcher.clearLocalesTestValue);
   await tester.pumpWidget(KtWalletApp());
   await tester.pumpAndSettle();
   await tester.scrollUntilVisible(find.text(galleryEntry), 200);
