@@ -3,6 +3,27 @@
 Reviewed the Pencil design (`ui.pen`) screen-by-screen against the V1 page list
 in ui-m.md §17.
 
+## Live typography verification (2026-07)
+
+The golden suite renders with box-glyphs (no fonts in the test env), so it
+verifies **layout** only. Two follow-ups closed the loop on true 1:1:
+
+1. **Fonts were unbundled.** Code referenced `Inter` / `JetBrains Mono` but no
+   font assets existed → on-device fallback to system fonts, and mono text
+   (addresses/hashes/mnemonics) lost its monospacing. FIXED: bundled both OFL
+   variable fonts in each app (`fonts/`, declared in pubspec). CJK falls back to
+   the platform CJK font (Inter has no CJK) — correct.
+2. **Live render check.** Built `kt_wallet` for web and rendered it in Chrome at
+   phone width with the real fonts. Home (W20) and Assets (W2) match the Pencil
+   frames 1:1 — header pill + 普通 badge + amber avatar, amber backup banner,
+   `$862.40` balance, four actions with 转账 highlighted, all four network
+   chips, assets card, and the active bottom tab bar. Tab switching works in the
+   compiled build. Typography now matches the design.
+
+Cold Signer (dark theme) shares `ui_kit` and bundles the same fonts; it is not
+web-configured (air-gapped by design), so its fidelity rests on shared
+components + bundled fonts + its passing golden suite.
+
 ## Inventory (verified via layout snapshot)
 
 - **52 screens**: KT Wallet W1–W31 (31), Cold Signer C1–C21 (21).
