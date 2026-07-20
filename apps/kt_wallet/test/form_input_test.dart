@@ -18,15 +18,21 @@ void main() {
     final fields = find.byType(TextField);
     expect(fields, findsNWidgets(12));
 
+    // A valid 12-word mnemonic (words the deterministic backend accepts).
+    const words = [
+      'abandon', 'ability', 'able', 'about', 'above', 'absent',
+      'absorb', 'abstract', 'absurd', 'abuse', 'access', 'accident',
+    ];
+
     // Fill the first 11 — button still disabled.
     for (var i = 0; i < 11; i++) {
-      await tester.enterText(fields.at(i), 'word${i + 1}');
+      await tester.enterText(fields.at(i), words[i]);
     }
     await tester.pumpAndSettle();
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '导入')).onPressed, isNull);
 
     // Fill the last one — now enabled — and import.
-    await tester.enterText(fields.at(11), 'word12');
+    await tester.enterText(fields.at(11), words[11]);
     await tester.pumpAndSettle();
     await tester.tap(find.text('导入'));
     await tester.pumpAndSettle();

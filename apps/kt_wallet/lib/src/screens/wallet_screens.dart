@@ -10,6 +10,15 @@ import '../wallets/wallet_model.dart';
 
 const _mnemonic = ['walnut', 'breeze', 'copper', 'stadium', 'lyric', 'fossil', 'drift', 'mosaic', 'tunnel', 'prairie', 'zebra', 'anchor'];
 
+/// The mnemonic shown in the backup flow: the one just generated during
+/// create-onboarding, or the demo constant when the screen is opened standalone
+/// (design gallery / goldens / the "立即备份" banner path).
+List<String> _activeMnemonic(BuildContext context) {
+  final pending = WalletScope.of(context).pendingMnemonic;
+  if (pending == null) return _mnemonic;
+  return pending.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+}
+
 Widget _wordGrid(List<String> words) {
   return Column(children: [
     for (var r = 0; r < (words.length / 2).ceil(); r++)
@@ -61,32 +70,11 @@ class SplashScreen extends StatelessWidget {
 class AddWalletScreen extends StatelessWidget {
   const AddWalletScreen({super.key});
 
-  static const _palette = [0xFF0EA5E9, 0xFF10B981, 0xFFEF4444, 0xFFF59E0B, 0xFF8B5CF6, 0xFFEC4899];
-
-  /// Creates a fresh hot wallet in the live controller and returns home. Real
-  /// key generation happens natively; here we add the wallet record so the
-  /// multi-wallet switcher reflects it immediately.
-  void _createHotWallet(BuildContext context) {
-    final controller = WalletScope.of(context);
-    final n = controller.count + 1;
-    final id = 'w${DateTime.now().microsecondsSinceEpoch}';
-    controller.add(HotWallet(
-      id: id,
-      name: '钱包 $n',
-      avatarColor: _palette[controller.count % _palette.length],
-      addresses: ChainAddresses(
-        eth: '0x${id.substring(1, 9)}00000000000000000000000000000000',
-        polygon: '0x${id.substring(1, 9)}00000000000000000000000000000000',
-        tron: 'T${id.substring(1, 9)}000000000000000000000000000',
-        solana: '${id.substring(1, 9)}0000000000000000000000000000',
-      ),
-      sortOrder: controller.count,
-    ));
-    controller.select(id);
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(const SnackBar(content: Text('新钱包已创建，记得尽快备份助记词')));
-    context.go('/home');
+  /// Starts the create-onboarding flow: generate a fresh mnemonic, then walk
+  /// the backup show → verify screens before the wallet is committed.
+  Future<void> _createHotWallet(BuildContext context) async {
+    await WalletScope.of(context).beginCreate();
+    if (context.mounted) context.push('/create-warn');
   }
 
   @override
@@ -187,7 +175,7 @@ class MnemonicShowScreen extends StatelessWidget {
             Expanded(child: Text('请按顺序手写抄录，请勿截图或拍照。任何人获得助记词即可控制资产。', style: TextStyle(fontSize: 13, height: 1.5, color: WalletColors.red))),
           ]),
         ),
-        _wordGrid(_mnemonic),
+        _wordGrid(_activeMnemonic(context)),
       ],
     );
   }
@@ -201,30 +189,48 @@ class MnemonicVerifyScreen extends StatefulWidget {
 }
 
 class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
-  // Challenge the 4th word; options include the correct one plus distractors.
+  // Challenge the 4th word; options are built from the actual mnemonic.
   static const _challengePosition = 4; // 1-based
-  static const _options = ['fossil', 'stadium', 'breeze', 'mosaic', 'anchor', 'copper'];
-  String get _correct => _mnemonic[_challengePosition - 1]; // 'stadium'
 
   String? _selected;
 
-  void _confirm() {
+  List<String> _words() => _activeMnemonic(context);
+  String _correct() => _words()[_challengePosition - 1];
+
+  /// Correct word + up to 5 distinct distractors from the same mnemonic,
+  /// alphabetically ordered for a stable layout.
+  List<String> _options() {
+    final words = _words();
+    final correct = words[_challengePosition - 1];
+    final distractors = words.where((w) => w != correct).toSet().take(5);
+    return [correct, ...distractors]..sort();
+  }
+
+  Future<void> _confirm() async {
     if (_selected == null) return;
+    final controller = WalletScope.of(context);
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
-    if (_selected == _correct) {
-      final controller = WalletScope.of(context);
+    if (_selected != _correct()) {
+      setState(() => _selected = null);
+      messenger.showSnackBar(const SnackBar(content: Text('选择有误，请对照您手写的备份重试')));
+      return;
+    }
+    if (controller.pendingMnemonic != null) {
+      // Create-onboarding: commit the new wallet now that backup is verified.
+      await controller.finalizeCreate();
+      messenger.showSnackBar(const SnackBar(content: Text('钱包已创建并完成备份')));
+    } else {
+      // Standalone backup of the current wallet.
       final current = controller.current;
       if (current != null) controller.markBackedUp(current.id);
       messenger.showSnackBar(const SnackBar(content: Text('备份已验证，助记词记录正确')));
-      context.go('/home');
-    } else {
-      setState(() => _selected = null);
-      messenger.showSnackBar(const SnackBar(content: Text('选择有误，请对照您手写的备份重试')));
     }
+    if (mounted) context.go('/home');
   }
 
   @override
   Widget build(BuildContext context) {
+    final options = _options();
     return KtScreen(
       gap: 24,
       navBar: KtNavBar(title: '校验备份', onBack: () => Navigator.of(context).maybePop(), trailingText: '3 / 3'),
@@ -241,14 +247,16 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
           const Text('从下列单词中选择正确的一项', style: TextStyle(fontSize: 13, color: WalletColors.text2)),
         ]),
         Column(children: [
-          for (var r = 0; r < 3; r++)
+          for (var r = 0; r < (options.length / 2).ceil(); r++)
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Row(children: [
                 for (var c = 0; c < 2; c++) ...[
                   if (c > 0) const SizedBox(width: 10),
                   Expanded(child: () {
-                    final word = _options[r * 2 + c];
+                    final idx = r * 2 + c;
+                    if (idx >= options.length) return const SizedBox();
+                    final word = options[idx];
                     final sel = word == _selected;
                     return GestureDetector(
                       behavior: HitTestBehavior.opaque,
@@ -306,28 +314,18 @@ class _MnemonicImportScreenState extends State<MnemonicImportScreen> {
     if (mounted) await Clipboard.setData(const ClipboardData(text: ''));
   }
 
-  void _import() {
+  Future<void> _import() async {
     final controller = WalletScope.of(context);
-    final n = controller.count + 1;
-    final id = 'w${DateTime.now().microsecondsSinceEpoch}';
-    controller.add(HotWallet(
-      id: id,
-      name: '导入钱包 $n',
-      avatarColor: AddWalletScreen._palette[controller.count % AddWalletScreen._palette.length],
-      addresses: ChainAddresses(
-        eth: '0x${id.substring(1, 9)}00000000000000000000000000000000',
-        polygon: '0x${id.substring(1, 9)}00000000000000000000000000000000',
-        tron: 'T${id.substring(1, 9)}000000000000000000000000000',
-        solana: '${id.substring(1, 9)}0000000000000000000000000000',
-      ),
-      sortOrder: controller.count,
-      backedUp: true, // an imported mnemonic is already recorded elsewhere
-    ));
-    controller.select(id);
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(const SnackBar(content: Text('助记词已导入')));
-    context.go('/home');
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    final mnemonic = _controllers.map((c) => c.text.trim()).join(' ');
+    try {
+      await controller.importWallet(mnemonic);
+    } on CoreCryptoException catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text('助记词无效，请检查每个单词后重试')));
+      return;
+    }
+    messenger.showSnackBar(const SnackBar(content: Text('助记词已导入')));
+    if (mounted) context.go('/home');
   }
 
   @override

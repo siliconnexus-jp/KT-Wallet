@@ -24,11 +24,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('创建新钱包'), findsOneWidget);
 
+    // 创建新钱包 generates a real mnemonic and enters the backup flow.
     await tester.tap(find.text('创建新钱包'));
     await tester.pumpAndSettle();
-
-    // Back on home with the new wallet (4th) selected.
-    expect(find.text('钱包 4'), findsOneWidget);
+    await tester.tap(find.text('显示助记词'));
+    await tester.pumpAndSettle();
+    // The show screen renders a full 12-word mnemonic (numbered 01..12).
+    expect(find.text('01'), findsOneWidget);
+    expect(find.text('12'), findsOneWidget);
+    await tester.tap(find.text('我已手写备份，开始校验'));
+    await tester.pumpAndSettle();
+    expect(find.text('第 4 个单词是？'), findsOneWidget); // real backup-verify challenge
   });
 
   testWidgets('delete wallet from manage screen removes it from the list',

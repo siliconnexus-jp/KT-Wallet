@@ -43,8 +43,8 @@ final screenRegistry = <String, (String, WidgetBuilder)>{
   'W19 安全设置': ('/security', (c) => const SecuritySettingsScreen()),
 };
 
-GoRouter buildRouter() => GoRouter(
-      initialLocation: '/',
+GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
+      initialLocation: initialLocation,
       routes: [
         GoRoute(path: '/', builder: (c, s) => const _Gallery()),
         for (final entry in screenRegistry.entries)
