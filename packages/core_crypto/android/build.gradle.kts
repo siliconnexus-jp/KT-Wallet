@@ -25,6 +25,15 @@ plugins {
     id("com.android.library")
 }
 
+// Trust Wallet Core's Android artifact is published only to GitHub Packages
+// (auth required); it is NOT on Maven Central. To keep the repo building on
+// Android out of the box, wallet-core is OPT-IN via `-PwalletCore=true`
+// (or walletCore=true in the app's android/gradle.properties). When off (the
+// default), an API-identical fail-closed stub bridge is compiled instead so the
+// full UI runs, but no key/address/signature can be produced on Android.
+val useWalletCore = (project.findProperty("walletCore")?.toString() ?: "false")
+    .toBoolean()
+
 android {
     namespace = "com.ktwallet.core_crypto"
 
@@ -38,6 +47,8 @@ android {
     sourceSets {
         getByName("main") {
             java.srcDirs("src/main/kotlin")
+            // Swap in the real wallet-core bridge or the fail-closed stub.
+            java.srcDir(if (useWalletCore) "src/walletcore/kotlin" else "src/stub/kotlin")
         }
         getByName("test") {
             java.srcDirs("src/test/kotlin")
@@ -73,7 +84,15 @@ kotlin {
 
 dependencies {
     // Trust Wallet Core: audited crypto (mnemonic, derivation, signing).
-    implementation("com.trustwallet:wallet-core:4.7.0")
+    // Opt-in — see `useWalletCore` above. Requires the GitHub Packages Maven
+    // repo with credentials:
+    //   maven {
+    //     url = uri("https://maven.pkg.github.com/trustwallet/wallet-core")
+    //     credentials { username = <gh-user>; password = <gh-token:read:packages> }
+    //   }
+    if (useWalletCore) {
+        implementation("com.trustwallet:wallet-core:4.7.0")
+    }
     // Biometric prompt for the AuthGate.
     implementation("androidx.biometric:biometric:1.1.0")
     // Argon2id KDF for the Cold Signer second encryption layer.
