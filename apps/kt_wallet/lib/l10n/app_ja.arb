@@ -1,6 +1,5 @@
 {
   "@@locale": "ja",
-
   "appTagline": "二台構成のコールドウォレット・オンライン監視端末",
   "actionConfirm": "確認",
   "actionCancel": "キャンセル",
@@ -10,22 +9,18 @@
   "manage": "管理",
   "viewAll": "すべて",
   "max": "最大",
-
   "tabHome": "ホーム",
   "tabAssets": "資産",
   "tabRecords": "履歴",
   "tabSettings": "設定",
-
   "walletKindHot": "通常",
   "walletKindWatch": "監視",
   "walletStateBackedUp": "バックアップ済み",
   "walletStateNotBackedUp": "未バックアップ",
-
   "walletSeedDaily": "日常ウォレット",
   "walletSeedMain": "メインウォレット",
   "walletDefaultName": "ウォレット {index}",
   "walletImportedName": "インポートウォレット {index}",
-
   "backupBannerText": "リカバリーフレーズが未バックアップ — 紛失の恐れがあります",
   "backupNow": "今すぐバックアップ",
   "balanceTitle": "総資産評価額 (USD)",
@@ -38,17 +33,14 @@
   "recordsTitle": "取引履歴",
   "txSent": "送信",
   "txReceived": "受取",
-
   "dateToday": "今日",
   "dateYesterday": "昨日",
   "monthDay": "{month}月{day}日",
-
   "settingsWalletManage": "ウォレット管理",
   "settingsSecurity": "セキュリティ設定",
   "settingsAddressBook": "アドレス帳",
   "settingsNetwork": "ネットワーク",
   "settingsTokenManage": "トークン管理",
-
   "addWalletTitle": "ウォレットを追加",
   "addWalletStandardSection": "通常ウォレット・手軽",
   "createNewWallet": "新規ウォレットを作成",
@@ -58,7 +50,6 @@
   "coldWalletSection": "オフラインウォレット構成・高セキュリティ",
   "connectColdWallet": "オフラインウォレットを接続",
   "connectColdWalletDesc": "QRでCold Signerとペアリング。秘密鍵は端末に入りません",
-
   "createWalletTitle": "通常ウォレットを作成",
   "showMnemonic": "リカバリーフレーズを表示",
   "mnemonicWillGenerate": "次にリカバリーフレーズを生成します",
@@ -67,40 +58,32 @@
   "ruleFullControlDesc": "この12単語を得た者は、あなたの全資産を送金できます",
   "ruleHandwriteTitle": "紙とペンで手書きバックアップのみ",
   "ruleHandwriteDesc": "写真・クラウド・メモ・チャットアプリに保存しないでください",
-
   "backupMnemonicTitle": "リカバリーフレーズをバックアップ",
   "mnemonicShowConfirmBtn": "手書きしました — 確認へ",
   "mnemonicShowWarning": "順番通りに手書きしてください。スクリーンショットや撮影は禁止です。フレーズを得た者が資産を管理できます。",
-
   "verifyBackupTitle": "バックアップを確認",
   "mnemonicWordChallenge": "{position} 番目の単語は？",
   "mnemonicChallengeHint": "下から正しい単語を選択してください",
   "verifyWrong": "選択が違います。手書きバックアップを確認して再試行してください",
   "walletCreatedBackedUp": "ウォレットを作成しバックアップしました",
   "backupVerified": "バックアップを確認しました — フレーズは正しいです",
-
   "mnemonicInvalid": "リカバリーフレーズが無効です。各単語を確認して再試行してください",
   "mnemonicImported": "リカバリーフレーズをインポートしました",
   "wordsCount": "{count} 単語",
   "pasteMnemonic": "フレーズを貼り付け（解析後クリップボードを消去）",
-
   "scanAccountQr": "アカウントQRをスキャン",
   "connectColdSubtitle": "オフライン端末から公開アドレスをインポートして監視ウォレットを作成",
   "connectColdSafety": "端末はフレーズ・秘密鍵・シードを一切受信・保存しません。",
   "scanAccountHint": "Cold SignerのアドレスQRに合わせてください",
-
   "importConfirmTitle": "インポートを確認",
   "createWatchWallet": "監視ウォレットを作成",
   "walletIdProtocol": "Wallet ID: {id} · プロトコル v{version}",
-
   "walletsTitle": "ウォレット",
-
   "deleteWalletTitle": "ウォレットを削除",
   "deleteWalletConfirm": "「{name}」を削除しますか？端末の記録のみ削除され、オンチェーン資産には影響しません。",
   "deletedWallet": "「{name}」を削除しました",
   "sortAction": "並べ替え",
   "walletCountLimit": "ウォレット {count} 個 · 上限 {max} 個",
-
   "walletDetailTitle": "ウォレット詳細",
   "walletTypeLabel": "ウォレット種別",
   "standardWallet": "通常ウォレット",
@@ -108,7 +91,6 @@
   "viewMnemonic": "リカバリーフレーズを表示",
   "viewMnemonicDesc": "Face IDまたはパスコードが必要です",
   "deleteWalletDesc": "認証が必要です。削除前にバックアップ状態を再確認します",
-
   "amountMustBePositive": "金額は0より大きくしてください",
   "insufficientBalance": "残高不足",
   "amountFormatInvalid": "金額の形式が正しくありません",
@@ -124,14 +106,12 @@
   "feeSlow": "低速",
   "feeStandard": "標準",
   "feeFast": "高速",
-
   "confirmFee": "手数料を確認",
   "feeExplainer": "手数料が高いほど確認が早くなります。手数料はネットワークに支払われ、アプリには入りません。",
   "feeEtaSlow": "≈ 3〜5分",
   "feeEtaStandard": "≈ 1分",
   "feeEtaFast": "≈ 15秒",
   "feeLowWarning": "手数料が低すぎると、取引が長時間未確認のままになったり失敗したりする場合があります。TRON Energyが不足するとTRXを消費して補います。",
-
   "confirmTransactionTitle": "取引を確認",
   "confirmTransfer": "送金を確認",
   "generateSignQr": "署名用QRを生成",
@@ -140,56 +120,44 @@
   "fromAddress": "送信元",
   "totalSpend": "合計支出",
   "unbackedTransferWarning": "このウォレットはリカバリーフレーズが未バックアップです。送金前にバックアップを推奨します。",
-
   "pendingSignTitle": "署名待ち取引",
   "dynamicShard": "動的シャード {received} / {total}",
   "networkRow": "ネットワーク",
   "requestId": "リクエストID",
   "scanWithOfflinePhone": "このQRをオフライン署名端末でスキャンしてください",
-
   "scanSignResultTitle": "署名結果をスキャン",
   "recognizedShard": "認識済みシャード {received} / {total}",
-
   "broadcastTitle": "取引をブロードキャスト",
   "dontBroadcastYet": "まだ送信しない",
   "signatureVerified": "署名を確認 · 署名者はウォレットアドレスと一致し、内容は改ざんされていません",
   "signerAddress": "署名アドレス",
   "txHashPreview": "取引ハッシュのプレビュー",
-
   "backToHome": "ホームへ戻る",
   "txSubmitted": "取引を送信しました",
   "txHash": "取引ハッシュ",
   "statusLabel": "ステータス",
   "confirming": "確認中 ({received}/{total})",
-
   "txDetailTitle": "取引詳細",
   "confirmedPrefix": "確認済み",
   "confirmations": "確認数",
-
   "authToConfirmTransfer": "認証して送金を確認",
   "authEveryTransfer": "送金ごとにFace IDまたはパスコードが必要です",
   "useFaceId": "Face IDで認証",
   "usePasscode": "パスコードを使う",
-
   "searchAssetHint": "名称 / シンボル / コントラクトを検索",
   "price": "価格",
   "change24h": "24時間変動",
   "contractAddress": "コントラクトアドレス",
-
   "receiveWarning": "TRONネットワーク（TRC-20）資産のみ対応。他のネットワークからの送金は資産の損失につながります。",
-
   "addressBookTitle": "アドレス帳",
   "searchNameOrAddress": "名称またはアドレスを検索",
   "noMatchingContacts": "一致する連絡先がありません",
   "contactBobExchange": "Bob 取引所",
   "contactColdBackup": "コールドウォレットのバックアップ",
-
   "tokenManageTitle": "トークン管理",
-
   "networkSettingsTitle": "ネットワーク設定",
   "rpcTimeout": "タイムアウト",
   "rpcNode": "RPCノード",
-
   "accessControl": "アクセス制御",
   "appLock": "アプリロック",
   "appLockDesc": "アプリ起動時にFace IDを要求",
@@ -203,9 +171,7 @@
   "displayLanguage": "表示言語",
   "deleteWatchWallet": "監視ウォレットを削除",
   "deleteWatchWalletDesc": "公開アドレスとローカル記録のみ削除。資産に影響はありません",
-
   "languageSystem": "システムに従う",
-
   "modeSelectTitle": "デバイスモードを選択",
   "modeSelectSubtitle": "はじめに、この端末の役割を選んでください",
   "modeWalletTitle": "オンラインウォレット",
@@ -216,5 +182,8 @@
   "modeSignerConfirmBody": "このモードはオフライン端末専用です。機内モードをオンにし、この端末を絶対にネットへ接続しないでください。",
   "deviceMode": "デバイスモード",
   "deviceModeSwitchTitle": "デバイスモードを切り替え",
-  "deviceModeSwitchDesc": "切り替えると、モード選択画面に戻ります。"
+  "deviceModeSwitchDesc": "切り替えると、モード選択画面に戻ります。",
+  "walletLoadErrorTitle": "ウォレットを読み込めませんでした",
+  "walletLoadErrorDesc": "端末内のウォレットデータを読み取れませんでした。もう一度お試しください。問題が続く場合はアプリを再インストールしてください。",
+  "actionRetry": "再試行"
 }

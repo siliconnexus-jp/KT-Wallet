@@ -44,6 +44,11 @@ class WalletStore {
 
   Future<void> delete(String walletId) => _wallets.deleteWallet(walletId);
 
+  /// Closes the underlying database. Call when the store is retired (e.g.
+  /// leaving wallet mode in the combined installer); the store must not be
+  /// used afterwards.
+  Future<void> close() => _db.close();
+
   // ---- mapping -----------------------------------------------------------
 
   Wallet _toDomain(db.Wallet row, List<db.Account> accounts) {

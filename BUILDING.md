@@ -2,8 +2,11 @@
 
 Two Flutter apps in a pub workspace:
 
-- `apps/kt_wallet` — online multi-wallet (KT Wallet)
-- `apps/cold_signer` — air-gapped offline signer (Cold Signer)
+- `apps/kt_wallet` — **the shipping single installer**: first-launch device-mode
+  picker (online wallet / offline signer), with the signer embedded via a path
+  dependency on `cold_signer`
+- `apps/cold_signer` — the air-gapped offline signer, also independently
+  buildable as its own app for users who want a dedicated signer install
 
 Both build for **iOS and Android**. All four targets are verified building:
 

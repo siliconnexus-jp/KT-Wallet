@@ -588,4 +588,14 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deviceModeSwitchDesc => '切り替えると、モード選択画面に戻ります。';
+
+  @override
+  String get walletLoadErrorTitle => 'ウォレットを読み込めませんでした';
+
+  @override
+  String get walletLoadErrorDesc =>
+      '端末内のウォレットデータを読み取れませんでした。もう一度お試しください。問題が続く場合はアプリを再インストールしてください。';
+
+  @override
+  String get actionRetry => '再試行';
 }

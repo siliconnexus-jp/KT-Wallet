@@ -118,7 +118,7 @@ WalletController _seedController() => WalletController(WalletManager(initial: [
 ///
 /// Both mode subtrees run under a [DeviceModeScope] whose `exitMode` clears
 /// the persisted choice and returns to the picker.
-class RootApp extends StatefulWidget {
+class RootApp extends StatelessWidget {
   RootApp({
     super.key,
     DeviceModeController? modeController,
@@ -135,32 +135,27 @@ class RootApp extends StatefulWidget {
   final Future<WalletController> Function()? walletBootstrap;
 
   @override
-  State<RootApp> createState() => _RootAppState();
-}
-
-class _RootAppState extends State<RootApp> {
-  @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: widget.modeController,
+      listenable: modeController,
       builder: (context, _) {
-        switch (widget.modeController.mode) {
+        switch (modeController.mode) {
           case null:
             return ModeSelectApp(
-              localeController: widget.localeController,
-              modeController: widget.modeController,
+              localeController: localeController,
+              modeController: modeController,
             );
           case DeviceMode.wallet:
             return DeviceModeScope(
-              exitMode: widget.modeController.clear,
+              exitMode: modeController.clear,
               child: _WalletBootstrap(
-                localeController: widget.localeController,
-                bootstrap: widget.walletBootstrap ?? () => _bootstrapWallet(widget.localeController),
+                localeController: localeController,
+                bootstrap: walletBootstrap ?? () => _bootstrapWallet(localeController),
               ),
             );
           case DeviceMode.signer:
             return DeviceModeScope(
-              exitMode: widget.modeController.clear,
+              exitMode: modeController.clear,
               child: ColdSignerApp(initialLocation: '/welcome'),
             );
         }
@@ -170,7 +165,9 @@ class _RootAppState extends State<RootApp> {
 }
 
 /// Runs the async wallet bootstrap behind a plain dark splash (just the picker
-/// background color) and hands off to [KtWalletApp] once loaded.
+/// background color) and hands off to [KtWalletApp] once loaded. A failed
+/// bootstrap (e.g. unreadable database) shows a retryable error screen instead
+/// of hanging on the splash. Leaving wallet mode closes the database.
 class _WalletBootstrap extends StatefulWidget {
   const _WalletBootstrap({required this.localeController, required this.bootstrap});
 
@@ -182,13 +179,28 @@ class _WalletBootstrap extends StatefulWidget {
 }
 
 class _WalletBootstrapState extends State<_WalletBootstrap> {
-  late final Future<WalletController> _controller = widget.bootstrap();
+  late Future<WalletController> _controller = widget.bootstrap();
+
+  @override
+  void dispose() {
+    // Release the DB connection when this mode subtree is torn down (mode
+    // switch back to the picker). A bootstrap that failed has nothing to close.
+    _controller.then((c) => c.close()).ignore();
+    super.dispose();
+  }
+
+  void _retry() => setState(() {
+        _controller = widget.bootstrap();
+      });
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<WalletController>(
       future: _controller,
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _BootstrapErrorApp(localeController: widget.localeController, onRetry: _retry);
+        }
         final controller = snapshot.data;
         if (controller == null) return const ColoredBox(color: SignerColors.bg);
         return KtWalletApp(
@@ -197,6 +209,66 @@ class _WalletBootstrapState extends State<_WalletBootstrap> {
           initialLocation: '/home',
         );
       },
+    );
+  }
+}
+
+/// Full-screen retryable error shown when the wallet bootstrap fails. Hosts its
+/// own minimal MaterialApp because it renders outside [KtWalletApp] (there is
+/// no Directionality/l10n above it otherwise).
+class _BootstrapErrorApp extends StatelessWidget {
+  const _BootstrapErrorApp({required this.localeController, required this.onRetry});
+
+  final LocaleController localeController;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: localeController,
+      builder: (context, _) => MaterialApp(
+        title: 'KT Wallet',
+        debugShowCheckedModeBanner: false,
+        locale: localeController.locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: ThemeData(
+          fontFamily: 'Inter',
+          brightness: Brightness.dark,
+          colorScheme: ColorScheme.fromSeed(seedColor: WalletColors.accent, brightness: Brightness.dark),
+          scaffoldBackgroundColor: SignerColors.bg,
+        ),
+        home: Builder(
+          builder: (context) {
+            final l10n = AppLocalizations.of(context);
+            return Scaffold(
+              backgroundColor: SignerColors.bg,
+              body: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Icon(Icons.error_outline, size: 48, color: SignerColors.text2),
+                      const SizedBox(height: 16),
+                      Text(l10n.walletLoadErrorTitle,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: SignerColors.text)),
+                      const SizedBox(height: 8),
+                      Text(l10n.walletLoadErrorDesc,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 13, height: 1.6, color: SignerColors.text2)),
+                      const SizedBox(height: 24),
+                      KtPrimaryButton(label: l10n.actionRetry, onPressed: onRetry),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }

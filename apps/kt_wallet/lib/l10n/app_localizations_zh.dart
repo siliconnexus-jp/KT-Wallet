@@ -583,4 +583,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceModeSwitchDesc => '切换后将返回模式选择页。';
+
+  @override
+  String get walletLoadErrorTitle => '钱包加载失败';
+
+  @override
+  String get walletLoadErrorDesc => '无法读取本机的钱包数据。请重试;若问题持续,请重新安装应用。';
+
+  @override
+  String get actionRetry => '重试';
 }

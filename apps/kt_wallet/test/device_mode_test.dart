@@ -122,4 +122,76 @@ void main() {
     expect(mode.mode, isNull);
     expect(find.text('选择设备模式'), findsOneWidget);
   });
+
+  testWidgets('a failed wallet bootstrap shows a retryable error, not a hang', (tester) async {
+    tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+
+    var calls = 0;
+    await tester.pumpWidget(RootApp(
+      modeController: DeviceModeController(initial: DeviceMode.wallet),
+      walletBootstrap: () async {
+        calls++;
+        if (calls == 1) throw StateError('corrupt database');
+        return _testWalletController();
+      },
+    ));
+    await tester.pumpAndSettle();
+
+    // First attempt fails → error screen with a retry button.
+    expect(find.text('钱包加载失败'), findsOneWidget);
+    expect(find.text('重试'), findsOneWidget);
+
+    // Retry succeeds → wallet home.
+    await tester.tap(find.text('重试'));
+    await tester.pumpAndSettle();
+    expect(find.text('钱包加载失败'), findsNothing);
+    expect(find.text('日常钱包'), findsOneWidget);
+  });
+
+  testWidgets('signer welcome offers an escape hatch back to the picker', (tester) async {
+    final mode = await _pumpRoot(tester, initialMode: DeviceMode.signer);
+
+    // The scope-gated link is on the welcome screen (before any onboarding).
+    await tester.tap(find.text('切换设备模式'));
+    await tester.pumpAndSettle();
+
+    expect(mode.mode, isNull);
+    expect(find.text('选择设备模式'), findsOneWidget);
+  });
+
+  testWidgets('leaving wallet mode closes the wallet controller (database)', (tester) async {
+    tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+
+    final controller = _ClosableController();
+    final mode = DeviceModeController(initial: DeviceMode.wallet);
+    await tester.pumpWidget(RootApp(
+      modeController: mode,
+      walletBootstrap: () async => controller,
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('日常钱包'), findsOneWidget);
+    expect(controller.closed, isFalse);
+
+    // Exiting the mode tears down the wallet subtree and must release the DB.
+    mode.clear();
+    await tester.pumpAndSettle();
+    expect(find.text('选择设备模式'), findsOneWidget);
+    expect(controller.closed, isTrue);
+  });
+}
+
+class _ClosableController extends WalletController {
+  _ClosableController() : super(WalletManager(initial: [
+          HotWallet(id: 'daily', name: '日常钱包', avatarColor: 0xFFF59E0B, addresses: _addr('a'), backedUp: true),
+        ]));
+
+  bool closed = false;
+
+  @override
+  Future<void> close() async {
+    closed = true;
+    await super.close();
+  }
 }

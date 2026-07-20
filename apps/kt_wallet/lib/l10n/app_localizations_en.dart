@@ -608,4 +608,14 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get deviceModeSwitchDesc =>
       'You will return to the mode selection screen.';
+
+  @override
+  String get walletLoadErrorTitle => 'Couldn\'t load wallets';
+
+  @override
+  String get walletLoadErrorDesc =>
+      'Your on-device wallet data couldn\'t be read. Try again; if the problem persists, reinstall the app.';
+
+  @override
+  String get actionRetry => 'Retry';
 }

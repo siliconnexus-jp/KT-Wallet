@@ -22,7 +22,6 @@ sealed class Wallet {
   final int sortOrder;
 
   bool get canSignLocally;
-  String get typeLabel;
 }
 
 /// Hot wallet: holds encrypted key material on-device and can sign locally.
@@ -41,9 +40,6 @@ class HotWallet extends Wallet {
 
   @override
   bool get canSignLocally => true;
-
-  @override
-  String get typeLabel => '普通';
 
   /// The ONLY entry point to local signing. Watch wallets have no equivalent.
   Future<SignedTransaction> sign(
@@ -86,9 +82,6 @@ class WatchWallet extends Wallet {
 
   @override
   bool get canSignLocally => false;
-
-  @override
-  String get typeLabel => '观察';
 
   WatchWallet copyWith({String? name, int? avatarColor, int? sortOrder}) =>
       WatchWallet(

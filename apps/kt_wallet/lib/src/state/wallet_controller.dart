@@ -23,6 +23,12 @@ class WalletController extends ChangeNotifier {
   final CoreCrypto _crypto;
   final WalletStore? _store;
 
+  /// Releases the backing store's database connection (no-op for in-memory
+  /// controllers). Call when the controller is retired, e.g. when leaving
+  /// wallet mode in the combined installer; the controller must not be used
+  /// afterwards.
+  Future<void> close() async => _store?.close();
+
   /// Mnemonic generated during create-onboarding, held only between the
   /// "create new wallet" tap and the backup-verify confirmation, then dropped.
   String? _pendingMnemonic;

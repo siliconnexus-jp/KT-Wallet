@@ -1197,6 +1197,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'切换后将返回模式选择页。'**
   String get deviceModeSwitchDesc;
+
+  /// No description provided for @walletLoadErrorTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包加载失败'**
+  String get walletLoadErrorTitle;
+
+  /// No description provided for @walletLoadErrorDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法读取本机的钱包数据。请重试;若问题持续,请重新安装应用。'**
+  String get walletLoadErrorDesc;
+
+  /// No description provided for @actionRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试'**
+  String get actionRetry;
 }
 
 class _AppLocalizationsDelegate

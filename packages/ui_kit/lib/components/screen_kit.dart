@@ -107,7 +107,12 @@ class KtNavBar extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                 ),
         ),
-        Text(title, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: theme.text)),
+        Flexible(
+          child: Text(title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: theme.text)),
+        ),
         // Min 44 wide (mirrors the leading slot) but grows for longer action
         // labels ("Reorder", "並べ替え") instead of wrapping them.
         ConstrainedBox(
