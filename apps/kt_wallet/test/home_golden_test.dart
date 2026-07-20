@@ -19,6 +19,15 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    // Precache async-decoding asset images (token icons) so the golden
+    // captures the rendered logos.
+    await tester.runAsync(() async {
+      for (final element in find.byType(Image).evaluate()) {
+        await precacheImage((element.widget as Image).image, element);
+      }
+    });
+    await tester.pump();
+
     await expectLater(
       find.byType(HomeScreen),
       matchesGoldenFile('goldens/home_screen.png'),

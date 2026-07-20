@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../widgets/token_icon.dart';
 import '../state/app_prefs.dart';
 import '../state/locale_controller.dart';
 import '../state/wallet_scope.dart';
@@ -341,7 +342,7 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
             for (var i = 0; i < _tokens.length; i++) ...[
               if (i > 0) const SizedBox(height: 14),
               Row(children: [
-                KtAvatar(color: _tokens[i].$1, initial: _tokens[i].$2, size: 36),
+                TokenIcon(symbol: _tokens[i].$3, size: 36, fallbackColor: _tokens[i].$1, fallbackInitial: _tokens[i].$2),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

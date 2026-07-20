@@ -24,6 +24,15 @@ void main() {
       ));
       await tester.pump();
 
+      // Asset images (token icons) decode asynchronously; precache them so
+      // goldens capture the rendered logos instead of blank placeholders.
+      await tester.runAsync(() async {
+        for (final element in find.byType(Image).evaluate()) {
+          await precacheImage((element.widget as Image).image, element);
+        }
+      });
+      await tester.pump();
+
       await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/screens/$slug.png'));
     });
   }

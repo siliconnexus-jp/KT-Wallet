@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../widgets/token_icon.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
 
@@ -128,7 +129,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
           const SizedBox(height: 8),
           for (var i = 0; i < _assets.length; i++)
             ListTile(
-              leading: KtAvatar(color: _assets[i].color, initial: _assets[i].initial, size: 36),
+              leading: TokenIcon(symbol: _assets[i].symbol, size: 36, fallbackColor: _assets[i].color, fallbackInitial: _assets[i].initial),
               title: Text(_assets[i].symbol, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
               subtitle: Text('${_assets[i].network} · ${l10n.availableBalance(_assets[i].availableLabel, _assets[i].symbol)}', style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
               trailing: i == _assetIndex ? const Icon(Icons.check, size: 20, color: WalletColors.accent) : null,
@@ -160,7 +161,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
             behavior: HitTestBehavior.opaque,
             onTap: _pickAsset,
             child: Row(children: [
-              KtAvatar(color: _asset.color, initial: _asset.initial, size: 36),
+              TokenIcon(symbol: _asset.symbol, size: 36, fallbackColor: _asset.color, fallbackInitial: _asset.initial),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

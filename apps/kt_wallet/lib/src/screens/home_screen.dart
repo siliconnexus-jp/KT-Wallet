@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../widgets/token_icon.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
 
@@ -526,7 +527,7 @@ class _AssetTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
         children: [
-          _Avatar(color: a.color, initial: a.letter, size: 40),
+          TokenIcon(symbol: a.name, size: 40, fallbackColor: a.color, fallbackInitial: a.letter),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

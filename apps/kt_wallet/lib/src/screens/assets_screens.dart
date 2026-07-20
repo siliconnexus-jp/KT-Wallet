@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../widgets/token_icon.dart';
 import '../state/wallet_scope.dart';
 
 /// W2 资产列表 — search + network filter + full asset list. Live: the search
@@ -98,7 +99,7 @@ class _AssetTile extends StatelessWidget {
   final (Color, String, String, String, String, String, Color, String) a;
   @override
   Widget build(BuildContext context) => Row(children: [
-        KtAvatar(color: a.$1, initial: a.$2),
+        TokenIcon(symbol: a.$3, size: 40, fallbackColor: a.$1, fallbackInitial: a.$2),
         const SizedBox(width: 12),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -139,7 +140,7 @@ class TokenDetailScreen extends StatelessWidget {
       ),
       children: [
         Column(children: [
-          const KtAvatar(color: Color(0xFF26A17B), initial: '₮', size: 56),
+          const TokenIcon(symbol: 'USDT', size: 56),
           const SizedBox(height: 10),
           const Text('3,120.00 USDT', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: WalletColors.text)),
           const SizedBox(height: 6),
@@ -275,7 +276,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(color: WalletColors.surface, borderRadius: BorderRadius.circular(999)),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                KtAvatar(color: chain.tokenColor, initial: chain.glyph, size: 24),
+                TokenIcon(symbol: chain.pillLabel.split(' ').first, size: 24, fallbackColor: chain.tokenColor, fallbackInitial: chain.glyph),
                 const SizedBox(width: 8),
                 Text(chain.pillLabel, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WalletColors.text)),
                 const SizedBox(width: 8),
