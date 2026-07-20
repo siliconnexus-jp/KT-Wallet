@@ -113,6 +113,17 @@ class WalletController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setColor(String id, int color) {
+    _manager.setColor(id, color);
+    _persistMetadata(id);
+    notifyListeners();
+  }
+
+  /// Exposes the stored mnemonic for backup/inspection flows. Requires the
+  /// wallet's key material to exist in [CoreCrypto] (throws
+  /// [CoreCryptoException] otherwise, e.g. for demo-seeded wallets).
+  Future<String> exportMnemonic(String id) => _crypto.exportMnemonic(id);
+
   void markBackedUp(String id) {
     _manager.markBackedUp(id);
     _persistMetadata(id);

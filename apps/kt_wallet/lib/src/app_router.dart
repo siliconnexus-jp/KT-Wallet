@@ -52,7 +52,14 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
         // not enumerated by the design gallery / golden tests.
         GoRoute(path: '/scan-address', builder: (c, s) => const ScanAddressScreen()),
         for (final entry in screenRegistry.entries)
-          GoRoute(path: entry.value.$1, builder: (c, s) => entry.value.$2(c)),
+          GoRoute(
+            path: entry.value.$1,
+            // Wallet detail accepts ?id=<walletId> when pushed from the manage
+            // list; without it (gallery / goldens) it shows the current wallet.
+            builder: entry.value.$1 == '/wallet-detail'
+                ? (c, s) => WalletDetailScreen(walletId: s.uri.queryParameters['id'])
+                : (c, s) => entry.value.$2(c),
+          ),
       ],
     );
 

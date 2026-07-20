@@ -15,6 +15,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get actionCancel => 'Cancel';
 
   @override
+  String get actionSave => 'Save';
+
+  @override
   String get actionImport => 'Import';
 
   @override
@@ -243,6 +246,36 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bluetoothWarning => 'Bluetooth is on — turn it off and re-check.';
 
   @override
+  String get checkNetwork => 'Network connection';
+
+  @override
+  String get checkIntegrity => 'System integrity';
+
+  @override
+  String get checkLevelPass => 'Pass';
+
+  @override
+  String get checkLevelWarn => 'Warning';
+
+  @override
+  String get checkLevelBlock => 'Blocked';
+
+  @override
+  String get securityChecking => 'Checking device status…';
+
+  @override
+  String get securityOverallPass => 'All checks passed · Ready to sign';
+
+  @override
+  String get securityOverallWarn => 'Risks detected · Proceed with caution';
+
+  @override
+  String get securityOverallBlock => 'Critical risk · Signing disabled';
+
+  @override
+  String get securityRecheck => 'Re-run checks';
+
+  @override
   String receivingShard(int received, int total) {
     return 'Receiving shard $received / $total';
   }
@@ -319,6 +352,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get voidThisSignature => 'Void this signature';
+
+  @override
+  String get voidSignatureTitle => 'Void this signature?';
+
+  @override
+  String get voidSignatureDesc =>
+      'Once voided, this signature QR code becomes invalid and the online wallet cannot broadcast the transaction.';
+
+  @override
+  String get signatureVoided => 'Signature voided';
 
   @override
   String dynamicShard(int received, int total) {

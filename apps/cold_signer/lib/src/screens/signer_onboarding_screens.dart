@@ -387,7 +387,16 @@ class SignerBiometricScreen extends StatelessWidget {
       theme: _t,
       gap: 28,
       navBar: KtNavBar(title: l10n.biometricTitle, theme: _t),
-      bottom: Column(children: [_signerBtn(l10n.enableFaceId, onPressed: () => context.push('/created')), const SizedBox(height: 12), Text(l10n.biometricSkip, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2))]),
+      bottom: Column(children: [
+        _signerBtn(l10n.enableFaceId, onPressed: () => context.push('/created')),
+        const SizedBox(height: 12),
+        // Skipping biometrics still completes wallet creation.
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => context.push('/created'),
+          child: Text(l10n.biometricSkip, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2)),
+        ),
+      ]),
       children: [
         const SizedBox(height: 24),
         Center(child: Container(width: 120, height: 120, decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(60), border: Border.all(color: SignerColors.border)), child: const Icon(Icons.face, size: 60, color: SignerColors.blue))),
@@ -410,7 +419,16 @@ class SignerCreatedScreen extends StatelessWidget {
     return KtScreen(
       theme: _t,
       gap: 24,
-      bottom: Column(children: [_signerBtn(l10n.exportPublicAddress, onPressed: () => context.push('/export')), const SizedBox(height: 12), Text(l10n.later, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2))]),
+      bottom: Column(children: [
+        _signerBtn(l10n.exportPublicAddress, onPressed: () => context.push('/export')),
+        const SizedBox(height: 12),
+        // "Later" skips address export and lands on the offline home.
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => context.go('/home'),
+          child: Text(l10n.later, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2)),
+        ),
+      ]),
       children: [
         const SizedBox(height: 48),
         Center(child: Container(width: 96, height: 96, decoration: BoxDecoration(color: SignerColors.ok.withValues(alpha: 0.08), shape: BoxShape.circle), child: Center(child: Container(width: 68, height: 68, decoration: const BoxDecoration(color: SignerColors.ok, shape: BoxShape.circle), child: const Icon(Icons.check, size: 34, color: Color(0xFF0A0C0F)))))),

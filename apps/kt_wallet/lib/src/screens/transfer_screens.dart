@@ -385,7 +385,7 @@ class SignRequestQrScreen extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: l10n.pendingSignTitle, onBack: () => Navigator.of(context).maybePop(), trailingText: l10n.actionCancel),
+      navBar: KtNavBar(title: l10n.pendingSignTitle, onBack: () => Navigator.of(context).maybePop(), trailingText: l10n.actionCancel, onTrailing: () => Navigator.of(context).maybePop()),
       children: [
         KtCard(
           padding: const EdgeInsets.all(24),
@@ -467,7 +467,11 @@ class BroadcastConfirmScreen extends StatelessWidget {
       bottom: Column(children: [
         KtPrimaryButton(label: l10n.broadcastTitle, onPressed: () => context.go('/broadcast-result')),
         const SizedBox(height: 12),
-        Text(l10n.dontBroadcastYet, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text2)),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => Navigator.of(context).maybePop(),
+          child: Text(l10n.dontBroadcastYet, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text2)),
+        ),
       ]),
       children: [
         Container(
@@ -624,7 +628,12 @@ class TransferAuthSheet extends StatelessWidget {
             const SizedBox(height: 20),
             KtPrimaryButton(label: l10n.useFaceId, onPressed: () => context.go('/broadcast-result')),
             const SizedBox(height: 12),
-            Text(l10n.usePasscode, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text2)),
+            // Demo passcode path: same simulated auth success as Face ID.
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => context.go('/broadcast-result'),
+              child: Text(l10n.usePasscode, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text2)),
+            ),
           ]),
         ),
       ),

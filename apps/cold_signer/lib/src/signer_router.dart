@@ -18,7 +18,9 @@ final signerRegistry = <String, (String, WidgetBuilder)>{
   'C15 生物识别设置': ('/biometric', (c) => const SignerBiometricScreen()),
   'C16 创建成功': ('/created', (c) => const SignerCreatedScreen()),
   'C5 离线首页': ('/home', (c) => const SignerHomeScreen()),
-  'C2 离线安全检查': ('/security-check', (c) => const SignerSecurityCheckScreen()),
+  // The gallery/golden entry keeps the canned design snapshot so existing
+  // goldens stay byte-identical; the live route is overridden below.
+  'C2 离线安全检查': ('/security-check', (c) => const SignerSecurityCheckPreviewScreen()),
   'C6 扫描交易': ('/scan', (c) => const SignerScanScreen()),
   'C7 交易解析确认': ('/parse', (c) => const SignerParseScreen()),
   'C17 风险警告': ('/risk', (c) => const SignerRiskScreen()),
@@ -31,12 +33,19 @@ final signerRegistry = <String, (String, WidgetBuilder)>{
   'C21 删除钱包': ('/delete', (c) => const SignerDeleteScreen()),
 };
 
+/// Live builders that replace a registry entry's design-snapshot builder when
+/// the app actually navigates there (the registry itself is the golden/gallery
+/// baseline and must keep rendering the original snapshot).
+final _liveOverrides = <String, WidgetBuilder>{
+  '/security-check': (c) => const SignerSecurityCheckScreen(),
+};
+
 GoRouter buildSignerRouter({String initialLocation = '/'}) => GoRouter(
       initialLocation: initialLocation,
       routes: [
         GoRoute(path: '/', builder: (c, s) => const _Gallery()),
         for (final entry in signerRegistry.entries)
-          GoRoute(path: entry.value.$1, builder: (c, s) => entry.value.$2(c)),
+          GoRoute(path: entry.value.$1, builder: (c, s) => (_liveOverrides[entry.value.$1] ?? entry.value.$2)(c)),
       ],
     );
 

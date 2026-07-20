@@ -1,63 +1,101 @@
+import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../state/wallet_scope.dart';
 
-/// W2 资产列表 — search + network filter + full asset list.
-class AssetsListScreen extends StatelessWidget {
+/// W2 资产列表 — search + network filter + full asset list. Live: the search
+/// field and network segments filter the (demo) asset rows; tapping a row
+/// opens the token detail screen.
+class AssetsListScreen extends StatefulWidget {
   const AssetsListScreen({super.key});
+  @override
+  State<AssetsListScreen> createState() => _AssetsListScreenState();
+}
 
+class _AssetsListScreenState extends State<AssetsListScreen> {
+  // (color, symbol glyph, name, holdings, value, change, change color, network)
   static const _assets = [
-    (Color(0xFF627EEA), 'Ξ', 'Ethereum', '2.4805 ETH', r'$8,241.60', '+2.4%', WalletColors.green),
-    (Color(0xFF26A17B), '₮', 'USDT', '3,120.00 USDT · TRON', r'$3,120.00', '0.0%', WalletColors.text3),
-    (Color(0xFF8247E5), '⬡', 'POL', '2,860.5 POL · Polygon', r'$986.87', '-1.2%', WalletColors.red),
-    (Color(0xFF9945FF), '◎', 'Solana', '3.208 SOL', r'$498.85', '+5.1%', WalletColors.green),
-    (Color(0xFF2775CA), r'$', 'USDC', '120.00 USDC · Solana', r'$120.00', '0.0%', WalletColors.text3),
+    (Color(0xFF627EEA), 'Ξ', 'Ethereum', '2.4805 ETH', r'$8,241.60', '+2.4%', WalletColors.green, 'Ethereum'),
+    (Color(0xFF26A17B), '₮', 'USDT', '3,120.00 USDT · TRON', r'$3,120.00', '0.0%', WalletColors.text3, 'TRON'),
+    (Color(0xFF8247E5), '⬡', 'POL', '2,860.5 POL · Polygon', r'$986.87', '-1.2%', WalletColors.red, 'Polygon'),
+    (Color(0xFF9945FF), '◎', 'Solana', '3.208 SOL', r'$498.85', '+5.1%', WalletColors.green, 'Solana'),
+    (Color(0xFF2775CA), r'$', 'USDC', '120.00 USDC · Solana', r'$120.00', '0.0%', WalletColors.text3, 'Solana'),
   ];
+  static const _networks = ['Ethereum', 'Polygon', 'TRON', 'Solana'];
+
+  String _query = '';
+  int _net = 0; // 0 = all
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final q = _query.trim().toLowerCase();
+    final results = [
+      for (final a in _assets)
+        if ((_net == 0 || a.$8 == _networks[_net - 1]) &&
+            (q.isEmpty || a.$3.toLowerCase().contains(q) || a.$4.toLowerCase().contains(q)))
+          a,
+    ];
     return KtScreen(
       navBar: KtNavBar(title: l10n.tabAssets, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.add, onTrailing: () => context.push('/token-manage')),
       children: [
-        _SearchBar(),
-        KtSegmented(options: [l10n.viewAll, 'Ethereum', 'Polygon', 'TRON', 'Solana'], selected: 0),
-        KtCard(
-          child: Column(children: [
-            for (var i = 0; i < _assets.length; i++) ...[
-              if (i > 0) const SizedBox(height: 18),
-              _AssetTile(_assets[i]),
-            ],
+        Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(color: WalletColors.surface, borderRadius: BorderRadius.circular(12)),
+          child: Row(children: [
+            const Icon(Icons.search, size: 18, color: WalletColors.text3),
+            const SizedBox(width: 8),
+            Expanded(
+              // The placeholder is drawn as a plain Text (not the TextField's
+              // hint) so the idle screen renders exactly like the design.
+              child: Stack(alignment: Alignment.centerLeft, children: [
+                if (_query.isEmpty)
+                  Text(l10n.searchAssetHint, maxLines: 1, style: const TextStyle(fontSize: 14, color: WalletColors.text3)),
+                TextField(
+                  onChanged: (v) => setState(() => _query = v),
+                  style: const TextStyle(fontSize: 14, color: WalletColors.text),
+                  decoration: const InputDecoration(isCollapsed: true, border: InputBorder.none),
+                ),
+              ]),
+            ),
           ]),
         ),
+        KtSegmented(
+          options: [l10n.viewAll, ..._networks],
+          selected: _net,
+          onChanged: (i) => setState(() => _net = i),
+        ),
+        if (results.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 32),
+            child: Center(child: Text(l10n.noMatchingAssets, style: const TextStyle(fontSize: 14, color: WalletColors.text3))),
+          )
+        else
+          KtCard(
+            child: Column(children: [
+              for (var i = 0; i < results.length; i++) ...[
+                if (i > 0) const SizedBox(height: 18),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => context.push('/token'),
+                  child: _AssetTile(results[i]),
+                ),
+              ],
+            ]),
+          ),
       ],
-    );
-  }
-}
-
-class _SearchBar extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(color: WalletColors.surface, borderRadius: BorderRadius.circular(12)),
-      child: Row(children: [
-        const Icon(Icons.search, size: 18, color: WalletColors.text3),
-        const SizedBox(width: 8),
-        Text(l10n.searchAssetHint, style: const TextStyle(fontSize: 14, color: WalletColors.text3)),
-      ]),
     );
   }
 }
 
 class _AssetTile extends StatelessWidget {
   const _AssetTile(this.a);
-  final (Color, String, String, String, String, String, Color) a;
+  final (Color, String, String, String, String, String, Color, String) a;
   @override
   Widget build(BuildContext context) => Row(children: [
         KtAvatar(color: a.$1, initial: a.$2),
@@ -138,49 +176,121 @@ class TokenDetailScreen extends StatelessWidget {
   }
 }
 
-/// W14 收款 — token selector + QR + address + warning.
-class ReceiveScreen extends StatelessWidget {
-  const ReceiveScreen({super.key});
+/// A chain selectable on the receive screen: coin, network name, pill label,
+/// token glyph + color, and the ChainColors dot shown in the picker sheet.
+class _ReceiveChain {
+  const _ReceiveChain(this.coin, this.network, this.pillLabel, this.glyph, this.tokenColor, this.dotColor);
+  final Coin coin;
+  final String network, pillLabel, glyph;
+  final Color tokenColor, dotColor;
+}
 
-  /// The receive address rendered under the QR placeholder.
-  static const _address = 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa';
+/// W14 收款 — chain selector + QR + address + warning. Live: the pill opens a
+/// chain picker; the displayed address (and what copy/share puts on the
+/// clipboard) is the current wallet's address for the selected chain.
+class ReceiveScreen extends StatefulWidget {
+  const ReceiveScreen({super.key});
+  @override
+  State<ReceiveScreen> createState() => _ReceiveScreenState();
+}
+
+class _ReceiveScreenState extends State<ReceiveScreen> {
+  static const _chains = [
+    _ReceiveChain(Coin.eth, 'Ethereum', 'ETH · Ethereum', 'Ξ', Color(0xFF627EEA), ChainColors.ethereum),
+    _ReceiveChain(Coin.polygon, 'Polygon', 'POL · Polygon', '⬡', Color(0xFF8247E5), ChainColors.polygon),
+    _ReceiveChain(Coin.tron, 'TRON', 'USDT · TRON', '₮', Color(0xFF26A17B), ChainColors.tron),
+    _ReceiveChain(Coin.solana, 'Solana', 'SOL · Solana', '◎', Color(0xFF9945FF), ChainColors.solana),
+  ];
+
+  // Default TRON, matching the design.
+  int _selected = 2;
+
+  _ReceiveChain get _chain => _chains[_selected];
+
+  String _address(BuildContext context) {
+    final wallet = WalletScope.of(context).current;
+    return wallet == null ? '' : wallet.addresses.forCoin(_chain.coin);
+  }
+
+  Future<void> _pickChain() async {
+    final l10n = AppLocalizations.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: WalletColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 12),
+          Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(children: [
+              Text(l10n.networkRow, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: WalletColors.text)),
+            ]),
+          ),
+          const SizedBox(height: 8),
+          for (var i = 0; i < _chains.length; i++)
+            ListTile(
+              leading: Container(width: 10, height: 10, decoration: BoxDecoration(color: _chains[i].dotColor, shape: BoxShape.circle)),
+              title: Text(_chains[i].network, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
+              trailing: i == _selected ? const Icon(Icons.check, size: 20, color: WalletColors.accent) : null,
+              onTap: () {
+                setState(() => _selected = i);
+                Navigator.of(ctx).pop();
+              },
+            ),
+          const SizedBox(height: 12),
+        ]),
+      ),
+    );
+  }
+
+  void _copyAddress() {
+    final l10n = AppLocalizations.of(context);
+    Clipboard.setData(ClipboardData(text: _address(context)));
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(l10n.addressCopied)));
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final chain = _chain;
+    final address = _address(context);
     return KtScreen(
       navBar: KtNavBar(
         title: l10n.actionReceive,
         onBack: () => Navigator.of(context).maybePop(),
         trailing: Icons.ios_share,
-        onTrailing: () {
-          Clipboard.setData(const ClipboardData(text: _address));
-          ScaffoldMessenger.of(context)
-            ..clearSnackBars()
-            ..showSnackBar(SnackBar(content: Text(l10n.addressCopied)));
-        },
+        onTrailing: _copyAddress,
       ),
       children: [
         Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(color: WalletColors.surface, borderRadius: BorderRadius.circular(999)),
-            child: Row(mainAxisSize: MainAxisSize.min, children: const [
-              KtAvatar(color: Color(0xFF26A17B), initial: '₮', size: 24),
-              SizedBox(width: 8),
-              Text('USDT · TRON', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WalletColors.text)),
-              SizedBox(width: 8),
-              Icon(Icons.keyboard_arrow_down, size: 16, color: WalletColors.text3),
-            ]),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _pickChain,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(color: WalletColors.surface, borderRadius: BorderRadius.circular(999)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                KtAvatar(color: chain.tokenColor, initial: chain.glyph, size: 24),
+                const SizedBox(width: 8),
+                Text(chain.pillLabel, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WalletColors.text)),
+                const SizedBox(width: 8),
+                const Icon(Icons.keyboard_arrow_down, size: 16, color: WalletColors.text3),
+              ]),
+            ),
           ),
         ),
         KtCard(
           padding: const EdgeInsets.all(24),
-          child: Column(children: const [
-            KtQrPlaceholder(size: 220),
-            SizedBox(height: 18),
-            Text(_address,
-                textAlign: TextAlign.center, style: TextStyle(fontSize: 14, fontFamily: KtFonts.mono, height: 1.6, color: WalletColors.text)),
+          child: Column(children: [
+            const KtQrPlaceholder(size: 220),
+            const SizedBox(height: 18),
+            Text(address,
+                textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, fontFamily: KtFonts.mono, height: 1.6, color: WalletColors.text)),
           ]),
         ),
         Container(
@@ -189,7 +299,7 @@ class ReceiveScreen extends StatelessWidget {
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Icon(Icons.warning_amber_rounded, size: 16, color: WalletColors.amber),
             const SizedBox(width: 10),
-            Expanded(child: Text(l10n.receiveWarning,
+            Expanded(child: Text(chain.coin == Coin.tron ? l10n.receiveWarning : l10n.receiveWarningFor(chain.network),
                 style: const TextStyle(fontSize: 13, height: 1.5, color: Color(0xFF9A6503)))),
           ]),
         ),

@@ -1287,6 +1287,60 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'重试'**
   String get actionRetry;
+
+  /// No description provided for @renameWallet.
+  ///
+  /// In zh, this message translates to:
+  /// **'重命名钱包'**
+  String get renameWallet;
+
+  /// No description provided for @backupTranscribed.
+  ///
+  /// In zh, this message translates to:
+  /// **'我已抄写'**
+  String get backupTranscribed;
+
+  /// No description provided for @receiveWarningFor.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅支持接收 {network} 网络资产。从其他网络转入将导致资产丢失。'**
+  String receiveWarningFor(String network);
+
+  /// No description provided for @autoLockImmediate.
+  ///
+  /// In zh, this message translates to:
+  /// **'立即'**
+  String get autoLockImmediate;
+
+  /// No description provided for @autoLockMinutesLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'{minutes} 分钟'**
+  String autoLockMinutesLabel(int minutes);
+
+  /// No description provided for @copyAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制地址'**
+  String get copyAddress;
+
+  /// No description provided for @noMatchingAssets.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有匹配的资产'**
+  String get noMatchingAssets;
+
+  /// No description provided for @noWatchWallet.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前没有观察钱包'**
+  String get noWatchWallet;
+
+  /// No description provided for @watchWalletCreated.
+  ///
+  /// In zh, this message translates to:
+  /// **'观察钱包已创建'**
+  String get watchWalletCreated;
 }
 
 class _AppLocalizationsDelegate

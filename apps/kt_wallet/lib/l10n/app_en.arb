@@ -197,5 +197,28 @@
   "deviceModeSwitchDesc": "You will return to the mode selection screen.",
   "walletLoadErrorTitle": "Couldn't load wallets",
   "walletLoadErrorDesc": "Your on-device wallet data couldn't be read. Try again; if the problem persists, reinstall the app.",
-  "actionRetry": "Retry"
+  "actionRetry": "Retry",
+  "renameWallet": "Rename wallet",
+  "backupTranscribed": "I have written it down",
+  "receiveWarningFor": "Only {network} network assets are supported. Sending from other networks will lose funds.",
+  "@receiveWarningFor": {
+    "placeholders": {
+      "network": {
+        "type": "String"
+      }
+    }
+  },
+  "autoLockImmediate": "Immediately",
+  "autoLockMinutesLabel": "{minutes} min",
+  "@autoLockMinutesLabel": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "copyAddress": "Copy address",
+  "noMatchingAssets": "No matching assets",
+  "noWatchWallet": "No watch wallet on this device",
+  "watchWalletCreated": "Watch wallet created"
 }

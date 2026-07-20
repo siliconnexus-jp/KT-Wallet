@@ -77,6 +77,9 @@ void main() {
     await _open(tester, 'W3 Token 详情');
     await tester.tap(find.text('收款'));
     await tester.pumpAndSettle();
-    expect(find.text('TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa'), findsOneWidget); // W14 receive
+    // W14 receive, live: shows the current wallet's TRON address (default
+    // chain) — the demo seed wallet 日常钱包.
+    expect(find.text('USDT · TRON'), findsOneWidget);
+    expect(find.text('TaPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa'), findsOneWidget);
   });
 }

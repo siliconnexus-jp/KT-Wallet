@@ -658,4 +658,35 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get actionRetry => 'Retry';
+
+  @override
+  String get renameWallet => 'Rename wallet';
+
+  @override
+  String get backupTranscribed => 'I have written it down';
+
+  @override
+  String receiveWarningFor(String network) {
+    return 'Only $network network assets are supported. Sending from other networks will lose funds.';
+  }
+
+  @override
+  String get autoLockImmediate => 'Immediately';
+
+  @override
+  String autoLockMinutesLabel(int minutes) {
+    return '$minutes min';
+  }
+
+  @override
+  String get copyAddress => 'Copy address';
+
+  @override
+  String get noMatchingAssets => 'No matching assets';
+
+  @override
+  String get noWatchWallet => 'No watch wallet on this device';
+
+  @override
+  String get watchWalletCreated => 'Watch wallet created';
 }

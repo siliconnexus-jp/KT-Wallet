@@ -3,6 +3,7 @@
 
   "actionConfirm": "Confirm",
   "actionCancel": "Cancel",
+  "actionSave": "Save",
   "actionImport": "Import",
   "done": "Done",
   "later": "Maybe later",
@@ -82,6 +83,16 @@
   "statusNotDetected": "Not detected",
   "riskCannotSign": "Risk detected · signing unavailable",
   "bluetoothWarning": "Bluetooth is on — turn it off and re-check.",
+  "checkNetwork": "Network connection",
+  "checkIntegrity": "System integrity",
+  "checkLevelPass": "Pass",
+  "checkLevelWarn": "Warning",
+  "checkLevelBlock": "Blocked",
+  "securityChecking": "Checking device status…",
+  "securityOverallPass": "All checks passed · Ready to sign",
+  "securityOverallWarn": "Risks detected · Proceed with caution",
+  "securityOverallBlock": "Critical risk · Signing disabled",
+  "securityRecheck": "Re-run checks",
 
   "receivingShard": "Receiving shard {received} / {total}",
 
@@ -110,6 +121,9 @@
 
   "signComplete": "Signing complete",
   "voidThisSignature": "Void this signature",
+  "voidSignatureTitle": "Void this signature?",
+  "voidSignatureDesc": "Once voided, this signature QR code becomes invalid and the online wallet cannot broadcast the transaction.",
+  "signatureVoided": "Signature voided",
   "dynamicShard": "Dynamic shard {received} / {total}",
   "scanResultInstruction": "Read this QR with the online wallet's “Scan signing result”",
 

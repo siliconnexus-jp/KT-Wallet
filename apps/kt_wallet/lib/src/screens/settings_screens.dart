@@ -1,9 +1,13 @@
 import 'package:chains/chains.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../state/app_prefs.dart';
 import '../state/locale_controller.dart';
+import '../state/wallet_scope.dart';
+import '../wallets/wallet_model.dart';
 
 /// Display name + badge color per validated chain (address book rows).
 const _chainTags = [
@@ -140,6 +144,43 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
     // Not disposed here: the sheet's exit animation still holds the fields.
   }
 
+  /// "⋮" menu on a contact row: copy the contact's address to the clipboard.
+  Future<void> _contactMenu((String, String, String, String, Color) contact) async {
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: WalletColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 12),
+          Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(children: [
+              Text(contact.$2, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: WalletColors.text)),
+            ]),
+          ),
+          const SizedBox(height: 8),
+          ListTile(
+            leading: const Icon(Icons.copy, size: 20, color: WalletColors.accent),
+            title: Text(l10n.copyAddress, style: const TextStyle(fontSize: 15, color: WalletColors.text)),
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: contact.$3));
+              Navigator.of(ctx).pop();
+              messenger
+                ..clearSnackBars()
+                ..showSnackBar(SnackBar(content: Text(l10n.addressCopied)));
+            },
+          ),
+          const SizedBox(height: 12),
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -203,7 +244,11 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                       Text(results[i].$3, style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text3)),
                     ]),
                   ),
-                  const Icon(Icons.more_vert, size: 18, color: WalletColors.text3),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _contactMenu(results[i]),
+                    child: const Icon(Icons.more_vert, size: 18, color: WalletColors.text3),
+                  ),
                 ]),
               ],
             ]),
@@ -315,9 +360,54 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
   }
 }
 
-/// W18 网络设置.
-class NetworkSettingsScreen extends StatelessWidget {
+/// W18 网络设置. Live: tapping a network's RPC row opens a sheet to edit the
+/// node URL (in-memory demo state, like the token/contact lists).
+class NetworkSettingsScreen extends StatefulWidget {
   const NetworkSettingsScreen({super.key});
+  @override
+  State<NetworkSettingsScreen> createState() => _NetworkSettingsScreenState();
+}
+
+class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
+  /// Per-network RPC node override chosen in this session.
+  final _rpcOverrides = <String, String>{};
+
+  Future<void> _editRpc(String name, String rpc) async {
+    final l10n = AppLocalizations.of(context);
+    final controller = TextEditingController(text: rpc);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: WalletColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              Text(name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: WalletColors.text)),
+              const SizedBox(height: 16),
+              _sheetField(controller, label: l10n.rpcNode, mono: true),
+              const SizedBox(height: 18),
+              KtPrimaryButton(
+                label: l10n.actionSave,
+                onPressed: () {
+                  final value = controller.text.trim();
+                  if (value.isNotEmpty) setState(() => _rpcOverrides[name] = value);
+                  Navigator.of(ctx).pop();
+                },
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+    // Not disposed here: the sheet's exit animation still holds the field.
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -346,16 +436,20 @@ class NetworkSettingsScreen extends StatelessWidget {
                 ),
               ]),
               const SizedBox(height: 12),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(l10n.rpcNode, style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
-                    const SizedBox(height: 2),
-                    Text(rpc, style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text)),
-                  ]),
-                ),
-                const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3),
-              ]),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _editRpc(name, _rpcOverrides[name] ?? rpc),
+                child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(l10n.rpcNode, style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
+                      const SizedBox(height: 2),
+                      Text(_rpcOverrides[name] ?? rpc, style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text)),
+                    ]),
+                  ),
+                  const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3),
+                ]),
+              ),
             ]),
           ),
       ],
@@ -371,8 +465,121 @@ class SecuritySettingsScreen extends StatefulWidget {
 }
 
 class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
-  bool _appLock = true;
-  bool _privacy = false;
+  /// Screen-local prefs controller; values are persisted (SharedPreferences)
+  /// so they survive leaving the screen and app restarts.
+  final _prefs = AppPrefsController();
+
+  @override
+  void initState() {
+    super.initState();
+    _prefs.addListener(_onPrefsChanged);
+    _prefs.load();
+  }
+
+  @override
+  void dispose() {
+    _prefs.removeListener(_onPrefsChanged);
+    _prefs.dispose();
+    super.dispose();
+  }
+
+  void _onPrefsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// Shared option-list bottom sheet (same visual pattern as the language
+  /// picker): [labels] with the [selected] index checked; returns the tapped
+  /// index via [onSelect].
+  Future<void> _pickOption({
+    required String title,
+    required List<String> labels,
+    required int selected,
+    required ValueChanged<int> onSelect,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: WalletColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 12),
+          Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(children: [
+              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: WalletColors.text)),
+            ]),
+          ),
+          const SizedBox(height: 8),
+          for (var i = 0; i < labels.length; i++)
+            ListTile(
+              title: Text(labels[i], style: const TextStyle(fontSize: 15, color: WalletColors.text)),
+              trailing: i == selected ? const Icon(Icons.check, size: 20, color: WalletColors.accent) : null,
+              onTap: () {
+                onSelect(i);
+                Navigator.of(ctx).pop();
+              },
+            ),
+          const SizedBox(height: 12),
+        ]),
+      ),
+    );
+  }
+
+  String _autoLockLabel(AppLocalizations l10n, int minutes) =>
+      minutes == 0 ? l10n.autoLockImmediate : l10n.autoLockMinutesLabel(minutes);
+
+  Future<void> _pickFiat() async {
+    final l10n = AppLocalizations.of(context);
+    await _pickOption(
+      title: l10n.fiatUnit,
+      labels: AppPrefsController.fiatOptions,
+      selected: AppPrefsController.fiatOptions.indexOf(_prefs.fiat),
+      onSelect: (i) => _prefs.setFiat(AppPrefsController.fiatOptions[i]),
+    );
+  }
+
+  Future<void> _pickAutoLock() async {
+    final l10n = AppLocalizations.of(context);
+    await _pickOption(
+      title: l10n.autoLock,
+      labels: [for (final m in AppPrefsController.autoLockOptions) _autoLockLabel(l10n, m)],
+      selected: AppPrefsController.autoLockOptions.indexOf(_prefs.autoLockMinutes),
+      onSelect: (i) => _prefs.setAutoLockMinutes(AppPrefsController.autoLockOptions[i]),
+    );
+  }
+
+  /// Danger row: deletes the first watch wallet after confirmation (a watch
+  /// wallet holds only public addresses, so this never touches key material).
+  Future<void> _deleteWatchWallet() async {
+    final l10n = AppLocalizations.of(context);
+    final controller = WalletScope.of(context);
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    final watch = controller.wallets.whereType<WatchWallet>().firstOrNull;
+    if (watch == null) {
+      messenger.showSnackBar(SnackBar(content: Text(l10n.noWatchWallet)));
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.deleteWalletTitle),
+        content: Text(l10n.deleteWalletConfirm(watch.name)),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l10n.actionCancel)),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.actionDelete, style: const TextStyle(color: WalletColors.red)),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      controller.remove(watch.id);
+      messenger.showSnackBar(SnackBar(content: Text(l10n.deletedWallet(watch.name))));
+    }
+  }
 
   Future<void> _pickLanguage() async {
     final l10n = AppLocalizations.of(context);
@@ -456,17 +663,21 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
         Text(l10n.accessControl, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: WalletColors.text2)),
         KtCard(
           child: Column(children: [
-            _row(Icons.lock_outline, l10n.appLock, l10n.appLockDesc, _switch(_appLock, onTap: () => setState(() => _appLock = !_appLock))),
+            _row(Icons.lock_outline, l10n.appLock, l10n.appLockDesc, _switch(_prefs.appLock, onTap: () => _prefs.setAppLock(!_prefs.appLock))),
             const SizedBox(height: 16),
-            _row(Icons.timer_outlined, l10n.autoLock, l10n.autoLockDesc, Row(mainAxisSize: MainAxisSize.min, children: [Text(l10n.autoLockValue, style: const TextStyle(fontSize: 13, color: WalletColors.text2)), const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3)])),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _pickAutoLock,
+              child: _row(Icons.timer_outlined, l10n.autoLock, l10n.autoLockDesc, Row(mainAxisSize: MainAxisSize.min, children: [Text(_autoLockLabel(l10n, _prefs.autoLockMinutes), style: const TextStyle(fontSize: 13, color: WalletColors.text2)), const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3)])),
+            ),
             const SizedBox(height: 16),
-            _row(Icons.visibility_off_outlined, l10n.privacyMode, l10n.privacyModeDesc, _switch(_privacy, onTap: () => setState(() => _privacy = !_privacy))),
+            _row(Icons.visibility_off_outlined, l10n.privacyMode, l10n.privacyModeDesc, _switch(_prefs.privacyMode, onTap: () => _prefs.setPrivacyMode(!_prefs.privacyMode))),
           ]),
         ),
         Text(l10n.dataSection, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: WalletColors.text2)),
         KtCard(
           child: Column(children: [
-            _SimpleRow(Icons.attach_money, l10n.fiatUnit, 'USD'),
+            _SimpleRow(Icons.attach_money, l10n.fiatUnit, _prefs.fiat, onTap: _pickFiat),
             const SizedBox(height: 16),
             _SimpleRow(Icons.language, l10n.displayLanguage, _languageLabel(l10n, localeController.locale), onTap: _pickLanguage),
             // Only in the combined single-installer app: switch back to the
@@ -478,7 +689,11 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
           ]),
         ),
         KtCard(
-          child: _row(Icons.delete_outline, l10n.deleteWatchWallet, l10n.deleteWatchWalletDesc, const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3), danger: true),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _deleteWatchWallet,
+            child: _row(Icons.delete_outline, l10n.deleteWatchWallet, l10n.deleteWatchWalletDesc, const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3), danger: true),
+          ),
         ),
       ],
     );

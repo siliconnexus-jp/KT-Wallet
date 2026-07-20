@@ -32,7 +32,11 @@ class _HomeScreenState extends State<HomeScreen> {
               child: IndexedStack(
                 index: _tab,
                 children: [
-                  _HomeTab(assets: widget.assets),
+                  _HomeTab(
+                    assets: widget.assets,
+                    onViewAll: () => setState(() => _tab = 1),
+                    onOpenSettings: () => setState(() => _tab = 3),
+                  ),
                   const _AssetsTab(),
                   const _RecordsTab(),
                   const _SettingsTab(),
@@ -48,8 +52,51 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _HomeTab extends StatelessWidget {
-  const _HomeTab({required this.assets});
+  const _HomeTab({required this.assets, this.onViewAll, this.onOpenSettings});
   final List<AssetRow> assets;
+  final VoidCallback? onViewAll;
+  final VoidCallback? onOpenSettings;
+
+  /// "更多" quick action: bottom sheet with the secondary destinations.
+  Future<void> _showMore(BuildContext context) async {
+    final l10n = AppLocalizations.of(context);
+    final entries = <(IconData, String, String)>[
+      (Icons.qr_code_2, l10n.connectColdWallet, '/connect-cold'),
+      (Icons.contacts_outlined, l10n.settingsAddressBook, '/address-book'),
+      (Icons.account_balance_wallet_outlined, l10n.settingsWalletManage, '/wallet-manage'),
+    ];
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: WalletColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 12),
+          Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(children: [
+              Text(l10n.actionMore, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: WalletColors.text)),
+            ]),
+          ),
+          const SizedBox(height: 8),
+          for (final (icon, label, route) in entries)
+            ListTile(
+              leading: Icon(icon, size: 22, color: WalletColors.accent),
+              title: Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: WalletColors.text)),
+              trailing: const Icon(Icons.chevron_right, size: 18, color: WalletColors.text3),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                context.push(route);
+              },
+            ),
+          const SizedBox(height: 12),
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -58,7 +105,7 @@ class _HomeTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
-        _Header(wallet: wallet, onTapPill: () => context.push('/switcher')),
+        _Header(wallet: wallet, onTapPill: () => context.push('/switcher'), onTapSettings: onOpenSettings),
         if (isHot && !wallet.backedUp) ...[
           const SizedBox(height: 20),
           const _BackupBanner(),
@@ -66,11 +113,11 @@ class _HomeTab extends StatelessWidget {
         const SizedBox(height: 24),
         _Balance(amount: r'$862.40', change: '+\$12.06 (+1.4%) ${l10n.balanceChangePeriod}'),
         const SizedBox(height: 24),
-        _ActionRow(isHot: isHot),
+        _ActionRow(isHot: isHot, onMore: () => _showMore(context)),
         const SizedBox(height: 24),
         const _NetworkChips(),
         const SizedBox(height: 24),
-        _AssetsCard(assets: assets),
+        _AssetsCard(assets: assets, onViewAll: onViewAll),
       ],
     );
   }
@@ -251,9 +298,10 @@ class AssetRow {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.wallet, this.onTapPill});
+  const _Header({required this.wallet, this.onTapPill, this.onTapSettings});
   final Wallet wallet;
   final VoidCallback? onTapPill;
+  final VoidCallback? onTapSettings;
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -286,7 +334,11 @@ class _Header extends StatelessWidget {
           ),
         ),
         ),
-        const Icon(Icons.settings_outlined, size: 22, color: WalletColors.text2),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTapSettings,
+          child: const Icon(Icons.settings_outlined, size: 22, color: WalletColors.text2),
+        ),
       ],
     );
   }
@@ -331,9 +383,15 @@ class _BackupBanner extends StatelessWidget {
   }
 }
 
-class _Balance extends StatelessWidget {
+class _Balance extends StatefulWidget {
   const _Balance({required this.amount, required this.change});
   final String amount, change;
+  @override
+  State<_Balance> createState() => _BalanceState();
+}
+
+class _BalanceState extends State<_Balance> {
+  bool _hidden = false;
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -343,20 +401,25 @@ class _Balance extends StatelessWidget {
         Row(children: [
           Text(l10n.balanceTitle, style: const TextStyle(fontSize: 13, color: WalletColors.text2)),
           const SizedBox(width: 6),
-          const Icon(Icons.visibility_outlined, size: 14, color: WalletColors.text3),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _hidden = !_hidden),
+            child: Icon(_hidden ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 14, color: WalletColors.text3),
+          ),
         ]),
         const SizedBox(height: 6),
-        Text(amount, style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: WalletColors.text)),
+        Text(_hidden ? '••••••' : widget.amount, style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: WalletColors.text)),
         const SizedBox(height: 6),
-        Text(change, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.green)),
+        Text(_hidden ? '••••' : widget.change, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.green)),
       ],
     );
   }
 }
 
 class _ActionRow extends StatelessWidget {
-  const _ActionRow({required this.isHot});
+  const _ActionRow({required this.isHot, this.onMore});
   final bool isHot;
+  final VoidCallback? onMore;
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -378,7 +441,8 @@ class _ActionRow extends StatelessWidget {
       children: [
         for (final (label, icon, primary, route) in actions)
           GestureDetector(
-            onTap: route == null ? null : () => context.push(route),
+            behavior: HitTestBehavior.opaque,
+            onTap: route == null ? onMore : () => context.push(route),
             child: Column(children: [
               Container(
                 width: 54,
@@ -415,8 +479,9 @@ class _NetworkChips extends StatelessWidget {
 }
 
 class _AssetsCard extends StatelessWidget {
-  const _AssetsCard({required this.assets});
+  const _AssetsCard({required this.assets, this.onViewAll});
   final List<AssetRow> assets;
+  final VoidCallback? onViewAll;
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -430,16 +495,24 @@ class _AssetsCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(l10n.tabAssets, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
-              Row(children: [
-                Text(l10n.viewAll, style: const TextStyle(fontSize: 13, color: WalletColors.text2)),
-                const Icon(Icons.chevron_right, size: 14, color: WalletColors.text2),
-              ]),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onViewAll,
+                child: Row(children: [
+                  Text(l10n.viewAll, style: const TextStyle(fontSize: 13, color: WalletColors.text2)),
+                  const Icon(Icons.chevron_right, size: 14, color: WalletColors.text2),
+                ]),
+              ),
             ],
           ),
           const SizedBox(height: 18),
           for (var i = 0; i < assets.length; i++) ...[
             if (i > 0) const SizedBox(height: 18),
-            _AssetTile(assets[i]),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => context.push('/token'),
+              child: _AssetTile(assets[i]),
+            ),
           ],
         ],
       ),

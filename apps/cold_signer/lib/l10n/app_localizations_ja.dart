@@ -15,6 +15,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get actionCancel => 'キャンセル';
 
   @override
+  String get actionSave => '保存';
+
+  @override
   String get actionImport => 'インポート';
 
   @override
@@ -232,6 +235,36 @@ class AppLocalizationsJa extends AppLocalizations {
   String get bluetoothWarning => 'Bluetoothがオンになっています。オフにして再チェックしてください。';
 
   @override
+  String get checkNetwork => 'ネットワーク接続';
+
+  @override
+  String get checkIntegrity => 'システム完全性';
+
+  @override
+  String get checkLevelPass => '合格';
+
+  @override
+  String get checkLevelWarn => '警告';
+
+  @override
+  String get checkLevelBlock => '危険';
+
+  @override
+  String get securityChecking => 'デバイス状態を確認中…';
+
+  @override
+  String get securityOverallPass => 'チェック合格 · 署名できます';
+
+  @override
+  String get securityOverallWarn => 'リスクあり · 慎重に操作してください';
+
+  @override
+  String get securityOverallBlock => '重大なリスクあり · 署名は禁止されています';
+
+  @override
+  String get securityRecheck => '再チェック';
+
+  @override
   String receivingShard(int received, int total) {
     return 'シャード受信 $received / $total';
   }
@@ -307,6 +340,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get voidThisSignature => 'この署名を無効化';
+
+  @override
+  String get voidSignatureTitle => 'この署名を無効にしますか？';
+
+  @override
+  String get voidSignatureDesc =>
+      '無効にすると、この署名結果のQRコードは使用できなくなり、オンラインウォレットはこの取引をブロードキャストできません。';
+
+  @override
+  String get signatureVoided => '署名を無効にしました';
 
   @override
   String dynamicShard(int received, int total) {

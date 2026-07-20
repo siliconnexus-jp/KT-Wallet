@@ -112,6 +112,12 @@ abstract class AppLocalizations {
   /// **'取消'**
   String get actionCancel;
 
+  /// No description provided for @actionSave.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存'**
+  String get actionSave;
+
   /// No description provided for @actionImport.
   ///
   /// In zh, this message translates to:
@@ -526,6 +532,66 @@ abstract class AppLocalizations {
   /// **'检测到蓝牙处于开启状态，请关闭后重新检测。'**
   String get bluetoothWarning;
 
+  /// No description provided for @checkNetwork.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络连接'**
+  String get checkNetwork;
+
+  /// No description provided for @checkIntegrity.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统完整性'**
+  String get checkIntegrity;
+
+  /// No description provided for @checkLevelPass.
+  ///
+  /// In zh, this message translates to:
+  /// **'通过'**
+  String get checkLevelPass;
+
+  /// No description provided for @checkLevelWarn.
+  ///
+  /// In zh, this message translates to:
+  /// **'警告'**
+  String get checkLevelWarn;
+
+  /// No description provided for @checkLevelBlock.
+  ///
+  /// In zh, this message translates to:
+  /// **'危险'**
+  String get checkLevelBlock;
+
+  /// No description provided for @securityChecking.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在检查设备状态…'**
+  String get securityChecking;
+
+  /// No description provided for @securityOverallPass.
+  ///
+  /// In zh, this message translates to:
+  /// **'检查通过 · 可以签名'**
+  String get securityOverallPass;
+
+  /// No description provided for @securityOverallWarn.
+  ///
+  /// In zh, this message translates to:
+  /// **'存在风险 · 请谨慎操作'**
+  String get securityOverallWarn;
+
+  /// No description provided for @securityOverallBlock.
+  ///
+  /// In zh, this message translates to:
+  /// **'存在高危项 · 已禁止签名'**
+  String get securityOverallBlock;
+
+  /// No description provided for @securityRecheck.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新检查'**
+  String get securityRecheck;
+
   /// No description provided for @receivingShard.
   ///
   /// In zh, this message translates to:
@@ -663,6 +729,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'作废本次签名'**
   String get voidThisSignature;
+
+  /// No description provided for @voidSignatureTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'作废本次签名？'**
+  String get voidSignatureTitle;
+
+  /// No description provided for @voidSignatureDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'作废后该签名结果二维码将失效，联网钱包将无法广播这笔交易。'**
+  String get voidSignatureDesc;
+
+  /// No description provided for @signatureVoided.
+  ///
+  /// In zh, this message translates to:
+  /// **'签名已作废'**
+  String get signatureVoided;
 
   /// No description provided for @dynamicShard.
   ///

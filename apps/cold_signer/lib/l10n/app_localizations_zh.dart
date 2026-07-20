@@ -15,6 +15,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get actionCancel => '取消';
 
   @override
+  String get actionSave => '保存';
+
+  @override
   String get actionImport => '导入';
 
   @override
@@ -228,6 +231,36 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bluetoothWarning => '检测到蓝牙处于开启状态，请关闭后重新检测。';
 
   @override
+  String get checkNetwork => '网络连接';
+
+  @override
+  String get checkIntegrity => '系统完整性';
+
+  @override
+  String get checkLevelPass => '通过';
+
+  @override
+  String get checkLevelWarn => '警告';
+
+  @override
+  String get checkLevelBlock => '危险';
+
+  @override
+  String get securityChecking => '正在检查设备状态…';
+
+  @override
+  String get securityOverallPass => '检查通过 · 可以签名';
+
+  @override
+  String get securityOverallWarn => '存在风险 · 请谨慎操作';
+
+  @override
+  String get securityOverallBlock => '存在高危项 · 已禁止签名';
+
+  @override
+  String get securityRecheck => '重新检查';
+
+  @override
   String receivingShard(int received, int total) {
     return '接收分片 $received / $total';
   }
@@ -302,6 +335,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get voidThisSignature => '作废本次签名';
+
+  @override
+  String get voidSignatureTitle => '作废本次签名？';
+
+  @override
+  String get voidSignatureDesc => '作废后该签名结果二维码将失效，联网钱包将无法广播这笔交易。';
+
+  @override
+  String get signatureVoided => '签名已作废';
 
   @override
   String dynamicShard(int received, int total) {

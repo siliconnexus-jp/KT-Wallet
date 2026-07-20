@@ -3,6 +3,7 @@
 
   "actionConfirm": "確認",
   "actionCancel": "キャンセル",
+  "actionSave": "保存",
   "actionImport": "インポート",
   "done": "完了",
   "later": "後で",
@@ -82,6 +83,16 @@
   "statusNotDetected": "未検出",
   "riskCannotSign": "リスクあり · 署名できません",
   "bluetoothWarning": "Bluetoothがオンになっています。オフにして再チェックしてください。",
+  "checkNetwork": "ネットワーク接続",
+  "checkIntegrity": "システム完全性",
+  "checkLevelPass": "合格",
+  "checkLevelWarn": "警告",
+  "checkLevelBlock": "危険",
+  "securityChecking": "デバイス状態を確認中…",
+  "securityOverallPass": "チェック合格 · 署名できます",
+  "securityOverallWarn": "リスクあり · 慎重に操作してください",
+  "securityOverallBlock": "重大なリスクあり · 署名は禁止されています",
+  "securityRecheck": "再チェック",
 
   "receivingShard": "シャード受信 {received} / {total}",
 
@@ -110,6 +121,9 @@
 
   "signComplete": "署名完了",
   "voidThisSignature": "この署名を無効化",
+  "voidSignatureTitle": "この署名を無効にしますか？",
+  "voidSignatureDesc": "無効にすると、この署名結果のQRコードは使用できなくなり、オンラインウォレットはこの取引をブロードキャストできません。",
+  "signatureVoided": "署名を無効にしました",
   "dynamicShard": "動的シャード {received} / {total}",
   "scanResultInstruction": "オンラインウォレットの「署名結果をスキャン」でこのQRを読み取ってください",
 

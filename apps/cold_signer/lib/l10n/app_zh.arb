@@ -3,6 +3,7 @@
 
   "actionConfirm": "确认",
   "actionCancel": "取消",
+  "actionSave": "保存",
   "actionImport": "导入",
   "done": "完成",
   "later": "稍后再说",
@@ -91,6 +92,16 @@
   "statusNotDetected": "未检测到",
   "riskCannotSign": "存在风险 · 暂不能签名",
   "bluetoothWarning": "检测到蓝牙处于开启状态，请关闭后重新检测。",
+  "checkNetwork": "网络连接",
+  "checkIntegrity": "系统完整性",
+  "checkLevelPass": "通过",
+  "checkLevelWarn": "警告",
+  "checkLevelBlock": "危险",
+  "securityChecking": "正在检查设备状态…",
+  "securityOverallPass": "检查通过 · 可以签名",
+  "securityOverallWarn": "存在风险 · 请谨慎操作",
+  "securityOverallBlock": "存在高危项 · 已禁止签名",
+  "securityRecheck": "重新检查",
 
   "receivingShard": "接收分片 {received} / {total}",
   "@receivingShard": {
@@ -128,6 +139,9 @@
 
   "signComplete": "签名完成",
   "voidThisSignature": "作废本次签名",
+  "voidSignatureTitle": "作废本次签名？",
+  "voidSignatureDesc": "作废后该签名结果二维码将失效，联网钱包将无法广播这笔交易。",
+  "signatureVoided": "签名已作废",
   "dynamicShard": "动态分片 {received} / {total}",
   "@dynamicShard": {
     "placeholders": { "received": { "type": "int" }, "total": { "type": "int" } }

@@ -1,6 +1,7 @@
 import 'package:cold_signer/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 Future<void> _open(WidgetTester tester, String galleryEntry) async {
   // Pin the locale so the localized UI asserted below is in Chinese.
@@ -101,6 +102,175 @@ void main() {
     await tester.tap(find.text('完成'));
     await tester.pumpAndSettle();
     expect(find.text('扫描待签名交易'), findsOneWidget); // C5 home
+  });
+
+  testWidgets('biometric setup: skip advances to wallet-created',
+      (tester) async {
+    await _open(tester, 'C15 生物识别设置');
+    await tester.tap(find.text('暂不启用，仅使用密码'));
+    await tester.pumpAndSettle();
+    expect(find.text('钱包创建完成'), findsOneWidget); // C16 created
+  });
+
+  testWidgets('created: "later" skips export and lands on the offline home',
+      (tester) async {
+    await _open(tester, 'C16 创建成功');
+    await tester.tap(find.text('稍后再说'));
+    await tester.pumpAndSettle();
+    expect(find.text('扫描待签名交易'), findsOneWidget); // C5 home
+  });
+
+  testWidgets('auth: device-passcode alternative also completes the signature',
+      (tester) async {
+    await _open(tester, 'C8 身份验证');
+    await tester.tap(find.text('改用设备密码'));
+    await tester.pumpAndSettle();
+    expect(find.text('签名完成'), findsOneWidget); // C9 result QR
+  });
+
+  testWidgets('result QR: void signature confirms, snackbars, returns home',
+      (tester) async {
+    await _open(tester, 'C9 签名结果二维码');
+    await tester.tap(find.text('作废本次签名'));
+    await tester.pumpAndSettle();
+    expect(find.text('作废本次签名？'), findsOneWidget); // confirm dialog
+
+    // Cancel keeps the result screen.
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('签名完成'), findsOneWidget);
+
+    // Confirm voids and returns home with a snackbar.
+    await tester.tap(find.text('作废本次签名'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('作废本次签名').last); // dialog's destructive action
+    await tester.pumpAndSettle();
+    expect(find.text('签名已作废'), findsOneWidget);
+    expect(find.text('扫描待签名交易'), findsOneWidget); // C5 home
+  });
+
+  testWidgets('home: settings gear opens security settings',
+      (tester) async {
+    await _open(tester, 'C5 离线首页');
+    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.pumpAndSettle();
+    expect(find.text('修改 App 密码'), findsOneWidget); // C20
+  });
+
+  testWidgets('home: security banner opens the live security check',
+      (tester) async {
+    await _open(tester, 'C5 离线首页');
+    await tester.tap(find.text('安全检查通过 · 飞行模式已开启'));
+    await tester.pumpAndSettle();
+    expect(find.text('离线安全检查'), findsOneWidget); // live C2
+    expect(find.text('重新检查'), findsOneWidget);
+    // Let the default probe's DNS timeout fire so no fake timer stays pending.
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('wallet manage: backup check re-enters the mnemonic flow',
+      (tester) async {
+    await _open(tester, 'C19 钱包管理');
+    await tester.tap(find.text('助记词备份验证'));
+    await tester.pumpAndSettle();
+    expect(find.text('备份助记词'), findsOneWidget); // C3 show
+  });
+
+  testWidgets('wallet manage: export row opens address export',
+      (tester) async {
+    await _open(tester, 'C19 钱包管理');
+    await tester.tap(find.text('导出公开地址'));
+    await tester.pumpAndSettle();
+    expect(find.text('全部地址'), findsOneWidget); // C10 export
+  });
+
+  testWidgets('wallet manage: delete row opens the delete flow',
+      (tester) async {
+    await _open(tester, 'C19 钱包管理');
+    await tester.tap(find.text('删除钱包'));
+    await tester.pumpAndSettle();
+    expect(find.text('永久删除钱包'), findsOneWidget); // C21
+  });
+
+  testWidgets('wallet manage: destroy-all row opens the delete flow',
+      (tester) async {
+    await _open(tester, 'C19 钱包管理');
+    await tester.tap(find.text('销毁全部钱包数据'));
+    await tester.pumpAndSettle();
+    expect(find.text('永久删除钱包'), findsOneWidget); // C21 (closest flow)
+  });
+
+  testWidgets('wallet manage: rename dialog updates the wallet name',
+      (tester) async {
+    await _open(tester, 'C19 钱包管理');
+    expect(find.text('主钱包'), findsOneWidget);
+    await tester.tap(find.text('修改钱包名称'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '旅行签名器');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(find.text('旅行签名器'), findsOneWidget);
+    expect(find.text('主钱包'), findsNothing);
+  });
+
+  testWidgets('security settings: toggles are live and password row navigates',
+      (tester) async {
+    await _open(tester, 'C20 安全设置');
+
+    Alignment bioKnob() => (tester
+            .widget<Align>(find.descendant(
+                of: find.byKey(const ValueKey('toggle-biometric')),
+                matching: find.byType(Align)))
+            .alignment) as Alignment;
+
+    // Biometric toggle flips off and back on.
+    expect(bioKnob(), Alignment.centerRight);
+    await tester.tap(find.byKey(const ValueKey('toggle-biometric')));
+    await tester.pump();
+    expect(bioKnob(), Alignment.centerLeft);
+    await tester.tap(find.byKey(const ValueKey('toggle-biometric')));
+    await tester.pump();
+    expect(bioKnob(), Alignment.centerRight);
+
+    // Per-sign verification is V1-mandatory: tapping explains via snackbar.
+    await tester.tap(find.byKey(const ValueKey('toggle-verify-every-sign')));
+    await tester.pump();
+    expect(find.text('不可关闭（V1 强制）'), findsNWidgets(2)); // row sub + snackbar
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('修改 App 密码'));
+    await tester.pumpAndSettle();
+    expect(find.text('设置 6 位密码'), findsOneWidget); // C14
+  });
+
+  testWidgets('records: segmented filter narrows the list',
+      (tester) async {
+    await _open(tester, 'C18 签名记录');
+    expect(find.text('120.00 USDT'), findsOneWidget);
+    expect(find.text('0.25 ETH'), findsOneWidget);
+
+    await tester.tap(find.descendant(
+        of: find.byType(KtSegmented), matching: find.text('已拒绝')));
+    await tester.pumpAndSettle();
+    expect(find.text('未知合约调用 · TRON'), findsOneWidget);
+    expect(find.text('0.25 ETH'), findsNothing);
+    expect(find.text('120.00 USDT'), findsNothing);
+  });
+
+  testWidgets('address export: chain filter narrows the QR payload and list',
+      (tester) async {
+    await _open(tester, 'C10 地址导出');
+    expect(find.text('包含 4 条链公开地址 · 不含任何私密数据'), findsOneWidget);
+    expect(find.text('TRON'), findsOneWidget);
+
+    await tester.tap(find.descendant(
+        of: find.byType(KtSegmented), matching: find.text('Ethereum')));
+    await tester.pumpAndSettle();
+    expect(find.text('包含 1 条链公开地址 · 不含任何私密数据'), findsOneWidget);
+    expect(find.text('TRON'), findsNothing);
+    expect(find.text('Solana'), findsNothing);
   });
 
   testWidgets('delete wallet: destructive confirm returns to onboarding',

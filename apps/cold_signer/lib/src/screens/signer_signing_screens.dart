@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../security/device_probe.dart';
+import '../security/security_check.dart';
 
 const _t = AppTheme.signer;
 
@@ -36,17 +38,25 @@ class SignerHomeScreen extends StatelessWidget {
               Text(l10n.offlineForDays(42), style: const TextStyle(fontSize: 13, color: SignerColors.ok)),
             ]),
           ]),
-          const Icon(Icons.settings_outlined, size: 22, color: SignerColors.text2),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => context.push('/security'),
+            child: const Icon(Icons.settings_outlined, size: 22, color: SignerColors.text2),
+          ),
         ]),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(color: SignerColors.ok.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(12)),
-          child: Row(children: [
-            const Icon(Icons.verified_user, size: 18, color: SignerColors.ok),
-            const SizedBox(width: 10),
-            Expanded(child: Text(l10n.securityCheckPassed, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: SignerColors.ok))),
-            const Icon(Icons.chevron_right, size: 16, color: SignerColors.ok),
-          ]),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => context.push('/security-check'),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(color: SignerColors.ok.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(12)),
+            child: Row(children: [
+              const Icon(Icons.verified_user, size: 18, color: SignerColors.ok),
+              const SizedBox(width: 10),
+              Expanded(child: Text(l10n.securityCheckPassed, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: SignerColors.ok))),
+              const Icon(Icons.chevron_right, size: 16, color: SignerColors.ok),
+            ]),
+          ),
         ),
         GestureDetector(
           onTap: () => context.push('/scan'),
@@ -80,9 +90,122 @@ class _Dot extends StatelessWidget {
   Widget build(BuildContext context) => Container(width: size, height: size, decoration: BoxDecoration(color: color, shape: BoxShape.circle));
 }
 
-/// C2 离线安全检查.
-class SignerSecurityCheckScreen extends StatelessWidget {
-  const SignerSecurityCheckScreen({super.key});
+/// C2 离线安全检查 — runs the real [SecurityChecks] engine over a device probe
+/// and renders one row per [CheckResult], plus an aggregate verdict header.
+class SignerSecurityCheckScreen extends StatefulWidget {
+  const SignerSecurityCheckScreen({super.key, this.probe = probeDeviceState});
+
+  /// Injectable device probe; tests supply a fixed [DeviceState].
+  final Future<DeviceState> Function() probe;
+
+  @override
+  State<SignerSecurityCheckScreen> createState() => _SignerSecurityCheckScreenState();
+}
+
+class _SignerSecurityCheckScreenState extends State<SignerSecurityCheckScreen> {
+  SecurityVerdict? _verdict; // null while a probe is in flight
+
+  @override
+  void initState() {
+    super.initState();
+    _run();
+  }
+
+  Future<void> _run() async {
+    if (_verdict != null) setState(() => _verdict = null); // re-run: back to checking
+    final state = await widget.probe();
+    if (!mounted) return;
+    setState(() => _verdict = SecurityChecks.verdict(state));
+  }
+
+  static IconData _checkIcon(String id) => switch (id) {
+        'network' => Icons.wifi,
+        'airplane' => Icons.airplanemode_active,
+        'bluetooth' => Icons.bluetooth,
+        'passcode' => Icons.lock,
+        'biometric' => Icons.face,
+        'screen_capture' => Icons.screenshot_monitor,
+        'integrity' => Icons.verified_user,
+        _ => Icons.shield_outlined,
+      };
+
+  /// Engine check ids → localized labels (the engine has no BuildContext).
+  static String _checkLabel(AppLocalizations l10n, String id) => switch (id) {
+        'network' => l10n.checkNetwork,
+        'airplane' => l10n.checkAirplaneMode,
+        'bluetooth' => l10n.checkBluetooth,
+        'passcode' => l10n.checkDevicePasscode,
+        'biometric' => l10n.checkBiometric,
+        'screen_capture' => l10n.checkScreenRecording,
+        'integrity' => l10n.checkIntegrity,
+        _ => id,
+      };
+
+  Widget _resultRow(AppLocalizations l10n, CheckResult r) {
+    final (color, icon, levelLabel) = switch (r.level) {
+      CheckLevel.pass => (SignerColors.ok, Icons.check_circle, l10n.checkLevelPass),
+      CheckLevel.warn => (SignerColors.warn, Icons.error, l10n.checkLevelWarn),
+      CheckLevel.block => (SignerColors.danger, Icons.cancel, l10n.checkLevelBlock),
+    };
+    return Row(children: [
+      Icon(_checkIcon(r.id), size: 18, color: r.level == CheckLevel.pass ? SignerColors.text2 : color),
+      const SizedBox(width: 12),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(_checkLabel(l10n, r.id), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text)),
+        if (r.detail != null) ...[
+          const SizedBox(height: 2),
+          // Engine diagnostics are untranslated; surfaced as-is.
+          Text(r.detail!, style: const TextStyle(fontSize: 11, color: Color(0xFF5A616C))),
+        ],
+      ])),
+      Text(levelLabel, style: TextStyle(fontSize: 13, color: color)),
+      const SizedBox(width: 8),
+      Icon(icon, size: 16, color: color),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final verdict = _verdict;
+    final (headBg, headColor, headIcon, headTitle) = switch (verdict?.overall) {
+      null => (SignerColors.surface, SignerColors.text2, Icons.shield_outlined, l10n.securityChecking),
+      CheckLevel.pass => (SignerColors.ok.withValues(alpha: 0.10), SignerColors.ok, Icons.verified_user, l10n.securityOverallPass),
+      CheckLevel.warn => (SignerColors.warn.withValues(alpha: 0.10), SignerColors.warn, Icons.warning_amber_rounded, l10n.securityOverallWarn),
+      CheckLevel.block => (SignerColors.danger.withValues(alpha: 0.10), SignerColors.danger, Icons.dangerous, l10n.securityOverallBlock),
+    };
+    return KtScreen(
+      theme: _t,
+      navBar: KtNavBar(title: l10n.offlineSecurityCheck, theme: _t, onBack: () => Navigator.of(context).maybePop()),
+      bottom: KtPrimaryButton(label: l10n.securityRecheck, style: KtButtonStyle.signer, onPressed: verdict == null ? null : _run),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: headBg, borderRadius: BorderRadius.circular(14)),
+          child: Row(children: [
+            Icon(headIcon, size: 22, color: headColor),
+            const SizedBox(width: 12),
+            Expanded(child: Text(headTitle, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: headColor))),
+          ]),
+        ),
+        if (verdict != null)
+          _card(Column(children: [
+            for (var i = 0; i < verdict.results.length; i++) ...[
+              if (i > 0) const SizedBox(height: 13),
+              _resultRow(l10n, verdict.results[i]),
+            ],
+          ])),
+      ],
+    );
+  }
+}
+
+/// Design-snapshot variant of C2 with the canned rows from the original
+/// ui-m.md mock. Kept solely as the dev-gallery / golden baseline (the
+/// registry builds this so existing goldens stay byte-identical); the app
+/// route '/security-check' serves the live [SignerSecurityCheckScreen].
+class SignerSecurityCheckPreviewScreen extends StatelessWidget {
+  const SignerSecurityCheckPreviewScreen({super.key});
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -211,6 +334,43 @@ class SignerParseScreen extends StatelessWidget {
 /// C17 风险警告.
 class SignerRiskScreen extends StatelessWidget {
   const SignerRiskScreen({super.key});
+
+  /// The rejected request's raw payload (canned demo data, hex-encoded).
+  static const _rawTxHex =
+      '0a021f8b220899c14e3b5d2a77e340b8b2d8a8f1335a760802126e0a3174797065'
+      '2e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572'
+      '536d617274436f6e747261637412390a15419f2d3c7a44e1b06f8c55d2e4a97b'
+      '318d6fa02c1e1215418b44f7d21c39aa66e05f2b90d34c7e81a5f30d6b188094'
+      'ebdc0370d8b2d4a8f133';
+
+  Future<void> _showRawTx(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: SignerColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: SignerColors.border, borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 14),
+            Text(l10n.viewRawTxData, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: SignerColors.text)),
+            const SizedBox(height: 6),
+            const Text('REQ-9AB301 · TRON', style: TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: Color(0xFF5A616C))),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: SignerColors.surface2, borderRadius: BorderRadius.circular(12)),
+              child: const SelectableText(_rawTxHex, style: TextStyle(fontSize: 12, height: 1.6, fontFamily: KtFonts.mono, color: SignerColors.text2)),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -221,7 +381,11 @@ class SignerRiskScreen extends StatelessWidget {
       bottom: Column(children: [
         SizedBox(width: double.infinity, height: 52, child: OutlinedButton(onPressed: () => context.go('/home'), style: OutlinedButton.styleFrom(backgroundColor: SignerColors.surface, side: const BorderSide(color: SignerColors.border), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: Text(l10n.backToHome, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: SignerColors.text)))),
         const SizedBox(height: 12),
-        Text(l10n.viewRawTxData, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2)),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _showRawTx(context),
+          child: Text(l10n.viewRawTxData, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2)),
+        ),
       ]),
       children: [
         const SizedBox(height: 8),
@@ -255,7 +419,16 @@ class SignerAuthScreen extends StatelessWidget {
       theme: _t,
       gap: 28,
       navBar: KtNavBar(title: l10n.authTitle, theme: _t, onBack: () => Navigator.of(context).maybePop()),
-      bottom: Column(children: [KtPrimaryButton(label: l10n.useFaceIdVerify, style: KtButtonStyle.signer, onPressed: () => context.push('/result-qr')), const SizedBox(height: 12), Text(l10n.useDevicePasscode, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2))]),
+      bottom: Column(children: [
+        KtPrimaryButton(label: l10n.useFaceIdVerify, style: KtButtonStyle.signer, onPressed: () => context.push('/result-qr')),
+        const SizedBox(height: 12),
+        // Alternate auth path: same destination as the Face ID button.
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => context.push('/result-qr'),
+          child: Text(l10n.useDevicePasscode, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2)),
+        ),
+      ]),
       children: [
         const SizedBox(height: 24),
         Center(child: Container(width: 112, height: 112, decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(56), border: Border.all(color: SignerColors.border)), child: const Icon(Icons.face, size: 56, color: SignerColors.blue))),
@@ -273,6 +446,37 @@ class SignerAuthScreen extends StatelessWidget {
 /// C9 签名结果二维码.
 class SignerResultQrScreen extends StatelessWidget {
   const SignerResultQrScreen({super.key});
+
+  /// Destructive confirm: voiding invalidates the shown signature QR, then
+  /// returns to the offline home with a confirmation snackbar.
+  Future<void> _confirmVoid(BuildContext context) async {
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: SignerColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(l10n.voidSignatureTitle, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: SignerColors.text)),
+        content: Text(l10n.voidSignatureDesc, style: const TextStyle(fontSize: 14, height: 1.6, color: SignerColors.text2)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.actionCancel, style: const TextStyle(color: SignerColors.text2)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.voidThisSignature, style: const TextStyle(color: SignerColors.danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      messenger.showSnackBar(SnackBar(content: Text(l10n.signatureVoided)));
+      context.go('/home');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -280,7 +484,15 @@ class SignerResultQrScreen extends StatelessWidget {
       theme: _t,
       gap: 16,
       navBar: KtNavBar(title: l10n.signComplete, theme: _t),
-      bottom: Column(children: [KtPrimaryButton(label: l10n.done, style: KtButtonStyle.signer, onPressed: () => context.go('/home')), const SizedBox(height: 12), Text(l10n.voidThisSignature, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.danger))]),
+      bottom: Column(children: [
+        KtPrimaryButton(label: l10n.done, style: KtButtonStyle.signer, onPressed: () => context.go('/home')),
+        const SizedBox(height: 12),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _confirmVoid(context),
+          child: Text(l10n.voidThisSignature, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.danger)),
+        ),
+      ]),
       children: [
         Container(
           padding: const EdgeInsets.all(24),
@@ -300,45 +512,55 @@ class SignerResultQrScreen extends StatelessWidget {
 }
 
 /// C10 地址导出.
-class SignerAddressExportScreen extends StatelessWidget {
+class SignerAddressExportScreen extends StatefulWidget {
   const SignerAddressExportScreen({super.key});
+  @override
+  State<SignerAddressExportScreen> createState() => _SignerAddressExportScreenState();
+}
+
+class _SignerAddressExportScreenState extends State<SignerAddressExportScreen> {
   static const _addrs = [
     (ChainColors.ethereum, 'Ethereum', '0x8f3C2a…7E19bE1', "m/44'/60'/0'/0/0"),
     (ChainColors.polygon, 'Polygon', '0x8f3C2a…7E19bE1', "m/44'/60'/0'/0/0"),
     (ChainColors.tron, 'TRON', 'TQm9…L3kFa', "m/44'/195'/0'/0/0"),
     (ChainColors.solana, 'Solana', '6yKp…Vr2W', "m/44'/501'/0'"),
   ];
+
+  int _seg = 0;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final options = [l10n.allAddresses, 'Ethereum', 'Polygon'];
+    final visible = _seg == 0 ? _addrs : _addrs.where((a) => a.$2 == options[_seg]).toList();
     return KtScreen(
       theme: _t,
       gap: 16,
       navBar: KtNavBar(title: l10n.exportPublicAddress, theme: _t, onBack: () => Navigator.of(context).maybePop()),
       bottom: KtPrimaryButton(label: l10n.done, style: KtButtonStyle.signer, onPressed: () => context.go('/home')),
       children: [
-        KtSegmented(theme: _t, options: [l10n.allAddresses, 'Ethereum', 'Polygon'], selected: 0),
+        KtSegmented(theme: _t, options: options, selected: _seg, onChanged: (i) => setState(() => _seg = i)),
         Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
           child: Column(children: [
             const KtQrPlaceholder(size: 200),
             const SizedBox(height: 12),
-            Text(l10n.exportQrCaption(4), style: const TextStyle(fontSize: 12, color: Color(0xFF626B7A))),
+            Text(l10n.exportQrCaption(visible.length), style: const TextStyle(fontSize: 12, color: Color(0xFF626B7A))),
           ]),
         ),
         _card(Column(children: [
-          for (var i = 0; i < _addrs.length; i++) ...[
+          for (var i = 0; i < visible.length; i++) ...[
             if (i > 0) const SizedBox(height: 12),
             Row(children: [
-              _Dot(_addrs[i].$1, size: 8),
+              _Dot(visible[i].$1, size: 8),
               const SizedBox(width: 12),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(_addrs[i].$2, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text)),
+                Text(visible[i].$2, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text)),
                 const SizedBox(height: 3),
-                Text(_addrs[i].$4, style: const TextStyle(fontSize: 11, fontFamily: KtFonts.mono, color: Color(0xFF5A616C))),
+                Text(visible[i].$4, style: const TextStyle(fontSize: 11, fontFamily: KtFonts.mono, color: Color(0xFF5A616C))),
               ])),
-              Text(_addrs[i].$3, style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: SignerColors.text2)),
+              Text(visible[i].$3, style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: SignerColors.text2)),
               const SizedBox(width: 8),
               const Icon(Icons.qr_code, size: 16, color: SignerColors.text2),
             ]),

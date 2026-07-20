@@ -638,4 +638,35 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get actionRetry => '再試行';
+
+  @override
+  String get renameWallet => 'ウォレット名を変更';
+
+  @override
+  String get backupTranscribed => '書き写しました';
+
+  @override
+  String receiveWarningFor(String network) {
+    return '$networkネットワークの資産のみ対応。他のネットワークからの送金は資産の損失につながります。';
+  }
+
+  @override
+  String get autoLockImmediate => 'すぐに';
+
+  @override
+  String autoLockMinutesLabel(int minutes) {
+    return '$minutes分';
+  }
+
+  @override
+  String get copyAddress => 'アドレスをコピー';
+
+  @override
+  String get noMatchingAssets => '一致する資産はありません';
+
+  @override
+  String get noWatchWallet => 'ウォッチウォレットはありません';
+
+  @override
+  String get watchWalletCreated => 'ウォッチウォレットを作成しました';
 }

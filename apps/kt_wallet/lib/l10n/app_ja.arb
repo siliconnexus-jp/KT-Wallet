@@ -197,5 +197,28 @@
   "deviceModeSwitchDesc": "切り替えると、モード選択画面に戻ります。",
   "walletLoadErrorTitle": "ウォレットを読み込めませんでした",
   "walletLoadErrorDesc": "端末内のウォレットデータを読み取れませんでした。もう一度お試しください。問題が続く場合はアプリを再インストールしてください。",
-  "actionRetry": "再試行"
+  "actionRetry": "再試行",
+  "renameWallet": "ウォレット名を変更",
+  "backupTranscribed": "書き写しました",
+  "receiveWarningFor": "{network}ネットワークの資産のみ対応。他のネットワークからの送金は資産の損失につながります。",
+  "@receiveWarningFor": {
+    "placeholders": {
+      "network": {
+        "type": "String"
+      }
+    }
+  },
+  "autoLockImmediate": "すぐに",
+  "autoLockMinutesLabel": "{minutes}分",
+  "@autoLockMinutesLabel": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "copyAddress": "アドレスをコピー",
+  "noMatchingAssets": "一致する資産はありません",
+  "noWatchWallet": "ウォッチウォレットはありません",
+  "watchWalletCreated": "ウォッチウォレットを作成しました"
 }

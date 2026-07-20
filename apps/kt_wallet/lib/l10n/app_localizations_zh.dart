@@ -632,4 +632,35 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get actionRetry => '重试';
+
+  @override
+  String get renameWallet => '重命名钱包';
+
+  @override
+  String get backupTranscribed => '我已抄写';
+
+  @override
+  String receiveWarningFor(String network) {
+    return '仅支持接收 $network 网络资产。从其他网络转入将导致资产丢失。';
+  }
+
+  @override
+  String get autoLockImmediate => '立即';
+
+  @override
+  String autoLockMinutesLabel(int minutes) {
+    return '$minutes 分钟';
+  }
+
+  @override
+  String get copyAddress => '复制地址';
+
+  @override
+  String get noMatchingAssets => '没有匹配的资产';
+
+  @override
+  String get noWatchWallet => '当前没有观察钱包';
+
+  @override
+  String get watchWalletCreated => '观察钱包已创建';
 }
