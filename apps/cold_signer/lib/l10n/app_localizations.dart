@@ -712,6 +712,12 @@ abstract class AppLocalizations {
   /// **'改用设备密码'**
   String get useDevicePasscode;
 
+  /// No description provided for @biometricFailedRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'验证失败，请重试'**
+  String get biometricFailedRetry;
+
   /// No description provided for @verifyToSign.
   ///
   /// In zh, this message translates to:

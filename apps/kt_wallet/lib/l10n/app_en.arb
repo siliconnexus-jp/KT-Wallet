@@ -147,6 +147,7 @@
   "authEveryTransfer": "Every transfer requires Face ID or a passcode",
   "useFaceId": "Use Face ID",
   "usePasscode": "Use passcode instead",
+  "biometricFailedRetry": "Authentication failed. Try again.",
   "searchAssetHint": "Search name / symbol / contract",
   "price": "Price",
   "change24h": "24h change",
@@ -221,5 +222,8 @@
   "noMatchingAssets": "No matching assets",
   "noWatchWallet": "No watch wallet on this device",
   "watchWalletCreated": "Watch wallet created",
-  "marketOfflineDemo": "Offline — showing demo data"
+  "marketOfflineDemo": "Offline — showing demo data",
+  "actionDone": "Done",
+  "historyUnsupportedChain": "History lookup isn't available on this chain yet",
+  "historyEmpty": "No transactions yet"
 }

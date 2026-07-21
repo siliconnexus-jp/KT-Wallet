@@ -499,6 +499,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get usePasscode => 'Use passcode instead';
 
   @override
+  String get biometricFailedRetry => 'Authentication failed. Try again.';
+
+  @override
   String get searchAssetHint => 'Search name / symbol / contract';
 
   @override
@@ -692,4 +695,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get marketOfflineDemo => 'Offline — showing demo data';
+
+  @override
+  String get actionDone => 'Done';
+
+  @override
+  String get historyUnsupportedChain =>
+      'History lookup isn\'t available on this chain yet';
+
+  @override
+  String get historyEmpty => 'No transactions yet';
 }

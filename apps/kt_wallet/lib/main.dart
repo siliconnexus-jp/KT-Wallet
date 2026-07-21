@@ -12,6 +12,8 @@ import 'l10n/app_localizations.dart';
 import 'src/app_router.dart';
 import 'src/data/database_provider.dart';
 import 'src/market/market_scope.dart';
+import 'src/security/app_lock_gate.dart';
+import 'src/security/secure_screen.dart';
 import 'src/state/device_mode.dart';
 import 'src/state/locale_controller.dart';
 import 'src/state/wallet_controller.dart';
@@ -154,6 +156,12 @@ class RootApp extends StatelessWidget {
     return ListenableBuilder(
       listenable: modeController,
       builder: (context, _) {
+        // Screenshot protection follows the mode: signer content (mnemonics,
+        // signing QRs) must never land in screenshots or the recents
+        // switcher, so entering signer mode raises Android's FLAG_SECURE and
+        // every other mode clears it again. Best-effort + idempotent (the
+        // builder may rerun); a no-op on iOS/tests (see SecureScreen).
+        SecureScreen.set(modeController.mode == DeviceMode.signer);
         switch (modeController.mode) {
           case null:
             return ModeSelectApp(
@@ -218,10 +226,16 @@ class _WalletBootstrapState extends State<_WalletBootstrap> {
         }
         final controller = snapshot.data;
         if (controller == null) return const ColoredBox(color: SignerColors.bg);
-        return KtWalletApp(
-          controller: controller,
+        // App lock: with the security-settings 应用锁 preference on, the
+        // wallet stays behind a biometric lock screen (see AppLockGate for
+        // the no-biometrics passthrough rationale).
+        return AppLockGate(
           localeController: widget.localeController,
-          initialLocation: '/home',
+          child: KtWalletApp(
+            controller: controller,
+            localeController: widget.localeController,
+            initialLocation: '/home',
+          ),
         );
       },
     );

@@ -328,6 +328,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get useDevicePasscode => '改用设备密码';
 
   @override
+  String get biometricFailedRetry => '验证失败，请重试';
+
+  @override
   String get verifyToSign => '验证以完成签名';
 
   @override

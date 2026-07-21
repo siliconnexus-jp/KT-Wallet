@@ -137,6 +137,20 @@ class WalletController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Moves the wallet at [oldIndex] (position in the sorted [wallets] list) to
+  /// [newIndex], then persists every wallet's new sortOrder — a drag rewrites
+  /// the whole permutation, so all rows are "affected".
+  void reorder(int oldIndex, int newIndex) {
+    final ids = _manager.wallets.map((w) => w.id).toList();
+    final id = ids.removeAt(oldIndex);
+    ids.insert(newIndex, id);
+    _manager.reorder(ids);
+    for (final walletId in ids) {
+      _persistMetadata(walletId);
+    }
+    notifyListeners();
+  }
+
   void _persistMetadata(String id) {
     final store = _store;
     if (store == null) return;

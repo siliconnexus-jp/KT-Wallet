@@ -81,6 +81,11 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
                 '/wallet-detail' => (c, s) => WalletDetailScreen(walletId: s.uri.queryParameters['id']),
                 '/import-confirm' => (c, s) =>
                     ImportConfirmScreen(export: s.extra is AccountExport ? s.extra as AccountExport : null),
+                // Live W12: the registry (gallery + goldens) keeps the
+                // design-snapshot ScanAccountScreen; actual navigation gets
+                // the camera-enabled variant, which renders identically when
+                // no camera is available.
+                '/scan-account' => (c, s) => const ScanAccountCameraScreen(),
                 _ => (c, s) => entry.value.$2(c),
               },
             ),

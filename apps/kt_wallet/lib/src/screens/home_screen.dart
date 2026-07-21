@@ -5,6 +5,8 @@ import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../market/balance_service.dart';
+import '../market/history_controller.dart';
+import '../market/history_service.dart';
 import '../market/market_controller.dart';
 import '../market/market_scope.dart';
 import '../widgets/market_offline_banner.dart';
@@ -189,31 +191,168 @@ class _AssetsTab extends StatelessWidget {
   }
 }
 
-class _RecordsTab extends StatelessWidget {
+class _RecordsTab extends StatefulWidget {
   const _RecordsTab();
+  @override
+  State<_RecordsTab> createState() => _RecordsTabState();
+}
+
+class _RecordsTabState extends State<_RecordsTab> {
+  /// Lazily-owned [HistoryController], mounted the first time this tab builds
+  /// under a live market context (no `main.dart` wiring). Tests inject their
+  /// own controller via [HistoryScope], which always wins over the lazy one.
+  HistoryController? _owned;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_owned == null &&
+        HistoryScope.maybeOf(context) == null &&
+        MarketScope.maybeOf(context) != null) {
+      final controller = HistoryController(wallets: WalletScope.of(context));
+      _owned = controller..addListener(_onHistoryChanged);
+      // Post-frame: refresh() notifies synchronously, never mid-build.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) controller.refreshIfNeeded();
+      });
+    }
+  }
+
+  void _onHistoryChanged() => setState(() {});
+
+  @override
+  void dispose() {
+    _owned?.removeListener(_onHistoryChanged);
+    _owned?.dispose();
+    super.dispose();
+  }
+
+  /// Demo rows exactly as before live wiring existed (gallery/goldens, and
+  /// the labeled offline fallback).
+  Widget _demoCard(BuildContext context, AppLocalizations l10n) => KtCard(
+        child: Column(
+          children: [
+            for (final (i, r) in _demoRecords(l10n).indexed) ...[
+              if (i > 0) Divider(height: 1, color: WalletColors.text.withValues(alpha: 0.06)),
+              _RecordRow(record: r, onTap: () => context.push('/tx-detail')),
+            ],
+          ],
+        ),
+      );
+
+  /// Loading placeholder: three '--' shimmer rows, mirroring the row layout.
+  Widget _loadingCard() => KtCard(
+        child: Column(
+          children: [
+            for (var i = 0; i < 3; i++) ...[
+              if (i > 0) Divider(height: 1, color: WalletColors.text.withValues(alpha: 0.06)),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(color: WalletColors.text3.withValues(alpha: 0.08), shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('--', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text3)),
+                          SizedBox(height: 2),
+                          Text('--', style: TextStyle(fontSize: 12, color: WalletColors.text3)),
+                        ],
+                      ),
+                    ),
+                    const Text('--', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text3)),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+
+  Widget _liveCard(BuildContext context, AppLocalizations l10n, List<ChainTxRecord> records) {
+    if (records.isEmpty) {
+      return KtCard(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            child: Text(l10n.historyEmpty, style: const TextStyle(fontSize: 13, color: WalletColors.text3)),
+          ),
+        ),
+      );
+    }
+    return KtCard(
+      child: Column(
+        children: [
+          for (final (i, r) in records.indexed) ...[
+            if (i > 0) Divider(height: 1, color: WalletColors.text.withValues(alpha: 0.06)),
+            _RecordRow(
+              record: _TxRecord(r.outgoing, r.amountText ?? '--', _formatRecordTime(l10n, r.timestamp)),
+              onTap: () => context.push('/tx-detail'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final records = _demoRecords(l10n);
+    final history = HistoryScope.maybeOf(context) ?? _owned;
+    final Widget body;
+    if (history == null) {
+      // No live context (gallery/goldens): demo rows, byte-for-byte.
+      body = _demoCard(context, l10n);
+    } else if (history.allUnsupported) {
+      // No chain in this context has a keyless history API — say so instead
+      // of showing demo rows that could pass for live data.
+      body = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: Text(l10n.historyUnsupportedChain, style: const TextStyle(fontSize: 13, color: WalletColors.text3)),
+        ),
+      );
+    } else if (history.isLoading) {
+      body = _loadingCard();
+    } else if (history.isError) {
+      // Live fetch failed (e.g. demo mock addresses rejected on-chain): demo
+      // rows behind the explicit offline banner, mirroring the market tabs.
+      body = Column(children: [
+        const MarketOfflineBanner(),
+        const SizedBox(height: 12),
+        _demoCard(context, l10n),
+      ]);
+    } else {
+      body = _liveCard(context, l10n, history.records);
+    }
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
         const SizedBox(height: 8),
         Text(l10n.recordsTitle, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
         const SizedBox(height: 20),
-        KtCard(
-          child: Column(
-            children: [
-              for (final (i, r) in records.indexed) ...[
-                if (i > 0) Divider(height: 1, color: WalletColors.text.withValues(alpha: 0.06)),
-                _RecordRow(record: r, onTap: () => context.push('/tx-detail')),
-              ],
-            ],
-          ),
-        ),
+        body,
       ],
     );
   }
+}
+
+/// "今天 14:32" / "昨天 09:11" / "7月17日 20:04"-style timestamp, reusing the
+/// existing date l10n keys so all three languages come for free.
+String _formatRecordTime(AppLocalizations l10n, DateTime t) {
+  final now = DateTime.now();
+  final day = DateTime(t.year, t.month, t.day);
+  final today = DateTime(now.year, now.month, now.day);
+  final hm = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+  if (day == today) return '${l10n.dateToday} $hm';
+  if (day == today.subtract(const Duration(days: 1))) return '${l10n.dateYesterday} $hm';
+  return '${l10n.monthDay(t.month, t.day)} $hm';
 }
 
 class _RecordRow extends StatelessWidget {
@@ -247,7 +386,9 @@ class _RecordRow extends StatelessWidget {
                 ],
               ),
             ),
-            Text('${sent ? '-' : '+'}${record.amount}', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: sent ? WalletColors.text : WalletColors.green)),
+            // Unparseable live amounts render as a plain '--' (no sign);
+            // demo rows always carry an amount, so their output is unchanged.
+            Text(record.amount == '--' ? '--' : '${sent ? '-' : '+'}${record.amount}', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: sent ? WalletColors.text : WalletColors.green)),
           ],
         ),
       ),

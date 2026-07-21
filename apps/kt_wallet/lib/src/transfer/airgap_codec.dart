@@ -236,20 +236,27 @@ SignResult decodeSignResultFrames(List<String> qrFrames, {required SignRequest e
     throw StateError('incomplete frame set: ${aggregator.state}'
         '${aggregator.failure == null ? '' : ' (${aggregator.failure})'}');
   }
-  final payload = AirgapPayload.decode(aggregator.payload!);
-  if (payload is! SignResult) {
-    throw StateError('expected a sign-result payload, got ${payload.type}');
+  return verifySignResultPayload(aggregator.payload!, expected: expected);
+}
+
+/// Decodes an assembled payload as a [SignResult] and verifies it answers
+/// [expected] — the shared tail of [decodeSignResultFrames], also used by the
+/// live camera path where frames arrive one by one instead of as a list.
+SignResult verifySignResultPayload(Uint8List payload, {required SignRequest expected}) {
+  final decoded = AirgapPayload.decode(payload);
+  if (decoded is! SignResult) {
+    throw StateError('expected a sign-result payload, got ${decoded.type}');
   }
-  if (payload.reqIdHex != expected.reqIdHex) {
+  if (decoded.reqIdHex != expected.reqIdHex) {
     throw StateError('sign-result answers a different request');
   }
-  if (payload.walletId != expected.walletId) {
+  if (decoded.walletId != expected.walletId) {
     throw StateError('sign-result wallet mismatch');
   }
-  if (payload.coin != expected.coin) {
+  if (decoded.coin != expected.coin) {
     throw StateError('sign-result coin mismatch');
   }
-  return payload;
+  return decoded;
 }
 
 // ---- formatting helpers --------------------------------------------------------

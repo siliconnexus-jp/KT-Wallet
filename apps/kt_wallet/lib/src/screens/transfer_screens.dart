@@ -8,8 +8,11 @@ import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../security/biometric_auth.dart';
 import '../transfer/airgap_codec.dart';
+import '../transfer/frame_scan.dart';
 import '../transfer/transfer_draft.dart';
+import '../widgets/scan_viewfinder.dart';
 import '../widgets/token_icon.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
@@ -538,15 +541,31 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
   }
 }
 
-/// W7 扫描签名结果 (dark camera screen). The camera is simulated (tap the
-/// viewfinder), but what the "scan" produces is protocol-genuine: the frames
-/// the Cold Signer would display for the outstanding request are generated,
-/// aggregated through [FrameAggregator] and decoded back into a verified
-/// [SignResult] exactly as a real scan would be.
-class ScanResultScreen extends StatelessWidget {
-  const ScanResultScreen({super.key});
+/// W7 扫描签名结果 (dark camera screen). With a camera available the live
+/// scanner feeds every decoded QR string — one base64url AIRGAP-V1 frame — to
+/// a real [FrameAggregator]; without one, tapping the simulated viewfinder
+/// still produces a protocol-genuine session: the frames the Cold Signer
+/// would display for the outstanding request are generated, aggregated and
+/// decoded back into a verified [SignResult] exactly as a real scan would be.
+class ScanResultScreen extends StatefulWidget {
+  const ScanResultScreen({super.key, this.availability});
+
+  /// Camera probe override for tests; defaults to the process-wide instance.
+  final CameraAvailability? availability;
+
+  @override
+  State<ScanResultScreen> createState() => _ScanResultScreenState();
+}
+
+class _ScanResultScreenState extends State<ScanResultScreen> {
+  /// Live camera aggregation session (untouched by the simulated tap, which
+  /// synthesizes and verifies a complete frame set in one step, as before).
+  final _session = QrFrameScanSession();
+  AggregatorProgress? _progress;
+  bool _navigated = false;
 
   void _simulateScan(BuildContext context, TransferSession? session, Wallet? wallet) {
+    if (_navigated) return;
     final request = session?.request;
     if (session != null && request != null) {
       // Signer side of the (simulated) air gap: the paired signer answers with
@@ -559,6 +578,38 @@ class ScanResultScreen extends StatelessWidget {
       // request; broadcast-confirm renders only what was decoded.
       session.result = decodeSignResultFrames(frames, expected: request);
     }
+    _navigated = true;
+    context.push('/broadcast-confirm');
+  }
+
+  /// Discards the current (unverifiable or failed) session and rescans.
+  void _restartSession() {
+    _session.reset();
+    setState(() => _progress = null);
+  }
+
+  void _onScanned(String raw) {
+    if (_navigated) return;
+    final progress = _session.add(raw); // invalid strings: silent anomalies
+    if (progress.received > 0) setState(() => _progress = progress);
+    if (_session.isFailed) return _restartSession();
+    if (!_session.isDone) return;
+
+    final session = TransferSessionScope.maybeOf(context);
+    final request = session?.request;
+    if (session == null || request == null) {
+      // Nothing to answer (no outstanding request): drop the payload.
+      return _restartSession();
+    }
+    final SignResult result;
+    try {
+      result = verifySignResultPayload(_session.payload!, expected: request);
+    } on Object {
+      // Foreign or malformed payload: silently start over, keep scanning.
+      return _restartSession();
+    }
+    session.result = result;
+    _navigated = true;
     context.push('/broadcast-confirm');
   }
 
@@ -567,6 +618,10 @@ class ScanResultScreen extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final session = TransferSessionScope.maybeOf(context);
     final wallet = WalletScope.of(context).current;
+    // Demo shard counters until a live scan makes real progress (gallery /
+    // goldens render exactly the design literals).
+    final received = _progress?.received ?? 5;
+    final total = _progress?.total ?? 12;
     return Scaffold(
       backgroundColor: SignerColors.bg,
       body: SafeArea(
@@ -578,26 +633,17 @@ class ScanResultScreen extends StatelessWidget {
             child: KtNavBar(title: l10n.scanSignResultTitle, theme: AppTheme.signer, leading: Icons.close, onBack: () => Navigator.of(context).maybePop()),
           ),
           const SizedBox(height: 24),
-          GestureDetector(
-            onTap: () => _simulateScan(context, session, wallet),
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 20),
-              height: 380,
-              decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(20)),
-              child: Center(
-                child: Container(
-                  width: 240,
-                  height: 240,
-                  decoration: BoxDecoration(border: Border.all(color: SignerColors.blue, width: 2), borderRadius: BorderRadius.circular(16)),
-                  child: const Icon(Icons.qr_code_2, size: 64, color: SignerColors.border),
-                ),
-              ),
-            ),
+          ScanViewfinder(
+            height: 380,
+            frameColor: SignerColors.blue,
+            onSimulatedTap: () => _simulateScan(context, session, wallet),
+            onScanned: _onScanned,
+            availability: widget.availability,
           ),
           const SizedBox(height: 24),
-          Text(l10n.recognizedShard(5, 12), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white)),
+          Text(l10n.recognizedShard(received, total), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white)),
           const SizedBox(height: 10),
-          const ShardProgressBar(received: 5, total: 12, color: SignerColors.blue, trackColor: SignerColors.border, width: 240),
+          ShardProgressBar(received: received, total: total, color: SignerColors.blue, trackColor: SignerColors.border, width: 240),
         ]),
       ),
     );
@@ -779,9 +825,33 @@ class TxDetailScreen extends StatelessWidget {
   }
 }
 
-/// W30 转账身份验证 (bottom sheet).
+/// W30 转账身份验证 (bottom sheet). The Face ID button runs a real biometric
+/// prompt through [BiometricAuth]: success proceeds, failure stays on the
+/// sheet with a snackbar, and an unavailable platform (no hardware / nothing
+/// enrolled / tests) proceeds like before — an honest demo shortcut, since
+/// the online app has no PIN of its own to fall back to yet.
 class TransferAuthSheet extends StatelessWidget {
-  const TransferAuthSheet({super.key});
+  const TransferAuthSheet({super.key, this.auth});
+
+  /// Injectable authenticator; defaults to [BiometricAuth.instance].
+  final BiometricAuth? auth;
+
+  Future<void> _faceId(BuildContext context) async {
+    final l10n = AppLocalizations.of(context);
+    final outcome = await (auth ?? BiometricAuth.instance)
+        .authenticate(reason: l10n.authToConfirmTransfer);
+    if (!context.mounted) return;
+    switch (outcome) {
+      case BiometricOutcome.success:
+      case BiometricOutcome.unavailable: // demo shortcut, see class comment
+        context.go('/broadcast-result');
+      case BiometricOutcome.failure:
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(content: Text(l10n.biometricFailedRetry)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -806,7 +876,7 @@ class TransferAuthSheet extends StatelessWidget {
             const SizedBox(height: 8),
             Text(l10n.authEveryTransfer, style: const TextStyle(fontSize: 13, color: WalletColors.text2)),
             const SizedBox(height: 20),
-            KtPrimaryButton(label: l10n.useFaceId, onPressed: () => context.go('/broadcast-result')),
+            KtPrimaryButton(label: l10n.useFaceId, onPressed: () => _faceId(context)),
             const SizedBox(height: 12),
             // Demo passcode path: same simulated auth success as Face ID.
             GestureDetector(

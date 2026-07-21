@@ -679,9 +679,18 @@ class WalletSwitcherSheet extends StatelessWidget {
 }
 
 /// W27 钱包管理. Live: reads the wallet list from [WalletScope] and supports
-/// deleting a wallet (with confirmation) and adding a new one.
-class WalletManageScreen extends StatelessWidget {
+/// deleting a wallet (with confirmation), adding a new one, and — via the nav
+/// "排序" action — an in-place drag-to-reorder mode that persists sortOrder.
+class WalletManageScreen extends StatefulWidget {
   const WalletManageScreen({super.key});
+  @override
+  State<WalletManageScreen> createState() => _WalletManageScreenState();
+}
+
+class _WalletManageScreenState extends State<WalletManageScreen> {
+  /// Whether the list is in reorder mode (drag handles instead of delete
+  /// buttons, "完成" instead of "排序"). Default rendering is unchanged.
+  bool _reordering = false;
 
   Future<void> _confirmDelete(BuildContext context, Wallet w) async {
     final l10n = AppLocalizations.of(context);
@@ -708,6 +717,65 @@ class WalletManageScreen extends StatelessWidget {
     }
   }
 
+  /// Shared left portion of a wallet row (avatar + name/badge + state text) —
+  /// identical in normal and reorder mode so goldens stay byte-for-byte.
+  Widget _rowBody(AppLocalizations l10n, Wallet w) {
+    final isHot = w is HotWallet;
+    final kind = isHot ? WalletKind.hot : WalletKind.watch;
+    final unbacked = isHot && !w.backedUp;
+    final state = switch (w) {
+      HotWallet(backedUp: true) => l10n.walletStateBackedUp,
+      HotWallet() => l10n.walletStateNotBackedUp,
+      WatchWallet() => 'Cold Signer',
+    };
+    return Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [Flexible(child: Text(w.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text))), const SizedBox(width: 8), WalletTypeBadge(kind: kind, label: isHot ? l10n.walletKindHot : l10n.walletKindWatch)]),
+      const SizedBox(height: 3),
+      Text(state, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, fontWeight: unbacked ? FontWeight.w600 : FontWeight.w400, color: unbacked ? WalletColors.red : WalletColors.text3)),
+    ]));
+  }
+
+  /// Reorder-mode list: long-pressable drag handles per row (delete buttons
+  /// hidden), rendered as a non-scrolling ReorderableListView inside the
+  /// KtScreen scroll view. onReorder delegates to the controller, which
+  /// persists every wallet's new sortOrder.
+  Widget _reorderList(AppLocalizations l10n, List<Wallet> wallets) {
+    final controller = WalletScope.of(context);
+    return ReorderableListView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      buildDefaultDragHandles: false,
+      // onReorderItem (unlike the deprecated onReorder) already delivers the
+      // post-removal newIndex, so no manual off-by-one adjustment is needed.
+      onReorderItem: (oldIndex, newIndex) {
+        if (newIndex == oldIndex) return;
+        controller.reorder(oldIndex, newIndex);
+      },
+      children: [
+        for (final (i, w) in wallets.indexed)
+          Padding(
+            key: ValueKey('reorder-${w.id}'),
+            padding: EdgeInsets.only(bottom: i == wallets.length - 1 ? 0 : 16),
+            child: KtCard(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(children: [
+                KtAvatar(color: Color(w.avatarColor), initial: w.name.characters.first),
+                const SizedBox(width: 12),
+                _rowBody(l10n, w),
+                ReorderableDragStartListener(
+                  index: i,
+                  child: const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Icon(Icons.drag_handle, size: 20, color: WalletColors.text3),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -715,24 +783,23 @@ class WalletManageScreen extends StatelessWidget {
     final wallets = controller.wallets;
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: l10n.settingsWalletManage, onBack: () => Navigator.of(context).maybePop(), trailingText: l10n.sortAction),
+      navBar: KtNavBar(
+        title: l10n.settingsWalletManage,
+        onBack: () => Navigator.of(context).maybePop(),
+        trailingText: _reordering ? l10n.actionDone : l10n.sortAction,
+        onTrailing: () => setState(() => _reordering = !_reordering),
+      ),
       bottom: KtPrimaryButton(
         label: l10n.addWalletTitle,
         onPressed: controller.canAddMore ? () => context.push('/add-wallet') : null,
       ),
       children: [
         Text(l10n.walletCountLimit(wallets.length, WalletManager.maxWallets), style: const TextStyle(fontSize: 13, color: WalletColors.text3)),
-        for (final w in wallets)
-          () {
-            final isHot = w is HotWallet;
-            final kind = isHot ? WalletKind.hot : WalletKind.watch;
-            final unbacked = isHot && !w.backedUp;
-            final state = switch (w) {
-              HotWallet(backedUp: true) => l10n.walletStateBackedUp,
-              HotWallet() => l10n.walletStateNotBackedUp,
-              WatchWallet() => 'Cold Signer',
-            };
-            return GestureDetector(
+        if (_reordering)
+          _reorderList(l10n, wallets)
+        else
+          for (final w in wallets)
+            GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => context.push('/wallet-detail?id=${w.id}'),
               child: KtCard(
@@ -740,19 +807,14 @@ class WalletManageScreen extends StatelessWidget {
                 child: Row(children: [
                   KtAvatar(color: Color(w.avatarColor), initial: w.name.characters.first),
                   const SizedBox(width: 12),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [Flexible(child: Text(w.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text))), const SizedBox(width: 8), WalletTypeBadge(kind: kind, label: isHot ? l10n.walletKindHot : l10n.walletKindWatch)]),
-                    const SizedBox(height: 3),
-                    Text(state, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, fontWeight: unbacked ? FontWeight.w600 : FontWeight.w400, color: unbacked ? WalletColors.red : WalletColors.text3)),
-                  ])),
+                  _rowBody(l10n, w),
                   IconButton(
                     icon: const Icon(Icons.delete_outline, size: 20, color: WalletColors.text3),
                     onPressed: () => _confirmDelete(context, w),
                   ),
                 ]),
               ),
-            );
-          }(),
+            ),
       ],
     );
   }

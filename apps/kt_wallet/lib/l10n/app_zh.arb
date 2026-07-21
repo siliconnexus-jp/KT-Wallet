@@ -273,6 +273,7 @@
   "authEveryTransfer": "每次转账都需要 Face ID 或密码验证",
   "useFaceId": "使用 Face ID 验证",
   "usePasscode": "改用密码",
+  "biometricFailedRetry": "验证失败，请重试",
   "searchAssetHint": "搜索名称 / Symbol / 合约地址",
   "price": "价格",
   "change24h": "24h 涨跌",
@@ -347,5 +348,8 @@
   "noMatchingAssets": "没有匹配的资产",
   "noWatchWallet": "当前没有观察钱包",
   "watchWalletCreated": "观察钱包已创建",
-  "marketOfflineDemo": "离线，显示演示数据"
+  "marketOfflineDemo": "离线，显示演示数据",
+  "actionDone": "完成",
+  "historyUnsupportedChain": "该链暂不支持历史查询",
+  "historyEmpty": "暂无交易记录"
 }

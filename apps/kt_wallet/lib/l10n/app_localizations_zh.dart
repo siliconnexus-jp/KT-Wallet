@@ -481,6 +481,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get usePasscode => '改用密码';
 
   @override
+  String get biometricFailedRetry => '验证失败，请重试';
+
+  @override
   String get searchAssetHint => '搜索名称 / Symbol / 合约地址';
 
   @override
@@ -666,4 +669,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get marketOfflineDemo => '离线，显示演示数据';
+
+  @override
+  String get actionDone => '完成';
+
+  @override
+  String get historyUnsupportedChain => '该链暂不支持历史查询';
+
+  @override
+  String get historyEmpty => '暂无交易记录';
 }

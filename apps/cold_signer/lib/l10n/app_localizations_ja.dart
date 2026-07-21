@@ -333,6 +333,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get useDevicePasscode => '端末パスコードを使う';
 
   @override
+  String get biometricFailedRetry => '認証に失敗しました。もう一度お試しください';
+
+  @override
   String get verifyToSign => '認証して署名を完了';
 
   @override

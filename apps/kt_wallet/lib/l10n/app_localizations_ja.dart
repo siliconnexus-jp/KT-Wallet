@@ -484,6 +484,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get usePasscode => 'パスコードを使う';
 
   @override
+  String get biometricFailedRetry => '認証に失敗しました。もう一度お試しください';
+
+  @override
   String get searchAssetHint => '名称 / シンボル / コントラクトを検索';
 
   @override
@@ -672,4 +675,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get marketOfflineDemo => 'オフライン — デモデータを表示中';
+
+  @override
+  String get actionDone => '完了';
+
+  @override
+  String get historyUnsupportedChain => 'このチェーンでは履歴照会はまだ利用できません';
+
+  @override
+  String get historyEmpty => '取引履歴はまだありません';
 }

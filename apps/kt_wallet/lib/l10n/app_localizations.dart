@@ -982,6 +982,12 @@ abstract class AppLocalizations {
   /// **'改用密码'**
   String get usePasscode;
 
+  /// No description provided for @biometricFailedRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'验证失败，请重试'**
+  String get biometricFailedRetry;
+
   /// No description provided for @searchAssetHint.
   ///
   /// In zh, this message translates to:
@@ -1347,6 +1353,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'离线，显示演示数据'**
   String get marketOfflineDemo;
+
+  /// No description provided for @actionDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'完成'**
+  String get actionDone;
+
+  /// No description provided for @historyUnsupportedChain.
+  ///
+  /// In zh, this message translates to:
+  /// **'该链暂不支持历史查询'**
+  String get historyUnsupportedChain;
+
+  /// No description provided for @historyEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无交易记录'**
+  String get historyEmpty;
 }
 
 class _AppLocalizationsDelegate

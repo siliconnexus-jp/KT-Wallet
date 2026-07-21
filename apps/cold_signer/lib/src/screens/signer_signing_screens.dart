@@ -8,11 +8,14 @@ import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../security/biometric_auth.dart';
 import '../security/device_probe.dart';
 import '../security/pin_lock.dart';
 import '../security/security_check.dart';
 import '../signing/demo_airgap.dart';
+import '../signing/frame_scan.dart';
 import '../state/signer_wallet_controller.dart';
+import '../widgets/scan_viewfinder.dart';
 
 const _t = AppTheme.signer;
 
@@ -296,16 +299,22 @@ class SignerSecurityCheckPreviewScreen extends StatelessWidget {
   }
 }
 
-/// C6 扫描交易 — dark camera scaffold with a simulated capture loop.
+/// C6 扫描交易 — dark camera scaffold.
 ///
-/// There is no camera in this build, so each tap on the viewfinder "captures"
-/// the next animated-QR frame kt_wallet would be displaying. Everything past
-/// that tap is the real protocol: the frames come from the real [Fragmenter],
-/// are re-parsed byte-for-byte via [AirgapFrame.decode], aggregated by a real
+/// With a camera available at runtime the viewfinder hosts a live scanner and
+/// every decoded QR string — one base64url AIRGAP-V1 wire frame — feeds the
+/// aggregation session; without one, each tap on the viewfinder "captures"
+/// the next animated-QR frame kt_wallet would be displaying. Either way,
+/// everything past the capture is the real protocol: frames are parsed
+/// byte-for-byte via [AirgapFrame.decode], aggregated by a real
 /// [FrameAggregator], decoded with [AirgapPayload.decode] and vetted by
 /// [SignRequestValidator] before the decoded request is pushed to /parse.
 class SignerScanScreen extends StatefulWidget {
-  const SignerScanScreen({super.key});
+  const SignerScanScreen({super.key, this.availability});
+
+  /// Camera probe override for tests; defaults to the process-wide instance.
+  final CameraAvailability? availability;
+
   @override
   State<SignerScanScreen> createState() => _SignerScanScreenState();
 }
@@ -313,7 +322,8 @@ class SignerScanScreen extends StatefulWidget {
 class _SignerScanScreenState extends State<SignerScanScreen> {
   /// The frame set the hot wallet's animated QR is "displaying".
   late final List<AirgapFrame> _frames = demoSignRequestFrames();
-  final _aggregator = FrameAggregator();
+  final _session = QrFrameScanSession();
+  FrameAggregator get _aggregator => _session.aggregator;
   AggregatorProgress? _progress;
 
   /// Simulates one camera read: the next un-received frame goes through the
@@ -331,6 +341,19 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
       return;
     }
     setState(() => _progress = progress);
+  }
+
+  /// One real camera detection. Strings that aren't protocol frames (or that
+  /// belong to a foreign session) are counted silently as anomalies inside
+  /// [QrFrameScanSession] — a stray QR in view must not abort the scan.
+  void _onScanned(String raw) {
+    if (_session.isDone) return;
+    final progress = _session.add(raw);
+    if (_session.isDone) {
+      _onComplete();
+      return;
+    }
+    if (progress.received > 0) setState(() => _progress = progress);
   }
 
   Future<void> _onComplete() async {
@@ -387,14 +410,12 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
           const KtStatusBar(theme: _t),
           Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: KtNavBar(title: l10n.scanPendingTx, theme: _t, leading: Icons.close, onBack: () => Navigator.of(context).maybePop())),
           const SizedBox(height: 24),
-          GestureDetector(
-            onTap: _captureNext,
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 20),
-              height: 360,
-              decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(20)),
-              child: Center(child: Container(width: 240, height: 240, decoration: BoxDecoration(border: Border.all(color: SignerColors.ok, width: 2), borderRadius: BorderRadius.circular(16)), child: const Icon(Icons.qr_code_2, size: 64, color: SignerColors.border))),
-            ),
+          ScanViewfinder(
+            height: 360,
+            frameColor: SignerColors.ok,
+            onSimulatedTap: _captureNext,
+            onScanned: _onScanned,
+            availability: widget.availability,
           ),
           const SizedBox(height: 24),
           Text(l10n.receivingShard(received, total), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: SignerColors.text)),
@@ -563,11 +584,14 @@ class SignerRiskScreen extends StatelessWidget {
 
 /// C8 身份验证.
 class SignerAuthScreen extends StatelessWidget {
-  const SignerAuthScreen({super.key, this.request});
+  const SignerAuthScreen({super.key, this.request, this.auth});
 
   /// Request being authorized; forwarded to the result screen so the emitted
   /// SignResult answers the right reqId. Null in the gallery (canned strings).
   final SignRequest? request;
+
+  /// Injectable authenticator; defaults to [BiometricAuth.instance].
+  final BiometricAuth? auth;
 
   /// Authorization granted: commit the reqId to the anti-replay ledger BEFORE
   /// the result QR is shown (crash-safety ordering, DD §3.4) and navigate.
@@ -579,6 +603,28 @@ class SignerAuthScreen extends StatelessWidget {
       await controller.recordSigned(req, txHash: demoTxHash);
     }
     if (context.mounted) context.push('/result-qr', extra: req);
+  }
+
+  /// The biometric path: a real local_auth prompt. Success authorizes the
+  /// signature exactly like a verified PIN; an explicit failure stays on the
+  /// screen with a snackbar; an unavailable platform (no hardware, nothing
+  /// enrolled, plugin dead in tests) falls back to the PIN sheet — the signer
+  /// always has that second factor once a wallet is enrolled.
+  Future<void> _faceIdAuth(BuildContext context) async {
+    final l10n = AppLocalizations.of(context);
+    final outcome = await (auth ?? BiometricAuth.instance)
+        .authenticate(reason: l10n.verifyToSign);
+    if (!context.mounted) return;
+    switch (outcome) {
+      case BiometricOutcome.success:
+        await _completeSignature(context);
+      case BiometricOutcome.unavailable:
+        await _passcodeAuth(context);
+      case BiometricOutcome.failure:
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(content: Text(l10n.biometricFailedRetry)));
+    }
   }
 
   /// The passcode path. With a real wallet enrolled this demands the actual
@@ -611,10 +657,9 @@ class SignerAuthScreen extends StatelessWidget {
       gap: 28,
       navBar: KtNavBar(title: l10n.authTitle, theme: _t, onBack: () => Navigator.of(context).maybePop()),
       bottom: Column(children: [
-        // HONEST LIMIT: no local_auth in this build, so the biometric button
-        // remains the demo shortcut — it "succeeds" without any platform
-        // prompt. The passcode path below verifies the real PIN.
-        KtPrimaryButton(label: l10n.useFaceIdVerify, style: KtButtonStyle.signer, onPressed: () => _completeSignature(context)),
+        // Real local_auth prompt; falls back to the PIN sheet when the
+        // platform can't prompt (see _faceIdAuth).
+        KtPrimaryButton(label: l10n.useFaceIdVerify, style: KtButtonStyle.signer, onPressed: () => _faceIdAuth(context)),
         const SizedBox(height: 12),
         // Alternate auth path: the real app PIN when a wallet exists.
         GestureDetector(

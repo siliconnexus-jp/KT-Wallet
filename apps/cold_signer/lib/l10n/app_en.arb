@@ -117,6 +117,7 @@
   "authTitle": "Authentication",
   "useFaceIdVerify": "Verify with Face ID",
   "useDevicePasscode": "Use device passcode",
+  "biometricFailedRetry": "Authentication failed. Try again.",
   "verifyToSign": "Verify to complete signing",
   "verifyToSignDesc": "Every signature requires Face ID or the device passcode",
   "amountLabel": "Amount",

@@ -147,6 +147,7 @@
   "authEveryTransfer": "送金ごとにFace IDまたはパスコードが必要です",
   "useFaceId": "Face IDで認証",
   "usePasscode": "パスコードを使う",
+  "biometricFailedRetry": "認証に失敗しました。もう一度お試しください",
   "searchAssetHint": "名称 / シンボル / コントラクトを検索",
   "price": "価格",
   "change24h": "24時間変動",
@@ -221,5 +222,8 @@
   "noMatchingAssets": "一致する資産はありません",
   "noWatchWallet": "ウォッチウォレットはありません",
   "watchWalletCreated": "ウォッチウォレットを作成しました",
-  "marketOfflineDemo": "オフライン — デモデータを表示中"
+  "marketOfflineDemo": "オフライン — デモデータを表示中",
+  "actionDone": "完了",
+  "historyUnsupportedChain": "このチェーンでは履歴照会はまだ利用できません",
+  "historyEmpty": "取引履歴はまだありません"
 }

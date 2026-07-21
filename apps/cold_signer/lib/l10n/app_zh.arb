@@ -135,6 +135,7 @@
   "authTitle": "身份验证",
   "useFaceIdVerify": "使用 Face ID 验证",
   "useDevicePasscode": "改用设备密码",
+  "biometricFailedRetry": "验证失败，请重试",
   "verifyToSign": "验证以完成签名",
   "verifyToSignDesc": "每次签名都需要通过 Face ID 或设备密码验证",
   "amountLabel": "金额",

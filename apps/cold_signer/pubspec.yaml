@@ -53,6 +53,8 @@ dependencies:
   sqlite3_flutter_libs: ^0.5.42
   path: ^1.9.1
   path_provider: ^2.1.6
+  mobile_scanner: ^7.4.0
+  local_auth: ^3.0.2
 
 dev_dependencies:
   flutter_test:

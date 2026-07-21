@@ -344,6 +344,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get useDevicePasscode => 'Use device passcode';
 
   @override
+  String get biometricFailedRetry => 'Authentication failed. Try again.';
+
+  @override
   String get verifyToSign => 'Verify to complete signing';
 
   @override
