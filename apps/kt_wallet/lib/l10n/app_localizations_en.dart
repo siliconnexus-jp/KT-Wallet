@@ -450,6 +450,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dontBroadcastYet => 'Not yet';
 
   @override
+  String get chainParamsFallback =>
+      'Couldn\'t fetch on-chain parameters — using preset nonce and fee values';
+
+  @override
+  String broadcastFailedMessage(String message) {
+    return 'Broadcast failed: $message';
+  }
+
+  @override
   String get signatureVerified =>
       'Signature verified · signer matches the wallet address; contents untampered';
 

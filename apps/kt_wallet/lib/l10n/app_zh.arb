@@ -248,6 +248,15 @@
   },
   "broadcastTitle": "广播交易",
   "dontBroadcastYet": "暂不广播",
+  "chainParamsFallback": "无法获取链上参数，已使用预设 nonce 与手续费",
+  "broadcastFailedMessage": "广播失败：{message}",
+  "@broadcastFailedMessage": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
   "signatureVerified": "签名已验证 · 签名者与钱包地址一致，交易内容未被篡改",
   "signerAddress": "签名地址",
   "txHashPreview": "交易 Hash 预览",

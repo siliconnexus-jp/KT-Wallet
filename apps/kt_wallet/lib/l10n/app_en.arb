@@ -132,6 +132,15 @@
   "recognizedShard": "Recognized shard {received} / {total}",
   "broadcastTitle": "Broadcast transaction",
   "dontBroadcastYet": "Not yet",
+  "chainParamsFallback": "Couldn't fetch on-chain parameters — using preset nonce and fee values",
+  "broadcastFailedMessage": "Broadcast failed: {message}",
+  "@broadcastFailedMessage": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
   "signatureVerified": "Signature verified · signer matches the wallet address; contents untampered",
   "signerAddress": "Signer address",
   "txHashPreview": "Tx hash preview",

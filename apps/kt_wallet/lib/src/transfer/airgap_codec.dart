@@ -133,13 +133,20 @@ const signRequestTtlSeconds = 600;
 ///
 /// EVM chains carry a REAL typed transaction: `0x02 || rlp(...)` unsigned
 /// EIP-1559 bytes from the chains package (native transfer or ERC-20
-/// `transfer` calldata) — exactly what a signer hashes and signs. The nonce
-/// and gas parameters are demo constants until online nonce/gas fetching is
-/// wired (they affect values inside the encoding, not its validity as a
-/// serialization). TRON (protobuf) and Solana (message v0) still use the
+/// `transfer` calldata) — exactly what a signer hashes and signs. The
+/// optional [nonce] / [maxPriorityFeePerGas] / [maxFeePerGas] overrides
+/// carry live chain-state parameters (ChainParamsService); when absent the
+/// documented DEMO constants apply, so every demo/golden rendering stays
+/// byte-identical. TRON (protobuf) and Solana (message v0) still use the
 /// canonical-JSON placeholder pending real-signing integration to validate
 /// their encoders against.
-Uint8List rawTxFor(TransferDraft draft, {required String from}) {
+Uint8List rawTxFor(
+  TransferDraft draft, {
+  required String from,
+  BigInt? nonce,
+  BigInt? maxPriorityFeePerGas,
+  BigInt? maxFeePerGas,
+}) {
   if (draft.chain == Chain.ethereum || draft.chain == Chain.polygon) {
     final intent = TransferIntent(
       chain: draft.chain,
@@ -154,10 +161,10 @@ Uint8List rawTxFor(TransferDraft draft, {required String from}) {
     final tx = Eip1559Tx.forTransfer(
       intent,
       chainId: BigInt.from(chainIdForChain(draft.chain) ?? 1),
-      // Demo chain-state parameters (see doc comment above).
-      nonce: BigInt.zero,
-      maxPriorityFeePerGas: BigInt.two * gwei,
-      maxFeePerGas: BigInt.from(40) * gwei,
+      // Live overrides when provided; demo constants otherwise (see above).
+      nonce: nonce ?? BigInt.zero,
+      maxPriorityFeePerGas: maxPriorityFeePerGas ?? BigInt.two * gwei,
+      maxFeePerGas: maxFeePerGas ?? BigInt.from(40) * gwei,
       gasLimit: BigInt.from(draft.operation == TxOperation.nativeTransfer ? 21000 : 65000),
     );
     return tx.encodeUnsigned();
@@ -196,13 +203,17 @@ abstract final class SummaryKeys {
 
 /// Builds the real [SignRequest] for W6. With a live [draft], the reqId is
 /// random (Random.secure) and timestamps are now-based; without one (gallery /
-/// goldens) the fixed demo identity keeps the rendering deterministic.
+/// goldens) the fixed demo identity keeps the rendering deterministic. The
+/// optional EVM chain-state overrides pass straight through to [rawTxFor].
 SignRequest buildSignRequest({
   TransferDraft? draft,
   required String walletId,
   required String fromAddress,
   Uint8List? reqId,
   int? nowEpochSeconds,
+  BigInt? nonce,
+  BigInt? maxPriorityFeePerGas,
+  BigInt? maxFeePerGas,
 }) {
   final live = draft != null;
   final d = draft ?? demoDraft;
@@ -216,7 +227,13 @@ SignRequest buildSignRequest({
     walletId: id,
     coin: coinForChain(d.chain),
     chainId: chainIdForChain(d.chain),
-    rawTx: demoRawTx(d, from: fromAddress),
+    rawTx: rawTxFor(
+      d,
+      from: fromAddress,
+      nonce: nonce,
+      maxPriorityFeePerGas: maxPriorityFeePerGas,
+      maxFeePerGas: maxFeePerGas,
+    ),
     summary: {
       SummaryKeys.network: d.networkLabel,
       SummaryKeys.amount: d.amountText,

@@ -60,10 +60,16 @@ class TransferSession {
   /// The protocol-decoded result produced by the (simulated) W7 scan.
   SignResult? result;
 
+  /// The tx hash the broadcast step actually produced: the node's answer for
+  /// a real broadcast, or the demo hash on the simulated short-circuit. W9
+  /// prefers this over [result]'s pre-broadcast hash when set.
+  String? broadcastTxHash;
+
   void clear() {
     draft = null;
     request = null;
     result = null;
+    broadcastTxHash = null;
   }
 }
 

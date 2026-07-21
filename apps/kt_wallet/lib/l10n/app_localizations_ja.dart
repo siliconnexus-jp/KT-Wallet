@@ -437,6 +437,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String get dontBroadcastYet => 'まだ送信しない';
 
   @override
+  String get chainParamsFallback => 'チェーン上のパラメータを取得できないため、既定のnonceと手数料を使用します';
+
+  @override
+  String broadcastFailedMessage(String message) {
+    return 'ブロードキャストに失敗しました：$message';
+  }
+
+  @override
   String get signatureVerified => '署名を確認 · 署名者はウォレットアドレスと一致し、内容は改ざんされていません';
 
   @override

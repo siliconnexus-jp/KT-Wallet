@@ -434,6 +434,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dontBroadcastYet => '暂不广播';
 
   @override
+  String get chainParamsFallback => '无法获取链上参数，已使用预设 nonce 与手续费';
+
+  @override
+  String broadcastFailedMessage(String message) {
+    return '广播失败：$message';
+  }
+
+  @override
   String get signatureVerified => '签名已验证 · 签名者与钱包地址一致，交易内容未被篡改';
 
   @override

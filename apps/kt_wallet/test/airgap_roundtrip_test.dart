@@ -239,6 +239,46 @@ void evmRawTxTests() {
     expect(raw, expected);
   });
 
+  test('rawTxFor overrides encode the live nonce/fees byte-for-byte (#nonce/gas)', () {
+    final draft = TransferDraft(
+      symbol: 'ETH',
+      networkLabel: 'Ethereum',
+      chain: Chain.ethereum,
+      decimals: 18,
+      recipient: '0x925fEA1c0dbf3B011391bbed682E32861BE73213',
+      amount: Amount.parse('0.5', 18, symbol: 'ETH'),
+      feeTier: 1,
+    );
+    const from = '0x0000000000000000000000000000000000000001';
+    final tip = BigInt.from(1500000000); // 1.5 gwei
+    final maxFee = BigInt.from(52000000000); // 52 gwei
+    final raw = rawTxFor(
+      draft,
+      from: from,
+      nonce: BigInt.from(42),
+      maxPriorityFeePerGas: tip,
+      maxFeePerGas: maxFee,
+    );
+
+    final expected = Eip1559Tx.forTransfer(
+      TransferIntent(
+        chain: Chain.ethereum,
+        operation: TxOperation.nativeTransfer,
+        from: from,
+        to: draft.recipient,
+        amount: draft.amount,
+      ),
+      chainId: BigInt.one,
+      nonce: BigInt.from(42),
+      maxPriorityFeePerGas: tip,
+      maxFeePerGas: maxFee,
+      gasLimit: BigInt.from(21000),
+    ).encodeUnsigned();
+    expect(raw, expected);
+    // And it genuinely differs from the demo-constant encoding.
+    expect(raw, isNot(equals(rawTxFor(draft, from: from))));
+  });
+
   test('TRON draft rawTx keeps the documented JSON placeholder shape', () {
     final raw = rawTxFor(demoDraft, from: usdtTronContract);
     final decoded = json.decode(utf8.decode(raw)) as Map<String, dynamic>;

@@ -892,6 +892,18 @@ abstract class AppLocalizations {
   /// **'暂不广播'**
   String get dontBroadcastYet;
 
+  /// No description provided for @chainParamsFallback.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法获取链上参数，已使用预设 nonce 与手续费'**
+  String get chainParamsFallback;
+
+  /// No description provided for @broadcastFailedMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'广播失败：{message}'**
+  String broadcastFailedMessage(String message);
+
   /// No description provided for @signatureVerified.
   ///
   /// In zh, this message translates to:

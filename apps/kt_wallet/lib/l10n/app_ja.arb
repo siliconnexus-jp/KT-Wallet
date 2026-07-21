@@ -132,6 +132,15 @@
   "recognizedShard": "認識済みシャード {received} / {total}",
   "broadcastTitle": "取引をブロードキャスト",
   "dontBroadcastYet": "まだ送信しない",
+  "chainParamsFallback": "チェーン上のパラメータを取得できないため、既定のnonceと手数料を使用します",
+  "broadcastFailedMessage": "ブロードキャストに失敗しました：{message}",
+  "@broadcastFailedMessage": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
   "signatureVerified": "署名を確認 · 署名者はウォレットアドレスと一致し、内容は改ざんされていません",
   "signerAddress": "署名アドレス",
   "txHashPreview": "取引ハッシュのプレビュー",

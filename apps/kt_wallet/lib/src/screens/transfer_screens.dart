@@ -8,8 +8,12 @@ import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../market/market_scope.dart' show prefsRpcEndpoints;
 import '../security/biometric_auth.dart';
+import '../state/app_prefs.dart' show AppPrefsScope;
 import '../transfer/airgap_codec.dart';
+import '../transfer/broadcast_service.dart';
+import '../transfer/chain_params_service.dart';
 import '../transfer/frame_scan.dart';
 import '../transfer/transfer_draft.dart';
 import '../widgets/scan_viewfinder.dart';
@@ -189,7 +193,8 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                     tokenContract: _asset.contract,
                   )
                   ..request = null
-                  ..result = null;
+                  ..result = null
+                  ..broadcastTxHash = null;
                 context.push(isHot ? '/confirm-hot' : '/confirm-watch');
               }
             : null,
@@ -454,8 +459,18 @@ class TransferConfirmScreen extends StatelessWidget {
 /// [SignRequest], fragmented into frames, and each frame's bytes are rendered
 /// as a scannable QR, cycling every ~600ms. The shard label/progress reflect
 /// the actual frame count.
+///
+/// Live EVM drafts first fetch the sender's real nonce and current fees via
+/// [ChainParamsService] (brief spinner in place of the QR); on failure the
+/// documented demo constants apply and a fallback hint is shown. Demo/gallery
+/// renderings and non-EVM chains build synchronously, exactly as before.
 class SignRequestQrScreen extends StatefulWidget {
-  const SignRequestQrScreen({super.key});
+  const SignRequestQrScreen({super.key, this.paramsService});
+
+  /// Injectable chain-params fetcher for tests; defaults to one resolving
+  /// the prefs-overridable endpoints.
+  final ChainParamsService? paramsService;
+
   @override
   State<SignRequestQrScreen> createState() => _SignRequestQrScreenState();
 }
@@ -469,19 +484,72 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
   int _frameIndex = 0;
   Timer? _timer;
 
+  /// True while the live EVM chain-state fetch is in flight (spinner state).
+  bool _building = false;
+
+  /// True when the fetch failed and the demo constants were used instead.
+  bool _paramsFellBack = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_request != null) return; // build once per screen instance
+    if (_request != null || _building) return; // build once per screen instance
     final session = TransferSessionScope.maybeOf(context);
     _draft = session?.draft;
     final wallet = WalletScope.of(context).current;
-    final chain = (_draft ?? demoDraft).chain;
-    final request = buildSignRequest(
-      draft: _draft,
-      walletId: wallet?.id ?? demoWalletId,
-      fromAddress: wallet == null ? demoFromAddress : addressForChain(wallet.addresses, chain),
-    );
+    final draft = _draft;
+    final chain = (draft ?? demoDraft).chain;
+    final walletId = wallet?.id ?? demoWalletId;
+    final from = wallet == null ? demoFromAddress : addressForChain(wallet.addresses, chain);
+    if (draft != null && (chain == Chain.ethereum || chain == Chain.polygon)) {
+      // Live EVM path: real nonce/fees first, QR after the fetch.
+      _building = true;
+      final service = widget.paramsService ??
+          ChainParamsService(endpoints: prefsRpcEndpoints(AppPrefsScope.maybeOf(context)));
+      unawaited(_buildLiveEvm(service, session, draft, walletId: walletId, from: from));
+    } else {
+      _install(buildSignRequest(draft: draft, walletId: walletId, fromAddress: from), session);
+    }
+  }
+
+  Future<void> _buildLiveEvm(
+    ChainParamsService service,
+    TransferSession? session,
+    TransferDraft draft, {
+    required String walletId,
+    required String from,
+  }) async {
+    BigInt? nonce, maxPriority, maxFee;
+    try {
+      final params = await service.fetchEvmParams(draft.chain, from);
+      final tier = params.tierFor(draft.feeTier);
+      nonce = BigInt.from(params.nonce);
+      maxPriority = tier.maxPriorityFeePerGas;
+      maxFee = tier.maxFeePerGas;
+    } catch (_) {
+      // Node unreachable / erroring: the demo constants keep the request
+      // buildable; the fallback banner tells the user what happened.
+      _paramsFellBack = true;
+    }
+    if (!mounted) return;
+    setState(() {
+      _building = false;
+      _install(
+        buildSignRequest(
+          draft: draft,
+          walletId: walletId,
+          fromAddress: from,
+          nonce: nonce,
+          maxPriorityFeePerGas: maxPriority,
+          maxFeePerGas: maxFee,
+        ),
+        session,
+      );
+    });
+  }
+
+  /// Registers [request] as the outstanding one and starts the frame cycle.
+  void _install(SignRequest request, TransferSession? session) {
     _request = request;
     // This is now the outstanding request the scanned result must answer.
     session
@@ -510,12 +578,26 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final request = _request!;
+    final request = _request;
     final draft = _draft;
+    if (request == null) {
+      // Brief spinner while the live EVM nonce/fee fetch is in flight.
+      return KtScreen(
+        gap: 16,
+        navBar: KtNavBar(title: l10n.pendingSignTitle, onBack: () => Navigator.of(context).maybePop(), trailingText: l10n.actionCancel, onTrailing: _cancel),
+        children: const [
+          KtCard(
+            padding: EdgeInsets.all(24),
+            child: SizedBox(height: 280, child: Center(child: CircularProgressIndicator())),
+          ),
+        ],
+      );
+    }
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(title: l10n.pendingSignTitle, onBack: () => Navigator.of(context).maybePop(), trailingText: l10n.actionCancel, onTrailing: _cancel),
       children: [
+        if (_paramsFellBack) _amberWarn(l10n.chainParamsFallback),
         KtCard(
           padding: const EdgeInsets.all(24),
           child: Column(children: [
@@ -654,8 +736,60 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
 /// network are read from the protocol payload (and the amount/recipient from
 /// the outstanding request it answered); without one (gallery / goldens) the
 /// demo constants render unchanged.
-class BroadcastConfirmScreen extends StatelessWidget {
-  const BroadcastConfirmScreen({super.key});
+///
+/// The broadcast button pushes the signed bytes through [BroadcastService]:
+/// demo signatures short-circuit to the simulated-success path (never sent to
+/// a node), a real signature goes over the wire, and a rejection surfaces the
+/// node's message here — the broadcastError → failed step; retry stays
+/// user-explicit (INV-15, no auto-retry).
+class BroadcastConfirmScreen extends StatefulWidget {
+  const BroadcastConfirmScreen({super.key, this.broadcaster});
+
+  /// Injectable broadcast pipe for tests; defaults to one resolving the
+  /// prefs-overridable endpoints.
+  final BroadcastService? broadcaster;
+
+  @override
+  State<BroadcastConfirmScreen> createState() => _BroadcastConfirmScreenState();
+}
+
+class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
+  bool _busy = false;
+
+  /// Node/transport message of the last failed broadcast, if any.
+  String? _error;
+
+  Future<void> _broadcast() async {
+    final session = TransferSessionScope.maybeOf(context);
+    final result = session?.result;
+    if (session == null || result == null) {
+      // Gallery / demo rendering without a decoded result: keep the design's
+      // direct navigation (nothing to broadcast).
+      context.go('/broadcast-result');
+      return;
+    }
+    final service = widget.broadcaster ??
+        BroadcastService(endpoints: prefsRpcEndpoints(AppPrefsScope.maybeOf(context)));
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final outcome = await service.broadcast(chainForCoin(result.coin), result.signedTx);
+    if (!mounted) return;
+    switch (outcome.status) {
+      case BroadcastStatus.ok:
+      case BroadcastStatus.simulated:
+        session.broadcastTxHash = outcome.txHash ?? result.txHash;
+        context.go('/broadcast-result');
+      case BroadcastStatus.error:
+      case BroadcastStatus.unsupported:
+        setState(() {
+          _busy = false;
+          _error = outcome.message ?? '';
+        });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -687,7 +821,7 @@ class BroadcastConfirmScreen extends StatelessWidget {
       gap: 16,
       navBar: KtNavBar(title: l10n.broadcastTitle, onBack: () => Navigator.of(context).maybePop()),
       bottom: Column(children: [
-        KtPrimaryButton(label: l10n.broadcastTitle, onPressed: () => context.go('/broadcast-result')),
+        KtPrimaryButton(label: l10n.broadcastTitle, onPressed: _busy ? null : _broadcast),
         const SizedBox(height: 12),
         GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -696,6 +830,18 @@ class BroadcastConfirmScreen extends StatelessWidget {
         ),
       ]),
       children: [
+        // Failed-broadcast state: the node's rejection message, verbatim.
+        if (_error != null)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: WalletColors.red.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.error_outline, size: 18, color: WalletColors.red),
+              const SizedBox(width: 10),
+              Expanded(child: Text(l10n.broadcastFailedMessage(_error!),
+                  style: const TextStyle(fontSize: 13, height: 1.5, fontWeight: FontWeight.w500, color: WalletColors.red))),
+            ]),
+          ),
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(color: WalletColors.green.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
@@ -731,10 +877,12 @@ class BroadcastResultScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    // Keep the hash consistent with what broadcast-confirm displayed when a
-    // decoded result exists (watch-wallet flow); demo constant otherwise.
-    final result = TransferSessionScope.maybeOf(context)?.result;
-    final hashValue = result == null ? '8f6d2c…a94e07' : truncateMiddle(result.txHash, head: 6, tail: 6);
+    // Prefer the hash the broadcast step actually produced (node answer or
+    // simulated short-circuit); else keep the decoded result's hash for
+    // consistency with broadcast-confirm; demo constant otherwise.
+    final session = TransferSessionScope.maybeOf(context);
+    final fullHash = session?.broadcastTxHash ?? session?.result?.txHash;
+    final hashValue = fullHash == null ? '8f6d2c…a94e07' : truncateMiddle(fullHash, head: 6, tail: 6);
     return KtScreen(
       gap: 24,
       bottom: KtPrimaryButton(label: l10n.backToHome, onPressed: () => context.go('/home')),
