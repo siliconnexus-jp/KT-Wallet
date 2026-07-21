@@ -117,6 +117,9 @@
   },
   "fromAccount": "转出账户（From）",
   "toAddress": "收款地址（To）",
+  "walletIdLabel": "钱包 ID",
+  "createdAtLabel": "创建时间",
+  "expiresAtLabel": "有效期至",
 
   "riskWarningTitle": "风险警告",
   "backToHome": "返回首页",

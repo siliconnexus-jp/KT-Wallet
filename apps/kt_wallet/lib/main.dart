@@ -14,6 +14,7 @@ import 'src/state/device_mode.dart';
 import 'src/state/locale_controller.dart';
 import 'src/state/wallet_controller.dart';
 import 'src/state/wallet_scope.dart';
+import 'src/transfer/transfer_draft.dart';
 import 'src/wallets/wallet_manager.dart';
 import 'src/wallets/wallet_model.dart';
 import 'src/wallets/wallet_store.dart';
@@ -464,6 +465,10 @@ class KtWalletApp extends StatefulWidget {
 class _KtWalletAppState extends State<KtWalletApp> {
   late final GoRouter _router;
 
+  /// In-flight transfer flow state (draft → sign-request → decoded result),
+  /// shared across the transfer screens via [TransferSessionScope].
+  final TransferSession _transferSession = TransferSession();
+
   @override
   void initState() {
     super.initState();
@@ -492,7 +497,10 @@ class _KtWalletAppState extends State<KtWalletApp> {
           routerConfig: _router,
           builder: (context, child) => KtDeviceChrome(
             mockStatusBar: false,
-            child: WalletScope(controller: widget.controller, child: child!),
+            child: WalletScope(
+              controller: widget.controller,
+              child: TransferSessionScope(session: _transferSession, child: child!),
+            ),
           ),
         ),
       ),

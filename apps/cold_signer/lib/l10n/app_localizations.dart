@@ -634,6 +634,24 @@ abstract class AppLocalizations {
   /// **'收款地址（To）'**
   String get toAddress;
 
+  /// No description provided for @walletIdLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包 ID'**
+  String get walletIdLabel;
+
+  /// No description provided for @createdAtLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建时间'**
+  String get createdAtLabel;
+
+  /// No description provided for @expiresAtLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'有效期至'**
+  String get expiresAtLabel;
+
   /// No description provided for @riskWarningTitle.
   ///
   /// In zh, this message translates to:

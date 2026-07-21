@@ -102,6 +102,9 @@
   "rawAmountPrecision": "生の数量 {amount}（精度 {precision}）",
   "fromAccount": "送金元アカウント",
   "toAddress": "受取アドレス",
+  "walletIdLabel": "ウォレット ID",
+  "createdAtLabel": "作成日時",
+  "expiresAtLabel": "有効期限",
 
   "riskWarningTitle": "リスク警告",
   "backToHome": "ホームへ戻る",

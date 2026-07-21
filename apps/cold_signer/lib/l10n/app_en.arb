@@ -102,6 +102,9 @@
   "rawAmountPrecision": "Raw amount {amount} (precision {precision})",
   "fromAccount": "From account",
   "toAddress": "Recipient address",
+  "walletIdLabel": "Wallet ID",
+  "createdAtLabel": "Created at",
+  "expiresAtLabel": "Valid until",
 
   "riskWarningTitle": "Risk warning",
   "backToHome": "Back to home",

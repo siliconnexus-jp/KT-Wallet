@@ -301,6 +301,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get toAddress => 'Recipient address';
 
   @override
+  String get walletIdLabel => 'Wallet ID';
+
+  @override
+  String get createdAtLabel => 'Created at';
+
+  @override
+  String get expiresAtLabel => 'Valid until';
+
+  @override
   String get riskWarningTitle => 'Risk warning';
 
   @override

@@ -286,6 +286,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get toAddress => '收款地址（To）';
 
   @override
+  String get walletIdLabel => '钱包 ID';
+
+  @override
+  String get createdAtLabel => '创建时间';
+
+  @override
+  String get expiresAtLabel => '有效期至';
+
+  @override
   String get riskWarningTitle => '风险警告';
 
   @override

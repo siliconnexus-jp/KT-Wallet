@@ -1,3 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -5,8 +10,40 @@ import 'package:ui_kit/ui_kit.dart';
 import '../../l10n/app_localizations.dart';
 import '../security/device_probe.dart';
 import '../security/security_check.dart';
+import '../signing/demo_airgap.dart';
 
 const _t = AppTheme.signer;
+
+/// Short display form of a request id, e.g. REQ-7F3A2C.
+String _reqLabel(Uint8List reqId) =>
+    'REQ-${reqId.take(3).map((b) => b.toRadixString(16).padLeft(2, '0')).join().toUpperCase()}';
+
+/// SLIP-44 coin type → display name (V1 supported set).
+String _coinName(int coin) => switch (coin) {
+      60 => 'Ethereum',
+      195 => 'TRON',
+      501 => 'Solana',
+      966 => 'Polygon',
+      _ => 'SLIP-44 #$coin',
+    };
+
+String _two(int v) => v.toString().padLeft(2, '0');
+
+/// Local wall-clock rendering of an epoch-seconds timestamp.
+String _fmtEpoch(int epochSeconds) {
+  final t = DateTime.fromMillisecondsSinceEpoch(epochSeconds * 1000);
+  return '${t.year}-${_two(t.month)}-${_two(t.day)} ${_two(t.hour)}:${_two(t.minute)}:${_two(t.second)}';
+}
+
+/// Digit grouping for raw integer amounts (120000000 → 120,000,000).
+String _group(String digits) {
+  final out = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) out.write(',');
+    out.write(digits[i]);
+  }
+  return out.toString();
+}
 
 Widget _kv(String k, String v, {bool mono = false, Color? color}) => Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -257,12 +294,81 @@ class SignerSecurityCheckPreviewScreen extends StatelessWidget {
   }
 }
 
-/// Dark camera scaffold shared by C6.
-class SignerScanScreen extends StatelessWidget {
+/// C6 扫描交易 — dark camera scaffold with a simulated capture loop.
+///
+/// There is no camera in this build, so each tap on the viewfinder "captures"
+/// the next animated-QR frame kt_wallet would be displaying. Everything past
+/// that tap is the real protocol: the frames come from the real [Fragmenter],
+/// are re-parsed byte-for-byte via [AirgapFrame.decode], aggregated by a real
+/// [FrameAggregator], decoded with [AirgapPayload.decode] and vetted by
+/// [SignRequestValidator] before the decoded request is pushed to /parse.
+class SignerScanScreen extends StatefulWidget {
   const SignerScanScreen({super.key});
+  @override
+  State<SignerScanScreen> createState() => _SignerScanScreenState();
+}
+
+class _SignerScanScreenState extends State<SignerScanScreen> {
+  /// The frame set the hot wallet's animated QR is "displaying".
+  late final List<AirgapFrame> _frames = demoSignRequestFrames();
+  final _aggregator = FrameAggregator();
+  AggregatorProgress? _progress;
+
+  /// Simulates one camera read: the next un-received frame goes through the
+  /// wire encoding and into the aggregator.
+  void _captureNext() {
+    if (_aggregator.state == AggregatorState.done ||
+        _aggregator.state == AggregatorState.failed) {
+      return;
+    }
+    final next = _aggregator.progress.received;
+    final frame = AirgapFrame.decode(_frames[next].encode());
+    final progress = _aggregator.addFrame(frame);
+    if (_aggregator.state == AggregatorState.done) {
+      _onComplete();
+      return;
+    }
+    setState(() => _progress = progress);
+  }
+
+  void _onComplete() {
+    final SignRequest request;
+    final ValidationResult verdict;
+    try {
+      final payload = AirgapPayload.decode(_aggregator.payload!);
+      if (payload is! SignRequest) {
+        // Account exports / results are not signable input.
+        context.push('/risk');
+        return;
+      }
+      request = payload;
+      // Steps 2–6 of the acceptance check (validator.dart). The demo device
+      // has no persisted records for this reqId, and V1's transaction
+      // whitelist is stubbed to "TRON transfers only" until the chains
+      // package supplies the real parser.
+      verdict = SignRequestValidator(
+        localWalletId: demoWalletId,
+        records: InMemorySignRecordStore(),
+        transactionAllowed: (r) => r.coin == demoCoinTron,
+      ).validate(request);
+    } on PayloadError {
+      context.push('/risk');
+      return;
+    }
+    if (!verdict.isOk) {
+      context.push('/risk');
+      return;
+    }
+    context.push('/parse', extra: request);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    // Before the first capture the aggregator hasn't locked a total yet; show
+    // the frame-set size (which is what the hot wallet's QR announces anyway).
+    final received = _progress?.received ?? 0;
+    final total = _progress?.total ?? _frames.length;
     return Scaffold(
       backgroundColor: SignerColors.bg,
       body: SafeArea(
@@ -272,7 +378,7 @@ class SignerScanScreen extends StatelessWidget {
           Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: KtNavBar(title: l10n.scanPendingTx, theme: _t, leading: Icons.close, onBack: () => Navigator.of(context).maybePop())),
           const SizedBox(height: 24),
           GestureDetector(
-            onTap: () => context.push('/parse'),
+            onTap: _captureNext,
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 20),
               height: 360,
@@ -281,9 +387,9 @@ class SignerScanScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          Text(l10n.receivingShard(5, 8), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: SignerColors.text)),
+          Text(l10n.receivingShard(received, total), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: SignerColors.text)),
           const SizedBox(height: 10),
-          const ShardProgressBar(received: 5, total: 8, color: SignerColors.ok, trackColor: SignerColors.border, width: 240),
+          ShardProgressBar(received: received, total: total, color: SignerColors.ok, trackColor: SignerColors.border, width: 240),
         ]),
       ),
     );
@@ -291,11 +397,34 @@ class SignerScanScreen extends StatelessWidget {
 }
 
 /// C7 交易解析确认.
+///
+/// With a decoded [request] (the live scan flow) every field comes from the
+/// AIRGAP-V1 payload; without one (dev gallery / goldens) the original canned
+/// design snapshot is rendered unchanged.
 class SignerParseScreen extends StatelessWidget {
-  const SignerParseScreen({super.key});
+  const SignerParseScreen({super.key, this.request});
+
+  /// The decoded request handed over by the scan screen; null in the gallery.
+  final SignRequest? request;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final req = request;
+    // Display fields: decoded payload when present, otherwise the canned
+    // design-snapshot strings. The summary map is a display hint only
+    // (payload.dart) — a production build must render the chains-package
+    // parse of rawTx instead; the demo intent JSON carries the same values.
+    final summary = req?.summary ?? const {};
+    final headline = req == null
+        ? 'TRON · Token Transfer（TRC-20）'
+        : '${_coinName(req.coin)} · ${summary['op'] ?? 'Transfer'}';
+    final reqLabel = req == null ? 'REQ-7F3A2C' : _reqLabel(req.reqId);
+    final amount = req == null ? '120.00 USDT' : '${summary['amount'] ?? '?'} ${summary['token'] ?? ''}';
+    final rawAmount = req == null ? '120,000,000' : _group('${summary['rawAmount'] ?? '?'}');
+    final decimals = req == null ? 6 : (summary['decimals'] is int ? summary['decimals']! as int : 0);
+    final from = req == null ? 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa' : '${summary['from'] ?? '?'}';
+    final to = req == null ? 'TWd4qCEUYAJgLtSpQ2dK7wY9nMxR38uQz' : '${summary['to'] ?? '?'}';
     return KtScreen(
       theme: _t,
       gap: 16,
@@ -303,29 +432,42 @@ class SignerParseScreen extends StatelessWidget {
       bottom: Row(children: [
         SizedBox(width: 120, height: 52, child: OutlinedButton(onPressed: () => context.pop(), style: OutlinedButton.styleFrom(backgroundColor: SignerColors.surface, side: const BorderSide(color: SignerColors.border), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: Text(l10n.reject, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: SignerColors.danger)))),
         const SizedBox(width: 12),
-        Expanded(child: SizedBox(height: 52, child: FilledButton.icon(onPressed: () => context.push('/auth'), icon: const Icon(Icons.edit, size: 18, color: Color(0xFF0A0C0F)), label: Text(l10n.confirmSign, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF0A0C0F))), style: FilledButton.styleFrom(backgroundColor: SignerColors.ok, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))))),
+        Expanded(child: SizedBox(height: 52, child: FilledButton.icon(onPressed: () => context.push('/auth', extra: req), icon: const Icon(Icons.edit, size: 18, color: Color(0xFF0A0C0F)), label: Text(l10n.confirmSign, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF0A0C0F))), style: FilledButton.styleFrom(backgroundColor: SignerColors.ok, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))))),
       ]),
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(12)),
-          child: Row(children: const [
-            _Dot(ChainColors.tron, size: 8),
-            SizedBox(width: 10),
-            Expanded(child: Text('TRON · Token Transfer（TRC-20）', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: SignerColors.text))),
-            Text('REQ-7F3A2C', style: TextStyle(fontSize: 11, fontFamily: KtFonts.mono, color: Color(0xFF5A616C))),
+          child: Row(children: [
+            const _Dot(ChainColors.tron, size: 8),
+            const SizedBox(width: 10),
+            Expanded(child: Text(headline, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: SignerColors.text))),
+            Text(reqLabel, style: const TextStyle(fontSize: 11, fontFamily: KtFonts.mono, color: Color(0xFF5A616C))),
           ]),
         ),
         _card(Column(children: [
-          const Text('120.00 USDT', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700, fontFamily: KtFonts.mono, color: SignerColors.text)),
+          Text(amount, style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700, fontFamily: KtFonts.mono, color: SignerColors.text)),
           const SizedBox(height: 6),
-          Text(l10n.rawAmountPrecision('120,000,000', 6), style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: SignerColors.text2)),
+          Text(l10n.rawAmountPrecision(rawAmount, decimals), style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: SignerColors.text2)),
         ])),
         _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          SignerDetailRow(label: l10n.fromAccount, value: 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa'),
+          SignerDetailRow(label: l10n.fromAccount, value: from),
           const SizedBox(height: 16),
-          SignerDetailRow(label: l10n.toAddress, value: 'TWd4qCEUYAJgLtSpQ2dK7wY9nMxR38uQz'),
+          SignerDetailRow(label: l10n.toAddress, value: to),
         ])),
+        // Request metadata card — live flow only, so the gallery snapshot
+        // (and its golden) stays byte-identical.
+        if (req != null)
+          _card(Column(children: [
+            _kv(l10n.requestId, req.reqIdHex.toUpperCase(), mono: true),
+            const SizedBox(height: 8),
+            _kv(l10n.walletIdLabel, req.walletId, mono: true),
+            const SizedBox(height: 8),
+            _kv(l10n.createdAtLabel, _fmtEpoch(req.createdAt), mono: true),
+            const SizedBox(height: 8),
+            // Static expiry display; a live countdown stays a visual concern.
+            _kv(l10n.expiresAtLabel, _fmtEpoch(req.expiresAt), mono: true),
+          ])),
       ],
     );
   }
@@ -411,21 +553,30 @@ class SignerRiskScreen extends StatelessWidget {
 
 /// C8 身份验证.
 class SignerAuthScreen extends StatelessWidget {
-  const SignerAuthScreen({super.key});
+  const SignerAuthScreen({super.key, this.request});
+
+  /// Request being authorized; forwarded to the result screen so the emitted
+  /// SignResult answers the right reqId. Null in the gallery (canned strings).
+  final SignRequest? request;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final req = request;
+    final summary = req?.summary ?? const {};
+    final amount = req == null ? '120.00 USDT' : '${summary['amount'] ?? '?'} ${summary['token'] ?? ''}';
+    final reqLabel = req == null ? 'REQ-7F3A2C' : _reqLabel(req.reqId);
     return KtScreen(
       theme: _t,
       gap: 28,
       navBar: KtNavBar(title: l10n.authTitle, theme: _t, onBack: () => Navigator.of(context).maybePop()),
       bottom: Column(children: [
-        KtPrimaryButton(label: l10n.useFaceIdVerify, style: KtButtonStyle.signer, onPressed: () => context.push('/result-qr')),
+        KtPrimaryButton(label: l10n.useFaceIdVerify, style: KtButtonStyle.signer, onPressed: () => context.push('/result-qr', extra: req)),
         const SizedBox(height: 12),
         // Alternate auth path: same destination as the Face ID button.
         GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () => context.push('/result-qr'),
+          onTap: () => context.push('/result-qr', extra: req),
           child: Text(l10n.useDevicePasscode, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2)),
         ),
       ]),
@@ -437,15 +588,58 @@ class SignerAuthScreen extends StatelessWidget {
           const SizedBox(height: 10),
           Text(l10n.verifyToSignDesc, textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, height: 1.6, color: SignerColors.text2)),
         ]),
-        _card(Column(children: [_kv(l10n.amountLabel, '120.00 USDT', mono: true), const SizedBox(height: 8), _kv(l10n.requestId, 'REQ-7F3A2C', mono: true)])),
+        _card(Column(children: [_kv(l10n.amountLabel, amount, mono: true), const SizedBox(height: 8), _kv(l10n.requestId, reqLabel, mono: true)])),
       ],
     );
   }
 }
 
-/// C9 签名结果二维码.
-class SignerResultQrScreen extends StatelessWidget {
-  const SignerResultQrScreen({super.key});
+/// C9 签名结果二维码 — animated result QR carrying a real AIRGAP-V1 SignResult.
+///
+/// The result answers [request] (same reqId), is fragmented by the real
+/// [Fragmenter], and each frame's wire bytes are base64url-encoded into a
+/// scannable [KtQrCode]; a timer cycles the frames like kt_wallet's receiver
+/// expects. Without a request (dev gallery / direct navigation) the canonical
+/// demo request is answered, so the screen still shows real frames.
+class SignerResultQrScreen extends StatefulWidget {
+  const SignerResultQrScreen({super.key, this.request});
+
+  /// The authorized request this result answers; null in the gallery.
+  final SignRequest? request;
+
+  @override
+  State<SignerResultQrScreen> createState() => _SignerResultQrScreenState();
+}
+
+class _SignerResultQrScreenState extends State<SignerResultQrScreen> {
+  /// base64url-encoded wire bytes of each result frame (the QR contents).
+  late final List<String> _frameData;
+  int _index = 0;
+  Timer? _timer;
+
+  /// Frame dwell time; ~600ms is the scan-reliability compromise the animated
+  /// QR loop is calibrated for.
+  static const _frameInterval = Duration(milliseconds: 600);
+
+  @override
+  void initState() {
+    super.initState();
+    final result = demoSignResult(widget.request ?? demoSignRequest());
+    _frameData = [
+      for (final frame in demoSignResultFrames(result)) base64Url.encode(frame.encode()),
+    ];
+    if (_frameData.length > 1) {
+      _timer = Timer.periodic(_frameInterval, (_) {
+        setState(() => _index = (_index + 1) % _frameData.length);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   /// Destructive confirm: voiding invalidates the shown signature QR, then
   /// returns to the offline home with a confirmation snackbar.
@@ -496,13 +690,15 @@ class SignerResultQrScreen extends StatelessWidget {
       children: [
         Container(
           padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+          decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(20)),
           child: Column(children: [
-            const KtQrPlaceholder(size: 220),
+            // The current frame of the animated result QR (dark style: white
+            // modules on the signer surface).
+            KtQrCode(data: _frameData[_index], size: 220, dark: true),
             const SizedBox(height: 14),
-            Text(l10n.dynamicShard(2, 6), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF626B7A))),
+            Text(l10n.dynamicShard(_index + 1, _frameData.length), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: SignerColors.text2)),
             const SizedBox(height: 8),
-            const ShardProgressBar(received: 2, total: 6, color: WalletColors.green, trackColor: WalletColors.border),
+            ShardProgressBar(received: _index + 1, total: _frameData.length, color: SignerColors.ok, trackColor: SignerColors.border),
           ]),
         ),
         Center(child: Text(l10n.scanResultInstruction, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, color: SignerColors.text2))),

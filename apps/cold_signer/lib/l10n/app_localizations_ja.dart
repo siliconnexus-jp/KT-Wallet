@@ -290,6 +290,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get toAddress => '受取アドレス';
 
   @override
+  String get walletIdLabel => 'ウォレット ID';
+
+  @override
+  String get createdAtLabel => '作成日時';
+
+  @override
+  String get expiresAtLabel => '有効期限';
+
+  @override
   String get riskWarningTitle => 'リスク警告';
 
   @override

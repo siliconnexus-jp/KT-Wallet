@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:chains/chains.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,9 +8,18 @@ import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../transfer/airgap_codec.dart';
+import '../transfer/transfer_draft.dart';
 import '../widgets/token_icon.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
+
+Color _chainDot(Chain chain) => switch (chain) {
+      Chain.ethereum => ChainColors.ethereum,
+      Chain.polygon => ChainColors.polygon,
+      Chain.tron => ChainColors.tron,
+      Chain.solana => ChainColors.solana,
+    };
 
 Widget _amberWarn(String text) => Container(
       padding: const EdgeInsets.all(12),
@@ -30,19 +42,22 @@ class TransferInputScreen extends StatefulWidget {
 
 /// A demo asset selectable on the transfer screen (mirrors the home list).
 class _TransferAsset {
-  const _TransferAsset(this.symbol, this.network, this.networkName, this.chain, this.decimals, this.available, this.availableLabel, this.color, this.initial);
+  const _TransferAsset(this.symbol, this.network, this.networkName, this.chain, this.decimals, this.available, this.availableLabel, this.color, this.initial, {this.contract});
   final String symbol, network, networkName;
   final Chain chain;
   final int decimals;
   final String available, availableLabel;
   final Color color;
   final String initial;
+
+  /// Token contract for token assets; null for native coins.
+  final String? contract;
   Amount get availableAmount => Amount.parse(available, decimals, symbol: symbol);
 }
 
 class _TransferInputScreenState extends State<TransferInputScreen> {
   static const _assets = [
-    _TransferAsset('USDT', 'TRON · TRC-20', 'TRON', Chain.tron, 6, '3120.00', '3,120.00', Color(0xFF26A17B), '₮'),
+    _TransferAsset('USDT', 'TRON · TRC-20', 'TRON', Chain.tron, 6, '3120.00', '3,120.00', Color(0xFF26A17B), '₮', contract: usdtTronContract),
     _TransferAsset('ETH', 'Ethereum', 'Ethereum', Chain.ethereum, 18, '0.0842', '0.0842', Color(0xFF627EEA), 'Ξ'),
     _TransferAsset('SOL', 'Solana', 'Solana', Chain.solana, 9, '0.531', '0.531', Color(0xFF9945FF), '◎'),
   ];
@@ -153,7 +168,29 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(title: l10n.actionSend, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.qr_code_scanner, onTrailing: _scanAddress),
-      bottom: KtPrimaryButton(label: l10n.actionNext, onPressed: canProceed ? () => context.push(isHot ? '/confirm-hot' : '/confirm-watch') : null),
+      bottom: KtPrimaryButton(
+        label: l10n.actionNext,
+        onPressed: canProceed
+            ? () {
+                // Hand the entered transfer to the downstream screens. Starting
+                // a new draft invalidates any earlier request/result.
+                TransferSessionScope.maybeOf(context)
+                  ?..draft = TransferDraft(
+                    symbol: _asset.symbol,
+                    networkLabel: _asset.network,
+                    chain: _asset.chain,
+                    decimals: _asset.decimals,
+                    recipient: addrCheck.normalized ?? _addrController.text.trim(),
+                    amount: _amount!,
+                    feeTier: _fee,
+                    tokenContract: _asset.contract,
+                  )
+                  ..request = null
+                  ..result = null;
+                context.push(isHot ? '/confirm-hot' : '/confirm-watch');
+              }
+            : null,
+      ),
       children: [
         KtCard(
           padding: const EdgeInsets.all(14),
@@ -337,13 +374,44 @@ class _FeeSelectScreenState extends State<FeeSelectScreen> {
   }
 }
 
-/// Shared confirm layout for W5 (watch) / W29 (hot).
+/// Shared confirm layout for W5 (watch) / W29 (hot). With a live
+/// [TransferDraft] in scope, every displayed field is derived from the draft
+/// through the chains [TxPreview]; without one (gallery / goldens) the design
+/// demo values render unchanged.
 class TransferConfirmScreen extends StatelessWidget {
   const TransferConfirmScreen({super.key, required this.isHot});
   final bool isHot;
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final draft = TransferSessionScope.maybeOf(context)?.draft;
+    final wallet = WalletScope.of(context).current;
+
+    // Demo defaults (Pencil design literals).
+    var headline = '-120.00 USDT';
+    var fiat = '≈ \$120.00';
+    var networkLabel = 'TRON · TRC-20';
+    var dotColor = ChainColors.tron;
+    var fromValue = '主钱包 TQm9…3kFa';
+    var toValue = 'TWd4qCEU…nMxR38uQz';
+    var feeValue = '≈ 13.7 TRX（\$1.90）';
+    var totalValue = '120.00 USDT';
+
+    if (draft != null) {
+      final from = wallet == null ? demoFromAddress : addressForChain(wallet.addresses, draft.chain);
+      final preview = previewForDraft(draft, from: from);
+      final total = preview.totalNativeSpend;
+      headline = '-${draft.amountText}';
+      // Demo 1:1 USD peg, consistent with the input screen's ≈ display.
+      fiat = '≈ \$${preview.amount.format()}';
+      networkLabel = draft.networkLabel;
+      dotColor = _chainDot(draft.chain);
+      fromValue = '${wallet?.name ?? ''} ${truncateMiddle(preview.from, head: 4, tail: 4)}'.trim();
+      toValue = truncateMiddle(preview.to, head: 8, tail: 9);
+      feeValue = '≈ ${preview.networkFee}';
+      totalValue = total == null ? draft.amountText : '$total';
+    }
+
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(title: l10n.confirmTransactionTitle, onBack: () => Navigator.of(context).maybePop()),
@@ -354,22 +422,22 @@ class TransferConfirmScreen extends StatelessWidget {
             style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
       ]),
       children: [
-        Column(children: const [
-          Text('-120.00 USDT', style: TextStyle(fontSize: 34, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: WalletColors.text)),
-          SizedBox(height: 8),
-          Text('≈ \$120.00', style: TextStyle(fontSize: 14, color: WalletColors.text2)),
-          SizedBox(height: 8),
-          NetworkBadge(label: 'TRON · TRC-20', dotColor: ChainColors.tron),
+        Column(children: [
+          Text(headline, style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: WalletColors.text)),
+          const SizedBox(height: 8),
+          Text(fiat, style: const TextStyle(fontSize: 14, color: WalletColors.text2)),
+          const SizedBox(height: 8),
+          NetworkBadge(label: networkLabel, dotColor: dotColor),
         ]),
         KtCard(
           child: Column(children: [
-            KtDetailRow(label: l10n.fromAddress, value: '主钱包 TQm9…3kFa', mono: true),
+            KtDetailRow(label: l10n.fromAddress, value: fromValue, mono: true),
             const SizedBox(height: 14),
-            KtDetailRow(label: l10n.recipientAddress, value: 'TWd4qCEU…nMxR38uQz', mono: true),
+            KtDetailRow(label: l10n.recipientAddress, value: toValue, mono: true),
             const SizedBox(height: 14),
-            KtDetailRow(label: l10n.networkFee, value: '≈ 13.7 TRX（\$1.90）'),
+            KtDetailRow(label: l10n.networkFee, value: feeValue),
             const SizedBox(height: 14),
-            KtDetailRow(label: l10n.totalSpend, value: '120.00 USDT', valueColor: WalletColors.text),
+            KtDetailRow(label: l10n.totalSpend, value: totalValue, valueColor: WalletColors.text),
           ]),
         ),
         if (isHot) _amberWarn(l10n.unbackedTransferWarning),
@@ -378,33 +446,90 @@ class TransferConfirmScreen extends StatelessWidget {
   }
 }
 
-/// W6 待签名二维码.
-class SignRequestQrScreen extends StatelessWidget {
+/// W6 待签名二维码. Displays a REAL animated AIRGAP-V1 sign-request: the draft
+/// (or the demo transfer when opened from the gallery) is encoded to a
+/// [SignRequest], fragmented into frames, and each frame's bytes are rendered
+/// as a scannable QR, cycling every ~600ms. The shard label/progress reflect
+/// the actual frame count.
+class SignRequestQrScreen extends StatefulWidget {
   const SignRequestQrScreen({super.key});
+  @override
+  State<SignRequestQrScreen> createState() => _SignRequestQrScreenState();
+}
+
+class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
+  static const _frameInterval = Duration(milliseconds: 600);
+
+  TransferDraft? _draft;
+  SignRequest? _request;
+  List<String> _frames = const [];
+  int _frameIndex = 0;
+  Timer? _timer;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_request != null) return; // build once per screen instance
+    final session = TransferSessionScope.maybeOf(context);
+    _draft = session?.draft;
+    final wallet = WalletScope.of(context).current;
+    final chain = (_draft ?? demoDraft).chain;
+    final request = buildSignRequest(
+      draft: _draft,
+      walletId: wallet?.id ?? demoWalletId,
+      fromAddress: wallet == null ? demoFromAddress : addressForChain(wallet.addresses, chain),
+    );
+    _request = request;
+    // This is now the outstanding request the scanned result must answer.
+    session
+      ?..request = request
+      ..result = null;
+    _frames = encodeQrFrames(request, reqId: request.reqId);
+    if (_frames.length > 1) {
+      _timer = Timer.periodic(_frameInterval, (_) {
+        setState(() => _frameIndex = (_frameIndex + 1) % _frames.length);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _cancel() {
+    final session = TransferSessionScope.maybeOf(context);
+    if (session?.request == _request) session?.request = null;
+    Navigator.of(context).maybePop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final request = _request!;
+    final draft = _draft;
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: l10n.pendingSignTitle, onBack: () => Navigator.of(context).maybePop(), trailingText: l10n.actionCancel, onTrailing: () => Navigator.of(context).maybePop()),
+      navBar: KtNavBar(title: l10n.pendingSignTitle, onBack: () => Navigator.of(context).maybePop(), trailingText: l10n.actionCancel, onTrailing: _cancel),
       children: [
         KtCard(
           padding: const EdgeInsets.all(24),
           child: Column(children: [
-            const KtQrPlaceholder(size: 240),
+            KtQrCode(data: _frames[_frameIndex], size: 240),
             const SizedBox(height: 16),
-            Text(l10n.dynamicShard(3, 8), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
+            Text(l10n.dynamicShard(_frameIndex + 1, _frames.length), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
             const SizedBox(height: 8),
-            const ShardProgressBar(received: 3, total: 8),
+            ShardProgressBar(received: _frameIndex + 1, total: _frames.length),
           ]),
         ),
         KtCard(
           child: Column(children: [
-            KtDetailRow(label: l10n.networkRow, value: 'TRON · TRC-20'),
+            KtDetailRow(label: l10n.networkRow, value: draft?.networkLabel ?? 'TRON · TRC-20'),
             const SizedBox(height: 14),
-            KtDetailRow(label: l10n.amountLabel, value: '120.00 USDT'),
+            KtDetailRow(label: l10n.amountLabel, value: draft?.amountText ?? '120.00 USDT'),
             const SizedBox(height: 14),
-            KtDetailRow(label: l10n.requestId, value: 'REQ-7F3A2C', mono: true),
+            KtDetailRow(label: l10n.requestId, value: 'REQ-${request.reqIdHex.substring(0, 6).toUpperCase()}', mono: true),
           ]),
         ),
         Center(child: Text(l10n.scanWithOfflinePhone, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text))),
@@ -413,12 +538,35 @@ class SignRequestQrScreen extends StatelessWidget {
   }
 }
 
-/// W7 扫描签名结果 (dark camera screen).
+/// W7 扫描签名结果 (dark camera screen). The camera is simulated (tap the
+/// viewfinder), but what the "scan" produces is protocol-genuine: the frames
+/// the Cold Signer would display for the outstanding request are generated,
+/// aggregated through [FrameAggregator] and decoded back into a verified
+/// [SignResult] exactly as a real scan would be.
 class ScanResultScreen extends StatelessWidget {
   const ScanResultScreen({super.key});
+
+  void _simulateScan(BuildContext context, TransferSession? session, Wallet? wallet) {
+    final request = session?.request;
+    if (session != null && request != null) {
+      // Signer side of the (simulated) air gap: the paired signer answers with
+      // deterministic demo signature bytes for the same reqId.
+      final signer = wallet == null
+          ? demoFromAddress
+          : addressForChain(wallet.addresses, chainForCoin(request.coin));
+      final frames = encodeQrFrames(buildDemoSignResult(request, signer: signer), reqId: request.reqId);
+      // Wallet side: aggregate + decode + verify against the outstanding
+      // request; broadcast-confirm renders only what was decoded.
+      session.result = decodeSignResultFrames(frames, expected: request);
+    }
+    context.push('/broadcast-confirm');
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final session = TransferSessionScope.maybeOf(context);
+    final wallet = WalletScope.of(context).current;
     return Scaffold(
       backgroundColor: SignerColors.bg,
       body: SafeArea(
@@ -431,7 +579,7 @@ class ScanResultScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           GestureDetector(
-            onTap: () => context.push('/broadcast-confirm'),
+            onTap: () => _simulateScan(context, session, wallet),
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 20),
               height: 380,
@@ -456,12 +604,39 @@ class ScanResultScreen extends StatelessWidget {
   }
 }
 
-/// W8 广播确认.
+/// W8 广播确认. With a decoded [SignResult] in scope, the tx hash, signer and
+/// network are read from the protocol payload (and the amount/recipient from
+/// the outstanding request it answered); without one (gallery / goldens) the
+/// demo constants render unchanged.
 class BroadcastConfirmScreen extends StatelessWidget {
   const BroadcastConfirmScreen({super.key});
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final session = TransferSessionScope.maybeOf(context);
+    final result = session?.result;
+    final request = session?.request;
+
+    // Demo defaults (Pencil design literals).
+    var headline = '-120.00 USDT';
+    var networkLabel = 'TRON · TRC-20';
+    var dotColor = ChainColors.tron;
+    var toValue = 'TWd4qCEU…nMxR38uQz';
+    var signerValue = 'TQm9xPa2…Vb7L3kFa';
+    var hashValue = '8f6d2c…a94e07';
+
+    if (result != null) {
+      final summary = request?.summary;
+      final chain = chainForCoin(result.coin);
+      headline = '-${summary?[SummaryKeys.amount] ?? ''}';
+      networkLabel = summary?[SummaryKeys.network] as String? ?? chain.name;
+      dotColor = _chainDot(chain);
+      final recipient = summary?[SummaryKeys.recipient] as String?;
+      if (recipient != null) toValue = truncateMiddle(recipient, head: 8, tail: 9);
+      signerValue = truncateMiddle(result.signer);
+      hashValue = truncateMiddle(result.txHash, head: 6, tail: 6);
+    }
+
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(title: l10n.broadcastTitle, onBack: () => Navigator.of(context).maybePop()),
@@ -485,18 +660,18 @@ class BroadcastConfirmScreen extends StatelessWidget {
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF0A7A45)))),
           ]),
         ),
-        Column(children: const [
-          Text('-120.00 USDT', style: TextStyle(fontSize: 34, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: WalletColors.text)),
-          SizedBox(height: 8),
-          NetworkBadge(label: 'TRON · TRC-20', dotColor: ChainColors.tron),
+        Column(children: [
+          Text(headline, style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: WalletColors.text)),
+          const SizedBox(height: 8),
+          NetworkBadge(label: networkLabel, dotColor: dotColor),
         ]),
         KtCard(
           child: Column(children: [
-            KtDetailRow(label: l10n.recipientAddress, value: 'TWd4qCEU…nMxR38uQz', mono: true),
+            KtDetailRow(label: l10n.recipientAddress, value: toValue, mono: true),
             const SizedBox(height: 14),
-            KtDetailRow(label: l10n.signerAddress, value: 'TQm9xPa2…Vb7L3kFa', mono: true),
+            KtDetailRow(label: l10n.signerAddress, value: signerValue, mono: true),
             const SizedBox(height: 14),
-            KtDetailRow(label: l10n.txHashPreview, value: '8f6d2c…a94e07', mono: true),
+            KtDetailRow(label: l10n.txHashPreview, value: hashValue, mono: true),
           ]),
         ),
       ],
@@ -510,6 +685,10 @@ class BroadcastResultScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    // Keep the hash consistent with what broadcast-confirm displayed when a
+    // decoded result exists (watch-wallet flow); demo constant otherwise.
+    final result = TransferSessionScope.maybeOf(context)?.result;
+    final hashValue = result == null ? '8f6d2c…a94e07' : truncateMiddle(result.txHash, head: 6, tail: 6);
     return KtScreen(
       gap: 24,
       bottom: KtPrimaryButton(label: l10n.backToHome, onPressed: () => context.go('/home')),
@@ -537,7 +716,7 @@ class BroadcastResultScreen extends StatelessWidget {
         ]),
         KtCard(
           child: Column(children: [
-            KtDetailRow(label: l10n.txHash, value: '8f6d2c…a94e07', mono: true),
+            KtDetailRow(label: l10n.txHash, value: hashValue, mono: true),
             const SizedBox(height: 14),
             KtDetailRow(label: l10n.statusLabel, value: l10n.confirming(3, 19), valueColor: WalletColors.accent),
           ]),

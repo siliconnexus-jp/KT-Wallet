@@ -1,4 +1,5 @@
 import 'package:cold_signer/main.dart';
+import 'package:cold_signer/src/signing/demo_airgap.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -74,8 +75,13 @@ void main() {
     await _open(tester, 'C5 离线首页');
     await tester.tap(find.text('扫描待签名交易'));
     await tester.pumpAndSettle();
-    // C6 scan screen; tap the camera to simulate frames complete.
-    await tester.tap(find.byIcon(Icons.qr_code_2).first);
+    // C6 scan screen: every simulated capture feeds one real frame into the
+    // aggregator; the last one completes the payload and navigates.
+    final frameCount = demoSignRequestFrames().length;
+    for (var i = 0; i < frameCount; i++) {
+      await tester.tap(find.byIcon(Icons.qr_code_2).first);
+      await tester.pump();
+    }
     await tester.pumpAndSettle();
     expect(find.text('确认交易内容'), findsOneWidget); // C7 parse
 

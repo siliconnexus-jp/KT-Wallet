@@ -59,8 +59,11 @@ void main() {
     // Watch confirm shows the air-gap button, not local sign.
     expect(find.text('生成待签名二维码'), findsOneWidget);
 
+    // The QR screen runs a periodic frame-cycling timer, so pumpAndSettle
+    // would never settle; pump discrete frames instead.
     await tester.tap(find.text('生成待签名二维码'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('待签名交易'), findsOneWidget); // W6 QR screen
   });
 

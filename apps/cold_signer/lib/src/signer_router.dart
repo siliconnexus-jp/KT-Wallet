@@ -1,3 +1,4 @@
+import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -33,11 +34,23 @@ final signerRegistry = <String, (String, WidgetBuilder)>{
   'C21 删除钱包': ('/delete', (c) => const SignerDeleteScreen()),
 };
 
+/// The sign-request handed along the scan → parse → auth → result chain via
+/// GoRouter's `extra` slot (null when a screen is opened directly).
+SignRequest? _requestExtra(GoRouterState state) {
+  final extra = state.extra;
+  return extra is SignRequest ? extra : null;
+}
+
 /// Live builders that replace a registry entry's design-snapshot builder when
 /// the app actually navigates there (the registry itself is the golden/gallery
-/// baseline and must keep rendering the original snapshot).
-final _liveOverrides = <String, WidgetBuilder>{
-  '/security-check': (c) => const SignerSecurityCheckScreen(),
+/// baseline and must keep rendering the original snapshot). Unlike the
+/// registry's [WidgetBuilder]s these also see the [GoRouterState], so the
+/// signing chain can pass the decoded request between screens.
+final _liveOverrides = <String, Widget Function(BuildContext, GoRouterState)>{
+  '/security-check': (c, s) => const SignerSecurityCheckScreen(),
+  '/parse': (c, s) => SignerParseScreen(request: _requestExtra(s)),
+  '/auth': (c, s) => SignerAuthScreen(request: _requestExtra(s)),
+  '/result-qr': (c, s) => SignerResultQrScreen(request: _requestExtra(s)),
 };
 
 GoRouter buildSignerRouter({String initialLocation = '/'}) => GoRouter(
@@ -45,7 +58,13 @@ GoRouter buildSignerRouter({String initialLocation = '/'}) => GoRouter(
       routes: [
         GoRoute(path: '/', builder: (c, s) => const _Gallery()),
         for (final entry in signerRegistry.entries)
-          GoRoute(path: entry.value.$1, builder: (c, s) => (_liveOverrides[entry.value.$1] ?? entry.value.$2)(c)),
+          GoRoute(
+            path: entry.value.$1,
+            builder: (c, s) {
+              final live = _liveOverrides[entry.value.$1];
+              return live == null ? entry.value.$2(c) : live(c, s);
+            },
+          ),
       ],
     );
 
