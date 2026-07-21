@@ -133,3 +133,48 @@ class WalletRepository {
         value: value,
       ));
 }
+
+/// Global (cross-wallet) address-book contacts — the Settings → 地址管理 list.
+/// Not wallet-scoped by design: contacts are an app-level surface (unlike the
+/// per-wallet [AddressBook] table used by transfer flows).
+class ContactsRepository {
+  ContactsRepository(this._db);
+  final WalletDatabase _db;
+
+  Future<List<Contact>> list() => (_db.select(_db.contacts)
+        ..orderBy([
+          (c) => OrderingTerm(expression: c.createdAt),
+          (c) => OrderingTerm(expression: c.id),
+        ]))
+      .get();
+
+  Future<void> insert(Insertable<Contact> contact) =>
+      _db.into(_db.contacts).insert(contact);
+
+  Future<void> delete(String id) =>
+      (_db.delete(_db.contacts)..where((c) => c.id.equals(id))).go();
+}
+
+/// Global custom-token registry — the Settings → Token 管理 list.
+class TokensRepository {
+  TokensRepository(this._db);
+  final WalletDatabase _db;
+
+  Future<List<CustomToken>> list() => (_db.select(_db.customTokens)
+        ..orderBy([
+          (t) => OrderingTerm(expression: t.sortOrder),
+          (t) => OrderingTerm(expression: t.createdAt),
+          (t) => OrderingTerm(expression: t.id),
+        ]))
+      .get();
+
+  Future<void> insert(Insertable<CustomToken> token) =>
+      _db.into(_db.customTokens).insert(token);
+
+  Future<void> setEnabled(String id, bool enabled) =>
+      (_db.update(_db.customTokens)..where((t) => t.id.equals(id)))
+          .write(CustomTokensCompanion(enabled: Value(enabled)));
+
+  Future<void> delete(String id) =>
+      (_db.delete(_db.customTokens)..where((t) => t.id.equals(id))).go();
+}

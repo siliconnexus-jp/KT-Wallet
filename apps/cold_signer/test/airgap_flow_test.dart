@@ -118,6 +118,83 @@ void main() {
     expect(find.text('REQ-7F3A2C'), findsOneWidget); // short label
   });
 
+  test('demo account-export round-trips: fragment → aggregate → decode', () {
+    final export = demoAccountExport();
+    final frames = demoAccountExportFrames();
+    // The demo chunk size must actually yield a multi-frame session.
+    expect(frames.length, greaterThan(1));
+
+    final aggregator = FrameAggregator();
+    for (var i = 0; i < frames.length; i++) {
+      // Round-trip each frame through its wire bytes, as a camera read would.
+      final progress =
+          aggregator.addFrame(AirgapFrame.decode(frames[i].encode()));
+      expect(progress.received, i + 1);
+      expect(progress.total, frames.length);
+      expect(progress.duplicates, 0);
+      expect(progress.anomalies, 0);
+    }
+    expect(aggregator.state, AggregatorState.done);
+
+    final decoded = AirgapPayload.decode(aggregator.payload!);
+    expect(decoded, isA<AccountExport>());
+    final exp = decoded as AccountExport;
+    expect(exp.walletId, demoExportWalletId);
+    expect(exp.walletId, 'WLT-3E8A91');
+    expect(exp.walletName, demoExportWalletName);
+    expect(exp.walletName, '主钱包');
+    expect(exp.accounts.length, export.accounts.length);
+    for (var i = 0; i < export.accounts.length; i++) {
+      expect(exp.accounts[i].coin, export.accounts[i].coin);
+      expect(exp.accounts[i].address, export.accounts[i].address);
+      expect(exp.accounts[i].path, export.accounts[i].path);
+      expect(exp.accounts[i].index, export.accounts[i].index);
+    }
+    // Spot-check the seeded watch-wallet values survive the wire.
+    expect(exp.accounts[0].coin, 60);
+    expect(exp.accounts[0].address, '0xc71c8B29b3d4b79E19bE1');
+    expect(exp.accounts[0].path, "m/44'/60'/0'/0/0");
+    expect(exp.accounts[1].coin, 966);
+    expect(exp.accounts[1].address, exp.accounts[0].address);
+    expect(exp.accounts[2].coin, 195);
+    expect(exp.accounts[2].address, 'TcPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa');
+    expect(exp.accounts[3].coin, 501);
+    expect(exp.accounts[3].address, 'cyKpXwMWd4qmDqVr2W');
+    expect(exp.accounts[3].path, "m/44'/501'/0'");
+  });
+
+  testWidgets('export QR: renders real frames, cycles them, counter matches',
+      (tester) async {
+    final expected = demoAccountExportFrames().length;
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('zh'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const SignerAddressExportScreen(),
+    ));
+    await tester.pump();
+
+    expect(expected, greaterThan(1));
+    expect(find.text('动态分片 1 / $expected'), findsOneWidget);
+    final firstFrame = tester.widget<KtQrCode>(find.byType(KtQrCode)).data;
+    // Frame payloads are the base64url wire bytes of real AirgapFrames,
+    // stamped with the export session's walletId-hash reqId.
+    final parsed =
+        AirgapFrame.decode(Uint8List.fromList(base64Url.decode(firstFrame)));
+    expect(parsed.total, expected);
+    expect(parsed.reqId, demoExportReqId());
+
+    // The ~600ms timer advances to the next frame.
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('动态分片 2 / $expected'), findsOneWidget);
+    final secondFrame = tester.widget<KtQrCode>(find.byType(KtQrCode)).data;
+    expect(secondFrame, isNot(firstFrame));
+
+    // And wraps around after a full cycle.
+    await tester.pump(Duration(milliseconds: 600 * (expected - 1)));
+    expect(find.text('动态分片 1 / $expected'), findsOneWidget);
+  });
+
   testWidgets('result QR: renders real frames, cycles them, counter matches',
       (tester) async {
     final expected =

@@ -15,6 +15,7 @@ import 'src/state/locale_controller.dart';
 import 'src/state/wallet_controller.dart';
 import 'src/state/wallet_scope.dart';
 import 'src/transfer/transfer_draft.dart';
+import 'src/wallets/directory_seeder.dart';
 import 'src/wallets/wallet_manager.dart';
 import 'src/wallets/wallet_model.dart';
 import 'src/wallets/wallet_store.dart';
@@ -51,6 +52,9 @@ Future<WalletController> _bootstrapWallet(LocaleController localeController) asy
     await _seedFirstRun(crypto, store, l10n);
     manager = await store.load();
   }
+  // Runs on every launch (guarded by a one-shot flag + emptiness checks):
+  // upgraders from the pre-directory schema get the demo contacts/tokens too.
+  await seedDirectoryDefaults(store, l10n);
 
   return WalletController(manager, crypto: crypto, store: store);
 }
@@ -99,6 +103,10 @@ Future<void> _seedFirstRun(CoreCrypto crypto, WalletStore store, AppLocalization
     coldWalletId: 'WLT-3E8A91',
     protocolVersion: 1,
   ));
+
+  // Address-book / token-list seeding lives in seedDirectoryDefaults — it
+  // must also run for installs upgrading from the pre-directory schema, whose
+  // wallets already exist so this function never runs again.
 }
 
 /// In-memory demo controller for the design gallery and widget tests (no

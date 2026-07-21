@@ -1,3 +1,4 @@
+import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +7,8 @@ import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../state/wallet_scope.dart';
+import '../transfer/airgap_codec.dart' show truncateMiddle;
+import '../wallets/pairing_airgap.dart';
 import '../wallets/wallet_manager.dart';
 import '../wallets/wallet_model.dart';
 import 'camera_screen.dart';
@@ -449,16 +452,42 @@ class ConnectColdScreen extends StatelessWidget {
 
 /// W12 扫描账户二维码 (dark camera). Tapping the viewfinder simulates a
 /// successful scan and continues to the import-confirm screen.
-class ScanAccountScreen extends StatelessWidget {
+class ScanAccountScreen extends StatefulWidget {
   const ScanAccountScreen({super.key});
+  @override
+  State<ScanAccountScreen> createState() => _ScanAccountScreenState();
+}
+
+class _ScanAccountScreenState extends State<ScanAccountScreen> {
+  // The camera is simulated (each viewfinder tap "captures" the next frame),
+  // but the frames and their aggregation are the real protocol path: wire
+  // bytes → AirgapFrame.decode → FrameAggregator → AccountExport.decode.
+  late final List<AirgapFrame> _frames = demoAccountExportFrames();
+  final _aggregator = FrameAggregator();
+  int _received = 0;
+
+  void _onScan(BuildContext context) {
+    final wire = _frames[_received % _frames.length].encode();
+    final progress = _aggregator.addFrame(AirgapFrame.decode(wire));
+    setState(() => _received = progress.received);
+    final payload = _aggregator.payload;
+    if (payload != null) {
+      final export = AirgapPayload.decode(payload);
+      if (export is AccountExport && context.mounted) {
+        context.pushReplacement('/import-confirm', extra: export);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final progress = _received == 0 ? '' : ' · $_received / ${_frames.length}';
     return KtCameraScreen(
       title: l10n.scanAccountQr,
-      hint: l10n.scanAccountHint,
+      hint: '${l10n.scanAccountHint}$progress',
       onClose: () => Navigator.of(context).maybePop(),
-      onSimulatedScan: () => context.push('/import-confirm'),
+      onSimulatedScan: () => _onScan(context),
     );
   }
 }
@@ -466,13 +495,27 @@ class ScanAccountScreen extends StatelessWidget {
 /// W13 导入确认. Live: confirming creates a watch wallet (public addresses
 /// only) in the shared controller and returns home with it selected.
 class ImportConfirmScreen extends StatelessWidget {
-  const ImportConfirmScreen({super.key});
-  static const _nets = [
+  const ImportConfirmScreen({super.key, this.export});
+
+  /// Decoded AccountExport handed over by the scan screen. Null when opened
+  /// from the gallery — the screen then renders the design's demo snapshot
+  /// (goldens unchanged).
+  final AccountExport? export;
+
+  static const _demoNets = [
     (ChainColors.ethereum, 'Ethereum', '0x8f3C2a…7E19bE1'),
     (ChainColors.polygon, 'Polygon', '0x8f3C2a…7E19bE1'),
     (ChainColors.tron, 'TRON', 'TQm9xPa2…Vb7L3kFa'),
     (ChainColors.solana, 'Solana', '6yKpXw…mDqVr2W'),
   ];
+
+  static (Color, String) _chainMeta(int coin) => switch (coin) {
+        60 => (ChainColors.ethereum, 'Ethereum'),
+        966 => (ChainColors.polygon, 'Polygon'),
+        195 => (ChainColors.tron, 'TRON'),
+        501 => (ChainColors.solana, 'Solana'),
+        _ => (WalletColors.text3, 'SLIP-44 $coin'),
+      };
 
   void _createWatchWallet(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -481,16 +524,20 @@ class ImportConfirmScreen extends StatelessWidget {
     final id = 'w${DateTime.now().microsecondsSinceEpoch}';
     controller.add(WatchWallet(
       id: id,
-      name: l10n.walletSeedMain,
+      // The wallet's name/id/addresses are DATA from the signer's export —
+      // never retranslated. Demo fallback mirrors the old hardcoded values.
+      name: export?.walletName ?? l10n.walletSeedMain,
       avatarColor: 0xFF0C1220,
-      addresses: const ChainAddresses(
-        eth: '0x8f3C2a71c8B29b3d4b79E19bE1',
-        polygon: '0x8f3C2a71c8B29b3d4b79E19bE1',
-        tron: 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
-        solana: '6yKpXwMWd4qmDqVr2W',
-      ),
+      addresses: export != null
+          ? addressesFromExport(export!)
+          : const ChainAddresses(
+              eth: '0x8f3C2a71c8B29b3d4b79E19bE1',
+              polygon: '0x8f3C2a71c8B29b3d4b79E19bE1',
+              tron: 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
+              solana: '6yKpXwMWd4qmDqVr2W',
+            ),
       sortOrder: controller.count,
-      coldWalletId: 'WLT-3E8A91',
+      coldWalletId: export?.walletId ?? 'WLT-3E8A91',
       protocolVersion: 1,
     ));
     controller.select(id);
@@ -503,6 +550,16 @@ class ImportConfirmScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final nets = export == null
+        ? _demoNets
+        : [
+            for (final a in export!.accounts)
+              (
+                _chainMeta(a.coin).$1,
+                _chainMeta(a.coin).$2,
+                truncateMiddle(a.address),
+              ),
+          ];
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(title: l10n.importConfirmTitle, onBack: () => Navigator.of(context).maybePop()),
@@ -513,21 +570,21 @@ class ImportConfirmScreen extends StatelessWidget {
             Container(width: 48, height: 48, decoration: BoxDecoration(color: const Color(0xFF0C1220), borderRadius: BorderRadius.circular(14)), child: const Icon(Icons.verified_user, size: 24, color: SignerColors.ok)),
             const SizedBox(width: 14),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(l10n.walletSeedMain, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: WalletColors.text)),
+              Text(export?.walletName ?? l10n.walletSeedMain, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: WalletColors.text)),
               const SizedBox(height: 4),
-              Text(l10n.walletIdProtocol('WLT-3E8A91', 1), style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text3)),
+              Text(l10n.walletIdProtocol(export?.walletId ?? 'WLT-3E8A91', 1), style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text3)),
             ])),
           ]),
         ),
         KtCard(
           child: Column(children: [
-            for (var i = 0; i < _nets.length; i++) ...[
+            for (var i = 0; i < nets.length; i++) ...[
               if (i > 0) const SizedBox(height: 13),
               Row(children: [
-                Container(width: 8, height: 8, decoration: BoxDecoration(color: _nets[i].$1, shape: BoxShape.circle)),
+                Container(width: 8, height: 8, decoration: BoxDecoration(color: nets[i].$1, shape: BoxShape.circle)),
                 const SizedBox(width: 12),
-                Expanded(child: Text(_nets[i].$2, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text))),
-                Text(_nets[i].$3, style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text2)),
+                Expanded(child: Text(nets[i].$2, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text))),
+                Text(nets[i].$3, style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text2)),
               ]),
             ],
           ]),

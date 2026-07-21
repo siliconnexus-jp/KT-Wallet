@@ -129,6 +129,41 @@ class SignRequests extends Table {
   Set<Column> get primaryKey => {reqId};
 }
 
+/// Global (cross-wallet) address-book contacts (Settings → 地址管理). Unlike
+/// [AddressBook] these are not scoped to a wallet: the address book screen is
+/// an app-level surface. Added in schema v2.
+class Contacts extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text().withLength(min: 1, max: 64)();
+  TextColumn get address => text()();
+
+  /// Canonical chain tag (e.g. 'ethereum', 'tron'). Stored as text because
+  /// wallet_data has no dependency on the chains package's enum.
+  TextColumn get chain => text()();
+  IntColumn get createdAt => integer()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Global custom-token registry (Settings → Token 管理): the user-managed
+/// show/hide token list, independent of any wallet. Added in schema v2.
+class CustomTokens extends Table {
+  TextColumn get id => text()();
+  TextColumn get symbol => text()();
+  TextColumn get name => text()();
+  TextColumn get contract => text().nullable()();
+
+  /// Display label for where the token lives (e.g. 'TRON · TRC-20').
+  TextColumn get network => text()();
+  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  IntColumn get createdAt => integer()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// Global settings (not per-wallet).
 class Settings extends Table {
   TextColumn get key => text()();

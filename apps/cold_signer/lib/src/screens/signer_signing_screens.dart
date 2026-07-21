@@ -707,7 +707,13 @@ class _SignerResultQrScreenState extends State<SignerResultQrScreen> {
   }
 }
 
-/// C10 地址导出.
+/// C10 地址导出 — animated export QR carrying a real AIRGAP-V1 AccountExport.
+///
+/// The canonical demo export (kt_wallet's watch-wallet accounts) is fragmented
+/// by the real [Fragmenter] and each frame's wire bytes are base64url-encoded
+/// into a scannable [KtQrCode]; a timer cycles the frames exactly like C9's
+/// result QR. The segmented filter below only narrows the address *list* —
+/// the QR always carries the full export payload.
 class SignerAddressExportScreen extends StatefulWidget {
   const SignerAddressExportScreen({super.key});
   @override
@@ -724,6 +730,39 @@ class _SignerAddressExportScreenState extends State<SignerAddressExportScreen> {
 
   int _seg = 0;
 
+  /// base64url-encoded wire bytes of each export frame (the QR contents).
+  late final List<String> _frameData;
+
+  /// How many accounts the export payload carries (constant — the segmented
+  /// filter never changes what the QR encodes).
+  late final int _exportedAccounts;
+  int _index = 0;
+  Timer? _timer;
+
+  /// Frame dwell time; ~600ms is the scan-reliability compromise the animated
+  /// QR loop is calibrated for (same as C9).
+  static const _frameInterval = Duration(milliseconds: 600);
+
+  @override
+  void initState() {
+    super.initState();
+    _exportedAccounts = demoAccountExport().accounts.length;
+    _frameData = [
+      for (final frame in demoAccountExportFrames()) base64Url.encode(frame.encode()),
+    ];
+    if (_frameData.length > 1) {
+      _timer = Timer.periodic(_frameInterval, (_) {
+        setState(() => _index = (_index + 1) % _frameData.length);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -738,11 +777,17 @@ class _SignerAddressExportScreenState extends State<SignerAddressExportScreen> {
         KtSegmented(theme: _t, options: options, selected: _seg, onChanged: (i) => setState(() => _seg = i)),
         Container(
           padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+          decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(20)),
           child: Column(children: [
-            const KtQrPlaceholder(size: 200),
+            // The current frame of the animated export QR (dark style: white
+            // modules on the signer surface).
+            KtQrCode(data: _frameData[_index], size: 200, dark: true),
+            const SizedBox(height: 14),
+            Text(l10n.dynamicShard(_index + 1, _frameData.length), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: SignerColors.text2)),
+            const SizedBox(height: 8),
+            ShardProgressBar(received: _index + 1, total: _frameData.length, color: SignerColors.ok, trackColor: SignerColors.border),
             const SizedBox(height: 12),
-            Text(l10n.exportQrCaption(visible.length), style: const TextStyle(fontSize: 12, color: Color(0xFF626B7A))),
+            Text(l10n.exportQrCaption(_exportedAccounts), style: const TextStyle(fontSize: 12, color: SignerColors.text2)),
           ]),
         ),
         _card(Column(children: [

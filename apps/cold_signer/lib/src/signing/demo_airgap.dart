@@ -117,3 +117,43 @@ SignResult demoSignResult(SignRequest request) {
 List<AirgapFrame> demoSignResultFrames(SignResult result) =>
     Fragmenter(chunkSize: demoChunkSize)
         .fragment(result.encode(), reqId: result.reqId);
+
+// ---- account export (C10 pairing) ------------------------------------------
+
+/// Identity of the watch wallet the online app pairs with. These values must
+/// match kt_wallet's seeded demo watch wallet exactly, or the pairing story
+/// falls apart on the receiving side.
+const demoExportWalletId = 'WLT-3E8A91';
+const demoExportWalletName = '主钱包';
+
+/// The canonical demo account-export payload: the four accounts kt_wallet's
+/// demo watch wallet holds (Ethereum/Polygon share one EVM key, plus TRON and
+/// Solana). A production signer exports its own real derived addresses here;
+/// the demo signer holds no private key, so it exports the online app's seeded
+/// demo watch-wallet values instead.
+AccountExport demoAccountExport() => AccountExport(
+      walletId: demoExportWalletId,
+      walletName: demoExportWalletName,
+      accounts: [
+        AccountRecord(coin: 60, address: '0xc71c8B29b3d4b79E19bE1', path: "m/44'/60'/0'/0/0", index: 0),
+        // Polygon reuses the Ethereum key: same address, same derivation path.
+        AccountRecord(coin: 966, address: '0xc71c8B29b3d4b79E19bE1', path: "m/44'/60'/0'/0/0", index: 0),
+        AccountRecord(coin: 195, address: 'TcPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa', path: "m/44'/195'/0'/0/0", index: 0),
+        AccountRecord(coin: 501, address: 'cyKpXwMWd4qmDqVr2W', path: "m/44'/501'/0'", index: 0),
+      ],
+    );
+
+/// Frame reqId for the export session. Account-export frames carry a hash of
+/// the walletId in the reqId slot (see fragmenter.dart's header notes); the
+/// demo fills the 8-byte field with the CRC-32 of the walletId's UTF-8 bytes,
+/// doubled. Deterministic, so tests and the animated QR are stable.
+Uint8List demoExportReqId() {
+  final h = crc32Bytes(utf8.encode(demoExportWalletId));
+  return Uint8List.fromList([...h, ...h]);
+}
+
+/// The exact ordered frame set the export QR on C10 cycles through. Uses the
+/// demo chunk size so the payload spans several frames and the receiver's
+/// multi-frame aggregation actually gets exercised.
+List<AirgapFrame> demoAccountExportFrames() => Fragmenter(chunkSize: demoChunkSize)
+    .fragment(demoAccountExport().encode(), reqId: demoExportReqId());

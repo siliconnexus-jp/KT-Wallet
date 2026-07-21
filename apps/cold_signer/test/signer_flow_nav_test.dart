@@ -265,18 +265,22 @@ void main() {
     expect(find.text('120.00 USDT'), findsNothing);
   });
 
-  testWidgets('address export: chain filter narrows the QR payload and list',
+  testWidgets('address export: chain filter narrows the list, not the QR',
       (tester) async {
     await _open(tester, 'C10 地址导出');
+    // The export QR always carries the full 4-account payload.
+    expect(find.byType(KtQrCode), findsOneWidget);
     expect(find.text('包含 4 条链公开地址 · 不含任何私密数据'), findsOneWidget);
     expect(find.text('TRON'), findsOneWidget);
 
     await tester.tap(find.descendant(
         of: find.byType(KtSegmented), matching: find.text('Ethereum')));
     await tester.pumpAndSettle();
-    expect(find.text('包含 1 条链公开地址 · 不含任何私密数据'), findsOneWidget);
+    // The list narrows to the selected chain…
     expect(find.text('TRON'), findsNothing);
     expect(find.text('Solana'), findsNothing);
+    // …but the QR payload is untouched: still all 4 exported accounts.
+    expect(find.text('包含 4 条链公开地址 · 不含任何私密数据'), findsOneWidget);
   });
 
   testWidgets('delete wallet: destructive confirm returns to onboarding',

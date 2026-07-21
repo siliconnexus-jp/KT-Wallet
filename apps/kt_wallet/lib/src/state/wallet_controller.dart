@@ -1,6 +1,7 @@
 import 'package:core_crypto/core_crypto.dart';
 import 'package:core_crypto/testing.dart';
 import 'package:flutter/foundation.dart';
+import 'package:wallet_data/wallet_data.dart' show Contact, CustomToken;
 
 import '../wallets/wallet_manager.dart';
 import '../wallets/wallet_model.dart';
@@ -141,5 +142,100 @@ class WalletController extends ChangeNotifier {
     if (store == null) return;
     final wallet = _manager.wallets.where((w) => w.id == id).firstOrNull;
     if (wallet != null) store.updateMetadata(wallet);
+  }
+
+  // ---- global address book & custom-token list ---------------------------
+  //
+  // Persisted through the store when present; a plain in-memory list when
+  // `_store == null` (gallery/goldens/widget tests), so the screens have a
+  // single code path either way.
+
+  final List<Contact> _contacts = [];
+  final List<CustomToken> _tokens = [];
+  int _rowSeq = 0;
+
+  /// Whether contacts/tokens survive a restart (drift store wired).
+  bool get hasStore => _store != null;
+
+  List<Contact> get contacts => List.unmodifiable(_contacts);
+  List<CustomToken> get tokens => List.unmodifiable(_tokens);
+
+  String _rowId(String prefix) =>
+      '$prefix${DateTime.now().microsecondsSinceEpoch}-${_rowSeq++}';
+
+  /// Refreshes [contacts] from the store (no-op refresh without one).
+  Future<List<Contact>> loadContacts() async {
+    final store = _store;
+    if (store != null) {
+      _contacts
+        ..clear()
+        ..addAll(await store.listContacts());
+    }
+    return contacts;
+  }
+
+  Future<Contact> addContact({
+    required String name,
+    required String address,
+    required String chain,
+  }) async {
+    final contact = Contact(
+      id: _rowId('c'),
+      name: name,
+      address: address,
+      chain: chain,
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    await _store?.addContact(contact);
+    _contacts.add(contact);
+    notifyListeners();
+    return contact;
+  }
+
+  Future<void> removeContact(String id) async {
+    await _store?.deleteContact(id);
+    _contacts.removeWhere((c) => c.id == id);
+    notifyListeners();
+  }
+
+  /// Refreshes [tokens] from the store (no-op refresh without one).
+  Future<List<CustomToken>> loadTokens() async {
+    final store = _store;
+    if (store != null) {
+      _tokens
+        ..clear()
+        ..addAll(await store.listTokens());
+    }
+    return tokens;
+  }
+
+  Future<CustomToken> addToken({
+    required String symbol,
+    required String name,
+    String? contract,
+    required String network,
+    bool enabled = true,
+  }) async {
+    final token = CustomToken(
+      id: _rowId('t'),
+      symbol: symbol,
+      name: name,
+      contract: contract,
+      network: network,
+      enabled: enabled,
+      sortOrder: _tokens.length,
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    await _store?.addToken(token);
+    _tokens.add(token);
+    notifyListeners();
+    return token;
+  }
+
+  Future<void> setTokenEnabled(String id, bool enabled) async {
+    await _store?.setTokenEnabled(id, enabled);
+    final i = _tokens.indexWhere((t) => t.id == id);
+    if (i >= 0) _tokens[i] = _tokens[i].copyWith(enabled: enabled);
+    notifyListeners();
   }
 }

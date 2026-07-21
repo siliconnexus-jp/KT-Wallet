@@ -4062,6 +4062,874 @@ class WalletSettingsCompanion extends UpdateCompanion<WalletSetting> {
   }
 }
 
+class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ContactsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(
+      minTextLength: 1,
+      maxTextLength: 64,
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _addressMeta = const VerificationMeta(
+    'address',
+  );
+  @override
+  late final GeneratedColumn<String> address = GeneratedColumn<String>(
+    'address',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _chainMeta = const VerificationMeta('chain');
+  @override
+  late final GeneratedColumn<String> chain = GeneratedColumn<String>(
+    'chain',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, name, address, chain, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'contacts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Contact> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('address')) {
+      context.handle(
+        _addressMeta,
+        address.isAcceptableOrUnknown(data['address']!, _addressMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_addressMeta);
+    }
+    if (data.containsKey('chain')) {
+      context.handle(
+        _chainMeta,
+        chain.isAcceptableOrUnknown(data['chain']!, _chainMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_chainMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Contact map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Contact(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      address: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}address'],
+      )!,
+      chain: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}chain'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ContactsTable createAlias(String alias) {
+    return $ContactsTable(attachedDatabase, alias);
+  }
+}
+
+class Contact extends DataClass implements Insertable<Contact> {
+  final String id;
+  final String name;
+  final String address;
+
+  /// Canonical chain tag (e.g. 'ethereum', 'tron'). Stored as text because
+  /// wallet_data has no dependency on the chains package's enum.
+  final String chain;
+  final int createdAt;
+  const Contact({
+    required this.id,
+    required this.name,
+    required this.address,
+    required this.chain,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['address'] = Variable<String>(address);
+    map['chain'] = Variable<String>(chain);
+    map['created_at'] = Variable<int>(createdAt);
+    return map;
+  }
+
+  ContactsCompanion toCompanion(bool nullToAbsent) {
+    return ContactsCompanion(
+      id: Value(id),
+      name: Value(name),
+      address: Value(address),
+      chain: Value(chain),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory Contact.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Contact(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      address: serializer.fromJson<String>(json['address']),
+      chain: serializer.fromJson<String>(json['chain']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'address': serializer.toJson<String>(address),
+      'chain': serializer.toJson<String>(chain),
+      'createdAt': serializer.toJson<int>(createdAt),
+    };
+  }
+
+  Contact copyWith({
+    String? id,
+    String? name,
+    String? address,
+    String? chain,
+    int? createdAt,
+  }) => Contact(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    address: address ?? this.address,
+    chain: chain ?? this.chain,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  Contact copyWithCompanion(ContactsCompanion data) {
+    return Contact(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      address: data.address.present ? data.address.value : this.address,
+      chain: data.chain.present ? data.chain.value : this.chain,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Contact(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('address: $address, ')
+          ..write('chain: $chain, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, address, chain, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Contact &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.address == this.address &&
+          other.chain == this.chain &&
+          other.createdAt == this.createdAt);
+}
+
+class ContactsCompanion extends UpdateCompanion<Contact> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> address;
+  final Value<String> chain;
+  final Value<int> createdAt;
+  final Value<int> rowid;
+  const ContactsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.address = const Value.absent(),
+    this.chain = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ContactsCompanion.insert({
+    required String id,
+    required String name,
+    required String address,
+    required String chain,
+    required int createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       address = Value(address),
+       chain = Value(chain),
+       createdAt = Value(createdAt);
+  static Insertable<Contact> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? address,
+    Expression<String>? chain,
+    Expression<int>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (address != null) 'address': address,
+      if (chain != null) 'chain': chain,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ContactsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String>? address,
+    Value<String>? chain,
+    Value<int>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return ContactsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      address: address ?? this.address,
+      chain: chain ?? this.chain,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (address.present) {
+      map['address'] = Variable<String>(address.value);
+    }
+    if (chain.present) {
+      map['chain'] = Variable<String>(chain.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ContactsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('address: $address, ')
+          ..write('chain: $chain, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CustomTokensTable extends CustomTokens
+    with TableInfo<$CustomTokensTable, CustomToken> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CustomTokensTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _symbolMeta = const VerificationMeta('symbol');
+  @override
+  late final GeneratedColumn<String> symbol = GeneratedColumn<String>(
+    'symbol',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _contractMeta = const VerificationMeta(
+    'contract',
+  );
+  @override
+  late final GeneratedColumn<String> contract = GeneratedColumn<String>(
+    'contract',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _networkMeta = const VerificationMeta(
+    'network',
+  );
+  @override
+  late final GeneratedColumn<String> network = GeneratedColumn<String>(
+    'network',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _enabledMeta = const VerificationMeta(
+    'enabled',
+  );
+  @override
+  late final GeneratedColumn<bool> enabled = GeneratedColumn<bool>(
+    'enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    symbol,
+    name,
+    contract,
+    network,
+    enabled,
+    sortOrder,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'custom_tokens';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CustomToken> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('symbol')) {
+      context.handle(
+        _symbolMeta,
+        symbol.isAcceptableOrUnknown(data['symbol']!, _symbolMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_symbolMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('contract')) {
+      context.handle(
+        _contractMeta,
+        contract.isAcceptableOrUnknown(data['contract']!, _contractMeta),
+      );
+    }
+    if (data.containsKey('network')) {
+      context.handle(
+        _networkMeta,
+        network.isAcceptableOrUnknown(data['network']!, _networkMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_networkMeta);
+    }
+    if (data.containsKey('enabled')) {
+      context.handle(
+        _enabledMeta,
+        enabled.isAcceptableOrUnknown(data['enabled']!, _enabledMeta),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CustomToken map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CustomToken(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      symbol: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}symbol'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      contract: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}contract'],
+      ),
+      network: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}network'],
+      )!,
+      enabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}enabled'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CustomTokensTable createAlias(String alias) {
+    return $CustomTokensTable(attachedDatabase, alias);
+  }
+}
+
+class CustomToken extends DataClass implements Insertable<CustomToken> {
+  final String id;
+  final String symbol;
+  final String name;
+  final String? contract;
+
+  /// Display label for where the token lives (e.g. 'TRON · TRC-20').
+  final String network;
+  final bool enabled;
+  final int sortOrder;
+  final int createdAt;
+  const CustomToken({
+    required this.id,
+    required this.symbol,
+    required this.name,
+    this.contract,
+    required this.network,
+    required this.enabled,
+    required this.sortOrder,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['symbol'] = Variable<String>(symbol);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || contract != null) {
+      map['contract'] = Variable<String>(contract);
+    }
+    map['network'] = Variable<String>(network);
+    map['enabled'] = Variable<bool>(enabled);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['created_at'] = Variable<int>(createdAt);
+    return map;
+  }
+
+  CustomTokensCompanion toCompanion(bool nullToAbsent) {
+    return CustomTokensCompanion(
+      id: Value(id),
+      symbol: Value(symbol),
+      name: Value(name),
+      contract: contract == null && nullToAbsent
+          ? const Value.absent()
+          : Value(contract),
+      network: Value(network),
+      enabled: Value(enabled),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory CustomToken.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CustomToken(
+      id: serializer.fromJson<String>(json['id']),
+      symbol: serializer.fromJson<String>(json['symbol']),
+      name: serializer.fromJson<String>(json['name']),
+      contract: serializer.fromJson<String?>(json['contract']),
+      network: serializer.fromJson<String>(json['network']),
+      enabled: serializer.fromJson<bool>(json['enabled']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'symbol': serializer.toJson<String>(symbol),
+      'name': serializer.toJson<String>(name),
+      'contract': serializer.toJson<String?>(contract),
+      'network': serializer.toJson<String>(network),
+      'enabled': serializer.toJson<bool>(enabled),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'createdAt': serializer.toJson<int>(createdAt),
+    };
+  }
+
+  CustomToken copyWith({
+    String? id,
+    String? symbol,
+    String? name,
+    Value<String?> contract = const Value.absent(),
+    String? network,
+    bool? enabled,
+    int? sortOrder,
+    int? createdAt,
+  }) => CustomToken(
+    id: id ?? this.id,
+    symbol: symbol ?? this.symbol,
+    name: name ?? this.name,
+    contract: contract.present ? contract.value : this.contract,
+    network: network ?? this.network,
+    enabled: enabled ?? this.enabled,
+    sortOrder: sortOrder ?? this.sortOrder,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  CustomToken copyWithCompanion(CustomTokensCompanion data) {
+    return CustomToken(
+      id: data.id.present ? data.id.value : this.id,
+      symbol: data.symbol.present ? data.symbol.value : this.symbol,
+      name: data.name.present ? data.name.value : this.name,
+      contract: data.contract.present ? data.contract.value : this.contract,
+      network: data.network.present ? data.network.value : this.network,
+      enabled: data.enabled.present ? data.enabled.value : this.enabled,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustomToken(')
+          ..write('id: $id, ')
+          ..write('symbol: $symbol, ')
+          ..write('name: $name, ')
+          ..write('contract: $contract, ')
+          ..write('network: $network, ')
+          ..write('enabled: $enabled, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    symbol,
+    name,
+    contract,
+    network,
+    enabled,
+    sortOrder,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CustomToken &&
+          other.id == this.id &&
+          other.symbol == this.symbol &&
+          other.name == this.name &&
+          other.contract == this.contract &&
+          other.network == this.network &&
+          other.enabled == this.enabled &&
+          other.sortOrder == this.sortOrder &&
+          other.createdAt == this.createdAt);
+}
+
+class CustomTokensCompanion extends UpdateCompanion<CustomToken> {
+  final Value<String> id;
+  final Value<String> symbol;
+  final Value<String> name;
+  final Value<String?> contract;
+  final Value<String> network;
+  final Value<bool> enabled;
+  final Value<int> sortOrder;
+  final Value<int> createdAt;
+  final Value<int> rowid;
+  const CustomTokensCompanion({
+    this.id = const Value.absent(),
+    this.symbol = const Value.absent(),
+    this.name = const Value.absent(),
+    this.contract = const Value.absent(),
+    this.network = const Value.absent(),
+    this.enabled = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CustomTokensCompanion.insert({
+    required String id,
+    required String symbol,
+    required String name,
+    this.contract = const Value.absent(),
+    required String network,
+    this.enabled = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    required int createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       symbol = Value(symbol),
+       name = Value(name),
+       network = Value(network),
+       createdAt = Value(createdAt);
+  static Insertable<CustomToken> custom({
+    Expression<String>? id,
+    Expression<String>? symbol,
+    Expression<String>? name,
+    Expression<String>? contract,
+    Expression<String>? network,
+    Expression<bool>? enabled,
+    Expression<int>? sortOrder,
+    Expression<int>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (symbol != null) 'symbol': symbol,
+      if (name != null) 'name': name,
+      if (contract != null) 'contract': contract,
+      if (network != null) 'network': network,
+      if (enabled != null) 'enabled': enabled,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CustomTokensCompanion copyWith({
+    Value<String>? id,
+    Value<String>? symbol,
+    Value<String>? name,
+    Value<String?>? contract,
+    Value<String>? network,
+    Value<bool>? enabled,
+    Value<int>? sortOrder,
+    Value<int>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return CustomTokensCompanion(
+      id: id ?? this.id,
+      symbol: symbol ?? this.symbol,
+      name: name ?? this.name,
+      contract: contract ?? this.contract,
+      network: network ?? this.network,
+      enabled: enabled ?? this.enabled,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (symbol.present) {
+      map['symbol'] = Variable<String>(symbol.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (contract.present) {
+      map['contract'] = Variable<String>(contract.value);
+    }
+    if (network.present) {
+      map['network'] = Variable<String>(network.value);
+    }
+    if (enabled.present) {
+      map['enabled'] = Variable<bool>(enabled.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustomTokensCompanion(')
+          ..write('id: $id, ')
+          ..write('symbol: $symbol, ')
+          ..write('name: $name, ')
+          ..write('contract: $contract, ')
+          ..write('network: $network, ')
+          ..write('enabled: $enabled, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$WalletDatabase extends GeneratedDatabase {
   _$WalletDatabase(QueryExecutor e) : super(e);
   $WalletDatabaseManager get managers => $WalletDatabaseManager(this);
@@ -4074,6 +4942,8 @@ abstract class _$WalletDatabase extends GeneratedDatabase {
   late final $SignRequestsTable signRequests = $SignRequestsTable(this);
   late final $SettingsTable settings = $SettingsTable(this);
   late final $WalletSettingsTable walletSettings = $WalletSettingsTable(this);
+  late final $ContactsTable contacts = $ContactsTable(this);
+  late final $CustomTokensTable customTokens = $CustomTokensTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4088,6 +4958,8 @@ abstract class _$WalletDatabase extends GeneratedDatabase {
     signRequests,
     settings,
     walletSettings,
+    contacts,
+    customTokens,
   ];
 }
 
@@ -6187,6 +7059,457 @@ typedef $$WalletSettingsTableProcessedTableManager =
       WalletSetting,
       PrefetchHooks Function()
     >;
+typedef $$ContactsTableCreateCompanionBuilder =
+    ContactsCompanion Function({
+      required String id,
+      required String name,
+      required String address,
+      required String chain,
+      required int createdAt,
+      Value<int> rowid,
+    });
+typedef $$ContactsTableUpdateCompanionBuilder =
+    ContactsCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String> address,
+      Value<String> chain,
+      Value<int> createdAt,
+      Value<int> rowid,
+    });
+
+class $$ContactsTableFilterComposer
+    extends Composer<_$WalletDatabase, $ContactsTable> {
+  $$ContactsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get address => $composableBuilder(
+    column: $table.address,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get chain => $composableBuilder(
+    column: $table.chain,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ContactsTableOrderingComposer
+    extends Composer<_$WalletDatabase, $ContactsTable> {
+  $$ContactsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get address => $composableBuilder(
+    column: $table.address,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get chain => $composableBuilder(
+    column: $table.chain,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ContactsTableAnnotationComposer
+    extends Composer<_$WalletDatabase, $ContactsTable> {
+  $$ContactsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get address =>
+      $composableBuilder(column: $table.address, builder: (column) => column);
+
+  GeneratedColumn<String> get chain =>
+      $composableBuilder(column: $table.chain, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$ContactsTableTableManager
+    extends
+        RootTableManager<
+          _$WalletDatabase,
+          $ContactsTable,
+          Contact,
+          $$ContactsTableFilterComposer,
+          $$ContactsTableOrderingComposer,
+          $$ContactsTableAnnotationComposer,
+          $$ContactsTableCreateCompanionBuilder,
+          $$ContactsTableUpdateCompanionBuilder,
+          (Contact, BaseReferences<_$WalletDatabase, $ContactsTable, Contact>),
+          Contact,
+          PrefetchHooks Function()
+        > {
+  $$ContactsTableTableManager(_$WalletDatabase db, $ContactsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ContactsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ContactsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ContactsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> address = const Value.absent(),
+                Value<String> chain = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ContactsCompanion(
+                id: id,
+                name: name,
+                address: address,
+                chain: chain,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required String address,
+                required String chain,
+                required int createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => ContactsCompanion.insert(
+                id: id,
+                name: name,
+                address: address,
+                chain: chain,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ContactsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$WalletDatabase,
+      $ContactsTable,
+      Contact,
+      $$ContactsTableFilterComposer,
+      $$ContactsTableOrderingComposer,
+      $$ContactsTableAnnotationComposer,
+      $$ContactsTableCreateCompanionBuilder,
+      $$ContactsTableUpdateCompanionBuilder,
+      (Contact, BaseReferences<_$WalletDatabase, $ContactsTable, Contact>),
+      Contact,
+      PrefetchHooks Function()
+    >;
+typedef $$CustomTokensTableCreateCompanionBuilder =
+    CustomTokensCompanion Function({
+      required String id,
+      required String symbol,
+      required String name,
+      Value<String?> contract,
+      required String network,
+      Value<bool> enabled,
+      Value<int> sortOrder,
+      required int createdAt,
+      Value<int> rowid,
+    });
+typedef $$CustomTokensTableUpdateCompanionBuilder =
+    CustomTokensCompanion Function({
+      Value<String> id,
+      Value<String> symbol,
+      Value<String> name,
+      Value<String?> contract,
+      Value<String> network,
+      Value<bool> enabled,
+      Value<int> sortOrder,
+      Value<int> createdAt,
+      Value<int> rowid,
+    });
+
+class $$CustomTokensTableFilterComposer
+    extends Composer<_$WalletDatabase, $CustomTokensTable> {
+  $$CustomTokensTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get symbol => $composableBuilder(
+    column: $table.symbol,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get contract => $composableBuilder(
+    column: $table.contract,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get network => $composableBuilder(
+    column: $table.network,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get enabled => $composableBuilder(
+    column: $table.enabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CustomTokensTableOrderingComposer
+    extends Composer<_$WalletDatabase, $CustomTokensTable> {
+  $$CustomTokensTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get symbol => $composableBuilder(
+    column: $table.symbol,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get contract => $composableBuilder(
+    column: $table.contract,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get network => $composableBuilder(
+    column: $table.network,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get enabled => $composableBuilder(
+    column: $table.enabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CustomTokensTableAnnotationComposer
+    extends Composer<_$WalletDatabase, $CustomTokensTable> {
+  $$CustomTokensTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get symbol =>
+      $composableBuilder(column: $table.symbol, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get contract =>
+      $composableBuilder(column: $table.contract, builder: (column) => column);
+
+  GeneratedColumn<String> get network =>
+      $composableBuilder(column: $table.network, builder: (column) => column);
+
+  GeneratedColumn<bool> get enabled =>
+      $composableBuilder(column: $table.enabled, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$CustomTokensTableTableManager
+    extends
+        RootTableManager<
+          _$WalletDatabase,
+          $CustomTokensTable,
+          CustomToken,
+          $$CustomTokensTableFilterComposer,
+          $$CustomTokensTableOrderingComposer,
+          $$CustomTokensTableAnnotationComposer,
+          $$CustomTokensTableCreateCompanionBuilder,
+          $$CustomTokensTableUpdateCompanionBuilder,
+          (
+            CustomToken,
+            BaseReferences<_$WalletDatabase, $CustomTokensTable, CustomToken>,
+          ),
+          CustomToken,
+          PrefetchHooks Function()
+        > {
+  $$CustomTokensTableTableManager(_$WalletDatabase db, $CustomTokensTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CustomTokensTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CustomTokensTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CustomTokensTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> symbol = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> contract = const Value.absent(),
+                Value<String> network = const Value.absent(),
+                Value<bool> enabled = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CustomTokensCompanion(
+                id: id,
+                symbol: symbol,
+                name: name,
+                contract: contract,
+                network: network,
+                enabled: enabled,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String symbol,
+                required String name,
+                Value<String?> contract = const Value.absent(),
+                required String network,
+                Value<bool> enabled = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                required int createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => CustomTokensCompanion.insert(
+                id: id,
+                symbol: symbol,
+                name: name,
+                contract: contract,
+                network: network,
+                enabled: enabled,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CustomTokensTableProcessedTableManager =
+    ProcessedTableManager<
+      _$WalletDatabase,
+      $CustomTokensTable,
+      CustomToken,
+      $$CustomTokensTableFilterComposer,
+      $$CustomTokensTableOrderingComposer,
+      $$CustomTokensTableAnnotationComposer,
+      $$CustomTokensTableCreateCompanionBuilder,
+      $$CustomTokensTableUpdateCompanionBuilder,
+      (
+        CustomToken,
+        BaseReferences<_$WalletDatabase, $CustomTokensTable, CustomToken>,
+      ),
+      CustomToken,
+      PrefetchHooks Function()
+    >;
 
 class $WalletDatabaseManager {
   final _$WalletDatabase _db;
@@ -6209,4 +7532,8 @@ class $WalletDatabaseManager {
       $$SettingsTableTableManager(_db, _db.settings);
   $$WalletSettingsTableTableManager get walletSettings =>
       $$WalletSettingsTableTableManager(_db, _db.walletSettings);
+  $$ContactsTableTableManager get contacts =>
+      $$ContactsTableTableManager(_db, _db.contacts);
+  $$CustomTokensTableTableManager get customTokens =>
+      $$CustomTokensTableTableManager(_db, _db.customTokens);
 }

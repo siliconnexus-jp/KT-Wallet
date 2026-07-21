@@ -1,3 +1,4 @@
+import 'package:airgap_protocol/airgap_protocol.dart' show AccountExport;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -73,10 +74,15 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
             GoRoute(
               path: entry.value.$1,
               // Wallet detail accepts ?id=<walletId> when pushed from the manage
-              // list; without it (gallery / goldens) it shows the current wallet.
-              builder: entry.value.$1 == '/wallet-detail'
-                  ? (c, s) => WalletDetailScreen(walletId: s.uri.queryParameters['id'])
-                  : (c, s) => entry.value.$2(c),
+              // list; import-confirm accepts the decoded AccountExport from the
+              // pairing scan via `extra`. Without them (gallery / goldens) both
+              // render their demo snapshots.
+              builder: switch (entry.value.$1) {
+                '/wallet-detail' => (c, s) => WalletDetailScreen(walletId: s.uri.queryParameters['id']),
+                '/import-confirm' => (c, s) =>
+                    ImportConfirmScreen(export: s.extra is AccountExport ? s.extra as AccountExport : null),
+                _ => (c, s) => entry.value.$2(c),
+              },
             ),
       ],
     );

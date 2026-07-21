@@ -2,11 +2,13 @@ import 'package:chains/chains.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:ui_kit/ui_kit.dart';
+import 'package:wallet_data/wallet_data.dart' show Contact, CustomToken;
 
 import '../../l10n/app_localizations.dart';
 import '../widgets/token_icon.dart';
 import '../state/app_prefs.dart';
 import '../state/locale_controller.dart';
+import '../state/wallet_controller.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
 
@@ -82,8 +84,53 @@ class AddressBookScreen extends StatefulWidget {
 class _AddressBookScreenState extends State<AddressBookScreen> {
   String _query = '';
 
-  /// Contacts added in this session via the "+" sheet (in-memory demo state).
-  final _added = <(String, String, String, String, Color)>[];
+  /// Contacts rendered by this screen, loaded from (and mutated through) the
+  /// [WalletController]: drift-persisted in the real app, in-memory in the
+  /// gallery/goldens (no store).
+  List<Contact> _contacts = const [];
+  WalletController? _controller;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final controller = WalletScope.of(context);
+    if (identical(controller, _controller)) return;
+    _controller = controller;
+    _load(controller);
+  }
+
+  Future<void> _load(WalletController controller) async {
+    var contacts = await controller.loadContacts();
+    if (contacts.isEmpty && !controller.hasStore) {
+      // No-store fallback (gallery/goldens/tests): seed the classic demo rows
+      // in-memory so the screen renders exactly like the recorded designs. The
+      // real app persists these same rows on first run (see main._seedFirstRun).
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context);
+      for (final (name, address, chain) in [
+        ('Alice', '0x71c8B2…9F3dA24', Chain.ethereum),
+        (l10n.contactBobExchange, 'TWd4qCEU…nMxR38uQz', Chain.tron),
+        (l10n.contactColdBackup, '0x8f3C2a…7E19bE1', Chain.polygon),
+        ('Dana', '6yKp…Vr2W', Chain.solana),
+      ]) {
+        await controller.addContact(name: name, address: address, chain: chain.name);
+      }
+      contacts = controller.contacts;
+    }
+    if (mounted) setState(() => _contacts = contacts);
+  }
+
+  /// Display fields for a stored contact: avatar initial, chain tag + color.
+  (String, String, String, String, Color) _display(Contact c) {
+    final tag = _chainTags.where((t) => t.$1.name == c.chain).firstOrNull;
+    return (
+      c.name.characters.first.toUpperCase(),
+      c.name,
+      _abbrevAddress(c.address),
+      tag?.$2 ?? c.chain,
+      tag?.$3 ?? WalletColors.text3,
+    );
+  }
 
   /// "+" bottom sheet: name + address; the address must validate against one
   /// of the supported chains, whose tag/color the new row inherits.
@@ -124,7 +171,7 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                   label: l10n.actionSave,
                   onPressed: nameController.text.trim().isEmpty || addrController.text.trim().isEmpty
                       ? null
-                      : () {
+                      : () async {
                           final name = nameController.text.trim();
                           final addr = addrController.text.trim();
                           final match = _chainTags.where((t) => Addresses.validate(t.$1, addr).isValid).firstOrNull;
@@ -132,8 +179,11 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                             setSheetState(() => error = l10n.invalidChainAddress);
                             return;
                           }
-                          setState(() => _added.add((name.characters.first.toUpperCase(), name, _abbrevAddress(addr), match.$2, match.$3)));
-                          Navigator.of(ctx).pop();
+                          final controller = _controller!;
+                          final navigator = Navigator.of(ctx);
+                          await controller.addContact(name: name, address: addr, chain: match.$1.name);
+                          if (mounted) setState(() => _contacts = controller.contacts);
+                          navigator.pop();
                         },
                 ),
               ]),
@@ -145,8 +195,9 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
     // Not disposed here: the sheet's exit animation still holds the fields.
   }
 
-  /// "⋮" menu on a contact row: copy the contact's address to the clipboard.
-  Future<void> _contactMenu((String, String, String, String, Color) contact) async {
+  /// "⋮" menu on a contact row: copy the contact's address, or delete the
+  /// contact (with confirmation).
+  Future<void> _contactMenu(Contact contact) async {
     final l10n = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context);
     await showModalBottomSheet<void>(
@@ -161,7 +212,7 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(children: [
-              Text(contact.$2, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: WalletColors.text)),
+              Text(contact.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: WalletColors.text)),
             ]),
           ),
           const SizedBox(height: 8),
@@ -169,11 +220,19 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
             leading: const Icon(Icons.copy, size: 20, color: WalletColors.accent),
             title: Text(l10n.copyAddress, style: const TextStyle(fontSize: 15, color: WalletColors.text)),
             onTap: () {
-              Clipboard.setData(ClipboardData(text: contact.$3));
+              Clipboard.setData(ClipboardData(text: contact.address));
               Navigator.of(ctx).pop();
               messenger
                 ..clearSnackBars()
                 ..showSnackBar(SnackBar(content: Text(l10n.addressCopied)));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete_outline, size: 20, color: WalletColors.red),
+            title: Text(l10n.actionDelete, style: const TextStyle(fontSize: 15, color: WalletColors.red)),
+            onTap: () {
+              Navigator.of(ctx).pop();
+              _confirmDeleteContact(contact);
             },
           ),
           const SizedBox(height: 12),
@@ -182,20 +241,41 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
     );
   }
 
+  /// Confirmation + persisted removal. Reuses the generic "removes the local
+  /// record only" delete copy (deleteWalletConfirm) — no chain state involved.
+  Future<void> _confirmDeleteContact(Contact contact) async {
+    final l10n = AppLocalizations.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.actionDelete),
+        content: Text(l10n.deleteWalletConfirm(contact.name)),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l10n.actionCancel)),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.actionDelete, style: const TextStyle(color: WalletColors.red)),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      final controller = _controller!;
+      await controller.removeContact(contact.id);
+      if (mounted) setState(() => _contacts = controller.contacts);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final contacts = <(String, String, String, String, Color)>[
-      ('A', 'Alice', '0x71c8B2…9F3dA24', 'Ethereum', ChainColors.ethereum),
-      ('B', l10n.contactBobExchange, 'TWd4qCEU…nMxR38uQz', 'TRON', ChainColors.tron),
-      ('冷', l10n.contactColdBackup, '0x8f3C2a…7E19bE1', 'Polygon', ChainColors.polygon),
-      ('D', 'Dana', '6yKp…Vr2W', 'Solana', ChainColors.solana),
-      ..._added,
-    ];
     final q = _query.trim().toLowerCase();
     final results = q.isEmpty
-        ? contacts
-        : contacts.where((c) => c.$2.toLowerCase().contains(q) || c.$3.toLowerCase().contains(q) || c.$4.toLowerCase().contains(q)).toList();
+        ? _contacts
+        : _contacts.where((c) {
+            final d = _display(c);
+            return d.$2.toLowerCase().contains(q) || d.$3.toLowerCase().contains(q) || d.$4.toLowerCase().contains(q);
+          }).toList();
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(title: l10n.addressBookTitle, onBack: () => Navigator.of(context).maybePop(), trailing: Icons.add, onTrailing: _addContact),
@@ -231,26 +311,29 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
             child: Column(children: [
               for (var i = 0; i < results.length; i++) ...[
                 if (i > 0) const SizedBox(height: 16),
-                Row(children: [
-                  KtAvatar(color: const Color(0xFFF2F4F7), initial: results[i].$1, size: 40),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(children: [
-                        Text(results[i].$2, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WalletColors.text)),
-                        const SizedBox(width: 8),
-                        NetworkBadge(label: results[i].$4, dotColor: results[i].$5),
+                Builder(builder: (context) {
+                  final d = _display(results[i]);
+                  return Row(children: [
+                    KtAvatar(color: const Color(0xFFF2F4F7), initial: d.$1, size: 40),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Row(children: [
+                          Text(d.$2, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WalletColors.text)),
+                          const SizedBox(width: 8),
+                          NetworkBadge(label: d.$4, dotColor: d.$5),
+                        ]),
+                        const SizedBox(height: 3),
+                        Text(d.$3, style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text3)),
                       ]),
-                      const SizedBox(height: 3),
-                      Text(results[i].$3, style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text3)),
-                    ]),
-                  ),
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _contactMenu(results[i]),
-                    child: const Icon(Icons.more_vert, size: 18, color: WalletColors.text3),
-                  ),
-                ]),
+                    ),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _contactMenu(results[i]),
+                      child: const Icon(Icons.more_vert, size: 18, color: WalletColors.text3),
+                    ),
+                  ]);
+                }),
               ],
             ]),
           ),
@@ -267,14 +350,55 @@ class TokenManageScreen extends StatefulWidget {
 }
 
 class _TokenManageScreenState extends State<TokenManageScreen> {
-  final _tokens = <(Color, String, String, String)>[
-    (const Color(0xFF26A17B), '₮', 'USDT', 'TRON · TRC-20'),
-    (const Color(0xFF26A17B), '₮', 'USDT', 'Ethereum · ERC-20'),
-    (const Color(0xFF2775CA), r'$', 'USDC', 'Solana · SPL'),
-    (const Color(0xFFF0B90B), 'B', 'BUSD', 'Ethereum · ERC-20'),
-    (const Color(0xFFFF007A), 'U', 'UNI', 'Ethereum · ERC-20'),
-  ];
-  final _enabled = [true, true, true, false, false];
+  /// Brand fallback (icon color + glyph) per known symbol; unknown symbols get
+  /// the neutral slate + first letter, exactly like the old hardcoded rows.
+  static const _brand = <String, (Color, String)>{
+    'USDT': (Color(0xFF26A17B), '₮'),
+    'USDC': (Color(0xFF2775CA), r'$'),
+    'BUSD': (Color(0xFFF0B90B), 'B'),
+    'UNI': (Color(0xFFFF007A), 'U'),
+  };
+
+  /// Tokens rendered by this screen, loaded from (and mutated through) the
+  /// [WalletController]: drift-persisted in the real app, in-memory in the
+  /// gallery/goldens (no store).
+  List<CustomToken> _tokens = const [];
+  WalletController? _controller;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final controller = WalletScope.of(context);
+    if (identical(controller, _controller)) return;
+    _controller = controller;
+    _load(controller);
+  }
+
+  Future<void> _load(WalletController controller) async {
+    var tokens = await controller.loadTokens();
+    if (tokens.isEmpty && !controller.hasStore) {
+      // No-store fallback (gallery/goldens/tests): seed the classic demo rows
+      // in-memory. The real app persists these same rows on first run (see
+      // main._seedFirstRun).
+      for (final (symbol, name, network, enabled) in [
+        ('USDT', 'Tether USD', 'TRON · TRC-20', true),
+        ('USDT', 'Tether USD', 'Ethereum · ERC-20', true),
+        ('USDC', 'USD Coin', 'Solana · SPL', true),
+        ('BUSD', 'Binance USD', 'Ethereum · ERC-20', false),
+        ('UNI', 'Uniswap', 'Ethereum · ERC-20', false),
+      ]) {
+        await controller.addToken(symbol: symbol, name: name, network: network, enabled: enabled);
+      }
+      tokens = controller.tokens;
+    }
+    if (mounted) setState(() => _tokens = tokens);
+  }
+
+  Future<void> _toggle(CustomToken token) async {
+    final controller = _controller!;
+    await controller.setTokenEnabled(token.id, !token.enabled);
+    if (mounted) setState(() => _tokens = controller.tokens);
+  }
 
   /// "+" bottom sheet: symbol + name + contract address; a saved token is
   /// appended to the in-memory list as an enabled row.
@@ -309,16 +433,21 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
                   label: l10n.actionSave,
                   onPressed: symbolController.text.trim().isEmpty || nameController.text.trim().isEmpty
                       ? null
-                      : () {
+                      : () async {
                           final symbol = symbolController.text.trim().toUpperCase();
                           final name = nameController.text.trim();
                           final contract = contractController.text.trim();
                           final sub = contract.isEmpty ? name : '$name · ${_abbrevAddress(contract)}';
-                          setState(() {
-                            _tokens.add((const Color(0xFF64748B), symbol.characters.first, symbol, sub));
-                            _enabled.add(true);
-                          });
-                          Navigator.of(ctx).pop();
+                          final controller = _controller!;
+                          final navigator = Navigator.of(ctx);
+                          await controller.addToken(
+                            symbol: symbol,
+                            name: name,
+                            contract: contract.isEmpty ? null : contract,
+                            network: sub,
+                          );
+                          if (mounted) setState(() => _tokens = controller.tokens);
+                          navigator.pop();
                         },
                 ),
               ]),
@@ -341,18 +470,23 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
           child: Column(children: [
             for (var i = 0; i < _tokens.length; i++) ...[
               if (i > 0) const SizedBox(height: 14),
-              Row(children: [
-                TokenIcon(symbol: _tokens[i].$3, size: 36, fallbackColor: _tokens[i].$1, fallbackInitial: _tokens[i].$2),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(_tokens[i].$3, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WalletColors.text)),
-                    const SizedBox(height: 3),
-                    Text(_tokens[i].$4, style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
-                  ]),
-                ),
-                _switch(_enabled[i], onTap: () => setState(() => _enabled[i] = !_enabled[i])),
-              ]),
+              Builder(builder: (context) {
+                final token = _tokens[i];
+                final (color, initial) = _brand[token.symbol] ??
+                    (const Color(0xFF64748B), token.symbol.characters.first);
+                return Row(children: [
+                  TokenIcon(symbol: token.symbol, size: 36, fallbackColor: color, fallbackInitial: initial),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(token.symbol, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WalletColors.text)),
+                      const SizedBox(height: 3),
+                      Text(token.network, style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
+                    ]),
+                  ),
+                  _switch(token.enabled, onTap: () => _toggle(token)),
+                ]);
+              }),
             ],
           ]),
         ),

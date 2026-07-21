@@ -11,9 +11,14 @@ import 'wallet_model.dart';
 /// table (detailed-design.md §5.1), so a domain [Wallet] is assembled from its
 /// wallet row + its four account rows.
 class WalletStore {
-  WalletStore(this._db) : _wallets = db.WalletsRepository(_db);
+  WalletStore(this._db)
+      : _wallets = db.WalletsRepository(_db),
+        _contacts = db.ContactsRepository(_db),
+        _tokens = db.TokensRepository(_db);
   final db.WalletDatabase _db;
   final db.WalletsRepository _wallets;
+  final db.ContactsRepository _contacts;
+  final db.TokensRepository _tokens;
 
   static const _coins = ['eth', 'polygon', 'tron', 'solana'];
 
@@ -43,6 +48,27 @@ class WalletStore {
       _db.into(_db.wallets).insertOnConflictUpdate(_walletCompanion(wallet));
 
   Future<void> delete(String walletId) => _wallets.deleteWallet(walletId);
+
+  // ---- global address book (Settings → 地址管理) --------------------------
+
+  Future<List<db.Contact>> listContacts() => _contacts.list();
+
+  Future<void> addContact(db.Contact contact) =>
+      _contacts.insert(contact.toCompanion(false));
+
+  Future<void> deleteContact(String id) => _contacts.delete(id);
+
+  // ---- global custom-token list (Settings → Token 管理) -------------------
+
+  Future<List<db.CustomToken>> listTokens() => _tokens.list();
+
+  Future<void> addToken(db.CustomToken token) =>
+      _tokens.insert(token.toCompanion(false));
+
+  Future<void> setTokenEnabled(String id, bool enabled) =>
+      _tokens.setEnabled(id, enabled);
+
+  Future<void> deleteToken(String id) => _tokens.delete(id);
 
   /// Closes the underlying database. Call when the store is retired (e.g.
   /// leaving wallet mode in the combined installer); the store must not be
