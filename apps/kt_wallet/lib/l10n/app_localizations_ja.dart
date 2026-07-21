@@ -568,6 +568,24 @@ class AppLocalizationsJa extends AppLocalizations {
   String get networkResetDefault => 'デフォルトに戻す';
 
   @override
+  String get gatewayTitle => 'ゲートウェイ';
+
+  @override
+  String get gatewayDesc => '統合クエリゲートウェイ。空欄の場合は各チェーンのノードに直接接続します';
+
+  @override
+  String get gatewayNotSet => '未設定';
+
+  @override
+  String get gatewayTest => '接続テスト';
+
+  @override
+  String get gatewayTestOk => 'ゲートウェイ接続に成功しました';
+
+  @override
+  String get gatewayTestFail => 'ゲートウェイ接続に失敗しました';
+
+  @override
   String get accessControl => 'アクセス制御';
 
   @override

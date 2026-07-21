@@ -6,6 +6,7 @@ import 'package:core_crypto/core_crypto.dart' show Coin;
 
 import '../market/balance_service.dart'
     show RpcEndpointResolver, defaultRpcEndpointFor;
+import '../market/gateway_client.dart';
 import '../rpc/http_transport.dart';
 
 /// The RPC-endpoint coin for a transfer chain (ETH and Polygon resolve to
@@ -46,8 +47,12 @@ class ChainParamsService {
   ChainParamsService({
     JsonRpcTransport? jsonRpcTransport,
     RpcEndpointResolver? endpoints,
+    GatewayResolver? gateway,
   })  : _jsonRpc = jsonRpcTransport ?? HttpJsonRpcTransport(),
-        _endpoints = endpoints ?? defaultRpcEndpointFor;
+        _endpoints = endpoints ?? defaultRpcEndpointFor,
+        _gateway = gateway ?? _noGateway;
+
+  static GatewayClient? _noGateway() => null;
 
   final JsonRpcTransport _jsonRpc;
 
@@ -55,12 +60,30 @@ class ChainParamsService {
   /// override saved in settings applies from the very next request.
   final RpcEndpointResolver _endpoints;
 
+  /// Optional gateway (null in direct mode), resolved on every fetch.
+  final GatewayResolver _gateway;
+
   /// Fetches [fromAddress]'s pending nonce and the current fee estimate
   /// concurrently. Throws on any failure (RPC error, timeout, malformed
   /// response) — the caller decides the fallback policy.
+  ///
+  /// GATEWAY SEMANTICS: with a gateway configured, `kt_getChainParams` is
+  /// asked first; any gateway failure falls back to the direct EvmRpc pair
+  /// (getNonce + estimateFees), and only a failure of BOTH paths throws.
+  /// Direct mode never contacts the gateway.
   Future<EvmChainParams> fetchEvmParams(Chain chain, String fromAddress) async {
     if (chain != Chain.ethereum && chain != Chain.polygon) {
       throw ArgumentError('not an EVM chain: $chain');
+    }
+    final gateway = _gateway();
+    if (gateway != null) {
+      try {
+        final params = await gateway.getChainParams(
+            chain: rpcCoinForChain(chain), address: fromAddress);
+        return EvmChainParams(nonce: params.nonce, fees: params.fees);
+      } catch (_) {
+        // GatewayException / transport failure: direct node path below.
+      }
     }
     final rpc = EvmRpc(url: _endpoints(rpcCoinForChain(chain)), transport: _jsonRpc);
     // Future.wait (not records .wait) so the first failure propagates as-is

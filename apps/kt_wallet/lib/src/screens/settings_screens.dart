@@ -2,11 +2,13 @@ import 'package:chains/chains.dart';
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:ui_kit/ui_kit.dart';
 import 'package:wallet_data/wallet_data.dart' show Contact, CustomToken;
 
 import '../../l10n/app_localizations.dart';
 import '../market/balance_service.dart' show defaultRpcEndpointFor;
+import '../market/gateway_client.dart' show GatewayClient;
 import '../security/biometric_auth.dart';
 import '../security/wallet_pin.dart';
 import '../widgets/pin_pad.dart';
@@ -506,8 +508,18 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
 /// offers a reset-to-default action; without a scope (gallery / goldens /
 /// plain widget tests) it keeps the original in-memory demo state and demo
 /// hostnames byte-for-byte.
+///
+/// Under a scope, an OPTIONAL gateway card renders above the per-chain rows:
+/// the persisted `gateway.url` (blank = direct mode), an edit sheet like the
+/// RPC rows, and a test-connection action (`kt_health` → snackbar). The card
+/// is scope-only, so the scope-absent gallery/golden rendering is unchanged.
 class NetworkSettingsScreen extends StatefulWidget {
-  const NetworkSettingsScreen({super.key});
+  const NetworkSettingsScreen({super.key, this.gatewayTestClient});
+
+  /// Injectable http client for the gateway test-connection call (tests);
+  /// null in production (the [GatewayClient] creates its own).
+  final http.Client? gatewayTestClient;
+
   @override
   State<NetworkSettingsScreen> createState() => _NetworkSettingsScreenState();
 }
@@ -516,6 +528,120 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
   /// Per-network RPC node override chosen in this session (scope-absent demo
   /// fallback only).
   final _rpcOverrides = <String, String>{};
+
+  /// True while a gateway test-connection call is in flight.
+  bool _testingGateway = false;
+
+  /// Edit sheet for the gateway URL, mirroring the RPC row sheet. Saving a
+  /// blank value (or tapping reset) clears back to direct mode.
+  Future<void> _editGateway(AppPrefsController prefs) async {
+    final l10n = AppLocalizations.of(context);
+    final controller = TextEditingController(text: prefs.gatewayUrl ?? '');
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: WalletColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              Text(l10n.gatewayTitle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: WalletColors.text)),
+              const SizedBox(height: 16),
+              _sheetField(controller, label: l10n.gatewayTitle, mono: true),
+              const SizedBox(height: 18),
+              KtPrimaryButton(
+                label: l10n.actionSave,
+                onPressed: () {
+                  // Blank = back to direct mode (the gateway stays optional).
+                  prefs.setGatewayUrl(controller.text);
+                  Navigator.of(ctx).pop();
+                },
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: TextButton(
+                  onPressed: () {
+                    prefs.setGatewayUrl(null);
+                    Navigator.of(ctx).pop();
+                  },
+                  child: Text(l10n.networkResetDefault,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text2)),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+    // Not disposed here: the sheet's exit animation still holds the field.
+  }
+
+  /// `kt_health` against the saved gateway URL; the outcome lands in a
+  /// success/failure snackbar. [GatewayClient.health] never throws.
+  Future<void> _testGateway(String url) async {
+    if (_testingGateway) return;
+    setState(() => _testingGateway = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = AppLocalizations.of(context);
+    final client =
+        GatewayClient(baseUrl: url, client: widget.gatewayTestClient);
+    final ok = await client.health();
+    if (widget.gatewayTestClient == null) client.close();
+    if (!mounted) return;
+    setState(() => _testingGateway = false);
+    messenger.showSnackBar(
+        SnackBar(content: Text(ok ? l10n.gatewayTestOk : l10n.gatewayTestFail)));
+  }
+
+  /// The gateway card (scope-only, so goldens keep the scope-absent bytes).
+  Widget _gatewayCard(AppLocalizations l10n, AppPrefsController prefs) {
+    final url = prefs.gatewayUrl;
+    return KtCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(l10n.gatewayTitle, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text))),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: url == null ? null : () => _testGateway(url),
+            child: Text(
+              l10n.gatewayTest,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: url == null ? WalletColors.text3 : WalletColors.accent,
+              ),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        Text(l10n.gatewayDesc, style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
+        const SizedBox(height: 12),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _editGateway(prefs),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Expanded(
+              child: Text(
+                url ?? l10n.gatewayNotSet,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontFamily: url == null ? null : KtFonts.mono,
+                  color: url == null ? WalletColors.text3 : WalletColors.text,
+                ),
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3),
+          ]),
+        ),
+      ]),
+    );
+  }
 
   Future<void> _editRpc(AppPrefsController? prefs, Coin coin, String name, String rpc) async {
     final l10n = AppLocalizations.of(context);
@@ -595,6 +721,9 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
       gap: 16,
       navBar: KtNavBar(title: l10n.networkSettingsTitle, onBack: () => Navigator.of(context).maybePop()),
       children: [
+        // Optional gateway card, above the per-chain rows. Live-scope only:
+        // the scope-absent (gallery / goldens) rendering stays byte-for-byte.
+        if (prefs != null) _gatewayCard(l10n, prefs),
         for (final (color, coin, name, rpc, ms, ok) in nets)
           KtCard(
             padding: const EdgeInsets.all(14),

@@ -214,9 +214,11 @@ class _RecordsTabState extends State<_RecordsTab> {
       final controller = HistoryController(
         wallets: WalletScope.of(context),
         // TronGrid endpoint follows the persisted network-settings override
-        // (defaults everywhere when no AppPrefsScope is mounted).
+        // (defaults everywhere when no AppPrefsScope is mounted); a
+        // configured gateway unlocks eth/polygon/solana history too.
         service: HistoryService(
-            endpoints: prefsRpcEndpoints(AppPrefsScope.maybeOf(context))),
+            endpoints: prefsRpcEndpoints(AppPrefsScope.maybeOf(context)),
+            gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context))),
       );
       _owned = controller..addListener(_onHistoryChanged);
       // Post-frame: refresh() notifies synchronously, never mid-build.

@@ -6,6 +6,7 @@ import 'package:chains/rpc.dart';
 
 import '../market/balance_service.dart'
     show RpcEndpointResolver, defaultRpcEndpointFor;
+import '../market/gateway_client.dart';
 import '../rpc/http_transport.dart';
 import 'airgap_codec.dart' show hexEncode;
 import 'chain_params_service.dart' show rpcCoinForChain;
@@ -62,13 +63,20 @@ class BroadcastService {
     JsonRpcTransport? jsonRpcTransport,
     RestTransport? restTransport,
     RpcEndpointResolver? endpoints,
+    GatewayResolver? gateway,
   })  : _jsonRpc = jsonRpcTransport ?? HttpJsonRpcTransport(),
         _rest = restTransport ?? HttpRestTransport(),
-        _endpoints = endpoints ?? defaultRpcEndpointFor;
+        _endpoints = endpoints ?? defaultRpcEndpointFor,
+        _gateway = gateway ?? _noGateway;
+
+  static GatewayClient? _noGateway() => null;
 
   final JsonRpcTransport _jsonRpc;
   final RestTransport _rest;
   final RpcEndpointResolver _endpoints;
+
+  /// Optional gateway (null in direct mode), resolved on every broadcast.
+  final GatewayResolver _gateway;
 
   /// The demo signature marker (see `buildDemoSignResult`).
   static final Uint8List _demoPrefix =
@@ -86,11 +94,45 @@ class BroadcastService {
   /// Broadcasts [signedTx] on [chain] and returns the node's transaction
   /// hash. Errors are returned, never thrown — the caller maps them onto the
   /// flow's broadcastError → failed transition.
+  ///
+  /// GATEWAY SEMANTICS: the demo-signature gate stays FIRST — a `SIGNED-V1:`
+  /// payload never touches the gateway or a node, regardless of config. For
+  /// real signatures with a gateway configured, `kt_broadcast` is tried
+  /// first; a -32000 upstream error means a real node already saw and
+  /// REJECTED the transaction, so it surfaces as the failed outcome without
+  /// a direct re-post (INV-15: one broadcast call posts at most once to a
+  /// node that answers). Any other gateway failure (transport, rate limit,
+  /// unsupported, protocol error — the tx never reached a node) falls back
+  /// to today's direct path.
   Future<BroadcastOutcome> broadcast(Chain chain, Uint8List signedTx) async {
     if (isDemoSignature(signedTx)) {
       // Simulated success, no network: the demo hash matches what
       // buildDemoSignResult put in the SignResult (sha256 of the bytes).
       return BroadcastOutcome.simulated(hexEncode(sha256(signedTx)));
+    }
+    final gateway = _gateway();
+    if (gateway != null) {
+      final payload = _gatewayPayload(chain, signedTx);
+      if (payload == null && chain == Chain.tron) {
+        // Same honesty rule as the direct path: a TRON payload that is not
+        // the TronGrid JSON transaction cannot be submitted anywhere.
+        return const BroadcastOutcome.unsupported(
+            'TRON signed payload is not the TronGrid JSON transaction');
+      }
+      if (payload != null) {
+        try {
+          return BroadcastOutcome.ok(
+              await gateway.broadcast(chain: rpcCoinForChain(chain), payload: payload));
+        } on GatewayException catch (e) {
+          if (e.isUpstreamError) {
+            return BroadcastOutcome.error(e.upstreamMessage ?? e.message);
+          }
+          // Gateway couldn't forward (unsupported/rate-limited/protocol):
+          // fall through to the direct path.
+        } catch (_) {
+          // Transport failure/timeout before a node answered: direct path.
+        }
+      }
     }
     try {
       switch (chain) {
@@ -130,6 +172,28 @@ class BroadcastService {
     } catch (e) {
       // Timeouts, transport failures, malformed responses.
       return BroadcastOutcome.error('$e');
+    }
+  }
+
+  /// Encodes [signedTx] as the contract's `kt_broadcast` payload: 0x-hex for
+  /// EVM, base64 for Solana, the TronGrid JSON string for TRON. Returns null
+  /// for a TRON payload that is not the TronGrid JSON transaction (the same
+  /// shapes the direct path reports as unsupported).
+  static String? _gatewayPayload(Chain chain, Uint8List signedTx) {
+    switch (chain) {
+      case Chain.ethereum || Chain.polygon:
+        return '0x${hexEncode(signedTx)}';
+      case Chain.solana:
+        return base64Encode(signedTx);
+      case Chain.tron:
+        final String text;
+        try {
+          text = utf8.decode(signedTx);
+          if (json.decode(text) is! Map) return null;
+        } on FormatException {
+          return null;
+        }
+        return text;
     }
   }
 }

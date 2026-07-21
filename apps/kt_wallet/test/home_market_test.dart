@@ -238,4 +238,44 @@ void main() {
     expect(balances.calls, 3);
     controller.dispose();
   });
+
+  testWidgets('changing the persisted gateway URL triggers a market refresh',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = AppPrefsController();
+    final wallets = _wallets();
+    final balances = _FakeBalanceService(
+        {for (final c in Coin.values) c: const BalanceResult.error()});
+    final controller = MarketController(
+      wallets: wallets,
+      balances: balances,
+      prices: _FakePriceService(null),
+      tokens: _FakeTokenBalanceService(
+          {for (final t in builtinTokens) t.id: const BalanceResult.error()}),
+    );
+    await tester.pumpWidget(_app(MarketScopeHost(
+      wallets: wallets,
+      controller: controller,
+      prefs: prefs,
+      child: const HomeScreen(),
+    )));
+    await tester.pumpAndSettle();
+    expect(balances.calls, 1); // home-entry refresh
+
+    // Configuring a gateway changes where every balance comes from → refetch.
+    await prefs.setGatewayUrl('https://gw.example');
+    await tester.pumpAndSettle();
+    expect(balances.calls, 2);
+
+    // Unrelated preference edits still do not refetch.
+    await prefs.setFiat('CNY');
+    await tester.pumpAndSettle();
+    expect(balances.calls, 2);
+
+    // Clearing back to direct mode refetches once more.
+    await prefs.setGatewayUrl(null);
+    await tester.pumpAndSettle();
+    expect(balances.calls, 3);
+    controller.dispose();
+  });
 }

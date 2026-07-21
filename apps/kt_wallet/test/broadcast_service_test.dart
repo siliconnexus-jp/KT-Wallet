@@ -8,7 +8,9 @@ import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/testing.dart';
 import 'package:kt_wallet/l10n/app_localizations.dart';
+import 'package:kt_wallet/src/market/gateway_client.dart';
 import 'package:kt_wallet/src/screens/transfer_screens.dart';
 import 'package:kt_wallet/src/transfer/airgap_codec.dart';
 import 'package:kt_wallet/src/transfer/broadcast_service.dart';
@@ -98,6 +100,38 @@ void main() {
         // Same hash the simulated signer put in the SignResult.
         expect(outcome.txHash, hexEncode(sha256(signed)));
       }
+      expect(jsonRpc.calls, 0);
+      expect(rest.calls, 0);
+    });
+
+    test('GATE holds with a gateway configured: demo signature never reaches '
+        'the gateway either', () async {
+      final jsonRpc = _NoNetworkJsonRpc();
+      final rest = _NoNetworkRest();
+      var gatewayHits = 0;
+      // A resolver that returns a client whose transport fails the test on
+      // any request: the demo short-circuit must fire BEFORE gateway logic.
+      final gateway = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: MockClient((request) async {
+          gatewayHits++;
+          fail('demo signatures must never reach the gateway (${request.url})');
+        }),
+      );
+      final service = BroadcastService(
+        jsonRpcTransport: jsonRpc,
+        restTransport: rest,
+        endpoints: _endpoint,
+        gateway: () => gateway,
+      );
+
+      final signed = _demoSigned();
+      for (final chain in Chain.values) {
+        final outcome = await service.broadcast(chain, signed);
+        expect(outcome.status, BroadcastStatus.simulated);
+        expect(outcome.txHash, hexEncode(sha256(signed)));
+      }
+      expect(gatewayHits, 0);
       expect(jsonRpc.calls, 0);
       expect(rest.calls, 0);
     });

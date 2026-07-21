@@ -5,7 +5,9 @@ import 'package:flutter/widgets.dart';
 import '../state/app_prefs.dart';
 import '../state/wallet_controller.dart';
 import 'balance_service.dart';
+import 'gateway_client.dart';
 import 'market_controller.dart';
+import 'price_service.dart';
 import 'token_balance_service.dart';
 
 /// Provides the app-wide [MarketController] and rebuilds dependents when it
@@ -39,6 +41,26 @@ class MarketScope extends InheritedNotifier<MarketController> {
 RpcEndpointResolver prefsRpcEndpoints(AppPrefsController? prefs) =>
     (Coin coin) => prefs?.rpcOverride(coin) ?? defaultRpcEndpointFor(coin);
 
+/// Builds the gateway resolver backing the OPTIONAL gateway mode: it returns
+/// a [GatewayClient] for the currently persisted `gateway.url`, or null when
+/// the preference is blank (direct mode — the default) or no [prefs] is
+/// wired. The client is cached per URL so repeated fetches reuse one
+/// http.Client; saving a new URL (or clearing it) applies from the very next
+/// call, same as the RPC override resolver.
+GatewayResolver prefsGatewayResolver(AppPrefsController? prefs) {
+  GatewayClient? cached;
+  String? cachedUrl;
+  return () {
+    final url = prefs?.gatewayUrl;
+    if (url == null || url.isEmpty) return null;
+    if (cached == null || cachedUrl != url) {
+      cached = GatewayClient(baseUrl: url);
+      cachedUrl = url;
+    }
+    return cached;
+  };
+}
+
 /// Owns the [MarketController]'s lifecycle so `main.dart` only has to mount a
 /// single widget in the MaterialApp builder chain. Tests can inject a
 /// pre-built [controller]; injected controllers are not disposed here.
@@ -65,20 +87,33 @@ class MarketScopeHost extends StatefulWidget {
 }
 
 class _MarketScopeHostState extends State<MarketScopeHost> {
+  /// One shared gateway resolver for all market services: they reuse a single
+  /// [GatewayClient] (and its http.Client) while the URL is unchanged.
+  late final GatewayResolver _gateway = prefsGatewayResolver(widget.prefs);
+
   late final MarketController _controller = widget.controller ??
       MarketController(
         wallets: widget.wallets,
-        balances: BalanceService(endpoints: prefsRpcEndpoints(widget.prefs)),
-        tokens: TokenBalanceService(endpoints: prefsRpcEndpoints(widget.prefs)),
+        balances: BalanceService(
+            endpoints: prefsRpcEndpoints(widget.prefs), gateway: _gateway),
+        tokens: TokenBalanceService(
+            endpoints: prefsRpcEndpoints(widget.prefs), gateway: _gateway),
+        prices: PriceService(gateway: _gateway),
       );
 
-  /// Last-seen effective endpoints, to refresh only on actual RPC changes
-  /// (not on unrelated preference edits like the fiat currency).
+  /// Last-seen effective endpoints (per-chain RPC + the gateway URL), to
+  /// refresh only on actual network-config changes (not on unrelated
+  /// preference edits like the fiat currency).
   List<String>? _lastEndpoints;
 
   List<String> _snapshotEndpoints() {
     final resolve = prefsRpcEndpoints(widget.prefs);
-    return [for (final coin in Coin.values) resolve(coin)];
+    return [
+      for (final coin in Coin.values) resolve(coin),
+      // Saving or clearing the gateway URL changes where every balance comes
+      // from — refetch, exactly like an RPC override change.
+      widget.prefs?.gatewayUrl ?? '',
+    ];
   }
 
   @override

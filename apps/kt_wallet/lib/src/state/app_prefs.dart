@@ -15,6 +15,10 @@ class AppPrefsController extends ChangeNotifier {
   static const _keyAutoLockMinutes = 'prefs.autoLockMinutes';
   static const _keyFiat = 'prefs.fiat';
 
+  /// Storage key for the optional KT gateway URL. No stored value (null)
+  /// means "direct mode": every chain query goes straight to the nodes.
+  static const gatewayPrefKey = 'gateway.url';
+
   /// Storage keys for the per-chain RPC endpoint overrides. No stored value
   /// (null) means "use the built-in default endpoint".
   static const rpcPrefKeys = {
@@ -48,6 +52,13 @@ class AppPrefsController extends ChangeNotifier {
   /// default applies (callers resolve the effective URL themselves).
   String? rpcOverride(Coin coin) => _rpcOverrides[coin];
 
+  String? _gatewayUrl;
+
+  /// The configured KT gateway URL, or null in direct mode (the default).
+  /// The gateway is strictly optional: a null/blank value keeps every chain
+  /// query on today's direct node paths.
+  String? get gatewayUrl => _gatewayUrl;
+
   /// Loads persisted values (if any). Safe to call lazily from a screen.
   Future<void> load() async {
     try {
@@ -64,6 +75,8 @@ class AppPrefsController extends ChangeNotifier {
           _rpcOverrides.remove(entry.key);
         }
       }
+      final gateway = prefs.getString(gatewayPrefKey);
+      _gatewayUrl = (gateway == null || gateway.isEmpty) ? null : gateway;
       notifyListeners();
     } catch (_) {
       // No prefs plugin (tests) or read error: keep the defaults.
@@ -127,6 +140,26 @@ class AppPrefsController extends ChangeNotifier {
         await prefs.remove(key);
       } else {
         await prefs.setString(key, normalized);
+      }
+    } catch (_) {
+      // Persistence is best-effort; the in-memory choice still applies.
+    }
+  }
+
+  /// Sets (or, with null / blank, clears back to direct mode) the optional
+  /// KT gateway URL.
+  Future<void> setGatewayUrl(String? url) async {
+    final value = url?.trim();
+    final normalized = (value == null || value.isEmpty) ? null : value;
+    if (normalized == _gatewayUrl) return;
+    _gatewayUrl = normalized;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (normalized == null) {
+        await prefs.remove(gatewayPrefKey);
+      } else {
+        await prefs.setString(gatewayPrefKey, normalized);
       }
     } catch (_) {
       // Persistence is best-effort; the in-memory choice still applies.

@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:http/http.dart' as http;
 
+import 'balance_service.dart' show BalanceService;
+import 'gateway_client.dart';
+
 /// CoinGecko simple/price base URL — keyless public API tier.
 const String defaultCoinGeckoBaseUrl = 'https://api.coingecko.com/api/v3';
 
@@ -16,11 +19,18 @@ class PriceService {
     http.Client? client,
     this.baseUrl = defaultCoinGeckoBaseUrl,
     this.timeout = const Duration(seconds: 10),
-  }) : _client = client ?? http.Client();
+    GatewayResolver? gateway,
+  })  : _client = client ?? http.Client(),
+        _gateway = gateway ?? _noGateway;
+
+  static GatewayClient? _noGateway() => null;
 
   final http.Client _client;
   final String baseUrl;
   final Duration timeout;
+
+  /// Optional gateway (null in direct mode), resolved on every fetch.
+  final GatewayResolver _gateway;
 
   /// CoinGecko coin ids for the native coins (POL is the migrated
   /// `polygon-ecosystem-token`, not the retired MATIC id).
@@ -42,7 +52,31 @@ class PriceService {
 
   /// Fetches spot USD prices. Returns null on any failure; partial responses
   /// keep whichever coins were present.
+  ///
+  /// GATEWAY SEMANTICS: with a gateway configured, `kt_getPrices` is asked
+  /// first (symbols per [BalanceService.symbolFor]); a failing or empty
+  /// gateway answer falls back to the direct CoinGecko fetch, so prices
+  /// survive a broken gateway. Direct mode never contacts the gateway.
   Future<Map<Coin, double>?> fetchUsdPrices() async {
+    final gateway = _gateway();
+    if (gateway != null) {
+      try {
+        final quoted = await gateway.getPrices(
+            [for (final coin in Coin.values) BalanceService.symbolFor[coin]!]);
+        final out = <Coin, double>{
+          for (final coin in Coin.values)
+            if (quoted.usdBySymbol[BalanceService.symbolFor[coin]!] != null)
+              coin: quoted.usdBySymbol[BalanceService.symbolFor[coin]!]!,
+        };
+        if (out.isNotEmpty) {
+          _lastGood = Map.unmodifiable(out);
+          return _lastGood;
+        }
+        // All symbols unknown to the gateway: try CoinGecko instead.
+      } catch (_) {
+        // GatewayException / transport failure: direct CoinGecko fallback.
+      }
+    }
     try {
       final ids = coinGeckoIds.values.join(',');
       final uri = Uri.parse('$baseUrl/simple/price?ids=$ids&vs_currencies=usd');

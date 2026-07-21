@@ -4,6 +4,7 @@ import 'package:core_crypto/core_crypto.dart' show ChainAddresses, Coin;
 
 import '../rpc/http_transport.dart';
 import 'balance_service.dart';
+import 'gateway_client.dart';
 
 /// One entry of the built-in token registry: a fungible token contract on one
 /// of the supported chains. Pure data — display colors/glyphs live with the
@@ -84,14 +85,21 @@ class TokenBalanceService {
     JsonRpcTransport? jsonRpcTransport,
     RestTransport? restTransport,
     RpcEndpointResolver? endpoints,
+    GatewayResolver? gateway,
     this.tokens = builtinTokens,
   })  : _jsonRpc = jsonRpcTransport ?? HttpJsonRpcTransport(),
         _rest = restTransport ?? HttpRestTransport(),
-        _endpoints = endpoints ?? defaultRpcEndpointFor;
+        _endpoints = endpoints ?? defaultRpcEndpointFor,
+        _gateway = gateway ?? _noGateway;
+
+  static GatewayClient? _noGateway() => null;
 
   final JsonRpcTransport _jsonRpc;
   final RestTransport _rest;
   final RpcEndpointResolver _endpoints;
+
+  /// Optional gateway (null in direct mode), resolved on every fetch.
+  final GatewayResolver _gateway;
 
   /// The registry this instance fetches, in display order.
   final List<TokenInfo> tokens;
@@ -99,10 +107,83 @@ class TokenBalanceService {
   /// Fetches every registry token concurrently. Never throws: each per-token
   /// failure collapses to [BalanceStatus.error] for that token only. Results
   /// are keyed by [TokenInfo.id].
+  ///
+  /// GATEWAY SEMANTICS (resilience over purity): with a gateway configured,
+  /// the registry is grouped by chain and each chain issues ONE
+  /// `kt_getBalances` call carrying its token entries; the gateway's
+  /// per-token `error` rows map to [BalanceStatus.error] exactly like a
+  /// failing direct call. If the gateway call itself fails, every token of
+  /// that chain falls back to today's direct path — one broken gateway never
+  /// costs more than the extra round trip. Direct mode never contacts it.
   Future<Map<String, BalanceResult>> fetchAll(ChainAddresses addresses) async {
+    final gateway = _gateway();
+    if (gateway != null) {
+      final byChain = <Coin, List<TokenInfo>>{};
+      for (final token in tokens) {
+        byChain.putIfAbsent(token.chain, () => []).add(token);
+      }
+      final chainMaps = await Future.wait([
+        for (final entry in byChain.entries)
+          _gatewayChain(gateway, entry.key, entry.value, addresses),
+      ]);
+      return {for (final map in chainMaps) ...map};
+    }
     final entries = await Future.wait(
         [for (final token in tokens) _guard(token, addresses)]);
     return {for (final (id, result) in entries) id: result};
+  }
+
+  /// One gateway `kt_getBalances` call for all of [chainTokens] (same chain);
+  /// on any call-level failure, falls back to the direct path per token.
+  Future<Map<String, BalanceResult>> _gatewayChain(
+    GatewayClient gateway,
+    Coin chain,
+    List<TokenInfo> chainTokens,
+    ChainAddresses addresses,
+  ) async {
+    try {
+      final balances = await gateway.getBalances(
+        chain: chain,
+        address: addresses.forCoin(chain),
+        tokens: [
+          for (final token in chainTokens)
+            GatewayTokenQuery(
+              contract: token.contract,
+              decimals: token.decimals,
+              symbol: token.symbol,
+            ),
+        ],
+      );
+      final byContract = {
+        for (final row in balances.tokens) row.contract: row,
+      };
+      return {
+        for (final token in chainTokens)
+          token.id: _mapGatewayRow(token, byContract[token.contract]),
+      };
+    } catch (_) {
+      // Gateway unreachable/erroring for this chain: direct fallback, same
+      // per-token isolation as direct mode.
+      final entries = await Future.wait(
+          [for (final token in chainTokens) _guard(token, addresses)]);
+      return {for (final (id, result) in entries) id: result};
+    }
+  }
+
+  /// Missing row / per-token error / unparseable value → error for that token
+  /// only; a parsed raw value is a real balance (registry decimals/symbol
+  /// win for display consistency).
+  BalanceResult _mapGatewayRow(TokenInfo token, GatewayTokenBalance? row) {
+    final raw = row?.raw;
+    if (row == null || row.error != null || raw == null) {
+      return const BalanceResult.error();
+    }
+    try {
+      return BalanceResult.ok(
+          Amount(raw: raw, decimals: token.decimals, symbol: token.symbol));
+    } catch (_) {
+      return const BalanceResult.error();
+    }
   }
 
   Future<(String, BalanceResult)> _guard(

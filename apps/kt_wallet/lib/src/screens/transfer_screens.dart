@@ -8,7 +8,8 @@ import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
-import '../market/market_scope.dart' show prefsRpcEndpoints;
+import '../market/market_scope.dart'
+    show prefsGatewayResolver, prefsRpcEndpoints;
 import '../security/biometric_auth.dart';
 import '../state/app_prefs.dart' show AppPrefsScope;
 import '../transfer/airgap_codec.dart';
@@ -505,7 +506,9 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
       // Live EVM path: real nonce/fees first, QR after the fetch.
       _building = true;
       final service = widget.paramsService ??
-          ChainParamsService(endpoints: prefsRpcEndpoints(AppPrefsScope.maybeOf(context)));
+          ChainParamsService(
+              endpoints: prefsRpcEndpoints(AppPrefsScope.maybeOf(context)),
+              gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)));
       unawaited(_buildLiveEvm(service, session, draft, walletId: walletId, from: from));
     } else {
       _install(buildSignRequest(draft: draft, walletId: walletId, fromAddress: from), session);
@@ -769,7 +772,9 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
       return;
     }
     final service = widget.broadcaster ??
-        BroadcastService(endpoints: prefsRpcEndpoints(AppPrefsScope.maybeOf(context)));
+        BroadcastService(
+            endpoints: prefsRpcEndpoints(AppPrefsScope.maybeOf(context)),
+            gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)));
     setState(() {
       _busy = true;
       _error = null;

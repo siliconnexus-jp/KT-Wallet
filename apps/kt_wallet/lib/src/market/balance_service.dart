@@ -3,6 +3,7 @@ import 'package:chains/rpc.dart';
 import 'package:core_crypto/core_crypto.dart' show ChainAddresses, Coin;
 
 import '../rpc/http_transport.dart';
+import 'gateway_client.dart';
 
 /// Default public mainnet endpoints (no API keys). Overridable per instance
 /// for tests or self-hosted nodes.
@@ -65,9 +66,13 @@ class BalanceService {
     JsonRpcTransport? jsonRpcTransport,
     RestTransport? restTransport,
     RpcEndpointResolver? endpoints,
+    GatewayResolver? gateway,
   })  : _jsonRpc = jsonRpcTransport ?? HttpJsonRpcTransport(),
         _rest = restTransport ?? HttpRestTransport(),
-        _endpoints = endpoints ?? defaultRpcEndpointFor;
+        _endpoints = endpoints ?? defaultRpcEndpointFor,
+        _gateway = gateway ?? _noGateway;
+
+  static GatewayClient? _noGateway() => null;
 
   final JsonRpcTransport _jsonRpc;
   final RestTransport _rest;
@@ -75,6 +80,9 @@ class BalanceService {
   /// Resolved on every fetch (not cached at construction) so a persisted
   /// override saved in settings applies from the very next refresh.
   final RpcEndpointResolver _endpoints;
+
+  /// Optional gateway (null in direct mode), also resolved on every fetch.
+  final GatewayResolver _gateway;
 
   /// Native-unit decimals per chain (wei / wei / SUN / lamports).
   static const decimalsFor = {
@@ -95,19 +103,58 @@ class BalanceService {
   /// Fetches all four chains concurrently. Never throws: every per-chain
   /// failure (RPC error, HTTP status, timeout, malformed body) collapses to
   /// [BalanceStatus.error] for that chain only.
+  ///
+  /// GATEWAY SEMANTICS (resilience over purity): with a gateway configured,
+  /// each chain first asks the gateway (`kt_getBalances`, native only — the
+  /// token registry goes through [TokenBalanceService]); a failing gateway
+  /// call falls back to that chain's direct node path, so a broken/unreachable
+  /// gateway degrades to exactly today's behavior instead of a dead screen.
+  /// In direct mode (null resolver) the gateway is never contacted.
   Future<Map<Coin, BalanceResult>> fetchAll(ChainAddresses addresses) async {
     final eth = EvmRpc(url: _endpoints(Coin.eth), transport: _jsonRpc);
     final polygon = EvmRpc(url: _endpoints(Coin.polygon), transport: _jsonRpc);
     final tron = TronRpc(baseUrl: _endpoints(Coin.tron), transport: _rest);
     final solana = SolanaRpc(url: _endpoints(Coin.solana), transport: _jsonRpc);
 
+    final direct = {
+      Coin.eth: () => eth.getBalance(addresses.eth),
+      Coin.polygon: () => polygon.getBalance(addresses.polygon),
+      Coin.tron: () => tron.getTrxBalance(addresses.tron),
+      Coin.solana: () => solana.getBalance(addresses.solana),
+    };
+    final gateway = _gateway();
     final entries = await Future.wait([
-      _guard(Coin.eth, () => eth.getBalance(addresses.eth)),
-      _guard(Coin.polygon, () => polygon.getBalance(addresses.polygon)),
-      _guard(Coin.tron, () => tron.getTrxBalance(addresses.tron)),
-      _guard(Coin.solana, () => solana.getBalance(addresses.solana)),
+      for (final coin in Coin.values)
+        _fetchChain(gateway, coin, addresses.forCoin(coin), direct[coin]!),
     ]);
     return {for (final (coin, result) in entries) coin: result};
+  }
+
+  Future<(Coin, BalanceResult)> _fetchChain(
+    GatewayClient? gateway,
+    Coin coin,
+    String address,
+    Future<BigInt> Function() direct,
+  ) async {
+    if (gateway != null) {
+      try {
+        final balances =
+            await gateway.getBalances(chain: coin, address: address);
+        final native = balances.native;
+        return (
+          coin,
+          BalanceResult.ok(Amount(
+            raw: native.raw,
+            decimals: native.decimals,
+            symbol: native.symbol,
+          )),
+        );
+      } catch (_) {
+        // GatewayException / transport failure / malformed answer: fall back
+        // to this chain's direct node path below.
+      }
+    }
+    return _guard(coin, direct);
   }
 
   Future<(Coin, BalanceResult)> _guard(

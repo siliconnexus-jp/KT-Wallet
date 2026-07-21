@@ -5,6 +5,7 @@ import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:http/http.dart' as http;
 
 import 'balance_service.dart' show RpcEndpointResolver, defaultRpcEndpointFor;
+import 'gateway_client.dart';
 
 /// TronGrid REST base URL — the only chain with a keyless public history API.
 const String defaultTronHistoryApiUrl = 'https://api.trongrid.io';
@@ -73,15 +74,22 @@ class HistoryService {
   HistoryService({
     http.Client? client,
     RpcEndpointResolver? endpoints,
+    GatewayResolver? gateway,
     this.timeout = const Duration(seconds: 10),
   })  : _client = client ?? http.Client(),
-        _endpoints = endpoints ?? defaultRpcEndpointFor;
+        _endpoints = endpoints ?? defaultRpcEndpointFor,
+        _gateway = gateway ?? _noGateway;
+
+  static GatewayClient? _noGateway() => null;
 
   final http.Client _client;
 
   /// Per-chain endpoint resolver (settings overrides in production; the
   /// built-in defaults otherwise). Resolved on every fetch.
   final RpcEndpointResolver _endpoints;
+
+  /// Optional gateway (null in direct mode), resolved on every fetch.
+  final GatewayResolver _gateway;
   final Duration timeout;
 
   /// The TronGrid base URL in effect for the next fetch.
@@ -94,7 +102,31 @@ class HistoryService {
   /// failure (HTTP status, timeout, malformed body) collapses to
   /// [HistoryStatus.error]; chains without a keyless API return
   /// [HistoryStatus.unsupported].
+  ///
+  /// GATEWAY SEMANTICS: with a gateway configured, `kt_getHistory` is asked
+  /// for EVERY chain — this is what UNLOCKS eth/polygon/solana history
+  /// (indexer keys live server-side); "unsupported" is returned only when the
+  /// gateway itself says so, or in direct mode. On a gateway failure, TRON
+  /// falls back to the direct TronGrid path (the one keyless API we have);
+  /// the other chains have no direct path, so they surface an honest
+  /// [HistoryStatus.error] rather than pretending "unsupported".
   Future<HistoryResult> fetch(Coin coin, String address) async {
+    final gateway = _gateway();
+    if (gateway != null) {
+      try {
+        final history = await gateway.getHistory(
+            chain: coin, address: address, limit: pageSize);
+        if (history.unsupported) return const HistoryResult.unsupported();
+        final records = [
+          for (final record in history.records) _mapGatewayRecord(record),
+        ]..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        return HistoryResult.ok(
+            List.unmodifiable(records.take(pageSize)));
+      } catch (_) {
+        // Gateway unreachable/erroring: only TRON has a direct alternative.
+        if (coin != Coin.tron) return const HistoryResult.error();
+      }
+    }
     switch (coin) {
       case Coin.tron:
         return _fetchTron(address);
@@ -103,6 +135,23 @@ class HistoryService {
       case Coin.solana:
         return const HistoryResult.unsupported();
     }
+  }
+
+  /// Normalizes one gateway record onto the display shape; an unparseable
+  /// amount renders as '--' (null), never a made-up number.
+  ChainTxRecord _mapGatewayRecord(GatewayHistoryRecord record) {
+    final raw = record.amountRaw;
+    final decimals = record.decimals;
+    final symbol = record.symbol;
+    return ChainTxRecord(
+      hash: record.hash,
+      outgoing: record.outgoing,
+      amountText: raw != null && decimals != null && symbol != null
+          ? _formatAmount(raw, decimals, symbol)
+          : null,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(record.timestampMs),
+      confirmed: !record.failed,
+    );
   }
 
   /// TRC-20 transfers + native transactions, fetched concurrently, merged

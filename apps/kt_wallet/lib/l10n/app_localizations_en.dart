@@ -584,6 +584,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get networkResetDefault => 'Reset to default';
 
   @override
+  String get gatewayTitle => 'Gateway';
+
+  @override
+  String get gatewayDesc =>
+      'Unified query gateway; leave blank to connect directly to each chain\'s node';
+
+  @override
+  String get gatewayNotSet => 'Not set';
+
+  @override
+  String get gatewayTest => 'Test connection';
+
+  @override
+  String get gatewayTestOk => 'Gateway connection succeeded';
+
+  @override
+  String get gatewayTestFail => 'Gateway connection failed';
+
+  @override
   String get accessControl => 'Access control';
 
   @override

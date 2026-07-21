@@ -1144,6 +1144,42 @@ abstract class AppLocalizations {
   /// **'恢复默认'**
   String get networkResetDefault;
 
+  /// No description provided for @gatewayTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'网关'**
+  String get gatewayTitle;
+
+  /// No description provided for @gatewayDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'统一查询网关，留空则直连各链节点'**
+  String get gatewayDesc;
+
+  /// No description provided for @gatewayNotSet.
+  ///
+  /// In zh, this message translates to:
+  /// **'未设置'**
+  String get gatewayNotSet;
+
+  /// No description provided for @gatewayTest.
+  ///
+  /// In zh, this message translates to:
+  /// **'测试连接'**
+  String get gatewayTest;
+
+  /// No description provided for @gatewayTestOk.
+  ///
+  /// In zh, this message translates to:
+  /// **'网关连接成功'**
+  String get gatewayTestOk;
+
+  /// No description provided for @gatewayTestFail.
+  ///
+  /// In zh, this message translates to:
+  /// **'网关连接失败'**
+  String get gatewayTestFail;
+
   /// No description provided for @accessControl.
   ///
   /// In zh, this message translates to:

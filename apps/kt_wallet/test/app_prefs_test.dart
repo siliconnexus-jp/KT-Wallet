@@ -84,6 +84,43 @@ void main() {
     expect(reloaded.rpcOverride(Coin.tron), isNull);
   });
 
+  test('gateway url: null by default, round-trip, blank clears to direct',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+
+    final prefs = AppPrefsController();
+    expect(prefs.gatewayUrl, isNull); // direct mode is the default
+
+    await prefs.setGatewayUrl('  https://gw.example  ');
+    expect(prefs.gatewayUrl, 'https://gw.example'); // trimmed
+
+    // Persists under the documented key and survives a fresh controller.
+    final store = await SharedPreferences.getInstance();
+    expect(store.getString('gateway.url'), 'https://gw.example');
+    final reloaded = AppPrefsController();
+    await reloaded.load();
+    expect(reloaded.gatewayUrl, 'https://gw.example');
+
+    // Blank (or null) clears back to direct mode and removes the stored key.
+    await prefs.setGatewayUrl('   ');
+    expect(prefs.gatewayUrl, isNull);
+    expect(store.getString('gateway.url'), isNull);
+    await reloaded.load();
+    expect(reloaded.gatewayUrl, isNull);
+  });
+
+  test('setGatewayUrl notifies once per actual change', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = AppPrefsController();
+    var notified = 0;
+    prefs.addListener(() => notified++);
+    await prefs.setGatewayUrl('https://gw.example');
+    await prefs.setGatewayUrl('https://gw.example'); // no-op
+    await prefs.setGatewayUrl(null);
+    await prefs.setGatewayUrl('  '); // already direct: no-op
+    expect(notified, 2);
+  });
+
   test('setRpcOverride notifies once per actual change', () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = AppPrefsController();

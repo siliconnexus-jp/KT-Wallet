@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/src/market/balance_service.dart';
 import 'package:kt_wallet/src/screens/settings_screens.dart';
@@ -27,6 +31,9 @@ void main() {
     expect(find.text('api.trongrid.io'), findsOneWidget);
     // The live effective URLs must NOT leak into the scope-absent rendering.
     expect(find.text(defaultEthRpcUrl), findsNothing);
+    // The gateway card is live-scope only: goldens stay byte-identical.
+    expect(find.text('网关'), findsNothing);
+    expect(find.text('测试连接'), findsNothing);
     // No reset action in the demo edit sheet.
     await tester.tap(find.text('eth-mainnet.g.alchemy.com'));
     await tester.pumpAndSettle();
@@ -97,5 +104,151 @@ void main() {
     expect(prefs.rpcOverride(Coin.eth), isNull);
     final store = await SharedPreferences.getInstance();
     expect(store.getString('rpc.eth'), isNull);
+  });
+
+  testWidgets(
+      'gateway card: URL edit persists; blank save resets to direct mode',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = AppPrefsController();
+    await prefs.load();
+
+    await tester.pumpWidget(_app(
+        AppPrefsScope(controller: prefs, child: const NetworkSettingsScreen())));
+    await tester.pumpAndSettle();
+
+    // The card renders above the chain rows with the explainer and the
+    // not-set placeholder (direct mode by default).
+    expect(find.text('网关'), findsOneWidget);
+    expect(find.text('统一查询网关，留空则直连各链节点'), findsOneWidget);
+    expect(find.text('未设置'), findsOneWidget);
+
+    // Enter a URL and save.
+    await tester.tap(find.text('未设置'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), ' https://gw.example ');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(prefs.gatewayUrl, 'https://gw.example');
+    expect(find.text('https://gw.example'), findsOneWidget);
+    expect(find.text('未设置'), findsNothing);
+
+    // Round-trips through SharedPreferences (a fresh controller loads it).
+    final reloaded = AppPrefsController();
+    await reloaded.load();
+    expect(reloaded.gatewayUrl, 'https://gw.example');
+
+    // Saving a blank value clears back to direct mode: the prefs value is
+    // null again (so prefsGatewayResolver returns null → direct path) and
+    // the stored key is removed.
+    await tester.tap(find.text('https://gw.example'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '   ');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(prefs.gatewayUrl, isNull);
+    expect(find.text('未设置'), findsOneWidget);
+    final store = await SharedPreferences.getInstance();
+    expect(store.getString('gateway.url'), isNull);
+    await reloaded.load();
+    expect(reloaded.gatewayUrl, isNull);
+  });
+
+  testWidgets('gateway card: reset button clears the URL to direct mode',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(
+        {'gateway.url': 'https://gw.example'});
+    final prefs = AppPrefsController();
+    await prefs.load();
+
+    await tester.pumpWidget(_app(
+        AppPrefsScope(controller: prefs, child: const NetworkSettingsScreen())));
+    await tester.pumpAndSettle();
+    expect(find.text('https://gw.example'), findsOneWidget);
+
+    await tester.tap(find.text('https://gw.example'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('恢复默认').last);
+    await tester.pumpAndSettle();
+
+    expect(prefs.gatewayUrl, isNull);
+    expect(find.text('未设置'), findsOneWidget);
+  });
+
+  testWidgets('test connection: kt_health ok → success snackbar', (tester) async {
+    SharedPreferences.setMockInitialValues(
+        {'gateway.url': 'https://gw.example'});
+    final prefs = AppPrefsController();
+    await prefs.load();
+
+    final requests = <Uri>[];
+    final client = MockClient((request) async {
+      requests.add(request.url);
+      final body = jsonDecode(request.body) as Map<String, Object?>;
+      expect(body['method'], 'kt_health');
+      return http.Response(
+          jsonEncode({
+            'jsonrpc': '2.0',
+            'id': body['id'],
+            'result': {'ok': true, 'version': '1.0.0'}
+          }),
+          200);
+    });
+
+    await tester.pumpWidget(_app(AppPrefsScope(
+        controller: prefs,
+        child: NetworkSettingsScreen(gatewayTestClient: client))));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('测试连接'));
+    await tester.pumpAndSettle();
+
+    expect(requests.single.toString(), 'https://gw.example/rpc');
+    expect(find.text('网关连接成功'), findsOneWidget);
+    expect(find.text('网关连接失败'), findsNothing);
+  });
+
+  testWidgets('test connection: unreachable gateway → failure snackbar',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(
+        {'gateway.url': 'https://gw.example'});
+    final prefs = AppPrefsController();
+    await prefs.load();
+
+    final client =
+        MockClient((request) async => http.Response('bad gateway', 502));
+
+    await tester.pumpWidget(_app(AppPrefsScope(
+        controller: prefs,
+        child: NetworkSettingsScreen(gatewayTestClient: client))));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('测试连接'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('网关连接失败'), findsOneWidget);
+    expect(find.text('网关连接成功'), findsNothing);
+  });
+
+  testWidgets('test connection is inert while no gateway URL is set',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = AppPrefsController();
+    await prefs.load();
+
+    final client = MockClient((request) async =>
+        fail('no gateway configured: nothing may be contacted'));
+
+    await tester.pumpWidget(_app(AppPrefsScope(
+        controller: prefs,
+        child: NetworkSettingsScreen(gatewayTestClient: client))));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('测试连接'));
+    await tester.pumpAndSettle();
+    expect(find.text('网关连接成功'), findsNothing);
+    expect(find.text('网关连接失败'), findsNothing);
   });
 }

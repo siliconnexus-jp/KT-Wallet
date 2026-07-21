@@ -564,6 +564,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get networkResetDefault => '恢复默认';
 
   @override
+  String get gatewayTitle => '网关';
+
+  @override
+  String get gatewayDesc => '统一查询网关，留空则直连各链节点';
+
+  @override
+  String get gatewayNotSet => '未设置';
+
+  @override
+  String get gatewayTest => '测试连接';
+
+  @override
+  String get gatewayTestOk => '网关连接成功';
+
+  @override
+  String get gatewayTestFail => '网关连接失败';
+
+  @override
   String get accessControl => '访问控制';
 
   @override
