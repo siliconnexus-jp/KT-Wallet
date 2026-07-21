@@ -36,6 +36,7 @@ Widget _wrap(Widget child) => MaterialApp(
     );
 
 void main() {
+  evmRawTxTests();
   group('protocol round-trip', () {
     test('sign-request: draft → fragment → encode → aggregate → decode keeps every field', () {
       final draft = _draft();
@@ -199,5 +200,49 @@ void main() {
       expect(find.text(truncateMiddle(dailyTron)), findsOneWidget); // signer
       expect(find.text('-120 USDT'), findsOneWidget); // demo draft amount via summary
     });
+  });
+}
+
+/// #13 EVM leg wired: the sign-request rawTx for EVM chains is a REAL
+/// EIP-1559 unsigned transaction, not the JSON placeholder.
+void evmRawTxTests() {
+  test('EVM draft rawTx is a typed 0x02 EIP-1559 encoding matching Eip1559Tx', () {
+    final draft = TransferDraft(
+      symbol: 'ETH',
+      networkLabel: 'Ethereum',
+      chain: Chain.ethereum,
+      decimals: 18,
+      recipient: '0x925fEA1c0dbf3B011391bbed682E32861BE73213',
+      amount: Amount.parse('0.5', 18, symbol: 'ETH'),
+      feeTier: 1,
+    );
+    final raw = rawTxFor(draft, from: '0x0000000000000000000000000000000000000001');
+    expect(raw.first, 0x02, reason: 'typed EIP-1559 envelope');
+
+    // Re-encode with the same demo chain-state parameters — byte equality
+    // proves rawTx really is the chains-package serialization.
+    final gwei = BigInt.from(1000000000);
+    final expected = Eip1559Tx.forTransfer(
+      TransferIntent(
+        chain: Chain.ethereum,
+        operation: TxOperation.nativeTransfer,
+        from: '0x0000000000000000000000000000000000000001',
+        to: draft.recipient,
+        amount: draft.amount,
+      ),
+      chainId: BigInt.one,
+      nonce: BigInt.zero,
+      maxPriorityFeePerGas: BigInt.two * gwei,
+      maxFeePerGas: BigInt.from(40) * gwei,
+      gasLimit: BigInt.from(21000),
+    ).encodeUnsigned();
+    expect(raw, expected);
+  });
+
+  test('TRON draft rawTx keeps the documented JSON placeholder shape', () {
+    final raw = rawTxFor(demoDraft, from: usdtTronContract);
+    final decoded = json.decode(utf8.decode(raw)) as Map<String, dynamic>;
+    expect(decoded['chain'], 'tron');
+    expect(decoded['v'], 1);
   });
 }

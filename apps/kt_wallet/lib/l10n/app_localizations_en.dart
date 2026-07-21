@@ -572,6 +572,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get rpcNode => 'RPC node';
 
   @override
+  String get networkResetDefault => 'Reset to default';
+
+  @override
   String get accessControl => 'Access control';
 
   @override
@@ -705,4 +708,37 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get historyEmpty => 'No transactions yet';
+
+  @override
+  String get setPinTitle => 'Set unlock PIN';
+
+  @override
+  String get setPinPrompt => 'Set a 6-digit PIN';
+
+  @override
+  String get setPinConfirmPrompt => 'Enter again to confirm';
+
+  @override
+  String get setPinDesc =>
+      'Unlocks the app when biometrics are unavailable. The PIN is stored only in this device\'s secure area.';
+
+  @override
+  String get pinMismatch => 'The two entries don\'t match — set it again';
+
+  @override
+  String get enterPinToUnlock => 'Enter PIN to unlock';
+
+  @override
+  String get enterPinToDisable => 'Enter PIN to turn off app lock';
+
+  @override
+  String get pinIncorrect => 'Incorrect PIN, try again';
+
+  @override
+  String pinLockedRetry(int seconds) {
+    return 'Too many attempts. Retry in ${seconds}s';
+  }
+
+  @override
+  String get usePinUnlock => 'Unlock with PIN';
 }

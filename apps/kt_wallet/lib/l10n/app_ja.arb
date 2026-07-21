@@ -171,6 +171,7 @@
   "networkSettingsTitle": "ネットワーク設定",
   "rpcTimeout": "タイムアウト",
   "rpcNode": "RPCノード",
+  "networkResetDefault": "デフォルトに戻す",
   "accessControl": "アクセス制御",
   "appLock": "アプリロック",
   "appLockDesc": "アプリ起動時にFace IDを要求",
@@ -225,5 +226,22 @@
   "marketOfflineDemo": "オフライン — デモデータを表示中",
   "actionDone": "完了",
   "historyUnsupportedChain": "このチェーンでは履歴照会はまだ利用できません",
-  "historyEmpty": "取引履歴はまだありません"
+  "historyEmpty": "取引履歴はまだありません",
+  "setPinTitle": "ロック解除パスワードを設定",
+  "setPinPrompt": "6桁のパスワードを設定",
+  "setPinConfirmPrompt": "確認のため再入力",
+  "setPinDesc": "生体認証が使えないときにパスワードでアプリを解除します。パスワードは本端末のセキュアエリアにのみ保存されます。",
+  "pinMismatch": "2回の入力が一致しません。もう一度設定してください",
+  "enterPinToUnlock": "パスワードを入力してロック解除",
+  "enterPinToDisable": "アプリロックをオフにするにはパスワードを入力",
+  "pinIncorrect": "パスワードが違います。再試行してください",
+  "pinLockedRetry": "試行回数が上限に達しました。{seconds} 秒後に再試行してください",
+  "@pinLockedRetry": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "usePinUnlock": "パスワードで解除"
 }

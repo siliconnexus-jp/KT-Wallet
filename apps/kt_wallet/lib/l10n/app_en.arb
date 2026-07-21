@@ -171,6 +171,7 @@
   "networkSettingsTitle": "Network settings",
   "rpcTimeout": "Timeout",
   "rpcNode": "RPC node",
+  "networkResetDefault": "Reset to default",
   "accessControl": "Access control",
   "appLock": "App lock",
   "appLockDesc": "Require Face ID to open the app",
@@ -225,5 +226,22 @@
   "marketOfflineDemo": "Offline — showing demo data",
   "actionDone": "Done",
   "historyUnsupportedChain": "History lookup isn't available on this chain yet",
-  "historyEmpty": "No transactions yet"
+  "historyEmpty": "No transactions yet",
+  "setPinTitle": "Set unlock PIN",
+  "setPinPrompt": "Set a 6-digit PIN",
+  "setPinConfirmPrompt": "Enter again to confirm",
+  "setPinDesc": "Unlocks the app when biometrics are unavailable. The PIN is stored only in this device's secure area.",
+  "pinMismatch": "The two entries don't match — set it again",
+  "enterPinToUnlock": "Enter PIN to unlock",
+  "enterPinToDisable": "Enter PIN to turn off app lock",
+  "pinIncorrect": "Incorrect PIN, try again",
+  "pinLockedRetry": "Too many attempts. Retry in {seconds}s",
+  "@pinLockedRetry": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "usePinUnlock": "Unlock with PIN"
 }

@@ -8,6 +8,7 @@ import '../../l10n/app_localizations.dart';
 import '../market/balance_service.dart';
 import '../market/market_controller.dart';
 import '../market/market_scope.dart';
+import 'home_screen.dart' show tokenRowMeta;
 import '../widgets/market_offline_banner.dart';
 import '../widgets/token_icon.dart';
 import '../state/wallet_scope.dart';
@@ -45,9 +46,10 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
     });
   }
 
-  /// Live native-coin rows in the same tuple shape as the demo list. Loading
-  /// and errored chains show '--' — never an invented number; the change
-  /// column is empty because there is no 24h-change feed yet.
+  /// Live rows in the same tuple shape as the demo list: the four native
+  /// coins, then the built-in registry tokens. Loading and errored items show
+  /// '--' — never an invented number; the change column is empty because
+  /// there is no 24h-change feed yet.
   List<(Color, String, String, String, String, String, Color, String)> _liveRows(
       MarketController market) {
     return [
@@ -71,6 +73,25 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
             '',
             WalletColors.text3,
             network,
+          );
+        }(),
+      for (final token in market.tokens)
+        () {
+          final result = market.tokenBalanceFor(token.id);
+          final amount = result.amount;
+          final ok = result.status == BalanceStatus.ok && amount != null;
+          final fiat = market.tokenFiatValueUsd(token);
+          final (color, glyph) = tokenRowMeta[token.symbol] ??
+              (WalletColors.accent, token.symbol.substring(0, 1));
+          return (
+            color,
+            glyph,
+            token.symbol,
+            '${ok ? amount.format(maxFraction: 6) : '--'} ${token.symbol} · ${token.network}',
+            fiat == null ? '--' : formatUsd(fiat),
+            '',
+            WalletColors.text3,
+            token.network,
           );
         }(),
     ];

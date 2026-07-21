@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/src/market/balance_service.dart';
 import 'package:kt_wallet/src/market/market_controller.dart';
 import 'package:kt_wallet/src/market/price_service.dart';
+import 'package:kt_wallet/src/market/token_balance_service.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
 import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
@@ -29,6 +30,14 @@ class FakeBalanceService extends BalanceService {
     if (g != null) await g.future;
     return results;
   }
+}
+
+class FakeTokenBalanceService extends TokenBalanceService {
+  FakeTokenBalanceService(this.results);
+  final Map<String, BalanceResult> results;
+  @override
+  Future<Map<String, BalanceResult>> fetchAll(ChainAddresses addresses) async =>
+      results;
 }
 
 class FakePriceService extends PriceService {
@@ -190,6 +199,56 @@ void main() {
     await pumpEventQueue();
     expect(balances.calls, 2);
     expect(balances.lastAddresses!.eth, '0xbbb');
+    controller.dispose();
+  });
+
+  test('token balances: per-token results, pegged fiat, total inclusion',
+      () async {
+    final controller = MarketController(
+      wallets: _wallets(),
+      balances: FakeBalanceService(_okResults()),
+      prices: FakePriceService(_prices),
+      tokens: FakeTokenBalanceService({
+        'usdt-eth': BalanceResult.ok(
+            Amount(raw: BigInt.from(25000000), decimals: 6, symbol: 'USDT')),
+        'usdc-polygon': BalanceResult.ok(
+            Amount(raw: BigInt.from(10000000), decimals: 6, symbol: 'USDC')),
+        'usdt-tron': const BalanceResult.error(),
+      }),
+    );
+    // Registry exposed; everything starts as loading.
+    expect(controller.tokens.map((t) => t.id),
+        ['usdt-eth', 'usdc-polygon', 'usdt-tron']);
+    expect(
+        controller.tokenBalanceFor('usdt-eth').status, BalanceStatus.loading);
+
+    await controller.refresh();
+    expect(controller.tokenBalanceFor('usdt-eth').status, BalanceStatus.ok);
+    expect(controller.tokenBalanceFor('usdt-tron').status, BalanceStatus.error);
+
+    final byId = {for (final t in controller.tokens) t.id: t};
+    // Stablecoin fiat comes from the existing $1.00 peg.
+    expect(controller.tokenFiatValueUsd(byId['usdt-eth']!), closeTo(25, 1e-9));
+    expect(controller.tokenFiatValueUsd(byId['usdc-polygon']!),
+        closeTo(10, 1e-9));
+    // Errored token: no fiat value, never an invented number.
+    expect(controller.tokenFiatValueUsd(byId['usdt-tron']!), isNull);
+    // Natives 2051.50 + tokens 35.00.
+    expect(controller.totalUsd, closeTo(2086.5, 1e-9));
+    controller.dispose();
+  });
+
+  test('a controller without a token service has no token rows', () async {
+    final controller = MarketController(
+      wallets: _wallets(),
+      balances: FakeBalanceService(_okResults()),
+      prices: FakePriceService(_prices),
+    );
+    await controller.refresh();
+    expect(controller.tokens, isEmpty);
+    expect(controller.tokenBalanceFor('usdt-eth').status,
+        BalanceStatus.loading);
+    expect(controller.totalUsd, closeTo(2051.5, 1e-9));
     controller.dispose();
   });
 

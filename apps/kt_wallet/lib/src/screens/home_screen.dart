@@ -9,8 +9,10 @@ import '../market/history_controller.dart';
 import '../market/history_service.dart';
 import '../market/market_controller.dart';
 import '../market/market_scope.dart';
+import '../market/token_balance_service.dart';
 import '../widgets/market_offline_banner.dart';
 import '../widgets/token_icon.dart';
+import '../state/app_prefs.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
 
@@ -209,7 +211,13 @@ class _RecordsTabState extends State<_RecordsTab> {
     if (_owned == null &&
         HistoryScope.maybeOf(context) == null &&
         MarketScope.maybeOf(context) != null) {
-      final controller = HistoryController(wallets: WalletScope.of(context));
+      final controller = HistoryController(
+        wallets: WalletScope.of(context),
+        // TronGrid endpoint follows the persisted network-settings override
+        // (defaults everywhere when no AppPrefsScope is mounted).
+        service: HistoryService(
+            endpoints: prefsRpcEndpoints(AppPrefsScope.maybeOf(context))),
+      );
       _owned = controller..addListener(_onHistoryChanged);
       // Post-frame: refresh() notifies synchronously, never mid-build.
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -487,9 +495,38 @@ const liveChainRows = [
   (Coin.solana, 'Solana', 'SOL', Color(0xFF9945FF), '◎'),
 ];
 
-/// Builds the asset rows from live market data. Loading and errored chains
-/// render '--' (never a fabricated number); no 24h-change feed exists yet, so
-/// the change column stays empty in live mode.
+/// Fallback avatar color + glyph per built-in token symbol ([TokenIcon]
+/// renders the bundled brand PNG; these only show for missing assets).
+const tokenRowMeta = {
+  'USDT': (Color(0xFF26A17B), '₮'),
+  'USDC': (Color(0xFF2775CA), r'$'),
+};
+
+/// One live asset row for a registry token, in the demo rows' visual shape
+/// ('500.00 USDT · TRON'). Loading/errored tokens render '--' — never a
+/// fabricated number.
+AssetRow liveTokenRow(MarketController market, TokenInfo token) {
+  final result = market.tokenBalanceFor(token.id);
+  final amount = result.amount;
+  final ok = result.status == BalanceStatus.ok && amount != null;
+  final fiat = market.tokenFiatValueUsd(token);
+  final (color, glyph) = tokenRowMeta[token.symbol] ??
+      (WalletColors.accent, token.symbol.substring(0, 1));
+  return AssetRow(
+    color,
+    glyph,
+    token.symbol,
+    '${ok ? amount.format(maxFraction: 6) : '--'} ${token.symbol} · ${token.network}',
+    fiat == null ? '--' : formatUsd(fiat),
+    '',
+    WalletColors.text3,
+  );
+}
+
+/// Builds the asset rows from live market data: the four native rows, then
+/// the registry tokens. Loading and errored chains render '--' (never a
+/// fabricated number); no 24h-change feed exists yet, so the change column
+/// stays empty in live mode.
 List<AssetRow> liveAssetRows(MarketController market) => [
       for (final (coin, name, symbol, color, glyph) in liveChainRows)
         () {
@@ -507,6 +544,7 @@ List<AssetRow> liveAssetRows(MarketController market) => [
             WalletColors.text3,
           );
         }(),
+      for (final token in market.tokens) liveTokenRow(market, token),
     ];
 
 class AssetRow {

@@ -15,6 +15,20 @@ const String defaultPolygonRpcUrl = 'https://polygon-rpc.com';
 const String defaultTronApiUrl = 'https://api.trongrid.io';
 const String defaultSolanaRpcUrl = 'https://api.mainnet-beta.solana.com';
 
+/// Resolves the endpoint (JSON-RPC URL, or REST base URL for TRON) to use for
+/// one chain. Injected into the network services so the settings screen's
+/// persisted overrides apply without the services knowing about preferences.
+typedef RpcEndpointResolver = String Function(Coin coin);
+
+/// The built-in default endpoint per chain — the resolver used when no
+/// override source is wired up (tests, gallery).
+String defaultRpcEndpointFor(Coin coin) => switch (coin) {
+      Coin.eth => defaultEthRpcUrl,
+      Coin.polygon => defaultPolygonRpcUrl,
+      Coin.tron => defaultTronApiUrl,
+      Coin.solana => defaultSolanaRpcUrl,
+    };
+
 /// Per-chain fetch outcome. Chains are independent: one failing endpoint (or
 /// one invalid address) never taints the others.
 enum BalanceStatus { loading, ok, error, unsupported }
@@ -50,19 +64,17 @@ class BalanceService {
   BalanceService({
     JsonRpcTransport? jsonRpcTransport,
     RestTransport? restTransport,
-    this.ethRpcUrl = defaultEthRpcUrl,
-    this.polygonRpcUrl = defaultPolygonRpcUrl,
-    this.tronApiUrl = defaultTronApiUrl,
-    this.solanaRpcUrl = defaultSolanaRpcUrl,
+    RpcEndpointResolver? endpoints,
   })  : _jsonRpc = jsonRpcTransport ?? HttpJsonRpcTransport(),
-        _rest = restTransport ?? HttpRestTransport();
+        _rest = restTransport ?? HttpRestTransport(),
+        _endpoints = endpoints ?? defaultRpcEndpointFor;
 
   final JsonRpcTransport _jsonRpc;
   final RestTransport _rest;
-  final String ethRpcUrl;
-  final String polygonRpcUrl;
-  final String tronApiUrl;
-  final String solanaRpcUrl;
+
+  /// Resolved on every fetch (not cached at construction) so a persisted
+  /// override saved in settings applies from the very next refresh.
+  final RpcEndpointResolver _endpoints;
 
   /// Native-unit decimals per chain (wei / wei / SUN / lamports).
   static const decimalsFor = {
@@ -84,10 +96,10 @@ class BalanceService {
   /// failure (RPC error, HTTP status, timeout, malformed body) collapses to
   /// [BalanceStatus.error] for that chain only.
   Future<Map<Coin, BalanceResult>> fetchAll(ChainAddresses addresses) async {
-    final eth = EvmRpc(url: ethRpcUrl, transport: _jsonRpc);
-    final polygon = EvmRpc(url: polygonRpcUrl, transport: _jsonRpc);
-    final tron = TronRpc(baseUrl: tronApiUrl, transport: _rest);
-    final solana = SolanaRpc(url: solanaRpcUrl, transport: _jsonRpc);
+    final eth = EvmRpc(url: _endpoints(Coin.eth), transport: _jsonRpc);
+    final polygon = EvmRpc(url: _endpoints(Coin.polygon), transport: _jsonRpc);
+    final tron = TronRpc(baseUrl: _endpoints(Coin.tron), transport: _rest);
+    final solana = SolanaRpc(url: _endpoints(Coin.solana), transport: _jsonRpc);
 
     final entries = await Future.wait([
       _guard(Coin.eth, () => eth.getBalance(addresses.eth)),

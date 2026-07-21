@@ -129,12 +129,46 @@ Uint8List randomReqId() {
 /// [AirgapLimits.maxExpirySeconds]).
 const signRequestTtlSeconds = 600;
 
-/// Deterministic placeholder raw transaction: utf8 of the canonical JSON of
-/// the transfer intent. Real chain serialization (protobuf for TRON, RLP/1559
-/// for EVM, a Solana message for SOL) is out of scope at current fidelity —
-/// what matters here is that real bytes, derived from the user's actual
-/// input, flow through the AIRGAP-V1 protocol end to end.
-Uint8List demoRawTx(TransferDraft draft, {required String from}) =>
+/// Raw transaction bytes for the sign request.
+///
+/// EVM chains carry a REAL typed transaction: `0x02 || rlp(...)` unsigned
+/// EIP-1559 bytes from the chains package (native transfer or ERC-20
+/// `transfer` calldata) — exactly what a signer hashes and signs. The nonce
+/// and gas parameters are demo constants until online nonce/gas fetching is
+/// wired (they affect values inside the encoding, not its validity as a
+/// serialization). TRON (protobuf) and Solana (message v0) still use the
+/// canonical-JSON placeholder pending real-signing integration to validate
+/// their encoders against.
+Uint8List rawTxFor(TransferDraft draft, {required String from}) {
+  if (draft.chain == Chain.ethereum || draft.chain == Chain.polygon) {
+    final intent = TransferIntent(
+      chain: draft.chain,
+      operation: draft.operation,
+      from: from,
+      to: draft.recipient,
+      amount: draft.amount,
+      tokenContract: draft.tokenContract,
+      tokenSymbol: draft.tokenContract == null ? null : draft.symbol,
+    );
+    final gwei = BigInt.from(1000000000);
+    final tx = Eip1559Tx.forTransfer(
+      intent,
+      chainId: BigInt.from(chainIdForChain(draft.chain) ?? 1),
+      // Demo chain-state parameters (see doc comment above).
+      nonce: BigInt.zero,
+      maxPriorityFeePerGas: BigInt.two * gwei,
+      maxFeePerGas: BigInt.from(40) * gwei,
+      gasLimit: BigInt.from(draft.operation == TxOperation.nativeTransfer ? 21000 : 65000),
+    );
+    return tx.encodeUnsigned();
+  }
+  return _jsonRawTx(draft, from: from);
+}
+
+/// Deterministic placeholder raw transaction for chains whose real
+/// serialization isn't integrated yet (TRON protobuf, Solana message):
+/// utf8 of the canonical JSON of the transfer intent.
+Uint8List _jsonRawTx(TransferDraft draft, {required String from}) =>
     Uint8List.fromList(utf8.encode(json.encode({
       'v': 1,
       'chain': draft.chain.name,
@@ -147,6 +181,11 @@ Uint8List demoRawTx(TransferDraft draft, {required String from}) =>
       if (draft.tokenContract != null) 'contract': draft.tokenContract,
       'fee': networkFeeFor(draft.chain, draft.feeTier).toString(),
     })));
+
+/// Back-compat alias for existing tests/callers; the demo (TRON) draft keeps
+/// its JSON placeholder shape under either name.
+Uint8List demoRawTx(TransferDraft draft, {required String from}) =>
+    rawTxFor(draft, from: from);
 
 /// Integer keys of the sign-request `summary` display-hint map.
 abstract final class SummaryKeys {

@@ -132,6 +132,44 @@ void main() {
         expect(results[coin]!.status, BalanceStatus.error, reason: '$coin');
       }
     });
+
+    test('an injected endpoint resolver overrides the URLs the transports see',
+        () async {
+      final seenJsonUrls = <String>[];
+      final seenRestUrls = <String>[];
+      final service = BalanceService(
+        endpoints: (coin) => 'https://custom-${coin.name}.example',
+        jsonRpcTransport: _FakeJsonRpc((url, body) async {
+          seenJsonUrls.add(url);
+          return (body as Map)['method'] == 'getBalance'
+              ? _rpcResult({'context': <String, Object?>{}, 'value': 0})
+              : _rpcResult('0x0');
+        }),
+        restTransport: _FakeRest(onGet: (url) async {
+          seenRestUrls.add(url);
+          return {'data': <Object?>[]};
+        }),
+      );
+
+      final results = await service.fetchAll(_addresses);
+      for (final coin in Coin.values) {
+        expect(results[coin]!.status, BalanceStatus.ok, reason: '$coin');
+      }
+      expect(
+          seenJsonUrls,
+          containsAll([
+            'https://custom-eth.example',
+            'https://custom-polygon.example',
+            'https://custom-solana.example',
+          ]));
+      expect(seenRestUrls.single,
+          'https://custom-tron.example/v1/accounts/TTronAddr');
+      // And the default resolver maps each chain to the built-in consts.
+      expect(defaultRpcEndpointFor(Coin.eth), defaultEthRpcUrl);
+      expect(defaultRpcEndpointFor(Coin.polygon), defaultPolygonRpcUrl);
+      expect(defaultRpcEndpointFor(Coin.tron), defaultTronApiUrl);
+      expect(defaultRpcEndpointFor(Coin.solana), defaultSolanaRpcUrl);
+    });
   });
 
   group('PriceService', () {

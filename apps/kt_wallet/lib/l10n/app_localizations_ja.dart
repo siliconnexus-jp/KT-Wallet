@@ -557,6 +557,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get rpcNode => 'RPCノード';
 
   @override
+  String get networkResetDefault => 'デフォルトに戻す';
+
+  @override
   String get accessControl => 'アクセス制御';
 
   @override
@@ -684,4 +687,37 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get historyEmpty => '取引履歴はまだありません';
+
+  @override
+  String get setPinTitle => 'ロック解除パスワードを設定';
+
+  @override
+  String get setPinPrompt => '6桁のパスワードを設定';
+
+  @override
+  String get setPinConfirmPrompt => '確認のため再入力';
+
+  @override
+  String get setPinDesc =>
+      '生体認証が使えないときにパスワードでアプリを解除します。パスワードは本端末のセキュアエリアにのみ保存されます。';
+
+  @override
+  String get pinMismatch => '2回の入力が一致しません。もう一度設定してください';
+
+  @override
+  String get enterPinToUnlock => 'パスワードを入力してロック解除';
+
+  @override
+  String get enterPinToDisable => 'アプリロックをオフにするにはパスワードを入力';
+
+  @override
+  String get pinIncorrect => 'パスワードが違います。再試行してください';
+
+  @override
+  String pinLockedRetry(int seconds) {
+    return '試行回数が上限に達しました。$seconds 秒後に再試行してください';
+  }
+
+  @override
+  String get usePinUnlock => 'パスワードで解除';
 }

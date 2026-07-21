@@ -1,8 +1,10 @@
-import 'package:flutter/foundation.dart';
+import 'package:core_crypto/core_crypto.dart' show Coin;
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// User preferences from the security-settings screen: app lock, privacy mode,
-/// auto-lock delay and fiat display currency. Persisted via SharedPreferences.
+/// User preferences from the settings screens: app lock, privacy mode,
+/// auto-lock delay, fiat display currency and per-chain RPC endpoint
+/// overrides. Persisted via SharedPreferences.
 ///
 /// All persistence is best-effort and guarded (same style as
 /// [LocaleController]): in widget tests without the SharedPreferences plugin,
@@ -12,6 +14,15 @@ class AppPrefsController extends ChangeNotifier {
   static const _keyPrivacyMode = 'prefs.privacyMode';
   static const _keyAutoLockMinutes = 'prefs.autoLockMinutes';
   static const _keyFiat = 'prefs.fiat';
+
+  /// Storage keys for the per-chain RPC endpoint overrides. No stored value
+  /// (null) means "use the built-in default endpoint".
+  static const rpcPrefKeys = {
+    Coin.eth: 'rpc.eth',
+    Coin.polygon: 'rpc.polygon',
+    Coin.tron: 'rpc.tron',
+    Coin.solana: 'rpc.solana',
+  };
 
   /// Fiat currencies offered by the picker.
   static const fiatOptions = ['USD', 'CNY', 'JPY'];
@@ -31,6 +42,12 @@ class AppPrefsController extends ChangeNotifier {
   int get autoLockMinutes => _autoLockMinutes;
   String get fiat => _fiat;
 
+  final Map<Coin, String> _rpcOverrides = {};
+
+  /// The user's RPC endpoint override for [coin], or null when the built-in
+  /// default applies (callers resolve the effective URL themselves).
+  String? rpcOverride(Coin coin) => _rpcOverrides[coin];
+
   /// Loads persisted values (if any). Safe to call lazily from a screen.
   Future<void> load() async {
     try {
@@ -39,6 +56,14 @@ class AppPrefsController extends ChangeNotifier {
       _privacyMode = prefs.getBool(_keyPrivacyMode) ?? _privacyMode;
       _autoLockMinutes = prefs.getInt(_keyAutoLockMinutes) ?? _autoLockMinutes;
       _fiat = prefs.getString(_keyFiat) ?? _fiat;
+      for (final entry in rpcPrefKeys.entries) {
+        final url = prefs.getString(entry.value);
+        if (url != null && url.isNotEmpty) {
+          _rpcOverrides[entry.key] = url;
+        } else {
+          _rpcOverrides.remove(entry.key);
+        }
+      }
       notifyListeners();
     } catch (_) {
       // No prefs plugin (tests) or read error: keep the defaults.
@@ -83,6 +108,31 @@ class AppPrefsController extends ChangeNotifier {
     }
   }
 
+  /// Sets (or, with null / blank, clears back to the default) the RPC
+  /// endpoint override for [coin].
+  Future<void> setRpcOverride(Coin coin, String? url) async {
+    final value = url?.trim();
+    final normalized = (value == null || value.isEmpty) ? null : value;
+    if (normalized == _rpcOverrides[coin]) return;
+    if (normalized == null) {
+      _rpcOverrides.remove(coin);
+    } else {
+      _rpcOverrides[coin] = normalized;
+    }
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = rpcPrefKeys[coin]!;
+      if (normalized == null) {
+        await prefs.remove(key);
+      } else {
+        await prefs.setString(key, normalized);
+      }
+    } catch (_) {
+      // Persistence is best-effort; the in-memory choice still applies.
+    }
+  }
+
   Future<void> _persistBool(String key, bool value) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -91,4 +141,21 @@ class AppPrefsController extends ChangeNotifier {
       // Persistence is best-effort; the in-memory choice still applies.
     }
   }
+}
+
+/// Provides the app-wide [AppPrefsController] and rebuilds dependents when it
+/// notifies. Like [MarketScope] there is deliberately NO fallback: screens
+/// rendered without a scope (gallery / goldens / plain widget tests) get null
+/// from [maybeOf] and keep their scope-absent demo behavior byte-for-byte.
+class AppPrefsScope extends InheritedNotifier<AppPrefsController> {
+  const AppPrefsScope({
+    super.key,
+    required AppPrefsController controller,
+    required super.child,
+  }) : super(notifier: controller);
+
+  /// The shared controller, or null when no scope is mounted (demo rendering).
+  /// Registers a dependency — rebuilds the caller on preference changes.
+  static AppPrefsController? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AppPrefsScope>()?.notifier;
 }

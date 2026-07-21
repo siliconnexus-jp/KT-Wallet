@@ -4,6 +4,8 @@ import 'package:chains/chains.dart' show Amount, base58Decode;
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:http/http.dart' as http;
 
+import 'balance_service.dart' show RpcEndpointResolver, defaultRpcEndpointFor;
+
 /// TronGrid REST base URL — the only chain with a keyless public history API.
 const String defaultTronHistoryApiUrl = 'https://api.trongrid.io';
 
@@ -70,13 +72,20 @@ class HistoryResult {
 class HistoryService {
   HistoryService({
     http.Client? client,
-    this.tronApiUrl = defaultTronHistoryApiUrl,
+    RpcEndpointResolver? endpoints,
     this.timeout = const Duration(seconds: 10),
-  }) : _client = client ?? http.Client();
+  })  : _client = client ?? http.Client(),
+        _endpoints = endpoints ?? defaultRpcEndpointFor;
 
   final http.Client _client;
-  final String tronApiUrl;
+
+  /// Per-chain endpoint resolver (settings overrides in production; the
+  /// built-in defaults otherwise). Resolved on every fetch.
+  final RpcEndpointResolver _endpoints;
   final Duration timeout;
+
+  /// The TronGrid base URL in effect for the next fetch.
+  String get tronApiUrl => _endpoints(Coin.tron);
 
   /// Max records requested per endpoint and returned after the merge.
   static const int pageSize = 20;

@@ -553,6 +553,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get rpcNode => 'RPC 节点';
 
   @override
+  String get networkResetDefault => '恢复默认';
+
+  @override
   String get accessControl => '访问控制';
 
   @override
@@ -678,4 +681,36 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get historyEmpty => '暂无交易记录';
+
+  @override
+  String get setPinTitle => '设置解锁密码';
+
+  @override
+  String get setPinPrompt => '设置 6 位密码';
+
+  @override
+  String get setPinConfirmPrompt => '再次输入以确认';
+
+  @override
+  String get setPinDesc => '生物识别不可用时用密码解锁 App。密码仅保存在本机安全区域。';
+
+  @override
+  String get pinMismatch => '两次输入不一致，请重新设置';
+
+  @override
+  String get enterPinToUnlock => '输入密码解锁';
+
+  @override
+  String get enterPinToDisable => '输入密码以关闭 App 锁';
+
+  @override
+  String get pinIncorrect => '密码错误，请重试';
+
+  @override
+  String pinLockedRetry(int seconds) {
+    return '尝试次数过多，请 $seconds 秒后重试';
+  }
+
+  @override
+  String get usePinUnlock => '使用密码解锁';
 }

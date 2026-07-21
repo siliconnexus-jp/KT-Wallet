@@ -6,9 +6,11 @@ import 'package:flutter/foundation.dart';
 import '../state/wallet_controller.dart';
 import 'balance_service.dart';
 import 'price_service.dart';
+import 'token_balance_service.dart';
 
-/// Live market state for the current wallet: per-chain native balances plus
-/// spot USD prices, refreshed on home entry, wallet switch (listens to the
+/// Live market state for the current wallet: per-chain native balances, the
+/// built-in registry's token balances (when a [TokenBalanceService] is wired)
+/// plus spot USD prices, refreshed on home entry, wallet switch (listens to the
 /// [WalletController]) and pull-to-refresh — deliberately no polling loop.
 ///
 /// Fiat math uses doubles for DISPLAY ONLY (totals/row values); on-chain
@@ -18,18 +20,28 @@ class MarketController extends ChangeNotifier {
     required WalletController wallets,
     BalanceService? balances,
     PriceService? prices,
+    TokenBalanceService? tokens,
   })  :
         // ignore: prefer_initializing_formals
         _wallets = wallets,
         _balances = balances ?? BalanceService(),
-        _prices = prices ?? PriceService() {
+        _prices = prices ?? PriceService(),
+        // Deliberately nullable (no network-hitting default): contexts that
+        // never wire a token service (older tests, gallery) simply have no
+        // token rows.
+        // ignore: prefer_initializing_formals
+        _tokens = tokens {
     _walletId = _wallets.current?.id;
     _wallets.addListener(_onWalletsChanged);
+    _tokenResults = {
+      for (final token in this.tokens) token.id: const BalanceResult.loading(),
+    };
   }
 
   final WalletController _wallets;
   final BalanceService _balances;
   final PriceService _prices;
+  final TokenBalanceService? _tokens;
 
   String? _walletId;
   int _generation = 0;
@@ -39,6 +51,7 @@ class MarketController extends ChangeNotifier {
   Map<Coin, BalanceResult> _results = {
     for (final coin in Coin.values) coin: const BalanceResult.loading(),
   };
+  Map<String, BalanceResult> _tokenResults = const {};
   Map<Coin, double>? _pricesUsd;
 
   /// True while a refresh is in flight (rows render '--' placeholders).
@@ -49,14 +62,23 @@ class MarketController extends ChangeNotifier {
 
   BalanceResult balanceFor(Coin coin) => _results[coin]!;
 
+  /// The token registry rendered under the native rows (empty when no token
+  /// service was wired up).
+  List<TokenInfo> get tokens => _tokens?.tokens ?? const [];
+
+  /// Per-token fetch result, keyed by [TokenInfo.id].
+  BalanceResult tokenBalanceFor(String id) =>
+      _tokenResults[id] ?? const BalanceResult.loading();
+
   /// Spot USD prices, or null when never fetched successfully this session.
   Map<Coin, double>? get pricesUsd => _pricesUsd;
 
   double? priceUsd(Coin coin) => _pricesUsd?[coin];
 
-  /// True when at least one chain returned a real balance.
+  /// True when at least one chain or token returned a real balance.
   bool get hasLiveBalances =>
-      _results.values.any((r) => r.status == BalanceStatus.ok);
+      _results.values.any((r) => r.status == BalanceStatus.ok) ||
+      _tokenResults.values.any((r) => r.status == BalanceStatus.ok);
 
   /// Everything errored: no live balance on any chain AND no prices. The UI
   /// falls back to the demo constants behind an explicit "offline — demo
@@ -77,12 +99,30 @@ class MarketController extends ChangeNotifier {
         price;
   }
 
-  /// Sum of the computable per-chain fiat values, or null when none is
-  /// computable (a partially failed refresh totals only what's known).
+  /// USD value of one token's balance, or null when unavailable. Prices come
+  /// from the existing stablecoin pegs ([PriceService.peggedUsdBySymbol]);
+  /// non-pegged tokens without a price feed stay null ('--'), never invented.
+  double? tokenFiatValueUsd(TokenInfo token) {
+    final result = tokenBalanceFor(token.id);
+    final amount = result.amount;
+    if (result.status != BalanceStatus.ok || amount == null) return null;
+    final price = PriceService.peggedUsdBySymbol[token.symbol];
+    if (price == null) return null;
+    return amount.raw.toDouble() /
+        math.pow(10, amount.decimals).toDouble() *
+        price;
+  }
+
+  /// Sum of the computable per-chain and per-token fiat values, or null when
+  /// none is computable (a partially failed refresh totals only what's known).
   double? get totalUsd {
     double? total;
     for (final coin in Coin.values) {
       final value = fiatValueUsd(coin);
+      if (value != null) total = (total ?? 0) + value;
+    }
+    for (final token in tokens) {
+      final value = tokenFiatValueUsd(token);
       if (value != null) total = (total ?? 0) + value;
     }
     return total;
@@ -106,15 +146,23 @@ class MarketController extends ChangeNotifier {
     _results = {
       for (final coin in Coin.values) coin: const BalanceResult.loading(),
     };
+    _tokenResults = {
+      for (final token in tokens) token.id: const BalanceResult.loading(),
+    };
     notifyListeners();
 
-    final (balances, prices) = await (
+    final tokenService = _tokens;
+    final (balances, prices, tokenBalances) = await (
       _balances.fetchAll(wallet.addresses),
       _prices.fetchUsdPrices(),
+      tokenService == null
+          ? Future.value(const <String, BalanceResult>{})
+          : tokenService.fetchAll(wallet.addresses),
     ).wait;
 
     if (generation != _generation) return; // superseded — drop stale results
     _results = balances;
+    _tokenResults = tokenBalances;
     // A failed price fetch falls back to the session's last good quotes
     // (prices drift slowly; balances are never substituted this way).
     _pricesUsd = prices ?? _prices.lastGoodUsd;

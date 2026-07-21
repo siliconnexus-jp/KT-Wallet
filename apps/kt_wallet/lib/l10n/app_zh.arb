@@ -297,6 +297,7 @@
   "networkSettingsTitle": "网络设置",
   "rpcTimeout": "超时",
   "rpcNode": "RPC 节点",
+  "networkResetDefault": "恢复默认",
   "accessControl": "访问控制",
   "appLock": "App 锁",
   "appLockDesc": "打开 App 时需要 Face ID",
@@ -351,5 +352,22 @@
   "marketOfflineDemo": "离线，显示演示数据",
   "actionDone": "完成",
   "historyUnsupportedChain": "该链暂不支持历史查询",
-  "historyEmpty": "暂无交易记录"
+  "historyEmpty": "暂无交易记录",
+  "setPinTitle": "设置解锁密码",
+  "setPinPrompt": "设置 6 位密码",
+  "setPinConfirmPrompt": "再次输入以确认",
+  "setPinDesc": "生物识别不可用时用密码解锁 App。密码仅保存在本机安全区域。",
+  "pinMismatch": "两次输入不一致，请重新设置",
+  "enterPinToUnlock": "输入密码解锁",
+  "enterPinToDisable": "输入密码以关闭 App 锁",
+  "pinIncorrect": "密码错误，请重试",
+  "pinLockedRetry": "尝试次数过多，请 {seconds} 秒后重试",
+  "@pinLockedRetry": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "usePinUnlock": "使用密码解锁"
 }

@@ -1,10 +1,15 @@
 import 'package:chains/chains.dart';
+import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:ui_kit/ui_kit.dart';
 import 'package:wallet_data/wallet_data.dart' show Contact, CustomToken;
 
 import '../../l10n/app_localizations.dart';
+import '../market/balance_service.dart' show defaultRpcEndpointFor;
+import '../security/biometric_auth.dart';
+import '../security/wallet_pin.dart';
+import '../widgets/pin_pad.dart';
 import '../widgets/token_icon.dart';
 import '../state/app_prefs.dart';
 import '../state/locale_controller.dart';
@@ -496,7 +501,11 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
 }
 
 /// W18 网络设置. Live: tapping a network's RPC row opens a sheet to edit the
-/// node URL (in-memory demo state, like the token/contact lists).
+/// node URL. Under an [AppPrefsScope] (production) the edit reads/writes the
+/// persisted per-chain override ('rpc.eth' …, null → built-in default) and
+/// offers a reset-to-default action; without a scope (gallery / goldens /
+/// plain widget tests) it keeps the original in-memory demo state and demo
+/// hostnames byte-for-byte.
 class NetworkSettingsScreen extends StatefulWidget {
   const NetworkSettingsScreen({super.key});
   @override
@@ -504,10 +513,11 @@ class NetworkSettingsScreen extends StatefulWidget {
 }
 
 class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
-  /// Per-network RPC node override chosen in this session.
+  /// Per-network RPC node override chosen in this session (scope-absent demo
+  /// fallback only).
   final _rpcOverrides = <String, String>{};
 
-  Future<void> _editRpc(String name, String rpc) async {
+  Future<void> _editRpc(AppPrefsController? prefs, Coin coin, String name, String rpc) async {
     final l10n = AppLocalizations.of(context);
     final controller = TextEditingController(text: rpc);
     await showModalBottomSheet<void>(
@@ -531,10 +541,31 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                 label: l10n.actionSave,
                 onPressed: () {
                   final value = controller.text.trim();
-                  if (value.isNotEmpty) setState(() => _rpcOverrides[name] = value);
+                  if (value.isNotEmpty) {
+                    if (prefs != null) {
+                      // Saving the default back counts as "no override".
+                      prefs.setRpcOverride(
+                          coin, value == defaultRpcEndpointFor(coin) ? null : value);
+                    } else {
+                      setState(() => _rpcOverrides[name] = value);
+                    }
+                  }
                   Navigator.of(ctx).pop();
                 },
               ),
+              if (prefs != null) ...[
+                const SizedBox(height: 8),
+                Center(
+                  child: TextButton(
+                    onPressed: () {
+                      prefs.setRpcOverride(coin, null);
+                      Navigator.of(ctx).pop();
+                    },
+                    child: Text(l10n.networkResetDefault,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text2)),
+                  ),
+                ),
+              ],
             ]),
           ),
         ),
@@ -546,17 +577,25 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final nets = <(Color, String, String, String, bool)>[
-      (ChainColors.ethereum, 'Ethereum', 'eth-mainnet.g.alchemy.com', '86 ms', true),
-      (ChainColors.polygon, 'Polygon', 'polygon-rpc.com', '112 ms', true),
-      (ChainColors.tron, 'TRON', 'api.trongrid.io', '64 ms', true),
-      (ChainColors.solana, 'Solana', 'api.mainnet-beta.solana.com', l10n.rpcTimeout, false),
+    // Rebuilds on preference changes (the InheritedNotifier dependency), so a
+    // saved or reset override updates the effective URL rows immediately.
+    final prefs = AppPrefsScope.maybeOf(context);
+    final nets = <(Color, Coin, String, String, String, bool)>[
+      (ChainColors.ethereum, Coin.eth, 'Ethereum', 'eth-mainnet.g.alchemy.com', '86 ms', true),
+      (ChainColors.polygon, Coin.polygon, 'Polygon', 'polygon-rpc.com', '112 ms', true),
+      (ChainColors.tron, Coin.tron, 'TRON', 'api.trongrid.io', '64 ms', true),
+      (ChainColors.solana, Coin.solana, 'Solana', 'api.mainnet-beta.solana.com', l10n.rpcTimeout, false),
     ];
+    // The URL shown and edited per row: the persisted effective endpoint in
+    // live mode, the demo hostname (plus session-local edits) otherwise.
+    String effectiveRpc(Coin coin, String name, String demo) => prefs != null
+        ? (prefs.rpcOverride(coin) ?? defaultRpcEndpointFor(coin))
+        : (_rpcOverrides[name] ?? demo);
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(title: l10n.networkSettingsTitle, onBack: () => Navigator.of(context).maybePop()),
       children: [
-        for (final (color, name, rpc, ms, ok) in nets)
+        for (final (color, coin, name, rpc, ms, ok) in nets)
           KtCard(
             padding: const EdgeInsets.all(14),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -573,13 +612,13 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
               const SizedBox(height: 12),
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () => _editRpc(name, _rpcOverrides[name] ?? rpc),
+                onTap: () => _editRpc(prefs, coin, name, effectiveRpc(coin, name, rpc)),
                 child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(l10n.rpcNode, style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
                       const SizedBox(height: 2),
-                      Text(_rpcOverrides[name] ?? rpc, style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text)),
+                      Text(effectiveRpc(coin, name, rpc), style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text)),
                     ]),
                   ),
                   const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3),
@@ -660,6 +699,58 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
         ]),
       ),
     );
+  }
+
+  /// App-lock switch. Turning it ON with no PIN enrolled first walks through
+  /// the set-PIN sheet (the gate needs a fallback for devices without
+  /// biometrics); turning it OFF demands proof — a biometric success or the
+  /// current PIN.
+  Future<void> _toggleAppLock() async {
+    final pin = WalletPin.instance;
+    final auth = BiometricAuth.instance;
+    if (!_prefs.appLock) {
+      // Turning ON: enroll a PIN first when none exists yet.
+      if (!await pin.isSet()) {
+        if (!mounted) return;
+        final enrolled = await showModalBottomSheet<bool>(
+          context: context,
+          backgroundColor: WalletColors.surface,
+          isScrollControlled: true,
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+          builder: (ctx) => _SetPinSheet(pin: pin),
+        );
+        if (enrolled != true) return; // sheet dismissed: leave the lock off
+      }
+      await _prefs.setAppLock(true);
+      return;
+    }
+    // Turning OFF. Legacy state (lock on, nothing ever enrolled): there is
+    // nothing to verify against, so the switch just flips.
+    if (!await pin.isSet()) {
+      await _prefs.setAppLock(false);
+      return;
+    }
+    if (!mounted) return;
+    var verified = false;
+    if (await auth.canAuthenticate()) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context);
+      verified =
+          await auth.authenticate(reason: l10n.appLock) == BiometricOutcome.success;
+    }
+    if (!verified) {
+      // Same order as the gate: biometrics first, PIN numpad as the fallback.
+      if (!mounted) return;
+      final ok = await showModalBottomSheet<bool>(
+        context: context,
+        backgroundColor: WalletColors.surface,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        builder: (ctx) => _VerifyPinSheet(pin: pin),
+      );
+      verified = ok == true;
+    }
+    if (verified) await _prefs.setAppLock(false);
   }
 
   String _autoLockLabel(AppLocalizations l10n, int minutes) =>
@@ -798,7 +889,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
         Text(l10n.accessControl, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: WalletColors.text2)),
         KtCard(
           child: Column(children: [
-            _row(Icons.lock_outline, l10n.appLock, l10n.appLockDesc, _switch(_prefs.appLock, onTap: () => _prefs.setAppLock(!_prefs.appLock))),
+            _row(Icons.lock_outline, l10n.appLock, l10n.appLockDesc, _switch(_prefs.appLock, onTap: _toggleAppLock)),
             const SizedBox(height: 16),
             GestureDetector(
               behavior: HitTestBehavior.opaque,
@@ -865,4 +956,164 @@ class _SimpleRow extends StatelessWidget {
           const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3),
         ]),
       );
+}
+
+/// Set-PIN bottom sheet (enrollment for the app-lock fallback). Two-phase,
+/// mirroring cold_signer's C14 interaction: enter 6 digits, re-enter to
+/// confirm; a mismatch shows an inline error and starts over. Pops `true`
+/// once the PIN is enrolled.
+class _SetPinSheet extends StatefulWidget {
+  const _SetPinSheet({required this.pin});
+
+  final WalletPin pin;
+
+  @override
+  State<_SetPinSheet> createState() => _SetPinSheetState();
+}
+
+class _SetPinSheetState extends State<_SetPinSheet> {
+  String _entry = '';
+  String? _first; // the first pass, once 6 digits entered
+  String? _error;
+  bool _saving = false;
+
+  Future<void> _onKey(String k) async {
+    if (_saving) return;
+    if (k == 'del') {
+      if (_entry.isNotEmpty) setState(() => _entry = _entry.substring(0, _entry.length - 1));
+      return;
+    }
+    if (_entry.length >= 6) return;
+    setState(() {
+      _entry += k;
+      _error = null;
+    });
+    if (_entry.length < 6) return;
+
+    if (_first == null) {
+      // First pass done; ask for confirmation.
+      setState(() {
+        _first = _entry;
+        _entry = '';
+      });
+    } else if (_entry == _first) {
+      setState(() => _saving = true);
+      await widget.pin.setPin(_entry);
+      if (mounted) Navigator.of(context).pop(true);
+    } else {
+      final l10n = AppLocalizations.of(context);
+      setState(() {
+        _first = null;
+        _entry = '';
+        _error = l10n.pinMismatch;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final confirming = _first != null;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 16),
+          Text(confirming ? l10n.setPinConfirmPrompt : l10n.setPinPrompt,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: WalletColors.text)),
+          const SizedBox(height: 8),
+          Text(l10n.setPinDesc,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, height: 1.5, color: WalletColors.text3)),
+          const SizedBox(height: 14),
+          PinDots(filled: _entry.length),
+          SizedBox(
+            height: 32,
+            child: Center(
+              child: _error == null
+                  ? null
+                  : Text(_error!, style: const TextStyle(fontSize: 13, color: WalletColors.red)),
+            ),
+          ),
+          PinPad(onKey: _onKey),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Verify-PIN bottom sheet (guards switching the app lock off). Verifies the
+/// entry against [WalletPin] — wrong-PIN and lockout messages inline — and
+/// pops `true` on success.
+class _VerifyPinSheet extends StatefulWidget {
+  const _VerifyPinSheet({required this.pin});
+
+  final WalletPin pin;
+
+  @override
+  State<_VerifyPinSheet> createState() => _VerifyPinSheetState();
+}
+
+class _VerifyPinSheetState extends State<_VerifyPinSheet> {
+  String _entry = '';
+  String? _error;
+  bool _verifying = false;
+
+  Future<void> _onKey(String k) async {
+    if (_verifying) return;
+    if (k == 'del') {
+      if (_entry.isNotEmpty) setState(() => _entry = _entry.substring(0, _entry.length - 1));
+      return;
+    }
+    if (_entry.length >= 6) return;
+    setState(() {
+      _entry += k;
+      _error = null;
+    });
+    if (_entry.length < 6) return;
+
+    final l10n = AppLocalizations.of(context);
+    setState(() => _verifying = true);
+    final verdict = await widget.pin.verify(_entry);
+    if (!mounted) return;
+    if (verdict.isOk) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+    setState(() {
+      _entry = '';
+      _verifying = false;
+      _error = verdict.isLocked
+          ? l10n.pinLockedRetry(verdict.lockRemaining!.inSeconds + 1)
+          : l10n.pinIncorrect;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 16),
+          Text(l10n.enterPinToDisable,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: WalletColors.text)),
+          const SizedBox(height: 18),
+          PinDots(filled: _entry.length),
+          SizedBox(
+            height: 32,
+            child: Center(
+              child: _error == null
+                  ? null
+                  : Text(_error!, style: const TextStyle(fontSize: 13, color: WalletColors.red)),
+            ),
+          ),
+          PinPad(onKey: _onKey),
+        ]),
+      ),
+    );
+  }
 }

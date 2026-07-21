@@ -1126,6 +1126,12 @@ abstract class AppLocalizations {
   /// **'RPC 节点'**
   String get rpcNode;
 
+  /// No description provided for @networkResetDefault.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复默认'**
+  String get networkResetDefault;
+
   /// No description provided for @accessControl.
   ///
   /// In zh, this message translates to:
@@ -1371,6 +1377,66 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'暂无交易记录'**
   String get historyEmpty;
+
+  /// No description provided for @setPinTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置解锁密码'**
+  String get setPinTitle;
+
+  /// No description provided for @setPinPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置 6 位密码'**
+  String get setPinPrompt;
+
+  /// No description provided for @setPinConfirmPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'再次输入以确认'**
+  String get setPinConfirmPrompt;
+
+  /// No description provided for @setPinDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'生物识别不可用时用密码解锁 App。密码仅保存在本机安全区域。'**
+  String get setPinDesc;
+
+  /// No description provided for @pinMismatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'两次输入不一致，请重新设置'**
+  String get pinMismatch;
+
+  /// No description provided for @enterPinToUnlock.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入密码解锁'**
+  String get enterPinToUnlock;
+
+  /// No description provided for @enterPinToDisable.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入密码以关闭 App 锁'**
+  String get enterPinToDisable;
+
+  /// No description provided for @pinIncorrect.
+  ///
+  /// In zh, this message translates to:
+  /// **'密码错误，请重试'**
+  String get pinIncorrect;
+
+  /// No description provided for @pinLockedRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'尝试次数过多，请 {seconds} 秒后重试'**
+  String pinLockedRetry(int seconds);
+
+  /// No description provided for @usePinUnlock.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用密码解锁'**
+  String get usePinUnlock;
 }
 
 class _AppLocalizationsDelegate

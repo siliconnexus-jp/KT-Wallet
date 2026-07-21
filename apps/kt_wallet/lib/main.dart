@@ -14,6 +14,7 @@ import 'src/data/database_provider.dart';
 import 'src/market/market_scope.dart';
 import 'src/security/app_lock_gate.dart';
 import 'src/security/secure_screen.dart';
+import 'src/state/app_prefs.dart';
 import 'src/state/device_mode.dart';
 import 'src/state/locale_controller.dart';
 import 'src/state/wallet_controller.dart';
@@ -497,12 +498,19 @@ class _KtWalletAppState extends State<KtWalletApp> {
   /// shared across the transfer screens via [TransferSessionScope].
   final TransferSession _transferSession = TransferSession();
 
+  /// App-wide preferences (RPC endpoint overrides among them), shared between
+  /// the settings screens and the market services via [AppPrefsScope].
+  final AppPrefsController _prefs = AppPrefsController();
+
   @override
   void initState() {
     super.initState();
     _router = buildRouter(initialLocation: widget.initialLocation);
     // Pick up a persisted language override (no-op if none / in tests).
     widget.localeController.load();
+    // Pick up persisted preferences, e.g. saved RPC overrides (same no-op
+    // guarantee in tests without the SharedPreferences plugin).
+    _prefs.load();
   }
 
   @override
@@ -527,9 +535,13 @@ class _KtWalletAppState extends State<KtWalletApp> {
             mockStatusBar: false,
             child: WalletScope(
               controller: widget.controller,
-              child: MarketScopeHost(
-                wallets: widget.controller,
-                child: TransferSessionScope(session: _transferSession, child: child!),
+              child: AppPrefsScope(
+                controller: _prefs,
+                child: MarketScopeHost(
+                  wallets: widget.controller,
+                  prefs: _prefs,
+                  child: TransferSessionScope(session: _transferSession, child: child!),
+                ),
               ),
             ),
           ),
