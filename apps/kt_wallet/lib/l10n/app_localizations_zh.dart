@@ -663,4 +663,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get watchWalletCreated => '观察钱包已创建';
+
+  @override
+  String get marketOfflineDemo => '离线，显示演示数据';
 }

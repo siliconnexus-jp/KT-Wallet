@@ -736,6 +736,24 @@ abstract class AppLocalizations {
   /// **'请求 ID'**
   String get requestId;
 
+  /// No description provided for @enterPinToSign.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入 App 密码以完成签名'**
+  String get enterPinToSign;
+
+  /// No description provided for @pinIncorrect.
+  ///
+  /// In zh, this message translates to:
+  /// **'密码错误，请重试'**
+  String get pinIncorrect;
+
+  /// No description provided for @pinLockedRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'尝试次数过多，请 {seconds} 秒后重试'**
+  String pinLockedRetry(int seconds);
+
   /// No description provided for @signComplete.
   ///
   /// In zh, this message translates to:

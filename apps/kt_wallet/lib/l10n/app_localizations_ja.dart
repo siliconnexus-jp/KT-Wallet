@@ -669,4 +669,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get watchWalletCreated => 'ウォッチウォレットを作成しました';
+
+  @override
+  String get marketOfflineDemo => 'オフライン — デモデータを表示中';
 }

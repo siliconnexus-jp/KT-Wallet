@@ -346,5 +346,6 @@
   "copyAddress": "复制地址",
   "noMatchingAssets": "没有匹配的资产",
   "noWatchWallet": "当前没有观察钱包",
-  "watchWalletCreated": "观察钱包已创建"
+  "watchWalletCreated": "观察钱包已创建",
+  "marketOfflineDemo": "离线，显示演示数据"
 }

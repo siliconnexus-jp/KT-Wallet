@@ -220,5 +220,6 @@
   "copyAddress": "アドレスをコピー",
   "noMatchingAssets": "一致する資産はありません",
   "noWatchWallet": "ウォッチウォレットはありません",
-  "watchWalletCreated": "ウォッチウォレットを作成しました"
+  "watchWalletCreated": "ウォッチウォレットを作成しました",
+  "marketOfflineDemo": "オフライン — デモデータを表示中"
 }

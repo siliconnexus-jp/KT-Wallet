@@ -220,5 +220,6 @@
   "copyAddress": "Copy address",
   "noMatchingAssets": "No matching assets",
   "noWatchWallet": "No watch wallet on this device",
-  "watchWalletCreated": "Watch wallet created"
+  "watchWalletCreated": "Watch wallet created",
+  "marketOfflineDemo": "Offline — showing demo data"
 }

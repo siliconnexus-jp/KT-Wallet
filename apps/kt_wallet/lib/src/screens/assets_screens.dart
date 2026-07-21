@@ -5,6 +5,10 @@ import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../market/balance_service.dart';
+import '../market/market_controller.dart';
+import '../market/market_scope.dart';
+import '../widgets/market_offline_banner.dart';
 import '../widgets/token_icon.dart';
 import '../state/wallet_scope.dart';
 
@@ -32,11 +36,58 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
   int _net = 0; // 0 = all
 
   @override
+  void initState() {
+    super.initState();
+    // Live refresh on entry (post-frame — refresh() notifies synchronously).
+    // No-op without a MarketScope (gallery/goldens) or after the first one.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) MarketScope.read(context)?.refreshIfNeeded();
+    });
+  }
+
+  /// Live native-coin rows in the same tuple shape as the demo list. Loading
+  /// and errored chains show '--' — never an invented number; the change
+  /// column is empty because there is no 24h-change feed yet.
+  List<(Color, String, String, String, String, String, Color, String)> _liveRows(
+      MarketController market) {
+    return [
+      for (final (coin, name, symbol, color, glyph, network) in const [
+        (Coin.eth, 'Ethereum', 'ETH', Color(0xFF627EEA), 'Ξ', 'Ethereum'),
+        (Coin.polygon, 'POL', 'POL', Color(0xFF8247E5), '⬡', 'Polygon'),
+        (Coin.tron, 'TRON', 'TRX', Color(0xFF26A17B), '₮', 'TRON'),
+        (Coin.solana, 'Solana', 'SOL', Color(0xFF9945FF), '◎', 'Solana'),
+      ])
+        () {
+          final result = market.balanceFor(coin);
+          final amount = result.amount;
+          final ok = result.status == BalanceStatus.ok && amount != null;
+          final fiat = market.fiatValueUsd(coin);
+          return (
+            color,
+            glyph,
+            name,
+            ok ? '${amount.format(maxFraction: 6)} $symbol' : '-- $symbol',
+            fiat == null ? '--' : formatUsd(fiat),
+            '',
+            WalletColors.text3,
+            network,
+          );
+        }(),
+    ];
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    // No scope (gallery/goldens) → demo rows byte-for-byte; scope with all
+    // fetches failed → demo rows behind the offline banner; else live rows.
+    final market = MarketScope.maybeOf(context);
+    final offline = market?.isOffline ?? false;
+    final live = market != null && !offline;
+    final rows = live ? _liveRows(market) : _assets;
     final q = _query.trim().toLowerCase();
     final results = [
-      for (final a in _assets)
+      for (final a in rows)
         if ((_net == 0 || a.$8 == _networks[_net - 1]) &&
             (q.isEmpty || a.$3.toLowerCase().contains(q) || a.$4.toLowerCase().contains(q)))
           a,
@@ -71,6 +122,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
           selected: _net,
           onChanged: (i) => setState(() => _net = i),
         ),
+        if (offline) const MarketOfflineBanner(),
         if (results.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 32),

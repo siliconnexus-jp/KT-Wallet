@@ -29,12 +29,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('备份助记词'), findsOneWidget); // C3 show
 
+    // The live flow generates a REAL random mnemonic; read the words off the
+    // C3 grid (keyed per position) exactly like a user copying the backup.
+    final words = [
+      for (var i = 0; i < 12; i++)
+        tester.widget<Text>(find.byKey(Key('mnemonic-word-$i'))).data!,
+    ];
+
     await tester.tap(find.text('我已手写备份，开始验证'));
     await tester.pumpAndSettle();
-    expect(find.text('第 9 个单词是？'), findsOneWidget); // C4 verify
+    expect(find.textContaining('个单词是？'), findsOneWidget); // C4 verify
 
-    // Must pick the correct 9th word before 确认 is enabled.
-    await tester.tap(find.text('signal'));
+    // Answer the challenge with the word at the challenged position.
+    final challengeText =
+        tester.widget<Text>(find.textContaining('个单词是？')).data!;
+    final position =
+        int.parse(RegExp(r'第 (\d+) 个').firstMatch(challengeText)!.group(1)!);
+    await tester.tap(find.text(words[position - 1]).last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('确认'));
     await tester.pumpAndSettle();

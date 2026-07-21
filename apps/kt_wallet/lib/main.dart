@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'dart:ui' show PlatformDispatcher;
 
 import 'package:cold_signer/cold_signer.dart';
@@ -10,6 +11,7 @@ import 'package:ui_kit/ui_kit.dart';
 import 'l10n/app_localizations.dart';
 import 'src/app_router.dart';
 import 'src/data/database_provider.dart';
+import 'src/market/market_scope.dart';
 import 'src/state/device_mode.dart';
 import 'src/state/locale_controller.dart';
 import 'src/state/wallet_controller.dart';
@@ -44,7 +46,11 @@ Future<WalletController> _bootstrapWallet(LocaleController localeController) asy
   final l10n = await AppLocalizations.delegate.load(_resolveLocale(localeController.locale));
 
   final db = openWalletDatabase();
-  final crypto = MockCoreCrypto();
+  // Real Trust Wallet Core on iOS (the native bridge is fully implemented:
+  // Keychain-stored entropy, BIP-39/44 derivation, biometric-gated export).
+  // Android falls back to the deterministic mock until the wallet-core
+  // GitHub-Packages credential is configured (see BUILDING.md).
+  final crypto = Platform.isIOS ? MethodChannelCoreCrypto() : MockCoreCrypto();
   final store = WalletStore(db);
 
   var manager = await store.load();
@@ -507,7 +513,10 @@ class _KtWalletAppState extends State<KtWalletApp> {
             mockStatusBar: false,
             child: WalletScope(
               controller: widget.controller,
-              child: TransferSessionScope(session: _transferSession, child: child!),
+              child: MarketScopeHost(
+                wallets: widget.controller,
+                child: TransferSessionScope(session: _transferSession, child: child!),
+              ),
             ),
           ),
         ),

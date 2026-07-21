@@ -345,6 +345,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get requestId => 'リクエストID';
 
   @override
+  String get enterPinToSign => '署名を完了するにはアプリパスワードを入力';
+
+  @override
+  String get pinIncorrect => 'パスワードが違います。再試行してください';
+
+  @override
+  String pinLockedRetry(int seconds) {
+    return '試行回数が上限に達しました。$seconds 秒後に再試行してください';
+  }
+
+  @override
   String get signComplete => '署名完了';
 
   @override

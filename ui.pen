@@ -3,18 +3,6 @@
   "children": [
     {
       "type": "frame",
-      "id": "bi8Au",
-      "x": 0,
-      "y": 0,
-      "name": "Frame",
-      "clip": true,
-      "width": 800,
-      "height": 600,
-      "fill": "#FFFFFF",
-      "layout": "none"
-    },
-    {
-      "type": "frame",
       "id": "rhZ6h",
       "x": 1000,
       "y": -400,
@@ -25494,6 +25482,554 @@
                   ]
                 }
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "Hzhgy",
+      "x": 15100,
+      "y": 100,
+      "name": "W31 手续费选择",
+      "clip": true,
+      "width": 390,
+      "fill": "$w-bg",
+      "layout": "vertical",
+      "children": [
+        {
+          "id": "QtMkI",
+          "type": "ref",
+          "ref": "rhZ6h",
+          "name": "Status Bar",
+          "width": "fill_container"
+        },
+        {
+          "type": "frame",
+          "id": "H8DtkK",
+          "name": "Content",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 20,
+          "padding": [
+            8,
+            20,
+            24,
+            20
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "nxSkX",
+              "name": "Nav",
+              "width": "fill_container",
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "g8nBHx",
+                  "name": "Back",
+                  "width": 22,
+                  "height": 22,
+                  "icon": "arrow-left",
+                  "library": "lucide",
+                  "fill": "$w-text"
+                },
+                {
+                  "type": "text",
+                  "id": "T7X7Ps",
+                  "name": "Title",
+                  "fill": "$w-text",
+                  "content": "网络手续费",
+                  "fontFamily": "$font",
+                  "fontSize": 17,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "BVoKF",
+                  "name": "Spacer",
+                  "width": 22,
+                  "height": 22
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "xyf8Z",
+              "name": "Sub",
+              "fill": "$w-text2",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "手续费越高，交易确认越快。费用支付给网络，不进入本 App。",
+              "lineHeight": 1.5,
+              "fontFamily": "$font",
+              "fontSize": 13,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "u4Z7Up",
+              "name": "Tiers",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "awGxW",
+                  "name": "Tier 慢",
+                  "width": "fill_container",
+                  "fill": "$w-surface",
+                  "cornerRadius": 14,
+                  "stroke": "$w-border",
+                  "strokeWidth": 1,
+                  "gap": 12,
+                  "padding": 16,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "O32ke",
+                      "name": "Radio",
+                      "fill": "#FFFFFF",
+                      "width": 20,
+                      "height": 20,
+                      "stroke": "#D2D7E0",
+                      "strokeWidth": 1.5
+                    },
+                    {
+                      "type": "frame",
+                      "id": "E3Nord",
+                      "name": "Mid",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Hcbv5",
+                          "name": "Name",
+                          "fill": "$w-text",
+                          "content": "慢",
+                          "fontFamily": "$font",
+                          "fontSize": 15,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "PcY9l",
+                          "name": "Eta",
+                          "fill": "$w-text3",
+                          "content": "≈ 3-5 分钟",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "R0XLYy",
+                      "name": "Right",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "alignItems": "end",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "zclqh",
+                          "name": "Fee",
+                          "fill": "$w-text",
+                          "content": "6.8 TRX",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "Rx1CE",
+                          "name": "Fiat",
+                          "fill": "$w-text3",
+                          "content": "$0.94",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "vo4gX",
+                  "name": "Tier 标准",
+                  "width": "fill_container",
+                  "fill": "#2557E80A",
+                  "cornerRadius": 14,
+                  "stroke": "$w-accent",
+                  "strokeWidth": 1.5,
+                  "gap": 12,
+                  "padding": 16,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "KmmUn",
+                      "name": "Radio",
+                      "fill": "$w-accent",
+                      "width": 20,
+                      "height": 20,
+                      "stroke": "$w-accent"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "IYPIq",
+                      "name": "Mid",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "qE7Co",
+                          "name": "Name",
+                          "fill": "$w-text",
+                          "content": "标准",
+                          "fontFamily": "$font",
+                          "fontSize": 15,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "HbBoI",
+                          "name": "Eta",
+                          "fill": "$w-text3",
+                          "content": "≈ 1 分钟",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "qaOju",
+                      "name": "Right",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "alignItems": "end",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "i8FdlD",
+                          "name": "Fee",
+                          "fill": "$w-text",
+                          "content": "13.7 TRX",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "SfkBK",
+                          "name": "Fiat",
+                          "fill": "$w-text3",
+                          "content": "$1.90",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "XXYs0",
+                  "name": "Tier 快",
+                  "width": "fill_container",
+                  "fill": "$w-surface",
+                  "cornerRadius": 14,
+                  "stroke": "$w-border",
+                  "strokeWidth": 1,
+                  "gap": 12,
+                  "padding": 16,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "luv7d",
+                      "name": "Radio",
+                      "fill": "#FFFFFF",
+                      "width": 20,
+                      "height": 20,
+                      "stroke": "#D2D7E0",
+                      "strokeWidth": 1.5
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Hs1nx",
+                      "name": "Mid",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "C8CqWS",
+                          "name": "Name",
+                          "fill": "$w-text",
+                          "content": "快",
+                          "fontFamily": "$font",
+                          "fontSize": 15,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "aiTgS",
+                          "name": "Eta",
+                          "fill": "$w-text3",
+                          "content": "≈ 15 秒",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "SBi4d",
+                      "name": "Right",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "alignItems": "end",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Ns6la",
+                          "name": "Fee",
+                          "fill": "$w-text",
+                          "content": "27.4 TRX",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "CdmN1",
+                          "name": "Fiat",
+                          "fill": "$w-text3",
+                          "content": "$3.80",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "H9vnN",
+              "name": "CustomLabel",
+              "fill": "$w-text2",
+              "content": "自定义",
+              "fontFamily": "$font",
+              "fontSize": 13,
+              "fontWeight": "600",
+              "letterSpacing": 0.5
+            },
+            {
+              "type": "frame",
+              "id": "BdkKi",
+              "name": "Custom Card",
+              "width": "fill_container",
+              "fill": "$w-surface",
+              "cornerRadius": 14,
+              "layout": "vertical",
+              "gap": 14,
+              "padding": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "OA2Ta",
+                  "name": "Field Fee Limit",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "X22Ro3",
+                      "name": "L",
+                      "fill": "$w-text2",
+                      "content": "Fee Limit",
+                      "fontFamily": "$font",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "j32lQl",
+                      "name": "VR",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "xPkSw",
+                          "name": "V",
+                          "fill": "$w-text",
+                          "content": "30,000,000",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "IDCCY",
+                          "name": "U",
+                          "fill": "$w-text3",
+                          "content": "SUN",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "XDVtH",
+                  "name": "Field 预计 Energy",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "XIxXh",
+                      "name": "L",
+                      "fill": "$w-text2",
+                      "content": "预计 Energy",
+                      "fontFamily": "$font",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "oEcJK",
+                      "name": "VR",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "BtYlB",
+                          "name": "V",
+                          "fill": "$w-text",
+                          "content": "31,895",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Qv45y",
+                  "name": "Field 预计带宽",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "iOiUv",
+                      "name": "L",
+                      "fill": "$w-text2",
+                      "content": "预计带宽",
+                      "fontFamily": "$font",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Ny7Xz",
+                      "name": "VR",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "qBT4r",
+                          "name": "V",
+                          "fill": "$w-text",
+                          "content": "345",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "RwnnE",
+              "name": "Warn",
+              "width": "fill_container",
+              "fill": "#E8930C14",
+              "cornerRadius": 12,
+              "gap": 10,
+              "padding": 12,
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "BtjAi",
+                  "name": "Icon",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "triangle-alert",
+                  "library": "lucide",
+                  "fill": "$w-amber"
+                },
+                {
+                  "type": "text",
+                  "id": "AfZWL",
+                  "name": "Text",
+                  "fill": "#9A6503",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "手续费过低可能导致交易长时间未确认甚至失败。TRON Energy 不足时将燃烧 TRX 抵扣。",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "id": "D3WFcj",
+              "type": "ref",
+              "ref": "V2kn1K",
+              "name": "Confirm",
+              "width": "fill_container",
+              "descendants": {
+                "u1Yc0": {
+                  "content": "确认手续费"
+                }
+              }
             }
           ]
         }

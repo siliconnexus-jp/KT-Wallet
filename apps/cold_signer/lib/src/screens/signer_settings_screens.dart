@@ -4,6 +4,7 @@ import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../state/locale_controller.dart';
+import '../state/signer_wallet_controller.dart';
 
 const _t = AppTheme.signer;
 Widget _card(Widget child, {EdgeInsets padding = const EdgeInsets.all(16)}) =>
@@ -369,10 +370,12 @@ class _SignerSecuritySettingsScreenState extends State<SignerSecuritySettingsScr
 class SignerDeleteScreen extends StatelessWidget {
   const SignerDeleteScreen({super.key});
 
-  /// Destructive confirmation; the signer is demo-stateless, so on confirm the
-  /// delete outcome is returning to onboarding.
+  /// Destructive confirmation. In the live flow the confirm wipes the secure
+  /// vault (mnemonic, metadata, PIN, lockout) and the anti-replay records;
+  /// without a scope (gallery/goldens) it just returns to onboarding.
   Future<void> _confirmDelete(BuildContext context) async {
     final l10n = AppLocalizations.of(context);
+    final controller = SignerWalletScope.maybeOf(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -392,7 +395,9 @@ class SignerDeleteScreen extends StatelessWidget {
         ],
       ),
     );
-    if (confirmed == true && context.mounted) context.go('/welcome');
+    if (confirmed != true) return;
+    if (controller != null) await controller.deleteWallet();
+    if (context.mounted) context.go('/welcome');
   }
 
   @override

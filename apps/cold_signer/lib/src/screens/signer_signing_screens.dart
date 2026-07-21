@@ -9,8 +9,10 @@ import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../security/device_probe.dart';
+import '../security/pin_lock.dart';
 import '../security/security_check.dart';
 import '../signing/demo_airgap.dart';
+import '../state/signer_wallet_controller.dart';
 
 const _t = AppTheme.signer;
 
@@ -331,7 +333,16 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
     setState(() => _progress = progress);
   }
 
-  void _onComplete() {
+  Future<void> _onComplete() async {
+    final controller = SignerWalletScope.maybeOf(context);
+    // Live flow: the durable drift-backed anti-replay ledger, so a reqId
+    // signed once — even before an app restart — routes to /risk as a
+    // duplicate. Without a scope (goldens / bare-widget tests) the stateless
+    // in-memory store keeps the original demo behavior.
+    final SignRecordStore records = controller == null
+        ? InMemorySignRecordStore()
+        : await controller.loadRecordStore();
+    if (!mounted) return;
     final SignRequest request;
     final ValidationResult verdict;
     try {
@@ -342,13 +353,12 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
         return;
       }
       request = payload;
-      // Steps 2–6 of the acceptance check (validator.dart). The demo device
-      // has no persisted records for this reqId, and V1's transaction
+      // Steps 2–6 of the acceptance check (validator.dart). V1's transaction
       // whitelist is stubbed to "TRON transfers only" until the chains
       // package supplies the real parser.
       verdict = SignRequestValidator(
-        localWalletId: demoWalletId,
-        records: InMemorySignRecordStore(),
+        localWalletId: controller?.localWalletId ?? demoWalletId,
+        records: records,
         transactionAllowed: (r) => r.coin == demoCoinTron,
       ).validate(request);
     } on PayloadError {
@@ -559,6 +569,36 @@ class SignerAuthScreen extends StatelessWidget {
   /// SignResult answers the right reqId. Null in the gallery (canned strings).
   final SignRequest? request;
 
+  /// Authorization granted: commit the reqId to the anti-replay ledger BEFORE
+  /// the result QR is shown (crash-safety ordering, DD §3.4) and navigate.
+  /// Without a scope or a request nothing is recorded (gallery behavior).
+  Future<void> _completeSignature(BuildContext context) async {
+    final controller = SignerWalletScope.maybeOf(context);
+    final req = request;
+    if (controller != null && req != null) {
+      await controller.recordSigned(req, txHash: demoTxHash);
+    }
+    if (context.mounted) context.push('/result-qr', extra: req);
+  }
+
+  /// The passcode path. With a real wallet enrolled this demands the actual
+  /// app PIN (PBKDF2 verify + persisted lockout); otherwise it stays the
+  /// design snapshot's shortcut straight to the result.
+  Future<void> _passcodeAuth(BuildContext context) async {
+    final controller = SignerWalletScope.maybeOf(context);
+    if (controller == null || !controller.hasWallet) {
+      return _completeSignature(context);
+    }
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: SignerColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => _PinEntrySheet(pinLock: controller.pinLock),
+    );
+    if (ok == true && context.mounted) await _completeSignature(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -571,12 +611,15 @@ class SignerAuthScreen extends StatelessWidget {
       gap: 28,
       navBar: KtNavBar(title: l10n.authTitle, theme: _t, onBack: () => Navigator.of(context).maybePop()),
       bottom: Column(children: [
-        KtPrimaryButton(label: l10n.useFaceIdVerify, style: KtButtonStyle.signer, onPressed: () => context.push('/result-qr', extra: req)),
+        // HONEST LIMIT: no local_auth in this build, so the biometric button
+        // remains the demo shortcut — it "succeeds" without any platform
+        // prompt. The passcode path below verifies the real PIN.
+        KtPrimaryButton(label: l10n.useFaceIdVerify, style: KtButtonStyle.signer, onPressed: () => _completeSignature(context)),
         const SizedBox(height: 12),
-        // Alternate auth path: same destination as the Face ID button.
+        // Alternate auth path: the real app PIN when a wallet exists.
         GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () => context.push('/result-qr', extra: req),
+          onTap: () => _passcodeAuth(context),
           child: Text(l10n.useDevicePasscode, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2)),
         ),
       ]),
@@ -590,6 +633,98 @@ class SignerAuthScreen extends StatelessWidget {
         ]),
         _card(Column(children: [_kv(l10n.amountLabel, amount, mono: true), const SizedBox(height: 8), _kv(l10n.requestId, reqLabel, mono: true)])),
       ],
+    );
+  }
+}
+
+/// Modal PIN pad for C8: verifies the enrolled app PIN via [PinLock]
+/// (PBKDF2-HMAC-SHA256 + persisted doubling lockout) and pops `true` on
+/// success. Only reachable in the live flow — the gallery never shows it.
+class _PinEntrySheet extends StatefulWidget {
+  const _PinEntrySheet({required this.pinLock});
+
+  final PinLock pinLock;
+
+  @override
+  State<_PinEntrySheet> createState() => _PinEntrySheetState();
+}
+
+class _PinEntrySheetState extends State<_PinEntrySheet> {
+  String _entry = '';
+  String? _error;
+  bool _verifying = false;
+
+  Future<void> _onKey(String k) async {
+    if (_verifying) return;
+    if (k == 'del') {
+      if (_entry.isNotEmpty) setState(() => _entry = _entry.substring(0, _entry.length - 1));
+      return;
+    }
+    if (k.isEmpty || _entry.length >= 6) return;
+    setState(() {
+      _entry += k;
+      _error = null;
+    });
+    if (_entry.length < 6) return;
+
+    final l10n = AppLocalizations.of(context);
+    setState(() => _verifying = true);
+    final verdict = await widget.pinLock.verify(_entry);
+    if (!mounted) return;
+    if (verdict.isOk) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+    setState(() {
+      _entry = '';
+      _verifying = false;
+      _error = verdict.isLocked
+          ? l10n.pinLockedRetry(verdict.lockRemaining!.inSeconds + 1)
+          : l10n.pinIncorrect;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 36, height: 4, decoration: BoxDecoration(color: SignerColors.border, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 16),
+          Text(l10n.enterPinToSign, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: SignerColors.text)),
+          const SizedBox(height: 18),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            for (var i = 0; i < 6; i++)
+              Container(width: 13, height: 13, margin: const EdgeInsets.symmetric(horizontal: 6), decoration: BoxDecoration(color: i < _entry.length ? SignerColors.text : SignerColors.surface2, shape: BoxShape.circle, border: i < _entry.length ? null : Border.all(color: SignerColors.border))),
+          ]),
+          SizedBox(
+            height: 32,
+            child: Center(
+              child: _error == null
+                  ? null
+                  : Text(_error!, style: const TextStyle(fontSize: 13, color: SignerColors.danger)),
+            ),
+          ),
+          for (final row in const [['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['', '0', 'del']])
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                for (final k in row)
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _onKey(k),
+                    child: Container(
+                      width: 64, height: 64, margin: const EdgeInsets.symmetric(horizontal: 10), alignment: Alignment.center,
+                      decoration: BoxDecoration(color: k.isEmpty || k == 'del' ? null : SignerColors.surface2, shape: BoxShape.circle),
+                      child: k == 'del' ? const Icon(Icons.backspace_outlined, size: 20, color: SignerColors.text2) : Text(k, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w500, color: SignerColors.text)),
+                    ),
+                  ),
+              ]),
+            ),
+        ]),
+      ),
     );
   }
 }

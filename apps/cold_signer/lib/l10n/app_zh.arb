@@ -139,6 +139,12 @@
   "verifyToSignDesc": "每次签名都需要通过 Face ID 或设备密码验证",
   "amountLabel": "金额",
   "requestId": "请求 ID",
+  "enterPinToSign": "输入 App 密码以完成签名",
+  "pinIncorrect": "密码错误，请重试",
+  "pinLockedRetry": "尝试次数过多，请 {seconds} 秒后重试",
+  "@pinLockedRetry": {
+    "placeholders": { "seconds": { "type": "int" } }
+  },
 
   "signComplete": "签名完成",
   "voidThisSignature": "作废本次签名",

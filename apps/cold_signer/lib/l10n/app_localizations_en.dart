@@ -357,6 +357,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get requestId => 'Request ID';
 
   @override
+  String get enterPinToSign => 'Enter app PIN to complete signing';
+
+  @override
+  String get pinIncorrect => 'Incorrect PIN, try again';
+
+  @override
+  String pinLockedRetry(int seconds) {
+    return 'Too many attempts. Retry in ${seconds}s';
+  }
+
+  @override
   String get signComplete => 'Signing complete';
 
   @override

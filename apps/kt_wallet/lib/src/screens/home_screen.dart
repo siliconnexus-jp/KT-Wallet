@@ -1,8 +1,13 @@
+import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../market/balance_service.dart';
+import '../market/market_controller.dart';
+import '../market/market_scope.dart';
+import '../widgets/market_offline_banner.dart';
 import '../widgets/token_icon.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
@@ -21,6 +26,17 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // First live refresh on home entry (post-frame: refresh() notifies
+    // synchronously, which must not happen mid-build). No-op without a
+    // MarketScope (gallery/goldens) and after the first refresh.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) MarketScope.read(context)?.refreshIfNeeded();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -103,23 +119,46 @@ class _HomeTab extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final wallet = WalletScope.of(context).current!;
     final isHot = wallet is HotWallet;
-    return ListView(
+    // No scope (gallery/goldens) → today's demo constants, byte-for-byte.
+    // Scope present but everything errored → demo constants behind an
+    // explicit offline banner. Otherwise → live values ('--' while loading).
+    final market = MarketScope.maybeOf(context);
+    final offline = market?.isOffline ?? false;
+    final live = market != null && !offline;
+    final total = live ? market.totalUsd : null;
+    final listView = ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
         _Header(wallet: wallet, onTapPill: () => context.push('/switcher'), onTapSettings: onOpenSettings),
+        if (offline) ...[
+          const SizedBox(height: 12),
+          const MarketOfflineBanner(),
+        ],
         if (isHot && !wallet.backedUp) ...[
           const SizedBox(height: 20),
           const _BackupBanner(),
         ],
         const SizedBox(height: 24),
-        _Balance(amount: r'$862.40', change: '+\$12.06 (+1.4%) ${l10n.balanceChangePeriod}'),
+        _Balance(
+          amount: live ? (total == null ? '--' : formatUsd(total)) : r'$862.40',
+          // No 24h-change source yet — live mode omits the line rather than
+          // showing an invented delta.
+          change: live ? '' : '+\$12.06 (+1.4%) ${l10n.balanceChangePeriod}',
+        ),
         const SizedBox(height: 24),
         _ActionRow(isHot: isHot, onMore: () => _showMore(context)),
         const SizedBox(height: 24),
         const _NetworkChips(),
         const SizedBox(height: 24),
-        _AssetsCard(assets: assets, onViewAll: onViewAll),
+        _AssetsCard(assets: live ? liveAssetRows(market) : assets, onViewAll: onViewAll),
       ],
+    );
+    if (market == null) return listView;
+    return RefreshIndicator(
+      color: WalletColors.accent,
+      onRefresh: () => market.refresh(),
+      child: listView,
     );
   }
 }
@@ -129,6 +168,9 @@ class _AssetsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final market = MarketScope.maybeOf(context);
+    final offline = market?.isOffline ?? false;
+    final live = market != null && !offline;
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
@@ -137,7 +179,11 @@ class _AssetsTab extends StatelessWidget {
         const SizedBox(height: 4),
         Text(l10n.assetsSortByValue, style: const TextStyle(fontSize: 13, color: WalletColors.text3)),
         const SizedBox(height: 20),
-        _AssetsCard(assets: demoAssets),
+        if (offline) ...[
+          const MarketOfflineBanner(),
+          const SizedBox(height: 12),
+        ],
+        _AssetsCard(assets: live ? liveAssetRows(market) : demoAssets),
       ],
     );
   }
@@ -291,6 +337,37 @@ const demoAssets = [
   AssetRow(Color(0xFF9945FF), '◎', 'Solana', '0.531 SOL', r'$82.60', '+5.1%', WalletColors.green),
 ];
 
+/// Display metadata for the live native-coin rows (token balances arrive with
+/// wallet-core): coin, display name, symbol, fallback color + glyph.
+const liveChainRows = [
+  (Coin.eth, 'Ethereum', 'ETH', Color(0xFF627EEA), 'Ξ'),
+  (Coin.polygon, 'Polygon', 'POL', Color(0xFF8247E5), '⬡'),
+  (Coin.tron, 'TRON', 'TRX', Color(0xFF26A17B), '₮'),
+  (Coin.solana, 'Solana', 'SOL', Color(0xFF9945FF), '◎'),
+];
+
+/// Builds the asset rows from live market data. Loading and errored chains
+/// render '--' (never a fabricated number); no 24h-change feed exists yet, so
+/// the change column stays empty in live mode.
+List<AssetRow> liveAssetRows(MarketController market) => [
+      for (final (coin, name, symbol, color, glyph) in liveChainRows)
+        () {
+          final result = market.balanceFor(coin);
+          final amount = result.amount;
+          final ok = result.status == BalanceStatus.ok && amount != null;
+          final fiat = market.fiatValueUsd(coin);
+          return AssetRow(
+            color,
+            glyph,
+            name,
+            ok ? '${amount.format(maxFraction: 6)} $symbol' : '-- $symbol',
+            fiat == null ? '--' : formatUsd(fiat),
+            '',
+            WalletColors.text3,
+          );
+        }(),
+    ];
+
 class AssetRow {
   const AssetRow(this.color, this.letter, this.name, this.sub, this.value, this.change, this.changeColor);
   final Color color;
@@ -410,8 +487,10 @@ class _BalanceState extends State<_Balance> {
         ]),
         const SizedBox(height: 6),
         Text(_hidden ? '••••••' : widget.amount, style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: WalletColors.text)),
-        const SizedBox(height: 6),
-        Text(_hidden ? '••••' : widget.change, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.green)),
+        if (widget.change.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(_hidden ? '••••' : widget.change, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.green)),
+        ],
       ],
     );
   }

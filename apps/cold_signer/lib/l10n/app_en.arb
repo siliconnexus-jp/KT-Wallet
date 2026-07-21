@@ -121,6 +121,12 @@
   "verifyToSignDesc": "Every signature requires Face ID or the device passcode",
   "amountLabel": "Amount",
   "requestId": "Request ID",
+  "enterPinToSign": "Enter app PIN to complete signing",
+  "pinIncorrect": "Incorrect PIN, try again",
+  "pinLockedRetry": "Too many attempts. Retry in {seconds}s",
+  "@pinLockedRetry": {
+    "placeholders": { "seconds": { "type": "int" } }
+  },
 
   "signComplete": "Signing complete",
   "voidThisSignature": "Void this signature",

@@ -13,6 +13,8 @@ class SignatureRecord {
     required this.toAddress,
     required this.amount,
     required this.status,
+    this.txHash,
+    this.walletId,
   });
 
   final String reqId;
@@ -22,14 +24,24 @@ class SignatureRecord {
   final String toAddress;
   final String amount;
   final RequestStatus status;
+
+  /// Chain tx hash for signed requests; null for rejected/expired ones.
+  final String? txHash;
+
+  /// The wallet the request addressed (audit trail; null in older callers).
+  final String? walletId;
 }
 
-/// Backing persistence contract (a drift/sqflite table in the app). Kept as an
-/// interface so the anti-replay logic is testable without a database.
+/// Backing persistence contract (the drift sign_records table in the app,
+/// see data/signer_database.dart). Kept as an interface so the anti-replay
+/// logic is testable without a database.
 abstract class SignRecordPersistence {
   Future<void> put(SignatureRecord record);
   Future<SignatureRecord?> get(String reqIdHex);
   Future<List<SignatureRecord>> all();
+
+  /// Erases every record (C21 delete-wallet wipe).
+  Future<void> clear();
 }
 
 /// In-memory persistence for tests.
@@ -44,6 +56,9 @@ class InMemorySignRecordPersistence implements SignRecordPersistence {
 
   @override
   Future<List<SignatureRecord>> all() async => _rows.values.toList();
+
+  @override
+  Future<void> clear() async => _rows.clear();
 }
 
 /// Adapts [SignRecordPersistence] to the synchronous [SignRecordStore] the

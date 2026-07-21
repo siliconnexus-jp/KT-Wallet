@@ -121,6 +121,12 @@
   "verifyToSignDesc": "署名のたびにFace IDまたは端末パスコードでの認証が必要です",
   "amountLabel": "金額",
   "requestId": "リクエストID",
+  "enterPinToSign": "署名を完了するにはアプリパスワードを入力",
+  "pinIncorrect": "パスワードが違います。再試行してください",
+  "pinLockedRetry": "試行回数が上限に達しました。{seconds} 秒後に再試行してください",
+  "@pinLockedRetry": {
+    "placeholders": { "seconds": { "type": "int" } }
+  },
 
   "signComplete": "署名完了",
   "voidThisSignature": "この署名を無効化",

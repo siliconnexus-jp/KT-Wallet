@@ -3,8 +3,14 @@ import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../signing/mnemonic_quiz.dart';
+import '../state/signer_wallet_controller.dart';
 
 const _t = AppTheme.signer;
+
+/// The canned design-snapshot mnemonic. The gallery/golden baseline renders
+/// this fixed list; the live create flow substitutes the freshly generated
+/// words via the router's live overrides.
 const _mnemonic = ['ripple', 'canyon', 'script', 'harbor', 'velvet', 'noble', 'orbit', 'meadow', 'signal', 'pledge', 'quartz', 'ember'];
 
 Widget _signerBtn(String label, {bool contrast = false, VoidCallback? onPressed}) =>
@@ -24,7 +30,9 @@ Widget _wordGrid(List<String> words) => Column(children: [
                   child: Row(children: [
                     Text((r * 2 + c + 1).toString().padLeft(2, '0'), style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: Color(0xFF5A616C))),
                     const SizedBox(width: 10),
-                    Text(words[r * 2 + c], style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, fontFamily: KtFonts.mono, color: SignerColors.text)),
+                    // Keyed so flow tests can read the (possibly generated)
+                    // word at each position; keys never affect rendering.
+                    Text(words[r * 2 + c], key: Key('mnemonic-word-${r * 2 + c}'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, fontFamily: KtFonts.mono, color: SignerColors.text)),
                   ]),
                 ),
               ),
@@ -82,7 +90,12 @@ class SignerWelcomeScreen extends StatelessWidget {
       theme: _t,
       gap: 24,
       bottom: Column(children: [
-        _signerBtn(l10n.createNewWallet, contrast: true, onPressed: () => context.push('/mnemonic-warn')),
+        _signerBtn(l10n.createNewWallet, contrast: true, onPressed: () {
+          // Live flow: generate the real mnemonic this create session will
+          // back up and verify. Absent scope (goldens) nothing changes.
+          SignerWalletScope.maybeOf(context)?.beginCreate();
+          context.push('/mnemonic-warn');
+        }),
         const SizedBox(height: 12),
         _signerBtn(l10n.importExistingWallet, onPressed: () => context.push('/mnemonic-import')),
         if (modeScope != null) ...[
@@ -148,7 +161,12 @@ class SignerMnemonicWarnScreen extends StatelessWidget {
 
 /// C3 助记词展示.
 class SignerMnemonicShowScreen extends StatelessWidget {
-  const SignerMnemonicShowScreen({super.key});
+  const SignerMnemonicShowScreen({super.key, this.words});
+
+  /// The real generated mnemonic (live create flow, via the router override);
+  /// null renders the canned demo list — the gallery/golden baseline.
+  final List<String>? words;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -168,7 +186,7 @@ class SignerMnemonicShowScreen extends StatelessWidget {
             Expanded(child: Text(l10n.mnemonicShowWarning, style: const TextStyle(fontSize: 13, height: 1.5, color: SignerColors.danger))),
           ]),
         ),
-        _wordGrid(_mnemonic),
+        _wordGrid(words ?? _mnemonic),
       ],
     );
   }
@@ -176,15 +194,25 @@ class SignerMnemonicShowScreen extends StatelessWidget {
 
 /// C4 助记词校验.
 class SignerMnemonicVerifyScreen extends StatefulWidget {
-  const SignerMnemonicVerifyScreen({super.key});
+  const SignerMnemonicVerifyScreen({super.key, this.challenge});
+
+  /// The live challenge over the real generated mnemonic (router override);
+  /// null falls back to the fixed demo challenge — the golden baseline.
+  final QuizQuestion? challenge;
+
   @override
   State<SignerMnemonicVerifyScreen> createState() => _SignerMnemonicVerifyScreenState();
 }
 
 class _SignerMnemonicVerifyScreenState extends State<SignerMnemonicVerifyScreen> {
-  static const _challengePosition = 9; // 1-based
-  static const _options = ['harbor', 'signal', 'quartz', 'meadow', 'orbit', 'pledge'];
-  String get _correct => _mnemonic[_challengePosition - 1]; // 'signal'
+  // The canned demo challenge (design snapshot): position 9 → 'signal'.
+  static const _demoPosition = 9; // 1-based
+  static const _demoOptions = ['harbor', 'signal', 'quartz', 'meadow', 'orbit', 'pledge'];
+
+  int get _challengePosition => widget.challenge?.position ?? _demoPosition;
+  List<String> get _options => widget.challenge?.options ?? _demoOptions;
+  String get _correct =>
+      widget.challenge?.correctWord ?? _mnemonic[_demoPosition - 1]; // 'signal'
 
   String? _selected;
 
@@ -315,7 +343,7 @@ class _SignerSetPasswordScreenState extends State<SignerSetPasswordScreen> {
     if (_entry.length == 6) _onComplete();
   }
 
-  void _onComplete() {
+  Future<void> _onComplete() async {
     final l10n = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     if (_first == null) {
@@ -325,6 +353,12 @@ class _SignerSetPasswordScreenState extends State<SignerSetPasswordScreen> {
         _entry = '';
       });
     } else if (_entry == _first) {
+      // Live flow: enroll the real PIN (PBKDF2 hash into the secure vault)
+      // before moving on. Without a scope (goldens) this is a pure no-op and
+      // the screen behaves exactly like the design snapshot.
+      final controller = SignerWalletScope.maybeOf(context);
+      if (controller != null) await controller.setPin(_entry);
+      if (!mounted) return;
       context.push('/biometric');
     } else {
       messenger.showSnackBar(SnackBar(content: Text(l10n.passwordMismatch)));
@@ -411,8 +445,26 @@ class SignerBiometricScreen extends StatelessWidget {
 }
 
 /// C16 创建成功.
-class SignerCreatedScreen extends StatelessWidget {
+class SignerCreatedScreen extends StatefulWidget {
   const SignerCreatedScreen({super.key});
+  @override
+  State<SignerCreatedScreen> createState() => _SignerCreatedScreenState();
+}
+
+class _SignerCreatedScreenState extends State<SignerCreatedScreen> {
+  bool _persisted = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Onboarding completion: persist the pending wallet to the secure vault.
+    // Runs once; a no-op when no create flow is in progress (gallery) or no
+    // scope exists (goldens) — the rendering is identical either way.
+    if (_persisted) return;
+    _persisted = true;
+    SignerWalletScope.maybeOf(context)?.completeOnboarding();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);

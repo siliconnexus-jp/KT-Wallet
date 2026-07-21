@@ -6,6 +6,7 @@ import 'package:ui_kit/ui_kit.dart';
 import 'screens/signer_onboarding_screens.dart';
 import 'screens/signer_settings_screens.dart';
 import 'screens/signer_signing_screens.dart';
+import 'state/signer_wallet_controller.dart';
 
 /// Registry of every Cold Signer screen (C1–C21), powering the router + gallery.
 final signerRegistry = <String, (String, WidgetBuilder)>{
@@ -48,6 +49,13 @@ SignRequest? _requestExtra(GoRouterState state) {
 /// signing chain can pass the decoded request between screens.
 final _liveOverrides = <String, Widget Function(BuildContext, GoRouterState)>{
   '/security-check': (c, s) => const SignerSecurityCheckScreen(),
+  // C3/C4: when a create flow is in progress the REAL generated mnemonic is
+  // shown and challenged; otherwise (gallery navigation, backup spot-check)
+  // both fall back to the canned demo words — identical to the snapshot.
+  '/mnemonic-show': (c, s) => SignerMnemonicShowScreen(
+      words: SignerWalletScope.maybeOf(c)?.pendingMnemonic),
+  '/mnemonic-verify': (c, s) => SignerMnemonicVerifyScreen(
+      challenge: SignerWalletScope.maybeOf(c)?.buildVerifyChallenge()),
   '/parse': (c, s) => SignerParseScreen(request: _requestExtra(s)),
   '/auth': (c, s) => SignerAuthScreen(request: _requestExtra(s)),
   '/result-qr': (c, s) => SignerResultQrScreen(request: _requestExtra(s)),

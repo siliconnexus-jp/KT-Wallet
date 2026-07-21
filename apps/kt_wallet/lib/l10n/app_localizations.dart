@@ -1341,6 +1341,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'观察钱包已创建'**
   String get watchWalletCreated;
+
+  /// No description provided for @marketOfflineDemo.
+  ///
+  /// In zh, this message translates to:
+  /// **'离线，显示演示数据'**
+  String get marketOfflineDemo;
 }
 
 class _AppLocalizationsDelegate

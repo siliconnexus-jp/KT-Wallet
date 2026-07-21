@@ -340,6 +340,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get requestId => '请求 ID';
 
   @override
+  String get enterPinToSign => '输入 App 密码以完成签名';
+
+  @override
+  String get pinIncorrect => '密码错误，请重试';
+
+  @override
+  String pinLockedRetry(int seconds) {
+    return '尝试次数过多，请 $seconds 秒后重试';
+  }
+
+  @override
   String get signComplete => '签名完成';
 
   @override
