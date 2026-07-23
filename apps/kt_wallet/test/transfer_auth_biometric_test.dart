@@ -46,4 +46,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('交易已提交'), findsOneWidget);
   });
+
+  testWidgets('tapping the dimmed scrim dismisses the auth sheet back to confirm', (tester) async {
+    BiometricAuth.instance = const FakeBiometricAuth(BiometricOutcome.success);
+    tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+    await tester.pumpWidget(KtWalletApp(initialLocation: '/confirm-hot'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('确认转账'));
+    await tester.pumpAndSettle();
+    expect(find.text('验证以确认转账'), findsOneWidget);
+
+    // Tap the dimmed area above the sheet card.
+    await tester.tapAt(const Offset(200, 80));
+    await tester.pumpAndSettle();
+
+    expect(find.text('验证以确认转账'), findsNothing, reason: 'scrim tap must dismiss');
+    expect(find.text('确认转账'), findsOneWidget); // back on W29 confirm
+  });
 }

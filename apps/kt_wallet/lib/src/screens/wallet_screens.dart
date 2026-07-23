@@ -609,6 +609,9 @@ class WalletSwitcherSheet extends StatelessWidget {
     return Scaffold(
       backgroundColor: WalletColors.text.withValues(alpha: 0.5),
       body: GestureDetector(
+        // Opaque so taps on the dimmed scrim (where nothing is painted by
+        // this subtree) still hit-test here and dismiss the sheet.
+        behavior: HitTestBehavior.opaque,
         onTap: () => context.pop(),
         child: Align(
           alignment: Alignment.bottomCenter,

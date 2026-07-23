@@ -58,4 +58,23 @@ void main() {
     // Backed-up hot wallet still shows the hot action row (更多, not 扫签名).
     expect(find.text('更多'), findsOneWidget);
   });
+
+  testWidgets('tapping the dimmed scrim closes the wallet switcher', (tester) async {
+    tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+    await tester.pumpWidget(KtWalletApp(initialLocation: '/home'));
+    await tester.pumpAndSettle();
+
+    // Open the switcher via the header pill.
+    await tester.tap(find.text('日常钱包'));
+    await tester.pumpAndSettle();
+    expect(find.text('添加钱包'), findsOneWidget);
+
+    // Tap high up in the dimmed area (well above the bottom sheet).
+    await tester.tapAt(const Offset(200, 80));
+    await tester.pumpAndSettle();
+
+    expect(find.text('添加钱包'), findsNothing, reason: 'scrim tap must dismiss the sheet');
+    expect(find.text('总资产估值 (USD)'), findsOneWidget); // back on home
+  });
 }
