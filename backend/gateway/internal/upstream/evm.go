@@ -20,7 +20,8 @@ type EVM struct {
 	pool *Pool
 }
 
-// NewEVM builds an EVM client named after its chain ("eth", "polygon").
+// NewEVM builds an EVM client named after its network ("eth-mainnet",
+// "polygon-amoy", ...).
 func NewEVM(name string, urls []string, clk clock.Clock, client *http.Client, attemptTimeout time.Duration) *EVM {
 	return &EVM{pool: NewPool(name, urls, clk, client, attemptTimeout)}
 }

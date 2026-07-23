@@ -384,5 +384,37 @@
       }
     }
   },
-  "usePinUnlock": "使用密码解锁"
+  "usePinUnlock": "使用密码解锁",
+  "networkEnvironment": "网络环境",
+  "envMainnet": "主网",
+  "envTestnet": "测试网",
+  "testnetBadge": "测试网",
+  "perChainNetwork": "逐链网络",
+  "addNetwork": "添加网络",
+  "networkNameLabel": "网络名称",
+  "chainFamilyLabel": "协议族",
+  "chainIdLabel": "Chain ID",
+  "explorerLabel": "区块浏览器 URL(可选)",
+  "symbolLabel": "币种符号",
+  "probeChecking": "正在探测 RPC…",
+  "probeOkSave": "探测通过,已保存",
+  "rpcProbeFailed": "RPC 探测失败,请检查地址",
+  "chainIdMismatch": "Chain ID 不匹配:节点返回 {actual}",
+  "deleteNetwork": "删除网络",
+  "networkInUse": "该网络正在使用中",
+  "faucetAction": "领取测试币",
+  "airdropRequesting": "正在请求空投…",
+  "airdropOk": "空投成功,余额稍后刷新",
+  "airdropFailed": "空投失败:{message}",
+  "fiatHiddenTestnet": "测试网资产无市场价格",
+  "@chainIdMismatch": {
+    "placeholders": {
+      "actual": {}
+    }
+  },
+  "@airdropFailed": {
+    "placeholders": {
+      "message": {}
+    }
+  }
 }

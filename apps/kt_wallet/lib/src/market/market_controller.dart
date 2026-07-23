@@ -21,11 +21,13 @@ class MarketController extends ChangeNotifier {
     BalanceService? balances,
     PriceService? prices,
     TokenBalanceService? tokens,
+    bool Function(Coin coin)? isTestnet,
   })  :
         // ignore: prefer_initializing_formals
         _wallets = wallets,
         _balances = balances ?? BalanceService(),
         _prices = prices ?? PriceService(),
+        _isTestnet = isTestnet ?? _neverTestnet,
         // Deliberately nullable (no network-hitting default): contexts that
         // never wire a token service (older tests, gallery) simply have no
         // token rows.
@@ -42,6 +44,14 @@ class MarketController extends ChangeNotifier {
   final BalanceService _balances;
   final PriceService _prices;
   final TokenBalanceService? _tokens;
+
+  /// Whether [coin]'s ACTIVE network instance is a testnet, re-evaluated on
+  /// every read (network switches apply live). Testnet amounts are real but
+  /// have no market price — fiat is suppressed, never invented. Default:
+  /// nothing is a testnet (today's behavior for all existing wiring).
+  final bool Function(Coin coin) _isTestnet;
+
+  static bool _neverTestnet(Coin _) => false;
 
   String? _walletId;
   int _generation = 0;
@@ -89,6 +99,9 @@ class MarketController extends ChangeNotifier {
   /// USD value of one chain's balance, or null when either the balance or its
   /// price is unavailable (display-only double math).
   double? fiatValueUsd(Coin coin) {
+    // Testnet coins have no market price by definition — fiat is unavailable
+    // even when a (mainnet) quote for the same symbol is in the cache.
+    if (_isTestnet(coin)) return null;
     final result = _results[coin]!;
     final amount = result.amount;
     if (result.status != BalanceStatus.ok || amount == null) return null;
@@ -103,6 +116,7 @@ class MarketController extends ChangeNotifier {
   /// from the existing stablecoin pegs ([PriceService.peggedUsdBySymbol]);
   /// non-pegged tokens without a price feed stay null ('--'), never invented.
   double? tokenFiatValueUsd(TokenInfo token) {
+    if (_isTestnet(token.chain)) return null;
     final result = tokenBalanceFor(token.id);
     final amount = result.amount;
     if (result.status != BalanceStatus.ok || amount == null) return null;
@@ -152,9 +166,14 @@ class MarketController extends ChangeNotifier {
     notifyListeners();
 
     final tokenService = _tokens;
+    // With every active chain on a testnet there is nothing to price — skip
+    // the fetch entirely (an unpriceable quote must not even be requested).
+    // Mixed environments still fetch once; testnet chains ignore the result
+    // via the fiat guards above.
+    final skipPrices = Coin.values.every(_isTestnet);
     final (balances, prices, tokenBalances) = await (
       _balances.fetchAll(wallet.addresses),
-      _prices.fetchUsdPrices(),
+      skipPrices ? Future<Map<Coin, double>?>.value(null) : _prices.fetchUsdPrices(),
       tokenService == null
           ? Future.value(const <String, BalanceResult>{})
           : tokenService.fetchAll(wallet.addresses),

@@ -33,10 +33,11 @@ const feeHistoryBlocks = 5
 func (g *Gateway) GetChainParams(ctx context.Context, params json.RawMessage) (any, *rpc.Error) {
 	var p struct {
 		Chain   string `json:"chain"`
+		Network string `json:"network"`
 		Address string `json:"address"`
 	}
 	if err := json.Unmarshal(params, &p); err != nil || len(params) == 0 {
-		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: expected {"chain", "address"}`)
+		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: expected {"chain", "network"?, "address"}`)
 	}
 	meta, rpcErr := validateChain(p.Chain)
 	if rpcErr != nil {
@@ -46,16 +47,20 @@ func (g *Gateway) GetChainParams(ctx context.Context, params json.RawMessage) (a
 		return nil, rpc.Errorf(rpc.CodeInvalidParams,
 			`invalid params: "chain" must be an EVM chain ("eth" or "polygon") for kt_getChainParams`)
 	}
+	network, rpcErr := resolveNetwork(p.Chain, p.Network)
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
 	if rpcErr := validateAddress(p.Chain, p.Address); rpcErr != nil {
 		return nil, rpcErr
 	}
 
-	key := p.Chain + "|" + p.Address
+	key := network + "|" + p.Address
 	if v, ok := g.paramsCache.Get(key); ok {
 		return v, nil
 	}
 
-	evm := g.evm[p.Chain]
+	evm := g.evm[network]
 	nonce, err := evm.TransactionCount(ctx, p.Address)
 	if err != nil {
 		return nil, upstreamError(p.Chain, err)

@@ -1,16 +1,20 @@
+import 'package:chains/chains.dart' show Chain;
 import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../market/airdrop_service.dart';
 import '../market/balance_service.dart';
 import '../market/market_controller.dart';
 import '../market/market_scope.dart';
 import 'home_screen.dart' show tokenRowMeta;
 import '../widgets/market_offline_banner.dart';
 import '../widgets/token_icon.dart';
+import '../state/networks.dart';
 import '../state/wallet_scope.dart';
 
 /// W2 资产列表 — search + network filter + full asset list. Live: the search
@@ -263,7 +267,12 @@ class _ReceiveChain {
 /// chain picker; the displayed address (and what copy/share puts on the
 /// clipboard) is the current wallet's address for the selected chain.
 class ReceiveScreen extends StatefulWidget {
-  const ReceiveScreen({super.key});
+  const ReceiveScreen({super.key, this.airdropClient});
+
+  /// Injectable http client for the devnet airdrop faucet (tests); null in
+  /// production (the [AirdropService] creates and closes its own).
+  final http.Client? airdropClient;
+
   @override
   State<ReceiveScreen> createState() => _ReceiveScreenState();
 }
@@ -279,12 +288,84 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   // Default TRON, matching the design.
   int _selected = 2;
 
+  /// True while a devnet airdrop request is in flight (guards double-taps).
+  bool _airdropping = false;
+
   _ReceiveChain get _chain => _chains[_selected];
+
+  /// Protocol family of the selected coin (Coin is the derivation-level enum,
+  /// Chain the network-level one; they map 1:1).
+  static Chain _familyOf(Coin coin) => switch (coin) {
+        Coin.eth => Chain.ethereum,
+        Coin.polygon => Chain.polygon,
+        Coin.tron => Chain.tron,
+        Coin.solana => Chain.solana,
+      };
 
   String _address(BuildContext context) {
     final wallet = WalletScope.of(context).current;
     return wallet == null ? '' : wallet.addresses.forCoin(_chain.coin);
   }
+
+  /// Faucet tap. Solana testnets (devnet included): a REAL one-tap airdrop of
+  /// 1 SOL via the active network's own RPC (`requestAirdrop` — devnet's
+  /// faucet IS that call). Other testnets: copy the faucet URL to the
+  /// clipboard — no url_launcher dependency exists in this app, so copying is
+  /// the honest affordance (same link-copied snackbar the explorer row uses).
+  Future<void> _faucet(Network net) async {
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    if (net.chain == Chain.solana) {
+      final address = _address(context);
+      if (address.isEmpty || _airdropping) return;
+      setState(() => _airdropping = true);
+      messenger.showSnackBar(SnackBar(content: Text(l10n.airdropRequesting)));
+      final service = AirdropService(client: widget.airdropClient);
+      try {
+        await service.requestAirdrop(rpcUrl: net.rpcUrl, address: address);
+        messenger
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(content: Text(l10n.airdropOk)));
+      } on AirdropException catch (e) {
+        messenger
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(content: Text(l10n.airdropFailed(e.message))));
+      } finally {
+        if (widget.airdropClient == null) service.close();
+        if (mounted) setState(() => _airdropping = false);
+      }
+      return;
+    }
+    final url = net.faucetUrl;
+    if (url == null) return;
+    Clipboard.setData(ClipboardData(text: url));
+    messenger.showSnackBar(SnackBar(content: Text(l10n.explorerLinkCopied)));
+  }
+
+  /// Testnet-only faucet row under the address card: the action label, an
+  /// amber dot + the active network's name (honest about where funds land).
+  Widget _faucetRow(AppLocalizations l10n, Network net) => GestureDetector(
+        key: const ValueKey('faucet-action'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _faucet(net),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(color: WalletColors.surface, borderRadius: BorderRadius.circular(12)),
+          child: Row(children: [
+            const Icon(Icons.water_drop_outlined, size: 18, color: WalletColors.accent),
+            const SizedBox(width: 10),
+            Expanded(
+                child: Text(l10n.faucetAction,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WalletColors.accent))),
+            Container(
+                width: 6,
+                height: 6,
+                decoration: const BoxDecoration(color: WalletColors.amber, shape: BoxShape.circle)),
+            const SizedBox(width: 6),
+            Text(net.name, style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
+          ]),
+        ),
+      );
 
   Future<void> _pickChain() async {
     final l10n = AppLocalizations.of(context);
@@ -333,6 +414,10 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     final l10n = AppLocalizations.of(context);
     final chain = _chain;
     final address = _address(context);
+    // Active network for the selected family. Scope-absent (gallery/goldens)
+    // falls back to the shared mainnet controller → active is never a testnet
+    // → the faucet row does not render → goldens stay byte-identical.
+    final activeNet = NetworkScope.of(context).activeFor(_familyOf(chain.coin));
     return KtScreen(
       navBar: KtNavBar(
         title: l10n.actionReceive,
@@ -367,6 +452,12 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                 textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, fontFamily: KtFonts.mono, height: 1.6, color: WalletColors.text)),
           ]),
         ),
+        // Testnet-only: one-tap Solana airdrop, or copy-faucet-URL where the
+        // network declares one. Mainnet (and testnets without either) render
+        // nothing here.
+        if (activeNet.isTestnet &&
+            (activeNet.chain == Chain.solana || activeNet.faucetUrl != null))
+          _faucetRow(l10n, activeNet),
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(color: WalletColors.amber.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),

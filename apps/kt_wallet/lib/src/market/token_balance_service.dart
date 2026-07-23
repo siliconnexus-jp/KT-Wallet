@@ -32,41 +32,58 @@ class TokenInfo {
   final String network;
 }
 
+// USDT on Ethereum mainnet — Tether's canonical ERC-20 contract, 6 decimals
+// (https://etherscan.io/token/0xdAC17F958D2ee523a2206206994597C13D831ec7).
+const usdtEthToken = TokenInfo(
+  id: 'usdt-eth',
+  symbol: 'USDT',
+  chain: Coin.eth,
+  contract: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+  decimals: 6,
+  network: 'Ethereum',
+);
+
+// USDC on Polygon PoS — Circle's NATIVE issuance (not the bridged USDC.e at
+// 0x2791...), 6 decimals, per Circle's "USDC on Polygon PoS" contract list
+// (https://developers.circle.com/stablecoins/usdc-on-main-networks).
+const usdcPolygonToken = TokenInfo(
+  id: 'usdc-polygon',
+  symbol: 'USDC',
+  chain: Coin.polygon,
+  contract: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
+  decimals: 6,
+  network: 'Polygon',
+);
+
+// USDT on TRON — Tether's canonical TRC-20 contract, 6 decimals
+// (https://tronscan.org/#/token20/TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t).
+const usdtTronToken = TokenInfo(
+  id: 'usdt-tron',
+  symbol: 'USDT',
+  chain: Coin.tron,
+  contract: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+  decimals: 6,
+  network: 'TRON',
+);
+
 /// Built-in token registry (V1: the three canonical stablecoin deployments;
 /// user-added tokens stay display-only in the token-manage directory).
-const builtinTokens = [
-  // USDT on Ethereum mainnet — Tether's canonical ERC-20 contract, 6 decimals
-  // (https://etherscan.io/token/0xdAC17F958D2ee523a2206206994597C13D831ec7).
-  TokenInfo(
-    id: 'usdt-eth',
-    symbol: 'USDT',
-    chain: Coin.eth,
-    contract: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-    decimals: 6,
-    network: 'Ethereum',
-  ),
-  // USDC on Polygon PoS — Circle's NATIVE issuance (not the bridged USDC.e at
-  // 0x2791...), 6 decimals, per Circle's "USDC on Polygon PoS" contract list
-  // (https://developers.circle.com/stablecoins/usdc-on-main-networks).
-  TokenInfo(
-    id: 'usdc-polygon',
-    symbol: 'USDC',
-    chain: Coin.polygon,
-    contract: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
-    decimals: 6,
-    network: 'Polygon',
-  ),
-  // USDT on TRON — Tether's canonical TRC-20 contract, 6 decimals
-  // (https://tronscan.org/#/token20/TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t).
-  TokenInfo(
-    id: 'usdt-tron',
-    symbol: 'USDT',
-    chain: Coin.tron,
-    contract: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
-    decimals: 6,
-    network: 'TRON',
-  ),
-];
+const builtinTokens = [usdtEthToken, usdcPolygonToken, usdtTronToken];
+
+/// The built-in registry keyed by NETWORK id: these are MAINNET contract
+/// deployments, so only the mainnet instances carry them — a testnet (or
+/// custom) network has no built-in tokens and must never query these
+/// contracts (same addresses on a testnet are a different, untrusted token
+/// at best).
+const builtinTokensByNetworkId = <String, List<TokenInfo>>{
+  'eth-mainnet': [usdtEthToken],
+  'polygon-mainnet': [usdcPolygonToken],
+  'tron-mainnet': [usdtTronToken],
+};
+
+/// Resolves the token registry to fetch, re-evaluated on every fetch so a
+/// network switch applies from the very next refresh.
+typedef TokenRegistryResolver = List<TokenInfo> Function();
 
 /// Fetches live token balances for the current wallet:
 ///
@@ -86,11 +103,15 @@ class TokenBalanceService {
     RestTransport? restTransport,
     RpcEndpointResolver? endpoints,
     GatewayResolver? gateway,
-    this.tokens = builtinTokens,
+    List<TokenInfo> tokens = builtinTokens,
+    TokenRegistryResolver? registry,
   })  : _jsonRpc = jsonRpcTransport ?? HttpJsonRpcTransport(),
         _rest = restTransport ?? HttpRestTransport(),
         _endpoints = endpoints ?? defaultRpcEndpointFor,
-        _gateway = gateway ?? _noGateway;
+        _gateway = gateway ?? _noGateway,
+        _staticTokens = tokens,
+        // ignore: prefer_initializing_formals
+        _registry = registry;
 
   static GatewayClient? _noGateway() => null;
 
@@ -101,8 +122,16 @@ class TokenBalanceService {
   /// Optional gateway (null in direct mode), resolved on every fetch.
   final GatewayResolver _gateway;
 
-  /// The registry this instance fetches, in display order.
-  final List<TokenInfo> tokens;
+  final List<TokenInfo> _staticTokens;
+
+  /// Optional dynamic registry (network-aware wiring); wins over the static
+  /// [tokens] list and is re-resolved on every fetch/read.
+  final TokenRegistryResolver? _registry;
+
+  /// The registry this instance fetches, in display order. With a [_registry]
+  /// resolver wired this follows the active networks live; otherwise the
+  /// static construction-time list (today's behavior).
+  List<TokenInfo> get tokens => _registry?.call() ?? _staticTokens;
 
   /// Fetches every registry token concurrently. Never throws: each per-token
   /// failure collapses to [BalanceStatus.error] for that token only. Results

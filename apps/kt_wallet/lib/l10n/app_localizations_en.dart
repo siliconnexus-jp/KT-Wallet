@@ -769,4 +769,74 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get usePinUnlock => 'Unlock with PIN';
+
+  @override
+  String get networkEnvironment => 'Network environment';
+
+  @override
+  String get envMainnet => 'Mainnet';
+
+  @override
+  String get envTestnet => 'Testnet';
+
+  @override
+  String get testnetBadge => 'TESTNET';
+
+  @override
+  String get perChainNetwork => 'Per-chain network';
+
+  @override
+  String get addNetwork => 'Add network';
+
+  @override
+  String get networkNameLabel => 'Network name';
+
+  @override
+  String get chainFamilyLabel => 'Chain family';
+
+  @override
+  String get chainIdLabel => 'Chain ID';
+
+  @override
+  String get explorerLabel => 'Explorer URL (optional)';
+
+  @override
+  String get symbolLabel => 'Symbol';
+
+  @override
+  String get probeChecking => 'Probing RPC…';
+
+  @override
+  String get probeOkSave => 'Probe passed, saved';
+
+  @override
+  String get rpcProbeFailed => 'RPC probe failed — check the URL';
+
+  @override
+  String chainIdMismatch(Object actual) {
+    return 'Chain ID mismatch: node returned $actual';
+  }
+
+  @override
+  String get deleteNetwork => 'Delete network';
+
+  @override
+  String get networkInUse => 'This network is currently in use';
+
+  @override
+  String get faucetAction => 'Get test funds';
+
+  @override
+  String get airdropRequesting => 'Requesting airdrop…';
+
+  @override
+  String get airdropOk => 'Airdrop sent — balance will refresh shortly';
+
+  @override
+  String airdropFailed(Object message) {
+    return 'Airdrop failed: $message';
+  }
+
+  @override
+  String get fiatHiddenTestnet => 'Testnet assets have no market price';
 }

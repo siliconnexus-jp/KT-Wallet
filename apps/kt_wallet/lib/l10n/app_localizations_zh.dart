@@ -739,4 +739,74 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get usePinUnlock => '使用密码解锁';
+
+  @override
+  String get networkEnvironment => '网络环境';
+
+  @override
+  String get envMainnet => '主网';
+
+  @override
+  String get envTestnet => '测试网';
+
+  @override
+  String get testnetBadge => '测试网';
+
+  @override
+  String get perChainNetwork => '逐链网络';
+
+  @override
+  String get addNetwork => '添加网络';
+
+  @override
+  String get networkNameLabel => '网络名称';
+
+  @override
+  String get chainFamilyLabel => '协议族';
+
+  @override
+  String get chainIdLabel => 'Chain ID';
+
+  @override
+  String get explorerLabel => '区块浏览器 URL(可选)';
+
+  @override
+  String get symbolLabel => '币种符号';
+
+  @override
+  String get probeChecking => '正在探测 RPC…';
+
+  @override
+  String get probeOkSave => '探测通过,已保存';
+
+  @override
+  String get rpcProbeFailed => 'RPC 探测失败,请检查地址';
+
+  @override
+  String chainIdMismatch(Object actual) {
+    return 'Chain ID 不匹配:节点返回 $actual';
+  }
+
+  @override
+  String get deleteNetwork => '删除网络';
+
+  @override
+  String get networkInUse => '该网络正在使用中';
+
+  @override
+  String get faucetAction => '领取测试币';
+
+  @override
+  String get airdropRequesting => '正在请求空投…';
+
+  @override
+  String get airdropOk => '空投成功,余额稍后刷新';
+
+  @override
+  String airdropFailed(Object message) {
+    return '空投失败:$message';
+  }
+
+  @override
+  String get fiatHiddenTestnet => '测试网资产无市场价格';
 }

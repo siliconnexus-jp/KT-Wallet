@@ -224,10 +224,15 @@ func newEnv(t *testing.T, mutate func(cfg *handlers.Config)) *env {
 		PolygonURLs:       []string{unreachable},
 		SolanaURLs:        []string{unreachable},
 		TronURL:           unreachable,
+		EthSepoliaURLs:    []string{unreachable},
+		PolygonAmoyURLs:   []string{unreachable},
+		SolanaDevnetURLs:  []string{unreachable},
+		TronNileURL:       unreachable,
 		CoinGeckoURL:      unreachable,
 		CoinGeckoInterval: time.Millisecond,
 		EtherscanURL:      unreachable,
 		HeliusURL:         unreachable,
+		HeliusDevnetURL:   unreachable,
 	}
 	if mutate != nil {
 		mutate(&cfg)

@@ -1,3 +1,4 @@
+import 'package:chains/chains.dart' show Chain;
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +14,7 @@ import '../market/token_balance_service.dart';
 import '../widgets/market_offline_banner.dart';
 import '../widgets/token_icon.dart';
 import '../state/app_prefs.dart';
+import '../state/networks.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
 
@@ -129,6 +131,11 @@ class _HomeTab extends StatelessWidget {
     final market = MarketScope.maybeOf(context);
     final offline = market?.isOffline ?? false;
     final live = market != null && !offline;
+    // ANY active chain on a testnet → the fiat total is meaningless (testnet
+    // assets have no market price): show '--' plus the explanatory note.
+    // Absent scope falls back to the all-mainnet controller → false, so demo
+    // and golden renderings are untouched.
+    final testnet = NetworkScope.of(context).anyTestnetActive;
     final total = live ? market.totalUsd : null;
     final listView = ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -145,11 +152,17 @@ class _HomeTab extends StatelessWidget {
         ],
         const SizedBox(height: 24),
         _Balance(
-          amount: live ? (total == null ? '--' : formatUsd(total)) : r'$862.40',
+          amount: live
+              ? (testnet || total == null ? '--' : formatUsd(total))
+              : r'$862.40',
           // No 24h-change source yet — live mode omits the line rather than
           // showing an invented delta.
           change: live ? '' : '+\$12.06 (+1.4%) ${l10n.balanceChangePeriod}',
         ),
+        if (live && testnet) ...[
+          const SizedBox(height: 12),
+          const _FiatHiddenTestnetNote(),
+        ],
         const SizedBox(height: 24),
         _ActionRow(isHot: isHot, onMore: () => _showMore(context)),
         const SizedBox(height: 24),
@@ -179,7 +192,10 @@ class _AssetsTab extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
         const SizedBox(height: 8),
-        Text(l10n.tabAssets, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
+        Row(children: [
+          Text(l10n.tabAssets, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
+          const TestnetBadge(),
+        ]),
         const SizedBox(height: 4),
         Text(l10n.assetsSortByValue, style: const TextStyle(fontSize: 13, color: WalletColors.text3)),
         const SizedBox(height: 20),
@@ -213,11 +229,12 @@ class _RecordsTabState extends State<_RecordsTab> {
         MarketScope.maybeOf(context) != null) {
       final controller = HistoryController(
         wallets: WalletScope.of(context),
-        // TronGrid endpoint follows the persisted network-settings override
-        // (defaults everywhere when no AppPrefsScope is mounted); a
-        // configured gateway unlocks eth/polygon/solana history too.
+        // TronGrid endpoint: persisted RPC override → ACTIVE tron network's
+        // rpcUrl (Nile is TronGrid-compatible, same paths) → builtin default;
+        // a configured gateway unlocks eth/polygon/solana history too.
         service: HistoryService(
-            endpoints: prefsRpcEndpoints(AppPrefsScope.maybeOf(context)),
+            endpoints: effectiveRpcEndpoints(AppPrefsScope.maybeOf(context),
+                NetworkScope.maybeOf(context)),
             gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context))),
       );
       _owned = controller..addListener(_onHistoryChanged);
@@ -345,7 +362,10 @@ class _RecordsTabState extends State<_RecordsTab> {
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
         const SizedBox(height: 8),
-        Text(l10n.recordsTitle, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
+        Row(children: [
+          Text(l10n.recordsTitle, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
+          const TestnetBadge(),
+        ]),
         const SizedBox(height: 20),
         body,
       ],
@@ -429,7 +449,10 @@ class _SettingsTab extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
         const SizedBox(height: 8),
-        Text(l10n.tabSettings, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
+        Row(children: [
+          Text(l10n.tabSettings, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
+          const TestnetBadge(),
+        ]),
         const SizedBox(height: 20),
         KtCard(
           padding: EdgeInsets.zero,
@@ -568,30 +591,39 @@ class _Header extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        GestureDetector(
-          onTap: onTapPill,
-          child: Container(
-          padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
-          decoration: BoxDecoration(
-            color: WalletColors.surface,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _Avatar(color: Color(wallet.avatarColor), initial: wallet.name.characters.first, size: 26),
-              const SizedBox(width: 8),
-              Text(wallet.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
-              const SizedBox(width: 8),
-              WalletTypeBadge(
-                kind: isHot ? WalletKind.hot : WalletKind.watch,
-                label: isHot ? l10n.walletKindHot : l10n.walletKindWatch,
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GestureDetector(
+              onTap: onTapPill,
+              child: Container(
+              padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
+              decoration: BoxDecoration(
+                color: WalletColors.surface,
+                borderRadius: BorderRadius.circular(999),
               ),
-              const SizedBox(width: 4),
-              const Icon(Icons.keyboard_arrow_down, size: 18, color: WalletColors.text2),
-            ],
-          ),
-        ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _Avatar(color: Color(wallet.avatarColor), initial: wallet.name.characters.first, size: 26),
+                  const SizedBox(width: 8),
+                  Text(wallet.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
+                  const SizedBox(width: 8),
+                  WalletTypeBadge(
+                    kind: isHot ? WalletKind.hot : WalletKind.watch,
+                    label: isHot ? l10n.walletKindHot : l10n.walletKindWatch,
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.keyboard_arrow_down, size: 18, color: WalletColors.text2),
+                ],
+              ),
+            ),
+            ),
+            // Amber testnet pill next to the wallet pill whenever ANY active
+            // chain is a testnet; renders nothing (zero-size) on all-mainnet,
+            // keeping demo/golden layouts byte-identical.
+            const TestnetBadge(),
+          ],
         ),
         GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -616,6 +648,70 @@ class _Avatar extends StatelessWidget {
         decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         child: Text(initial, style: TextStyle(fontSize: size * 0.46, fontWeight: FontWeight.w600, color: Colors.white)),
       );
+}
+
+/// Compact amber "TESTNET" pill, visible on every home tab whenever ANY
+/// active chain instance is a testnet. Reads the enclosing [NetworkScope]
+/// (registering a dependency, so environment switches update it live);
+/// without a scope the mainnet-default fallback keeps it zero-size —
+/// demo/golden renderings are unchanged.
+class TestnetBadge extends StatelessWidget {
+  const TestnetBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!NetworkScope.of(context).anyTestnetActive) {
+      return const SizedBox.shrink();
+    }
+    final l10n = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: WalletColors.amber.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          l10n.testnetBadge,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.3,
+            color: WalletColors.amber,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Small "testnet assets have no market price" note under the '--' total,
+/// visually consistent with [MarketOfflineBanner] (same strip styling).
+class _FiatHiddenTestnetNote extends StatelessWidget {
+  const _FiatHiddenTestnetNote();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: WalletColors.surface,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(children: [
+        const Icon(Icons.science_outlined, size: 14, color: WalletColors.amber),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            l10n.fiatHiddenTestnet,
+            style: const TextStyle(fontSize: 12, color: WalletColors.text3),
+          ),
+        ),
+      ]),
+    );
+  }
 }
 
 class _BackupBanner extends StatelessWidget {
@@ -723,20 +819,32 @@ class _ActionRow extends StatelessWidget {
 
 class _NetworkChips extends StatelessWidget {
   const _NetworkChips();
+
+  static const _chainDots = [
+    (Chain.ethereum, ChainColors.ethereum),
+    (Chain.polygon, ChainColors.polygon),
+    (Chain.tron, ChainColors.tron),
+    (Chain.solana, ChainColors.solana),
+  ];
+
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        child: const Row(children: [
-          NetworkBadge(label: 'Ethereum', dotColor: ChainColors.ethereum),
-          SizedBox(width: 8),
-          NetworkBadge(label: 'Polygon', dotColor: ChainColors.polygon),
-          SizedBox(width: 8),
-          NetworkBadge(label: 'TRON', dotColor: ChainColors.tron),
-          SizedBox(width: 8),
-          NetworkBadge(label: 'Solana', dotColor: ChainColors.solana),
-        ]),
-      );
+  Widget build(BuildContext context) {
+    // Chip labels follow the ACTIVE network per chain (Sepolia / Amoy / Nile /
+    // Devnet under the testnet environment). The scope-absent fallback is the
+    // all-mainnet profile, whose names are exactly the previous literals —
+    // demo/golden renderings unchanged.
+    final networks = NetworkScope.of(context);
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(children: [
+        for (final (i, (chain, dot)) in _chainDots.indexed) ...[
+          if (i > 0) const SizedBox(width: 8),
+          NetworkBadge(label: networks.activeFor(chain).name, dotColor: dot),
+        ],
+      ]),
+    );
+  }
 }
 
 class _AssetsCard extends StatelessWidget {

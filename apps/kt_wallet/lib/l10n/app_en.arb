@@ -258,5 +258,27 @@
       }
     }
   },
-  "usePinUnlock": "Unlock with PIN"
+  "usePinUnlock": "Unlock with PIN",
+  "networkEnvironment": "Network environment",
+  "envMainnet": "Mainnet",
+  "envTestnet": "Testnet",
+  "testnetBadge": "TESTNET",
+  "perChainNetwork": "Per-chain network",
+  "addNetwork": "Add network",
+  "networkNameLabel": "Network name",
+  "chainFamilyLabel": "Chain family",
+  "chainIdLabel": "Chain ID",
+  "explorerLabel": "Explorer URL (optional)",
+  "symbolLabel": "Symbol",
+  "probeChecking": "Probing RPC…",
+  "probeOkSave": "Probe passed, saved",
+  "rpcProbeFailed": "RPC probe failed — check the URL",
+  "chainIdMismatch": "Chain ID mismatch: node returned {actual}",
+  "deleteNetwork": "Delete network",
+  "networkInUse": "This network is currently in use",
+  "faucetAction": "Get test funds",
+  "airdropRequesting": "Requesting airdrop…",
+  "airdropOk": "Airdrop sent — balance will refresh shortly",
+  "airdropFailed": "Airdrop failed: {message}",
+  "fiatHiddenTestnet": "Testnet assets have no market price"
 }

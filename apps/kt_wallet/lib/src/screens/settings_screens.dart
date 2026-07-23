@@ -12,8 +12,10 @@ import '../market/gateway_client.dart' show GatewayClient;
 import '../security/biometric_auth.dart';
 import '../security/wallet_pin.dart';
 import '../widgets/pin_pad.dart';
+import '../widgets/rpc_probe.dart';
 import '../widgets/token_icon.dart';
 import '../state/app_prefs.dart';
+import '../state/networks.dart';
 import '../state/locale_controller.dart';
 import '../state/wallet_controller.dart';
 import '../state/wallet_scope.dart';
@@ -514,11 +516,16 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
 /// RPC rows, and a test-connection action (`kt_health` → snackbar). The card
 /// is scope-only, so the scope-absent gallery/golden rendering is unchanged.
 class NetworkSettingsScreen extends StatefulWidget {
-  const NetworkSettingsScreen({super.key, this.gatewayTestClient});
+  const NetworkSettingsScreen(
+      {super.key, this.gatewayTestClient, this.probeClient});
 
   /// Injectable http client for the gateway test-connection call (tests);
   /// null in production (the [GatewayClient] creates its own).
   final http.Client? gatewayTestClient;
+
+  /// Injectable http client for the add-network RPC probe (tests); null in
+  /// production (the [RpcProbe] creates and closes its own).
+  final http.Client? probeClient;
 
   @override
   State<NetworkSettingsScreen> createState() => _NetworkSettingsScreenState();
@@ -643,6 +650,301 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
     );
   }
 
+  // ---- multi-network management (NetworkScope-only, so the scope-absent
+  // gallery/golden rendering stays byte-for-byte) ---------------------------
+
+  /// What the current environment profile alone would dictate for [chain]
+  /// (each family has exactly one built-in mainnet and one built-in testnet,
+  /// asserted by the foundation tests).
+  Network _profileDefault(NetworkController net, Chain chain) =>
+      builtinNetworks.firstWhere((n) =>
+          n.chain == chain &&
+          n.isTestnet == (net.environment == NetworkEnvironment.testnet));
+
+  /// 网络环境 card: the mainnet/testnet environment switch.
+  Widget _envCard(AppLocalizations l10n, NetworkController net) => KtCard(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(l10n.networkEnvironment,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
+          const SizedBox(height: 12),
+          KtSegmented(
+            options: [l10n.envMainnet, l10n.envTestnet],
+            selected: net.environment == NetworkEnvironment.testnet ? 1 : 0,
+            // Foundation behavior: an explicit environment switch clears the
+            // per-chain overrides ("everything mainnet/testnet" wins).
+            onChanged: (i) => net.setEnvironment(
+                i == 1 ? NetworkEnvironment.testnet : NetworkEnvironment.mainnet),
+          ),
+        ]),
+      );
+
+  /// Small amber dot marking a testnet instance.
+  static Widget _testnetDot() => Container(
+      width: 6,
+      height: 6,
+      decoration: const BoxDecoration(color: WalletColors.amber, shape: BoxShape.circle));
+
+  /// 逐链网络 card: one row per chain family showing the ACTIVE network name;
+  /// tapping opens the per-family picker, "+" opens the add-network form.
+  Widget _perChainCard(AppLocalizations l10n, NetworkController net) => KtCard(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(
+                child: Text(l10n.perChainNetwork,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text))),
+            GestureDetector(
+              key: const ValueKey('add-network'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _addNetworkSheet(net),
+              child: const Icon(Icons.add, size: 18, color: WalletColors.accent),
+            ),
+          ]),
+          for (final (chain, label, color) in _chainTags) ...[
+            const SizedBox(height: 14),
+            Builder(builder: (context) {
+              final active = net.activeFor(chain);
+              return GestureDetector(
+                key: ValueKey('net-row-${chain.name}'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _pickNetwork(net, chain, label),
+                child: Row(children: [
+                  Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: Text(label,
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text))),
+                  if (active.isTestnet) ...[_testnetDot(), const SizedBox(width: 6)],
+                  Text(active.name, style: const TextStyle(fontSize: 13, color: WalletColors.text2)),
+                  const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3),
+                ]),
+              );
+            }),
+          ],
+        ]),
+      );
+
+  /// Per-family picker sheet: built-ins + customs, testnets with an amber dot,
+  /// the active one checked, custom rows with a delete affordance.
+  ///
+  /// Selecting the network the environment profile already dictates CLEARS the
+  /// override instead of pinning it: a pin to "what the profile says anyway"
+  /// would silently survive a later environment switch and betray it.
+  Future<void> _pickNetwork(NetworkController net, Chain chain, String familyLabel) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: WalletColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => SafeArea(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const SizedBox(height: 12),
+            Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(children: [
+                Text(familyLabel, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: WalletColors.text)),
+              ]),
+            ),
+            const SizedBox(height: 8),
+            for (final n in net.networksFor(chain))
+              ListTile(
+                key: ValueKey('net-opt-${n.id}'),
+                leading: n.isTestnet
+                    ? _testnetDot()
+                    : Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(color: WalletColors.green, shape: BoxShape.circle)),
+                title: Text(n.name, style: const TextStyle(fontSize: 15, color: WalletColors.text)),
+                subtitle: Text(n.rpcUrl,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, fontFamily: KtFonts.mono, color: WalletColors.text3)),
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                  // Built-ins show no delete; custom networks do.
+                  if (!n.builtin)
+                    GestureDetector(
+                      key: ValueKey('net-del-${n.id}'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () async {
+                        await _confirmDeleteNetwork(ctx, net, n);
+                        setSheetState(() {});
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.only(right: 8),
+                        child: Icon(Icons.delete_outline, size: 18, color: WalletColors.red),
+                      ),
+                    ),
+                  if (net.activeFor(chain).id == n.id)
+                    const Icon(Icons.check, size: 20, color: WalletColors.accent),
+                ]),
+                onTap: () {
+                  // Picking the profile default = clearing the pin.
+                  net.setOverride(chain, n.id == _profileDefault(net, chain).id ? null : n.id);
+                  Navigator.of(ctx).pop();
+                },
+              ),
+            const SizedBox(height: 12),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  /// Delete confirmation. When the network is currently active for some chain
+  /// the dialog says so (networkInUse) but still allows deletion — the
+  /// foundation drops the override and falls back to the environment profile.
+  Future<void> _confirmDeleteNetwork(BuildContext sheetCtx, NetworkController net, Network n) async {
+    final l10n = AppLocalizations.of(context);
+    final inUse = Chain.values.any((c) => net.activeFor(c).id == n.id);
+    final ok = await showDialog<bool>(
+      context: sheetCtx,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.deleteNetwork),
+        content: Text(inUse ? '${n.name}\n${l10n.networkInUse}' : n.name),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l10n.actionCancel)),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.actionDelete, style: const TextStyle(color: WalletColors.red)),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await net.removeCustom(n.id);
+  }
+
+  /// 添加网络 sheet: family picker + name/RPC/symbol (+ chainId for EVM
+  /// families, explorer optional). Saving PROBES the RPC first — nothing is
+  /// persisted until the endpoint answered once (and, for EVM, reported the
+  /// typed chain id).
+  Future<void> _addNetworkSheet(NetworkController net) async {
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final nameController = TextEditingController();
+    final rpcController = TextEditingController();
+    final symbolController = TextEditingController();
+    final chainIdController = TextEditingController();
+    final explorerController = TextEditingController();
+    var family = 0; // index into _chainTags
+    var probing = false;
+    String? error;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: WalletColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final chain = _chainTags[family].$1;
+          final isEvm = chain == Chain.ethereum || chain == Chain.polygon;
+          final typedChainId = int.tryParse(chainIdController.text.trim());
+          final complete = nameController.text.trim().isNotEmpty &&
+              rpcController.text.trim().isNotEmpty &&
+              symbolController.text.trim().isNotEmpty &&
+              (!isEvm || typedChainId != null);
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+            child: SafeArea(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                  child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2)))),
+                    const SizedBox(height: 16),
+                    Text(l10n.addNetwork, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: WalletColors.text)),
+                    const SizedBox(height: 16),
+                    Text(l10n.chainFamilyLabel,
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2)),
+                    const SizedBox(height: 8),
+                    KtSegmented(
+                      options: [for (final t in _chainTags) t.$2],
+                      selected: family,
+                      onChanged: probing ? null : (i) => setSheetState(() => family = i),
+                    ),
+                    const SizedBox(height: 14),
+                    _sheetField(nameController, label: l10n.networkNameLabel, onChanged: () => setSheetState(() {})),
+                    const SizedBox(height: 14),
+                    _sheetField(rpcController, label: l10n.rpcNode, mono: true, onChanged: () => setSheetState(() {})),
+                    const SizedBox(height: 14),
+                    _sheetField(symbolController, label: l10n.symbolLabel, onChanged: () => setSheetState(() {})),
+                    if (isEvm) ...[
+                      const SizedBox(height: 14),
+                      _sheetField(chainIdController, label: l10n.chainIdLabel, mono: true, onChanged: () => setSheetState(() {})),
+                    ],
+                    const SizedBox(height: 14),
+                    _sheetField(explorerController, label: l10n.explorerLabel, mono: true),
+                    if (error != null) ...[
+                      const SizedBox(height: 10),
+                      Row(children: [
+                        const Icon(Icons.error_outline, size: 14, color: WalletColors.red),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(error!, style: const TextStyle(fontSize: 12, color: WalletColors.red))),
+                      ]),
+                    ],
+                    const SizedBox(height: 18),
+                    KtPrimaryButton(
+                      label: probing ? l10n.probeChecking : l10n.actionSave,
+                      onPressed: !complete || probing
+                          ? null
+                          : () async {
+                              setSheetState(() {
+                                probing = true;
+                                error = null;
+                              });
+                              final probe = RpcProbe(client: widget.probeClient);
+                              final result = await probe.probe(
+                                chain: chain,
+                                rpcUrl: rpcController.text.trim(),
+                                expectedChainId: isEvm ? typedChainId : null,
+                              );
+                              if (widget.probeClient == null) probe.close();
+                              if (!ctx.mounted) return;
+                              switch (result) {
+                                case RpcProbeOk():
+                                  final explorer = explorerController.text.trim();
+                                  await net.addCustom(
+                                    chain: chain,
+                                    name: nameController.text.trim(),
+                                    rpcUrl: rpcController.text.trim(),
+                                    symbol: symbolController.text.trim().toUpperCase(),
+                                    evmChainId: isEvm ? typedChainId : null,
+                                    explorerUrl: explorer.isEmpty ? null : explorer,
+                                  );
+                                  if (!ctx.mounted) return;
+                                  Navigator.of(ctx).pop();
+                                  messenger
+                                    ..clearSnackBars()
+                                    ..showSnackBar(SnackBar(content: Text(l10n.probeOkSave)));
+                                case RpcProbeChainIdMismatch(:final actual):
+                                  // The node's actual id, decimal, inline; the
+                                  // sheet stays open for correction.
+                                  setSheetState(() {
+                                    probing = false;
+                                    error = l10n.chainIdMismatch(actual);
+                                  });
+                                case RpcProbeFailure():
+                                  setSheetState(() {
+                                    probing = false;
+                                    error = l10n.rpcProbeFailed;
+                                  });
+                              }
+                            },
+                    ),
+                  ]),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    // Not disposed here: the sheet's exit animation still holds the fields.
+  }
+
   Future<void> _editRpc(AppPrefsController? prefs, Coin coin, String name, String rpc) async {
     final l10n = AppLocalizations.of(context);
     final controller = TextEditingController(text: rpc);
@@ -706,6 +1008,10 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
     // Rebuilds on preference changes (the InheritedNotifier dependency), so a
     // saved or reset override updates the effective URL rows immediately.
     final prefs = AppPrefsScope.maybeOf(context);
+    // Multi-network management is NetworkScope-only (maybeOf registers the
+    // rebuild dependency); scope-absent (gallery / goldens) renders exactly
+    // the pre-feature screen.
+    final net = NetworkScope.maybeOf(context);
     final nets = <(Color, Coin, String, String, String, bool)>[
       (ChainColors.ethereum, Coin.eth, 'Ethereum', 'eth-mainnet.g.alchemy.com', '86 ms', true),
       (ChainColors.polygon, Coin.polygon, 'Polygon', 'polygon-rpc.com', '112 ms', true),
@@ -724,6 +1030,12 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
         // Optional gateway card, above the per-chain rows. Live-scope only:
         // the scope-absent (gallery / goldens) rendering stays byte-for-byte.
         if (prefs != null) _gatewayCard(l10n, prefs),
+        // Environment switch + per-family active-network picker, under the
+        // gateway card and above the RPC latency rows (NetworkScope-only).
+        if (net != null) ...[
+          _envCard(l10n, net),
+          _perChainCard(l10n, net),
+        ],
         for (final (color, coin, name, rpc, ms, ok) in nets)
           KtCard(
             padding: const EdgeInsets.all(14),

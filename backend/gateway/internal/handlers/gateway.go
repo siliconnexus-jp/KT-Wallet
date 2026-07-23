@@ -40,6 +40,12 @@ type Config struct {
 	SolanaURLs  []string
 	TronURL     string
 
+	// Testnet upstreams (one per supported non-mainnet network).
+	EthSepoliaURLs   []string
+	PolygonAmoyURLs  []string
+	SolanaDevnetURLs []string
+	TronNileURL      string
+
 	CoinGeckoURL string
 	// CoinGeckoInterval spaces outbound CoinGecko calls (default 1s).
 	CoinGeckoInterval time.Duration
@@ -47,7 +53,10 @@ type Config struct {
 	EtherscanURL string
 	EtherscanKey string
 	HeliusURL    string
-	HeliusKey    string
+	// HeliusDevnetURL is the Helius endpoint serving sol-devnet history; it
+	// shares HeliusKey with the mainnet endpoint.
+	HeliusDevnetURL string
+	HeliusKey       string
 }
 
 // Defaults returns the production upstream configuration.
@@ -60,23 +69,30 @@ func Defaults() Config {
 		PolygonURLs:       []string{"https://polygon-rpc.com", "https://polygon-bor-rpc.publicnode.com"},
 		SolanaURLs:        []string{"https://api.mainnet-beta.solana.com"},
 		TronURL:           "https://api.trongrid.io",
+		EthSepoliaURLs:    []string{"https://ethereum-sepolia-rpc.publicnode.com"},
+		PolygonAmoyURLs:   []string{"https://rpc-amoy.polygon.technology"},
+		SolanaDevnetURLs:  []string{"https://api.devnet.solana.com"},
+		TronNileURL:       "https://nile.trongrid.io",
 		CoinGeckoURL:      "https://api.coingecko.com",
 		CoinGeckoInterval: time.Second,
 		EtherscanURL:      "https://api.etherscan.io/v2/api",
 		HeliusURL:         "https://api.helius.xyz",
+		HeliusDevnetURL:   "https://api-devnet.helius.xyz",
 	}
 }
 
 // Gateway holds the upstream clients and caches behind the kt_* methods.
+// Chain-scoped clients are keyed by network id ("eth-mainnet", "tron-nile",
+// ...) so every network gets its own pool/circuit state.
 type Gateway struct {
 	cfg  Config
 	clk  clock.Clock
-	evm  map[string]*upstream.EVM // keyed "eth" / "polygon"
-	tron *upstream.Tron
-	sol  *upstream.Solana
+	evm  map[string]*upstream.EVM    // eth-mainnet, eth-sepolia, polygon-mainnet, polygon-amoy
+	tron map[string]*upstream.Tron   // tron-mainnet, tron-nile
+	sol  map[string]*upstream.Solana // sol-mainnet, sol-devnet
 	cg   *upstream.CoinGecko
 	scan *upstream.Etherscan
-	hel  *upstream.Helius
+	hel  map[string]*upstream.Helius // sol-mainnet, sol-devnet
 
 	priceCache   *cache.Cache
 	balanceCache *cache.Cache
@@ -111,6 +127,18 @@ func New(cfg Config) *Gateway {
 	if cfg.TronURL == "" {
 		cfg.TronURL = def.TronURL
 	}
+	if len(cfg.EthSepoliaURLs) == 0 {
+		cfg.EthSepoliaURLs = def.EthSepoliaURLs
+	}
+	if len(cfg.PolygonAmoyURLs) == 0 {
+		cfg.PolygonAmoyURLs = def.PolygonAmoyURLs
+	}
+	if len(cfg.SolanaDevnetURLs) == 0 {
+		cfg.SolanaDevnetURLs = def.SolanaDevnetURLs
+	}
+	if cfg.TronNileURL == "" {
+		cfg.TronNileURL = def.TronNileURL
+	}
 	if cfg.CoinGeckoURL == "" {
 		cfg.CoinGeckoURL = def.CoinGeckoURL
 	}
@@ -123,6 +151,9 @@ func New(cfg Config) *Gateway {
 	if cfg.HeliusURL == "" {
 		cfg.HeliusURL = def.HeliusURL
 	}
+	if cfg.HeliusDevnetURL == "" {
+		cfg.HeliusDevnetURL = def.HeliusDevnetURL
+	}
 
 	clk := cfg.Clock
 	hc := cfg.HTTPClient
@@ -131,14 +162,25 @@ func New(cfg Config) *Gateway {
 		cfg: cfg,
 		clk: clk,
 		evm: map[string]*upstream.EVM{
-			"eth":     upstream.NewEVM("eth", cfg.EthURLs, clk, hc, at),
-			"polygon": upstream.NewEVM("polygon", cfg.PolygonURLs, clk, hc, at),
+			"eth-mainnet":     upstream.NewEVM("eth-mainnet", cfg.EthURLs, clk, hc, at),
+			"eth-sepolia":     upstream.NewEVM("eth-sepolia", cfg.EthSepoliaURLs, clk, hc, at),
+			"polygon-mainnet": upstream.NewEVM("polygon-mainnet", cfg.PolygonURLs, clk, hc, at),
+			"polygon-amoy":    upstream.NewEVM("polygon-amoy", cfg.PolygonAmoyURLs, clk, hc, at),
 		},
-		tron:         upstream.NewTron(cfg.TronURL, hc, at),
-		sol:          upstream.NewSolana(cfg.SolanaURLs, clk, hc, at),
-		cg:           upstream.NewCoinGecko(cfg.CoinGeckoURL, hc, ratelimit.NewInterval(cfg.CoinGeckoInterval), at),
-		scan:         upstream.NewEtherscan(cfg.EtherscanURL, cfg.EtherscanKey, hc, at),
-		hel:          upstream.NewHelius(cfg.HeliusURL, cfg.HeliusKey, hc, at),
+		tron: map[string]*upstream.Tron{
+			"tron-mainnet": upstream.NewTron(cfg.TronURL, hc, at),
+			"tron-nile":    upstream.NewTron(cfg.TronNileURL, hc, at),
+		},
+		sol: map[string]*upstream.Solana{
+			"sol-mainnet": upstream.NewSolana(cfg.SolanaURLs, clk, hc, at),
+			"sol-devnet":  upstream.NewSolana(cfg.SolanaDevnetURLs, clk, hc, at),
+		},
+		cg:   upstream.NewCoinGecko(cfg.CoinGeckoURL, hc, ratelimit.NewInterval(cfg.CoinGeckoInterval), at),
+		scan: upstream.NewEtherscan(cfg.EtherscanURL, cfg.EtherscanKey, hc, at),
+		hel: map[string]*upstream.Helius{
+			"sol-mainnet": upstream.NewHelius(cfg.HeliusURL, cfg.HeliusKey, hc, at),
+			"sol-devnet":  upstream.NewHelius(cfg.HeliusDevnetURL, cfg.HeliusKey, hc, at),
+		},
 		priceCache:   cache.New(clk, pricesTTL),
 		balanceCache: cache.New(clk, balancesTTL),
 		paramsCache:  cache.New(clk, chainParamsTTL),

@@ -39,13 +39,18 @@ type balancesResult struct {
 func (g *Gateway) GetBalances(ctx context.Context, params json.RawMessage) (any, *rpc.Error) {
 	var p struct {
 		Chain   string     `json:"chain"`
+		Network string     `json:"network"`
 		Address string     `json:"address"`
 		Tokens  []tokenRef `json:"tokens"`
 	}
 	if err := json.Unmarshal(params, &p); err != nil || len(params) == 0 {
-		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: expected {"chain", "address", "tokens"?}`)
+		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: expected {"chain", "network"?, "address", "tokens"?}`)
 	}
 	meta, rpcErr := validateChain(p.Chain)
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	network, rpcErr := resolveNetwork(p.Chain, p.Network)
 	if rpcErr != nil {
 		return nil, rpcErr
 	}
@@ -61,7 +66,9 @@ func (g *Gateway) GetBalances(ctx context.Context, params json.RawMessage) (any,
 		}
 	}
 
-	key := p.Chain + "|" + p.Address + "|" + tokenSetHash(p.Tokens)
+	// Keyed by network (not chain): a testnet answer must never be served
+	// for a mainnet request or vice versa.
+	key := network + "|" + p.Address + "|" + tokenSetHash(p.Tokens)
 	if v, ok := g.balanceCache.Get(key); ok {
 		return v, nil
 	}
@@ -70,11 +77,11 @@ func (g *Gateway) GetBalances(ctx context.Context, params json.RawMessage) (any,
 	var err *rpc.Error
 	switch {
 	case meta.EVM:
-		res, err = g.evmBalances(ctx, p.Chain, meta, p.Address, p.Tokens)
+		res, err = g.evmBalances(ctx, p.Chain, network, meta, p.Address, p.Tokens)
 	case p.Chain == "tron":
-		res, err = g.tronBalances(ctx, meta, p.Address, p.Tokens)
+		res, err = g.tronBalances(ctx, network, meta, p.Address, p.Tokens)
 	default: // solana
-		res, err = g.solanaBalances(ctx, meta, p.Address, p.Tokens)
+		res, err = g.solanaBalances(ctx, network, meta, p.Address, p.Tokens)
 	}
 	if err != nil {
 		return nil, err
@@ -83,8 +90,8 @@ func (g *Gateway) GetBalances(ctx context.Context, params json.RawMessage) (any,
 	return res, nil
 }
 
-func (g *Gateway) evmBalances(ctx context.Context, chain string, meta chainMeta, address string, tokens []tokenRef) (*balancesResult, *rpc.Error) {
-	evm := g.evm[chain]
+func (g *Gateway) evmBalances(ctx context.Context, chain, network string, meta chainMeta, address string, tokens []tokenRef) (*balancesResult, *rpc.Error) {
+	evm := g.evm[network]
 	native, err := evm.GetBalance(ctx, address)
 	if err != nil {
 		return nil, upstreamError(chain, err)
@@ -107,8 +114,8 @@ func (g *Gateway) evmBalances(ctx context.Context, chain string, meta chainMeta,
 	return res, nil
 }
 
-func (g *Gateway) tronBalances(ctx context.Context, meta chainMeta, address string, tokens []tokenRef) (*balancesResult, *rpc.Error) {
-	acct, err := g.tron.GetAccount(ctx, address)
+func (g *Gateway) tronBalances(ctx context.Context, network string, meta chainMeta, address string, tokens []tokenRef) (*balancesResult, *rpc.Error) {
+	acct, err := g.tron[network].GetAccount(ctx, address)
 	if err != nil {
 		return nil, upstreamError("trongrid", err)
 	}
@@ -130,8 +137,8 @@ func (g *Gateway) tronBalances(ctx context.Context, meta chainMeta, address stri
 	return res, nil
 }
 
-func (g *Gateway) solanaBalances(ctx context.Context, meta chainMeta, address string, tokens []tokenRef) (*balancesResult, *rpc.Error) {
-	native, err := g.sol.GetBalance(ctx, address)
+func (g *Gateway) solanaBalances(ctx context.Context, network string, meta chainMeta, address string, tokens []tokenRef) (*balancesResult, *rpc.Error) {
+	native, err := g.sol[network].GetBalance(ctx, address)
 	if err != nil {
 		return nil, upstreamError("solana", err)
 	}

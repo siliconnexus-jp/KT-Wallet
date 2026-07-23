@@ -32,7 +32,10 @@ Chain chainForCoin(int coin) => switch (coin) {
       _ => throw ArgumentError('unsupported coin type $coin'),
     };
 
-/// EVM chain id where applicable; null for non-EVM chains.
+/// DEFAULT (mainnet) EVM chain id where applicable; null for non-EVM chains.
+/// The live transfer flow passes the ACTIVE network's evmChainId instead
+/// (Sepolia 11155111, Amoy 80002, ...) — these constants only back demo /
+/// golden renderings and callers without a network source.
 int? chainIdForChain(Chain chain) => switch (chain) {
       Chain.ethereum => 1,
       Chain.polygon => 137,
@@ -137,15 +140,20 @@ const signRequestTtlSeconds = 600;
 /// optional [nonce] / [maxPriorityFeePerGas] / [maxFeePerGas] overrides
 /// carry live chain-state parameters (ChainParamsService); when absent the
 /// documented DEMO constants apply, so every demo/golden rendering stays
-/// byte-identical. TRON (protobuf) and Solana (message v0) still use the
-/// canonical-JSON placeholder pending real-signing integration to validate
-/// their encoders against.
+/// byte-identical. The optional [evmChainId] carries the ACTIVE network's
+/// signing-domain id (testnets: Sepolia 11155111, Amoy 80002) — absent, the
+/// mainnet [chainIdForChain] constants apply, and a wrong-network signature
+/// is invalid by construction, which is exactly the isolation we want. TRON
+/// (protobuf) and Solana (message v0) still use the canonical-JSON
+/// placeholder pending real-signing integration to validate their encoders
+/// against.
 Uint8List rawTxFor(
   TransferDraft draft, {
   required String from,
   BigInt? nonce,
   BigInt? maxPriorityFeePerGas,
   BigInt? maxFeePerGas,
+  int? evmChainId,
 }) {
   if (draft.chain == Chain.ethereum || draft.chain == Chain.polygon) {
     final intent = TransferIntent(
@@ -160,7 +168,7 @@ Uint8List rawTxFor(
     final gwei = BigInt.from(1000000000);
     final tx = Eip1559Tx.forTransfer(
       intent,
-      chainId: BigInt.from(chainIdForChain(draft.chain) ?? 1),
+      chainId: BigInt.from(evmChainId ?? chainIdForChain(draft.chain) ?? 1),
       // Live overrides when provided; demo constants otherwise (see above).
       nonce: nonce ?? BigInt.zero,
       maxPriorityFeePerGas: maxPriorityFeePerGas ?? BigInt.two * gwei,
@@ -204,7 +212,11 @@ abstract final class SummaryKeys {
 /// Builds the real [SignRequest] for W6. With a live [draft], the reqId is
 /// random (Random.secure) and timestamps are now-based; without one (gallery /
 /// goldens) the fixed demo identity keeps the rendering deterministic. The
-/// optional EVM chain-state overrides pass straight through to [rawTxFor].
+/// optional EVM chain-state overrides pass straight through to [rawTxFor];
+/// [evmChainId] is the ACTIVE network's signing-domain id (also lands in the
+/// protocol's chainId field), defaulting to the mainnet constants; and
+/// [networkLabel] overrides the summary's network line so a testnet request
+/// tells the signer the truth (e.g. 'Sepolia' instead of 'Ethereum').
 SignRequest buildSignRequest({
   TransferDraft? draft,
   required String walletId,
@@ -214,6 +226,8 @@ SignRequest buildSignRequest({
   BigInt? nonce,
   BigInt? maxPriorityFeePerGas,
   BigInt? maxFeePerGas,
+  int? evmChainId,
+  String? networkLabel,
 }) {
   final live = draft != null;
   final d = draft ?? demoDraft;
@@ -226,16 +240,20 @@ SignRequest buildSignRequest({
     reqId: reqId ?? (live ? randomReqId() : demoReqId),
     walletId: id,
     coin: coinForChain(d.chain),
-    chainId: chainIdForChain(d.chain),
+    // Non-EVM chains have no signing-domain id; EVM chains carry the active
+    // network's (defaulting to mainnet).
+    chainId:
+        chainIdForChain(d.chain) == null ? null : (evmChainId ?? chainIdForChain(d.chain)),
     rawTx: rawTxFor(
       d,
       from: fromAddress,
       nonce: nonce,
       maxPriorityFeePerGas: maxPriorityFeePerGas,
       maxFeePerGas: maxFeePerGas,
+      evmChainId: evmChainId,
     ),
     summary: {
-      SummaryKeys.network: d.networkLabel,
+      SummaryKeys.network: networkLabel ?? d.networkLabel,
       SummaryKeys.amount: d.amountText,
       SummaryKeys.recipient: d.recipient,
     },

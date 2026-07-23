@@ -42,6 +42,18 @@ func main() {
 	if v := os.Getenv("TRON_API_URL"); v != "" {
 		cfg.TronURL = v
 	}
+	if v := envList("ETH_SEPOLIA_RPC_URLS"); len(v) > 0 {
+		cfg.EthSepoliaURLs = v
+	}
+	if v := envList("POLYGON_AMOY_RPC_URLS"); len(v) > 0 {
+		cfg.PolygonAmoyURLs = v
+	}
+	if v := envList("SOLANA_DEVNET_RPC_URLS"); len(v) > 0 {
+		cfg.SolanaDevnetURLs = v
+	}
+	if v := os.Getenv("TRON_NILE_API_URL"); v != "" {
+		cfg.TronNileURL = v
+	}
 	if v := os.Getenv("COINGECKO_API_URL"); v != "" {
 		cfg.CoinGeckoURL = v
 	}
@@ -51,6 +63,9 @@ func main() {
 	cfg.EtherscanKey = os.Getenv("ETHERSCAN_API_KEY")
 	if v := os.Getenv("HELIUS_API_URL"); v != "" {
 		cfg.HeliusURL = v
+	}
+	if v := os.Getenv("HELIUS_DEVNET_API_URL"); v != "" {
+		cfg.HeliusDevnetURL = v
 	}
 	cfg.HeliusKey = os.Getenv("HELIUS_API_KEY")
 

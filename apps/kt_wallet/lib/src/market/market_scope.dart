@@ -1,8 +1,10 @@
+import 'package:chains/chains.dart' show Chain;
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/widgets.dart';
 
 import '../state/app_prefs.dart';
+import '../state/networks.dart';
 import '../state/wallet_controller.dart';
 import 'balance_service.dart';
 import 'gateway_client.dart';
@@ -35,11 +37,50 @@ class MarketScope extends InheritedNotifier<MarketController> {
   }
 }
 
-/// Builds the effective per-chain endpoint resolver: the user's persisted
-/// override when [prefs] carries one, else the built-in default. Passing a
-/// null [prefs] (no scope mounted) resolves the defaults everywhere.
+/// The [Chain] (protocol family) served by an RPC-endpoint [Coin] slot.
+Chain chainForRpcCoin(Coin coin) => switch (coin) {
+      Coin.eth => Chain.ethereum,
+      Coin.polygon => Chain.polygon,
+      Coin.tron => Chain.tron,
+      Coin.solana => Chain.solana,
+    };
+
+/// Builds the effective per-chain endpoint resolver, precedence highest first:
+///
+/// 1. the user's persisted AppPrefs RPC override (existing behavior — an
+///    explicit URL the user typed always wins);
+/// 2. the ACTIVE network's rpcUrl from the [NetworkController] (environment
+///    switch / per-chain pin / custom network);
+/// 3. the built-in mainnet default.
+///
+/// Both sources are re-read on every call, so a settings change or network
+/// switch applies from the very next fetch. Passing null for either source
+/// skips that level (a null [networks] reproduces the pre-network behavior
+/// exactly, because the mainnet profile's URLs equal the built-in defaults).
+RpcEndpointResolver effectiveRpcEndpoints(
+        AppPrefsController? prefs, NetworkController? networks) =>
+    (Coin coin) =>
+        prefs?.rpcOverride(coin) ??
+        networks?.activeFor(chainForRpcCoin(coin)).rpcUrl ??
+        defaultRpcEndpointFor(coin);
+
+/// Back-compat name: prefs override → built-in default (no network source).
 RpcEndpointResolver prefsRpcEndpoints(AppPrefsController? prefs) =>
-    (Coin coin) => prefs?.rpcOverride(coin) ?? defaultRpcEndpointFor(coin);
+    effectiveRpcEndpoints(prefs, null);
+
+/// Builds the token-registry resolver for the active networks: each chain
+/// contributes the built-in tokens of its ACTIVE network id (mainnet ids keep
+/// today's entries; testnets and custom networks have none — mainnet
+/// contracts must never be queried elsewhere). A null [networks] resolves the
+/// full mainnet registry, i.e. today's behavior.
+TokenRegistryResolver networkTokenRegistry(NetworkController? networks) =>
+    () => networks == null
+        ? builtinTokens
+        : [
+            for (final chain in Chain.values)
+              ...builtinTokensByNetworkId[networks.activeFor(chain).id] ??
+                  const <TokenInfo>[],
+          ];
 
 /// Builds the gateway resolver backing the OPTIONAL gateway mode: it returns
 /// a [GatewayClient] for the currently persisted `gateway.url`, or null when
@@ -68,18 +109,31 @@ GatewayResolver prefsGatewayResolver(AppPrefsController? prefs) {
 /// When [prefs] is provided, the built controller's services resolve their
 /// endpoints through the persisted RPC overrides, and changing an override
 /// (in network settings) triggers a market refresh.
+///
+/// The active-network source is the enclosing [NetworkScope] (mounted above
+/// this host in main.dart) or the injected [networks] override (tests); the
+/// effective endpoint per chain is prefs override → active network → default,
+/// the token registry follows the active network ids, prices are suppressed
+/// for testnet chains, and any network change triggers a refresh exactly like
+/// a prefs endpoint change.
 class MarketScopeHost extends StatefulWidget {
   const MarketScopeHost({
     super.key,
     required this.wallets,
     this.controller,
     this.prefs,
+    this.networks,
     required this.child,
   });
 
   final WalletController wallets;
   final MarketController? controller;
   final AppPrefsController? prefs;
+
+  /// Explicit active-network source override (tests); production leaves this
+  /// null and the enclosing [NetworkScope] is used.
+  final NetworkController? networks;
+
   final Widget child;
 
   @override
@@ -91,25 +145,44 @@ class _MarketScopeHostState extends State<MarketScopeHost> {
   /// [GatewayClient] (and its http.Client) while the URL is unchanged.
   late final GatewayResolver _gateway = prefsGatewayResolver(widget.prefs);
 
+  /// The active-network source in effect (injected override or the enclosing
+  /// [NetworkScope]); resolved in [didChangeDependencies] BEFORE the first
+  /// build touches [_controller], and read through this field by the service
+  /// resolvers on every fetch.
+  NetworkController? _networks;
+
   late final MarketController _controller = widget.controller ??
       MarketController(
         wallets: widget.wallets,
         balances: BalanceService(
-            endpoints: prefsRpcEndpoints(widget.prefs), gateway: _gateway),
+            endpoints: _endpoints, gateway: _gateway),
         tokens: TokenBalanceService(
-            endpoints: prefsRpcEndpoints(widget.prefs), gateway: _gateway),
+            endpoints: _endpoints,
+            gateway: _gateway,
+            registry: () => networkTokenRegistry(_networks)()),
         prices: PriceService(gateway: _gateway),
+        isTestnet: (coin) =>
+            _networks?.activeFor(chainForRpcCoin(coin)).isTestnet ?? false,
       );
 
-  /// Last-seen effective endpoints (per-chain RPC + the gateway URL), to
-  /// refresh only on actual network-config changes (not on unrelated
-  /// preference edits like the fiat currency).
+  /// Effective endpoint for [coin] at call time (prefs override → active
+  /// network → default); a closure over the mutable [_networks] field so the
+  /// `late final` services always see the current source.
+  String _endpoints(Coin coin) =>
+      effectiveRpcEndpoints(widget.prefs, _networks)(coin);
+
+  /// Last-seen effective network config (per-chain endpoints, active network
+  /// ids and the gateway URL), to refresh only on actual changes (not on
+  /// unrelated preference edits like the fiat currency).
   List<String>? _lastEndpoints;
 
   List<String> _snapshotEndpoints() {
-    final resolve = prefsRpcEndpoints(widget.prefs);
     return [
-      for (final coin in Coin.values) resolve(coin),
+      for (final coin in Coin.values) _endpoints(coin),
+      // The active network id can change what is fetched (token registry,
+      // testnet fiat suppression) even when two networks share an endpoint.
+      for (final coin in Coin.values)
+        _networks?.activeFor(chainForRpcCoin(coin)).id ?? '',
       // Saving or clearing the gateway URL changes where every balance comes
       // from — refetch, exactly like an RPC override change.
       widget.prefs?.gatewayUrl ?? '',
@@ -119,24 +192,37 @@ class _MarketScopeHostState extends State<MarketScopeHost> {
   @override
   void initState() {
     super.initState();
-    if (widget.prefs != null) {
-      _lastEndpoints = _snapshotEndpoints();
-      widget.prefs!.addListener(_onPrefsChanged);
-    }
+    widget.prefs?.addListener(_onConfigChanged);
   }
 
-  void _onPrefsChanged() {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final networks = widget.networks ?? NetworkScope.maybeOf(context);
+    if (!identical(networks, _networks)) {
+      _networks?.removeListener(_onConfigChanged);
+      _networks = networks;
+      _networks?.addListener(_onConfigChanged);
+    }
+    // (Re-)baseline against the current source so the next change notification
+    // compares against reality, not a snapshot from another source.
+    _lastEndpoints = _snapshotEndpoints();
+  }
+
+  void _onConfigChanged() {
     final now = _snapshotEndpoints();
     if (listEquals(now, _lastEndpoints)) return;
     _lastEndpoints = now;
     // Balances fetched from the old node are stale the moment the endpoint
-    // changes; refetch (the generation guard drops any in-flight results).
+    // (or active network) changes; refetch (the generation guard drops any
+    // in-flight results).
     _controller.refresh();
   }
 
   @override
   void dispose() {
-    widget.prefs?.removeListener(_onPrefsChanged);
+    widget.prefs?.removeListener(_onConfigChanged);
+    _networks?.removeListener(_onConfigChanged);
     if (widget.controller == null) _controller.dispose();
     super.dispose();
   }

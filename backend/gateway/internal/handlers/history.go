@@ -34,19 +34,26 @@ func unsupportedHistory() *historyResult {
 	return &historyResult{Status: "unsupported", Records: []historyRecord{}}
 }
 
-// GetHistory implements kt_getHistory. TRON is always supported through
-// TronGrid; eth/polygon need an Etherscan-family key; solana needs a Helius
-// key; anything else reports {"status":"unsupported"}.
+// GetHistory implements kt_getHistory. TRON networks are always supported
+// through TronGrid (mainnet or nile base URL); eth/polygon networks need an
+// Etherscan-family key (Etherscan v2 covers testnets via chainid); solana
+// networks need a Helius key (sol-devnet uses the Helius devnet endpoint);
+// anything else reports {"status":"unsupported"}.
 func (g *Gateway) GetHistory(ctx context.Context, params json.RawMessage) (any, *rpc.Error) {
 	var p struct {
 		Chain   string `json:"chain"`
+		Network string `json:"network"`
 		Address string `json:"address"`
 		Limit   *int   `json:"limit"`
 	}
 	if err := json.Unmarshal(params, &p); err != nil || len(params) == 0 {
-		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: expected {"chain", "address", "limit"?}`)
+		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: expected {"chain", "network"?, "address", "limit"?}`)
 	}
 	if _, rpcErr := validateChain(p.Chain); rpcErr != nil {
+		return nil, rpcErr
+	}
+	network, rpcErr := resolveNetwork(p.Chain, p.Network)
+	if rpcErr != nil {
 		return nil, rpcErr
 	}
 	if rpcErr := validateAddress(p.Chain, p.Address); rpcErr != nil {
@@ -60,27 +67,26 @@ func (g *Gateway) GetHistory(ctx context.Context, params json.RawMessage) (any, 
 		limit = min(*p.Limit, maxHistoryLimit)
 	}
 
-	key := p.Chain + "|" + p.Address + "|" + strconv.Itoa(limit)
+	key := network + "|" + p.Address + "|" + strconv.Itoa(limit)
 	if v, ok := g.historyCache.Get(key); ok {
 		return v, nil
 	}
 
 	var res *historyResult
-	var rpcErr *rpc.Error
 	switch p.Chain {
 	case "tron":
-		res, rpcErr = g.tronHistory(ctx, p.Address, limit)
+		res, rpcErr = g.tronHistory(ctx, network, p.Address, limit)
 	case "eth", "polygon":
 		if g.cfg.EtherscanKey == "" {
 			res = unsupportedHistory()
 		} else {
-			res, rpcErr = g.evmHistory(ctx, p.Chain, p.Address, limit)
+			res, rpcErr = g.evmHistory(ctx, p.Chain, network, p.Address, limit)
 		}
 	case "solana":
 		if g.cfg.HeliusKey == "" {
 			res = unsupportedHistory()
 		} else {
-			res, rpcErr = g.solanaHistory(ctx, p.Address, limit)
+			res, rpcErr = g.solanaHistory(ctx, network, p.Address, limit)
 		}
 	}
 	if rpcErr != nil {
@@ -92,14 +98,15 @@ func (g *Gateway) GetHistory(ctx context.Context, params json.RawMessage) (any, 
 
 // tronHistory merges TRC-20 transfers and native TransferContract
 // transactions, newest first, deduplicated by transaction hash.
-func (g *Gateway) tronHistory(ctx context.Context, address string, limit int) (*historyResult, *rpc.Error) {
+func (g *Gateway) tronHistory(ctx context.Context, network, address string, limit int) (*historyResult, *rpc.Error) {
 	selfHex := tronAddrHex(address)
 
-	trc20, err := g.tron.TRC20Transfers(ctx, address, limit)
+	tron := g.tron[network]
+	trc20, err := tron.TRC20Transfers(ctx, address, limit)
 	if err != nil {
 		return nil, upstreamError("trongrid", err)
 	}
-	native, err := g.tron.NativeTransactions(ctx, address, limit)
+	native, err := tron.NativeTransactions(ctx, address, limit)
 	if err != nil {
 		return nil, upstreamError("trongrid", err)
 	}
@@ -156,11 +163,10 @@ func (g *Gateway) tronHistory(ctx context.Context, address string, limit int) (*
 	return &historyResult{Status: "ok", Records: deduped}, nil
 }
 
-func (g *Gateway) evmHistory(ctx context.Context, chain, address string, limit int) (*historyResult, *rpc.Error) {
-	chainID := 1
-	if chain == "polygon" {
-		chainID = 137
-	}
+func (g *Gateway) evmHistory(ctx context.Context, chain, network, address string, limit int) (*historyResult, *rpc.Error) {
+	// Etherscan v2 is multichain: the network picks the chainid
+	// (1 / 11155111 / 137 / 80002) against the same endpoint and key.
+	chainID := networks[network].EtherscanChainID
 	txs, err := g.scan.TxList(ctx, chainID, address, limit)
 	if err != nil {
 		return nil, upstreamError("etherscan", err)
@@ -194,8 +200,8 @@ func (g *Gateway) evmHistory(ctx context.Context, chain, address string, limit i
 	return &historyResult{Status: "ok", Records: records}, nil
 }
 
-func (g *Gateway) solanaHistory(ctx context.Context, address string, limit int) (*historyResult, *rpc.Error) {
-	txs, err := g.hel.Transactions(ctx, address, limit)
+func (g *Gateway) solanaHistory(ctx context.Context, network, address string, limit int) (*historyResult, *rpc.Error) {
+	txs, err := g.hel[network].Transactions(ctx, address, limit)
 	if err != nil {
 		return nil, upstreamError("helius", err)
 	}

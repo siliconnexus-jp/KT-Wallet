@@ -1485,6 +1485,138 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'使用密码解锁'**
   String get usePinUnlock;
+
+  /// No description provided for @networkEnvironment.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络环境'**
+  String get networkEnvironment;
+
+  /// No description provided for @envMainnet.
+  ///
+  /// In zh, this message translates to:
+  /// **'主网'**
+  String get envMainnet;
+
+  /// No description provided for @envTestnet.
+  ///
+  /// In zh, this message translates to:
+  /// **'测试网'**
+  String get envTestnet;
+
+  /// No description provided for @testnetBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'测试网'**
+  String get testnetBadge;
+
+  /// No description provided for @perChainNetwork.
+  ///
+  /// In zh, this message translates to:
+  /// **'逐链网络'**
+  String get perChainNetwork;
+
+  /// No description provided for @addNetwork.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加网络'**
+  String get addNetwork;
+
+  /// No description provided for @networkNameLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络名称'**
+  String get networkNameLabel;
+
+  /// No description provided for @chainFamilyLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'协议族'**
+  String get chainFamilyLabel;
+
+  /// No description provided for @chainIdLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'Chain ID'**
+  String get chainIdLabel;
+
+  /// No description provided for @explorerLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'区块浏览器 URL(可选)'**
+  String get explorerLabel;
+
+  /// No description provided for @symbolLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'币种符号'**
+  String get symbolLabel;
+
+  /// No description provided for @probeChecking.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在探测 RPC…'**
+  String get probeChecking;
+
+  /// No description provided for @probeOkSave.
+  ///
+  /// In zh, this message translates to:
+  /// **'探测通过,已保存'**
+  String get probeOkSave;
+
+  /// No description provided for @rpcProbeFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'RPC 探测失败,请检查地址'**
+  String get rpcProbeFailed;
+
+  /// No description provided for @chainIdMismatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'Chain ID 不匹配:节点返回 {actual}'**
+  String chainIdMismatch(Object actual);
+
+  /// No description provided for @deleteNetwork.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除网络'**
+  String get deleteNetwork;
+
+  /// No description provided for @networkInUse.
+  ///
+  /// In zh, this message translates to:
+  /// **'该网络正在使用中'**
+  String get networkInUse;
+
+  /// No description provided for @faucetAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'领取测试币'**
+  String get faucetAction;
+
+  /// No description provided for @airdropRequesting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在请求空投…'**
+  String get airdropRequesting;
+
+  /// No description provided for @airdropOk.
+  ///
+  /// In zh, this message translates to:
+  /// **'空投成功,余额稍后刷新'**
+  String get airdropOk;
+
+  /// No description provided for @airdropFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'空投失败:{message}'**
+  String airdropFailed(Object message);
+
+  /// No description provided for @fiatHiddenTestnet.
+  ///
+  /// In zh, this message translates to:
+  /// **'测试网资产无市场价格'**
+  String get fiatHiddenTestnet;
 }
 
 class _AppLocalizationsDelegate

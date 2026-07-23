@@ -746,4 +746,74 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get usePinUnlock => 'パスワードで解除';
+
+  @override
+  String get networkEnvironment => 'ネットワーク環境';
+
+  @override
+  String get envMainnet => 'メインネット';
+
+  @override
+  String get envTestnet => 'テストネット';
+
+  @override
+  String get testnetBadge => 'テストネット';
+
+  @override
+  String get perChainNetwork => 'チェーン別ネットワーク';
+
+  @override
+  String get addNetwork => 'ネットワークを追加';
+
+  @override
+  String get networkNameLabel => 'ネットワーク名';
+
+  @override
+  String get chainFamilyLabel => 'チェーン系統';
+
+  @override
+  String get chainIdLabel => 'Chain ID';
+
+  @override
+  String get explorerLabel => 'エクスプローラー URL(任意)';
+
+  @override
+  String get symbolLabel => 'シンボル';
+
+  @override
+  String get probeChecking => 'RPC を確認中…';
+
+  @override
+  String get probeOkSave => '確認に成功し、保存しました';
+
+  @override
+  String get rpcProbeFailed => 'RPC の確認に失敗しました。URL を確認してください';
+
+  @override
+  String chainIdMismatch(Object actual) {
+    return 'Chain ID が一致しません:ノードは $actual を返しました';
+  }
+
+  @override
+  String get deleteNetwork => 'ネットワークを削除';
+
+  @override
+  String get networkInUse => 'このネットワークは使用中です';
+
+  @override
+  String get faucetAction => 'テストコインを取得';
+
+  @override
+  String get airdropRequesting => 'エアドロップを要求中…';
+
+  @override
+  String get airdropOk => 'エアドロップ完了 — まもなく残高が更新されます';
+
+  @override
+  String airdropFailed(Object message) {
+    return 'エアドロップ失敗:$message';
+  }
+
+  @override
+  String get fiatHiddenTestnet => 'テストネット資産には市場価格がありません';
 }

@@ -8,10 +8,12 @@ import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../market/explorer_links.dart' show explorerTxUrl;
 import '../market/market_scope.dart'
-    show prefsGatewayResolver, prefsRpcEndpoints;
+    show effectiveRpcEndpoints, prefsGatewayResolver;
 import '../security/biometric_auth.dart';
 import '../state/app_prefs.dart' show AppPrefsScope;
+import '../state/networks.dart' show Network, NetworkScope;
 import '../transfer/airgap_codec.dart';
 import '../transfer/broadcast_service.dart';
 import '../transfer/chain_params_service.dart';
@@ -921,21 +923,49 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
     final from = wallet == null
         ? demoFromAddress
         : addressForChain(wallet.addresses, chain);
+    // The ACTIVE network instance for the draft's chain: its evmChainId is
+    // the signing domain the raw tx must carry (Sepolia 11155111, ...), and
+    // for a testnet its name overrides the summary's network label so the
+    // signer displays the truth. Live drafts only — demo/goldens (no draft)
+    // keep the mainnet constants and stay byte-identical.
+    final Network? network = draft == null
+        ? null
+        : NetworkScope.maybeOf(context)?.activeFor(chain);
+    final evmChainId = network?.evmChainId;
+    final networkLabel =
+        network != null && network.isTestnet ? network.name : null;
     if (draft != null && (chain == Chain.ethereum || chain == Chain.polygon)) {
       // Live EVM path: real nonce/fees first, QR after the fetch.
       _building = true;
       final service =
           widget.paramsService ??
           ChainParamsService(
-            endpoints: prefsRpcEndpoints(AppPrefsScope.maybeOf(context)),
+            endpoints: effectiveRpcEndpoints(
+              AppPrefsScope.maybeOf(context),
+              NetworkScope.maybeOf(context),
+            ),
             gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
           );
       unawaited(
-        _buildLiveEvm(service, session, draft, walletId: walletId, from: from),
+        _buildLiveEvm(
+          service,
+          session,
+          draft,
+          walletId: walletId,
+          from: from,
+          evmChainId: evmChainId,
+          networkLabel: networkLabel,
+        ),
       );
     } else {
       _install(
-        buildSignRequest(draft: draft, walletId: walletId, fromAddress: from),
+        buildSignRequest(
+          draft: draft,
+          walletId: walletId,
+          fromAddress: from,
+          evmChainId: evmChainId,
+          networkLabel: networkLabel,
+        ),
         session,
       );
     }
@@ -947,6 +977,8 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
     TransferDraft draft, {
     required String walletId,
     required String from,
+    int? evmChainId,
+    String? networkLabel,
   }) async {
     BigInt? nonce, maxPriority, maxFee;
     try {
@@ -971,6 +1003,8 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
           nonce: nonce,
           maxPriorityFeePerGas: maxPriority,
           maxFeePerGas: maxFee,
+          evmChainId: evmChainId,
+          networkLabel: networkLabel,
         ),
         session,
       );
@@ -1273,7 +1307,10 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
     final service =
         widget.broadcaster ??
         BroadcastService(
-          endpoints: prefsRpcEndpoints(AppPrefsScope.maybeOf(context)),
+          endpoints: effectiveRpcEndpoints(
+            AppPrefsScope.maybeOf(context),
+            NetworkScope.maybeOf(context),
+          ),
           gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
         );
     setState(() {
@@ -1552,9 +1589,16 @@ class TxDetailScreen extends StatelessWidget {
         onBack: () => Navigator.of(context).maybePop(),
         trailing: Icons.open_in_new,
         onTrailing: () {
+          // Explorer follows the ACTIVE tron network (the displayed demo tx
+          // is a TRON transfer): Nile's tronscan under the testnet
+          // environment, tronscan.org on mainnet — identical to the previous
+          // hardcoded link when no override is active.
           Clipboard.setData(
-            const ClipboardData(
-              text: 'https://tronscan.org/#/transaction/$_txHash',
+            ClipboardData(
+              text: explorerTxUrl(
+                NetworkScope.of(context).activeFor(Chain.tron),
+                _txHash,
+              ),
             ),
           );
           ScaffoldMessenger.of(context)

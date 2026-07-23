@@ -258,5 +258,27 @@
       }
     }
   },
-  "usePinUnlock": "パスワードで解除"
+  "usePinUnlock": "パスワードで解除",
+  "networkEnvironment": "ネットワーク環境",
+  "envMainnet": "メインネット",
+  "envTestnet": "テストネット",
+  "testnetBadge": "テストネット",
+  "perChainNetwork": "チェーン別ネットワーク",
+  "addNetwork": "ネットワークを追加",
+  "networkNameLabel": "ネットワーク名",
+  "chainFamilyLabel": "チェーン系統",
+  "chainIdLabel": "Chain ID",
+  "explorerLabel": "エクスプローラー URL(任意)",
+  "symbolLabel": "シンボル",
+  "probeChecking": "RPC を確認中…",
+  "probeOkSave": "確認に成功し、保存しました",
+  "rpcProbeFailed": "RPC の確認に失敗しました。URL を確認してください",
+  "chainIdMismatch": "Chain ID が一致しません:ノードは {actual} を返しました",
+  "deleteNetwork": "ネットワークを削除",
+  "networkInUse": "このネットワークは使用中です",
+  "faucetAction": "テストコインを取得",
+  "airdropRequesting": "エアドロップを要求中…",
+  "airdropOk": "エアドロップ完了 — まもなく残高が更新されます",
+  "airdropFailed": "エアドロップ失敗:{message}",
+  "fiatHiddenTestnet": "テストネット資産には市場価格がありません"
 }

@@ -17,6 +17,7 @@ import 'src/security/secure_screen.dart';
 import 'src/state/app_prefs.dart';
 import 'src/state/device_mode.dart';
 import 'src/state/locale_controller.dart';
+import 'src/state/networks.dart';
 import 'src/state/wallet_controller.dart';
 import 'src/state/wallet_scope.dart';
 import 'src/transfer/transfer_draft.dart';
@@ -502,6 +503,10 @@ class _KtWalletAppState extends State<KtWalletApp> {
   /// the settings screens and the market services via [AppPrefsScope].
   final AppPrefsController _prefs = AppPrefsController();
 
+  /// Active-network state (mainnet/testnet environment, per-chain overrides,
+  /// custom networks), shared app-wide via [NetworkScope].
+  final NetworkController _networks = NetworkController();
+
   @override
   void initState() {
     super.initState();
@@ -511,6 +516,7 @@ class _KtWalletAppState extends State<KtWalletApp> {
     // Pick up persisted preferences, e.g. saved RPC overrides (same no-op
     // guarantee in tests without the SharedPreferences plugin).
     _prefs.load();
+    _networks.load();
   }
 
   @override
@@ -535,12 +541,15 @@ class _KtWalletAppState extends State<KtWalletApp> {
             mockStatusBar: false,
             child: WalletScope(
               controller: widget.controller,
-              child: AppPrefsScope(
+              child: NetworkScope(
+                controller: _networks,
+                child: AppPrefsScope(
                 controller: _prefs,
                 child: MarketScopeHost(
                   wallets: widget.controller,
                   prefs: _prefs,
                   child: TransferSessionScope(session: _transferSession, child: child!),
+                ),
                 ),
               ),
             ),
