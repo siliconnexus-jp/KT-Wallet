@@ -294,7 +294,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get viewMnemonic => '查看助记词';
 
   @override
-  String get viewMnemonicDesc => '需要 Face ID 或密码验证';
+  String get viewMnemonicDesc => '需要生物识别或密码验证';
 
   @override
   String get deleteWalletDesc => '需身份验证，删除前将再次确认备份状态';
@@ -480,10 +480,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authToConfirmTransfer => '验证以确认转账';
 
   @override
-  String get authEveryTransfer => '每次转账都需要 Face ID 或密码验证';
+  String get authEveryTransfer => '每次转账都需要生物识别或密码验证';
 
   @override
-  String get useFaceId => '使用 Face ID 验证';
+  String get useFaceId => '使用生物识别验证';
 
   @override
   String get usePasscode => '改用密码';
@@ -588,7 +588,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appLock => 'App 锁';
 
   @override
-  String get appLockDesc => '打开 App 时需要 Face ID';
+  String get appLockDesc => '打开 App 时需要生物识别';
 
   @override
   String get autoLock => '自动锁定';
@@ -661,6 +661,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get walletLoadErrorDesc => '无法读取本机的钱包数据。请重试;若问题持续,请重新安装应用。';
+
+  @override
+  String get cryptoUnavailableTitle => '钱包引擎不可用';
+
+  @override
+  String get cryptoUnavailableDesc =>
+      '此 Android 构建未包含 Trust Wallet Core。请安装启用了 Wallet Core 的构建；应用不会自动改用模拟密钥。';
 
   @override
   String get actionRetry => '重试';
@@ -795,6 +802,23 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get faucetAction => '领取测试币';
+
+  @override
+  String get faucetOpened => '已打开测试币水龙头';
+
+  @override
+  String get externalActionFailed => '无法打开外部应用，请稍后重试';
+
+  @override
+  String shareAddressSubject(String network) {
+    return '$network 收款地址';
+  }
+
+  @override
+  String get cameraUnavailable => '相机不可用，请检查权限后重试';
+
+  @override
+  String get biometricUnavailable => '生物识别不可用，请使用钱包 PIN';
 
   @override
   String get airdropRequesting => '正在请求空投…';

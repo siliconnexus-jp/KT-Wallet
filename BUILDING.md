@@ -35,10 +35,20 @@ font (PingFang on iOS, Noto on Android), which is correct — Inter has no CJK.
 
 To keep the repo building on Android without credentials, wallet-core is
 **opt-in** on Android via the gradle property `walletCore` (default `false`).
-When off, an **API-identical fail-closed stub** is compiled in its place: the
-full UI and all navigation run, but every key/address/signature operation
-throws, so no wrong-but-plausible crypto can be produced. No wired UI flow calls
-the native bridge today, so the stub is invisible in normal use.
+When off, an **API-identical fail-closed stub** is compiled in its place:
+key/address/signature operations throw `CRYPTO_UNAVAILABLE`, so no
+wrong-but-plausible crypto can be produced. The production app always calls the
+native bridge and therefore shows its retryable bootstrap error on a clean
+Android install until wallet-core is enabled.
+
+For simulator-only UI acceptance, a deterministic mock may be opted into
+explicitly:
+
+```sh
+flutter run --dart-define=KT_ALLOW_MOCK_CRYPTO=true
+```
+
+Never use that define for release artifacts or real assets.
 
 ### Enabling real crypto on Android
 

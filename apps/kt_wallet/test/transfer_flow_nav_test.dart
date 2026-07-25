@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/main.dart';
+import 'package:kt_wallet/src/security/biometric_auth.dart';
 
 /// Walks the full transfer navigation, proving the screens are wired into one
 /// flow driven by the current wallet type.
@@ -17,8 +18,12 @@ Future<void> _open(WidgetTester tester, String galleryEntry) async {
 Future<void> _openHome(WidgetTester tester) => _open(tester, 'W1/W20 首页');
 
 void main() {
-  testWidgets('hot wallet: home → transfer → confirm → auth → result → home',
-      (tester) async {
+  testWidgets('hot wallet: home → transfer → confirm → auth → result → home', (
+    tester,
+  ) async {
+    final originalAuth = BiometricAuth.instance;
+    BiometricAuth.instance = const FakeBiometricAuth(BiometricOutcome.success);
+    addTearDown(() => BiometricAuth.instance = originalAuth);
     await _openHome(tester);
     // Default wallet 日常钱包 is hot.
     await tester.tap(find.text('转账'));
@@ -34,7 +39,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('验证以确认转账'), findsOneWidget); // auth sheet
 
-    await tester.tap(find.text('使用 Face ID 验证'));
+    await tester.tap(find.text('使用生物识别验证'));
     await tester.pumpAndSettle();
     expect(find.text('交易已提交'), findsOneWidget); // result
 
@@ -43,8 +48,9 @@ void main() {
     expect(find.text('日常钱包'), findsOneWidget); // back on home
   });
 
-  testWidgets('watch wallet: transfer confirm generates a sign-request QR',
-      (tester) async {
+  testWidgets('watch wallet: transfer confirm generates a sign-request QR', (
+    tester,
+  ) async {
     await _openHome(tester);
     // Switch to the watch wallet (主钱包).
     await tester.tap(find.text('日常钱包'));
@@ -67,16 +73,16 @@ void main() {
     expect(find.text('待签名交易'), findsOneWidget); // W6 QR screen
   });
 
-  testWidgets('token detail: send opens the transfer input screen',
-      (tester) async {
+  testWidgets('token detail: send opens the transfer input screen', (
+    tester,
+  ) async {
     await _open(tester, 'W3 Token 详情');
     await tester.tap(find.text('转账'));
     await tester.pumpAndSettle();
     expect(find.text('收款地址'), findsOneWidget); // W4 transfer input
   });
 
-  testWidgets('token detail: receive opens the receive screen',
-      (tester) async {
+  testWidgets('token detail: receive opens the receive screen', (tester) async {
     await _open(tester, 'W3 Token 详情');
     await tester.tap(find.text('收款'));
     await tester.pumpAndSettle();

@@ -2,6 +2,15 @@
 
 Open-source air-gapped multi-chain wallet for **Ethereum, Polygon, TRON, and Solana**.
 
+<p align="center">
+  <img src="branding/kt-wallet-logo-256.png" width="160" alt="KT Wallet logo">
+</p>
+
+## Open source
+
+Source code, issues, and releases:
+[github.com/siliconnexus-jp/KT-Wallet](https://github.com/siliconnexus-jp/KT-Wallet)
+
 ## One installer, two roles
 
 KT Wallet ships as a **single app** (`apps/kt_wallet`). On first launch you choose

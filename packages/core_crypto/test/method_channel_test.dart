@@ -54,20 +54,23 @@ void main() {
     });
 
     test('deriveAddresses decodes address map', () async {
-      mockNative((call) async => {
-            'eth': '0xE',
-            'polygon': '0xE',
-            'tron': 'T1',
-            'solana': 'S1',
-          });
+      mockNative(
+        (call) async => {
+          'eth': '0xE',
+          'polygon': '0xE',
+          'tron': 'T1',
+          'solana': 'S1',
+        },
+      );
       final addrs = await api.deriveAddresses('w1');
       expect(addrs.forCoin(Coin.polygon), '0xE');
       expect(addrs.forCoin(Coin.tron), 'T1');
     });
 
     test('getAuthState decodes state map', () async {
-      mockNative((call) async =>
-          {'locked': true, 'failCount': 5, 'cooldownSec': 42});
+      mockNative(
+        (call) async => {'locked': true, 'failCount': 5, 'cooldownSec': 42},
+      );
       final state = await api.getAuthState();
       expect(state.locked, isTrue);
       expect(state.failCount, 5);
@@ -83,6 +86,7 @@ void main() {
       'INVALID_MNEMONIC': isA<InvalidMnemonicException>(),
       'INVALID_INPUT': isA<InvalidInputException>(),
       'SIGN_FAILED': isA<SignFailedException>(),
+      'CRYPTO_UNAVAILABLE': isA<CryptoUnavailableException>(),
       'STORE_CORRUPTED': isA<StoreCorruptedException>(),
       'BIOMETRY_CHANGED': isA<BiometryChangedException>(),
     };
@@ -106,14 +110,16 @@ void main() {
       expect(
         () => api.exportMnemonic('w1'),
         throwsA(
-          isA<AuthLockedException>()
-              .having((e) => e.cooldownSec, 'cooldownSec', 300),
+          isA<AuthLockedException>().having(
+            (e) => e.cooldownSec,
+            'cooldownSec',
+            300,
+          ),
         ),
       );
     });
 
-    test('unknown code degrades to SignFailedException, not a crash',
-        () async {
+    test('unknown code degrades to SignFailedException, not a crash', () async {
       mockNative((call) async {
         throw PlatformException(code: 'SOMETHING_NEW');
       });

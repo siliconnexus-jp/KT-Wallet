@@ -637,7 +637,7 @@ abstract class AppLocalizations {
   /// No description provided for @viewMnemonicDesc.
   ///
   /// In zh, this message translates to:
-  /// **'需要 Face ID 或密码验证'**
+  /// **'需要生物识别或密码验证'**
   String get viewMnemonicDesc;
 
   /// No description provided for @deleteWalletDesc.
@@ -979,13 +979,13 @@ abstract class AppLocalizations {
   /// No description provided for @authEveryTransfer.
   ///
   /// In zh, this message translates to:
-  /// **'每次转账都需要 Face ID 或密码验证'**
+  /// **'每次转账都需要生物识别或密码验证'**
   String get authEveryTransfer;
 
   /// No description provided for @useFaceId.
   ///
   /// In zh, this message translates to:
-  /// **'使用 Face ID 验证'**
+  /// **'使用生物识别验证'**
   String get useFaceId;
 
   /// No description provided for @usePasscode.
@@ -1195,7 +1195,7 @@ abstract class AppLocalizations {
   /// No description provided for @appLockDesc.
   ///
   /// In zh, this message translates to:
-  /// **'打开 App 时需要 Face ID'**
+  /// **'打开 App 时需要生物识别'**
   String get appLockDesc;
 
   /// No description provided for @autoLock.
@@ -1341,6 +1341,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'无法读取本机的钱包数据。请重试;若问题持续,请重新安装应用。'**
   String get walletLoadErrorDesc;
+
+  /// No description provided for @cryptoUnavailableTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包引擎不可用'**
+  String get cryptoUnavailableTitle;
+
+  /// No description provided for @cryptoUnavailableDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'此 Android 构建未包含 Trust Wallet Core。请安装启用了 Wallet Core 的构建；应用不会自动改用模拟密钥。'**
+  String get cryptoUnavailableDesc;
 
   /// No description provided for @actionRetry.
   ///
@@ -1593,6 +1605,36 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'领取测试币'**
   String get faucetAction;
+
+  /// No description provided for @faucetOpened.
+  ///
+  /// In zh, this message translates to:
+  /// **'已打开测试币水龙头'**
+  String get faucetOpened;
+
+  /// No description provided for @externalActionFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法打开外部应用，请稍后重试'**
+  String get externalActionFailed;
+
+  /// No description provided for @shareAddressSubject.
+  ///
+  /// In zh, this message translates to:
+  /// **'{network} 收款地址'**
+  String shareAddressSubject(String network);
+
+  /// No description provided for @cameraUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'相机不可用，请检查权限后重试'**
+  String get cameraUnavailable;
+
+  /// No description provided for @biometricUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'生物识别不可用，请使用钱包 PIN'**
+  String get biometricUnavailable;
 
   /// No description provided for @airdropRequesting.
   ///

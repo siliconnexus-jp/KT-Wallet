@@ -296,7 +296,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get viewMnemonic => 'リカバリーフレーズを表示';
 
   @override
-  String get viewMnemonicDesc => 'Face IDまたはパスコードが必要です';
+  String get viewMnemonicDesc => '生体認証またはパスコードが必要です';
 
   @override
   String get deleteWalletDesc => '認証が必要です。削除前にバックアップ状態を再確認します';
@@ -483,10 +483,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get authToConfirmTransfer => '認証して送金を確認';
 
   @override
-  String get authEveryTransfer => '送金ごとにFace IDまたはパスコードが必要です';
+  String get authEveryTransfer => '送金ごとに生体認証またはパスコードが必要です';
 
   @override
-  String get useFaceId => 'Face IDで認証';
+  String get useFaceId => '生体認証を使用';
 
   @override
   String get usePasscode => 'パスコードを使う';
@@ -592,7 +592,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get appLock => 'アプリロック';
 
   @override
-  String get appLockDesc => 'アプリ起動時にFace IDを要求';
+  String get appLockDesc => 'アプリ起動時に生体認証を要求';
 
   @override
   String get autoLock => '自動ロック';
@@ -667,6 +667,13 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get walletLoadErrorDesc =>
       '端末内のウォレットデータを読み取れませんでした。もう一度お試しください。問題が続く場合はアプリを再インストールしてください。';
+
+  @override
+  String get cryptoUnavailableTitle => 'ウォレットエンジンを利用できません';
+
+  @override
+  String get cryptoUnavailableDesc =>
+      'この Android ビルドには Trust Wallet Core が含まれていません。Wallet Core 対応ビルドをインストールしてください。模擬鍵へ自動的に切り替わることはありません。';
 
   @override
   String get actionRetry => '再試行';
@@ -802,6 +809,23 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get faucetAction => 'テストコインを取得';
+
+  @override
+  String get faucetOpened => 'テストネットのフォーセットを開きました';
+
+  @override
+  String get externalActionFailed => '外部アプリを開けません。もう一度お試しください';
+
+  @override
+  String shareAddressSubject(String network) {
+    return '$network 受取アドレス';
+  }
+
+  @override
+  String get cameraUnavailable => 'カメラを利用できません。権限を確認して再試行してください';
+
+  @override
+  String get biometricUnavailable => '生体認証を利用できません。ウォレットPINを使用してください';
 
   @override
   String get airdropRequesting => 'エアドロップを要求中…';

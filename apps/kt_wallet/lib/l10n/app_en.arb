@@ -89,7 +89,7 @@
   "standardWallet": "Standard wallet",
   "backupNotYet": "Recovery phrase not backed up yet",
   "viewMnemonic": "View recovery phrase",
-  "viewMnemonicDesc": "Requires Face ID or passcode",
+  "viewMnemonicDesc": "Requires biometrics or passcode",
   "deleteWalletDesc": "Requires authentication; backup status is reconfirmed before deletion",
   "amountMustBePositive": "Amount must be greater than 0",
   "insufficientBalance": "Insufficient balance",
@@ -153,8 +153,8 @@
   "confirmedPrefix": "Confirmed",
   "confirmations": "Confirmations",
   "authToConfirmTransfer": "Authenticate to confirm",
-  "authEveryTransfer": "Every transfer requires Face ID or a passcode",
-  "useFaceId": "Use Face ID",
+  "authEveryTransfer": "Every transfer requires biometrics or a passcode",
+  "useFaceId": "Use biometrics",
   "usePasscode": "Use passcode instead",
   "biometricFailedRetry": "Authentication failed. Try again.",
   "searchAssetHint": "Search name / symbol / contract",
@@ -189,7 +189,7 @@
   "gatewayTestFail": "Gateway connection failed",
   "accessControl": "Access control",
   "appLock": "App lock",
-  "appLockDesc": "Require Face ID to open the app",
+  "appLockDesc": "Require biometrics to open the app",
   "autoLock": "Auto-lock",
   "autoLockDesc": "Re-lock after a background timeout",
   "autoLockValue": "1 min",
@@ -214,6 +214,8 @@
   "deviceModeSwitchDesc": "You will return to the mode selection screen.",
   "walletLoadErrorTitle": "Couldn't load wallets",
   "walletLoadErrorDesc": "Your on-device wallet data couldn't be read. Try again; if the problem persists, reinstall the app.",
+  "cryptoUnavailableTitle": "Wallet engine unavailable",
+  "cryptoUnavailableDesc": "This Android build does not include Trust Wallet Core. Install a wallet-core-enabled build; simulated keys are never used automatically.",
   "actionRetry": "Retry",
   "renameWallet": "Rename wallet",
   "backupTranscribed": "I have written it down",
@@ -277,6 +279,18 @@
   "deleteNetwork": "Delete network",
   "networkInUse": "This network is currently in use",
   "faucetAction": "Get test funds",
+  "faucetOpened": "Testnet faucet opened",
+  "externalActionFailed": "Unable to open the external app. Try again.",
+  "shareAddressSubject": "{network} receive address",
+  "@shareAddressSubject": {
+    "placeholders": {
+      "network": {
+        "type": "String"
+      }
+    }
+  },
+  "cameraUnavailable": "Camera unavailable. Check permission and try again.",
+  "biometricUnavailable": "Biometrics unavailable. Use your wallet PIN.",
   "airdropRequesting": "Requesting airdrop…",
   "airdropOk": "Airdrop sent — balance will refresh shortly",
   "airdropFailed": "Airdrop failed: {message}",

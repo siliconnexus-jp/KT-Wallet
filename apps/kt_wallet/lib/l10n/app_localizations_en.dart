@@ -305,7 +305,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get viewMnemonic => 'View recovery phrase';
 
   @override
-  String get viewMnemonicDesc => 'Requires Face ID or passcode';
+  String get viewMnemonicDesc => 'Requires biometrics or passcode';
 
   @override
   String get deleteWalletDesc =>
@@ -499,10 +499,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get authEveryTransfer =>
-      'Every transfer requires Face ID or a passcode';
+      'Every transfer requires biometrics or a passcode';
 
   @override
-  String get useFaceId => 'Use Face ID';
+  String get useFaceId => 'Use biometrics';
 
   @override
   String get usePasscode => 'Use passcode instead';
@@ -609,7 +609,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appLock => 'App lock';
 
   @override
-  String get appLockDesc => 'Require Face ID to open the app';
+  String get appLockDesc => 'Require biometrics to open the app';
 
   @override
   String get autoLock => 'Auto-lock';
@@ -689,6 +689,13 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get walletLoadErrorDesc =>
       'Your on-device wallet data couldn\'t be read. Try again; if the problem persists, reinstall the app.';
+
+  @override
+  String get cryptoUnavailableTitle => 'Wallet engine unavailable';
+
+  @override
+  String get cryptoUnavailableDesc =>
+      'This Android build does not include Trust Wallet Core. Install a wallet-core-enabled build; simulated keys are never used automatically.';
 
   @override
   String get actionRetry => 'Retry';
@@ -825,6 +832,26 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get faucetAction => 'Get test funds';
+
+  @override
+  String get faucetOpened => 'Testnet faucet opened';
+
+  @override
+  String get externalActionFailed =>
+      'Unable to open the external app. Try again.';
+
+  @override
+  String shareAddressSubject(String network) {
+    return '$network receive address';
+  }
+
+  @override
+  String get cameraUnavailable =>
+      'Camera unavailable. Check permission and try again.';
+
+  @override
+  String get biometricUnavailable =>
+      'Biometrics unavailable. Use your wallet PIN.';
 
   @override
   String get airdropRequesting => 'Requesting airdrop…';

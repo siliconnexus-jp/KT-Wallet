@@ -5,7 +5,6 @@ import 'package:chains/chains.dart'
 import 'package:chains/rpc.dart';
 import 'package:core_crypto/core_crypto.dart' show ChainAddresses, Coin;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -17,6 +16,7 @@ import 'package:kt_wallet/src/market/market_controller.dart';
 import 'package:kt_wallet/src/market/market_scope.dart';
 import 'package:kt_wallet/src/market/price_service.dart';
 import 'package:kt_wallet/src/market/token_balance_service.dart';
+import 'package:kt_wallet/src/platform/external_actions.dart';
 import 'package:kt_wallet/src/screens/home_screen.dart';
 import 'package:kt_wallet/src/screens/transfer_screens.dart';
 import 'package:kt_wallet/src/state/app_prefs.dart';
@@ -91,7 +91,8 @@ class _CountingBalanceService extends BalanceService {
     return {
       for (final coin in Coin.values)
         coin: BalanceResult.ok(
-            Amount(raw: BigInt.from(1000000), decimals: 6, symbol: 'X')),
+          Amount(raw: BigInt.from(1000000), decimals: 6, symbol: 'X'),
+        ),
     };
   }
 }
@@ -110,10 +111,12 @@ class _CountingPriceService extends PriceService {
 /// 链上参数拉取总是失败的测试替身——驱动 W6 的回退路径。
 class _ThrowingParamsService extends ChainParamsService {
   _ThrowingParamsService()
-      : super(jsonRpcTransport: _FakeJsonRpc((url, body) async => null));
+    : super(jsonRpcTransport: _FakeJsonRpc((url, body) async => null));
   @override
-  Future<EvmChainParams> fetchEvmParams(Chain chain, String fromAddress) async =>
-      throw StateError('node unreachable');
+  Future<EvmChainParams> fetchEvmParams(
+    Chain chain,
+    String fromAddress,
+  ) async => throw StateError('node unreachable');
 }
 
 class _FakeTokenService extends TokenBalanceService {
@@ -131,7 +134,9 @@ const _addresses = ChainAddresses(
   solana: 'SolAddr',
 );
 
-WalletController _wallets() => WalletController(WalletManager(initial: [
+WalletController _wallets() => WalletController(
+  WalletManager(
+    initial: [
       HotWallet(
         id: 'w1',
         name: '日常钱包',
@@ -139,18 +144,23 @@ WalletController _wallets() => WalletController(WalletManager(initial: [
         addresses: _addresses,
         backedUp: true,
       ),
-    ]));
+    ],
+  ),
+);
 
-Map<String, Object?> _rpcResult(Object? result) =>
-    {'jsonrpc': '2.0', 'id': 1, 'result': result};
+Map<String, Object?> _rpcResult(Object? result) => {
+  'jsonrpc': '2.0',
+  'id': 1,
+  'result': result,
+};
 
 Widget _app(Widget home) => MaterialApp(
-      debugShowCheckedModeBanner: false,
-      locale: const Locale('zh'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: home,
-    );
+  debugShowCheckedModeBanner: false,
+  locale: const Locale('zh'),
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: home,
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -160,8 +170,9 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final prefs = AppPrefsController();
       await prefs.setRpcOverride(Coin.eth, 'https://my-node.example');
-      final networks =
-          NetworkController(initialEnvironment: NetworkEnvironment.testnet);
+      final networks = NetworkController(
+        initialEnvironment: NetworkEnvironment.testnet,
+      );
 
       final resolve = effectiveRpcEndpoints(prefs, networks);
       // 1. 用户手填的 RPC 覆盖永远最高。
@@ -183,12 +194,14 @@ void main() {
     });
 
     test('BalanceService 经解析器把请求发到测试网端点(假传输断言 URL)', () async {
-      final networks =
-          NetworkController(initialEnvironment: NetworkEnvironment.testnet);
-      final jsonRpc = _FakeJsonRpc((url, body) async =>
-          (body as Map)['method'] == 'getBalance'
-              ? _rpcResult({'context': <String, Object?>{}, 'value': 0})
-              : _rpcResult('0x0'));
+      final networks = NetworkController(
+        initialEnvironment: NetworkEnvironment.testnet,
+      );
+      final jsonRpc = _FakeJsonRpc(
+        (url, body) async => (body as Map)['method'] == 'getBalance'
+            ? _rpcResult({'context': <String, Object?>{}, 'value': 0})
+            : _rpcResult('0x0'),
+      );
       final rest = _FakeRest((url) async => {'data': <Object?>[]});
       final service = BalanceService(
         endpoints: effectiveRpcEndpoints(null, networks),
@@ -198,12 +211,13 @@ void main() {
 
       await service.fetchAll(_addresses);
       expect(
-          jsonRpc.seenUrls,
-          containsAll([
-            ethSepolia.rpcUrl,
-            polygonAmoy.rpcUrl,
-            solanaDevnet.rpcUrl,
-          ]));
+        jsonRpc.seenUrls,
+        containsAll([
+          ethSepolia.rpcUrl,
+          polygonAmoy.rpcUrl,
+          solanaDevnet.rpcUrl,
+        ]),
+      );
       expect(rest.seenUrls.single, '${tronNile.rpcUrl}/v1/accounts/TTronAddr');
     });
   });
@@ -219,14 +233,18 @@ void main() {
         prices: _CountingPriceService(),
         tokens: _FakeTokenService(const {}),
       );
-      await tester.pumpWidget(_app(NetworkScope(
-        controller: networks,
-        child: MarketScopeHost(
-          wallets: wallets,
-          controller: controller,
-          child: const HomeScreen(),
+      await tester.pumpWidget(
+        _app(
+          NetworkScope(
+            controller: networks,
+            child: MarketScopeHost(
+              wallets: wallets,
+              controller: controller,
+              child: const HomeScreen(),
+            ),
+          ),
         ),
-      )));
+      );
       await tester.pumpAndSettle();
       expect(balances.calls, 1); // 首次进入首页的刷新
 
@@ -250,8 +268,9 @@ void main() {
 
   group('测试网代币注册表', () {
     test('测试网环境注册表为空,且不发出任何代币查询(fail-on-contact)', () async {
-      final networks =
-          NetworkController(initialEnvironment: NetworkEnvironment.testnet);
+      final networks = NetworkController(
+        initialEnvironment: NetworkEnvironment.testnet,
+      );
       final jsonRpc = _FailOnContactJsonRpc();
       final rest = _FailOnContactRest();
       final service = TokenBalanceService(
@@ -297,8 +316,9 @@ void main() {
     });
 
     test('混合环境仍拉取一次价格,但测试网链的法币价值保持 null', () async {
-      final prices = _CountingPriceService(
-          {for (final c in Coin.values) c: 1.0});
+      final prices = _CountingPriceService({
+        for (final c in Coin.values) c: 1.0,
+      });
       final controller = MarketController(
         wallets: _wallets(),
         balances: _CountingBalanceService(),
@@ -316,22 +336,31 @@ void main() {
 
   group('首页测试网标识', () {
     MarketController liveController({bool testnet = false}) => MarketController(
-          wallets: _wallets(),
-          balances: _CountingBalanceService(),
-          prices: _CountingPriceService(
-              testnet ? null : {for (final c in Coin.values) c: 1.0}),
-          tokens: _FakeTokenService(const {}),
-          isTestnet: (_) => testnet,
-        );
+      wallets: _wallets(),
+      balances: _CountingBalanceService(),
+      prices: _CountingPriceService(
+        testnet ? null : {for (final c in Coin.values) c: 1.0},
+      ),
+      tokens: _FakeTokenService(const {}),
+      isTestnet: (_) => testnet,
+    );
 
     testWidgets('测试网作用域下显示琥珀徽章、法币总额 -- 与提示语', (tester) async {
-      final networks =
-          NetworkController(initialEnvironment: NetworkEnvironment.testnet);
+      final networks = NetworkController(
+        initialEnvironment: NetworkEnvironment.testnet,
+      );
       final controller = liveController(testnet: true);
-      await tester.pumpWidget(_app(NetworkScope(
-        controller: networks,
-        child: MarketScope(controller: controller, child: const HomeScreen()),
-      )));
+      await tester.pumpWidget(
+        _app(
+          NetworkScope(
+            controller: networks,
+            child: MarketScope(
+              controller: controller,
+              child: const HomeScreen(),
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       // 琥珀测试网徽章(首页头部)。
@@ -396,26 +425,33 @@ void main() {
     });
 
     testWidgets('W6 签名请求屏在 Sepolia 作用域下发出 11155111 的请求', (tester) async {
-      final networks =
-          NetworkController(initialEnvironment: NetworkEnvironment.testnet);
+      final networks = NetworkController(
+        initialEnvironment: NetworkEnvironment.testnet,
+      );
       final session = TransferSession()..draft = draft;
       // 节点不可达 → 走回退路径(演示常量),但 chainId/网络名必须仍来自活动网络。
       final service = _ThrowingParamsService();
-      await tester.pumpWidget(_app(NetworkScope(
-        controller: networks,
-        child: TransferSessionScope(
-          session: session,
-          child: SignRequestQrScreen(paramsService: service),
+      await tester.pumpWidget(
+        _app(
+          NetworkScope(
+            controller: networks,
+            child: TransferSessionScope(
+              session: session,
+              child: SignRequestQrScreen(paramsService: service),
+            ),
+          ),
         ),
-      )));
+      );
       await tester.pump();
 
       final request = session.request!;
       expect(request.chainId, 11155111);
       expect(request.summary![SummaryKeys.network], 'Sepolia');
       // 原始字节与 Sepolia 域的编码逐字节一致(回退用演示 nonce/费率)。
-      expect(request.rawTx,
-          rawTxFor(draft, from: demoFromAddress, evmChainId: 11155111));
+      expect(
+        request.rawTx,
+        rawTxFor(draft, from: demoFromAddress, evmChainId: 11155111),
+      );
     });
 
     test('buildSignRequest 把活动网络的 chainId 与名称写进协议字段', () {
@@ -431,7 +467,10 @@ void main() {
       expect(request.summary![SummaryKeys.network], 'Sepolia');
       // 默认(无网络来源)保持主网常量 —— 演示/金样不变。
       final mainnet = buildSignRequest(
-          draft: draft, walletId: 'WLT-TEST', fromAddress: from);
+        draft: draft,
+        walletId: 'WLT-TEST',
+        fromAddress: from,
+      );
       expect(mainnet.chainId, 1);
       expect(mainnet.summary![SummaryKeys.network], 'Ethereum');
     });
@@ -439,17 +478,27 @@ void main() {
 
   group('区块浏览器链接跟随网络', () {
     test('各网络的交易链接格式', () {
-      expect(explorerTxUrl(ethSepolia, '0xabc'),
-          'https://sepolia.etherscan.io/tx/0xabc');
-      expect(explorerTxUrl(ethMainnet, '0xabc'),
-          'https://etherscan.io/tx/0xabc');
-      expect(explorerTxUrl(tronMainnet, 'deadbeef'),
-          'https://tronscan.org/#/transaction/deadbeef');
-      expect(explorerTxUrl(tronNile, 'deadbeef'),
-          'https://nile.tronscan.org/#/transaction/deadbeef');
+      expect(
+        explorerTxUrl(ethSepolia, '0xabc'),
+        'https://sepolia.etherscan.io/tx/0xabc',
+      );
+      expect(
+        explorerTxUrl(ethMainnet, '0xabc'),
+        'https://etherscan.io/tx/0xabc',
+      );
+      expect(
+        explorerTxUrl(tronMainnet, 'deadbeef'),
+        'https://tronscan.org/#/transaction/deadbeef',
+      );
+      expect(
+        explorerTxUrl(tronNile, 'deadbeef'),
+        'https://nile.tronscan.org/#/transaction/deadbeef',
+      );
       // Devnet 的 ?cluster=devnet 查询串必须保留在路径之后。
-      expect(explorerTxUrl(solanaDevnet, 'sig'),
-          'https://explorer.solana.com/tx/sig?cluster=devnet');
+      expect(
+        explorerTxUrl(solanaDevnet, 'sig'),
+        'https://explorer.solana.com/tx/sig?cluster=devnet',
+      );
       // 无 explorerUrl 的自定义网络回退到该链的主网浏览器。
       const custom = Network(
         id: 'custom-1',
@@ -463,34 +512,33 @@ void main() {
       expect(explorerTxUrl(custom, '0xabc'), 'https://etherscan.io/tx/0xabc');
     });
 
-    testWidgets('交易详情复制的链接使用活动 TRON 网络(Nile 覆盖)', (tester) async {
+    testWidgets('交易详情打开的链接使用活动 TRON 网络(Nile 覆盖)', (tester) async {
       SharedPreferences.setMockInitialValues({});
       final networks = NetworkController();
       await networks.setOverride(Chain.tron, 'tron-nile');
-      String? copied;
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          SystemChannels.platform, (call) async {
-        if (call.method == 'Clipboard.setData') {
-          copied = (call.arguments as Map)['text'] as String?;
-        }
-        return null;
-      });
-      addTearDown(() => tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, null));
+      final originalActions = ExternalActions.instance;
+      final actions = FakeExternalActions();
+      ExternalActions.instance = actions;
+      addTearDown(() => ExternalActions.instance = originalActions);
 
-      await tester.pumpWidget(_app(NetworkScope(
-          controller: networks, child: const TxDetailScreen())));
+      await tester.pumpWidget(
+        _app(NetworkScope(controller: networks, child: const TxDetailScreen())),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.open_in_new));
       await tester.pump();
-      expect(copied, startsWith('https://nile.tronscan.org/#/transaction/'));
+      expect(
+        actions.opened.single.toString(),
+        startsWith('https://nile.tronscan.org/#/transaction/'),
+      );
     });
   });
 
   group('历史记录跟随活动 TRON 网络', () {
     test('测试网环境下 TronGrid 请求发往 Nile(路径不变)', () async {
-      final networks =
-          NetworkController(initialEnvironment: NetworkEnvironment.testnet);
+      final networks = NetworkController(
+        initialEnvironment: NetworkEnvironment.testnet,
+      );
       final seen = <String>[];
       final service = HistoryService(
         endpoints: effectiveRpcEndpoints(null, networks),

@@ -161,7 +161,7 @@
   "standardWallet": "普通钱包",
   "backupNotYet": "尚未备份助记词",
   "viewMnemonic": "查看助记词",
-  "viewMnemonicDesc": "需要 Face ID 或密码验证",
+  "viewMnemonicDesc": "需要生物识别或密码验证",
   "deleteWalletDesc": "需身份验证，删除前将再次确认备份状态",
   "amountMustBePositive": "金额需大于 0",
   "insufficientBalance": "余额不足",
@@ -279,8 +279,8 @@
   "confirmedPrefix": "已确认",
   "confirmations": "确认数",
   "authToConfirmTransfer": "验证以确认转账",
-  "authEveryTransfer": "每次转账都需要 Face ID 或密码验证",
-  "useFaceId": "使用 Face ID 验证",
+  "authEveryTransfer": "每次转账都需要生物识别或密码验证",
+  "useFaceId": "使用生物识别验证",
   "usePasscode": "改用密码",
   "biometricFailedRetry": "验证失败，请重试",
   "searchAssetHint": "搜索名称 / Symbol / 合约地址",
@@ -315,7 +315,7 @@
   "gatewayTestFail": "网关连接失败",
   "accessControl": "访问控制",
   "appLock": "App 锁",
-  "appLockDesc": "打开 App 时需要 Face ID",
+  "appLockDesc": "打开 App 时需要生物识别",
   "autoLock": "自动锁定",
   "autoLockDesc": "后台超过时限后重新锁定",
   "autoLockValue": "1 分钟",
@@ -340,6 +340,8 @@
   "deviceModeSwitchDesc": "切换后将返回模式选择页。",
   "walletLoadErrorTitle": "钱包加载失败",
   "walletLoadErrorDesc": "无法读取本机的钱包数据。请重试;若问题持续,请重新安装应用。",
+  "cryptoUnavailableTitle": "钱包引擎不可用",
+  "cryptoUnavailableDesc": "此 Android 构建未包含 Trust Wallet Core。请安装启用了 Wallet Core 的构建；应用不会自动改用模拟密钥。",
   "actionRetry": "重试",
   "renameWallet": "重命名钱包",
   "backupTranscribed": "我已抄写",
@@ -403,6 +405,18 @@
   "deleteNetwork": "删除网络",
   "networkInUse": "该网络正在使用中",
   "faucetAction": "领取测试币",
+  "faucetOpened": "已打开测试币水龙头",
+  "externalActionFailed": "无法打开外部应用，请稍后重试",
+  "shareAddressSubject": "{network} 收款地址",
+  "@shareAddressSubject": {
+    "placeholders": {
+      "network": {
+        "type": "String"
+      }
+    }
+  },
+  "cameraUnavailable": "相机不可用，请检查权限后重试",
+  "biometricUnavailable": "生物识别不可用，请使用钱包 PIN",
   "airdropRequesting": "正在请求空投…",
   "airdropOk": "空投成功,余额稍后刷新",
   "airdropFailed": "空投失败:{message}",

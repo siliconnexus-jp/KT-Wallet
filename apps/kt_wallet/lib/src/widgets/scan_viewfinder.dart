@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../state/flutter_test_env.dart';
+
 /// Injectable probe deciding whether a live [MobileScanner] session should be
 /// attempted at all. Widget tests (and the golden suite) run without the
 /// plugin, so the default answers `false` off-device and the viewfinder stays
@@ -136,37 +138,65 @@ class _ScanViewfinderState extends State<ScanViewfinder> {
 
   /// The design's 240×240 scan frame (also the fallback placeholder).
   Widget _scanFrame({required bool withIcon}) => Container(
-        width: 240,
-        height: 240,
-        decoration: BoxDecoration(
-          border: Border.all(color: widget.frameColor, width: 2),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: withIcon ? const Icon(Icons.qr_code_2, size: 64, color: SignerColors.border) : null,
-      );
+    width: 240,
+    height: 240,
+    decoration: BoxDecoration(
+      border: Border.all(color: widget.frameColor, width: 2),
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: withIcon
+        ? const Icon(Icons.qr_code_2, size: 64, color: SignerColors.border)
+        : null,
+  );
 
   Widget _fallbackContent() => ColoredBox(
-        color: SignerColors.surface,
-        child: Center(child: _scanFrame(withIcon: true)),
-      );
+    color: SignerColors.surface,
+    child: Center(
+      child: isFlutterTestEnv
+          ? _scanFrame(withIcon: true)
+          : const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.no_photography_outlined,
+                  size: 52,
+                  color: SignerColors.border,
+                ),
+                SizedBox(height: 12),
+                Text(
+                  'Camera unavailable',
+                  style: TextStyle(fontSize: 14, color: SignerColors.text2),
+                ),
+              ],
+            ),
+    ),
+  );
 
   /// The outer card. Kept structurally identical to the previous hardcoded
   /// container in fallback mode (no clip) so the goldens stay byte-identical.
   Widget _card({required Widget child, required bool clip}) => Container(
-        margin: const EdgeInsets.symmetric(horizontal: 20),
-        height: widget.height,
-        clipBehavior: clip ? Clip.antiAlias : Clip.none,
-        decoration: BoxDecoration(color: SignerColors.surface, borderRadius: BorderRadius.circular(20)),
-        child: child,
-      );
+    margin: const EdgeInsets.symmetric(horizontal: 20),
+    height: widget.height,
+    clipBehavior: clip ? Clip.antiAlias : Clip.none,
+    decoration: BoxDecoration(
+      color: SignerColors.surface,
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: child,
+  );
 
   @override
   Widget build(BuildContext context) {
     final camera = _camera;
     if (!_attempting || camera == null) {
       return GestureDetector(
-        onTap: widget.onSimulatedTap,
-        child: _card(clip: false, child: Center(child: _scanFrame(withIcon: true))),
+        onTap: isFlutterTestEnv ? widget.onSimulatedTap : null,
+        child: _card(
+          clip: false,
+          child: isFlutterTestEnv
+              ? Center(child: _scanFrame(withIcon: true))
+              : _fallbackContent(),
+        ),
       );
     }
     return ValueListenableBuilder<MobileScannerState>(
@@ -176,20 +206,23 @@ class _ScanViewfinderState extends State<ScanViewfinder> {
         return GestureDetector(
           // While the real camera runs, taps must not inject demo frames into
           // the same aggregation session; the fallback keeps the demo tap.
-          onTap: live ? null : widget.onSimulatedTap,
+          onTap: live || !isFlutterTestEnv ? null : widget.onSimulatedTap,
           child: _card(
             clip: true,
-            child: Stack(fit: StackFit.expand, children: [
-              MobileScanner(
-                controller: camera,
-                onDetect: _onDetect,
-                // Both builders render the simulated viewfinder so a camera
-                // that never comes up (or dies) degrades to the demo look.
-                placeholderBuilder: (_) => _fallbackContent(),
-                errorBuilder: (_, _) => _fallbackContent(),
-              ),
-              if (live) Center(child: _scanFrame(withIcon: false)),
-            ]),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                MobileScanner(
+                  controller: camera,
+                  onDetect: _onDetect,
+                  // Both builders render the simulated viewfinder so a camera
+                  // that never comes up (or dies) degrades to the demo look.
+                  placeholderBuilder: (_) => _fallbackContent(),
+                  errorBuilder: (_, _) => _fallbackContent(),
+                ),
+                if (live) Center(child: _scanFrame(withIcon: false)),
+              ],
+            ),
           ),
         );
       },

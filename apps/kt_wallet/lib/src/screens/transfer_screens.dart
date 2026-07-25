@@ -11,7 +11,9 @@ import '../../l10n/app_localizations.dart';
 import '../market/explorer_links.dart' show explorerTxUrl;
 import '../market/market_scope.dart'
     show effectiveRpcEndpoints, prefsGatewayResolver;
+import '../platform/external_actions.dart';
 import '../security/biometric_auth.dart';
+import '../security/wallet_pin.dart';
 import '../state/app_prefs.dart' show AppPrefsScope;
 import '../state/networks.dart' show Network, NetworkScope;
 import '../transfer/airgap_codec.dart';
@@ -20,6 +22,7 @@ import '../transfer/chain_params_service.dart';
 import '../transfer/frame_scan.dart';
 import '../transfer/transfer_draft.dart';
 import '../widgets/scan_viewfinder.dart';
+import '../widgets/pin_pad.dart';
 import '../widgets/token_icon.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
@@ -932,8 +935,9 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
         ? null
         : NetworkScope.maybeOf(context)?.activeFor(chain);
     final evmChainId = network?.evmChainId;
-    final networkLabel =
-        network != null && network.isTestnet ? network.name : null;
+    final networkLabel = network != null && network.isTestnet
+        ? network.name
+        : null;
     if (draft != null && (chain == Chain.ethereum || chain == Chain.polygon)) {
       // Live EVM path: real nonce/fees first, QR after the fetch.
       _building = true;
@@ -1588,22 +1592,26 @@ class TxDetailScreen extends StatelessWidget {
         title: l10n.txDetailTitle,
         onBack: () => Navigator.of(context).maybePop(),
         trailing: Icons.open_in_new,
-        onTrailing: () {
+        onTrailing: () async {
           // Explorer follows the ACTIVE tron network (the displayed demo tx
           // is a TRON transfer): Nile's tronscan under the testnet
           // environment, tronscan.org on mainnet — identical to the previous
           // hardcoded link when no override is active.
-          Clipboard.setData(
-            ClipboardData(
-              text: explorerTxUrl(
+          final opened = await ExternalActions.instance.open(
+            Uri.parse(
+              explorerTxUrl(
                 NetworkScope.of(context).activeFor(Chain.tron),
                 _txHash,
               ),
             ),
           );
-          ScaffoldMessenger.of(context)
-            ..clearSnackBars()
-            ..showSnackBar(SnackBar(content: Text(l10n.explorerLinkCopied)));
+          if (!opened && context.mounted) {
+            ScaffoldMessenger.of(context)
+              ..clearSnackBars()
+              ..showSnackBar(
+                SnackBar(content: Text(l10n.externalActionFailed)),
+              );
+          }
         },
       ),
       children: [
@@ -1686,12 +1694,37 @@ class TransferAuthSheet extends StatelessWidget {
     if (!context.mounted) return;
     switch (outcome) {
       case BiometricOutcome.success:
-      case BiometricOutcome.unavailable: // demo shortcut, see class comment
         context.go('/broadcast-result');
       case BiometricOutcome.failure:
         ScaffoldMessenger.of(context)
           ..clearSnackBars()
           ..showSnackBar(SnackBar(content: Text(l10n.biometricFailedRetry)));
+      case BiometricOutcome.unavailable:
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(content: Text(l10n.biometricUnavailable)));
+    }
+  }
+
+  Future<void> _usePin(BuildContext context) async {
+    final l10n = AppLocalizations.of(context);
+    final pin = WalletPin.instance;
+    if (!await pin.isSet()) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(l10n.biometricUnavailable)));
+      return;
+    }
+    if (!context.mounted) return;
+    final verified = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: WalletColors.surface,
+      builder: (_) => _TransferPinSheet(pin: pin),
+    );
+    if (verified == true && context.mounted) {
+      context.go('/broadcast-result');
     }
   }
 
@@ -1765,10 +1798,9 @@ class TransferAuthSheet extends StatelessWidget {
                     onPressed: () => _faceId(context),
                   ),
                   const SizedBox(height: 12),
-                  // Demo passcode path: same simulated auth success as Face ID.
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () => context.go('/broadcast-result'),
+                    onTap: () => _usePin(context),
                     child: Text(
                       l10n.usePasscode,
                       style: const TextStyle(
@@ -1782,6 +1814,95 @@ class TransferAuthSheet extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TransferPinSheet extends StatefulWidget {
+  const _TransferPinSheet({required this.pin});
+
+  final WalletPin pin;
+
+  @override
+  State<_TransferPinSheet> createState() => _TransferPinSheetState();
+}
+
+class _TransferPinSheetState extends State<_TransferPinSheet> {
+  String _entry = '';
+  String? _error;
+  bool _busy = false;
+
+  Future<void> _key(String key) async {
+    if (_busy) return;
+    if (key == 'del') {
+      if (_entry.isNotEmpty) {
+        setState(() {
+          _entry = _entry.substring(0, _entry.length - 1);
+          _error = null;
+        });
+      }
+      return;
+    }
+    if (_entry.length >= 6) return;
+    setState(() {
+      _entry += key;
+      _error = null;
+    });
+    if (_entry.length != 6) return;
+    setState(() => _busy = true);
+    final verdict = await widget.pin.verify(_entry);
+    if (!mounted) return;
+    if (verdict.isOk) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+    final l10n = AppLocalizations.of(context);
+    setState(() {
+      _entry = '';
+      _busy = false;
+      _error = verdict.isLocked
+          ? l10n.pinLockedRetry(verdict.lockRemaining!.inSeconds + 1)
+          : l10n.pinIncorrect;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          24,
+          20,
+          24,
+          20 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              l10n.usePasscode,
+              style: const TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.w700,
+                color: WalletColors.text,
+              ),
+            ),
+            const SizedBox(height: 18),
+            PinDots(filled: _entry.length),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 13, color: WalletColors.red),
+              ),
+            ],
+            const SizedBox(height: 18),
+            PinPad(onKey: _key),
+          ],
         ),
       ),
     );

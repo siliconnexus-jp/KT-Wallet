@@ -210,6 +210,7 @@ class CoreCryptoPlugin :
         is WalletCoreBridge.InvalidMnemonicException -> "INVALID_MNEMONIC"
         is WalletCoreBridge.InvalidInputException -> "INVALID_INPUT"
         is WalletCoreBridge.SignFailedException -> "SIGN_FAILED"
+        is WalletCoreBridge.UnavailableException -> "CRYPTO_UNAVAILABLE"
         is WalletNotFoundException -> "WALLET_NOT_FOUND"
         is EntropyCipher.OpenFailedException -> "STORE_CORRUPTED"
         is android.security.keystore.KeyPermanentlyInvalidatedException ->

@@ -18,6 +18,9 @@ object WalletCoreBridge {
     class InvalidMnemonicException : Exception("invalid mnemonic")
     class InvalidInputException : Exception("invalid signing input")
     class SignFailedException : Exception("signing failed")
+    // Kept in the common bridge surface so CoreCryptoPlugin can map the
+    // fail-closed build without conditional source code.
+    class UnavailableException : Exception("Trust Wallet Core is unavailable")
 
     fun generateMnemonic(strength: Int): String {
         val wallet = HDWallet(strength, "")

@@ -18,19 +18,23 @@ void main() {
   WalletPin newPin([InMemoryPinStorage? storage]) =>
       WalletPin(storage ?? InMemoryPinStorage(), iterations: 1000);
 
-  Future<void> pumpGate(WidgetTester tester,
-      {required AppPrefsController prefs,
-      required BiometricAuth auth,
-      WalletPin? pin}) async {
+  Future<void> pumpGate(
+    WidgetTester tester, {
+    required AppPrefsController prefs,
+    required BiometricAuth auth,
+    WalletPin? pin,
+  }) async {
     tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
     addTearDown(tester.platformDispatcher.clearLocalesTestValue);
-    await tester.pumpWidget(AppLockGate(
-      localeController: LocaleController(),
-      prefs: prefs,
-      auth: auth,
-      pin: pin ?? newPin(),
-      child: child,
-    ));
+    await tester.pumpWidget(
+      AppLockGate(
+        localeController: LocaleController(),
+        prefs: prefs,
+        auth: auth,
+        pin: pin ?? newPin(),
+        child: child,
+      ),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -42,78 +46,103 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('app lock on: gate blocks, then a successful prompt unlocks',
-      (tester) async {
+  testWidgets('app lock on: gate blocks, then a successful prompt unlocks', (
+    tester,
+  ) async {
     // Default preference is appLock=true (persistence is dead in tests).
-    await pumpGate(tester,
-        prefs: AppPrefsController(),
-        auth: const FakeBiometricAuth(BiometricOutcome.success));
+    await pumpGate(
+      tester,
+      prefs: AppPrefsController(),
+      auth: const FakeBiometricAuth(BiometricOutcome.success),
+    );
 
     // Locked: the wallet is hidden behind the lock screen.
     expect(find.text('WALLET-HOME'), findsNothing);
     expect(find.text('App 锁'), findsOneWidget);
 
-    await tester.tap(find.text('使用 Face ID 验证'));
+    await tester.tap(find.text('使用生物识别验证'));
     await tester.pumpAndSettle();
     expect(find.text('WALLET-HOME'), findsOneWidget);
   });
 
-  testWidgets('a failed prompt with no PIN enrolled keeps the gate locked',
-      (tester) async {
-    await pumpGate(tester,
-        prefs: AppPrefsController(),
-        auth: const FakeBiometricAuth(BiometricOutcome.failure));
+  testWidgets('a failed prompt with no PIN enrolled keeps the gate locked', (
+    tester,
+  ) async {
+    await pumpGate(
+      tester,
+      prefs: AppPrefsController(),
+      auth: const FakeBiometricAuth(BiometricOutcome.failure),
+    );
 
-    await tester.tap(find.text('使用 Face ID 验证'));
+    await tester.tap(find.text('使用生物识别验证'));
     await tester.pumpAndSettle();
     expect(find.text('WALLET-HOME'), findsNothing);
     expect(find.text('App 锁'), findsOneWidget);
   });
 
   testWidgets(
-      'legacy pass-through: no usable biometrics AND no PIN enrolled lets through',
-      (tester) async {
-    await pumpGate(tester,
+    'legacy pass-through: no usable biometrics AND no PIN enrolled lets through',
+    (tester) async {
+      await pumpGate(
+        tester,
         prefs: AppPrefsController(),
-        auth: const FakeBiometricAuth(BiometricOutcome.success, available: false));
+        auth: const FakeBiometricAuth(
+          BiometricOutcome.success,
+          available: false,
+        ),
+      );
 
-    expect(find.text('WALLET-HOME'), findsOneWidget);
-  });
+      expect(find.text('WALLET-HOME'), findsOneWidget);
+    },
+  );
 
   testWidgets('app lock off: straight through', (tester) async {
     final prefs = AppPrefsController();
     prefs.setAppLock(false).ignore(); // persistence is dead in tests
-    await pumpGate(tester,
-        prefs: prefs, auth: const FakeBiometricAuth(BiometricOutcome.failure));
+    await pumpGate(
+      tester,
+      prefs: prefs,
+      auth: const FakeBiometricAuth(BiometricOutcome.failure),
+    );
 
     expect(find.text('WALLET-HOME'), findsOneWidget);
   });
 
-  testWidgets('bio unavailable + PIN enrolled: numpad appears, correct PIN unlocks',
-      (tester) async {
+  testWidgets(
+    'bio unavailable + PIN enrolled: numpad appears, correct PIN unlocks',
+    (tester) async {
+      final pin = newPin();
+      await pin.setPin('135790');
+      await pumpGate(
+        tester,
+        prefs: AppPrefsController(),
+        auth: const FakeBiometricAuth(
+          BiometricOutcome.success,
+          available: false,
+        ),
+        pin: pin,
+      );
+
+      // No pass-through: the PIN numpad is the lock screen.
+      expect(find.text('WALLET-HOME'), findsNothing);
+      expect(find.text('输入密码解锁'), findsOneWidget);
+
+      await tapPin(tester, '135790');
+      expect(find.text('WALLET-HOME'), findsOneWidget);
+    },
+  );
+
+  testWidgets('wrong PIN stays locked with the error message; retry unlocks', (
+    tester,
+  ) async {
     final pin = newPin();
     await pin.setPin('135790');
-    await pumpGate(tester,
-        prefs: AppPrefsController(),
-        auth: const FakeBiometricAuth(BiometricOutcome.success, available: false),
-        pin: pin);
-
-    // No pass-through: the PIN numpad is the lock screen.
-    expect(find.text('WALLET-HOME'), findsNothing);
-    expect(find.text('输入密码解锁'), findsOneWidget);
-
-    await tapPin(tester, '135790');
-    expect(find.text('WALLET-HOME'), findsOneWidget);
-  });
-
-  testWidgets('wrong PIN stays locked with the error message; retry unlocks',
-      (tester) async {
-    final pin = newPin();
-    await pin.setPin('135790');
-    await pumpGate(tester,
-        prefs: AppPrefsController(),
-        auth: const FakeBiometricAuth(BiometricOutcome.success, available: false),
-        pin: pin);
+    await pumpGate(
+      tester,
+      prefs: AppPrefsController(),
+      auth: const FakeBiometricAuth(BiometricOutcome.success, available: false),
+      pin: pin,
+    );
 
     await tapPin(tester, '000000');
     expect(find.text('WALLET-HOME'), findsNothing);
@@ -123,29 +152,37 @@ void main() {
     expect(find.text('WALLET-HOME'), findsOneWidget);
   });
 
-  testWidgets('5 wrong PINs engage the lockout message and refuse the right PIN',
-      (tester) async {
-    final pin = newPin();
-    await pin.setPin('135790');
-    await pumpGate(tester,
+  testWidgets(
+    '5 wrong PINs engage the lockout message and refuse the right PIN',
+    (tester) async {
+      final pin = newPin();
+      await pin.setPin('135790');
+      await pumpGate(
+        tester,
         prefs: AppPrefsController(),
-        auth: const FakeBiometricAuth(BiometricOutcome.success, available: false),
-        pin: pin);
+        auth: const FakeBiometricAuth(
+          BiometricOutcome.success,
+          available: false,
+        ),
+        pin: pin,
+      );
 
-    for (var i = 0; i < 5; i++) {
-      await tapPin(tester, '000000');
-    }
-    // 5th failure engaged the 30s lock: 尝试次数过多，请 N 秒后重试.
-    expect(find.textContaining('尝试次数过多'), findsOneWidget);
+      for (var i = 0; i < 5; i++) {
+        await tapPin(tester, '000000');
+      }
+      // 5th failure engaged the 30s lock: 尝试次数过多，请 N 秒后重试.
+      expect(find.textContaining('尝试次数过多'), findsOneWidget);
 
-    // Even the correct PIN is refused while locked out.
-    await tapPin(tester, '135790');
-    expect(find.text('WALLET-HOME'), findsNothing);
-    expect(find.textContaining('尝试次数过多'), findsOneWidget);
-  });
+      // Even the correct PIN is refused while locked out.
+      await tapPin(tester, '135790');
+      expect(find.text('WALLET-HOME'), findsNothing);
+      expect(find.textContaining('尝试次数过多'), findsOneWidget);
+    },
+  );
 
-  testWidgets('persisted lockout shows its message before any key is pressed',
-      (tester) async {
+  testWidgets('persisted lockout shows its message before any key is pressed', (
+    tester,
+  ) async {
     final storage = InMemoryPinStorage();
     final enrolled = newPin(storage);
     await enrolled.setPin('135790');
@@ -153,24 +190,29 @@ void main() {
       await enrolled.verify('000000');
     }
     // "Restart": a fresh WalletPin over the same storage still knows the lock.
-    await pumpGate(tester,
-        prefs: AppPrefsController(),
-        auth: const FakeBiometricAuth(BiometricOutcome.success, available: false),
-        pin: newPin(storage));
+    await pumpGate(
+      tester,
+      prefs: AppPrefsController(),
+      auth: const FakeBiometricAuth(BiometricOutcome.success, available: false),
+      pin: newPin(storage),
+    );
 
     expect(find.textContaining('尝试次数过多'), findsOneWidget);
   });
 
-  testWidgets('bio failure with a PIN enrolled falls back to the numpad',
-      (tester) async {
+  testWidgets('bio failure with a PIN enrolled falls back to the numpad', (
+    tester,
+  ) async {
     final pin = newPin();
     await pin.setPin('135790');
-    await pumpGate(tester,
-        prefs: AppPrefsController(),
-        auth: const FakeBiometricAuth(BiometricOutcome.failure),
-        pin: pin);
+    await pumpGate(
+      tester,
+      prefs: AppPrefsController(),
+      auth: const FakeBiometricAuth(BiometricOutcome.failure),
+      pin: pin,
+    );
 
-    await tester.tap(find.text('使用 Face ID 验证'));
+    await tester.tap(find.text('使用生物识别验证'));
     await tester.pumpAndSettle();
     expect(find.text('输入密码解锁'), findsOneWidget);
 
@@ -178,20 +220,24 @@ void main() {
     expect(find.text('WALLET-HOME'), findsOneWidget);
   });
 
-  testWidgets('the biometric lock screen offers a direct PIN path when enrolled',
-      (tester) async {
-    final pin = newPin();
-    await pin.setPin('135790');
-    await pumpGate(tester,
+  testWidgets(
+    'the biometric lock screen offers a direct PIN path when enrolled',
+    (tester) async {
+      final pin = newPin();
+      await pin.setPin('135790');
+      await pumpGate(
+        tester,
         prefs: AppPrefsController(),
         auth: const FakeBiometricAuth(BiometricOutcome.success),
-        pin: pin);
+        pin: pin,
+      );
 
-    await tester.tap(find.text('使用密码解锁'));
-    await tester.pumpAndSettle();
-    expect(find.text('输入密码解锁'), findsOneWidget);
+      await tester.tap(find.text('使用密码解锁'));
+      await tester.pumpAndSettle();
+      expect(find.text('输入密码解锁'), findsOneWidget);
 
-    await tapPin(tester, '135790');
-    expect(find.text('WALLET-HOME'), findsOneWidget);
-  });
+      await tapPin(tester, '135790');
+      expect(find.text('WALLET-HOME'), findsOneWidget);
+    },
+  );
 }

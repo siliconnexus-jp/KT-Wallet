@@ -1,4 +1,3 @@
-import 'dart:io' show Platform;
 import 'dart:ui' show PlatformDispatcher;
 
 import 'package:cold_signer/cold_signer.dart';
@@ -38,23 +37,31 @@ Future<void> main() async {
   final modeController = DeviceModeController();
   await modeController.load();
 
-  runApp(RootApp(localeController: localeController, modeController: modeController));
+  runApp(
+    RootApp(localeController: localeController, modeController: modeController),
+  );
 }
 
 /// Wallet-mode bootstrap (runs only once the user has picked "online wallet"):
 /// opens the on-device drift database, wires a persistent [WalletStore]
-/// (deterministic [MockCoreCrypto] backend where wallet-core is unavailable),
-/// and loads saved wallets (seeding a starter set on first run, named in the
-/// active language).
-Future<WalletController> _bootstrapWallet(LocaleController localeController) async {
-  final l10n = await AppLocalizations.delegate.load(_resolveLocale(localeController.locale));
+/// backed by the native [MethodChannelCoreCrypto], and loads saved wallets
+/// (seeding a starter set on first run, named in the active language).
+///
+/// A deterministic mock can only be enabled explicitly for simulator UI
+/// acceptance builds with `--dart-define=KT_ALLOW_MOCK_CRYPTO=true`. Normal
+/// debug/release builds fail closed when Trust Wallet Core is not linked.
+Future<WalletController> _bootstrapWallet(
+  LocaleController localeController,
+) async {
+  final l10n = await AppLocalizations.delegate.load(
+    _resolveLocale(localeController.locale),
+  );
 
   final db = openWalletDatabase();
-  // Real Trust Wallet Core on iOS (the native bridge is fully implemented:
-  // Keychain-stored entropy, BIP-39/44 derivation, biometric-gated export).
-  // Android falls back to the deterministic mock until the wallet-core
-  // GitHub-Packages credential is configured (see BUILDING.md).
-  final crypto = Platform.isIOS ? MethodChannelCoreCrypto() : MockCoreCrypto();
+  const allowMockCrypto = bool.fromEnvironment('KT_ALLOW_MOCK_CRYPTO');
+  final CoreCrypto crypto = allowMockCrypto
+      ? MockCoreCrypto()
+      : MethodChannelCoreCrypto();
   final store = WalletStore(db);
 
   var manager = await store.load();
@@ -82,37 +89,45 @@ Locale _resolveLocale(Locale? override) {
 }
 
 ChainAddresses _addr(String seed) => ChainAddresses(
-      eth: '0x${seed}71c8B29b3d4b79E19bE1',
-      polygon: '0x${seed}71c8B29b3d4b79E19bE1',
-      tron: 'T${seed}Pa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
-      solana: '${seed}yKpXwMWd4qmDqVr2W',
-    );
+  eth: '0x${seed}71c8B29b3d4b79E19bE1',
+  polygon: '0x${seed}71c8B29b3d4b79E19bE1',
+  tron: 'T${seed}Pa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
+  solana: '${seed}yKpXwMWd4qmDqVr2W',
+);
 
 /// First launch: one real hot wallet (mnemonic generated + addresses derived)
 /// plus one watch wallet, persisted, so the app opens to a populated home. Names
 /// are taken from the active language.
-Future<void> _seedFirstRun(CoreCrypto crypto, WalletStore store, AppLocalizations l10n) async {
+Future<void> _seedFirstRun(
+  CoreCrypto crypto,
+  WalletStore store,
+  AppLocalizations l10n,
+) async {
   final id = 'daily';
   final mnemonic = await crypto.generateMnemonic();
   await crypto.storeWallet(walletId: id, mnemonic: mnemonic);
   final addresses = await crypto.deriveAddresses(id);
-  await store.save(HotWallet(
-    id: id,
-    name: l10n.walletSeedDaily,
-    avatarColor: 0xFFF59E0B,
-    addresses: addresses,
-    sortOrder: 0,
-    backedUp: true,
-  ));
-  await store.save(WatchWallet(
-    id: 'cold',
-    name: l10n.walletSeedMain,
-    avatarColor: 0xFF0C1220,
-    addresses: _addr('c'),
-    sortOrder: 1,
-    coldWalletId: 'WLT-3E8A91',
-    protocolVersion: 1,
-  ));
+  await store.save(
+    HotWallet(
+      id: id,
+      name: l10n.walletSeedDaily,
+      avatarColor: 0xFFF59E0B,
+      addresses: addresses,
+      sortOrder: 0,
+      backedUp: true,
+    ),
+  );
+  await store.save(
+    WatchWallet(
+      id: 'cold',
+      name: l10n.walletSeedMain,
+      avatarColor: 0xFF0C1220,
+      addresses: _addr('c'),
+      sortOrder: 1,
+      coldWalletId: 'WLT-3E8A91',
+      protocolVersion: 1,
+    ),
+  );
 
   // Address-book / token-list seeding lives in seedDirectoryDefaults — it
   // must also run for installs upgrading from the pre-directory schema, whose
@@ -123,11 +138,36 @@ Future<void> _seedFirstRun(CoreCrypto crypto, WalletStore store, AppLocalization
 /// persistence). Demo wallet names stay as fixed literals — this controller
 /// only backs the developer gallery/goldens, never the shipped home. The daily
 /// wallet stays un-backed-up so the backup banner/flow is exercisable.
-WalletController _seedController() => WalletController(WalletManager(initial: [
-      HotWallet(id: 'daily', name: '日常钱包', avatarColor: 0xFFF59E0B, addresses: _addr('a'), backedUp: false),
-      HotWallet(id: 'savings', name: '储蓄钱包', avatarColor: 0xFF8B5CF6, addresses: _addr('b'), sortOrder: 1, backedUp: true),
-      WatchWallet(id: 'cold', name: '主钱包', avatarColor: 0xFF0C1220, addresses: _addr('c'), sortOrder: 2, coldWalletId: 'WLT-3E8A91', protocolVersion: 1),
-    ]));
+WalletController _seedController() => WalletController(
+  WalletManager(
+    initial: [
+      HotWallet(
+        id: 'daily',
+        name: '日常钱包',
+        avatarColor: 0xFFF59E0B,
+        addresses: _addr('a'),
+        backedUp: false,
+      ),
+      HotWallet(
+        id: 'savings',
+        name: '储蓄钱包',
+        avatarColor: 0xFF8B5CF6,
+        addresses: _addr('b'),
+        sortOrder: 1,
+        backedUp: true,
+      ),
+      WatchWallet(
+        id: 'cold',
+        name: '主钱包',
+        avatarColor: 0xFF0C1220,
+        addresses: _addr('c'),
+        sortOrder: 2,
+        coldWalletId: 'WLT-3E8A91',
+        protocolVersion: 1,
+      ),
+    ],
+  ),
+);
 
 /// Root gate of the combined installer. Listens to the [DeviceModeController]:
 ///
@@ -143,8 +183,8 @@ class RootApp extends StatelessWidget {
     DeviceModeController? modeController,
     LocaleController? localeController,
     this.walletBootstrap,
-  })  : modeController = modeController ?? DeviceModeController(),
-        localeController = localeController ?? LocaleController();
+  }) : modeController = modeController ?? DeviceModeController(),
+       localeController = localeController ?? LocaleController();
 
   final DeviceModeController modeController;
   final LocaleController localeController;
@@ -175,7 +215,8 @@ class RootApp extends StatelessWidget {
               exitMode: modeController.clear,
               child: _WalletBootstrap(
                 localeController: localeController,
-                bootstrap: walletBootstrap ?? () => _bootstrapWallet(localeController),
+                bootstrap:
+                    walletBootstrap ?? () => _bootstrapWallet(localeController),
               ),
             );
           case DeviceMode.signer:
@@ -194,7 +235,10 @@ class RootApp extends StatelessWidget {
 /// bootstrap (e.g. unreadable database) shows a retryable error screen instead
 /// of hanging on the splash. Leaving wallet mode closes the database.
 class _WalletBootstrap extends StatefulWidget {
-  const _WalletBootstrap({required this.localeController, required this.bootstrap});
+  const _WalletBootstrap({
+    required this.localeController,
+    required this.bootstrap,
+  });
 
   final LocaleController localeController;
   final Future<WalletController> Function() bootstrap;
@@ -215,8 +259,8 @@ class _WalletBootstrapState extends State<_WalletBootstrap> {
   }
 
   void _retry() => setState(() {
-        _controller = widget.bootstrap();
-      });
+    _controller = widget.bootstrap();
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -224,7 +268,11 @@ class _WalletBootstrapState extends State<_WalletBootstrap> {
       future: _controller,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return _BootstrapErrorApp(localeController: widget.localeController, onRetry: _retry);
+          return _BootstrapErrorApp(
+            localeController: widget.localeController,
+            error: snapshot.error,
+            onRetry: _retry,
+          );
         }
         final controller = snapshot.data;
         if (controller == null) return const ColoredBox(color: SignerColors.bg);
@@ -248,9 +296,14 @@ class _WalletBootstrapState extends State<_WalletBootstrap> {
 /// own minimal MaterialApp because it renders outside [KtWalletApp] (there is
 /// no Directionality/l10n above it otherwise).
 class _BootstrapErrorApp extends StatelessWidget {
-  const _BootstrapErrorApp({required this.localeController, required this.onRetry});
+  const _BootstrapErrorApp({
+    required this.localeController,
+    required this.error,
+    required this.onRetry,
+  });
 
   final LocaleController localeController;
+  final Object? error;
   final VoidCallback onRetry;
 
   @override
@@ -266,12 +319,16 @@ class _BootstrapErrorApp extends StatelessWidget {
         theme: ThemeData(
           fontFamily: 'Inter',
           brightness: Brightness.dark,
-          colorScheme: ColorScheme.fromSeed(seedColor: WalletColors.accent, brightness: Brightness.dark),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: WalletColors.accent,
+            brightness: Brightness.dark,
+          ),
           scaffoldBackgroundColor: SignerColors.bg,
         ),
         home: Builder(
           builder: (context) {
             final l10n = AppLocalizations.of(context);
+            final cryptoUnavailable = error is CryptoUnavailableException;
             return Scaffold(
               backgroundColor: SignerColors.bg,
               body: SafeArea(
@@ -281,17 +338,40 @@ class _BootstrapErrorApp extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Icon(Icons.error_outline, size: 48, color: SignerColors.text2),
+                      const Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: SignerColors.text2,
+                      ),
                       const SizedBox(height: 16),
-                      Text(l10n.walletLoadErrorTitle,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: SignerColors.text)),
+                      Text(
+                        cryptoUnavailable
+                            ? l10n.cryptoUnavailableTitle
+                            : l10n.walletLoadErrorTitle,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: SignerColors.text,
+                        ),
+                      ),
                       const SizedBox(height: 8),
-                      Text(l10n.walletLoadErrorDesc,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 13, height: 1.6, color: SignerColors.text2)),
+                      Text(
+                        cryptoUnavailable
+                            ? l10n.cryptoUnavailableDesc
+                            : l10n.walletLoadErrorDesc,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          height: 1.6,
+                          color: SignerColors.text2,
+                        ),
+                      ),
                       const SizedBox(height: 24),
-                      KtPrimaryButton(label: l10n.actionRetry, onPressed: onRetry),
+                      KtPrimaryButton(
+                        label: l10n.actionRetry,
+                        onPressed: onRetry,
+                      ),
                     ],
                   ),
                 ),
@@ -307,7 +387,11 @@ class _BootstrapErrorApp extends StatelessWidget {
 /// Minimal MaterialApp hosting the first-launch device-mode picker: dark theme
 /// consistent with the ui_kit design system, full l10n via kt_wallet's ARBs.
 class ModeSelectApp extends StatelessWidget {
-  const ModeSelectApp({super.key, required this.localeController, required this.modeController});
+  const ModeSelectApp({
+    super.key,
+    required this.localeController,
+    required this.modeController,
+  });
 
   final LocaleController localeController;
   final DeviceModeController modeController;
@@ -327,10 +411,16 @@ class ModeSelectApp extends StatelessWidget {
           theme: ThemeData(
             fontFamily: 'Inter',
             brightness: Brightness.dark,
-            colorScheme: ColorScheme.fromSeed(seedColor: WalletColors.accent, brightness: Brightness.dark),
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: WalletColors.accent,
+              brightness: Brightness.dark,
+            ),
             scaffoldBackgroundColor: SignerColors.bg,
           ),
-          home: KtDeviceChrome(mockStatusBar: false, child: ModeSelectScreen(onSelect: modeController.setMode)),
+          home: KtDeviceChrome(
+            mockStatusBar: false,
+            child: ModeSelectScreen(onSelect: modeController.setMode),
+          ),
         ),
       ),
     );
@@ -351,18 +441,36 @@ class ModeSelectScreen extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         backgroundColor: SignerColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(l10n.modeSignerConfirmTitle,
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: SignerColors.text)),
-        content: Text(l10n.modeSignerConfirmBody,
-            style: const TextStyle(fontSize: 14, height: 1.6, color: SignerColors.text2)),
+        title: Text(
+          l10n.modeSignerConfirmTitle,
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color: SignerColors.text,
+          ),
+        ),
+        content: Text(
+          l10n.modeSignerConfirmBody,
+          style: const TextStyle(
+            fontSize: 14,
+            height: 1.6,
+            color: SignerColors.text2,
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(l10n.actionCancel, style: const TextStyle(color: SignerColors.text2)),
+            child: Text(
+              l10n.actionCancel,
+              style: const TextStyle(color: SignerColors.text2),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(l10n.actionConfirm, style: const TextStyle(color: SignerColors.ok)),
+            child: Text(
+              l10n.actionConfirm,
+              style: const TextStyle(color: SignerColors.ok),
+            ),
           ),
         ],
       ),
@@ -386,20 +494,42 @@ class ModeSelectScreen extends StatelessWidget {
                 child: Container(
                   width: 64,
                   height: 64,
-                  decoration: BoxDecoration(color: WalletColors.accent, borderRadius: BorderRadius.circular(18)),
-                  child: const Icon(Icons.account_balance_wallet_outlined, size: 32, color: Color(0xFFFFFFFF)),
+                  decoration: BoxDecoration(
+                    color: WalletColors.accent,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: const Icon(
+                    Icons.account_balance_wallet_outlined,
+                    size: 32,
+                    color: Color(0xFFFFFFFF),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
               const Center(
-                child: Text('KT Wallet',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: SignerColors.text)),
+                child: Text(
+                  'KT Wallet',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: SignerColors.text,
+                  ),
+                ),
               ),
               const SizedBox(height: 40),
-              Text(l10n.modeSelectTitle,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: SignerColors.text)),
+              Text(
+                l10n.modeSelectTitle,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: SignerColors.text,
+                ),
+              ),
               const SizedBox(height: 6),
-              Text(l10n.modeSelectSubtitle, style: const TextStyle(fontSize: 13, color: SignerColors.text2)),
+              Text(
+                l10n.modeSelectSubtitle,
+                style: const TextStyle(fontSize: 13, color: SignerColors.text2),
+              ),
               const SizedBox(height: 20),
               _ModeCard(
                 icon: Icons.account_balance_wallet_outlined,
@@ -452,24 +582,50 @@ class _ModeCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: SignerColors.border),
         ),
-        child: Row(children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(color: SignerColors.surface2, borderRadius: BorderRadius.circular(12)),
-            child: Icon(icon, size: 22, color: iconColor),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: SignerColors.text)),
-              const SizedBox(height: 4),
-              Text(description, style: const TextStyle(fontSize: 12, height: 1.5, color: SignerColors.text2)),
-            ]),
-          ),
-          const SizedBox(width: 8),
-          const Icon(Icons.chevron_right, size: 18, color: SignerColors.text2),
-        ]),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: SignerColors.surface2,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, size: 22, color: iconColor),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: SignerColors.text,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      height: 1.5,
+                      color: SignerColors.text2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: SignerColors.text2,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -481,8 +637,8 @@ class KtWalletApp extends StatefulWidget {
     WalletController? controller,
     LocaleController? localeController,
     this.initialLocation = '/',
-  })  : controller = controller ?? _seedController(),
-        localeController = localeController ?? LocaleController();
+  }) : controller = controller ?? _seedController(),
+       localeController = localeController ?? LocaleController();
 
   final WalletController controller;
   final LocaleController localeController;
@@ -544,12 +700,15 @@ class _KtWalletAppState extends State<KtWalletApp> {
               child: NetworkScope(
                 controller: _networks,
                 child: AppPrefsScope(
-                controller: _prefs,
-                child: MarketScopeHost(
-                  wallets: widget.controller,
-                  prefs: _prefs,
-                  child: TransferSessionScope(session: _transferSession, child: child!),
-                ),
+                  controller: _prefs,
+                  child: MarketScopeHost(
+                    wallets: widget.controller,
+                    prefs: _prefs,
+                    child: TransferSessionScope(
+                      session: _transferSession,
+                      child: child!,
+                    ),
+                  ),
                 ),
               ),
             ),

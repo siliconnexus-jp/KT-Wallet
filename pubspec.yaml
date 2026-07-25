@@ -1,6 +1,7 @@
 name: kt_wallet_workspace
 description: KT Wallet monorepo (KT Wallet + Cold Signer + shared packages)
 publish_to: none
+repository: https://github.com/siliconnexus-jp/KT-Wallet
 
 environment:
   sdk: ^3.12.0
