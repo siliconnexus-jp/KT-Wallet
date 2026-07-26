@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>KT Wallet 安全加固与离线签名测试报告 · 2026-07-26</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #070912;
+      --panel: #101522;
+      --panel-2: #151c2b;
+      --line: #283249;
+      --text: #f6f7fb;
+      --muted: #a5afc1;
+      --violet: #9278ff;
+      --blue: #65a6ff;
+      --green: #54d69a;
+      --amber: #ffc266;
+      --red: #ff7a8a;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 12% -8%, #2c205c 0, transparent 31rem),
+        radial-gradient(circle at 95% 6%, #122b55 0, transparent 28rem),
+        var(--bg);
+      color: var(--text);
+      font: 15px/1.65 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { width: min(1180px, calc(100% - 32px)); margin: auto; padding: 52px 0 80px; }
+    a { color: #a9c8ff; text-underline-offset: 3px; }
+    code { color: #c6d5ff; font: 0.92em ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .hero { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; }
+    .brand { display: flex; gap: 18px; align-items: center; }
+    .brand img { width: 78px; height: 78px; border-radius: 22px; box-shadow: 0 12px 38px #0008; }
+    .eyebrow { color: #b39eff; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { font-size: clamp(32px, 5vw, 58px); line-height: 1.04; margin: 4px 0 12px; letter-spacing: -.04em; }
+    h2 { margin: 46px 0 16px; font-size: 25px; letter-spacing: -.02em; }
+    h3 { margin: 0 0 8px; font-size: 17px; }
+    p { margin: 8px 0; }
+    .muted { color: var(--muted); }
+    .stamp, .pill {
+      display: inline-flex;
+      align-items: center;
+      width: max-content;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 7px 12px;
+      color: var(--muted);
+      background: #111725cc;
+    }
+    .summary {
+      margin-top: 28px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: linear-gradient(145deg, #131a2a, #0e131f);
+      padding: 20px;
+      box-shadow: 0 16px 42px #0003;
+    }
+    .metric strong { display: block; font-size: 28px; margin-top: 2px; }
+    .ok { color: var(--green); }
+    .warn { color: var(--amber); }
+    .bad { color: var(--red); }
+    .info { color: var(--blue); }
+    .callout { border-left: 4px solid var(--violet); }
+    .callout.warn-border { border-left-color: var(--amber); }
+    .table { overflow-x: auto; border: 1px solid var(--line); border-radius: 17px; }
+    table { width: 100%; border-collapse: collapse; background: #0d121d; min-width: 760px; }
+    th, td { padding: 14px 16px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); font-size: 13px; font-weight: 650; letter-spacing: .025em; }
+    tr:last-child td { border-bottom: 0; }
+    .badge {
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: 999px;
+      background: #1b2538;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .checklist { margin: 8px 0 0; padding-left: 20px; }
+    .checklist li { margin: 8px 0; }
+    .gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    figure { margin: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); }
+    figure img { display: block; width: 100%; aspect-ratio: 9/19.6; object-fit: cover; object-position: top; background: #05070b; }
+    figcaption { padding: 13px 15px 15px; color: var(--muted); }
+    figcaption strong { display: block; color: var(--text); margin-bottom: 2px; }
+    details { border: 1px solid var(--line); border-radius: 15px; padding: 14px 16px; background: #0d121d; }
+    details + details { margin-top: 10px; }
+    summary { cursor: pointer; font-weight: 750; }
+    footer { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); }
+    @media (max-width: 900px) {
+      .summary { grid-template-columns: repeat(2, 1fr); }
+      .gallery { grid-template-columns: repeat(2, 1fr); }
+      .split { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 580px) {
+      main { width: min(100% - 20px, 1180px); padding-top: 28px; }
+      .hero { grid-template-columns: 1fr; }
+      .brand { align-items: flex-start; }
+      .brand img { width: 60px; height: 60px; border-radius: 17px; }
+      .summary, .gallery { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div class="brand">
+      <img src="../../branding/kt-wallet-logo-256.png" alt="KT Wallet logo">
+      <div>
+        <div class="eyebrow">Security hardening · Cold signing</div>
+        <h1>安全加固与离线签名报告</h1>
+        <div class="muted">Android API 35 · iOS Simulator 26.2 · Flutter / Native Wallet Core</div>
+      </div>
+    </div>
+    <div class="stamp">2026-07-26</div>
+  </header>
+
+  <section class="summary" aria-label="测试摘要">
+    <div class="card metric"><span class="muted">自动化回归</span><strong class="ok">693 passed</strong></div>
+    <div class="card metric"><span class="muted">目标链</span><strong class="ok">7 chains</strong></div>
+    <div class="card metric"><span class="muted">双端构建</span><strong class="ok">Android + iOS</strong></div>
+    <div class="card metric"><span class="muted">静态分析</span><strong class="ok">0 issues</strong></div>
+  </section>
+
+  <h2>执行结论</h2>
+  <section class="card callout">
+    <p><strong>核心实现已落地：</strong>Cold Signer 的助记词已从 Dart 安全存储迁移到原生加密层；账户导出、真实原始交易解析、原生签名、在线端密码学验签、设备安全检测、每次签名认证、动态手续费与 Pending 状态都已接入生产路径。生产入口不再预置演示钱包，也不会把模拟签名或模拟扫码当成成功。</p>
+    <p><strong>本轮验证已覆盖：</strong>Android 与 iOS 构建、七链解析/验签单测、钱包与签名器全量回归、空钱包首次启动、后台隐私封面、Android 截屏提醒及 Cold Signer <code>FLAG_SECURE</code>。</p>
+    <p><strong>验收边界：</strong>本轮没有重新为七条链各发送一轮“在线端生成 QR → 离线端签名 → 在线端验签 → 广播”的新交易。下方链上哈希是此前同项目热钱包真实测试网广播的永久基线，用于证明网络、余额、原生币和 Token 广播能力；新的离线闭环仍需准备两台设备/双模拟器与测试资产后再做最终链上验收。</p>
+  </section>
+
+  <h2>P0 / P1 实现状态</h2>
+  <div class="table">
+    <table>
+      <thead><tr><th>项目</th><th>状态</th><th>已实现与验证范围</th></tr></thead>
+      <tbody>
+        <tr><td>Cold Signer 原生密钥体系</td><td><span class="badge ok">已实现</span></td><td>随机 walletId、版本化元数据、原生 Wallet Core 保存/派生/签名；Dart 不持久化完整助记词；删除时清理密钥、PIN、认证与签名记录。</td></tr>
+        <tr><td>真实助记词导入</td><td><span class="badge ok">已实现</span></td><td>BIP-39 单词与校验和验证，支持 12/18/24 词、重复导入拒绝、原子持久化和重启恢复。</td></tr>
+        <tr><td>账户导出与在线配对</td><td><span class="badge ok">已实现</span></td><td>Ethereum、Polygon、Base、Arbitrum、Avalanche、TRON、Solana 的地址、公钥、派生路径与协议版本；在线端验证地址与公钥关系、拒绝重复或异常载荷。</td></tr>
+        <tr><td>真实离线签名</td><td><span class="badge ok">已实现</span></td><td>EVM EIP-1559、TRON protobuf、Solana legacy message；原生币、ERC-20、TRC-20、SPL Token；确认页仅展示从原始交易解析出的字段。</td></tr>
+        <tr><td>在线端密码学验签</td><td><span class="badge ok">已实现</span></td><td>EVM 恢复 signer 并核对 chainId/nonce/字段；TRON 核对 raw_data、签名和 txHash；Solana 核对 ed25519、fee payer 与 message。篡改数据失败闭合。</td></tr>
+        <tr><td>设备安全检测</td><td><span class="badge ok">已实现</span></td><td><code>safe / unsafe / unknown</code>；密码、生物识别、联网、录屏、root/jailbreak best-effort 检测；无法确认不冒充安全，unsafe 阻止签名。</td></tr>
+        <tr><td>签名器认证设置</td><td><span class="badge ok">已实现</span></td><td>生物识别可用性验证、持久化开关、旧 PIN/生物识别验证、错误退避与重启锁定、每次签名强制认证。</td></tr>
+        <tr><td>后台隐私保护</td><td><span class="badge ok">模拟器通过</span></td><td>Android API 33+ 禁止系统 Recents 截图并显示品牌封面；iOS Scene 生命周期覆盖 App Switcher；恢复时移除保护层。</td></tr>
+        <tr><td>动态手续费与预执行</td><td><span class="badge ok">已实现</span></td><td>EVM <code>estimateGas + feeHistory</code>；TRON bandwidth/energy/feeLimit；Solana blockhash/feeForMessage/simulation。估算失败不使用静态演示费。</td></tr>
+        <tr><td>Pending 状态管理</td><td><span class="badge info">基础完成</span></td><td>submitted/pending/confirmed/failed/dropped 持久化、重启续查、历史合并；EVM nonce 冲突检测、加速和取消尚未完成。</td></tr>
+        <tr><td>生产路径去演示化</td><td><span class="badge ok">已实现</span></td><td>Release 禁止模拟扫码/签名/成功交易，mock crypto 仅允许 debug + 显式测试开关；演示数据只留在测试与屏幕库。</td></tr>
+        <tr><td>发布合规基础</td><td><span class="badge ok">代码材料完成</span></td><td>package MPL-2.0 notice、iOS Privacy Manifest、隐私政策、安全风险说明、第三方许可与权限文案已补充。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>自动化与构建结果</h2>
+  <div class="table">
+    <table>
+      <thead><tr><th>模块</th><th>结果</th><th>重点覆盖</th></tr></thead>
+      <tbody>
+        <tr><td><code>packages/chains</code></td><td><span class="badge ok">132 passed</span></td><td>七链 RPC、地址、原始交易解析、EVM/TRON/Solana 真实密码学验签与篡改拒绝。</td></tr>
+        <tr><td><code>apps/kt_wallet</code></td><td><span class="badge ok">331 passed</span></td><td>在线钱包、配对、转账参数、广播、Pending、App Lock、空钱包启动与生产路由。</td></tr>
+        <tr><td><code>apps/cold_signer</code></td><td><span class="badge ok">104 passed</span></td><td>助记词、PIN、生物识别、原生 vault、导出、解析、认证、签名记录与安全检查。</td></tr>
+        <tr><td><code>packages/airgap_protocol</code></td><td><span class="badge ok">59 passed</span></td><td>AccountExport、请求/响应 payload、版本、过期、重复与异常载荷。</td></tr>
+        <tr><td><code>packages/core_crypto</code></td><td><span class="badge ok">33 passed</span></td><td>原生 API 类型、method channel、密钥生命周期与签名返回。</td></tr>
+        <tr><td><code>packages/wallet_data</code></td><td><span class="badge ok">21 passed</span></td><td>交易状态持久化与数据迁移。</td></tr>
+        <tr><td><code>packages/ui_kit</code></td><td><span class="badge ok">13 passed</span></td><td>截屏横幅显示、自动消失、关闭、连续重计时、后台排队和多语言。</td></tr>
+        <tr><td>Android debug</td><td><span class="badge ok">构建/安装通过</span></td><td>API 35 模拟器，组合 App 使用真实 Wallet Core；Cold Signer 保持 <code>FLAG_SECURE</code>。</td></tr>
+        <tr><td>iOS debug</td><td><span class="badge ok">构建/启动通过</span></td><td>KT Wallet 组合 App 与独立 Cold Signer Simulator 构建通过，Scene 隐私保护可见。</td></tr>
+        <tr><td><code>flutter analyze</code></td><td><span class="badge ok">0 issues</span></td><td>全工作区静态分析通过。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>运行时发现并修复的问题</h2>
+  <div class="split">
+    <section class="card">
+      <h3>空钱包首次启动崩溃</h3>
+      <p class="muted">清空模拟器数据后，生产模式没有演示钱包，首页旧逻辑仍对当前钱包做非空断言。</p>
+      <p><span class="badge ok">已修复</span> 空钱包直接进入“添加钱包”，App Lock 只在真实钱包存在时生效；补充回归测试防止再次出现。</p>
+    </section>
+    <section class="card">
+      <h3>Android 最近任务暴露页面</h3>
+      <p class="muted">仅在 <code>onPause</code> 添加保护视图仍存在系统快照竞态，偶发捕获 Flutter 原页面。</p>
+      <p><span class="badge ok">已修复</span> API 33+ 同时使用 <code>setRecentsScreenshotEnabled(false)</code> 和品牌保护视图，API 35 实测任务卡仅显示保护页。</p>
+    </section>
+  </div>
+
+  <h2>双端截图证据</h2>
+  <div class="gallery">
+    <figure><img src="screenshots/android-01-launch.png" alt="Android 模式选择"><figcaption><strong>Android · 启动入口</strong>在线钱包与 Cold Signer 模式明确分离。</figcaption></figure>
+    <figure><img src="screenshots/ios-01-launch.png" alt="iOS 模式选择"><figcaption><strong>iOS · 启动入口</strong>同一品牌下的双模式入口。</figcaption></figure>
+    <figure><img src="screenshots/android-04-add-wallet.png" alt="Android 空钱包添加页"><figcaption><strong>Android · 真实空钱包</strong>无演示账户，首次启动安全进入创建/导入流程。</figcaption></figure>
+    <figure><img src="screenshots/ios-03-add-wallet.png" alt="iOS 空钱包添加页"><figcaption><strong>iOS · 真实空钱包</strong>清理测试数据后正常启动，不再空指针崩溃。</figcaption></figure>
+    <figure><img src="screenshots/android-05-privacy-recents.png" alt="Android 后台隐私保护"><figcaption><strong>Android · 最近任务保护</strong>任务切换器只显示“天秤保护已启动”，不保留钱包像素。</figcaption></figure>
+    <figure><img src="screenshots/ios-04-privacy-switcher.png" alt="iOS App Switcher 隐私保护"><figcaption><strong>iOS · App Switcher</strong>Scene 生命周期品牌封面覆盖后台快照。</figcaption></figure>
+    <figure><img src="screenshots/android-06-screenshot-alert.png" alt="Android 截屏安全横幅"><figcaption><strong>Android · 截屏提醒</strong>API 35 官方截屏回调触发顶部 6 秒安全横幅。</figcaption></figure>
+    <figure><img src="screenshots/android-07-signer-flag-secure.png" alt="Android Cold Signer 黑色截图"><figcaption><strong>Android · FLAG_SECURE</strong>Cold Signer 截屏结果为黑色，这是主动阻止截图的正确结果。</figcaption></figure>
+    <figure><img src="screenshots/ios-06-cold-signer.png" alt="iOS Cold Signer 页面"><figcaption><strong>iOS · Cold Signer</strong>独立签名器启动、创建与导入入口通过。</figcaption></figure>
+  </div>
+
+  <h2>七链真实测试网广播基线</h2>
+  <section class="card callout warn-border">
+    <strong>证据归属说明：</strong>以下交易是本项目此前的真实热钱包测试网广播记录，浏览器链接可长期核验。它们证明七链 RPC、余额、原生签名/广播以及原生币和 Token 转账曾真实跑通；它们不是本轮新离线二维码闭环生成的交易。
+  </section>
+  <div class="table" style="margin-top:14px">
+    <table>
+      <thead><tr><th>测试网</th><th>原生币交易</th><th>Token 交易</th></tr></thead>
+      <tbody>
+        <tr><td>Ethereum Sepolia</td><td><a href="https://sepolia.etherscan.io/tx/0xee6b472dd40f4e48fa52aabc3cd78988229494dcac10db2237a15923acfee3b8">ETH · 0xee6b…e3b8</a></td><td><a href="https://sepolia.etherscan.io/tx/0x85235ac62f430fe9d09dd55fcebda1d3b4430911fdb2bbd83e09d53b50fb749b">Test USDT · 0x8523…749b</a></td></tr>
+        <tr><td>Polygon Amoy</td><td><a href="https://amoy.polygonscan.com/tx/0x7bbb6f784889ee179a07fafc87b7853163c7702443217e8e52fafd41fbbb20fb">POL · 0x7bbb…20fb</a></td><td><a href="https://amoy.polygonscan.com/tx/0x4ab2bac62769ce220c6afb0b7b327bfed8d3abb5e8ea27bb361ebbbfa2118041">USDC · 0x4ab2…8041</a></td></tr>
+        <tr><td>Base Sepolia</td><td><a href="https://sepolia.basescan.org/tx/0x619c53f1751038c7a8e28571faa6ed44f256c2a49473a27cc8e27a64ee20148f">ETH · 0x619c…148f</a></td><td><a href="https://sepolia.basescan.org/tx/0x898ea1dc2255ce0ee3e6d97242955aa33a02fca7b7a2b782e2848e84da7c0648">USDC · 0x898e…0648</a></td></tr>
+        <tr><td>Arbitrum Sepolia</td><td><a href="https://sepolia.arbiscan.io/tx/0xc8af1590df63ab01f2ac8c3f028122b0e00fae5c251a32981b5bb6dc035a1fa0">ETH · 0xc8af…1fa0</a></td><td><a href="https://sepolia.arbiscan.io/tx/0xd4ad6bbe7f8f8b5f8c0edea413df3eecf331892cc5d2921a8b3c7aebf3628d76">USDC · 0xd4ad…8d76</a></td></tr>
+        <tr><td>Avalanche Fuji</td><td><a href="https://testnet.snowtrace.io/tx/0x7b34b1f2d1352b1756faf8144e7375ac4946b1ff13a7e788016295cce82504bb">AVAX · 0x7b34…04bb</a></td><td><a href="https://testnet.snowtrace.io/tx/0xc683cb819c7930a9ac8aa0eb36f48947934956f2aeadc59fdac9264ec8d7c626">USDC · 0xc683…c626</a></td></tr>
+        <tr><td>TRON Nile</td><td><a href="https://nile.tronscan.org/#/transaction/e567f61b845eddb43c016ad7e3ee5215b8aef06826dca7786b834d59db4e5b6a">TRX · e567…5b6a</a></td><td><a href="https://nile.tronscan.org/#/transaction/8948f9fad8a0be218a585b2aae7d840b9c199485467e694f3b5a4c5d761adf29">USDT · 8948…df29</a></td></tr>
+        <tr><td>Solana Devnet</td><td><a href="https://explorer.solana.com/tx/XEN86X2sKFfZnsSQmzd3sw8NwG3pxGAfWLaBBad356faxMZVc1JE7ycLMz6Kf2DtsUSWUXKjta9aZjTBAGnwKtH?cluster=devnet">SOL · XEN8…wKtH</a></td><td><a href="https://explorer.solana.com/tx/23a1fJCmGCDEWWrR9oxot35C9QUuf81Ru7pkkNV8Tivo5fvsW5QdSk8pQDCdDw2zNyKaTu6NVswSgBpK5WH1yszU?cluster=devnet">USDC · 23a1…yszU</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>尚需完成的最终验收</h2>
+  <div class="split">
+    <section class="card">
+      <h3 class="warn">需要真实设备/资产</h3>
+      <ul class="checklist">
+        <li>为七链重新准备测试币和 Token，逐链执行完整的双设备离线 QR 广播闭环并生成新的 txHash。</li>
+        <li>iOS 真机验证系统截屏通知。Simulator 的 “Save Screen” 与 <code>simctl screenshot</code> 不触发 <code>userDidTakeScreenshotNotification</code>，因此本轮只能验证原生监听代码和横幅组件。</li>
+        <li>iOS 真机覆盖控制中心、电话遮挡、Home、锁屏和 App Switcher，并观察恢复时是否存在单帧敏感内容。</li>
+        <li>root/jailbreak、真实录屏和设备完整性失败场景需在对应实体设备上验证失败闭合。</li>
+      </ul>
+    </section>
+    <section class="card">
+      <h3 class="warn">明确尚未实现</h3>
+      <ul class="checklist">
+        <li>EVM Pending 交易的加速与取消，以及完整 nonce 冲突交互。</li>
+        <li>Solana SPL Token 收款方不存在 ATA 时自动创建 ATA；当前会安全拒绝并提示先建立 Token Account。</li>
+        <li>用户已排除的原生端 CI、正式发布签名、WalletConnect/DApp、NFT、Swap、质押。</li>
+      </ul>
+    </section>
+  </div>
+
+  <h2>安全判定原则</h2>
+  <details open>
+    <summary>签名成功不等于广播或确认成功</summary>
+    <p class="muted">App 分开记录 signed、submitted、pending、confirmed、failed、dropped。只有链上回执达到确认条件才显示确认成功。</p>
+  </details>
+  <details>
+    <summary>无法检测不等于安全</summary>
+    <p class="muted">原生能力不可用或权限不足时状态为 unknown；签名确认页不会用默认绿色“安全”代替真实检测结果。</p>
+  </details>
+  <details>
+    <summary>Android Cold Signer 不为截屏提醒降低保护</summary>
+    <p class="muted"><code>FLAG_SECURE</code> 优先阻止截屏，因此不会有“成功截屏”事件；黑色截图是预期安全行为。</p>
+  </details>
+
+  <footer>
+    KT Wallet · package <code>cc.siliconnexus.ktwallet.coldsigner</code><br>
+    报告仅使用测试网证据，不包含助记词、私钥、PIN、访问令牌或其他秘密。
+  </footer>
+</main>
+</body>
+</html>

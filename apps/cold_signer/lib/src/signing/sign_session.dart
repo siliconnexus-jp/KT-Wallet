@@ -5,17 +5,7 @@
 /// UI drives it with events and renders [state].
 library;
 
-enum SignState {
-  scanning,
-  validating,
-  riskBlocked,
-  reviewing,
-  rejected,
-  authenticating,
-  signed,
-  resultDisplaying,
-  voided,
-}
+enum SignState { scanning, validating, riskBlocked, reviewing, rejected, authenticating, signed, resultDisplaying, voided }
 
 enum SignEvent {
   framesComplete, // aggregator assembled a payload
@@ -85,11 +75,7 @@ const signRecordStatus = {
 };
 
 /// States with no outgoing legal transition (the session is finished).
-const signTerminalStates = {
-  SignState.riskBlocked,
-  SignState.rejected,
-  SignState.voided,
-};
+const signTerminalStates = {SignState.riskBlocked, SignState.rejected, SignState.voided};
 
 /// Stateful driver that tracks the current state.
 class SignSession {

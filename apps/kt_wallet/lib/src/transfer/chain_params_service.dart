@@ -38,6 +38,16 @@ class EvmChainParams {
   };
 }
 
+class EvmNonceState {
+  const EvmNonceState({required this.confirmed, required this.pending});
+
+  /// First nonce not yet consumed by a mined transaction.
+  final int confirmed;
+
+  /// First nonce not already represented in the node's pending pool.
+  final int pending;
+}
+
 /// Fetches real chain-state parameters over the tested `chains/rpc` clients.
 /// The transport is injectable (production defaults to the http-backed one,
 /// which owns the 10s request timeouts) and endpoints resolve through the
@@ -111,6 +121,51 @@ class ChainParamsService {
       nonce: results[0] as int,
       fees: _applyChainFeeFloor(chain, results[1] as GasFeeEstimate),
     );
+  }
+
+  Future<BigInt> estimateEvmGas(
+    Chain chain, {
+    required String from,
+    required String to,
+    required BigInt value,
+    required String data,
+  }) {
+    if (chain != Chain.ethereum &&
+        chain != Chain.polygon &&
+        chain != Chain.base &&
+        chain != Chain.arbitrum &&
+        chain != Chain.avalanche) {
+      throw ArgumentError('not an EVM chain: $chain');
+    }
+    return EvmRpc(
+      url: _endpoints(rpcCoinForChain(chain)),
+      transport: _jsonRpc,
+    ).estimateGas(from: from, to: to, value: value, data: data);
+  }
+
+  /// Fetches both mined and mempool nonce views from the same direct node.
+  /// Replacement flows use [EvmNonceState.confirmed] to reject an attempt
+  /// after the original nonce has already been consumed on-chain.
+  Future<EvmNonceState> fetchEvmNonceState(
+    Chain chain,
+    String fromAddress,
+  ) async {
+    if (chain != Chain.ethereum &&
+        chain != Chain.polygon &&
+        chain != Chain.base &&
+        chain != Chain.arbitrum &&
+        chain != Chain.avalanche) {
+      throw ArgumentError('not an EVM chain: $chain');
+    }
+    final rpc = EvmRpc(
+      url: _endpoints(rpcCoinForChain(chain)),
+      transport: _jsonRpc,
+    );
+    final values = await Future.wait<int>([
+      rpc.getConfirmedNonce(fromAddress),
+      rpc.getNonce(fromAddress),
+    ]);
+    return EvmNonceState(confirmed: values[0], pending: values[1]);
   }
 }
 

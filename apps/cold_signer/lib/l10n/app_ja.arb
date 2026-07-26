@@ -110,7 +110,7 @@
   "backToHome": "ホームへ戻る",
   "viewRawTxData": "生の取引データを表示",
   "signingBlocked": "署名を禁止しました",
-  "signingBlockedDesc": "この取引には安全に解析できない内容が含まれます。Cold Signerは資産保護のため署名を拒否しました。",
+  "signingBlockedDesc": "この取引には安全に解析できない内容が含まれます。KT Wallet Cold Signerは資産保護のため署名を拒否しました。",
   "unknownContractCallDetected": "未知のコントラクト呼び出しを検出：{method}",
   "unknownContractCallDesc": "V1はネイティブ通貨とトークンの送金のみ対応します。approve・permit などの承認系呼び出しはすべて拒否します。",
 

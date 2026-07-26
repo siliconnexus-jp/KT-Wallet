@@ -15,8 +15,9 @@ Future<void> _openHome(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('create new wallet from switcher adds a wallet and selects it',
-      (tester) async {
+  testWidgets('create new wallet from switcher adds a wallet and selects it', (
+    tester,
+  ) async {
     await _openHome(tester);
 
     // Open the switcher via the header pill, then the add-wallet screen.
@@ -36,11 +37,15 @@ void main() {
     expect(find.text('12'), findsOneWidget);
     await tester.tap(find.text('我已手写备份，开始校验'));
     await tester.pumpAndSettle();
-    expect(find.text('第 4 个单词是？'), findsOneWidget); // real backup-verify challenge
+    expect(
+      find.text('第 4 个单词是？'),
+      findsOneWidget,
+    ); // real backup-verify challenge
   });
 
-  testWidgets('delete wallet from manage screen removes it from the list',
-      (tester) async {
+  testWidgets('delete wallet from manage screen removes it from the list', (
+    tester,
+  ) async {
     await _openHome(tester);
 
     await tester.tap(find.text('日常钱包'));
@@ -53,7 +58,7 @@ void main() {
     final deleteIcons = find.byIcon(Icons.delete_outline);
     await tester.tap(deleteIcons.at(1));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(TextButton, '删除'));
+    await tester.tap(find.byKey(const ValueKey('kt-dialog-confirm')));
     await tester.pumpAndSettle();
 
     expect(find.text('共 2 个钱包 · 上限 20 个'), findsOneWidget);

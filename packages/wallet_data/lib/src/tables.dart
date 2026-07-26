@@ -25,9 +25,23 @@ enum TxStatus {
   confirmed,
   failed,
   expired,
+
+  /// Accepted by the app for submission, before a node has answered.
+  submitted,
+
+  /// Accepted by a node but not yet confirmed on-chain.
+  pending,
+
+  /// No longer visible to the network after the pending timeout.
+  dropped,
+
+  /// Superseded by another transaction using the same EVM nonce.
+  replaced,
 }
 
 enum SignMode { local, airgap }
+
+enum TxReplacementKind { speedUp, cancel }
 
 class Wallets extends Table {
   TextColumn get id => text()();
@@ -100,6 +114,19 @@ class Transactions extends Table {
   TextColumn get memo => text().nullable()();
   IntColumn get createdAt => integer()();
   IntColumn get broadcastAt => integer().nullable()();
+
+  /// EVM replacement metadata. Quantities remain decimal strings so nonce and
+  /// fees never lose precision. They are null for TRON, Solana and legacy rows.
+  TextColumn get nonce => text().nullable()();
+  TextColumn get maxPriorityFeeRaw => text().nullable()();
+  TextColumn get maxFeeRaw => text().nullable()();
+  TextColumn get gasLimitRaw => text().nullable()();
+
+  /// Replacement lineage. A successfully accepted replacement sets the
+  /// original row's [replacedById]; the new row points back with [replacesId].
+  TextColumn get replacesId => text().nullable()();
+  TextColumn get replacedById => text().nullable()();
+  IntColumn get replacementKind => intEnum<TxReplacementKind>().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

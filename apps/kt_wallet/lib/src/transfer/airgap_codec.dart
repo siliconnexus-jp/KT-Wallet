@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:chains/chains.dart';
 import 'package:core_crypto/core_crypto.dart' show ChainAddresses;
+import 'package:flutter/foundation.dart' show kReleaseMode;
 
 import 'transfer_draft.dart';
 
@@ -182,7 +183,9 @@ Uint8List rawTxFor(
   BigInt? nonce,
   BigInt? maxPriorityFeePerGas,
   BigInt? maxFeePerGas,
+  BigInt? gasLimit,
   int? evmChainId,
+  Uint8List? preparedRawTx,
 }) {
   if (draft.chain == Chain.ethereum ||
       draft.chain == Chain.polygon ||
@@ -208,13 +211,16 @@ Uint8List rawTxFor(
       maxFeePerGas: maxFeePerGas ?? BigInt.from(40) * gwei,
       // Arbitrum accounts for L1 posting overhead in its gas estimate, so a
       // plain 21,000 limit is rejected as "intrinsic gas too low".
-      gasLimit: BigInt.from(
+      gasLimit: gasLimit ?? BigInt.from(
         draft.operation == TxOperation.nativeTransfer
             ? (draft.chain == Chain.arbitrum ? 100000 : 21000)
             : (draft.chain == Chain.arbitrum ? 150000 : 65000),
       ),
     );
     return tx.encodeUnsigned();
+  }
+  if (preparedRawTx != null) {
+    return Uint8List.fromList(preparedRawTx);
   }
   return _jsonRawTx(draft, from: from);
 }
@@ -269,8 +275,10 @@ SignRequest buildSignRequest({
   BigInt? nonce,
   BigInt? maxPriorityFeePerGas,
   BigInt? maxFeePerGas,
+  BigInt? gasLimit,
   int? evmChainId,
   String? networkLabel,
+  Uint8List? preparedRawTx,
 }) {
   final live = draft != null;
   final d = draft ?? demoDraft;
@@ -295,7 +303,9 @@ SignRequest buildSignRequest({
       nonce: nonce,
       maxPriorityFeePerGas: maxPriorityFeePerGas,
       maxFeePerGas: maxFeePerGas,
+      gasLimit: gasLimit,
       evmChainId: evmChainId,
+      preparedRawTx: preparedRawTx,
     ),
     summary: {
       SummaryKeys.network: networkLabel ?? d.networkLabel,
@@ -390,6 +400,51 @@ SignResult verifySignResultPayload(
     throw StateError('sign-result coin mismatch');
   }
   return decoded;
+}
+
+/// Production verification gate. In addition to protocol correlation it
+/// proves that the signature belongs to the claimed account and signs the
+/// exact raw transaction originally shown by the online wallet.
+Future<SignResult> verifySignResultCryptographically(
+  Uint8List payload, {
+  required SignRequest expected,
+  String? expectedSigner,
+}) async {
+  final result = verifySignResultPayload(payload, expected: expected);
+  if (BroadcastSignatureMarkers.isDemo(result.signedTx)) {
+    if (kReleaseMode) {
+      throw StateError('simulated signatures are disabled in release builds');
+    }
+    return result;
+  }
+  final verified = await verifySignedTransaction(
+    chain: chainForCoin(expected.coin),
+    unsignedTx: expected.rawTx,
+    signedTx: result.signedTx,
+    claimedSigner: result.signer,
+  );
+  if (verified.txHash != result.txHash) {
+    throw StateError('sign-result transaction hash mismatch');
+  }
+  if (expectedSigner != null &&
+      verified.signer.toLowerCase() != expectedSigner.toLowerCase()) {
+    throw StateError('sign-result signer does not match paired account');
+  }
+  return result;
+}
+
+/// Shared marker check kept here so both the QR verifier and broadcaster
+/// reject the same test-only envelope without importing one another.
+abstract final class BroadcastSignatureMarkers {
+  static final _demoPrefix = Uint8List.fromList(utf8.encode('SIGNED-V1:'));
+
+  static bool isDemo(Uint8List signedTx) {
+    if (signedTx.length < _demoPrefix.length) return false;
+    for (var i = 0; i < _demoPrefix.length; i++) {
+      if (signedTx[i] != _demoPrefix[i]) return false;
+    }
+    return true;
+  }
 }
 
 // ---- formatting helpers --------------------------------------------------------

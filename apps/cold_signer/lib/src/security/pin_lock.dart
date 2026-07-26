@@ -8,21 +8,14 @@ import 'secure_vault.dart';
 
 /// PBKDF2-HMAC-SHA256 (RFC 2898). package:crypto has no PBKDF2, so the loop
 /// is implemented here over its HMAC primitive.
-Uint8List pbkdf2Sha256({
-  required List<int> password,
-  required List<int> salt,
-  required int iterations,
-  int length = 32,
-}) {
+Uint8List pbkdf2Sha256({required List<int> password, required List<int> salt, required int iterations, int length = 32}) {
   if (iterations < 1) throw ArgumentError.value(iterations, 'iterations');
   final hmac = Hmac(sha256, password);
   final blockCount = (length / 32).ceil();
   final out = BytesBuilder(copy: false);
   for (var block = 1; block <= blockCount; block++) {
     // U1 = HMAC(password, salt || INT_32_BE(block))
-    var u = hmac
-        .convert([...salt, block >> 24, (block >> 16) & 0xff, (block >> 8) & 0xff, block & 0xff])
-        .bytes;
+    var u = hmac.convert([...salt, block >> 24, (block >> 16) & 0xff, (block >> 8) & 0xff, block & 0xff]).bytes;
     final t = Uint8List.fromList(u);
     for (var i = 1; i < iterations; i++) {
       u = hmac.convert(u).bytes;
@@ -42,11 +35,8 @@ class PinVerdict {
   const PinVerdict._(this.kind, {this.failedAttempts = 0, this.lockRemaining});
 
   const PinVerdict.ok() : this._(PinVerdictKind.ok);
-  const PinVerdict.wrong(int failedAttempts)
-      : this._(PinVerdictKind.wrong, failedAttempts: failedAttempts);
-  const PinVerdict.locked(Duration remaining, int failedAttempts)
-      : this._(PinVerdictKind.locked,
-            failedAttempts: failedAttempts, lockRemaining: remaining);
+  const PinVerdict.wrong(int failedAttempts) : this._(PinVerdictKind.wrong, failedAttempts: failedAttempts);
+  const PinVerdict.locked(Duration remaining, int failedAttempts) : this._(PinVerdictKind.locked, failedAttempts: failedAttempts, lockRemaining: remaining);
 
   final PinVerdictKind kind;
 
@@ -70,13 +60,7 @@ class PinVerdict {
 /// (30 s → 60 s → 120 s → …). Both the counter and the lock deadline are
 /// persisted, so restarting the app does NOT reset the lockout.
 class PinLock {
-  PinLock(
-    this._storage, {
-    this.iterations = 100000,
-    Random? random,
-    DateTime Function()? clock,
-  })  : _random = random ?? Random.secure(),
-        _now = clock ?? DateTime.now;
+  PinLock(this._storage, {this.iterations = 100000, Random? random, DateTime Function()? clock}) : _random = random ?? Random.secure(), _now = clock ?? DateTime.now;
 
   final VaultStorage _storage;
 
@@ -92,23 +76,13 @@ class PinLock {
   static const baseLockout = Duration(seconds: 30);
 
   /// Whether a PIN has been enrolled.
-  Future<bool> isSet() async =>
-      await _storage.read(SecureVault.pinKey) != null;
+  Future<bool> isSet() async => await _storage.read(SecureVault.pinKey) != null;
 
   /// Enrolls (or replaces) the PIN and clears any lockout state.
   Future<void> setPin(String pin) async {
-    final salt = Uint8List.fromList(
-        List.generate(saltLength, (_) => _random.nextInt(256)));
-    final hash = pbkdf2Sha256(
-        password: utf8.encode(pin), salt: salt, iterations: iterations);
-    await _storage.write(
-        SecureVault.pinKey,
-        jsonEncode({
-          'algo': 'pbkdf2-hmac-sha256',
-          'salt': base64Encode(salt),
-          'hash': base64Encode(hash),
-          'iterations': iterations,
-        }));
+    final salt = Uint8List.fromList(List.generate(saltLength, (_) => _random.nextInt(256)));
+    final hash = pbkdf2Sha256(password: utf8.encode(pin), salt: salt, iterations: iterations);
+    await _storage.write(SecureVault.pinKey, jsonEncode({'algo': 'pbkdf2-hmac-sha256', 'salt': base64Encode(salt), 'hash': base64Encode(hash), 'iterations': iterations}));
     await _storage.delete(SecureVault.pinLockoutKey);
   }
 
@@ -133,11 +107,7 @@ class PinLock {
       return PinVerdict.locked(lockedUntil.difference(now), fails);
     }
 
-    final hash = pbkdf2Sha256(
-      password: utf8.encode(pin),
-      salt: base64Decode(record['salt']! as String),
-      iterations: record['iterations']! as int,
-    );
+    final hash = pbkdf2Sha256(password: utf8.encode(pin), salt: base64Decode(record['salt']! as String), iterations: record['iterations']! as int);
     if (_constantTimeEquals(hash, base64Decode(record['hash']! as String))) {
       await _storage.delete(SecureVault.pinLockoutKey);
       return const PinVerdict.ok();
@@ -150,15 +120,8 @@ class PinLock {
       final factor = 1 << (newFails - lockoutThreshold);
       until = now.add(baseLockout * factor);
     }
-    await _storage.write(
-        SecureVault.pinLockoutKey,
-        jsonEncode({
-          'fails': newFails,
-          if (until != null) 'lockedUntil': until.millisecondsSinceEpoch,
-        }));
-    return until == null
-        ? PinVerdict.wrong(newFails)
-        : PinVerdict.locked(until.difference(now), newFails);
+    await _storage.write(SecureVault.pinLockoutKey, jsonEncode({'fails': newFails, if (until != null) 'lockedUntil': until.millisecondsSinceEpoch}));
+    return until == null ? PinVerdict.wrong(newFails) : PinVerdict.locked(until.difference(now), newFails);
   }
 
   /// The currently pending lockout, if any (for pre-flight UI checks).
@@ -174,10 +137,7 @@ class PinLock {
     if (raw == null) return (0, null);
     final json = (jsonDecode(raw) as Map).cast<String, Object?>();
     final untilMs = json['lockedUntil'] as int?;
-    return (
-      json['fails']! as int,
-      untilMs == null ? null : DateTime.fromMillisecondsSinceEpoch(untilMs),
-    );
+    return (json['fails']! as int, untilMs == null ? null : DateTime.fromMillisecondsSinceEpoch(untilMs));
   }
 
   static bool _constantTimeEquals(List<int> a, List<int> b) {

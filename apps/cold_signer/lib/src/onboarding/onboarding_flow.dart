@@ -26,23 +26,9 @@ class OnboardingError implements Exception {
 
 /// Ordered steps for each mode; navigation only moves along this list.
 List<OnboardingStep> stepsFor(OnboardingMode mode) => switch (mode) {
-      OnboardingMode.create => const [
-          OnboardingStep.welcome,
-          OnboardingStep.securityWarning,
-          OnboardingStep.showMnemonic,
-          OnboardingStep.verifyMnemonic,
-          OnboardingStep.setPassword,
-          OnboardingStep.setBiometric,
-          OnboardingStep.done,
-        ],
-      OnboardingMode.importExisting => const [
-          OnboardingStep.welcome,
-          OnboardingStep.importInput,
-          OnboardingStep.setPassword,
-          OnboardingStep.setBiometric,
-          OnboardingStep.done,
-        ],
-    };
+  OnboardingMode.create => const [OnboardingStep.welcome, OnboardingStep.securityWarning, OnboardingStep.showMnemonic, OnboardingStep.verifyMnemonic, OnboardingStep.setPassword, OnboardingStep.setBiometric, OnboardingStep.done],
+  OnboardingMode.importExisting => const [OnboardingStep.welcome, OnboardingStep.importInput, OnboardingStep.setPassword, OnboardingStep.setBiometric, OnboardingStep.done],
+};
 
 /// Linear flow controller: forbids skipping ahead; `back` returns to the prior
 /// step; `skipBiometric` at the biometric step jumps to done (password-only).

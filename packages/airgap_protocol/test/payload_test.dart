@@ -13,7 +13,12 @@ void main() {
         walletName: '主钱包',
         accounts: [
           AccountRecord(
-              coin: 60, address: '0xabc', path: "m/44'/60'/0'/0/0", index: 0),
+            coin: 60,
+            address: '0xabc',
+            path: "m/44'/60'/0'/0/0",
+            index: 0,
+            publicKey: Uint8List.fromList([4, ...List<int>.filled(64, 1)]),
+          ),
           AccountRecord(
               coin: 195, address: 'Tabc', path: "m/44'/195'/0'/0/0", index: 0),
         ],
@@ -22,6 +27,7 @@ void main() {
       expect(decoded.walletId, 'WLT-3E8A91');
       expect(decoded.accounts, hasLength(2));
       expect(decoded.accounts[1].coin, 195);
+      expect(decoded.accounts.first.publicKey, hasLength(65));
     });
 
     test('accounts count bounds enforced (1..8)', () {

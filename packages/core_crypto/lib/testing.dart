@@ -193,6 +193,27 @@ class MockCoreCrypto implements CoreCrypto {
   }
 
   @override
+  Future<ChainPublicKeys> derivePublicKeys(String walletId) async {
+    CoreCryptoValidation.checkWalletId(walletId);
+    final wallet = _walletOrThrow(walletId);
+    Uint8List key(String tag, int length) {
+      final hex = _hexStream('${wallet.mnemonic}:$tag:pub', length * 2);
+      return Uint8List.fromList([
+        for (var i = 0; i < hex.length; i += 2)
+          int.parse(hex.substring(i, i + 2), radix: 16),
+      ]);
+    }
+
+    final evm = Uint8List.fromList([4, ...key('evm', 64)]);
+    return ChainPublicKeys(
+      eth: evm,
+      polygon: evm,
+      tron: Uint8List.fromList([4, ...key('tron', 64)]),
+      solana: key('solana', 32),
+    );
+  }
+
+  @override
   Future<SignedTransaction> signTransaction({
     required String walletId,
     required Coin coin,

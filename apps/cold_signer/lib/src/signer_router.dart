@@ -22,7 +22,10 @@ final signerRegistry = <String, (String, WidgetBuilder)>{
   'C5 离线首页': ('/home', (c) => const SignerHomeScreen()),
   // The gallery/golden entry keeps the canned design snapshot so existing
   // goldens stay byte-identical; the live route is overridden below.
-  'C2 离线安全检查': ('/security-check', (c) => const SignerSecurityCheckPreviewScreen()),
+  'C2 离线安全检查': (
+    '/security-check',
+    (c) => const SignerSecurityCheckPreviewScreen(),
+  ),
   'C6 扫描交易': ('/scan', (c) => const SignerScanScreen()),
   'C7 交易解析确认': ('/parse', (c) => const SignerParseScreen()),
   'C17 风险警告': ('/risk', (c) => const SignerRiskScreen()),
@@ -42,6 +45,11 @@ SignRequest? _requestExtra(GoRouterState state) {
   return extra is SignRequest ? extra : null;
 }
 
+SignResult? _resultExtra(GoRouterState state) {
+  final extra = state.extra;
+  return extra is SignResult ? extra : null;
+}
+
 /// Live builders that replace a registry entry's design-snapshot builder when
 /// the app actually navigates there (the registry itself is the golden/gallery
 /// baseline and must keep rendering the original snapshot). Unlike the
@@ -53,49 +61,71 @@ final _liveOverrides = <String, Widget Function(BuildContext, GoRouterState)>{
   // shown and challenged; otherwise (gallery navigation, backup spot-check)
   // both fall back to the canned demo words — identical to the snapshot.
   '/mnemonic-show': (c, s) => SignerMnemonicShowScreen(
-      words: SignerWalletScope.maybeOf(c)?.pendingMnemonic),
+    words: SignerWalletScope.maybeOf(c)?.pendingMnemonic,
+  ),
   '/mnemonic-verify': (c, s) => SignerMnemonicVerifyScreen(
-      challenge: SignerWalletScope.maybeOf(c)?.buildVerifyChallenge()),
+    challenge: SignerWalletScope.maybeOf(c)?.buildVerifyChallenge(),
+  ),
   '/parse': (c, s) => SignerParseScreen(request: _requestExtra(s)),
   '/auth': (c, s) => SignerAuthScreen(request: _requestExtra(s)),
-  '/result-qr': (c, s) => SignerResultQrScreen(request: _requestExtra(s)),
+  '/result-qr': (c, s) =>
+      SignerResultQrScreen(request: _requestExtra(s), result: _resultExtra(s)),
 };
 
 GoRouter buildSignerRouter({String initialLocation = '/'}) => GoRouter(
-      initialLocation: initialLocation,
-      routes: [
-        GoRoute(path: '/', builder: (c, s) => const _Gallery()),
-        for (final entry in signerRegistry.entries)
-          GoRoute(
-            path: entry.value.$1,
-            builder: (c, s) {
-              final live = _liveOverrides[entry.value.$1];
-              return live == null ? entry.value.$2(c) : live(c, s);
-            },
-          ),
-      ],
-    );
+  initialLocation: initialLocation,
+  routes: [
+    GoRoute(path: '/', builder: (c, s) => const _Gallery()),
+    for (final entry in signerRegistry.entries)
+      GoRoute(
+        path: entry.value.$1,
+        builder: (c, s) {
+          final live = _liveOverrides[entry.value.$1];
+          return live == null ? entry.value.$2(c) : live(c, s);
+        },
+      ),
+  ],
+);
 
 class _Gallery extends StatelessWidget {
   const _Gallery();
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: SignerColors.bg,
-        appBar: AppBar(title: const Text('Cold Signer — 屏幕库', style: TextStyle(color: SignerColors.text)), backgroundColor: SignerColors.surface),
-        body: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            for (final entry in signerRegistry.entries)
-              Card(
-                color: SignerColors.surface,
-                child: ListTile(
-                  title: Text(entry.key, style: const TextStyle(color: SignerColors.text)),
-                  subtitle: Text(entry.value.$1, style: const TextStyle(fontFamily: KtFonts.mono, fontSize: 12, color: SignerColors.text2)),
-                  trailing: const Icon(Icons.chevron_right, color: SignerColors.text2),
-                  onTap: () => context.go(entry.value.$1),
+    backgroundColor: SignerColors.bg,
+    appBar: AppBar(
+      title: const Text(
+        'KT Wallet Cold Signer — 屏幕库',
+        style: TextStyle(color: SignerColors.text),
+      ),
+      backgroundColor: SignerColors.surface,
+    ),
+    body: ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        for (final entry in signerRegistry.entries)
+          Card(
+            color: SignerColors.surface,
+            child: ListTile(
+              title: Text(
+                entry.key,
+                style: const TextStyle(color: SignerColors.text),
+              ),
+              subtitle: Text(
+                entry.value.$1,
+                style: const TextStyle(
+                  fontFamily: KtFonts.mono,
+                  fontSize: 12,
+                  color: SignerColors.text2,
                 ),
               ),
-          ],
-        ),
-      );
+              trailing: const Icon(
+                Icons.chevron_right,
+                color: SignerColors.text2,
+              ),
+              onTap: () => context.go(entry.value.$1),
+            ),
+          ),
+      ],
+    ),
+  );
 }

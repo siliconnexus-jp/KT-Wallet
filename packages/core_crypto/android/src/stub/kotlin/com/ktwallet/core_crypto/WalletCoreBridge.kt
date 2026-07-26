@@ -27,6 +27,7 @@ object WalletCoreBridge {
     fun suggest(prefix: String): List<String> = throw UnavailableException()
     fun entropyFromMnemonic(mnemonic: String): ByteArray = throw UnavailableException()
     fun addresses(entropy: ByteArray): Map<String, String> = throw UnavailableException()
+    fun publicKeys(entropy: ByteArray): Map<String, ByteArray> = throw UnavailableException()
     fun exportMnemonic(entropy: ByteArray): String = throw UnavailableException()
 
     data class Signed(val signedTx: ByteArray, val txHash: String)

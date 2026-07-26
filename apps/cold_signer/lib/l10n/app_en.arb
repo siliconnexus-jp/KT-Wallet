@@ -110,7 +110,7 @@
   "backToHome": "Back to home",
   "viewRawTxData": "View raw transaction data",
   "signingBlocked": "Signing blocked",
-  "signingBlockedDesc": "This transaction contains content that can't be safely parsed. Cold Signer refused to sign to protect your assets.",
+  "signingBlockedDesc": "This transaction contains content that can't be safely parsed. KT Wallet Cold Signer refused to sign to protect your assets.",
   "unknownContractCallDetected": "Unknown contract call detected: {method}",
   "unknownContractCallDesc": "V1 supports only native-coin and token transfers. Authorization calls like approve and permit are always rejected.",
 

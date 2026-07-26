@@ -81,8 +81,9 @@ abstract final class Addresses {
   // ---- TRON (Base58Check, 0x41 prefix) ------------------------------------
 
   static AddressValidation _validateTron(String a) {
-    if (!a.startsWith('T'))
+    if (!a.startsWith('T')) {
       return AddressValidation.bad('TRON address starts with T');
+    }
     Uint8List decoded;
     try {
       decoded = base58Decode(a);

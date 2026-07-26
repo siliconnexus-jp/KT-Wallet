@@ -1,8 +1,7 @@
-import 'dart:ui' show PlatformDispatcher;
-
 import 'package:cold_signer/cold_signer.dart';
 import 'package:core_crypto/core_crypto.dart';
 import 'package:core_crypto/testing.dart';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -49,78 +48,27 @@ Future<void> main() async {
 /// A deterministic mock can only be enabled explicitly for simulator UI
 /// acceptance builds with `--dart-define=KT_ALLOW_MOCK_CRYPTO=true`. Normal
 /// debug/release builds fail closed when Trust Wallet Core is not linked.
-Future<WalletController> _bootstrapWallet(
-  LocaleController localeController,
-) async {
-  final l10n = await AppLocalizations.delegate.load(
-    _resolveLocale(localeController.locale),
-  );
-
+Future<WalletController> _bootstrapWallet() async {
   final db = openWalletDatabase();
-  const allowMockCrypto = bool.fromEnvironment('KT_ALLOW_MOCK_CRYPTO');
+  const requestedMockCrypto = bool.fromEnvironment('KT_ALLOW_MOCK_CRYPTO');
+  final allowMockCrypto = !kReleaseMode && requestedMockCrypto;
   final CoreCrypto crypto = allowMockCrypto
       ? MockCoreCrypto()
       : MethodChannelCoreCrypto();
   final store = WalletStore(db);
-
-  var manager = await store.load();
-  if (manager.count == 0) {
-    await _seedFirstRun(crypto, store, l10n);
-    manager = await store.load();
-  }
+  final manager = await store.load();
   return WalletController(manager, crypto: crypto, store: store);
 }
 
 /// Resolves the locale to load [AppLocalizations] for: the manual override if
 /// set, else the system locale matched against the supported set (falling back
 /// to the first supported locale).
-Locale _resolveLocale(Locale? override) {
-  if (override != null) return override;
-  final system = PlatformDispatcher.instance.locale;
-  return AppLocalizations.supportedLocales.firstWhere(
-    (l) => l.languageCode == system.languageCode,
-    orElse: () => AppLocalizations.supportedLocales.first,
-  );
-}
-
 ChainAddresses _addr(String seed) => ChainAddresses(
   eth: '0x${seed}71c8B29b3d4b79E19bE1',
   polygon: '0x${seed}71c8B29b3d4b79E19bE1',
   tron: 'T${seed}Pa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
   solana: '${seed}yKpXwMWd4qmDqVr2W',
 );
-
-/// First launch: one real hot wallet (mnemonic generated + addresses derived)
-/// plus one watch wallet, persisted, so the app opens to a populated home. Names
-/// are taken from the active language.
-Future<void> _seedFirstRun(
-  CoreCrypto crypto,
-  WalletStore store,
-  AppLocalizations l10n,
-) async {
-  final id = 'daily';
-  final mnemonic = await crypto.generateMnemonic();
-  // The first-run bootstrap happens before the app has a screen from which it
-  // can reliably complete a biometric/device-credential prompt. The mnemonic
-  // is still encrypted by an Android Keystore-backed key; interactive auth is
-  // reserved for later sensitive operations once the wallet UI is available.
-  await crypto.storeWallet(
-    walletId: id,
-    mnemonic: mnemonic,
-    requireAuth: false,
-  );
-  final addresses = await crypto.deriveAddresses(id);
-  await store.save(
-    HotWallet(
-      id: id,
-      name: l10n.walletSeedDaily,
-      avatarColor: 0xFFF59E0B,
-      addresses: addresses,
-      sortOrder: 0,
-      backedUp: true,
-    ),
-  );
-}
 
 /// In-memory demo controller for the design gallery and widget tests (no
 /// persistence). Demo wallet names stay as fixed literals — this controller
@@ -204,9 +152,7 @@ class RootApp extends StatelessWidget {
                 exitMode: modeController.clear,
                 child: _WalletBootstrap(
                   localeController: localeController,
-                  bootstrap:
-                      walletBootstrap ??
-                      () => _bootstrapWallet(localeController),
+                  bootstrap: walletBootstrap ?? _bootstrapWallet,
                 ),
               );
             case DeviceMode.signer:
@@ -270,13 +216,18 @@ class _WalletBootstrapState extends State<_WalletBootstrap> {
         // App lock: with the security-settings 应用锁 preference on, the
         // wallet stays behind a biometric lock screen (see AppLockGate for
         // the no-biometrics passthrough rationale).
+        final walletApp = KtWalletApp(
+          controller: controller,
+          localeController: widget.localeController,
+          initialLocation: controller.current == null ? '/add-wallet' : '/home',
+        );
+        // There is nothing sensitive to unlock before the first wallet is
+        // created/imported/paired. A stale persisted app-lock preference must
+        // not trap an empty production install behind biometrics.
+        if (controller.current == null) return walletApp;
         return AppLockGate(
           localeController: widget.localeController,
-          child: KtWalletApp(
-            controller: controller,
-            localeController: widget.localeController,
-            initialLocation: '/home',
-          ),
+          child: walletApp,
         );
       },
     );
@@ -429,41 +380,14 @@ class ModeSelectScreen extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: SignerColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          l10n.modeSignerConfirmTitle,
-          style: const TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-            color: SignerColors.text,
-          ),
-        ),
-        content: Text(
-          l10n.modeSignerConfirmBody,
-          style: const TextStyle(
-            fontSize: 14,
-            height: 1.6,
-            color: SignerColors.text2,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(
-              l10n.actionCancel,
-              style: const TextStyle(color: SignerColors.text2),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(
-              l10n.actionConfirm,
-              style: const TextStyle(color: SignerColors.ok),
-            ),
-          ),
-        ],
+      builder: (_) => KtConfirmDialog(
+        title: l10n.modeSignerConfirmTitle,
+        message: l10n.modeSignerConfirmBody,
+        cancelLabel: l10n.actionCancel,
+        confirmLabel: l10n.actionConfirm,
+        theme: AppTheme.signer,
+        icon: Icons.phonelink_lock_rounded,
+        iconColor: SignerColors.ok,
       ),
     );
     if (confirmed == true) onSelect(DeviceMode.signer);

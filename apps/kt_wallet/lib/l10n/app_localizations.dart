@@ -397,7 +397,7 @@ abstract class AppLocalizations {
   /// No description provided for @connectColdWalletDesc.
   ///
   /// In zh, this message translates to:
-  /// **'扫码配对 Cold Signer，私钥永不进入本机'**
+  /// **'扫码配对 KT Wallet Cold Signer，私钥永不进入本机'**
   String get connectColdWalletDesc;
 
   /// No description provided for @createWalletTitle.
@@ -547,7 +547,7 @@ abstract class AppLocalizations {
   /// No description provided for @scanAccountHint.
   ///
   /// In zh, this message translates to:
-  /// **'对准 Cold Signer 的地址二维码'**
+  /// **'对准 KT Wallet Cold Signer 的地址二维码'**
   String get scanAccountHint;
 
   /// No description provided for @importConfirmTitle.
@@ -945,6 +945,138 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'状态'**
   String get statusLabel;
+
+  /// No description provided for @txStatusSubmitted.
+  ///
+  /// In zh, this message translates to:
+  /// **'已提交'**
+  String get txStatusSubmitted;
+
+  /// No description provided for @txStatusPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认中'**
+  String get txStatusPending;
+
+  /// No description provided for @txStatusConfirmed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已确认'**
+  String get txStatusConfirmed;
+
+  /// No description provided for @txStatusFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'失败'**
+  String get txStatusFailed;
+
+  /// No description provided for @txStatusDropped.
+  ///
+  /// In zh, this message translates to:
+  /// **'已丢弃'**
+  String get txStatusDropped;
+
+  /// No description provided for @txStatusReplaced.
+  ///
+  /// In zh, this message translates to:
+  /// **'已替换'**
+  String get txStatusReplaced;
+
+  /// No description provided for @nonceConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'该 nonce 已被另一笔待处理交易占用，请刷新后重试'**
+  String get nonceConflict;
+
+  /// No description provided for @txSpeedUp.
+  ///
+  /// In zh, this message translates to:
+  /// **'加速交易'**
+  String get txSpeedUp;
+
+  /// No description provided for @txCancelTransaction.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消交易'**
+  String get txCancelTransaction;
+
+  /// No description provided for @txReplacementConfirmTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认替换交易'**
+  String get txReplacementConfirmTitle;
+
+  /// No description provided for @txSpeedUpConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'将使用相同 nonce 和更高网络费重新发送。原收款地址与金额不会改变。'**
+  String get txSpeedUpConfirm;
+
+  /// No description provided for @txCancelConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'将使用相同 nonce 向自己发送 0 金额交易。仅当替换交易先被确认时，原交易才会取消。'**
+  String get txCancelConfirm;
+
+  /// No description provided for @txReplacementSubmitted.
+  ///
+  /// In zh, this message translates to:
+  /// **'替换交易已提交'**
+  String get txReplacementSubmitted;
+
+  /// No description provided for @txReplacementRace.
+  ///
+  /// In zh, this message translates to:
+  /// **'替换交易已提交，但原交易状态同时发生变化，请等待链上最终结果'**
+  String get txReplacementRace;
+
+  /// No description provided for @txNonceAlreadyUsed.
+  ///
+  /// In zh, this message translates to:
+  /// **'该 nonce 已被链上交易使用，无法继续替换'**
+  String get txNonceAlreadyUsed;
+
+  /// No description provided for @txReplacementUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'这笔交易缺少替换所需的链上参数，无法加速或取消'**
+  String get txReplacementUnavailable;
+
+  /// No description provided for @txNonceLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'Nonce'**
+  String get txNonceLabel;
+
+  /// No description provided for @txMaxFeeLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'最高网络费（原始单位）'**
+  String get txMaxFeeLabel;
+
+  /// No description provided for @txRawAmountLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'金额（原始单位）'**
+  String get txRawAmountLabel;
+
+  /// No description provided for @txReplacesLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'替换交易'**
+  String get txReplacesLabel;
+
+  /// No description provided for @txReplacedByLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'已由交易替换'**
+  String get txReplacedByLabel;
+
+  /// No description provided for @txNotFound.
+  ///
+  /// In zh, this message translates to:
+  /// **'未找到本地交易记录'**
+  String get txNotFound;
 
   /// No description provided for @confirming.
   ///

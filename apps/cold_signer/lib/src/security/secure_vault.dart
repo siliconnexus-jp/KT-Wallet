@@ -33,7 +33,7 @@ abstract class VaultStorage {
 /// plugin is always registered and the fallback never engages.
 class SecureVaultStorage implements VaultStorage {
   SecureVaultStorage({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? const FlutterSecureStorage();
 
   final FlutterSecureStorage _storage;
 
@@ -98,30 +98,63 @@ class WalletMetadata {
     required this.walletId,
     required this.name,
     required this.createdAt,
+    this.version = 2,
+    this.addresses = const {},
+    this.publicKeys = const {},
+    this.biometricEnabled = false,
   });
 
   factory WalletMetadata.fromJson(Map<String, Object?> json) => WalletMetadata(
-        walletId: json['walletId']! as String,
-        name: json['name']! as String,
-        createdAt: json['createdAt']! as int,
-      );
+    walletId: json['walletId']! as String,
+    name: json['name']! as String,
+    createdAt: json['createdAt']! as int,
+    version: json['version'] as int? ?? 1,
+    addresses: ((json['addresses'] as Map?) ?? const {}).cast<String, String>(),
+    publicKeys: ((json['publicKeys'] as Map?) ?? const {}).cast<String, String>(),
+    biometricEnabled: json['biometricEnabled'] as bool? ?? false,
+  );
 
   final String walletId;
   final String name;
 
   /// Epoch seconds.
   final int createdAt;
+  final int version;
+  final Map<String, String> addresses;
+  /// Base64-encoded public keys only; private material remains native.
+  final Map<String, String> publicKeys;
+  final bool biometricEnabled;
 
-  Map<String, Object?> toJson() =>
-      {'walletId': walletId, 'name': name, 'createdAt': createdAt};
+  WalletMetadata copyWith({
+    Map<String, String>? addresses,
+    Map<String, String>? publicKeys,
+    bool? biometricEnabled,
+  }) => WalletMetadata(
+    walletId: walletId,
+    name: name,
+    createdAt: createdAt,
+    version: version,
+    addresses: addresses ?? this.addresses,
+    publicKeys: publicKeys ?? this.publicKeys,
+    biometricEnabled: biometricEnabled ?? this.biometricEnabled,
+  );
+
+  Map<String, Object?> toJson() => {
+    'walletId': walletId,
+    'name': name,
+    'createdAt': createdAt,
+    'version': version,
+    'addresses': addresses,
+    'publicKeys': publicKeys,
+    'biometricEnabled': biometricEnabled,
+  };
 }
 
-/// The signer's secret store: the wallet mnemonic plus its metadata, held in
-/// the platform secure store via an injected [VaultStorage].
+/// The signer's non-secret descriptor store.
 ///
-/// Key material never leaves this vault except for the onboarding backup /
-/// backup-check flows (detailed-design.md §2). The PIN hash lives under the
-/// same storage but is owned by PinLock; [wipe] clears both.
+/// Mnemonic entropy is owned exclusively by `core_crypto`'s native Keychain /
+/// Keystore implementation. This Dart store contains only versioned public
+/// metadata, the app PIN verifier and its durable lockout state.
 class SecureVault {
   SecureVault(this._storage);
 
@@ -129,40 +162,31 @@ class SecureVault {
 
   /// Storage keys. `signer.pin` / `signer.pin_lockout` are written by PinLock
   /// but listed here so [wipe] erases everything the signer ever persists.
+  /// Legacy key used by pre-native builds. It is never written again and is
+  /// deleted on load/wipe so an upgrade cannot leave a Dart mnemonic behind.
   static const mnemonicKey = 'signer.mnemonic';
   static const metadataKey = 'signer.wallet_meta';
   static const pinKey = 'signer.pin';
   static const pinLockoutKey = 'signer.pin_lockout';
 
-  /// True when a wallet (mnemonic + metadata) is stored on this device.
-  Future<bool> hasWallet() async => await _storage.read(mnemonicKey) != null;
+  Future<bool> hasWallet() async => await _storage.read(metadataKey) != null;
 
-  /// Persists a wallet. The caller must drop its own mnemonic reference after
-  /// this call (mirrors core_crypto's storeWallet contract).
-  Future<void> storeWallet({
-    required List<String> mnemonic,
-    required WalletMetadata metadata,
-  }) async {
-    await _storage.write(mnemonicKey, mnemonic.join(' '));
+  Future<void> storeMetadata(WalletMetadata metadata) async {
     await _storage.write(metadataKey, jsonEncode(metadata.toJson()));
-  }
-
-  /// The stored mnemonic words, or null when no wallet exists. Only the
-  /// backup / backup-check flows may surface this to the UI.
-  Future<List<String>?> readMnemonic() async {
-    final raw = await _storage.read(mnemonicKey);
-    return raw?.split(' ');
   }
 
   Future<WalletMetadata?> readMetadata() async {
     final raw = await _storage.read(metadataKey);
     if (raw == null) return null;
     return WalletMetadata.fromJson(
-        (jsonDecode(raw) as Map).cast<String, Object?>());
+      (jsonDecode(raw) as Map).cast<String, Object?>(),
+    );
   }
 
-  /// Erases every key the signer persists: mnemonic, metadata, PIN hash and
-  /// PIN lockout state (C21 delete wallet).
+  Future<void> removeLegacyMnemonic() => _storage.delete(mnemonicKey);
+
+  /// Erases all Dart-side state. Native key material is deleted separately by
+  /// `CoreCrypto.deleteWallet` before this method is called.
   Future<void> wipe() async {
     for (final key in const [mnemonicKey, metadataKey, pinKey, pinLockoutKey]) {
       await _storage.delete(key);

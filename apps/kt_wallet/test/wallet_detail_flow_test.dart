@@ -21,20 +21,28 @@ Future<WalletController> _controller({bool backedUp = false}) async {
   final controller = WalletController(WalletManager(), crypto: crypto);
   await crypto.storeWallet(walletId: 'w1', mnemonic: _mnemonic);
   final addresses = await crypto.deriveAddresses('w1');
-  controller.add(HotWallet(
-    id: 'w1',
-    name: '日常钱包',
-    avatarColor: 0xFFF59E0B,
-    addresses: addresses,
-    backedUp: backedUp,
-  ));
+  controller.add(
+    HotWallet(
+      id: 'w1',
+      name: '日常钱包',
+      avatarColor: 0xFFF59E0B,
+      addresses: addresses,
+      backedUp: backedUp,
+    ),
+  );
   return controller;
 }
 
-Future<void> _pump(WidgetTester tester, WalletController controller, String location) async {
+Future<void> _pump(
+  WidgetTester tester,
+  WalletController controller,
+  String location,
+) async {
   tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
   addTearDown(tester.platformDispatcher.clearLocalesTestValue);
-  await tester.pumpWidget(KtWalletApp(controller: controller, initialLocation: location));
+  await tester.pumpWidget(
+    KtWalletApp(controller: controller, initialLocation: location),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -50,7 +58,9 @@ void main() {
     expect(find.text('w1'), findsOneWidget); // real wallet id row
   });
 
-  testWidgets('rename dialog updates the wallet name in the controller', (tester) async {
+  testWidgets('rename dialog updates the wallet name in the controller', (
+    tester,
+  ) async {
     final controller = await _controller();
     await _pump(tester, controller, '/wallet-detail?id=w1');
 
@@ -59,14 +69,16 @@ void main() {
     expect(find.text('重命名钱包'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField), '旅行钱包');
-    await tester.tap(find.widgetWithText(TextButton, '确认'));
+    await tester.tap(find.byKey(const ValueKey('kt-dialog-confirm')));
     await tester.pumpAndSettle();
 
     expect(controller.wallets.single.name, '旅行钱包');
     expect(find.text('旅行钱包'), findsOneWidget);
   });
 
-  testWidgets('tapping a palette color applies it to the wallet', (tester) async {
+  testWidgets('tapping a palette color applies it to the wallet', (
+    tester,
+  ) async {
     final controller = await _controller();
     await _pump(tester, controller, '/wallet-detail?id=w1');
 
@@ -77,7 +89,9 @@ void main() {
     expect(controller.wallets.single.avatarColor, 0xFF8B5CF6);
   });
 
-  testWidgets('backup banner sheet shows the mnemonic and marks backed up', (tester) async {
+  testWidgets('backup banner sheet shows the mnemonic and marks backed up', (
+    tester,
+  ) async {
     final controller = await _controller();
     await _pump(tester, controller, '/wallet-detail?id=w1');
 
@@ -96,7 +110,9 @@ void main() {
     expect(find.text('备份已验证，助记词记录正确'), findsOneWidget); // snackbar
   });
 
-  testWidgets('backed-up wallet: view-mnemonic sheet has no confirm button', (tester) async {
+  testWidgets('backed-up wallet: view-mnemonic sheet has no confirm button', (
+    tester,
+  ) async {
     final controller = await _controller(backedUp: true);
     await _pump(tester, controller, '/wallet-detail?id=w1');
 
@@ -107,13 +123,15 @@ void main() {
     expect(find.text('我已抄写'), findsNothing);
   });
 
-  testWidgets('delete row removes the wallet after confirmation', (tester) async {
+  testWidgets('delete row removes the wallet after confirmation', (
+    tester,
+  ) async {
     final controller = await _controller();
     await _pump(tester, controller, '/wallet-detail?id=w1');
 
     await tester.tap(find.text('删除钱包').first);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(TextButton, '删除'));
+    await tester.tap(find.byKey(const ValueKey('kt-dialog-confirm')));
     await tester.pumpAndSettle();
 
     expect(controller.wallets, isEmpty);

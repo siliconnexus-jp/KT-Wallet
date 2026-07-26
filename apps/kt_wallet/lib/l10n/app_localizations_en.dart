@@ -164,7 +164,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get connectColdWalletDesc =>
-      'Pair Cold Signer by QR; private keys never touch this device';
+      'Pair KT Wallet Cold Signer by QR; private keys never touch this device';
 
   @override
   String get createWalletTitle => 'Create standard wallet';
@@ -252,7 +252,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'This device never receives or stores a phrase, private key, or seed.';
 
   @override
-  String get scanAccountHint => 'Aim at the Cold Signer address QR';
+  String get scanAccountHint => 'Aim at the KT Wallet Cold Signer address QR';
 
   @override
   String get importConfirmTitle => 'Confirm import';
@@ -479,6 +479,78 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get statusLabel => 'Status';
+
+  @override
+  String get txStatusSubmitted => 'Submitted';
+
+  @override
+  String get txStatusPending => 'Pending';
+
+  @override
+  String get txStatusConfirmed => 'Confirmed';
+
+  @override
+  String get txStatusFailed => 'Failed';
+
+  @override
+  String get txStatusDropped => 'Dropped';
+
+  @override
+  String get txStatusReplaced => 'Replaced';
+
+  @override
+  String get nonceConflict =>
+      'This nonce is already reserved by another pending transaction. Refresh and try again.';
+
+  @override
+  String get txSpeedUp => 'Speed up';
+
+  @override
+  String get txCancelTransaction => 'Cancel transaction';
+
+  @override
+  String get txReplacementConfirmTitle => 'Confirm replacement';
+
+  @override
+  String get txSpeedUpConfirm =>
+      'Resend with the same nonce and a higher network fee. The recipient and amount will not change.';
+
+  @override
+  String get txCancelConfirm =>
+      'Send a zero-value transaction to yourself with the same nonce. The original is cancelled only if this replacement confirms first.';
+
+  @override
+  String get txReplacementSubmitted => 'Replacement transaction submitted';
+
+  @override
+  String get txReplacementRace =>
+      'The replacement was submitted while the original status changed. Wait for the final on-chain result.';
+
+  @override
+  String get txNonceAlreadyUsed =>
+      'This nonce has already been consumed on-chain and can no longer be replaced.';
+
+  @override
+  String get txReplacementUnavailable =>
+      'This transaction is missing the chain parameters required for speed-up or cancellation.';
+
+  @override
+  String get txNonceLabel => 'Nonce';
+
+  @override
+  String get txMaxFeeLabel => 'Maximum fee (raw unit)';
+
+  @override
+  String get txRawAmountLabel => 'Amount (raw unit)';
+
+  @override
+  String get txReplacesLabel => 'Replaces transaction';
+
+  @override
+  String get txReplacedByLabel => 'Replaced by transaction';
+
+  @override
+  String get txNotFound => 'Local transaction record not found';
 
   @override
   String confirming(int received, int total) {

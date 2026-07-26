@@ -13,8 +13,9 @@ class TronRpc {
     final resp = await transport.getJson('$baseUrl/v1/accounts/$address');
     if (resp is! Map) throw RpcException('bad account response');
     final data = resp['data'];
-    if (data is! List || data.isEmpty)
+    if (data is! List || data.isEmpty) {
       return BigInt.zero; // unactivated account
+    }
     final account = data.first;
     if (account is! Map) throw RpcException('bad account entry');
     final balance = account['balance'];
@@ -40,6 +41,77 @@ class TronRpc {
     return TronBlockRef(number: number, blockId: blockId);
   }
 
+  /// Estimates the TRX that may be burned by a TRC-20 contract call. The
+  /// returned feeLimit includes a 20% headroom over the node's energy result
+  /// after subtracting the account's currently available staked energy.
+  Future<TronEnergyEstimate> estimateTokenEnergy({
+    required String owner,
+    required String contract,
+    required String parameter,
+  }) async {
+    final responses = await Future.wait<Object?>([
+      transport.postJson('$baseUrl/wallet/triggerconstantcontract', {
+        'owner_address': owner,
+        'contract_address': contract,
+        'function_selector': 'transfer(address,uint256)',
+        'parameter': parameter,
+        'visible': true,
+      }),
+      transport.postJson('$baseUrl/wallet/getaccountresource', {
+        'address': owner,
+        'visible': true,
+      }),
+      transport.postJson('$baseUrl/wallet/getchainparameters', {}),
+    ]);
+    final trigger = responses[0];
+    final resources = responses[1];
+    final parameters = responses[2];
+    if (trigger is! Map ||
+        trigger['result'] is! Map ||
+        (trigger['result'] as Map)['result'] != true ||
+        trigger['energy_used'] is! int) {
+      throw RpcException('TRON energy estimation failed');
+    }
+    if (resources is! Map || parameters is! Map) {
+      throw RpcException('TRON resource estimation failed');
+    }
+    final required = trigger['energy_used'] as int;
+    final limit = resources['EnergyLimit'] is int
+        ? resources['EnergyLimit'] as int
+        : 0;
+    final used = resources['EnergyUsed'] is int
+        ? resources['EnergyUsed'] as int
+        : 0;
+    final available = (limit - used).clamp(0, limit).toInt();
+    final chainParameters = parameters['chainParameter'];
+    if (chainParameters is! List) {
+      throw RpcException('TRON energy price unavailable');
+    }
+    int? price;
+    for (final entry in chainParameters) {
+      if (entry is Map && entry['key'] == 'getEnergyFee') {
+        final value = entry['value'];
+        if (value is int) price = value;
+      }
+    }
+    if (price == null || price <= 0) {
+      throw RpcException('TRON energy price unavailable');
+    }
+    final burnEnergy = (required - available).clamp(0, required).toInt();
+    // At least 1 TRX prevents nodes rejecting a zero feeLimit when the
+    // account currently has enough energy but its resource state races.
+    final estimatedSun = burnEnergy * price;
+    final feeLimit = ((estimatedSun * 12 + 9) ~/ 10)
+        .clamp(1000000, 15000000000)
+        .toInt();
+    return TronEnergyEstimate(
+      energyRequired: required,
+      energyAvailable: available,
+      energyPriceSun: price,
+      feeLimitSun: feeLimit,
+    );
+  }
+
   /// Broadcasts a signed transaction (hex). Returns the txid on success.
   Future<String> broadcast(Object signedTx) async {
     final broadcastHex = signedTx is Map && signedTx['transaction'] is String;
@@ -61,4 +133,18 @@ class TronBlockRef {
   const TronBlockRef({required this.number, required this.blockId});
   final int number;
   final String blockId;
+}
+
+class TronEnergyEstimate {
+  const TronEnergyEstimate({
+    required this.energyRequired,
+    required this.energyAvailable,
+    required this.energyPriceSun,
+    required this.feeLimitSun,
+  });
+
+  final int energyRequired;
+  final int energyAvailable;
+  final int energyPriceSun;
+  final int feeLimitSun;
 }

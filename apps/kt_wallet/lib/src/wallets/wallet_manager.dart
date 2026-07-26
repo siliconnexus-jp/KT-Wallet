@@ -31,6 +31,8 @@ class WalletManager {
     return null;
   }
 
+  Wallet? byId(String id) => _byId(id);
+
   /// Adds a wallet. Throws if the id already exists or the cap is reached.
   void add(Wallet wallet) {
     if (_byId(wallet.id) != null) {

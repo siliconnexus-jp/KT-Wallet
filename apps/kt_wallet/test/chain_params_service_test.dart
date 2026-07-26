@@ -77,6 +77,15 @@ class _FakeParamsService extends ChainParamsService {
     calledFrom = fromAddress;
     return _fetch(chain, fromAddress);
   }
+
+  @override
+  Future<BigInt> estimateEvmGas(
+    Chain chain, {
+    required String from,
+    required String to,
+    required BigInt value,
+    required String data,
+  }) async => BigInt.from(21000);
 }
 
 Widget _wrap(Widget child) => MaterialApp(
@@ -185,7 +194,7 @@ void main() {
       expect(find.text('无法获取链上参数，已使用预设 nonce 与手续费'), findsNothing);
     });
 
-    testWidgets('fetch failure falls back to the demo constants and shows the hint', (tester) async {
+    testWidgets('fetch failure blocks QR generation instead of guessing fees', (tester) async {
       final service = _FakeParamsService((_, _) async => throw RpcException('boom'));
       final draft = _evmDraft();
       final session = TransferSession()..draft = draft;
@@ -193,10 +202,14 @@ void main() {
           session: session, child: SignRequestQrScreen(paramsService: service))));
       await tester.pump();
 
-      expect(find.byType(KtQrCode), findsOneWidget);
-      expect(find.text('无法获取链上参数，已使用预设 nonce 与手续费'), findsOneWidget);
-      // Byte-identical to the documented demo-constant encoding.
-      expect(session.request!.rawTx, rawTxFor(draft, from: service.calledFrom!));
+      expect(find.byType(KtQrCode), findsNothing);
+      expect(session.request, isNull);
+      expect(
+        find.text(
+          'Unable to estimate the network fee. Sending is disabled.',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('TRON draft never fetches (only EVM chains do)', (tester) async {

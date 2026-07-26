@@ -49,44 +49,19 @@ class DriftSignRecordPersistence implements SignRecordPersistence {
   final SignerDatabase _db;
 
   @override
-  Future<void> put(SignatureRecord record) => _db
-      .into(_db.signRecords)
-      .insertOnConflictUpdate(SignRecordsCompanion.insert(
-        reqId: record.reqId,
-        walletId: record.walletId ?? '',
-        coin: record.coin,
-        operation: record.operation,
-        toAddress: record.toAddress,
-        amount: record.amount,
-        signedAt: record.date,
-        txHash: Value(record.txHash),
-        status: record.status.name,
-      ));
+  Future<void> put(SignatureRecord record) => _db.into(_db.signRecords).insertOnConflictUpdate(SignRecordsCompanion.insert(reqId: record.reqId, walletId: record.walletId ?? '', coin: record.coin, operation: record.operation, toAddress: record.toAddress, amount: record.amount, signedAt: record.date, txHash: Value(record.txHash), status: record.status.name));
 
   @override
   Future<SignatureRecord?> get(String reqIdHex) async {
-    final row = await (_db.select(_db.signRecords)
-          ..where((t) => t.reqId.equals(reqIdHex)))
-        .getSingleOrNull();
+    final row = await (_db.select(_db.signRecords)..where((t) => t.reqId.equals(reqIdHex))).getSingleOrNull();
     return row == null ? null : _toRecord(row);
   }
 
   @override
-  Future<List<SignatureRecord>> all() async =>
-      [for (final row in await _db.select(_db.signRecords).get()) _toRecord(row)];
+  Future<List<SignatureRecord>> all() async => [for (final row in await _db.select(_db.signRecords).get()) _toRecord(row)];
 
   @override
   Future<void> clear() => _db.delete(_db.signRecords).go();
 
-  static SignatureRecord _toRecord(SignRecord row) => SignatureRecord(
-        reqId: row.reqId,
-        walletId: row.walletId,
-        date: row.signedAt,
-        coin: row.coin,
-        operation: row.operation,
-        toAddress: row.toAddress,
-        amount: row.amount,
-        txHash: row.txHash,
-        status: RequestStatus.values.byName(row.status),
-      );
+  static SignatureRecord _toRecord(SignRecord row) => SignatureRecord(reqId: row.reqId, walletId: row.walletId, date: row.signedAt, coin: row.coin, operation: row.operation, toAddress: row.toAddress, amount: row.amount, txHash: row.txHash, status: RequestStatus.values.byName(row.status));
 }

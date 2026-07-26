@@ -5,17 +5,7 @@ import 'package:airgap_protocol/airgap_protocol.dart';
 /// (detailed-design.md §5.1 sign_records, §13.5). Holds ONLY non-sensitive
 /// fields — never keys, mnemonics or seed.
 class SignatureRecord {
-  const SignatureRecord({
-    required this.reqId,
-    required this.date,
-    required this.coin,
-    required this.operation,
-    required this.toAddress,
-    required this.amount,
-    required this.status,
-    this.txHash,
-    this.walletId,
-  });
+  const SignatureRecord({required this.reqId, required this.date, required this.coin, required this.operation, required this.toAddress, required this.amount, required this.status, this.txHash, this.walletId});
 
   final String reqId;
   final int date; // epoch seconds

@@ -63,6 +63,25 @@ object WalletCoreBridge {
         )
     }
 
+    fun publicKeys(entropy: ByteArray): Map<String, ByteArray> {
+        val wallet = HDWallet(entropy, "")
+        val evm = wallet.getKeyForCoin(CoinType.ETHEREUM)
+            .getPublicKeySecp256k1(false).data()
+        val tron = wallet.getKeyForCoin(CoinType.TRON)
+            .getPublicKeySecp256k1(false).data()
+        val solana = wallet.getKeyForCoin(CoinType.SOLANA)
+            .getPublicKeyEd25519().data()
+        return mapOf(
+            "eth" to evm,
+            "polygon" to evm,
+            "base" to evm,
+            "arbitrum" to evm,
+            "avalanche" to evm,
+            "tron" to tron,
+            "solana" to solana,
+        )
+    }
+
     fun exportMnemonic(entropy: ByteArray): String = HDWallet(entropy, "").mnemonic()
 
     data class Signed(val signedTx: ByteArray, val txHash: String)
@@ -127,10 +146,9 @@ object WalletCoreBridge {
             val txIdBytes = Hash.sha256(rawData)
             val signature = key.sign(txIdBytes, Curve.SECP256K1)
             if (signature.size != 65) throw SignFailedException()
-            val transaction = protoBytes(1, rawData) + protoBytes(2, signature)
             val txId = txIdBytes.toHex()
             val json =
-                """{"transaction":"${transaction.toHex()}","txID":"$txId"}"""
+                """{"raw_data_hex":"${rawData.toHex()}","signature":["${signature.toHex()}"],"txID":"$txId"}"""
                     .toByteArray(Charsets.UTF_8)
             return Signed(json, txId)
         } catch (e: SignFailedException) {
@@ -159,23 +177,6 @@ object WalletCoreBridge {
         } finally {
             keyBytes.fill(0)
         }
-    }
-
-    private fun protoBytes(fieldNumber: Int, value: ByteArray): ByteArray =
-        encodeVarint((fieldNumber shl 3) or 2) +
-            encodeVarint(value.size) +
-            value
-
-    private fun encodeVarint(value: Int): ByteArray {
-        if (value < 0) throw InvalidInputException()
-        val out = mutableListOf<Byte>()
-        var current = value
-        while (current > 0x7f) {
-            out += ((current and 0x7f) or 0x80).toByte()
-            current = current ushr 7
-        }
-        out += current.toByte()
-        return out.toByteArray()
     }
 
     private data class Eip1559Fields(

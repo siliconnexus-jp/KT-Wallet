@@ -14,7 +14,7 @@ import 'signer_database.dart';
 SignerDatabase openSignerDatabase() => SignerDatabase(_lazyNativeConnection());
 
 LazyDatabase _lazyNativeConnection() => LazyDatabase(() async {
-      final dir = await getApplicationDocumentsDirectory();
-      final file = File(p.join(dir.path, 'cold_signer.sqlite'));
-      return NativeDatabase.createInBackground(file);
-    });
+  final dir = await getApplicationDocumentsDirectory();
+  final file = File(p.join(dir.path, 'cold_signer.sqlite'));
+  return NativeDatabase.createInBackground(file);
+});

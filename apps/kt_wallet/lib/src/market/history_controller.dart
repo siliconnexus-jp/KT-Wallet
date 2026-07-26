@@ -1,5 +1,8 @@
+// ignore_for_file: prefer_initializing_formals
+
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/widgets.dart';
+import 'package:wallet_data/wallet_data.dart' as db;
 
 import '../state/wallet_controller.dart';
 import 'history_service.dart';
@@ -12,8 +15,7 @@ class HistoryController extends ChangeNotifier {
   HistoryController({
     required WalletController wallets,
     HistoryService? service,
-  }) : // ignore: prefer_initializing_formals
-       _wallets = wallets,
+  }) : _wallets = wallets,
        _service = service ?? HistoryService() {
     _walletId = _wallets.current?.id;
     _wallets.addListener(_onWalletsChanged);
@@ -26,6 +28,7 @@ class HistoryController extends ChangeNotifier {
   int _generation = 0;
   bool _refreshing = false;
   bool _hasRefreshed = false;
+  List<db.Transaction> _localTransactions = const [];
 
   Map<Coin, HistoryResult> _results = {
     for (final coin in Coin.values) coin: const HistoryResult.loading(),
@@ -50,12 +53,40 @@ class HistoryController extends ChangeNotifier {
   /// the tab falls back to demo rows behind the offline banner.
   bool get isError => !isLoading && !hasLiveRecords && !allUnsupported;
 
+  db.Transaction? localTransactionForHash(String hash) {
+    for (final transaction in _localTransactions) {
+      if (transaction.hash == hash) return transaction;
+    }
+    return null;
+  }
+
   /// All successfully fetched records across chains, newest first.
   List<ChainTxRecord> get records {
     final merged = [
       for (final result in _results.values)
         if (result.status == HistoryStatus.ok) ...result.records,
-    ]..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    ];
+    final remoteHashes = {for (final record in merged) record.hash};
+    for (final transaction in _localTransactions) {
+      final hash = transaction.hash;
+      if (hash == null || remoteHashes.contains(hash)) continue;
+      if (transaction.status == db.TxStatus.failed ||
+          transaction.status == db.TxStatus.expired ||
+          transaction.status == db.TxStatus.dropped ||
+          transaction.status == db.TxStatus.replaced) {
+        continue;
+      }
+      merged.add(
+        ChainTxRecord(
+          hash: hash,
+          outgoing: true,
+          amountText: null,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(transaction.createdAt),
+          confirmed: transaction.status == db.TxStatus.confirmed,
+        ),
+      );
+    }
+    merged.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     return List.unmodifiable(merged);
   }
 
@@ -86,6 +117,39 @@ class HistoryController extends ChangeNotifier {
 
     if (generation != _generation) return; // superseded — drop stale results
     _results = {for (final (coin, result) in entries) coin: result};
+    _localTransactions = await _wallets.localTransactions();
+    if (generation != _generation) return;
+    final remoteByHash = {
+      for (final result in _results.values)
+        if (result.status == HistoryStatus.ok)
+          for (final record in result.records) record.hash: record,
+    };
+    for (final local in _localTransactions) {
+      final hash = local.hash;
+      final remote = hash == null ? null : remoteByHash[hash];
+      if (remote == null) {
+        final submittedAt = local.broadcastAt ?? local.createdAt;
+        final stale =
+            DateTime.now().millisecondsSinceEpoch - submittedAt >
+            const Duration(hours: 24).inMilliseconds;
+        if (stale && local.status == db.TxStatus.pending) {
+          await _wallets.updateTransactionStatus(
+            local.id,
+            db.TxStatus.dropped,
+            hash: hash,
+          );
+        }
+        continue;
+      }
+      if (local.status == db.TxStatus.confirmed) continue;
+      await _wallets.updateTransactionStatus(
+        local.id,
+        remote.confirmed ? db.TxStatus.confirmed : db.TxStatus.failed,
+        hash: hash,
+      );
+    }
+    _localTransactions = await _wallets.localTransactions();
+    if (generation != _generation) return;
     _refreshing = false;
     _hasRefreshed = true;
     notifyListeners();

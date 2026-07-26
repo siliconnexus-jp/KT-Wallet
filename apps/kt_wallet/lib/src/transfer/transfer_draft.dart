@@ -65,11 +65,16 @@ class TransferSession {
   /// prefers this over [result]'s pre-broadcast hash when set.
   String? broadcastTxHash;
 
+  /// Stable local row id used as the transaction moves from awaitingSig to
+  /// signed/submitted/pending without creating duplicate history entries.
+  String? localTransactionId;
+
   void clear() {
     draft = null;
     request = null;
     result = null;
     broadcastTxHash = null;
+    localTransactionId = null;
   }
 }
 

@@ -9,7 +9,7 @@ import '../market/balance_service.dart'
     show RpcEndpointResolver, defaultRpcEndpointFor;
 import '../market/gateway_client.dart';
 import '../rpc/http_transport.dart';
-import 'airgap_codec.dart' show hexEncode;
+import 'airgap_codec.dart' show BroadcastSignatureMarkers, hexEncode;
 import 'chain_params_service.dart' show rpcCoinForChain;
 
 /// How a broadcast attempt ended.
@@ -80,18 +80,9 @@ class BroadcastService {
   final GatewayResolver _gateway;
 
   /// The demo signature marker (see `buildDemoSignResult`).
-  static final Uint8List _demoPrefix = Uint8List.fromList(
-    utf8.encode('SIGNED-V1:'),
-  );
-
   /// True when [signedTx] is a simulated-signer payload, not a real signature.
-  static bool isDemoSignature(Uint8List signedTx) {
-    if (signedTx.length < _demoPrefix.length) return false;
-    for (var i = 0; i < _demoPrefix.length; i++) {
-      if (signedTx[i] != _demoPrefix[i]) return false;
-    }
-    return true;
-  }
+  static bool isDemoSignature(Uint8List signedTx) =>
+      BroadcastSignatureMarkers.isDemo(signedTx);
 
   /// Broadcasts [signedTx] on [chain] and returns the node's transaction
   /// hash. Errors are returned, never thrown — the caller maps them onto the

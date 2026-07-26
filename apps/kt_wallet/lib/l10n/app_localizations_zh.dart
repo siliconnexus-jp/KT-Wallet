@@ -162,7 +162,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectColdWallet => '连接离线钱包';
 
   @override
-  String get connectColdWalletDesc => '扫码配对 Cold Signer，私钥永不进入本机';
+  String get connectColdWalletDesc => '扫码配对 KT Wallet Cold Signer，私钥永不进入本机';
 
   @override
   String get createWalletTitle => '创建普通钱包';
@@ -241,7 +241,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectColdSafety => '本机永远不会接收或保存助记词、私钥或 Seed。';
 
   @override
-  String get scanAccountHint => '对准 Cold Signer 的地址二维码';
+  String get scanAccountHint => '对准 KT Wallet Cold Signer 的地址二维码';
 
   @override
   String get importConfirmTitle => '确认导入';
@@ -461,6 +461,72 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get statusLabel => '状态';
+
+  @override
+  String get txStatusSubmitted => '已提交';
+
+  @override
+  String get txStatusPending => '确认中';
+
+  @override
+  String get txStatusConfirmed => '已确认';
+
+  @override
+  String get txStatusFailed => '失败';
+
+  @override
+  String get txStatusDropped => '已丢弃';
+
+  @override
+  String get txStatusReplaced => '已替换';
+
+  @override
+  String get nonceConflict => '该 nonce 已被另一笔待处理交易占用，请刷新后重试';
+
+  @override
+  String get txSpeedUp => '加速交易';
+
+  @override
+  String get txCancelTransaction => '取消交易';
+
+  @override
+  String get txReplacementConfirmTitle => '确认替换交易';
+
+  @override
+  String get txSpeedUpConfirm => '将使用相同 nonce 和更高网络费重新发送。原收款地址与金额不会改变。';
+
+  @override
+  String get txCancelConfirm => '将使用相同 nonce 向自己发送 0 金额交易。仅当替换交易先被确认时，原交易才会取消。';
+
+  @override
+  String get txReplacementSubmitted => '替换交易已提交';
+
+  @override
+  String get txReplacementRace => '替换交易已提交，但原交易状态同时发生变化，请等待链上最终结果';
+
+  @override
+  String get txNonceAlreadyUsed => '该 nonce 已被链上交易使用，无法继续替换';
+
+  @override
+  String get txReplacementUnavailable => '这笔交易缺少替换所需的链上参数，无法加速或取消';
+
+  @override
+  String get txNonceLabel => 'Nonce';
+
+  @override
+  String get txMaxFeeLabel => '最高网络费（原始单位）';
+
+  @override
+  String get txRawAmountLabel => '金额（原始单位）';
+
+  @override
+  String get txReplacesLabel => '替换交易';
+
+  @override
+  String get txReplacedByLabel => '已由交易替换';
+
+  @override
+  String get txNotFound => '未找到本地交易记录';
 
   @override
   String confirming(int received, int total) {

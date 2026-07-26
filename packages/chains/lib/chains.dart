@@ -12,6 +12,8 @@ export 'src/evm_tx.dart';
 export 'src/keccak.dart' show keccak256;
 export 'src/rlp.dart';
 export 'src/sha256.dart' show sha256;
+export 'src/signature_verifier.dart';
 export 'src/solana_tx.dart';
+export 'src/transaction_parser.dart';
 export 'src/tron_tx.dart';
 export 'src/tx_preview.dart';

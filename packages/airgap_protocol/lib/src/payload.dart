@@ -107,6 +107,16 @@ Uint8List _bytes(Map<Object?, Object?> m, int key, String name, int maxLen) {
   return v;
 }
 
+Uint8List? _bytesOrNull(
+  Map<Object?, Object?> m,
+  int key,
+  String name,
+  int maxLen,
+) {
+  if (m[key] == null) return null;
+  return _bytes(m, key, name, maxLen);
+}
+
 // ---- account-export --------------------------------------------------------
 
 class AccountRecord {
@@ -115,11 +125,13 @@ class AccountRecord {
     required this.address,
     required this.path,
     required this.index,
+    this.publicKey,
   });
   final int coin;
   final String address;
   final String path;
   final int index;
+  final Uint8List? publicKey;
 }
 
 class AccountExport extends AirgapPayload {
@@ -149,7 +161,13 @@ class AccountExport extends AirgapPayload {
         3: walletName,
         4: [
           for (final a in accounts)
-            {0: a.coin, 1: a.address, 2: a.path, 3: a.index},
+            {
+              0: a.coin,
+              1: a.address,
+              2: a.path,
+              3: a.index,
+              if (a.publicKey != null) 4: a.publicKey,
+            },
         ],
       });
 
@@ -171,6 +189,7 @@ class AccountExport extends AirgapPayload {
               address: _text(a, 1, 'address', AirgapLimits.maxAddress),
               path: _text(a, 2, 'path', AirgapLimits.maxPath),
               index: _int(a, 3, 'index'),
+              publicKey: _bytesOrNull(a, 4, 'publicKey', 65),
             )
           else
             throw PayloadError('account entry must be a map'),

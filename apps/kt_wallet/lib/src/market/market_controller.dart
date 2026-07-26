@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+// ignore_for_file: prefer_initializing_formals
+
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/foundation.dart';
 
@@ -22,15 +24,13 @@ class MarketController extends ChangeNotifier {
     PriceService? prices,
     TokenBalanceService? tokens,
     bool Function(Coin coin)? isTestnet,
-  }) : // ignore: prefer_initializing_formals
-       _wallets = wallets,
+  }) : _wallets = wallets,
        _balances = balances ?? BalanceService(),
        _prices = prices ?? PriceService(),
        _isTestnet = isTestnet ?? _neverTestnet,
        // Deliberately nullable (no network-hitting default): contexts that
        // never wire a token service (older tests, gallery) simply have no
        // token rows.
-       // ignore: prefer_initializing_formals
        _tokens = tokens {
     _walletId = _wallets.current?.id;
     _wallets.addListener(_onWalletsChanged);

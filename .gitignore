@@ -80,5 +80,11 @@ build/
 **/android/.gradle/
 **/android/local.properties
 apps/kt_wallet/integration_test/.sepolia-e2e.json
+# Local testing/runbook handoff. May contain funded test keys or host details.
+docs/TESTING.md
+docs/TESTING_LOCAL.md
+docs/CURRENT_ISSUES.md
+docs/BACKEND_DEPLOY_LOCAL.md
+backend/gateway/.env.local
 **/android/app/.cxx/
 **/test/failures/

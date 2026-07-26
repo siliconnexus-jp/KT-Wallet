@@ -1,4 +1,6 @@
 import Flutter
+import LocalAuthentication
+import Network
 import UIKit
 
 @main
@@ -38,6 +40,17 @@ import UIKit
         name: "kt/screen_security",
         binaryMessenger: registrar.messenger()
       )
+      let deviceSecurityChannel = FlutterMethodChannel(
+        name: "kt/device_security",
+        binaryMessenger: registrar.messenger()
+      )
+      deviceSecurityChannel.setMethodCallHandler { [weak self] call, result in
+        guard call.method == "getState" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        self?.deviceSecurityState(result)
+      }
     }
   }
 
@@ -63,7 +76,7 @@ import UIKit
     hidePrivacyCover()
   }
 
-  private func showPrivacyCover() {
+  func showPrivacyCover() {
     if let cover = privacyCover {
       cover.isHidden = false
       cover.superview?.bringSubviewToFront(cover)
@@ -114,7 +127,7 @@ import UIKit
     privacyCover = cover
   }
 
-  private func hidePrivacyCover() {
+  func hidePrivacyCover() {
     if privacyCover == nil {
       showPrivacyCover()
     }
@@ -122,11 +135,11 @@ import UIKit
   }
 
   private func activeWindow() -> UIWindow? {
-    if let appWindow = window { return appWindow }
-    return UIApplication.shared.connectedScenes
+    let sceneWindow = UIApplication.shared.connectedScenes
       .compactMap { $0 as? UIWindowScene }
       .flatMap(\.windows)
       .first(where: \.isKeyWindow)
+    return sceneWindow ?? window
   }
 
   private func protectionLabel(
@@ -158,5 +171,65 @@ import UIKit
     let files = primary?["CFBundleIconFiles"] as? [String]
     return files?.last.flatMap(UIImage.init(named:))
       ?? UIImage(systemName: "shield.lefthalf.filled")
+  }
+
+  private func deviceSecurityState(_ result: @escaping FlutterResult) {
+    let auth = LAContext()
+    var authError: NSError?
+    let passcode = auth.canEvaluatePolicy(
+      .deviceOwnerAuthentication,
+      error: &authError
+    ) ? "safe" : "unsafe"
+    let biometricContext = LAContext()
+    var biometricError: NSError?
+    let biometric = biometricContext.canEvaluatePolicy(
+      .deviceOwnerAuthenticationWithBiometrics,
+      error: &biometricError
+    ) ? "safe" : "unsafe"
+
+    let monitor = NWPathMonitor()
+    let queue = DispatchQueue(label: "cc.siliconnexus.ktwallet.device-security")
+    monitor.pathUpdateHandler = { path in
+      monitor.cancel()
+      let state: [String: String] = [
+        "network": path.status == .satisfied ? "unsafe" : "safe",
+        // iOS exposes neither radio state without invasive private APIs.
+        "airplane": "unknown",
+        "bluetooth": "unknown",
+        "passcode": passcode,
+        "biometric": biometric,
+        "screenCapture": UIScreen.main.isCaptured ? "unsafe" : "safe",
+        "integrity": self.hasJailbreakEvidence() ? "unsafe" : "unknown",
+      ]
+      DispatchQueue.main.async {
+        result(state)
+      }
+    }
+    monitor.start(queue: queue)
+  }
+
+  private func hasJailbreakEvidence() -> Bool {
+    #if targetEnvironment(simulator)
+      return false
+    #else
+      let suspiciousPaths = [
+        "/Applications/Cydia.app",
+        "/Library/MobileSubstrate/MobileSubstrate.dylib",
+        "/bin/bash",
+        "/usr/sbin/sshd",
+        "/etc/apt",
+      ]
+      if suspiciousPaths.contains(where: FileManager.default.fileExists(atPath:)) {
+        return true
+      }
+      let probe = "/private/ktwallet-\(UUID().uuidString)"
+      do {
+        try "probe".write(toFile: probe, atomically: true, encoding: .utf8)
+        try? FileManager.default.removeItem(atPath: probe)
+        return true
+      } catch {
+        return false
+      }
+    #endif
   }
 }

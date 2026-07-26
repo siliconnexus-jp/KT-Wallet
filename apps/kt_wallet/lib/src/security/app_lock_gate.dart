@@ -304,8 +304,9 @@ class _PinLockBodyState extends State<_PinLockBody> {
   Future<void> _onKey(String k) async {
     if (_verifying) return;
     if (k == 'del') {
-      if (_entry.isNotEmpty)
+      if (_entry.isNotEmpty) {
         setState(() => _entry = _entry.substring(0, _entry.length - 1));
+      }
       return;
     }
     if (_entry.length >= 6) return;

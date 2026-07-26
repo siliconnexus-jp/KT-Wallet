@@ -1,11 +1,17 @@
 package cc.siliconnexus.ktwallet.coldsigner
 
 import android.app.Activity
+import android.app.KeyguardManager
+import android.bluetooth.BluetoothAdapter
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.graphics.Color
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.os.Build
+import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -26,6 +32,9 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            setRecentsScreenshotEnabled(false)
+        }
         // The standalone signer is always displaying secrets (mnemonics, the
         // signing QR loop), so FLAG_SECURE is set unconditionally: no
         // screenshots, no screen recording, blanked recents preview.
@@ -38,6 +47,16 @@ class MainActivity : FlutterFragmentActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             "kt/screen_security"
         )
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "kt/device_security"
+        ).setMethodCallHandler { call, result ->
+            if (call.method == "getState") {
+                result.success(deviceSecurityState())
+            } else {
+                result.notImplemented()
+            }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -134,5 +153,66 @@ class MainActivity : FlutterFragmentActivity() {
     private fun hidePrivacyCover() {
         privacyCover?.let { (it.parent as? ViewGroup)?.removeView(it) }
         privacyCover = null
+    }
+
+    private fun deviceSecurityState(): Map<String, String> {
+        val connectivity =
+            getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = connectivity.activeNetwork
+        val capabilities = network?.let(connectivity::getNetworkCapabilities)
+        val connected = capabilities?.hasCapability(
+            NetworkCapabilities.NET_CAPABILITY_INTERNET
+        ) == true
+
+        val keyguard = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        val airplaneEnabled = Settings.Global.getInt(
+            contentResolver,
+            Settings.Global.AIRPLANE_MODE_ON,
+            0
+        ) == 1
+        val bluetooth = try {
+            BluetoothAdapter.getDefaultAdapter()?.isEnabled?.let {
+                if (it) "unsafe" else "safe"
+            } ?: "unknown"
+        } catch (_: SecurityException) {
+            "unknown"
+        }
+        val biometric = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val manager = getSystemService(
+                android.hardware.biometrics.BiometricManager::class.java
+            )
+            @Suppress("DEPRECATION")
+            if (manager?.canAuthenticate() ==
+                android.hardware.biometrics.BiometricManager.BIOMETRIC_SUCCESS
+            ) "safe" else "unsafe"
+        } else {
+            "unknown"
+        }
+
+        return mapOf(
+            "network" to if (connected) "unsafe" else "safe",
+            "airplane" to if (airplaneEnabled) "safe" else "unsafe",
+            "bluetooth" to bluetooth,
+            "passcode" to if (keyguard.isDeviceSecure) "safe" else "unsafe",
+            "biometric" to biometric,
+            // FLAG_SECURE is unconditional for this Activity, so capture is
+            // prevented rather than guessed from MediaStore or broad access.
+            "screenCapture" to "safe",
+            "integrity" to if (hasRootEvidence()) "unsafe" else "unknown"
+        )
+    }
+
+    private fun hasRootEvidence(): Boolean {
+        val tags = Build.TAGS.orEmpty()
+        if (tags.contains("test-keys")) return true
+        val paths = listOf(
+            "/system/app/Superuser.apk",
+            "/system/xbin/su",
+            "/system/bin/su",
+            "/sbin/su",
+            "/data/local/xbin/su",
+            "/data/local/bin/su"
+        )
+        return paths.any { java.io.File(it).exists() }
     }
 }

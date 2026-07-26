@@ -933,6 +933,20 @@ class ImportConfirmScreen extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final controller = WalletScope.of(context);
     if (!controller.canAddMore) return;
+    final coldWalletId = export?.walletId;
+    if (coldWalletId != null &&
+        controller.wallets.whereType<WatchWallet>().any(
+          (wallet) => wallet.coldWalletId == coldWalletId,
+        )) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('This offline wallet is already paired'),
+          ),
+        );
+      return;
+    }
     final id = 'w${DateTime.now().microsecondsSinceEpoch}';
     controller.add(
       WatchWallet(
@@ -1303,26 +1317,19 @@ class _WalletManageScreenState extends State<WalletManageScreen> {
     final controller = WalletScope.of(context);
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.deleteWalletTitle),
-        content: Text(l10n.deleteWalletConfirm(w.name)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(l10n.actionCancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(
-              l10n.actionDelete,
-              style: const TextStyle(color: WalletColors.red),
-            ),
-          ),
-        ],
+      builder: (_) => KtConfirmDialog(
+        title: l10n.deleteWalletTitle,
+        message: l10n.deleteWalletConfirm(w.name),
+        cancelLabel: l10n.actionCancel,
+        confirmLabel: l10n.actionDelete,
+        icon: Icons.delete_outline_rounded,
+        iconColor: WalletColors.red,
+        destructive: true,
       ),
     );
     if (ok == true && context.mounted) {
-      controller.remove(w.id);
+      await controller.remove(w.id);
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
         ..showSnackBar(SnackBar(content: Text(l10n.deletedWallet(w.name))));
@@ -1338,7 +1345,7 @@ class _WalletManageScreenState extends State<WalletManageScreen> {
     final state = switch (w) {
       HotWallet(backedUp: true) => l10n.walletStateBackedUp,
       HotWallet() => l10n.walletStateNotBackedUp,
-      WatchWallet() => 'Cold Signer',
+      WatchWallet() => 'KT Wallet Cold Signer',
     };
     return Expanded(
       child: Column(
@@ -1514,43 +1521,48 @@ class WalletDetailScreen extends StatelessWidget {
     final nameController = TextEditingController(text: w.name);
     final name = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: WalletColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          l10n.renameWallet,
-          style: const TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-            color: WalletColors.text,
-          ),
-        ),
+      builder: (ctx) => KtDialog(
+        title: l10n.renameWallet,
+        icon: Icons.edit_outlined,
         content: TextField(
           controller: nameController,
           autofocus: true,
           style: const TextStyle(fontSize: 15, color: WalletColors.text),
-          decoration: InputDecoration(labelText: l10n.nameLabel),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(
-              l10n.actionCancel,
-              style: const TextStyle(color: WalletColors.text2),
+          decoration: InputDecoration(
+            labelText: l10n.nameLabel,
+            filled: true,
+            fillColor: WalletColors.bg,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: WalletColors.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(
+                color: WalletColors.accent,
+                width: 1.5,
+              ),
             ),
           ),
-          TextButton(
+        ),
+        actions: [
+          KtDialogAction(
+            key: const ValueKey('kt-dialog-cancel'),
+            label: l10n.actionCancel,
+            onPressed: () => Navigator.of(ctx).pop(),
+          ),
+          KtDialogAction(
+            key: const ValueKey('kt-dialog-confirm'),
+            label: l10n.actionConfirm,
+            style: KtDialogActionStyle.primary,
             onPressed: () => Navigator.of(ctx).pop(nameController.text.trim()),
-            child: Text(
-              l10n.actionConfirm,
-              style: const TextStyle(color: WalletColors.accent),
-            ),
           ),
         ],
       ),
     );
-    if (name != null && name.isNotEmpty && name != w.name)
+    if (name != null && name.isNotEmpty && name != w.name) {
       controller.rename(w.id, name);
+    }
   }
 
   /// Bottom sheet showing the wallet's mnemonic (exported from CoreCrypto).
@@ -1663,26 +1675,19 @@ class WalletDetailScreen extends StatelessWidget {
     final controller = WalletScope.of(context);
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.deleteWalletTitle),
-        content: Text(l10n.deleteWalletConfirm(w.name)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(l10n.actionCancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(
-              l10n.actionDelete,
-              style: const TextStyle(color: WalletColors.red),
-            ),
-          ),
-        ],
+      builder: (_) => KtConfirmDialog(
+        title: l10n.deleteWalletTitle,
+        message: l10n.deleteWalletConfirm(w.name),
+        cancelLabel: l10n.actionCancel,
+        confirmLabel: l10n.actionDelete,
+        icon: Icons.delete_outline_rounded,
+        iconColor: WalletColors.red,
+        destructive: true,
       ),
     );
     if (ok == true && context.mounted) {
-      controller.remove(w.id);
+      await controller.remove(w.id);
+      if (!context.mounted) return;
       Navigator.of(context).maybePop();
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
@@ -1785,7 +1790,7 @@ class WalletDetailScreen extends StatelessWidget {
               if (wallet is WatchWallet) ...[
                 const SizedBox(height: 14),
                 KtDetailRow(
-                  label: 'Cold Signer',
+                  label: 'KT Wallet Cold Signer',
                   value: wallet.coldWalletId,
                   mono: true,
                 ),

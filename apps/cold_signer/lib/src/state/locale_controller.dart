@@ -53,8 +53,7 @@ class LocaleController extends ChangeNotifier {
 /// Exposes the app-wide [LocaleController] to the widget tree (e.g. the Settings
 /// language picker) and rebuilds dependents when the language changes.
 class LocaleScope extends InheritedNotifier<LocaleController> {
-  const LocaleScope({super.key, required LocaleController controller, required super.child})
-      : super(notifier: controller);
+  const LocaleScope({super.key, required LocaleController controller, required super.child}) : super(notifier: controller);
 
   /// The live controller, or a shared "follow system" fallback when a screen is
   /// rendered standalone (the gallery index and golden tests). Real navigation

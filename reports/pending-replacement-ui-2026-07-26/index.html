@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>KT Wallet · Pending 加速/取消 UI 测试报告</title>
+  <style>
+    :root{--bg:#080b12;--card:#111827;--line:#26334a;--text:#eef4ff;--muted:#9eacc2;--blue:#5b86ff;--green:#37d483;--amber:#ffc45b;--red:#ff6570}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 12% 0,#142a58 0,transparent 30%),var(--bg);color:var(--text);font:15px/1.65 system-ui,-apple-system,"PingFang SC",sans-serif}
+    main{max-width:1180px;margin:auto;padding:48px 24px 80px}.eyebrow{color:#86a8ff;font-weight:800;letter-spacing:.12em}h1{font-size:clamp(34px,6vw,66px);line-height:1.05;margin:.18em 0}.lead{font-size:20px;color:#bdc9da;max-width:900px}
+    .summary,.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:30px 0}.card{background:linear-gradient(145deg,#151d2c,#0e141e);border:1px solid var(--line);border-radius:18px;padding:20px}.metric{font-size:30px;font-weight:850}.ok{color:var(--green)}.warn{color:var(--amber)}.muted{color:var(--muted)}
+    h2{margin-top:46px;font-size:28px}h3{margin:.1em 0 8px}.badge{display:inline-block;padding:3px 10px;border-radius:999px;background:#153725;color:#6ce7a4;font-weight:750}.badge.fix{background:#3b2d12;color:#ffd276}
+    table{width:100%;border-collapse:collapse;background:#0e151f;border:1px solid var(--line)}th,td{text-align:left;padding:13px;border-bottom:1px solid var(--line);vertical-align:top}th{background:#151e2c;color:#aec0d9}code{font:12px/1.5 ui-monospace,SFMono-Regular,monospace;color:#d5e2ff}
+    .shots{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}.shot{background:#111827;border:1px solid var(--line);border-radius:18px;padding:12px}.shot img{display:block;width:100%;max-height:760px;object-fit:contain;border-radius:12px;background:#05070b}.shot p{margin:10px 6px 4px;color:#bdc9dc}.note{border-left:4px solid var(--amber);padding:13px 16px;background:#211b10;border-radius:7px}.pass{color:var(--green);font-weight:750}
+    a{color:#87a8ff}@media(max-width:820px){.summary,.grid,.shots{grid-template-columns:1fr}table{display:block;overflow:auto}}
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">KT WALLET · ANDROID 15 + IOS 26.2 · 2026-07-26</div>
+  <h1>Pending 交易<br>加速 / 取消 UI 验收</h1>
+  <p class="lead">同一套集成 UI 用例在 Android API 35 模拟器与 iPhone 17 Pro Simulator 上执行。覆盖 Pending 详情、加速确认、取消确认、已确认状态保护及参数缺失保护。</p>
+
+  <div class="summary">
+    <div class="card"><div class="metric ok">2 / 2</div><div>模拟器平台通过</div></div>
+    <div class="card"><div class="metric ok">5 / 5</div><div>关键 UI 状态通过</div></div>
+    <div class="card"><div class="metric warn">1</div><div>UI 问题发现并修复</div></div>
+  </div>
+
+  <h2>结论</h2>
+  <div class="grid">
+    <div class="card"><h3>Android 15 / API 35</h3><span class="badge">通过</span><p class="muted">系统截图与设备内 Flutter 帧截图均完成；测试进程正常退出。</p></div>
+    <div class="card"><h3>iPhone 17 Pro / iOS 26.2</h3><span class="badge">通过</span><p class="muted">详情页和两个确认弹窗使用系统 Simulator 截图；五项语义断言全部通过。</p></div>
+    <div class="card"><h3>金额显示</h3><span class="badge fix">已修复</span><p class="muted">首轮发现主金额直接显示 wei；已改为 <code>-0.001 ETH</code>，原始单位继续保留在详情卡片中。</p></div>
+  </div>
+
+  <h2>逐项验收</h2>
+  <table>
+    <thead><tr><th>步骤</th><th>预期</th><th>Android</th><th>iOS</th></tr></thead>
+    <tbody>
+      <tr><td>Pending 交易详情</td><td>显示可读金额、Sepolia、原始金额、动态最高费、nonce、hash、状态，并出现“加速交易 / 取消交易”。</td><td class="pass">通过</td><td class="pass">通过</td></tr>
+      <tr><td>加速确认</td><td>明确说明复用相同 nonce、提高网络费，收款地址与金额不改变；用户可取消。</td><td class="pass">通过</td><td class="pass">通过</td></tr>
+      <tr><td>取消确认</td><td>明确说明向本人发送 0 金额，并提示仅当 replacement 先确认时原交易才被取消。</td><td class="pass">通过</td><td class="pass">通过</td></tr>
+      <tr><td>已确认保护</td><td>绿色已确认状态；不出现加速和取消按钮。</td><td class="pass">通过</td><td class="pass">通过（语义断言）</td></tr>
+      <tr><td>参数缺失保护</td><td>nonce/gas/费用参数不完整时保持只读，不出现替换操作。</td><td class="pass">通过</td><td class="pass">通过</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Android 截图</h2>
+  <div class="shots">
+    <div class="shot"><img src="screenshots/android-01-pending-details.png" alt="Android Pending 详情"><p>Pending 详情：金额已经格式化为 -0.001 ETH，底部提供加速与取消。</p></div>
+    <div class="shot"><img src="screenshots/android-02-speed-confirm.png" alt="Android 加速确认"><p>加速确认：相同 nonce、更高网络费，原交易内容保持不变。</p></div>
+    <div class="shot"><img src="screenshots/android-03-cancel-confirm.png" alt="Android 取消确认"><p>取消确认：0 金额自转，并说明 replacement 的竞争语义。</p></div>
+    <div class="shot"><img src="screenshots/android-device-04-confirmed-guard.png" alt="Android 已确认保护"><p>设备内精确帧：交易已确认后，替换按钮完全移除。</p></div>
+    <div class="shot"><img src="screenshots/android-05-missing-params.png" alt="Android 参数缺失保护"><p>参数缺失时仍可查看详情，但没有加速/取消入口。</p></div>
+  </div>
+
+  <h2>iOS 截图</h2>
+  <div class="shots">
+    <div class="shot"><img src="screenshots/ios-01-pending-details.png" alt="iOS Pending 详情"><p>iPhone 17 Pro：Pending 详情与两项操作。</p></div>
+    <div class="shot"><img src="screenshots/ios-02-speed-confirm.png" alt="iOS 加速确认"><p>iOS 加速确认弹窗。</p></div>
+    <div class="shot"><img src="screenshots/ios-03-cancel-confirm.png" alt="iOS 取消确认"><p>iOS 取消确认弹窗。</p></div>
+    <div class="shot"><img src="screenshots/ios-05-missing-params.png" alt="iOS 参数缺失保护"><p>iOS 参数缺失保护：替换操作隐藏。</p></div>
+  </div>
+
+  <h2>自动化证据</h2>
+  <table>
+    <tbody>
+      <tr><td>Android 集成 UI</td><td><code>flutter test integration_test/pending_replacement_ui_capture_test.dart -d emulator-5554</code></td><td class="pass">通过</td></tr>
+      <tr><td>iOS 集成 UI</td><td><code>flutter test integration_test/pending_replacement_ui_capture_test.dart -d F0116D5A-26A6-4748-A985-0A99B5544777</code></td><td class="pass">通过</td></tr>
+      <tr><td>Widget UI</td><td>Pending 操作、终态保护、缺参数保护、replacement lineage</td><td class="pass">4 项通过</td></tr>
+      <tr><td>Service</td><td>原生币加速、ERC-20 加速、取消交易、nonce 已消费拒绝</td><td class="pass">4 项通过</td></tr>
+    </tbody>
+  </table>
+
+  <p class="note"><strong>测试边界：</strong>本报告证明 UI、参数门禁和替换交易构造逻辑在两端通过；没有制造真实测试网低费率 Pending，因此不把它写成真实 replacement 链上广播成功。真实链上验收仍需 original/replacement txHash 和浏览器回执。</p>
+</main></body>
+</html>

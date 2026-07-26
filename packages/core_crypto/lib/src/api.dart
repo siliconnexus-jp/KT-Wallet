@@ -31,6 +31,10 @@ abstract class CoreCrypto {
   /// Derives public addresses for all supported chains.
   Future<ChainAddresses> deriveAddresses(String walletId);
 
+  /// Derives the public keys used by those accounts. No private material
+  /// crosses the native boundary.
+  Future<ChainPublicKeys> derivePublicKeys(String walletId);
+
   /// Signs a wallet-core SigningInput. Triggers native authentication.
   Future<SignedTransaction> signTransaction({
     required String walletId,

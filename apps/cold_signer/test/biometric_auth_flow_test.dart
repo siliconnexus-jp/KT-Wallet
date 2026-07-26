@@ -7,6 +7,7 @@ import 'package:cold_signer/src/signing/sign_record_store.dart';
 import 'package:cold_signer/src/state/signer_wallet_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:core_crypto/testing.dart';
 
 /// C8 against the injectable [BiometricAuth]: a (fake) biometric success
 /// authorizes the signature exactly like a verified PIN, a failure stays on
@@ -60,10 +61,11 @@ void main() {
     final wallet = SignerWalletController(
       storage: InMemoryVaultStorage(),
       records: InMemorySignRecordPersistence(),
+      crypto: MockCoreCrypto(),
       random: Random(42),
       pinIterations: 500,
     );
-    wallet.beginCreate();
+    await wallet.beginCreate();
     await wallet.setPin('135790');
     await wallet.completeOnboarding();
     expect(wallet.hasWallet, isTrue);

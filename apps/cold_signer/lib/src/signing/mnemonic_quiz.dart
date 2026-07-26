@@ -4,11 +4,7 @@
 library;
 
 class QuizQuestion {
-  QuizQuestion({
-    required this.position,
-    required this.correctWord,
-    required this.options,
-  });
+  QuizQuestion({required this.position, required this.correctWord, required this.options});
 
   /// 1-based word position.
   final int position;
@@ -20,13 +16,7 @@ class MnemonicQuiz {
   /// Generates [count] questions for a [mnemonic]. [pickIndices] chooses the
   /// challenged positions (0-based); [distractorsFor] supplies wrong options.
   /// Both are injected so tests are deterministic.
-  static List<QuizQuestion> build(
-    List<String> mnemonic, {
-    required List<int> Function(int wordCount, int count) pickIndices,
-    required List<String> Function(String correct, int optionCount) distractorsFor,
-    int count = 3,
-    int optionCount = 4,
-  }) {
+  static List<QuizQuestion> build(List<String> mnemonic, {required List<int> Function(int wordCount, int count) pickIndices, required List<String> Function(String correct, int optionCount) distractorsFor, int count = 3, int optionCount = 4}) {
     if (mnemonic.length < count) {
       throw ArgumentError('mnemonic too short for $count questions');
     }
@@ -49,11 +39,7 @@ class MnemonicQuiz {
             throw ArgumentError('distractors must be distinct');
           }
           final options = [correct, ...distractors]..sort();
-          return QuizQuestion(
-            position: idx + 1,
-            correctWord: correct,
-            options: options,
-          );
+          return QuizQuestion(position: idx + 1, correctWord: correct, options: options);
         }(),
     ];
   }

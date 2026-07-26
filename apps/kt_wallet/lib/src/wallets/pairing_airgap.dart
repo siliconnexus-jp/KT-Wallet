@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:airgap_protocol/airgap_protocol.dart';
+import 'package:chains/chains.dart';
 import 'package:core_crypto/core_crypto.dart';
 
 /// Canonical demo pairing session: the AccountExport payload the offline
@@ -79,4 +80,90 @@ ChainAddresses addressesFromExport(AccountExport export) {
     tron: addr(195),
     solana: addr(501),
   );
+}
+
+/// Validates the semantic account set after AIRGAP-V1 schema decoding. The
+/// production camera requires all seven supported chain records; tests and
+/// legacy demo fixtures may opt into the original four-record set.
+void validateAccountExport(
+  AccountExport export, {
+  bool requireAllChains = true,
+}) {
+  final expectedPaths = <int, String>{
+    60: "m/44'/60'/0'/0/0",
+    966: "m/44'/60'/0'/0/0",
+    8453: "m/44'/60'/0'/0/0",
+    42161: "m/44'/60'/0'/0/0",
+    9000: "m/44'/60'/0'/0/0",
+    195: "m/44'/195'/0'/0/0",
+    501: "m/44'/501'/0'",
+  };
+  final records = <int, AccountRecord>{};
+  for (final account in export.accounts) {
+    if (!expectedPaths.containsKey(account.coin) ||
+        records.containsKey(account.coin) ||
+        account.index != 0 ||
+        account.path != expectedPaths[account.coin]) {
+      throw PayloadError('invalid or duplicate account record');
+    }
+    final chain = switch (account.coin) {
+      60 => Chain.ethereum,
+      966 => Chain.polygon,
+      8453 => Chain.base,
+      42161 => Chain.arbitrum,
+      9000 => Chain.avalanche,
+      195 => Chain.tron,
+      501 => Chain.solana,
+      _ => throw PayloadError('unsupported account coin'),
+    };
+    if (!Addresses.validate(chain, account.address).isValid) {
+      throw PayloadError('invalid ${chain.name} account address');
+    }
+    final publicKey = account.publicKey;
+    if (requireAllChains && publicKey == null) {
+      throw PayloadError('account public key is required');
+    }
+    if (publicKey != null &&
+        !_publicKeyMatchesAddress(chain, publicKey, account.address)) {
+      throw PayloadError('account public key does not match address');
+    }
+    records[account.coin] = account;
+  }
+  final required = requireAllChains
+      ? expectedPaths.keys.toSet()
+      : const {60, 966, 195, 501};
+  if (!records.keys.toSet().containsAll(required)) {
+    throw PayloadError('account export is missing supported chains');
+  }
+  final evm = records[60]?.address.toLowerCase();
+  for (final coin in const [966, 8453, 42161, 9000]) {
+    final value = records[coin]?.address;
+    if (value != null && value.toLowerCase() != evm) {
+      throw PayloadError('EVM account records do not share one key');
+    }
+  }
+}
+
+bool _publicKeyMatchesAddress(
+  Chain chain,
+  Uint8List publicKey,
+  String address,
+) {
+  if (chain == Chain.solana) {
+    return publicKey.length == 32 && base58Encode(publicKey) == address;
+  }
+  if (publicKey.length != 65 || publicKey.first != 4) return false;
+  final body = keccak256(Uint8List.sublistView(publicKey, 1)).sublist(12);
+  if (chain == Chain.tron) {
+    final payload = Uint8List.fromList([0x41, ...body]);
+    final checksum = sha256(sha256(payload)).sublist(0, 4);
+    return base58Encode(
+          Uint8List.fromList([...payload, ...checksum]),
+        ) ==
+        address;
+  }
+  final hex = body
+      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+      .join();
+  return '0x$hex'.toLowerCase() == address.toLowerCase();
 }

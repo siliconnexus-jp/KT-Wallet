@@ -46,6 +46,9 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
       case "deriveAddresses":
         result(try deriveAddresses(a))
 
+      case "derivePublicKeys":
+        result(try derivePublicKeys(a))
+
       case "signTransaction":
         result(try await signTransaction(a))
 
@@ -136,6 +139,16 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
     context.interactionNotAllowed = false
     return try withEntropy(a, context: context) {
       try WalletCoreBridge.addresses(fromEntropy: $0)
+    }
+  }
+
+  private func derivePublicKeys(_ a: [String: Any]) throws -> [String: FlutterStandardTypedData] {
+    let context = LAContext()
+    context.interactionNotAllowed = false
+    return try withEntropy(a, context: context) { entropy in
+      try WalletCoreBridge.publicKeys(fromEntropy: entropy).mapValues {
+        FlutterStandardTypedData(bytes: $0)
+      }
     }
   }
 

@@ -49,6 +49,141 @@ class WalletStore {
 
   Future<void> delete(String walletId) => _wallets.deleteWallet(walletId);
 
+  // ---- locally submitted transactions -----------------------------------
+
+  Future<List<db.Transaction>> transactions(String walletId) =>
+      _wallets.scoped(walletId).transactions();
+
+  Future<db.Transaction?> transactionById(String walletId, String id) =>
+      _wallets.scoped(walletId).transactionById(id);
+
+  Future<void> upsertTransaction({
+    required String id,
+    required String walletId,
+    String? reqId,
+    required Coin coin,
+    String? contract,
+    required String from,
+    required String to,
+    required String amountRaw,
+    String? feeRaw,
+    String? hash,
+    required db.TxStatus status,
+    required db.SignMode signMode,
+    required int createdAt,
+    int? broadcastAt,
+    String? nonce,
+    String? maxPriorityFeeRaw,
+    String? maxFeeRaw,
+    String? gasLimitRaw,
+    String? replacesId,
+    String? replacedById,
+    db.TxReplacementKind? replacementKind,
+  }) => _wallets
+      .scoped(walletId)
+      .upsertTransaction(
+        db.TransactionsCompanion.insert(
+          id: id,
+          walletId: walletId,
+          reqId: Value(reqId),
+          coin: coin.name,
+          contract: Value(contract),
+          direction: db.TxDirection.outgoing,
+          fromAddr: from,
+          toAddr: to,
+          amountRaw: amountRaw,
+          feeRaw: Value(feeRaw),
+          hash: Value(hash),
+          status: status,
+          signMode: signMode,
+          createdAt: createdAt,
+          broadcastAt: Value(broadcastAt),
+          nonce: Value(nonce),
+          maxPriorityFeeRaw: Value(maxPriorityFeeRaw),
+          maxFeeRaw: Value(maxFeeRaw),
+          gasLimitRaw: Value(gasLimitRaw),
+          replacesId: Value(replacesId),
+          replacedById: Value(replacedById),
+          replacementKind: Value(replacementKind),
+        ),
+      );
+
+  Future<void> reserveEvmTransaction({
+    required String id,
+    required String walletId,
+    required Coin coin,
+    String? contract,
+    required String from,
+    required String to,
+    required String amountRaw,
+    required String feeRaw,
+    required db.SignMode signMode,
+    required int createdAt,
+    required String nonce,
+    required String maxPriorityFeeRaw,
+    required String maxFeeRaw,
+    required String gasLimitRaw,
+    String? replacesId,
+    db.TxReplacementKind? replacementKind,
+  }) => _wallets
+      .scoped(walletId)
+      .reserveEvmTransaction(
+        db.TransactionsCompanion.insert(
+          id: id,
+          walletId: walletId,
+          coin: coin.name,
+          contract: Value(contract),
+          direction: db.TxDirection.outgoing,
+          fromAddr: from,
+          toAddr: to,
+          amountRaw: amountRaw,
+          feeRaw: Value(feeRaw),
+          status: db.TxStatus.submitted,
+          signMode: signMode,
+          createdAt: createdAt,
+          nonce: Value(nonce),
+          maxPriorityFeeRaw: Value(maxPriorityFeeRaw),
+          maxFeeRaw: Value(maxFeeRaw),
+          gasLimitRaw: Value(gasLimitRaw),
+          replacesId: Value(replacesId),
+          replacementKind: Value(replacementKind),
+        ),
+        coin: coin.name,
+        from: from,
+        nonce: nonce,
+        replacesId: replacesId,
+      );
+
+  Future<void> updateTransactionStatus(
+    String walletId,
+    String id,
+    db.TxStatus status, {
+    String? hash,
+    int? broadcastAt,
+  }) => _wallets
+      .scoped(walletId)
+      .updateTransactionStatus(
+        id,
+        status,
+        hash: hash,
+        broadcastAt: broadcastAt,
+      );
+
+  Future<bool> acceptEvmReplacement({
+    required String walletId,
+    required String originalId,
+    required String replacementId,
+    required String hash,
+    required int broadcastAt,
+  }) => _wallets
+      .scoped(walletId)
+      .acceptEvmReplacement(
+        originalId: originalId,
+        replacementId: replacementId,
+        hash: hash,
+        broadcastAt: broadcastAt,
+      );
+
   // ---- global address book (Settings → 地址管理) --------------------------
 
   Future<List<db.Contact>> listContacts() => _contacts.list();

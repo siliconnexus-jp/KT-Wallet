@@ -55,6 +55,25 @@ enum WalletCoreBridge {
     ]
   }
 
+  static func publicKeys(fromEntropy entropy: Data) throws -> [String: Data] {
+    let wallet = try wallet(fromEntropy: entropy)
+    let evm = wallet.getKeyForCoin(coin: .ethereum)
+      .getPublicKeySecp256k1(compressed: false).data
+    let tron = wallet.getKeyForCoin(coin: .tron)
+      .getPublicKeySecp256k1(compressed: false).data
+    let solana = wallet.getKeyForCoin(coin: .solana)
+      .getPublicKeyEd25519().data
+    return [
+      "eth": evm,
+      "polygon": evm,
+      "base": evm,
+      "arbitrum": evm,
+      "avalanche": evm,
+      "tron": tron,
+      "solana": solana,
+    ]
+  }
+
   private static func coinType(_ coin: String) -> CoinType? {
     switch coin {
     case "eth": return .ethereum
@@ -116,10 +135,9 @@ enum WalletCoreBridge {
     let txID = Hash.sha256(data: rawData)
     guard let signature = key.sign(digest: txID, curve: .secp256k1),
           signature.count == 65 else { throw BridgeError.signFailed }
-    let transaction = protoBytes(field: 1, value: rawData)
-      + protoBytes(field: 2, value: signature)
-    let json: [String: String] = [
-      "transaction": transaction.hexString,
+    let json: [String: Any] = [
+      "raw_data_hex": rawData.hexString,
+      "signature": [signature.hexString],
       "txID": txID.hexString,
     ]
     return (
@@ -135,23 +153,10 @@ enum WalletCoreBridge {
     let key = try wallet(fromEntropy: entropy).getKeyForCoin(coin: .solana)
     guard let signature = key.sign(digest: message, curve: .ed25519),
           signature.count == 64 else { throw BridgeError.signFailed }
-    return (Data([1]) + signature + message, signature.hexString)
-  }
-
-  private static func protoBytes(field: Int, value: Data) -> Data {
-    encodeVarint((field << 3) | 2) + encodeVarint(value.count) + value
-  }
-
-  private static func encodeVarint(_ value: Int) -> Data {
-    var current = value
-    var out = Data()
-    repeat {
-      var byte = UInt8(current & 0x7f)
-      current >>= 7
-      if current != 0 { byte |= 0x80 }
-      out.append(byte)
-    } while current != 0
-    return out
+    return (
+      Data([1]) + signature + message,
+      Base58.encodeNoCheck(data: signature)
+    )
   }
 
   private struct Eip1559Fields {

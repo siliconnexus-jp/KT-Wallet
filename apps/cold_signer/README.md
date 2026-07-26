@@ -1,4 +1,4 @@
-# cold_signer
+# KT Wallet Cold Signer
 
 A new Flutter project.
 

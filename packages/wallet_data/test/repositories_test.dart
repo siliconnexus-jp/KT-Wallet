@@ -14,19 +14,48 @@ WalletsCompanion _wallet(String id, {WalletType type = WalletType.hot}) =>
       createdAt: 1000,
     );
 
-TransactionsCompanion _tx(String id, String walletId, {String amount = '100'}) =>
-    TransactionsCompanion.insert(
-      id: id,
-      walletId: walletId,
-      coin: 'eth',
-      direction: TxDirection.outgoing,
-      fromAddr: '0xfrom',
-      toAddr: '0xto',
-      amountRaw: amount,
-      status: TxStatus.confirmed,
-      signMode: SignMode.local,
-      createdAt: 1000,
-    );
+TransactionsCompanion _tx(
+  String id,
+  String walletId, {
+  String amount = '100',
+}) => TransactionsCompanion.insert(
+  id: id,
+  walletId: walletId,
+  coin: 'eth',
+  direction: TxDirection.outgoing,
+  fromAddr: '0xfrom',
+  toAddr: '0xto',
+  amountRaw: amount,
+  status: TxStatus.confirmed,
+  signMode: SignMode.local,
+  createdAt: 1000,
+);
+
+TransactionsCompanion _evmTx(
+  String id,
+  String walletId, {
+  String nonce = '7',
+  String? replacesId,
+  TxReplacementKind? replacementKind,
+}) => TransactionsCompanion.insert(
+  id: id,
+  walletId: walletId,
+  coin: 'eth',
+  direction: TxDirection.outgoing,
+  fromAddr: '0xfrom',
+  toAddr: '0xto',
+  amountRaw: '100',
+  feeRaw: const Value('420000'),
+  status: TxStatus.submitted,
+  signMode: SignMode.local,
+  createdAt: 1000,
+  nonce: Value(nonce),
+  maxPriorityFeeRaw: const Value('10'),
+  maxFeeRaw: const Value('20'),
+  gasLimitRaw: const Value('21000'),
+  replacesId: Value(replacesId),
+  replacementKind: Value(replacementKind),
+);
 
 void main() {
   late WalletDatabase db;
@@ -51,27 +80,35 @@ void main() {
     });
 
     test('address book is isolated per wallet', () async {
-      await wallets.scoped('A').addContact(AddressBookCompanion.insert(
-            id: 'c1',
-            walletId: 'A',
-            name: 'Alice',
-            address: '0xalice',
-            coin: 'eth',
-            createdAt: 1,
-          ));
+      await wallets
+          .scoped('A')
+          .addContact(
+            AddressBookCompanion.insert(
+              id: 'c1',
+              walletId: 'A',
+              name: 'Alice',
+              address: '0xalice',
+              coin: 'eth',
+              createdAt: 1,
+            ),
+          );
       expect(await wallets.scoped('A').contacts(), hasLength(1));
       expect(await wallets.scoped('B').contacts(), isEmpty);
     });
 
     test('token visibility toggles are per wallet', () async {
-      await wallets.scoped('A').upsertToken(TokensCompanion.insert(
-            walletId: 'A',
-            coin: 'eth',
-            symbol: 'USDT',
-            decimals: 6,
-            name: 'Tether',
-            enabled: const Value(false),
-          ));
+      await wallets
+          .scoped('A')
+          .upsertToken(
+            TokensCompanion.insert(
+              walletId: 'A',
+              coin: 'eth',
+              symbol: 'USDT',
+              decimals: 6,
+              name: 'Tether',
+              enabled: const Value(false),
+            ),
+          );
       expect(await wallets.scoped('A').tokens(), hasLength(1));
       expect(await wallets.scoped('A').tokens(enabledOnly: true), isEmpty);
       expect(await wallets.scoped('B').tokens(), isEmpty);
@@ -83,14 +120,17 @@ void main() {
       expect(await wallets.scoped('B').setting('theme'), isNull);
     });
 
-    test('scope forces walletId even if the caller passes a foreign one', () async {
-      // A caller tries to smuggle a row for B through A's repository (asserts
-      // are stripped in release, so the repo must force the scope's walletId).
-      await wallets.scoped('A').upsertTransaction(_tx('t1', 'B'));
-      expect(await wallets.scoped('A').transactions(), hasLength(1));
-      expect(await wallets.scoped('B').transactions(), isEmpty);
-      expect((await wallets.scoped('A').transactions()).single.walletId, 'A');
-    });
+    test(
+      'scope forces walletId even if the caller passes a foreign one',
+      () async {
+        // A caller tries to smuggle a row for B through A's repository (asserts
+        // are stripped in release, so the repo must force the scope's walletId).
+        await wallets.scoped('A').upsertTransaction(_tx('t1', 'B'));
+        expect(await wallets.scoped('A').transactions(), hasLength(1));
+        expect(await wallets.scoped('B').transactions(), isEmpty);
+        expect((await wallets.scoped('A').transactions()).single.walletId, 'A');
+      },
+    );
   });
 
   group('wallet lifecycle', () {
@@ -102,9 +142,16 @@ void main() {
     test('deleteWallet cascades all per-wallet rows', () async {
       final a = wallets.scoped('A');
       await a.upsertTransaction(_tx('t1', 'A'));
-      await a.addContact(AddressBookCompanion.insert(
-        id: 'c1', walletId: 'A', name: 'x', address: 'y', coin: 'eth', createdAt: 1,
-      ));
+      await a.addContact(
+        AddressBookCompanion.insert(
+          id: 'c1',
+          walletId: 'A',
+          name: 'x',
+          address: 'y',
+          coin: 'eth',
+          createdAt: 1,
+        ),
+      );
       await a.putSetting('k', 'v');
 
       await wallets.deleteWallet('A');
@@ -131,6 +178,119 @@ void main() {
       final tx = (await wallets.scoped('A').transactions()).single;
       expect(tx.amountRaw, huge);
       expect(BigInt.parse(tx.amountRaw), BigInt.parse(huge));
+    });
+  });
+
+  group('EVM nonce reservation and replacement', () {
+    test(
+      'racing transaction with the same nonce is rejected atomically',
+      () async {
+        final repo = wallets.scoped('A');
+        await repo.reserveEvmTransaction(
+          _evmTx('original', 'A'),
+          coin: 'eth',
+          from: '0xfrom',
+          nonce: '7',
+        );
+
+        await expectLater(
+          repo.reserveEvmTransaction(
+            _evmTx('racing', 'A'),
+            coin: 'eth',
+            from: '0xfrom',
+            nonce: '7',
+          ),
+          throwsA(
+            isA<EvmNonceConflict>().having(
+              (error) => error.existing.id,
+              'existing.id',
+              'original',
+            ),
+          ),
+        );
+        expect(await repo.transactions(), hasLength(1));
+      },
+    );
+
+    test('one replacement may reuse the original nonce', () async {
+      final repo = wallets.scoped('A');
+      await repo.reserveEvmTransaction(
+        _evmTx('original', 'A'),
+        coin: 'eth',
+        from: '0xfrom',
+        nonce: '7',
+      );
+      await repo.updateTransactionStatus('original', TxStatus.pending);
+
+      await repo.reserveEvmTransaction(
+        _evmTx(
+          'replacement',
+          'A',
+          replacesId: 'original',
+          replacementKind: TxReplacementKind.speedUp,
+        ),
+        coin: 'eth',
+        from: '0xfrom',
+        nonce: '7',
+        replacesId: 'original',
+      );
+
+      await expectLater(
+        repo.reserveEvmTransaction(
+          _evmTx(
+            'second-replacement',
+            'A',
+            replacesId: 'original',
+            replacementKind: TxReplacementKind.cancel,
+          ),
+          coin: 'eth',
+          from: '0xfrom',
+          nonce: '7',
+          replacesId: 'original',
+        ),
+        throwsA(isA<EvmNonceConflict>()),
+      );
+    });
+
+    test('accepted replacement updates both rows transactionally', () async {
+      final repo = wallets.scoped('A');
+      await repo.reserveEvmTransaction(
+        _evmTx('original', 'A'),
+        coin: 'eth',
+        from: '0xfrom',
+        nonce: '7',
+      );
+      await repo.updateTransactionStatus('original', TxStatus.pending);
+      await repo.reserveEvmTransaction(
+        _evmTx(
+          'replacement',
+          'A',
+          replacesId: 'original',
+          replacementKind: TxReplacementKind.cancel,
+        ),
+        coin: 'eth',
+        from: '0xfrom',
+        nonce: '7',
+        replacesId: 'original',
+      );
+
+      expect(
+        await repo.acceptEvmReplacement(
+          originalId: 'original',
+          replacementId: 'replacement',
+          hash: '0xnew',
+          broadcastAt: 2000,
+        ),
+        isTrue,
+      );
+
+      final original = await repo.transactionById('original');
+      final replacement = await repo.transactionById('replacement');
+      expect(original!.status, TxStatus.replaced);
+      expect(original.replacedById, 'replacement');
+      expect(replacement!.status, TxStatus.pending);
+      expect(replacement.hash, '0xnew');
+      expect(replacement.broadcastAt, 2000);
     });
   });
 }

@@ -2035,6 +2035,83 @@ class $TransactionsTable extends Transactions
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _nonceMeta = const VerificationMeta('nonce');
+  @override
+  late final GeneratedColumn<String> nonce = GeneratedColumn<String>(
+    'nonce',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _maxPriorityFeeRawMeta = const VerificationMeta(
+    'maxPriorityFeeRaw',
+  );
+  @override
+  late final GeneratedColumn<String> maxPriorityFeeRaw =
+      GeneratedColumn<String>(
+        'max_priority_fee_raw',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _maxFeeRawMeta = const VerificationMeta(
+    'maxFeeRaw',
+  );
+  @override
+  late final GeneratedColumn<String> maxFeeRaw = GeneratedColumn<String>(
+    'max_fee_raw',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _gasLimitRawMeta = const VerificationMeta(
+    'gasLimitRaw',
+  );
+  @override
+  late final GeneratedColumn<String> gasLimitRaw = GeneratedColumn<String>(
+    'gas_limit_raw',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _replacesIdMeta = const VerificationMeta(
+    'replacesId',
+  );
+  @override
+  late final GeneratedColumn<String> replacesId = GeneratedColumn<String>(
+    'replaces_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _replacedByIdMeta = const VerificationMeta(
+    'replacedById',
+  );
+  @override
+  late final GeneratedColumn<String> replacedById = GeneratedColumn<String>(
+    'replaced_by_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<TxReplacementKind?, int>
+  replacementKind =
+      GeneratedColumn<int>(
+        'replacement_kind',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<TxReplacementKind?>(
+        $TransactionsTable.$converterreplacementKindn,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2053,6 +2130,13 @@ class $TransactionsTable extends Transactions
     memo,
     createdAt,
     broadcastAt,
+    nonce,
+    maxPriorityFeeRaw,
+    maxFeeRaw,
+    gasLimitRaw,
+    replacesId,
+    replacedById,
+    replacementKind,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2158,6 +2242,51 @@ class $TransactionsTable extends Transactions
         ),
       );
     }
+    if (data.containsKey('nonce')) {
+      context.handle(
+        _nonceMeta,
+        nonce.isAcceptableOrUnknown(data['nonce']!, _nonceMeta),
+      );
+    }
+    if (data.containsKey('max_priority_fee_raw')) {
+      context.handle(
+        _maxPriorityFeeRawMeta,
+        maxPriorityFeeRaw.isAcceptableOrUnknown(
+          data['max_priority_fee_raw']!,
+          _maxPriorityFeeRawMeta,
+        ),
+      );
+    }
+    if (data.containsKey('max_fee_raw')) {
+      context.handle(
+        _maxFeeRawMeta,
+        maxFeeRaw.isAcceptableOrUnknown(data['max_fee_raw']!, _maxFeeRawMeta),
+      );
+    }
+    if (data.containsKey('gas_limit_raw')) {
+      context.handle(
+        _gasLimitRawMeta,
+        gasLimitRaw.isAcceptableOrUnknown(
+          data['gas_limit_raw']!,
+          _gasLimitRawMeta,
+        ),
+      );
+    }
+    if (data.containsKey('replaces_id')) {
+      context.handle(
+        _replacesIdMeta,
+        replacesId.isAcceptableOrUnknown(data['replaces_id']!, _replacesIdMeta),
+      );
+    }
+    if (data.containsKey('replaced_by_id')) {
+      context.handle(
+        _replacedByIdMeta,
+        replacedById.isAcceptableOrUnknown(
+          data['replaced_by_id']!,
+          _replacedByIdMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -2237,6 +2366,36 @@ class $TransactionsTable extends Transactions
         DriftSqlType.int,
         data['${effectivePrefix}broadcast_at'],
       ),
+      nonce: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}nonce'],
+      ),
+      maxPriorityFeeRaw: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}max_priority_fee_raw'],
+      ),
+      maxFeeRaw: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}max_fee_raw'],
+      ),
+      gasLimitRaw: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}gas_limit_raw'],
+      ),
+      replacesId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}replaces_id'],
+      ),
+      replacedById: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}replaced_by_id'],
+      ),
+      replacementKind: $TransactionsTable.$converterreplacementKindn.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}replacement_kind'],
+        ),
+      ),
     );
   }
 
@@ -2251,6 +2410,14 @@ class $TransactionsTable extends Transactions
       const EnumIndexConverter<TxStatus>(TxStatus.values);
   static JsonTypeConverter2<SignMode, int, int> $convertersignMode =
       const EnumIndexConverter<SignMode>(SignMode.values);
+  static JsonTypeConverter2<TxReplacementKind, int, int>
+  $converterreplacementKind = const EnumIndexConverter<TxReplacementKind>(
+    TxReplacementKind.values,
+  );
+  static JsonTypeConverter2<TxReplacementKind?, int?, int?>
+  $converterreplacementKindn = JsonTypeConverter2.asNullable(
+    $converterreplacementKind,
+  );
 }
 
 class Transaction extends DataClass implements Insertable<Transaction> {
@@ -2270,6 +2437,19 @@ class Transaction extends DataClass implements Insertable<Transaction> {
   final String? memo;
   final int createdAt;
   final int? broadcastAt;
+
+  /// EVM replacement metadata. Quantities remain decimal strings so nonce and
+  /// fees never lose precision. They are null for TRON, Solana and legacy rows.
+  final String? nonce;
+  final String? maxPriorityFeeRaw;
+  final String? maxFeeRaw;
+  final String? gasLimitRaw;
+
+  /// Replacement lineage. A successfully accepted replacement sets the
+  /// original row's [replacedById]; the new row points back with [replacesId].
+  final String? replacesId;
+  final String? replacedById;
+  final TxReplacementKind? replacementKind;
   const Transaction({
     required this.id,
     required this.walletId,
@@ -2287,6 +2467,13 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     this.memo,
     required this.createdAt,
     this.broadcastAt,
+    this.nonce,
+    this.maxPriorityFeeRaw,
+    this.maxFeeRaw,
+    this.gasLimitRaw,
+    this.replacesId,
+    this.replacedById,
+    this.replacementKind,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2331,6 +2518,29 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     if (!nullToAbsent || broadcastAt != null) {
       map['broadcast_at'] = Variable<int>(broadcastAt);
     }
+    if (!nullToAbsent || nonce != null) {
+      map['nonce'] = Variable<String>(nonce);
+    }
+    if (!nullToAbsent || maxPriorityFeeRaw != null) {
+      map['max_priority_fee_raw'] = Variable<String>(maxPriorityFeeRaw);
+    }
+    if (!nullToAbsent || maxFeeRaw != null) {
+      map['max_fee_raw'] = Variable<String>(maxFeeRaw);
+    }
+    if (!nullToAbsent || gasLimitRaw != null) {
+      map['gas_limit_raw'] = Variable<String>(gasLimitRaw);
+    }
+    if (!nullToAbsent || replacesId != null) {
+      map['replaces_id'] = Variable<String>(replacesId);
+    }
+    if (!nullToAbsent || replacedById != null) {
+      map['replaced_by_id'] = Variable<String>(replacedById);
+    }
+    if (!nullToAbsent || replacementKind != null) {
+      map['replacement_kind'] = Variable<int>(
+        $TransactionsTable.$converterreplacementKindn.toSql(replacementKind),
+      );
+    }
     return map;
   }
 
@@ -2360,6 +2570,27 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       broadcastAt: broadcastAt == null && nullToAbsent
           ? const Value.absent()
           : Value(broadcastAt),
+      nonce: nonce == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nonce),
+      maxPriorityFeeRaw: maxPriorityFeeRaw == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maxPriorityFeeRaw),
+      maxFeeRaw: maxFeeRaw == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maxFeeRaw),
+      gasLimitRaw: gasLimitRaw == null && nullToAbsent
+          ? const Value.absent()
+          : Value(gasLimitRaw),
+      replacesId: replacesId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(replacesId),
+      replacedById: replacedById == null && nullToAbsent
+          ? const Value.absent()
+          : Value(replacedById),
+      replacementKind: replacementKind == null && nullToAbsent
+          ? const Value.absent()
+          : Value(replacementKind),
     );
   }
 
@@ -2391,6 +2622,17 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       memo: serializer.fromJson<String?>(json['memo']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       broadcastAt: serializer.fromJson<int?>(json['broadcastAt']),
+      nonce: serializer.fromJson<String?>(json['nonce']),
+      maxPriorityFeeRaw: serializer.fromJson<String?>(
+        json['maxPriorityFeeRaw'],
+      ),
+      maxFeeRaw: serializer.fromJson<String?>(json['maxFeeRaw']),
+      gasLimitRaw: serializer.fromJson<String?>(json['gasLimitRaw']),
+      replacesId: serializer.fromJson<String?>(json['replacesId']),
+      replacedById: serializer.fromJson<String?>(json['replacedById']),
+      replacementKind: $TransactionsTable.$converterreplacementKindn.fromJson(
+        serializer.fromJson<int?>(json['replacementKind']),
+      ),
     );
   }
   @override
@@ -2419,6 +2661,15 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       'memo': serializer.toJson<String?>(memo),
       'createdAt': serializer.toJson<int>(createdAt),
       'broadcastAt': serializer.toJson<int?>(broadcastAt),
+      'nonce': serializer.toJson<String?>(nonce),
+      'maxPriorityFeeRaw': serializer.toJson<String?>(maxPriorityFeeRaw),
+      'maxFeeRaw': serializer.toJson<String?>(maxFeeRaw),
+      'gasLimitRaw': serializer.toJson<String?>(gasLimitRaw),
+      'replacesId': serializer.toJson<String?>(replacesId),
+      'replacedById': serializer.toJson<String?>(replacedById),
+      'replacementKind': serializer.toJson<int?>(
+        $TransactionsTable.$converterreplacementKindn.toJson(replacementKind),
+      ),
     };
   }
 
@@ -2439,6 +2690,13 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     Value<String?> memo = const Value.absent(),
     int? createdAt,
     Value<int?> broadcastAt = const Value.absent(),
+    Value<String?> nonce = const Value.absent(),
+    Value<String?> maxPriorityFeeRaw = const Value.absent(),
+    Value<String?> maxFeeRaw = const Value.absent(),
+    Value<String?> gasLimitRaw = const Value.absent(),
+    Value<String?> replacesId = const Value.absent(),
+    Value<String?> replacedById = const Value.absent(),
+    Value<TxReplacementKind?> replacementKind = const Value.absent(),
   }) => Transaction(
     id: id ?? this.id,
     walletId: walletId ?? this.walletId,
@@ -2456,6 +2714,17 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     memo: memo.present ? memo.value : this.memo,
     createdAt: createdAt ?? this.createdAt,
     broadcastAt: broadcastAt.present ? broadcastAt.value : this.broadcastAt,
+    nonce: nonce.present ? nonce.value : this.nonce,
+    maxPriorityFeeRaw: maxPriorityFeeRaw.present
+        ? maxPriorityFeeRaw.value
+        : this.maxPriorityFeeRaw,
+    maxFeeRaw: maxFeeRaw.present ? maxFeeRaw.value : this.maxFeeRaw,
+    gasLimitRaw: gasLimitRaw.present ? gasLimitRaw.value : this.gasLimitRaw,
+    replacesId: replacesId.present ? replacesId.value : this.replacesId,
+    replacedById: replacedById.present ? replacedById.value : this.replacedById,
+    replacementKind: replacementKind.present
+        ? replacementKind.value
+        : this.replacementKind,
   );
   Transaction copyWithCompanion(TransactionsCompanion data) {
     return Transaction(
@@ -2477,6 +2746,23 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       broadcastAt: data.broadcastAt.present
           ? data.broadcastAt.value
           : this.broadcastAt,
+      nonce: data.nonce.present ? data.nonce.value : this.nonce,
+      maxPriorityFeeRaw: data.maxPriorityFeeRaw.present
+          ? data.maxPriorityFeeRaw.value
+          : this.maxPriorityFeeRaw,
+      maxFeeRaw: data.maxFeeRaw.present ? data.maxFeeRaw.value : this.maxFeeRaw,
+      gasLimitRaw: data.gasLimitRaw.present
+          ? data.gasLimitRaw.value
+          : this.gasLimitRaw,
+      replacesId: data.replacesId.present
+          ? data.replacesId.value
+          : this.replacesId,
+      replacedById: data.replacedById.present
+          ? data.replacedById.value
+          : this.replacedById,
+      replacementKind: data.replacementKind.present
+          ? data.replacementKind.value
+          : this.replacementKind,
     );
   }
 
@@ -2498,13 +2784,20 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ..write('signMode: $signMode, ')
           ..write('memo: $memo, ')
           ..write('createdAt: $createdAt, ')
-          ..write('broadcastAt: $broadcastAt')
+          ..write('broadcastAt: $broadcastAt, ')
+          ..write('nonce: $nonce, ')
+          ..write('maxPriorityFeeRaw: $maxPriorityFeeRaw, ')
+          ..write('maxFeeRaw: $maxFeeRaw, ')
+          ..write('gasLimitRaw: $gasLimitRaw, ')
+          ..write('replacesId: $replacesId, ')
+          ..write('replacedById: $replacedById, ')
+          ..write('replacementKind: $replacementKind')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     walletId,
     reqId,
@@ -2521,7 +2814,14 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     memo,
     createdAt,
     broadcastAt,
-  );
+    nonce,
+    maxPriorityFeeRaw,
+    maxFeeRaw,
+    gasLimitRaw,
+    replacesId,
+    replacedById,
+    replacementKind,
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2541,7 +2841,14 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           other.signMode == this.signMode &&
           other.memo == this.memo &&
           other.createdAt == this.createdAt &&
-          other.broadcastAt == this.broadcastAt);
+          other.broadcastAt == this.broadcastAt &&
+          other.nonce == this.nonce &&
+          other.maxPriorityFeeRaw == this.maxPriorityFeeRaw &&
+          other.maxFeeRaw == this.maxFeeRaw &&
+          other.gasLimitRaw == this.gasLimitRaw &&
+          other.replacesId == this.replacesId &&
+          other.replacedById == this.replacedById &&
+          other.replacementKind == this.replacementKind);
 }
 
 class TransactionsCompanion extends UpdateCompanion<Transaction> {
@@ -2561,6 +2868,13 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
   final Value<String?> memo;
   final Value<int> createdAt;
   final Value<int?> broadcastAt;
+  final Value<String?> nonce;
+  final Value<String?> maxPriorityFeeRaw;
+  final Value<String?> maxFeeRaw;
+  final Value<String?> gasLimitRaw;
+  final Value<String?> replacesId;
+  final Value<String?> replacedById;
+  final Value<TxReplacementKind?> replacementKind;
   final Value<int> rowid;
   const TransactionsCompanion({
     this.id = const Value.absent(),
@@ -2579,6 +2893,13 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.memo = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.broadcastAt = const Value.absent(),
+    this.nonce = const Value.absent(),
+    this.maxPriorityFeeRaw = const Value.absent(),
+    this.maxFeeRaw = const Value.absent(),
+    this.gasLimitRaw = const Value.absent(),
+    this.replacesId = const Value.absent(),
+    this.replacedById = const Value.absent(),
+    this.replacementKind = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TransactionsCompanion.insert({
@@ -2598,6 +2919,13 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.memo = const Value.absent(),
     required int createdAt,
     this.broadcastAt = const Value.absent(),
+    this.nonce = const Value.absent(),
+    this.maxPriorityFeeRaw = const Value.absent(),
+    this.maxFeeRaw = const Value.absent(),
+    this.gasLimitRaw = const Value.absent(),
+    this.replacesId = const Value.absent(),
+    this.replacedById = const Value.absent(),
+    this.replacementKind = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        walletId = Value(walletId),
@@ -2626,6 +2954,13 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Expression<String>? memo,
     Expression<int>? createdAt,
     Expression<int>? broadcastAt,
+    Expression<String>? nonce,
+    Expression<String>? maxPriorityFeeRaw,
+    Expression<String>? maxFeeRaw,
+    Expression<String>? gasLimitRaw,
+    Expression<String>? replacesId,
+    Expression<String>? replacedById,
+    Expression<int>? replacementKind,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2645,6 +2980,13 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       if (memo != null) 'memo': memo,
       if (createdAt != null) 'created_at': createdAt,
       if (broadcastAt != null) 'broadcast_at': broadcastAt,
+      if (nonce != null) 'nonce': nonce,
+      if (maxPriorityFeeRaw != null) 'max_priority_fee_raw': maxPriorityFeeRaw,
+      if (maxFeeRaw != null) 'max_fee_raw': maxFeeRaw,
+      if (gasLimitRaw != null) 'gas_limit_raw': gasLimitRaw,
+      if (replacesId != null) 'replaces_id': replacesId,
+      if (replacedById != null) 'replaced_by_id': replacedById,
+      if (replacementKind != null) 'replacement_kind': replacementKind,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2666,6 +3008,13 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Value<String?>? memo,
     Value<int>? createdAt,
     Value<int?>? broadcastAt,
+    Value<String?>? nonce,
+    Value<String?>? maxPriorityFeeRaw,
+    Value<String?>? maxFeeRaw,
+    Value<String?>? gasLimitRaw,
+    Value<String?>? replacesId,
+    Value<String?>? replacedById,
+    Value<TxReplacementKind?>? replacementKind,
     Value<int>? rowid,
   }) {
     return TransactionsCompanion(
@@ -2685,6 +3034,13 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       memo: memo ?? this.memo,
       createdAt: createdAt ?? this.createdAt,
       broadcastAt: broadcastAt ?? this.broadcastAt,
+      nonce: nonce ?? this.nonce,
+      maxPriorityFeeRaw: maxPriorityFeeRaw ?? this.maxPriorityFeeRaw,
+      maxFeeRaw: maxFeeRaw ?? this.maxFeeRaw,
+      gasLimitRaw: gasLimitRaw ?? this.gasLimitRaw,
+      replacesId: replacesId ?? this.replacesId,
+      replacedById: replacedById ?? this.replacedById,
+      replacementKind: replacementKind ?? this.replacementKind,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2746,6 +3102,31 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     if (broadcastAt.present) {
       map['broadcast_at'] = Variable<int>(broadcastAt.value);
     }
+    if (nonce.present) {
+      map['nonce'] = Variable<String>(nonce.value);
+    }
+    if (maxPriorityFeeRaw.present) {
+      map['max_priority_fee_raw'] = Variable<String>(maxPriorityFeeRaw.value);
+    }
+    if (maxFeeRaw.present) {
+      map['max_fee_raw'] = Variable<String>(maxFeeRaw.value);
+    }
+    if (gasLimitRaw.present) {
+      map['gas_limit_raw'] = Variable<String>(gasLimitRaw.value);
+    }
+    if (replacesId.present) {
+      map['replaces_id'] = Variable<String>(replacesId.value);
+    }
+    if (replacedById.present) {
+      map['replaced_by_id'] = Variable<String>(replacedById.value);
+    }
+    if (replacementKind.present) {
+      map['replacement_kind'] = Variable<int>(
+        $TransactionsTable.$converterreplacementKindn.toSql(
+          replacementKind.value,
+        ),
+      );
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2771,6 +3152,13 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
           ..write('memo: $memo, ')
           ..write('createdAt: $createdAt, ')
           ..write('broadcastAt: $broadcastAt, ')
+          ..write('nonce: $nonce, ')
+          ..write('maxPriorityFeeRaw: $maxPriorityFeeRaw, ')
+          ..write('maxFeeRaw: $maxFeeRaw, ')
+          ..write('gasLimitRaw: $gasLimitRaw, ')
+          ..write('replacesId: $replacesId, ')
+          ..write('replacedById: $replacedById, ')
+          ..write('replacementKind: $replacementKind, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5920,6 +6308,13 @@ typedef $$TransactionsTableCreateCompanionBuilder =
       Value<String?> memo,
       required int createdAt,
       Value<int?> broadcastAt,
+      Value<String?> nonce,
+      Value<String?> maxPriorityFeeRaw,
+      Value<String?> maxFeeRaw,
+      Value<String?> gasLimitRaw,
+      Value<String?> replacesId,
+      Value<String?> replacedById,
+      Value<TxReplacementKind?> replacementKind,
       Value<int> rowid,
     });
 typedef $$TransactionsTableUpdateCompanionBuilder =
@@ -5940,6 +6335,13 @@ typedef $$TransactionsTableUpdateCompanionBuilder =
       Value<String?> memo,
       Value<int> createdAt,
       Value<int?> broadcastAt,
+      Value<String?> nonce,
+      Value<String?> maxPriorityFeeRaw,
+      Value<String?> maxFeeRaw,
+      Value<String?> gasLimitRaw,
+      Value<String?> replacesId,
+      Value<String?> replacedById,
+      Value<TxReplacementKind?> replacementKind,
       Value<int> rowid,
     });
 
@@ -6034,6 +6436,42 @@ class $$TransactionsTableFilterComposer
     column: $table.broadcastAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<String> get nonce => $composableBuilder(
+    column: $table.nonce,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get maxPriorityFeeRaw => $composableBuilder(
+    column: $table.maxPriorityFeeRaw,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get maxFeeRaw => $composableBuilder(
+    column: $table.maxFeeRaw,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get gasLimitRaw => $composableBuilder(
+    column: $table.gasLimitRaw,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get replacesId => $composableBuilder(
+    column: $table.replacesId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get replacedById => $composableBuilder(
+    column: $table.replacedById,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<TxReplacementKind?, TxReplacementKind, int>
+  get replacementKind => $composableBuilder(
+    column: $table.replacementKind,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
 }
 
 class $$TransactionsTableOrderingComposer
@@ -6124,6 +6562,41 @@ class $$TransactionsTableOrderingComposer
     column: $table.broadcastAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get nonce => $composableBuilder(
+    column: $table.nonce,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get maxPriorityFeeRaw => $composableBuilder(
+    column: $table.maxPriorityFeeRaw,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get maxFeeRaw => $composableBuilder(
+    column: $table.maxFeeRaw,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get gasLimitRaw => $composableBuilder(
+    column: $table.gasLimitRaw,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get replacesId => $composableBuilder(
+    column: $table.replacesId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get replacedById => $composableBuilder(
+    column: $table.replacedById,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get replacementKind => $composableBuilder(
+    column: $table.replacementKind,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$TransactionsTableAnnotationComposer
@@ -6184,6 +6657,38 @@ class $$TransactionsTableAnnotationComposer
     column: $table.broadcastAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get nonce =>
+      $composableBuilder(column: $table.nonce, builder: (column) => column);
+
+  GeneratedColumn<String> get maxPriorityFeeRaw => $composableBuilder(
+    column: $table.maxPriorityFeeRaw,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get maxFeeRaw =>
+      $composableBuilder(column: $table.maxFeeRaw, builder: (column) => column);
+
+  GeneratedColumn<String> get gasLimitRaw => $composableBuilder(
+    column: $table.gasLimitRaw,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get replacesId => $composableBuilder(
+    column: $table.replacesId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get replacedById => $composableBuilder(
+    column: $table.replacedById,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<TxReplacementKind?, int>
+  get replacementKind => $composableBuilder(
+    column: $table.replacementKind,
+    builder: (column) => column,
+  );
 }
 
 class $$TransactionsTableTableManager
@@ -6233,6 +6738,14 @@ class $$TransactionsTableTableManager
                 Value<String?> memo = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
                 Value<int?> broadcastAt = const Value.absent(),
+                Value<String?> nonce = const Value.absent(),
+                Value<String?> maxPriorityFeeRaw = const Value.absent(),
+                Value<String?> maxFeeRaw = const Value.absent(),
+                Value<String?> gasLimitRaw = const Value.absent(),
+                Value<String?> replacesId = const Value.absent(),
+                Value<String?> replacedById = const Value.absent(),
+                Value<TxReplacementKind?> replacementKind =
+                    const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TransactionsCompanion(
                 id: id,
@@ -6251,6 +6764,13 @@ class $$TransactionsTableTableManager
                 memo: memo,
                 createdAt: createdAt,
                 broadcastAt: broadcastAt,
+                nonce: nonce,
+                maxPriorityFeeRaw: maxPriorityFeeRaw,
+                maxFeeRaw: maxFeeRaw,
+                gasLimitRaw: gasLimitRaw,
+                replacesId: replacesId,
+                replacedById: replacedById,
+                replacementKind: replacementKind,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -6271,6 +6791,14 @@ class $$TransactionsTableTableManager
                 Value<String?> memo = const Value.absent(),
                 required int createdAt,
                 Value<int?> broadcastAt = const Value.absent(),
+                Value<String?> nonce = const Value.absent(),
+                Value<String?> maxPriorityFeeRaw = const Value.absent(),
+                Value<String?> maxFeeRaw = const Value.absent(),
+                Value<String?> gasLimitRaw = const Value.absent(),
+                Value<String?> replacesId = const Value.absent(),
+                Value<String?> replacedById = const Value.absent(),
+                Value<TxReplacementKind?> replacementKind =
+                    const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TransactionsCompanion.insert(
                 id: id,
@@ -6289,6 +6817,13 @@ class $$TransactionsTableTableManager
                 memo: memo,
                 createdAt: createdAt,
                 broadcastAt: broadcastAt,
+                nonce: nonce,
+                maxPriorityFeeRaw: maxPriorityFeeRaw,
+                maxFeeRaw: maxFeeRaw,
+                gasLimitRaw: gasLimitRaw,
+                replacesId: replacesId,
+                replacedById: replacedById,
+                replacementKind: replacementKind,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

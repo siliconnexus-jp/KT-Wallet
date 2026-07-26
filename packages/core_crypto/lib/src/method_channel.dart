@@ -84,6 +84,16 @@ class MethodChannelCoreCrypto implements CoreCrypto {
   }
 
   @override
+  Future<ChainPublicKeys> derivePublicKeys(String walletId) async {
+    CoreCryptoValidation.checkWalletId(walletId);
+    final map = await _invoke<Map<Object?, Object?>>(
+      'derivePublicKeys',
+      {'walletId': walletId},
+    );
+    return ChainPublicKeys.fromMap(map);
+  }
+
+  @override
   Future<SignedTransaction> signTransaction({
     required String walletId,
     required Coin coin,

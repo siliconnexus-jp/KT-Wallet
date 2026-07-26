@@ -293,8 +293,9 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                               address: addr,
                               chain: match.$1.name,
                             );
-                            if (mounted)
+                            if (mounted) {
                               setState(() => _contacts = controller.contacts);
+                            }
                             navigator.pop();
                           },
                   ),
@@ -395,22 +396,14 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
     final l10n = AppLocalizations.of(context);
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.actionDelete),
-        content: Text(l10n.deleteWalletConfirm(contact.name)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(l10n.actionCancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(
-              l10n.actionDelete,
-              style: const TextStyle(color: WalletColors.red),
-            ),
-          ),
-        ],
+      builder: (_) => KtConfirmDialog(
+        title: l10n.actionDelete,
+        message: l10n.deleteWalletConfirm(contact.name),
+        cancelLabel: l10n.actionCancel,
+        confirmLabel: l10n.actionDelete,
+        icon: Icons.person_remove_outlined,
+        iconColor: WalletColors.red,
+        destructive: true,
       ),
     );
     if (ok == true && mounted) {
@@ -703,8 +696,9 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
                               contract: contract.isEmpty ? null : contract,
                               network: sub,
                             );
-                            if (mounted)
+                            if (mounted) {
                               setState(() => _tokens = controller.tokens);
+                            }
                             navigator.pop();
                           },
                   ),
@@ -1272,22 +1266,14 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
     final inUse = Chain.values.any((c) => net.activeFor(c).id == n.id);
     final ok = await showDialog<bool>(
       context: sheetCtx,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.deleteNetwork),
-        content: Text(inUse ? '${n.name}\n${l10n.networkInUse}' : n.name),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(l10n.actionCancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(
-              l10n.actionDelete,
-              style: const TextStyle(color: WalletColors.red),
-            ),
-          ),
-        ],
+      builder: (_) => KtConfirmDialog(
+        title: l10n.deleteNetwork,
+        message: inUse ? '${n.name}\n${l10n.networkInUse}' : n.name,
+        cancelLabel: l10n.actionCancel,
+        confirmLabel: l10n.actionDelete,
+        icon: Icons.delete_outline_rounded,
+        iconColor: WalletColors.red,
+        destructive: true,
       ),
     );
     if (ok == true) await net.removeCustom(n.id);
@@ -2013,26 +1999,19 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     }
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.deleteWalletTitle),
-        content: Text(l10n.deleteWalletConfirm(watch.name)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(l10n.actionCancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(
-              l10n.actionDelete,
-              style: const TextStyle(color: WalletColors.red),
-            ),
-          ),
-        ],
+      builder: (_) => KtConfirmDialog(
+        title: l10n.deleteWalletTitle,
+        message: l10n.deleteWalletConfirm(watch.name),
+        cancelLabel: l10n.actionCancel,
+        confirmLabel: l10n.actionDelete,
+        icon: Icons.delete_outline_rounded,
+        iconColor: WalletColors.red,
+        destructive: true,
       ),
     );
     if (ok == true && mounted) {
-      controller.remove(watch.id);
+      await controller.remove(watch.id);
+      if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(content: Text(l10n.deletedWallet(watch.name))),
       );
@@ -2120,41 +2099,12 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     final l10n = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: WalletColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          l10n.deviceModeSwitchTitle,
-          style: const TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-            color: WalletColors.text,
-          ),
-        ),
-        content: Text(
-          l10n.deviceModeSwitchDesc,
-          style: const TextStyle(
-            fontSize: 14,
-            height: 1.5,
-            color: WalletColors.text2,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(
-              l10n.actionCancel,
-              style: const TextStyle(color: WalletColors.text2),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(
-              l10n.actionConfirm,
-              style: const TextStyle(color: WalletColors.accent),
-            ),
-          ),
-        ],
+      builder: (_) => KtConfirmDialog(
+        title: l10n.deviceModeSwitchTitle,
+        message: l10n.deviceModeSwitchDesc,
+        cancelLabel: l10n.actionCancel,
+        confirmLabel: l10n.actionConfirm,
+        icon: Icons.phonelink_setup_rounded,
       ),
     );
     if (confirmed == true) scope.exitMode();
@@ -2416,8 +2366,9 @@ class _SetPinSheetState extends State<_SetPinSheet> {
   Future<void> _onKey(String k) async {
     if (_saving) return;
     if (k == 'del') {
-      if (_entry.isNotEmpty)
+      if (_entry.isNotEmpty) {
         setState(() => _entry = _entry.substring(0, _entry.length - 1));
+      }
       return;
     }
     if (_entry.length >= 6) return;
@@ -2528,8 +2479,9 @@ class _VerifyPinSheetState extends State<_VerifyPinSheet> {
   Future<void> _onKey(String k) async {
     if (_verifying) return;
     if (k == 'del') {
-      if (_entry.isNotEmpty)
+      if (_entry.isNotEmpty) {
         setState(() => _entry = _entry.substring(0, _entry.length - 1));
+      }
       return;
     }
     if (_entry.length >= 6) return;

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:chains/rpc.dart';
 import 'package:test/test.dart';
 
@@ -156,6 +158,26 @@ void main() {
       );
       expect(await rpc.signatureStatus('sig'), isNull);
     });
+
+    test('fee and simulation use the exact serialized message', () async {
+      final transport = FakeJsonRpc((method, params) {
+        if (method == 'getFeeForMessage') return _ok({'value': 5000});
+        if (method == 'simulateTransaction') {
+          return _ok({
+            'value': {'err': null, 'unitsConsumed': 500},
+          });
+        }
+        throw StateError(method);
+      });
+      final rpc = SolanaRpc(url: 'x', transport: transport);
+      final message = Uint8List.fromList([1, 2, 3]);
+      expect(await rpc.getFeeForMessage(message), BigInt.from(5000));
+      await rpc.simulateMessage(message);
+      expect(
+        transport.requests.map((request) => request['method']),
+        ['getFeeForMessage', 'simulateTransaction'],
+      );
+    });
   });
 
   group('TronRpc', () {
@@ -206,6 +228,45 @@ void main() {
             }),
       );
       expect(() => rpc.getTrxBalance('Tabc'), throwsA(isA<RpcException>()));
+    });
+
+    test('TRC-20 fee limit comes from energy, resources and chain price',
+        () async {
+      final rpc = TronRpc(
+        baseUrl: 'https://api',
+        transport: FakeRest(
+          onPost: (url, body) {
+            if (url.endsWith('triggerconstantcontract')) {
+              return {
+                'result': {'result': true},
+                'energy_used': 100000,
+              };
+            }
+            if (url.endsWith('getaccountresource')) {
+              return {'EnergyLimit': 40000, 'EnergyUsed': 10000};
+            }
+            if (url.endsWith('getchainparameters')) {
+              return {
+                'chainParameter': [
+                  {'key': 'getEnergyFee', 'value': 420},
+                ],
+              };
+            }
+            throw StateError(url);
+          },
+        ),
+      );
+
+      final estimate = await rpc.estimateTokenEnergy(
+        owner: 'owner',
+        contract: 'contract',
+        parameter: '00',
+      );
+
+      expect(estimate.energyRequired, 100000);
+      expect(estimate.energyAvailable, 30000);
+      expect(estimate.energyPriceSun, 420);
+      expect(estimate.feeLimitSun, 35280000);
     });
   });
 }

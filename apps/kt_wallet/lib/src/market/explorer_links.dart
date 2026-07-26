@@ -8,6 +8,9 @@ import '../state/networks.dart';
 const _fallbackExplorerByChain = {
   Chain.ethereum: 'https://etherscan.io',
   Chain.polygon: 'https://polygonscan.com',
+  Chain.base: 'https://basescan.org',
+  Chain.arbitrum: 'https://arbiscan.io',
+  Chain.avalanche: 'https://snowtrace.io',
   Chain.tron: 'https://tronscan.org',
   Chain.solana: 'https://explorer.solana.com',
 };

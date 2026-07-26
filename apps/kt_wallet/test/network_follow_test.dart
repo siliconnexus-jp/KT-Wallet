@@ -58,21 +58,6 @@ class _FakeRest implements RestTransport {
       throw UnimplementedError('本测试不应发起 POST');
 }
 
-class _FailOnContactRest implements RestTransport {
-  int contacts = 0;
-  @override
-  Future<Object?> getJson(String url) {
-    contacts++;
-    fail('测试网环境下不应联系 TronGrid: $url');
-  }
-
-  @override
-  Future<Object?> postJson(String url, Object body) {
-    contacts++;
-    fail('测试网环境下不应联系 TronGrid: $url');
-  }
-}
-
 class _CountingBalanceService extends BalanceService {
   int calls = 0;
   @override
@@ -458,12 +443,12 @@ void main() {
       expect(raw, isNot(rawTxFor(draft, from: from)));
     });
 
-    testWidgets('W6 签名请求屏在 Sepolia 作用域下发出 11155111 的请求', (tester) async {
+    testWidgets('W6 在 Sepolia 手续费估算失败时闭合，不生成可签名请求', (tester) async {
       final networks = NetworkController(
         initialEnvironment: NetworkEnvironment.testnet,
       );
       final session = TransferSession()..draft = draft;
-      // 节点不可达 → 走回退路径(演示常量),但 chainId/网络名必须仍来自活动网络。
+      // 节点不可达时不得再用演示 nonce/费率生成可签名交易。
       final service = _ThrowingParamsService();
       await tester.pumpWidget(
         _app(
@@ -478,13 +463,12 @@ void main() {
       );
       await tester.pump();
 
-      final request = session.request!;
-      expect(request.chainId, 11155111);
-      expect(request.summary![SummaryKeys.network], 'Sepolia');
-      // 原始字节与 Sepolia 域的编码逐字节一致(回退用演示 nonce/费率)。
+      expect(session.request, isNull);
       expect(
-        request.rawTx,
-        rawTxFor(draft, from: demoFromAddress, evmChainId: 11155111),
+        find.text(
+          'Unable to estimate the network fee. Sending is disabled.',
+        ),
+        findsOneWidget,
       );
     });
 

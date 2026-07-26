@@ -1,5 +1,6 @@
 import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:chains/chains.dart';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -125,7 +126,9 @@ class _ScanAddressScreenState extends State<ScanAddressScreen> {
       title: l10n.scanAddressTitle,
       hint: l10n.scanAddressHint,
       onClose: () => Navigator.of(context).maybePop(),
-      onSimulatedScan: () => _pop(ScanAddressScreen.demoAddress),
+      onSimulatedScan: kReleaseMode
+          ? null
+          : () => _pop(ScanAddressScreen.demoAddress),
       onScanned: _onScanned,
       availability: widget.availability,
     );
@@ -172,8 +175,14 @@ class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
       return;
     }
     if (decoded is AccountExport && context.mounted) {
-      _navigated = true;
-      context.pushReplacement('/import-confirm', extra: decoded);
+      try {
+        if (kReleaseMode) validateAccountExport(decoded);
+        _navigated = true;
+        context.pushReplacement('/import-confirm', extra: decoded);
+      } on PayloadError {
+        _session.reset();
+        setState(() => _received = 0);
+      }
     }
   }
 
@@ -200,7 +209,9 @@ class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
       title: l10n.scanAccountQr,
       hint: '${l10n.scanAccountHint}$progress',
       onClose: () => Navigator.of(context).maybePop(),
-      onSimulatedScan: () => _onSimulatedScan(context),
+      onSimulatedScan: kReleaseMode
+          ? null
+          : () => _onSimulatedScan(context),
       onScanned: _onScanned,
       availability: widget.availability,
     );

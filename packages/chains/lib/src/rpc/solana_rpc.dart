@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'transport.dart';
 
 /// Solana JSON-RPC client (detailed-design.md §4.3).
@@ -83,6 +86,42 @@ class SolanaRpc {
       throw RpcException('bad blockhash');
     }
     return value['blockhash'] as String;
+  }
+
+  /// Fee in lamports for the exact serialized message.
+  Future<BigInt> getFeeForMessage(Uint8List message) async {
+    final result = await _call('getFeeForMessage', [
+      base64Encode(message),
+      {'commitment': 'confirmed'},
+    ]);
+    final value = result is Map ? result['value'] : null;
+    if (value is! int) throw RpcException('fee unavailable for message');
+    return BigInt.from(value);
+  }
+
+  /// Simulates the exact single-signer legacy transaction with a zeroed
+  /// signature. Signature verification is disabled, but every instruction,
+  /// account, balance and recent blockhash is checked by the node.
+  Future<void> simulateMessage(Uint8List message) async {
+    final transaction = Uint8List.fromList([
+      1,
+      ...List<int>.filled(64, 0),
+      ...message,
+    ]);
+    final result = await _call('simulateTransaction', [
+      base64Encode(transaction),
+      {
+        'encoding': 'base64',
+        'sigVerify': false,
+        'replaceRecentBlockhash': false,
+        'commitment': 'processed',
+      },
+    ]);
+    final value = result is Map ? result['value'] : null;
+    if (value is! Map) throw RpcException('bad simulation response');
+    if (value['err'] != null) {
+      throw RpcException('simulation failed: ${value['err']}');
+    }
   }
 
   Future<String> sendTransaction(String base64Tx) async {

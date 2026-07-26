@@ -9,36 +9,42 @@ import 'dart:math';
 /// every test runs against [InMemoryVaultStorage].
 void main() {
   group('SecureVault', () {
-    test('stores and reads back mnemonic + metadata', () async {
+    test('stores public metadata without any mnemonic', () async {
       final storage = InMemoryVaultStorage();
       final vault = SecureVault(storage);
       expect(await vault.hasWallet(), isFalse);
-      expect(await vault.readMnemonic(), isNull);
       expect(await vault.readMetadata(), isNull);
 
-      final words = generateMnemonic(random: Random(7));
-      await vault.storeWallet(
-        mnemonic: words,
-        metadata: const WalletMetadata(
-            walletId: 'WLT-A1B2C3D4', name: '主钱包', createdAt: 1786000000),
+      await vault.storeMetadata(
+        const WalletMetadata(
+          walletId: 'WLT-A1B2C3D4',
+          name: '主钱包',
+          createdAt: 1786000000,
+          addresses: {'eth': '0x123'},
+        ),
       );
 
       expect(await vault.hasWallet(), isTrue);
-      expect(await vault.readMnemonic(), words);
+      expect(storage.values.containsKey(SecureVault.mnemonicKey), isFalse);
       final meta = await vault.readMetadata();
       expect(meta!.walletId, 'WLT-A1B2C3D4');
       expect(meta.name, '主钱包');
       expect(meta.createdAt, 1786000000);
+      expect(meta.addresses['eth'], '0x123');
     });
 
     test('wipe erases mnemonic, metadata AND the PIN keys', () async {
       final storage = InMemoryVaultStorage();
       final vault = SecureVault(storage);
-      await vault.storeWallet(
-        mnemonic: generateMnemonic(random: Random(7)),
-        metadata: const WalletMetadata(
-            walletId: 'WLT-A1B2C3D4', name: '主钱包', createdAt: 1786000000),
+      await vault.storeMetadata(
+        const WalletMetadata(
+          walletId: 'WLT-A1B2C3D4',
+          name: '主钱包',
+          createdAt: 1786000000,
+        ),
       );
+      // Simulate an upgrade from the legacy Dart-mnemonic build.
+      await storage.write(SecureVault.mnemonicKey, 'legacy secret words');
       // Simulate PinLock's footprint under the same storage.
       await storage.write(SecureVault.pinKey, '{"hash":"x"}');
       await storage.write(SecureVault.pinLockoutKey, '{"fails":3}');

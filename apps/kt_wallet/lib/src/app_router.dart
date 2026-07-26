@@ -95,6 +95,9 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
                   ? s.extra as AccountExport
                   : null,
             ),
+            '/tx-detail' => (c, s) => TxDetailScreen(
+              transactionId: s.uri.queryParameters['id'],
+            ),
             // Live W12: the registry (gallery + goldens) keeps the
             // design-snapshot ScanAccountScreen; actual navigation gets
             // the camera-enabled variant, which renders identically when

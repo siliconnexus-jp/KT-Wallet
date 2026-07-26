@@ -1,13 +1,11 @@
-/// Offline security-check engine (detailed-design.md §7.2, ui-m.md §9.2).
-///
-/// Each check probes a device condition and maps the result to a level. The
-/// aggregate verdict gates entry to the signing path: any `block` forbids
-/// signing entirely.
+/// Offline security-check engine.
 library;
 
 enum CheckLevel { pass, warn, block }
 
-/// One check's outcome.
+/// A probe must never turn “not measurable” into a green check.
+enum DeviceCondition { safe, unsafe, unknown }
+
 class CheckResult {
   const CheckResult(this.id, this.level, {this.detail});
   final String id;
@@ -15,10 +13,9 @@ class CheckResult {
   final String? detail;
 }
 
-/// Raw device probe inputs, injected so the engine is pure and testable. In the
-/// app these are filled from NWPathMonitor / ConnectivityManager / platform
-/// APIs (detailed-design.md §4, §7.2).
 class DeviceState {
+  /// Compatibility constructor for deterministic tests and explicit native
+  /// probe results.
   const DeviceState({
     required this.networkReachable,
     required this.airplaneMode,
@@ -27,7 +24,43 @@ class DeviceState {
     required this.biometricEnrolled,
     required this.screenCaptured,
     required this.rootedOrJailbroken,
-  });
+  })  : network = networkReachable
+            ? DeviceCondition.unsafe
+            : DeviceCondition.safe,
+        airplane = airplaneMode
+            ? DeviceCondition.safe
+            : DeviceCondition.unsafe,
+        bluetooth = bluetoothOn
+            ? DeviceCondition.unsafe
+            : DeviceCondition.safe,
+        passcode = devicePasscodeSet
+            ? DeviceCondition.safe
+            : DeviceCondition.unsafe,
+        biometric = biometricEnrolled
+            ? DeviceCondition.safe
+            : DeviceCondition.unsafe,
+        screenCapture = screenCaptured
+            ? DeviceCondition.unsafe
+            : DeviceCondition.safe,
+        integrity = rootedOrJailbroken
+            ? DeviceCondition.unsafe
+            : DeviceCondition.safe;
+
+  const DeviceState.conditions({
+    required this.network,
+    required this.airplane,
+    required this.bluetooth,
+    required this.passcode,
+    required this.biometric,
+    required this.screenCapture,
+    required this.integrity,
+  })  : networkReachable = network == DeviceCondition.unsafe,
+        airplaneMode = airplane == DeviceCondition.safe,
+        bluetoothOn = bluetooth == DeviceCondition.unsafe,
+        devicePasscodeSet = passcode == DeviceCondition.safe,
+        biometricEnrolled = biometric == DeviceCondition.safe,
+        screenCaptured = screenCapture == DeviceCondition.unsafe,
+        rootedOrJailbroken = integrity == DeviceCondition.unsafe;
 
   final bool networkReachable;
   final bool airplaneMode;
@@ -36,61 +69,103 @@ class DeviceState {
   final bool biometricEnrolled;
   final bool screenCaptured;
   final bool rootedOrJailbroken;
+
+  final DeviceCondition network;
+  final DeviceCondition airplane;
+  final DeviceCondition bluetooth;
+  final DeviceCondition passcode;
+  final DeviceCondition biometric;
+  final DeviceCondition screenCapture;
+  final DeviceCondition integrity;
 }
 
-/// The check matrix from detailed-design.md §7.2. `block`-level failures stop
-/// the signing path via [SecurityVerdict.canSign].
 abstract final class SecurityChecks {
-  static List<CheckResult> run(DeviceState s) => [
-        CheckResult(
+  static List<CheckResult> run(DeviceState state) => [
+        _result(
           'network',
-          s.networkReachable ? CheckLevel.block : CheckLevel.pass,
-          detail: s.networkReachable ? '检测到网络连接' : '无网络',
+          state.network,
+          unsafe: CheckLevel.block,
+          safeDetail: '无网络',
+          unsafeDetail: '检测到网络连接',
         ),
-        CheckResult(
+        _result(
           'airplane',
-          s.airplaneMode ? CheckLevel.pass : CheckLevel.warn,
+          state.airplane,
+          unsafe: CheckLevel.warn,
+          safeDetail: '飞行模式已开启',
+          unsafeDetail: '飞行模式未开启',
         ),
-        CheckResult(
+        _result(
           'bluetooth',
-          s.bluetoothOn ? CheckLevel.warn : CheckLevel.pass,
+          state.bluetooth,
+          unsafe: CheckLevel.warn,
+          safeDetail: '蓝牙已关闭',
+          unsafeDetail: '蓝牙已开启',
         ),
-        CheckResult(
+        _result(
           'passcode',
-          s.devicePasscodeSet ? CheckLevel.pass : CheckLevel.block,
+          state.passcode,
+          unsafe: CheckLevel.block,
+          safeDetail: '设备密码已设置',
+          unsafeDetail: '设备密码未设置',
         ),
-        CheckResult(
+        _result(
           'biometric',
-          s.biometricEnrolled ? CheckLevel.pass : CheckLevel.warn,
+          state.biometric,
+          unsafe: CheckLevel.warn,
+          safeDetail: '生物识别可用',
+          unsafeDetail: '生物识别不可用',
         ),
-        CheckResult(
+        _result(
           'screen_capture',
-          s.screenCaptured ? CheckLevel.block : CheckLevel.pass,
+          state.screenCapture,
+          unsafe: CheckLevel.block,
+          safeDetail: '未检测到录屏',
+          unsafeDetail: '检测到屏幕录制',
         ),
-        CheckResult(
-          // A rooted/jailbroken device is a full compromise of the key holder;
-          // block signing outright (ui-m.md §9.2 "禁止签名").
+        _result(
           'integrity',
-          s.rootedOrJailbroken ? CheckLevel.block : CheckLevel.pass,
+          state.integrity,
+          unsafe: CheckLevel.block,
+          safeDetail: '系统完整性正常',
+          unsafeDetail: '检测到 root 或越狱',
         ),
       ];
 
-  static SecurityVerdict verdict(DeviceState s) =>
-      SecurityVerdict(run(s));
+  static CheckResult _result(
+    String id,
+    DeviceCondition condition, {
+    required CheckLevel unsafe,
+    required String safeDetail,
+    required String unsafeDetail,
+  }) =>
+      switch (condition) {
+        DeviceCondition.safe =>
+          CheckResult(id, CheckLevel.pass, detail: safeDetail),
+        DeviceCondition.unsafe =>
+          CheckResult(id, unsafe, detail: unsafeDetail),
+        DeviceCondition.unknown =>
+          CheckResult(id, CheckLevel.warn, detail: '无法确认'),
+      };
+
+  static SecurityVerdict verdict(DeviceState state) =>
+      SecurityVerdict(run(state));
 }
 
-/// Aggregate verdict over a set of check results.
 class SecurityVerdict {
   SecurityVerdict(this.results);
   final List<CheckResult> results;
 
   CheckLevel get overall {
-    if (results.any((r) => r.level == CheckLevel.block)) return CheckLevel.block;
-    if (results.any((r) => r.level == CheckLevel.warn)) return CheckLevel.warn;
+    if (results.any((r) => r.level == CheckLevel.block)) {
+      return CheckLevel.block;
+    }
+    if (results.any((r) => r.level == CheckLevel.warn)) {
+      return CheckLevel.warn;
+    }
     return CheckLevel.pass;
   }
 
-  /// Signing is only allowed when nothing is at `block` level.
   bool get canSign => overall != CheckLevel.block;
 
   List<CheckResult> get blocking =>

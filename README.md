@@ -68,6 +68,14 @@ not seed sample wallets, balances, assets, or successful transactions. If all
 configured RPC endpoints fail, the UI reports the network error instead of
 substituting demo values.
 
+The table describes implemented transaction families, not a guarantee that
+every public testnet endpoint or faucet is currently available. EVM sends use
+live nonce, fee history and gas estimation. TRC-20 sends estimate energy and
+derive `feeLimit` from current resources. Solana sends use a fresh blockhash,
+`getFeeForMessage` and node simulation. SPL transfers currently require the
+recipient token account to already exist; automatic associated-token-account
+creation is not yet implemented.
+
 Public RPC calls use bounded timeouts and per-network fallbacks. A custom RPC
 selected in Settings remains authoritative and is never silently replaced.
 Transaction history no longer requires the optional KT Gateway; the gateway can
@@ -91,3 +99,8 @@ See [BUILDING.md](BUILDING.md) for build instructions (including the wallet-core
 Android setup and release signing). Run the test suites from each package/app directory with
 `flutter test`; golden tests replicate the Pencil design (including its mock
 status bar — the real apps suppress it via `KtDeviceChrome`).
+
+Privacy, security and dependency disclosures are in
+[PRIVACY_POLICY.md](PRIVACY_POLICY.md),
+[SECURITY_AND_RISK.md](SECURITY_AND_RISK.md), and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

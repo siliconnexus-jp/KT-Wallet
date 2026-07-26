@@ -1,12 +1,23 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:chains/chains.dart';
+import 'package:chains/rpc.dart';
 import 'package:core_crypto/core_crypto.dart' show Coin;
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
+import 'package:wallet_data/wallet_data.dart'
+    show
+        EvmNonceConflict,
+        SignMode,
+        Transaction,
+        TxDirection,
+        TxReplacementKind,
+        TxStatus;
 
 import '../../l10n/app_localizations.dart';
 import '../market/balance_service.dart' show BalanceStatus;
@@ -15,6 +26,7 @@ import '../market/market_scope.dart'
     show MarketScope, effectiveRpcEndpoints, prefsGatewayResolver;
 import '../market/token_balance_service.dart' show usdcSolanaDevnetToken;
 import '../platform/external_actions.dart';
+import '../rpc/http_transport.dart';
 import '../security/biometric_auth.dart';
 import '../security/wallet_pin.dart';
 import '../state/app_prefs.dart' show AppPrefsScope, AuthMethod;
@@ -30,6 +42,52 @@ import '../widgets/pin_pad.dart';
 import '../widgets/token_icon.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
+
+Future<void> _persistAirgapTransaction(
+  BuildContext context,
+  TransferSession session,
+  TxStatus status, {
+  String? hash,
+}) async {
+  final draft = session.draft;
+  final request = session.request;
+  final wallet = WalletScope.of(context).current;
+  if (draft == null || request == null || wallet == null) return;
+  final id = session.localTransactionId ??=
+      'airgap_${request.reqIdHex.toLowerCase()}';
+  await WalletScope.of(context).saveOutgoingTransaction(
+    id: id,
+    reqId: request.reqIdHex,
+    coin: rpcCoinForChain(draft.chain),
+    contract: draft.tokenContract,
+    from: addressForChain(wallet.addresses, draft.chain),
+    to: draft.recipient,
+    amountRaw: draft.amount.raw.toString(),
+    hash: hash,
+    status: status,
+    signMode: SignMode.airgap,
+    createdAt: request.createdAt * 1000,
+    broadcastAt:
+        status == TxStatus.pending ||
+            status == TxStatus.failed ||
+            status == TxStatus.dropped
+        ? DateTime.now().millisecondsSinceEpoch
+        : null,
+  );
+}
+
+Uint8List _decodeHex(String input) {
+  if (input.length.isOdd || !RegExp(r'^[0-9a-fA-F]+$').hasMatch(input)) {
+    throw const FormatException('invalid hex');
+  }
+  return Uint8List.fromList([
+    for (var i = 0; i < input.length; i += 2)
+      int.parse(input.substring(i, i + 2), radix: 16),
+  ]);
+}
+
+bool get _isFlutterTest =>
+    !kReleaseMode && Platform.environment.containsKey('FLUTTER_TEST');
 
 Color _chainDot(Chain chain) => switch (chain) {
   Chain.ethereum => ChainColors.ethereum,
@@ -1159,8 +1217,7 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
   /// True while the live EVM chain-state fetch is in flight (spinner state).
   bool _building = false;
 
-  /// True when the fetch failed and the demo constants were used instead.
-  bool _paramsFellBack = false;
+  bool _paramsFailed = false;
 
   @override
   void didChangeDependencies() {
@@ -1187,7 +1244,12 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
     final networkLabel = network != null && network.isTestnet
         ? network.name
         : null;
-    if (draft != null && (chain == Chain.ethereum || chain == Chain.polygon)) {
+    if (draft != null &&
+        (chain == Chain.ethereum ||
+            chain == Chain.polygon ||
+            chain == Chain.base ||
+            chain == Chain.arbitrum ||
+            chain == Chain.avalanche)) {
       // Live EVM path: real nonce/fees first, QR after the fetch.
       _building = true;
       final service =
@@ -1207,6 +1269,28 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
           walletId: walletId,
           from: from,
           evmChainId: evmChainId,
+          networkLabel: networkLabel,
+        ),
+      );
+    } else if (draft != null && chain == Chain.tron && !_isFlutterTest) {
+      _building = true;
+      unawaited(
+        _buildLiveTron(
+          session,
+          draft,
+          walletId: walletId,
+          from: from,
+          networkLabel: networkLabel,
+        ),
+      );
+    } else if (draft != null && chain == Chain.solana && !_isFlutterTest) {
+      _building = true;
+      unawaited(
+        _buildLiveSolana(
+          session,
+          draft,
+          walletId: walletId,
+          from: from,
           networkLabel: networkLabel,
         ),
       );
@@ -1233,17 +1317,34 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
     int? evmChainId,
     String? networkLabel,
   }) async {
-    BigInt? nonce, maxPriority, maxFee;
+    BigInt? nonce, maxPriority, maxFee, gasLimit;
     try {
       final params = await service.fetchEvmParams(draft.chain, from);
       final tier = params.tierFor(draft.feeTier);
       nonce = BigInt.from(params.nonce);
       maxPriority = tier.maxPriorityFeePerGas;
       maxFee = tier.maxFeePerGas;
+      final tokenContract = draft.tokenContract;
+      final calldata = tokenContract == null
+          ? Uint8List(0)
+          : Erc20.transferCalldata(
+              to: draft.recipient,
+              amount: draft.amount.raw,
+            );
+      gasLimit = await service.estimateEvmGas(
+        draft.chain,
+        from: from,
+        to: tokenContract ?? draft.recipient,
+        value: tokenContract == null ? draft.amount.raw : BigInt.zero,
+        data: '0x${hexEncode(calldata)}',
+      );
     } catch (_) {
-      // Node unreachable / erroring: the demo constants keep the request
-      // buildable; the fallback banner tells the user what happened.
-      _paramsFellBack = true;
+      if (!mounted) return;
+      setState(() {
+        _building = false;
+        _paramsFailed = true;
+      });
+      return;
     }
     if (!mounted) return;
     setState(() {
@@ -1256,12 +1357,168 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
           nonce: nonce,
           maxPriorityFeePerGas: maxPriority,
           maxFeePerGas: maxFee,
+          gasLimit: gasLimit,
           evmChainId: evmChainId,
           networkLabel: networkLabel,
         ),
         session,
       );
     });
+  }
+
+  Future<void> _buildLiveTron(
+    TransferSession? session,
+    TransferDraft draft, {
+    required String walletId,
+    required String from,
+    String? networkLabel,
+  }) async {
+    try {
+      final endpoints = effectiveRpcEndpoints(
+        AppPrefsScope.maybeOf(context),
+        NetworkScope.maybeOf(context),
+      );
+      final rpc = TronRpc(
+        baseUrl: endpoints(Coin.tron),
+        transport: HttpRestTransport(),
+      );
+      final block = await rpc.getNowBlock();
+      final blockId = _decodeHex(block.blockId);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final intent = TransferIntent(
+        chain: Chain.tron,
+        operation: draft.operation,
+        from: from,
+        to: draft.recipient,
+        amount: draft.amount,
+        tokenContract: draft.tokenContract,
+        tokenSymbol: draft.tokenContract == null ? null : draft.symbol,
+      );
+      int? feeLimit;
+      if (draft.operation == TxOperation.tokenTransfer) {
+        final calldata = Trc20.transferCalldata(
+          to: draft.recipient,
+          amount: draft.amount.raw,
+        );
+        final energy = await rpc.estimateTokenEnergy(
+          owner: from,
+          contract: draft.tokenContract!,
+          parameter: hexEncode(calldata.sublist(4)),
+        );
+        feeLimit = energy.feeLimitSun;
+      }
+      final raw = TronRawTx.forTransfer(
+        intent,
+        refBlockBytes: Uint8List.fromList([
+          (block.number >> 8) & 0xff,
+          block.number & 0xff,
+        ]),
+        refBlockHash: Uint8List.sublistView(blockId, 8, 16),
+        timestamp: now,
+        expiration: now + const Duration(minutes: 10).inMilliseconds,
+        feeLimit: feeLimit,
+      ).encodeRawData();
+      if (!mounted) return;
+      setState(() {
+        _building = false;
+        _install(
+          buildSignRequest(
+            draft: draft,
+            walletId: walletId,
+            fromAddress: from,
+            networkLabel: networkLabel,
+            preparedRawTx: raw,
+          ),
+          session,
+        );
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _building = false;
+        _paramsFailed = true;
+      });
+    }
+  }
+
+  Future<void> _buildLiveSolana(
+    TransferSession? session,
+    TransferDraft draft, {
+    required String walletId,
+    required String from,
+    String? networkLabel,
+  }) async {
+    try {
+      final endpoints = effectiveRpcEndpoints(
+        AppPrefsScope.maybeOf(context),
+        NetworkScope.maybeOf(context),
+      );
+      final rpc = SolanaRpc(
+        url: endpoints(Coin.solana),
+        transport: HttpJsonRpcTransport(),
+      );
+      final blockhash = await rpc.getLatestBlockhash();
+      final SolanaMessage message;
+      if (draft.operation == TxOperation.nativeTransfer) {
+        message = SolanaMessage.systemTransfer(
+          from: from,
+          to: draft.recipient,
+          lamports: draft.amount.raw,
+          recentBlockhash: blockhash,
+        );
+      } else {
+        final mint = draft.tokenContract;
+        if (mint == null) throw StateError('missing SPL mint');
+        final sources = await rpc.getTokenAccounts(from, mint);
+        final destinations = await rpc.getTokenAccounts(draft.recipient, mint);
+        final source = sources
+            .where((account) => account.amount >= draft.amount.raw)
+            .firstOrNull;
+        if (source == null) {
+          throw StateError('insufficient SPL token balance');
+        }
+        if (destinations.isEmpty) {
+          throw StateError('recipient SPL token account does not exist');
+        }
+        message = SolanaMessage.splTransfer(
+          source: source.address,
+          destination: destinations.first.address,
+          owner: from,
+          amount: draft.amount.raw,
+          recentBlockhash: blockhash,
+        );
+      }
+      final raw = message.serialize();
+      final fee = await rpc.getFeeForMessage(raw);
+      final balance = await rpc.getBalance(from);
+      final nativeSpend = draft.operation == TxOperation.nativeTransfer
+          ? draft.amount.raw
+          : BigInt.zero;
+      if (balance < nativeSpend + fee) {
+        throw StateError('insufficient SOL for fee');
+      }
+      await rpc.simulateMessage(raw);
+      if (!mounted) return;
+      setState(() {
+        _building = false;
+        _install(
+          buildSignRequest(
+            draft: draft,
+            walletId: walletId,
+            fromAddress: from,
+            networkLabel: networkLabel,
+            preparedRawTx: raw,
+          ),
+          session,
+        );
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _building = false;
+        _paramsFailed = true;
+      });
+    }
   }
 
   /// Registers [request] as the outstanding one and starts the frame cycle.
@@ -1271,6 +1528,11 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
     session
       ?..request = request
       ..result = null;
+    if (session != null) {
+      unawaited(
+        _persistAirgapTransaction(context, session, TxStatus.awaitingSig),
+      );
+    }
     _frames = encodeQrFrames(request, reqId: request.reqId);
     if (_frames.length > 1) {
       _timer = Timer.periodic(_frameInterval, (_) {
@@ -1306,12 +1568,19 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
           trailingText: l10n.actionCancel,
           onTrailing: _cancel,
         ),
-        children: const [
+        children: [
           KtCard(
-            padding: EdgeInsets.all(24),
+            padding: const EdgeInsets.all(24),
             child: SizedBox(
               height: 280,
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(
+                child: _paramsFailed
+                    ? const Text(
+                        'Unable to estimate the network fee. Sending is disabled.',
+                        textAlign: TextAlign.center,
+                      )
+                    : const CircularProgressIndicator(),
+              ),
             ),
           ),
         ],
@@ -1326,7 +1595,6 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
         onTrailing: _cancel,
       ),
       children: [
-        if (_paramsFellBack) _amberWarn(l10n.chainParamsFallback),
         KtCard(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -1414,6 +1682,7 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
     Wallet? wallet,
   ) {
     if (_navigated) return;
+    if (kReleaseMode) return;
     final request = session?.request;
     if (session != null && request != null) {
       // Signer side of the (simulated) air gap: the paired signer answers with
@@ -1428,6 +1697,7 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
       // Wallet side: aggregate + decode + verify against the outstanding
       // request; broadcast-confirm renders only what was decoded.
       session.result = decodeSignResultFrames(frames, expected: request);
+      unawaited(_persistAirgapTransaction(context, session, TxStatus.signed));
     }
     _navigated = true;
     context.push('/broadcast-confirm');
@@ -1439,7 +1709,7 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
     setState(() => _progress = null);
   }
 
-  void _onScanned(String raw) {
+  Future<void> _onScanned(String raw) async {
     if (_navigated) return;
     final progress = _session.add(raw); // invalid strings: silent anomalies
     if (progress.received > 0) setState(() => _progress = progress);
@@ -1454,12 +1724,28 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
     }
     final SignResult result;
     try {
-      result = verifySignResultPayload(_session.payload!, expected: request);
+      final wallet = WalletScope.of(context).current;
+      final expectedSigner = wallet == null
+          ? null
+          : addressForChain(wallet.addresses, chainForCoin(request.coin));
+      result = await verifySignResultCryptographically(
+        _session.payload!,
+        expected: request,
+        expectedSigner: expectedSigner,
+      );
+      if (!mounted) return;
     } on Object {
       // Foreign or malformed payload: silently start over, keep scanning.
       return _restartSession();
     }
     session.result = result;
+    await _persistAirgapTransaction(
+      context,
+      session,
+      TxStatus.signed,
+      hash: result.txHash,
+    );
+    if (!mounted) return;
     _navigated = true;
     context.push('/broadcast-confirm');
   }
@@ -1570,6 +1856,13 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
       _busy = true;
       _error = null;
     });
+    await _persistAirgapTransaction(
+      context,
+      session,
+      TxStatus.submitted,
+      hash: result.txHash,
+    );
+    if (!mounted) return;
     final outcome = await service.broadcast(
       chainForCoin(result.coin),
       result.signedTx,
@@ -1579,9 +1872,23 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
       case BroadcastStatus.ok:
       case BroadcastStatus.simulated:
         session.broadcastTxHash = outcome.txHash ?? result.txHash;
+        await _persistAirgapTransaction(
+          context,
+          session,
+          TxStatus.pending,
+          hash: session.broadcastTxHash,
+        );
+        if (!mounted) return;
         context.go('/broadcast-result');
       case BroadcastStatus.error:
       case BroadcastStatus.unsupported:
+        await _persistAirgapTransaction(
+          context,
+          session,
+          TxStatus.failed,
+          hash: result.txHash,
+        );
+        if (!mounted) return;
         setState(() {
           _busy = false;
           _error = outcome.message ?? '';
@@ -1829,15 +2136,504 @@ class BroadcastResultScreen extends StatelessWidget {
   }
 }
 
-/// W15 交易详情.
-class TxDetailScreen extends StatelessWidget {
-  const TxDetailScreen({super.key});
+/// W15 交易详情. A route without [transactionId] keeps the design-gallery
+/// snapshot; real history navigation supplies the local row id and enables
+/// EVM speed-up/cancellation only when every persisted signing parameter is
+/// available.
+class TxDetailScreen extends StatefulWidget {
+  const TxDetailScreen({
+    super.key,
+    this.transactionId,
+    this.transaction,
+    this.transferService,
+  });
+
+  final String? transactionId;
+
+  /// Explicit row injection for deterministic widget tests.
+  final Transaction? transaction;
+  final LocalTransferService? transferService;
 
   /// Demo tx hash of the displayed transaction (matches the broadcast flow).
   static const _txHash = '8f6d2c…a94e07';
 
   @override
+  State<TxDetailScreen> createState() => _TxDetailScreenState();
+}
+
+class _TxDetailScreenState extends State<TxDetailScreen> {
+  Future<Transaction?>? _transaction;
+  String? _activeId;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _activeId = widget.transactionId;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (widget.transaction == null && _activeId != null) {
+      _transaction ??= WalletScope.of(context).localTransactionById(_activeId!);
+    }
+  }
+
+  void _reload([String? id]) {
+    if (id != null) _activeId = id;
+    setState(() {
+      _transaction = _activeId == null
+          ? null
+          : WalletScope.of(context).localTransactionById(_activeId!);
+    });
+  }
+
+  Chain? _chainFor(Transaction tx) => switch (tx.coin) {
+    'eth' => Chain.ethereum,
+    'polygon' => Chain.polygon,
+    'base' => Chain.base,
+    'arbitrum' => Chain.arbitrum,
+    'avalanche' => Chain.avalanche,
+    'tron' => Chain.tron,
+    'solana' => Chain.solana,
+    _ => null,
+  };
+
+  bool _canReplace(Transaction tx) {
+    final chain = _chainFor(tx);
+    final isEvm =
+        chain == Chain.ethereum ||
+        chain == Chain.polygon ||
+        chain == Chain.base ||
+        chain == Chain.arbitrum ||
+        chain == Chain.avalanche;
+    return isEvm &&
+        tx.signMode == SignMode.local &&
+        (tx.status == TxStatus.submitted || tx.status == TxStatus.pending) &&
+        tx.nonce != null &&
+        tx.maxPriorityFeeRaw != null &&
+        tx.maxFeeRaw != null &&
+        tx.gasLimitRaw != null;
+  }
+
+  String _statusLabel(AppLocalizations l10n, TxStatus status) =>
+      switch (status) {
+        TxStatus.submitted => l10n.txStatusSubmitted,
+        TxStatus.pending ||
+        TxStatus.broadcast ||
+        TxStatus.signed ||
+        TxStatus.awaitingSig ||
+        TxStatus.draft => l10n.txStatusPending,
+        TxStatus.confirmed => l10n.txStatusConfirmed,
+        TxStatus.failed || TxStatus.expired => l10n.txStatusFailed,
+        TxStatus.dropped => l10n.txStatusDropped,
+        TxStatus.replaced => l10n.txStatusReplaced,
+      };
+
+  Color _statusColor(TxStatus status) => switch (status) {
+    TxStatus.confirmed => WalletColors.green,
+    TxStatus.failed || TxStatus.dropped || TxStatus.expired => WalletColors.red,
+    TxStatus.replaced => WalletColors.text3,
+    _ => WalletColors.accent,
+  };
+
+  IconData _statusIcon(TxStatus status) => switch (status) {
+    TxStatus.confirmed => Icons.check_circle,
+    TxStatus.failed || TxStatus.dropped || TxStatus.expired => Icons.error,
+    TxStatus.replaced => Icons.swap_horiz_rounded,
+    _ => Icons.schedule_rounded,
+  };
+
+  String _short(String value) => value.length <= 24
+      ? value
+      : '${value.substring(0, 12)}…${value.substring(value.length - 10)}';
+
+  (int, String) _nativeUnit(Transaction tx) => switch (tx.coin) {
+    'polygon' => (18, 'POL'),
+    'avalanche' => (18, 'AVAX'),
+    'tron' => (6, 'TRX'),
+    'solana' => (9, 'SOL'),
+    _ => (18, 'ETH'),
+  };
+
+  String _displayNativeRaw(String raw, Transaction tx) {
+    final (decimals, symbol) = _nativeUnit(tx);
+    final amount = Amount(
+      raw: BigInt.parse(raw),
+      decimals: decimals,
+      symbol: symbol,
+    );
+    return '${amount.format(maxFraction: 8)} $symbol';
+  }
+
+  String _displayAmount(Transaction tx) {
+    if (tx.contract != null) return '${tx.amountRaw} Token (raw)';
+    final amount = _displayNativeRaw(tx.amountRaw, tx);
+    return tx.direction == TxDirection.outgoing ? '-$amount' : amount;
+  }
+
+  String _date(int millis) {
+    final value = DateTime.fromMillisecondsSinceEpoch(millis).toLocal();
+    String two(int number) => number.toString().padLeft(2, '0');
+    return '${value.year}-${two(value.month)}-${two(value.day)} '
+        '${two(value.hour)}:${two(value.minute)}';
+  }
+
+  Future<void> _openExplorer(Transaction tx) async {
+    final chain = _chainFor(tx);
+    final hash = tx.hash;
+    if (chain == null || hash == null || hash.isEmpty) return;
+    final opened = await ExternalActions.instance.open(
+      Uri.parse(explorerTxUrl(NetworkScope.of(context).activeFor(chain), hash)),
+    );
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context).externalActionFailed),
+          ),
+        );
+    }
+  }
+
+  Future<void> _replace(Transaction original, {required bool cancel}) async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => KtConfirmDialog(
+        title: l10n.txReplacementConfirmTitle,
+        message: cancel ? l10n.txCancelConfirm : l10n.txSpeedUpConfirm,
+        cancelLabel: l10n.actionCancel,
+        confirmLabel: l10n.actionConfirm,
+        icon: cancel ? Icons.cancel_outlined : Icons.bolt_rounded,
+        iconColor: cancel ? WalletColors.red : WalletColors.accent,
+        destructive: cancel,
+        details: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: (cancel ? WalletColors.red : WalletColors.accent).withValues(
+              alpha: 0.06,
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            children: [
+              KtDetailRow(
+                label: l10n.txNonceLabel,
+                value: original.nonce ?? '—',
+                mono: true,
+              ),
+              const SizedBox(height: 10),
+              KtDetailRow(
+                label: l10n.amountLabel,
+                value: cancel
+                    ? '0 ${_nativeUnit(original).$2}'
+                    : original.contract != null
+                    ? '${original.amountRaw} Token (raw)'
+                    : _displayNativeRaw(original.amountRaw, original),
+                mono: true,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final controller = WalletScope.of(context);
+    final wallet = controller.current;
+    final chain = _chainFor(original);
+    final networkScope = NetworkScope.maybeOf(context);
+    final network = chain == null ? null : networkScope?.activeFor(chain);
+    final nonce = BigInt.tryParse(original.nonce ?? '');
+    final priority = BigInt.tryParse(original.maxPriorityFeeRaw ?? '');
+    final maxFee = BigInt.tryParse(original.maxFeeRaw ?? '');
+    final gasLimit = BigInt.tryParse(original.gasLimitRaw ?? '');
+    if (wallet is! HotWallet ||
+        controller.usesDemoCrypto ||
+        chain == null ||
+        network?.evmChainId == null ||
+        nonce == null ||
+        priority == null ||
+        maxFee == null ||
+        gasLimit == null) {
+      _showMessage(l10n.txReplacementUnavailable);
+      return;
+    }
+
+    setState(() => _submitting = true);
+    final prefs = AppPrefsScope.maybeOf(context);
+    final service =
+        widget.transferService ??
+        LocalTransferService(
+          endpoints: effectiveRpcEndpoints(prefs, networkScope),
+          gateway: prefsGatewayResolver(prefs),
+        );
+    final createdAt = DateTime.now().millisecondsSinceEpoch;
+    final replacementId =
+        'replacement_${createdAt}_${cancel ? 'cancel' : 'speed'}';
+    var reserved = false;
+    try {
+      final prepared = await service.prepareEvmReplacement(
+        chain: chain,
+        evmChainId: network!.evmChainId!,
+        from: original.fromAddr,
+        recipient: original.toAddr,
+        amountRaw: BigInt.parse(original.amountRaw),
+        tokenContract: original.contract,
+        nonce: nonce,
+        previousMaxPriorityFeePerGas: priority,
+        previousMaxFeePerGas: maxFee,
+        previousGasLimit: gasLimit,
+        cancel: cancel,
+      );
+      await controller.reserveOutgoingEvmTransaction(
+        id: replacementId,
+        coin: prepared.coin,
+        contract: prepared.tokenContract,
+        from: prepared.from,
+        to: prepared.recipient,
+        amountRaw: prepared.amountRaw.toString(),
+        feeRaw: prepared.maximumFee.toString(),
+        signMode: SignMode.local,
+        createdAt: createdAt,
+        nonce: prepared.nonce.toString(),
+        maxPriorityFeeRaw: prepared.maxPriorityFeePerGas.toString(),
+        maxFeeRaw: prepared.maxFeePerGas.toString(),
+        gasLimitRaw: prepared.gasLimit.toString(),
+        replacesId: original.id,
+        replacementKind: cancel
+            ? TxReplacementKind.cancel
+            : TxReplacementKind.speedUp,
+      );
+      reserved = true;
+      final hash = await service.signAndBroadcastEvm(
+        wallet: wallet,
+        crypto: controller.crypto,
+        prepared: prepared,
+      );
+      final accepted = await controller.acceptEvmReplacement(
+        originalId: original.id,
+        replacementId: replacementId,
+        hash: hash,
+        broadcastAt: DateTime.now().millisecondsSinceEpoch,
+      );
+      if (!mounted) return;
+      _reload(replacementId);
+      _showMessage(
+        accepted ? l10n.txReplacementSubmitted : l10n.txReplacementRace,
+      );
+    } on EvmNonceAlreadyConsumed {
+      _showMessage(l10n.txNonceAlreadyUsed);
+      _reload();
+    } on EvmNonceConflict {
+      _showMessage(l10n.nonceConflict);
+      _reload();
+    } catch (error) {
+      if (reserved) {
+        await controller.updateTransactionStatus(
+          replacementId,
+          TxStatus.failed,
+        );
+      }
+      if (mounted) _showMessage('$error');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (widget.transaction != null) {
+      return _buildLive(context, widget.transaction!);
+    }
+    if (_activeId == null) return _buildDemo(context);
+    return FutureBuilder<Transaction?>(
+      future: _transaction,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return KtScreen(
+            navBar: KtNavBar(
+              title: AppLocalizations.of(context).txDetailTitle,
+              onBack: () => Navigator.of(context).maybePop(),
+            ),
+            children: const [Center(child: CircularProgressIndicator())],
+          );
+        }
+        final transaction = snapshot.data;
+        if (transaction == null) {
+          return KtScreen(
+            navBar: KtNavBar(
+              title: AppLocalizations.of(context).txDetailTitle,
+              onBack: () => Navigator.of(context).maybePop(),
+            ),
+            children: [
+              Center(child: Text(AppLocalizations.of(context).txNotFound)),
+            ],
+          );
+        }
+        return _buildLive(context, transaction);
+      },
+    );
+  }
+
+  Widget _buildLive(BuildContext context, Transaction tx) {
+    final l10n = AppLocalizations.of(context);
+    final statusColor = _statusColor(tx.status);
+    final chain = _chainFor(tx);
+    final networkName = chain == null
+        ? tx.coin
+        : NetworkScope.of(context).activeFor(chain).name;
+    final canReplace = _canReplace(tx);
+    return KtScreen(
+      gap: 16,
+      navBar: KtNavBar(
+        title: l10n.txDetailTitle,
+        onBack: () => Navigator.of(context).maybePop(),
+        trailing: tx.hash == null ? null : Icons.open_in_new,
+        onTrailing: tx.hash == null ? null : () => _openExplorer(tx),
+      ),
+      bottom: canReplace
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                KtPrimaryButton(
+                  label: l10n.txSpeedUp,
+                  icon: Icons.bolt_rounded,
+                  onPressed: _submitting
+                      ? null
+                      : () => _replace(tx, cancel: false),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: OutlinedButton.icon(
+                    onPressed: _submitting
+                        ? null
+                        : () => _replace(tx, cancel: true),
+                    icon: const Icon(Icons.cancel_outlined),
+                    label: Text(l10n.txCancelTransaction),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: WalletColors.red,
+                      side: const BorderSide(color: WalletColors.red),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : null,
+      children: [
+        Column(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(_statusIcon(tx.status), size: 28, color: statusColor),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _displayAmount(tx),
+              style: const TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.5,
+                color: WalletColors.text,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '${_statusLabel(l10n, tx.status)} · ${_date(tx.createdAt)}',
+              style: const TextStyle(fontSize: 13, color: WalletColors.text3),
+            ),
+          ],
+        ),
+        KtCard(
+          child: Column(
+            children: [
+              KtDetailRow(label: l10n.networkRow, value: networkName),
+              const SizedBox(height: 14),
+              KtDetailRow(
+                label: l10n.recipientAddress,
+                value: _short(tx.toAddr),
+                mono: true,
+              ),
+              const SizedBox(height: 14),
+              KtDetailRow(
+                label: l10n.txRawAmountLabel,
+                value: tx.amountRaw,
+                mono: true,
+              ),
+              if (tx.feeRaw != null) ...[
+                const SizedBox(height: 14),
+                KtDetailRow(
+                  label: l10n.networkFee,
+                  value: _displayNativeRaw(tx.feeRaw!, tx),
+                  mono: true,
+                ),
+              ],
+              if (tx.nonce != null) ...[
+                const SizedBox(height: 14),
+                KtDetailRow(
+                  label: l10n.txNonceLabel,
+                  value: tx.nonce!,
+                  mono: true,
+                ),
+              ],
+              if (tx.hash != null) ...[
+                const SizedBox(height: 14),
+                KtDetailRow(
+                  label: l10n.txHash,
+                  value: _short(tx.hash!),
+                  mono: true,
+                ),
+              ],
+              const SizedBox(height: 14),
+              KtDetailRow(
+                label: l10n.statusLabel,
+                value: _statusLabel(l10n, tx.status),
+                valueColor: statusColor,
+              ),
+              if (tx.replacesId != null) ...[
+                const SizedBox(height: 14),
+                KtDetailRow(
+                  label: l10n.txReplacesLabel,
+                  value: _short(tx.replacesId!),
+                  mono: true,
+                ),
+              ],
+              if (tx.replacedById != null) ...[
+                const SizedBox(height: 14),
+                KtDetailRow(
+                  label: l10n.txReplacedByLabel,
+                  value: _short(tx.replacedById!),
+                  mono: true,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDemo(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 16,
@@ -1854,7 +2650,7 @@ class TxDetailScreen extends StatelessWidget {
             Uri.parse(
               explorerTxUrl(
                 NetworkScope.of(context).activeFor(Chain.tron),
-                _txHash,
+                TxDetailScreen._txHash,
               ),
             ),
           );
@@ -2016,16 +2812,75 @@ class TransferAuthSheet extends StatelessWidget {
           endpoints: effectiveRpcEndpoints(prefs, networkScope),
           gateway: prefsGatewayResolver(prefs),
         );
+    final createdAt = DateTime.now().millisecondsSinceEpoch;
+    final id = session!.localTransactionId ??= 'local_$createdAt';
+    var reserved = false;
     try {
-      final hash = await service.execute(
-        wallet: wallet,
-        crypto: controller.crypto,
-        draft: draft,
-        evmChainId: chainId ?? 0,
-      );
-      session!.broadcastTxHash = hash;
+      final String hash;
+      if (isEvm) {
+        final prepared = await service.prepareEvm(
+          draft: draft,
+          from: addressForChain(wallet.addresses, draft.chain),
+          evmChainId: chainId!,
+        );
+        await controller.reserveOutgoingEvmTransaction(
+          id: id,
+          coin: prepared.coin,
+          contract: prepared.tokenContract,
+          from: prepared.from,
+          to: prepared.recipient,
+          amountRaw: prepared.amountRaw.toString(),
+          feeRaw: prepared.maximumFee.toString(),
+          signMode: SignMode.local,
+          createdAt: createdAt,
+          nonce: prepared.nonce.toString(),
+          maxPriorityFeeRaw: prepared.maxPriorityFeePerGas.toString(),
+          maxFeeRaw: prepared.maxFeePerGas.toString(),
+          gasLimitRaw: prepared.gasLimit.toString(),
+        );
+        reserved = true;
+        hash = await service.signAndBroadcastEvm(
+          wallet: wallet,
+          crypto: controller.crypto,
+          prepared: prepared,
+        );
+        await controller.updateTransactionStatus(
+          id,
+          TxStatus.pending,
+          hash: hash,
+          broadcastAt: DateTime.now().millisecondsSinceEpoch,
+        );
+      } else {
+        hash = await service.execute(
+          wallet: wallet,
+          crypto: controller.crypto,
+          draft: draft,
+          evmChainId: 0,
+        );
+        await controller.saveOutgoingTransaction(
+          id: id,
+          coin: rpcCoinForChain(draft.chain),
+          contract: draft.tokenContract,
+          from: addressForChain(wallet.addresses, draft.chain),
+          to: draft.recipient,
+          amountRaw: draft.amount.raw.toString(),
+          hash: hash,
+          status: TxStatus.pending,
+          signMode: SignMode.local,
+          createdAt: createdAt,
+          broadcastAt: createdAt,
+        );
+      }
+      session.broadcastTxHash = hash;
       if (context.mounted) context.go('/broadcast-result');
+    } on EvmNonceConflict {
+      if (context.mounted) {
+        _showTransferError(context, AppLocalizations.of(context).nonceConflict);
+      }
     } catch (e) {
+      if (reserved) {
+        await controller.updateTransactionStatus(id, TxStatus.failed);
+      }
       if (context.mounted) _showTransferError(context, '$e');
     }
   }

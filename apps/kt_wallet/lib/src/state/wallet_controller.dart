@@ -1,7 +1,14 @@
 import 'package:core_crypto/core_crypto.dart';
 import 'package:core_crypto/testing.dart';
 import 'package:flutter/foundation.dart';
-import 'package:wallet_data/wallet_data.dart' show Contact, CustomToken;
+import 'package:wallet_data/wallet_data.dart'
+    show
+        Contact,
+        CustomToken,
+        SignMode,
+        Transaction,
+        TxReplacementKind,
+        TxStatus;
 
 import '../wallets/wallet_manager.dart';
 import '../wallets/wallet_model.dart';
@@ -50,6 +57,147 @@ class WalletController extends ChangeNotifier {
   bool get usesDemoCrypto => _crypto is MockCoreCrypto;
   int get count => _manager.count;
   bool get canAddMore => _manager.canAddMore;
+
+  Future<List<Transaction>> localTransactions() async {
+    final walletId = current?.id;
+    if (walletId == null || _store == null) return const [];
+    return _store.transactions(walletId);
+  }
+
+  Future<Transaction?> localTransactionById(String id) async {
+    final walletId = current?.id;
+    if (walletId == null || _store == null) return null;
+    return _store.transactionById(walletId, id);
+  }
+
+  Future<void> saveOutgoingTransaction({
+    required String id,
+    String? reqId,
+    required Coin coin,
+    String? contract,
+    required String from,
+    required String to,
+    required String amountRaw,
+    String? feeRaw,
+    String? hash,
+    required TxStatus status,
+    required SignMode signMode,
+    required int createdAt,
+    int? broadcastAt,
+    String? nonce,
+    String? maxPriorityFeeRaw,
+    String? maxFeeRaw,
+    String? gasLimitRaw,
+    String? replacesId,
+    String? replacedById,
+    TxReplacementKind? replacementKind,
+  }) async {
+    final walletId = current?.id;
+    if (walletId == null || _store == null) return;
+    await _store.upsertTransaction(
+      id: id,
+      walletId: walletId,
+      reqId: reqId,
+      coin: coin,
+      contract: contract,
+      from: from,
+      to: to,
+      amountRaw: amountRaw,
+      feeRaw: feeRaw,
+      hash: hash,
+      status: status,
+      signMode: signMode,
+      createdAt: createdAt,
+      broadcastAt: broadcastAt,
+      nonce: nonce,
+      maxPriorityFeeRaw: maxPriorityFeeRaw,
+      maxFeeRaw: maxFeeRaw,
+      gasLimitRaw: gasLimitRaw,
+      replacesId: replacesId,
+      replacedById: replacedById,
+      replacementKind: replacementKind,
+    );
+    notifyListeners();
+  }
+
+  Future<void> reserveOutgoingEvmTransaction({
+    required String id,
+    required Coin coin,
+    String? contract,
+    required String from,
+    required String to,
+    required String amountRaw,
+    required String feeRaw,
+    required SignMode signMode,
+    required int createdAt,
+    required String nonce,
+    required String maxPriorityFeeRaw,
+    required String maxFeeRaw,
+    required String gasLimitRaw,
+    String? replacesId,
+    TxReplacementKind? replacementKind,
+  }) async {
+    final walletId = current?.id;
+    if (walletId == null || _store == null) {
+      throw StateError('No persistent wallet selected');
+    }
+    await _store.reserveEvmTransaction(
+      id: id,
+      walletId: walletId,
+      coin: coin,
+      contract: contract,
+      from: from,
+      to: to,
+      amountRaw: amountRaw,
+      feeRaw: feeRaw,
+      signMode: signMode,
+      createdAt: createdAt,
+      nonce: nonce,
+      maxPriorityFeeRaw: maxPriorityFeeRaw,
+      maxFeeRaw: maxFeeRaw,
+      gasLimitRaw: gasLimitRaw,
+      replacesId: replacesId,
+      replacementKind: replacementKind,
+    );
+    notifyListeners();
+  }
+
+  Future<void> updateTransactionStatus(
+    String id,
+    TxStatus status, {
+    String? hash,
+    int? broadcastAt,
+  }) async {
+    final walletId = current?.id;
+    if (walletId == null || _store == null) return;
+    await _store.updateTransactionStatus(
+      walletId,
+      id,
+      status,
+      hash: hash,
+      broadcastAt: broadcastAt,
+    );
+    notifyListeners();
+  }
+
+  Future<bool> acceptEvmReplacement({
+    required String originalId,
+    required String replacementId,
+    required String hash,
+    required int broadcastAt,
+  }) async {
+    final walletId = current?.id;
+    if (walletId == null || _store == null) return false;
+    final accepted = await _store.acceptEvmReplacement(
+      walletId: walletId,
+      originalId: originalId,
+      replacementId: replacementId,
+      hash: hash,
+      broadcastAt: broadcastAt,
+    );
+    notifyListeners();
+    return accepted;
+  }
 
   int _nextColor() => _palette[_manager.count % _palette.length];
   String _newId() => 'w${DateTime.now().microsecondsSinceEpoch}';
@@ -138,9 +286,13 @@ class WalletController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void remove(String id) {
+  Future<void> remove(String id) async {
+    final wallet = _manager.byId(id);
+    if (_store != null && wallet is HotWallet) {
+      await _crypto.deleteWallet(id);
+    }
     _manager.remove(id);
-    _store?.delete(id);
+    await _store?.delete(id);
     notifyListeners();
   }
 

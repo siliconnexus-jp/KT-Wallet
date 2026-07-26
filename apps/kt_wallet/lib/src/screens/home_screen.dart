@@ -3,6 +3,7 @@ import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
+import 'package:wallet_data/wallet_data.dart' show TxStatus;
 
 import '../../l10n/app_localizations.dart';
 import '../market/balance_service.dart';
@@ -17,6 +18,7 @@ import '../state/app_prefs.dart';
 import '../state/networks.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
+import 'wallet_screens.dart' show AddWalletScreen;
 
 /// KT Wallet home screen (Pencil W1/W20). Reads the current wallet from
 /// [WalletScope], so switching wallets rebuilds it live; hot vs watch wallets
@@ -46,6 +48,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // A production install intentionally has no demo wallet. It must land on
+    // the real create/import/pairing entry instead of rendering a home shell
+    // that assumes an account exists. This also closes the last-wallet-delete
+    // edge case while the /home route is still mounted.
+    if (WalletScope.of(context).current == null) {
+      return const AddWalletScreen();
+    }
     return Scaffold(
       backgroundColor: WalletColors.bg,
       body: SafeArea(
@@ -394,8 +403,9 @@ class _RecordsTabState extends State<_RecordsTab> {
   Widget _liveCard(
     BuildContext context,
     AppLocalizations l10n,
-    List<ChainTxRecord> records,
+    HistoryController history,
   ) {
+    final records = history.records;
     if (records.isEmpty) {
       return KtCard(
         child: Center(
@@ -418,13 +428,23 @@ class _RecordsTabState extends State<_RecordsTab> {
                 height: 1,
                 color: WalletColors.text.withValues(alpha: 0.06),
               ),
-            _RecordRow(
-              record: _TxRecord(
-                r.outgoing,
-                r.amountText ?? '--',
-                _formatRecordTime(l10n, r.timestamp),
-              ),
-              onTap: () => context.push('/tx-detail'),
+            Builder(
+              builder: (context) {
+                final local = history.localTransactionForHash(r.hash);
+                return _RecordRow(
+                  record: _TxRecord(
+                    r.outgoing,
+                    r.amountText ?? '--',
+                    _formatRecordTime(l10n, r.timestamp),
+                    status: local?.status,
+                  ),
+                  onTap: () => local == null
+                      ? context.push('/tx-detail')
+                      : context.push(
+                          '/tx-detail?id=${Uri.encodeComponent(local.id)}',
+                        ),
+                );
+              },
             ),
           ],
         ],
@@ -468,7 +488,7 @@ class _RecordsTabState extends State<_RecordsTab> {
         ],
       );
     } else {
-      body = _liveCard(context, l10n, history.records);
+      body = _liveCard(context, l10n, history);
     }
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -503,8 +523,9 @@ String _formatRecordTime(AppLocalizations l10n, DateTime t) {
   final hm =
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
   if (day == today) return '${l10n.dateToday} $hm';
-  if (day == today.subtract(const Duration(days: 1)))
+  if (day == today.subtract(const Duration(days: 1))) {
     return '${l10n.dateYesterday} $hm';
+  }
   return '${l10n.monthDay(t.month, t.day)} $hm';
 }
 
@@ -551,7 +572,9 @@ class _RecordRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    record.time,
+                    record.status == null
+                        ? record.time
+                        : '${record.time} · ${_txStatusLabel(l10n, record.status!)}',
                     style: const TextStyle(
                       fontSize: 12,
                       color: WalletColors.text3,
@@ -580,10 +603,22 @@ class _RecordRow extends StatelessWidget {
 }
 
 class _TxRecord {
-  const _TxRecord(this.outgoing, this.amount, this.time);
+  const _TxRecord(this.outgoing, this.amount, this.time, {this.status});
   final bool outgoing;
   final String amount, time;
+  final TxStatus? status;
 }
+
+String _txStatusLabel(AppLocalizations l10n, TxStatus status) =>
+    switch (status) {
+      TxStatus.submitted => l10n.txStatusSubmitted,
+      TxStatus.pending => l10n.txStatusPending,
+      TxStatus.confirmed => l10n.txStatusConfirmed,
+      TxStatus.failed => l10n.txStatusFailed,
+      TxStatus.dropped => l10n.txStatusDropped,
+      TxStatus.replaced => l10n.txStatusReplaced,
+      _ => status.name,
+    };
 
 List<_TxRecord> _demoRecords(AppLocalizations l10n) => [
   _TxRecord(true, '120.00 USDT', '${l10n.dateToday} 14:32'),

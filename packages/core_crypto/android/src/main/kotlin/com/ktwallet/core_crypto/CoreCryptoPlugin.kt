@@ -72,6 +72,7 @@ class CoreCryptoPlugin :
                     }
                 }
                 "deriveAddresses" -> result.success(deriveAddresses(call))
+                "derivePublicKeys" -> result.success(derivePublicKeys(call))
                 "signTransaction" -> signTransaction(call, result)
                 "exportMnemonic" -> exportMnemonic(call, result)
                 "deleteWallet" -> deleteWallet(call, result)
@@ -136,6 +137,12 @@ class CoreCryptoPlugin :
     private fun deriveAddresses(call: MethodCall): Map<String, String> {
         var out: Map<String, String> = emptyMap()
         withEntropy(call) { out = WalletCoreBridge.addresses(it) }
+        return out
+    }
+
+    private fun derivePublicKeys(call: MethodCall): Map<String, ByteArray> {
+        var out: Map<String, ByteArray> = emptyMap()
+        withEntropy(call) { out = WalletCoreBridge.publicKeys(it) }
         return out
     }
 

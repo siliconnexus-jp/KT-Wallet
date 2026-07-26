@@ -48,19 +48,62 @@ class EvmRpc {
   Future<BigInt> getBalance(String address) async =>
       _hexToBigInt(await _call('eth_getBalance', [address, 'latest']));
 
-  Future<int> getNonce(String address) async =>
-      _hexToBigInt(await _call('eth_getTransactionCount', [address, 'pending']))
-          .toInt();
+  Future<int> getNonce(String address) async => getNonceAt(address, 'pending');
+
+  Future<int> getConfirmedNonce(String address) async =>
+      getNonceAt(address, 'latest');
+
+  Future<int> getNonceAt(String address, String blockTag) async {
+    if (blockTag != 'latest' && blockTag != 'pending') {
+      throw ArgumentError.value(blockTag, 'blockTag');
+    }
+    return _hexToBigInt(
+      await _call('eth_getTransactionCount', [address, blockTag]),
+    ).toInt();
+  }
+
+  /// Returns null when the node no longer knows [hash].
+  Future<Map<Object?, Object?>?> getTransactionByHash(String hash) async {
+    final result = await _call('eth_getTransactionByHash', [hash]);
+    if (result == null) return null;
+    if (result is! Map) throw RpcException('malformed transaction response');
+    return result;
+  }
+
+  /// Returns null until the transaction is mined (or when it is unknown).
+  Future<Map<Object?, Object?>?> getTransactionReceipt(String hash) async {
+    final result = await _call('eth_getTransactionReceipt', [hash]);
+    if (result == null) return null;
+    if (result is! Map) throw RpcException('malformed receipt response');
+    return result;
+  }
+
+  Future<BigInt> estimateGas({
+    required String from,
+    required String to,
+    required BigInt value,
+    required String data,
+  }) async => _hexToBigInt(
+    await _call('eth_estimateGas', [
+      {
+        'from': from,
+        'to': to,
+        'value': '0x${value.toRadixString(16)}',
+        'data': data,
+      },
+    ]),
+  );
 
   /// ERC-20 balanceOf via eth_call.
   Future<BigInt> erc20Balance(String contract, String owner) async {
     // balanceOf(address) selector 70a08231 + padded owner.
     final data = '0x70a08231${'0' * 24}${_strip0x(owner)}';
     return _hexToBigInt(
-        await _call('eth_call', [
-      {'to': contract, 'data': data},
-      'latest'
-    ]));
+      await _call('eth_call', [
+        {'to': contract, 'data': data},
+        'latest',
+      ]),
+    );
   }
 
   Future<String> sendRawTransaction(String signedHex) async {
@@ -71,7 +114,11 @@ class EvmRpc {
 
   /// Estimates 1559 fees from feeHistory percentiles (slow/standard/fast).
   Future<GasFeeEstimate> estimateFees() async {
-    final history = await _call('eth_feeHistory', ['0x5', 'latest', [25, 50, 90]]);
+    final history = await _call('eth_feeHistory', [
+      '0x5',
+      'latest',
+      [25, 50, 90],
+    ]);
     if (history is! Map) throw RpcException('bad feeHistory');
     final rawBase = history['baseFeePerGas'];
     final rawRewards = history['reward'];
@@ -96,18 +143,16 @@ class EvmRpc {
 
     GasFeeEstimateTier tier(int idx) {
       final tip = meanReward(idx);
-      return GasFeeEstimateTier(maxPriorityFeePerGas: tip, maxFeePerGas: baseFee + tip);
+      return GasFeeEstimateTier(
+        maxPriorityFeePerGas: tip,
+        maxFeePerGas: baseFee + tip,
+      );
     }
 
-    return GasFeeEstimate(
-      slow: tier(0),
-      standard: tier(1),
-      fast: tier(2),
-    );
+    return GasFeeEstimate(slow: tier(0), standard: tier(1), fast: tier(2));
   }
 
-  static String _strip0x(String s) =>
-      s.startsWith('0x') ? s.substring(2) : s;
+  static String _strip0x(String s) => s.startsWith('0x') ? s.substring(2) : s;
 }
 
 /// One EVM fee tier.

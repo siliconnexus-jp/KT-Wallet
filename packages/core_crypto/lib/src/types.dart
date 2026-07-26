@@ -62,6 +62,62 @@ class ChainAddresses {
   );
 }
 
+class ChainPublicKeys {
+  ChainPublicKeys({
+    required Uint8List eth,
+    required Uint8List polygon,
+    Uint8List? base,
+    Uint8List? arbitrum,
+    Uint8List? avalanche,
+    required Uint8List tron,
+    required Uint8List solana,
+  }) : eth = Uint8List.fromList(eth),
+       polygon = Uint8List.fromList(polygon),
+       base = Uint8List.fromList(base ?? eth),
+       arbitrum = Uint8List.fromList(arbitrum ?? eth),
+       avalanche = Uint8List.fromList(avalanche ?? eth),
+       tron = Uint8List.fromList(tron),
+       solana = Uint8List.fromList(solana);
+
+  final Uint8List eth;
+  final Uint8List polygon;
+  final Uint8List base;
+  final Uint8List arbitrum;
+  final Uint8List avalanche;
+  final Uint8List tron;
+  final Uint8List solana;
+
+  Uint8List forCoin(Coin coin) => switch (coin) {
+    Coin.eth => eth,
+    Coin.polygon => polygon,
+    Coin.base => base,
+    Coin.arbitrum => arbitrum,
+    Coin.avalanche => avalanche,
+    Coin.tron => tron,
+    Coin.solana => solana,
+  };
+
+  Map<String, Uint8List> toMap() => {
+    'eth': eth,
+    'polygon': polygon,
+    'base': base,
+    'arbitrum': arbitrum,
+    'avalanche': avalanche,
+    'tron': tron,
+    'solana': solana,
+  };
+
+  static ChainPublicKeys fromMap(Map<Object?, Object?> map) => ChainPublicKeys(
+    eth: map['eth']! as Uint8List,
+    polygon: map['polygon']! as Uint8List,
+    base: (map['base'] ?? map['eth'])! as Uint8List,
+    arbitrum: (map['arbitrum'] ?? map['eth'])! as Uint8List,
+    avalanche: (map['avalanche'] ?? map['eth'])! as Uint8List,
+    tron: map['tron']! as Uint8List,
+    solana: map['solana']! as Uint8List,
+  );
+}
+
 /// Result of a native signing operation. Contains only public data.
 class SignedTransaction {
   const SignedTransaction({required this.signedTx, required this.txHash});

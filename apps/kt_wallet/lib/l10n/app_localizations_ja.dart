@@ -162,7 +162,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get connectColdWallet => 'オフラインウォレットを接続';
 
   @override
-  String get connectColdWalletDesc => 'QRでCold Signerとペアリング。秘密鍵は端末に入りません';
+  String get connectColdWalletDesc =>
+      'QRでKT Wallet Cold Signerとペアリング。秘密鍵は端末に入りません';
 
   @override
   String get createWalletTitle => '通常ウォレットを作成';
@@ -243,7 +244,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get connectColdSafety => '端末はフレーズ・秘密鍵・シードを一切受信・保存しません。';
 
   @override
-  String get scanAccountHint => 'Cold SignerのアドレスQRに合わせてください';
+  String get scanAccountHint => 'KT Wallet Cold SignerのアドレスQRに合わせてください';
 
   @override
   String get importConfirmTitle => 'インポートを確認';
@@ -464,6 +465,75 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get statusLabel => 'ステータス';
+
+  @override
+  String get txStatusSubmitted => '送信済み';
+
+  @override
+  String get txStatusPending => '確認待ち';
+
+  @override
+  String get txStatusConfirmed => '確認済み';
+
+  @override
+  String get txStatusFailed => '失敗';
+
+  @override
+  String get txStatusDropped => '破棄済み';
+
+  @override
+  String get txStatusReplaced => '置換済み';
+
+  @override
+  String get nonceConflict => 'この nonce は別の保留中取引で使用されています。更新して再試行してください。';
+
+  @override
+  String get txSpeedUp => '取引を高速化';
+
+  @override
+  String get txCancelTransaction => '取引をキャンセル';
+
+  @override
+  String get txReplacementConfirmTitle => '置換取引を確認';
+
+  @override
+  String get txSpeedUpConfirm =>
+      '同じ nonce とより高いネットワーク手数料で再送信します。送金先と金額は変更されません。';
+
+  @override
+  String get txCancelConfirm =>
+      '同じ nonce で自分宛てに 0 金額の取引を送信します。この置換取引が先に確認された場合のみ元の取引がキャンセルされます。';
+
+  @override
+  String get txReplacementSubmitted => '置換取引を送信しました';
+
+  @override
+  String get txReplacementRace => '置換取引の送信中に元の取引状態が変わりました。チェーン上の最終結果をお待ちください。';
+
+  @override
+  String get txNonceAlreadyUsed => 'この nonce はすでにチェーン上で使用されているため置換できません。';
+
+  @override
+  String get txReplacementUnavailable =>
+      'この取引には高速化またはキャンセルに必要なチェーンパラメータがありません。';
+
+  @override
+  String get txNonceLabel => 'Nonce';
+
+  @override
+  String get txMaxFeeLabel => '最大手数料（最小単位）';
+
+  @override
+  String get txRawAmountLabel => '金額（最小単位）';
+
+  @override
+  String get txReplacesLabel => '置換元の取引';
+
+  @override
+  String get txReplacedByLabel => '置換先の取引';
+
+  @override
+  String get txNotFound => 'ローカル取引記録が見つかりません';
 
   @override
   String confirming(int received, int total) {

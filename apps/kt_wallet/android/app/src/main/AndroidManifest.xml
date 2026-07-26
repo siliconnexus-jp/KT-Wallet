@@ -3,6 +3,7 @@
          injects its own CAMERA permission via the manifest merge.) -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <uses-permission android:name="android.permission.DETECT_SCREEN_CAPTURE"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <application
         android:label="KT Wallet"
         android:name="${applicationName}"

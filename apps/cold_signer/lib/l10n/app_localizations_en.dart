@@ -323,7 +323,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get signingBlockedDesc =>
-      'This transaction contains content that can\'t be safely parsed. Cold Signer refused to sign to protect your assets.';
+      'This transaction contains content that can\'t be safely parsed. KT Wallet Cold Signer refused to sign to protect your assets.';
 
   @override
   String unknownContractCallDetected(String method) {
