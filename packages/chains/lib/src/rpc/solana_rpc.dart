@@ -34,6 +34,19 @@ class SolanaRpc {
 
   /// Sum of all SPL token accounts owned by [owner] for [mint].
   Future<BigInt> getTokenBalance(String owner, String mint) async {
+    final accounts = await getTokenAccounts(owner, mint);
+    var total = BigInt.zero;
+    for (final account in accounts) {
+      total += account.amount;
+    }
+    return total;
+  }
+
+  /// Parsed SPL token accounts owned by [owner] for [mint].
+  Future<List<SolanaTokenAccount>> getTokenAccounts(
+    String owner,
+    String mint,
+  ) async {
     final result = await _call('getTokenAccountsByOwner', [
       owner,
       {'mint': mint},
@@ -41,18 +54,23 @@ class SolanaRpc {
     ]);
     final value = result is Map ? result['value'] : null;
     if (value is! List) throw RpcException('bad token account response');
-    var total = BigInt.zero;
+    final accounts = <SolanaTokenAccount>[];
     for (final entry in value) {
+      final pubkey = entry is Map ? entry['pubkey'] : null;
       final account = entry is Map ? entry['account'] : null;
       final data = account is Map ? account['data'] : null;
       final parsed = data is Map ? data['parsed'] : null;
       final info = parsed is Map ? parsed['info'] : null;
       final tokenAmount = info is Map ? info['tokenAmount'] : null;
       final amount = tokenAmount is Map ? tokenAmount['amount'] : null;
-      if (amount is! String) throw RpcException('bad token amount');
-      total += BigInt.parse(amount);
+      if (pubkey is! String || amount is! String) {
+        throw RpcException('bad token account');
+      }
+      accounts.add(
+        SolanaTokenAccount(address: pubkey, amount: BigInt.parse(amount)),
+      );
     }
-    return total;
+    return List.unmodifiable(accounts);
   }
 
   /// Latest blockhash (needed to build a transaction; short-lived).
@@ -90,4 +108,10 @@ class SolanaRpc {
     if (status is! String) throw RpcException('bad confirmationStatus');
     return status;
   }
+}
+
+class SolanaTokenAccount {
+  const SolanaTokenAccount({required this.address, required this.amount});
+  final String address;
+  final BigInt amount;
 }

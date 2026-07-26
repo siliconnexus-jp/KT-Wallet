@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KT Wallet iOS 测试网转账复测</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; background: #080b12; color: #f5f7fb; }
+    main { max-width: 1120px; margin: auto; padding: 56px 24px 80px; }
+    .eyebrow { color: #8da2fb; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    h1 { margin: 10px 0 12px; font-size: clamp(34px, 6vw, 62px); letter-spacing: -.045em; }
+    .lead { max-width: 760px; color: #aeb8cc; font-size: 19px; line-height: 1.6; }
+    .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 34px 0; }
+    .card, section { border: 1px solid #20283a; background: #101521; border-radius: 20px; }
+    .card { padding: 22px; }
+    .ok { color: #58e39c; font-weight: 800; }
+    section { padding: 26px; margin-top: 20px; }
+    h2 { margin: 0 0 18px; }
+    .tx { display: grid; grid-template-columns: 130px 1fr; gap: 10px; margin: 12px 0; }
+    .tx a { color: #9db0ff; overflow-wrap: anywhere; }
+    .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-top: 22px; }
+    figure { margin: 0; }
+    img { width: 100%; border-radius: 17px; border: 1px solid #2a344b; }
+    figcaption { color: #8f9ab0; font-size: 13px; margin-top: 8px; }
+    footer { color: #7f899e; margin-top: 30px; font-size: 14px; }
+    @media (max-width: 700px) { .summary { grid-template-columns: 1fr; } .tx { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">iPhone 17 Pro · iOS 26.2 · 2026-07-26</div>
+  <h1>测试网转账复测</h1>
+  <p class="lead">使用同一 iOS 钱包完成真实余额检查、WalletCore 本地签名、Face ID 授权、RPC 广播及链上确认。以下交易均为本轮新产生的公开测试网交易。</p>
+
+  <div class="summary">
+    <div class="card"><div class="ok">✓ 通过</div><h2>Solana Devnet</h2><div>SOL + USDC</div></div>
+    <div class="card"><div class="ok">✓ 通过</div><h2>TRON Nile</h2><div>TRX + Test USDT</div></div>
+    <div class="card"><div class="ok">✓ 通过</div><h2>Ethereum Sepolia</h2><div>ETH + Test USDT</div></div>
+  </div>
+
+  <section>
+    <h2>Solana Devnet</h2>
+    <div class="tx"><strong>SOL 转账</strong><a href="https://explorer.solana.com/tx/4VLp7kPTFt2VBNrmrcfXdY8fcXutdQLixL26vVzdJQDdfnAEkT7UBDKZTqSAQ3wEtaopvyXNzmTguZRtXsYifc8b?cluster=devnet">4VLp7kPTFt2VBNrmrcfXdY8fcXutdQLixL26vVzdJQDdfnAEkT7UBDKZTqSAQ3wEtaopvyXNzmTguZRtXsYifc8b</a></div>
+    <div class="tx"><strong>USDC 转账</strong><a href="https://explorer.solana.com/tx/5V7x66UFexp7nHUYeBH9bZMJHmozzdfHoCb5qs54DaSCxZwcPWUyznZosotba4QqMamBggFprU6dxgcyBvyp96gF?cluster=devnet">5V7x66UFexp7nHUYeBH9bZMJHmozzdfHoCb5qs54DaSCxZwcPWUyznZosotba4QqMamBggFprU6dxgcyBvyp96gF</a></div>
+    <div class="shots">
+      <figure><img src="screenshots/01-solana-sign-authorization.png" alt="SOL Face ID authorization"><figcaption>SOL 本地签名 Face ID 授权</figcaption></figure>
+      <figure><img src="screenshots/02-usdc-sign-authorization.png" alt="USDC Face ID authorization"><figcaption>USDC 本地签名 Face ID 授权</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>TRON Nile</h2>
+    <div class="tx"><strong>TRX 转账</strong><a href="https://nile.tronscan.org/#/transaction/925c87dc4ce2ffc323710f872a96d6e321acf85f80d1e4ed5da94deb15c13284">925c87dc4ce2ffc323710f872a96d6e321acf85f80d1e4ed5da94deb15c13284</a></div>
+    <div class="tx"><strong>USDT 转账</strong><a href="https://nile.tronscan.org/#/transaction/9cfd323fc2a457c904bf2c9a08678459e37a1c75a2620f8be62703d94e5c1bf6">9cfd323fc2a457c904bf2c9a08678459e37a1c75a2620f8be62703d94e5c1bf6</a></div>
+    <div class="shots">
+      <figure><img src="screenshots/03-tron-trx-authorization.png" alt="TRX Face ID authorization"><figcaption>TRX 本地签名 Face ID 授权</figcaption></figure>
+      <figure><img src="screenshots/04-tron-usdt-authorization.png" alt="TRON USDT Face ID authorization"><figcaption>TRON USDT 本地签名 Face ID 授权</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>Ethereum Sepolia</h2>
+    <div class="tx"><strong>ETH 转账</strong><a href="https://sepolia.etherscan.io/tx/0x998571162345ea00f4a33ece335cb0e76643795b26730f23a456ddebd9a6c6ce">0x998571162345ea00f4a33ece335cb0e76643795b26730f23a456ddebd9a6c6ce</a></div>
+    <div class="tx"><strong>USDT 铸造</strong><a href="https://sepolia.etherscan.io/tx/0x1461d2e3c747f62b562f22728d2d16f3257205b1803458dbc56296b20a9a7a53">0x1461d2e3c747f62b562f22728d2d16f3257205b1803458dbc56296b20a9a7a53</a></div>
+    <div class="tx"><strong>USDT 转账</strong><a href="https://sepolia.etherscan.io/tx/0x237fb584c5e5ae713ce1288c6647e77d8c54d5cb34e606b6fd1e7dfeca3b6fee">0x237fb584c5e5ae713ce1288c6647e77d8c54d5cb34e606b6fd1e7dfeca3b6fee</a></div>
+    <div class="shots">
+      <figure><img src="screenshots/05-sepolia-eth-authorization.png" alt="ETH Face ID authorization"><figcaption>ETH 本地签名 Face ID 授权</figcaption></figure>
+      <figure><img src="screenshots/06-sepolia-usdt-mint-authorization.png" alt="Test USDT mint authorization"><figcaption>测试 USDT 铸造签名授权</figcaption></figure>
+      <figure><img src="screenshots/07-sepolia-usdt-transfer-authorization.png" alt="USDT transfer authorization"><figcaption>USDT 转账签名授权</figcaption></figure>
+    </div>
+  </section>
+
+  <footer>结论：本轮三条测试网的原生币与代币发送链路均通过。TRON 首轮曾遇到节点瞬时 DNS 故障，重试官方 Nile TronGrid 后完成两笔链上确认。</footer>
+</main>
+</body>
+</html>

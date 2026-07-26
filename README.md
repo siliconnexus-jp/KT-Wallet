@@ -1,6 +1,7 @@
 # KT-Wallet
 
-Open-source air-gapped multi-chain wallet for **Ethereum, Polygon, TRON, and Solana**.
+Open-source air-gapped multi-chain wallet for **Ethereum, Polygon, Base,
+Arbitrum, Avalanche, TRON, and Solana**.
 
 <p align="center">
   <img src="branding/kt-wallet-logo-256.png" width="160" alt="KT Wallet logo">
@@ -49,6 +50,29 @@ level — the online app cannot sign for them even in principle.
 Fully localized in **简体中文 (base), English, and 日本語** — follows the system
 language with a persisted manual override in Settings (both roles).
 
+## Chain capabilities
+
+| Chain | Live balance | Native transfer | Token transfer | Direct history |
+|---|---:|---:|---:|---:|
+| Ethereum | ✅ | ✅ | ERC-20 | ✅ Blockscout |
+| Polygon | ✅ | ✅ | ERC-20 | ✅ Blockscout |
+| Base | ✅ | ✅ | ERC-20 | ✅ Blockscout |
+| Arbitrum | ✅ | ✅ | ERC-20 | ✅ Blockscout |
+| Avalanche C-Chain | ✅ | ✅ | ERC-20 | ✅ Routescan |
+| TRON | ✅ | ✅ TRX | TRC-20 | ✅ TronGrid |
+| Solana | ✅ | ✅ SOL | SPL | ✅ Solana RPC |
+
+Hot wallets sign on-device through Trust Wallet Core on Android and iOS.
+Watch-only wallets continue to use the QR air-gap flow. Production screens do
+not seed sample wallets, balances, assets, or successful transactions. If all
+configured RPC endpoints fail, the UI reports the network error instead of
+substituting demo values.
+
+Public RPC calls use bounded timeouts and per-network fallbacks. A custom RPC
+selected in Settings remains authoritative and is never silently replaced.
+Transaction history no longer requires the optional KT Gateway; the gateway can
+still be configured as an infrastructure override.
+
 ## Repository layout
 
 | Path | What it is |
@@ -64,6 +88,6 @@ language with a persisted manual override in Settings (both roles).
 ## Building & testing
 
 See [BUILDING.md](BUILDING.md) for build instructions (including the wallet-core
-Android setup). Run the test suites from each package/app directory with
+Android setup and release signing). Run the test suites from each package/app directory with
 `flutter test`; golden tests replicate the Pencil design (including its mock
 status bar — the real apps suppress it via `KtDeviceChrome`).

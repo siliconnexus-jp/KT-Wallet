@@ -1,0 +1,5 @@
+<resources>
+    <string name="privacy_app_name">KT Wallet</string>
+    <string name="privacy_protection_active">Libra Protection is active</string>
+    <string name="privacy_content_hidden">Your wallet content is hidden</string>
+</resources>

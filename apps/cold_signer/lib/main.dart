@@ -12,7 +12,12 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final localeController = LocaleController();
   await localeController.load();
-  runApp(ColdSignerApp(localeController: localeController));
+  runApp(
+    ColdSignerApp(
+      localeController: localeController,
+      initialLocation: '/welcome',
+    ),
+  );
 }
 
 class ColdSignerApp extends StatefulWidget {
@@ -21,8 +26,8 @@ class ColdSignerApp extends StatefulWidget {
     LocaleController? localeController,
     SignerWalletController? walletController,
     this.initialLocation = '/',
-  })  : localeController = localeController ?? LocaleController(),
-        walletController = walletController ?? SignerWalletController();
+  }) : localeController = localeController ?? LocaleController(),
+       walletController = walletController ?? SignerWalletController();
 
   final LocaleController localeController;
 
@@ -67,7 +72,8 @@ class _ColdSignerAppState extends State<ColdSignerApp> {
     if (!mounted) return;
     setState(() {
       _router = buildSignerRouter(
-        initialLocation: wallet.hasWallet && widget.initialLocation == '/welcome'
+        initialLocation:
+            wallet.hasWallet && widget.initialLocation == '/welcome'
             ? '/home'
             : widget.initialLocation,
       );
@@ -75,43 +81,52 @@ class _ColdSignerAppState extends State<ColdSignerApp> {
   }
 
   ThemeData get _theme => ThemeData(
-        fontFamily: 'Inter',
-        brightness: Brightness.dark,
-        colorScheme: ColorScheme.fromSeed(seedColor: SignerColors.ok, brightness: Brightness.dark),
-        scaffoldBackgroundColor: SignerColors.bg,
-      );
+    fontFamily: 'Inter',
+    brightness: Brightness.dark,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: SignerColors.ok,
+      brightness: Brightness.dark,
+    ),
+    scaffoldBackgroundColor: SignerColors.bg,
+  );
 
   @override
   Widget build(BuildContext context) {
     final router = _router;
-    return SignerWalletScope(
-      controller: widget.walletController,
-      child: LocaleScope(
-        controller: widget.localeController,
-        child: ListenableBuilder(
-          listenable: widget.localeController,
-          builder: (context, _) => router == null
-              // One frame at most, while the vault decides home vs. welcome.
-              ? MaterialApp(
-                  title: 'Cold Signer',
-                  debugShowCheckedModeBanner: false,
-                  locale: widget.localeController.locale,
-                  localizationsDelegates: AppLocalizations.localizationsDelegates,
-                  supportedLocales: AppLocalizations.supportedLocales,
-                  theme: _theme,
-                  home: const SignerSplashScreen(),
-                  builder: (context, child) => KtDeviceChrome(mockStatusBar: false, child: child!),
-                )
-              : MaterialApp.router(
-                  title: 'Cold Signer',
-                  debugShowCheckedModeBanner: false,
-                  locale: widget.localeController.locale,
-                  localizationsDelegates: AppLocalizations.localizationsDelegates,
-                  supportedLocales: AppLocalizations.supportedLocales,
-                  theme: _theme,
-                  routerConfig: router,
-                  builder: (context, child) => KtDeviceChrome(mockStatusBar: false, child: child!),
-                ),
+    return ScreenSecurityGuard(
+      child: SignerWalletScope(
+        controller: widget.walletController,
+        child: LocaleScope(
+          controller: widget.localeController,
+          child: ListenableBuilder(
+            listenable: widget.localeController,
+            builder: (context, _) => router == null
+                // One frame at most, while the vault decides home vs. welcome.
+                ? MaterialApp(
+                    title: 'Cold Signer',
+                    debugShowCheckedModeBanner: false,
+                    locale: widget.localeController.locale,
+                    localizationsDelegates:
+                        AppLocalizations.localizationsDelegates,
+                    supportedLocales: AppLocalizations.supportedLocales,
+                    theme: _theme,
+                    home: const SignerSplashScreen(),
+                    builder: (context, child) =>
+                        KtDeviceChrome(mockStatusBar: false, child: child!),
+                  )
+                : MaterialApp.router(
+                    title: 'Cold Signer',
+                    debugShowCheckedModeBanner: false,
+                    locale: widget.localeController.locale,
+                    localizationsDelegates:
+                        AppLocalizations.localizationsDelegates,
+                    supportedLocales: AppLocalizations.supportedLocales,
+                    theme: _theme,
+                    routerConfig: router,
+                    builder: (context, child) =>
+                        KtDeviceChrome(mockStatusBar: false, child: child!),
+                  ),
+          ),
         ),
       ),
     );

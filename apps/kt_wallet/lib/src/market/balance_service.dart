@@ -24,6 +24,10 @@ const String defaultSolanaRpcUrl = 'https://api.mainnet-beta.solana.com';
 /// persisted overrides apply without the services knowing about preferences.
 typedef RpcEndpointResolver = String Function(Coin coin);
 
+/// Called as soon as one chain finishes, allowing the home screen to reveal
+/// fast balances without waiting for the slowest RPC in the batch.
+typedef BalanceResultCallback = void Function(Coin coin, BalanceResult result);
+
 /// The built-in default endpoint per chain — the resolver used when no
 /// override source is wired up (tests, gallery).
 String defaultRpcEndpointFor(Coin coin) => switch (coin) {
@@ -118,7 +122,10 @@ class BalanceService {
   /// call falls back to that chain's direct node path, so a broken/unreachable
   /// gateway degrades to exactly today's behavior instead of a dead screen.
   /// In direct mode (null resolver) the gateway is never contacted.
-  Future<Map<Coin, BalanceResult>> fetchAll(ChainAddresses addresses) async {
+  Future<Map<Coin, BalanceResult>> fetchAll(
+    ChainAddresses addresses, {
+    BalanceResultCallback? onResult,
+  }) async {
     final eth = EvmRpc(url: _endpoints(Coin.eth), transport: _jsonRpc);
     final polygon = EvmRpc(url: _endpoints(Coin.polygon), transport: _jsonRpc);
     final base = EvmRpc(url: _endpoints(Coin.base), transport: _jsonRpc);
@@ -145,7 +152,12 @@ class BalanceService {
     final gateway = _gateway();
     final entries = await Future.wait([
       for (final coin in addresses.enabledCoins)
-        _fetchChain(gateway, coin, addresses.forCoin(coin), direct[coin]!),
+        _fetchChain(gateway, coin, addresses.forCoin(coin), direct[coin]!).then(
+          (entry) {
+            onResult?.call(entry.$1, entry.$2);
+            return entry;
+          },
+        ),
     ]);
     return {for (final (coin, result) in entries) coin: result};
   }

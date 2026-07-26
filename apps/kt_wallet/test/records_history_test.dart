@@ -16,30 +16,42 @@ class _FakeHistoryService extends HistoryService {
   _FakeHistoryService(this.results);
   final Map<Coin, HistoryResult> results;
   @override
-  Future<HistoryResult> fetch(Coin coin, String address) async => results[coin]!;
+  Future<HistoryResult> fetch(Coin coin, String address) async =>
+      results[coin]!;
 }
 
-WalletController _wallets() => WalletController(WalletManager(initial: [
+WalletController _wallets() => WalletController(
+  WalletManager(
+    initial: [
       HotWallet(
         id: 'w1',
         name: '日常钱包',
         avatarColor: 0xFFF59E0B,
         addresses: const ChainAddresses(
-            eth: '0xa', polygon: '0xa', tron: 'Ta', solana: 'a'),
+          eth: '0xa',
+          polygon: '0xa',
+          tron: 'Ta',
+          solana: 'a',
+        ),
         backedUp: true,
       ),
-    ]));
+    ],
+  ),
+);
 
 HistoryController _controller(Map<Coin, HistoryResult> results) =>
-    HistoryController(wallets: _wallets(), service: _FakeHistoryService(results));
+    HistoryController(
+      wallets: _wallets(),
+      service: _FakeHistoryService(results),
+    );
 
 Widget _app(HistoryController controller) => MaterialApp(
-      debugShowCheckedModeBanner: false,
-      locale: const Locale('zh'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: HistoryScope(controller: controller, child: const HomeScreen()),
-    );
+  debugShowCheckedModeBanner: false,
+  locale: const Locale('zh'),
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: HistoryScope(controller: controller, child: const HomeScreen()),
+);
 
 Future<void> _openRecordsTab(WidgetTester tester) async {
   // '记录' appears in the quick-action row and the tab bar; the tab bar comes
@@ -51,8 +63,9 @@ Future<void> _openRecordsTab(WidgetTester tester) async {
 const _unsupported = HistoryResult.unsupported();
 
 void main() {
-  testWidgets('records tab shows live TRON rows when the fetch succeeds',
-      (tester) async {
+  testWidgets('records tab shows live TRON rows when the fetch succeeds', (
+    tester,
+  ) async {
     final controller = _controller({
       Coin.tron: HistoryResult.ok([
         ChainTxRecord(
@@ -90,65 +103,71 @@ void main() {
   });
 
   testWidgets(
-      'records tab falls back to demo rows behind the offline banner on error',
-      (tester) async {
-    final controller = _controller({
-      Coin.tron: const HistoryResult.error(), // e.g. mock address rejected
-      Coin.eth: _unsupported,
-      Coin.polygon: _unsupported,
-      Coin.solana: _unsupported,
-    });
-    await controller.refresh();
+    'records tab reports network failure without substituting demo rows',
+    (tester) async {
+      final controller = _controller({
+        Coin.tron: const HistoryResult.error(), // e.g. mock address rejected
+        Coin.eth: _unsupported,
+        Coin.polygon: _unsupported,
+        Coin.solana: _unsupported,
+      });
+      await controller.refresh();
 
-    await tester.pumpWidget(_app(controller));
-    await tester.pumpAndSettle();
-    await _openRecordsTab(tester);
+      await tester.pumpWidget(_app(controller));
+      await tester.pumpAndSettle();
+      await _openRecordsTab(tester);
 
-    expect(find.text('离线，显示演示数据'), findsOneWidget);
-    // Demo rows render, explicitly labeled.
-    expect(find.text('-120.00 USDT'), findsOneWidget);
-    expect(find.text('+0.05 ETH'), findsOneWidget);
-    controller.dispose();
-  });
+      expect(find.text('网络不可用，实时数据加载失败'), findsOneWidget);
+      expect(find.text('-120.00 USDT'), findsNothing);
+      expect(find.text('+0.05 ETH'), findsNothing);
+      controller.dispose();
+    },
+  );
 
   testWidgets(
-      'records tab shows the unsupported line for a context with no history API',
-      (tester) async {
-    final controller = _controller({
-      for (final coin in Coin.values) coin: _unsupported, // "ETH-only" context
-    });
-    await controller.refresh();
+    'records tab shows the unsupported line for a context with no history API',
+    (tester) async {
+      final controller = _controller({
+        for (final coin in Coin.values)
+          coin: _unsupported, // "ETH-only" context
+      });
+      await controller.refresh();
 
-    await tester.pumpWidget(_app(controller));
-    await tester.pumpAndSettle();
-    await _openRecordsTab(tester);
+      await tester.pumpWidget(_app(controller));
+      await tester.pumpAndSettle();
+      await _openRecordsTab(tester);
 
-    expect(find.text('该链暂不支持历史查询'), findsOneWidget);
-    expect(find.text('-120.00 USDT'), findsNothing);
-    expect(find.text('离线，显示演示数据'), findsNothing);
-    controller.dispose();
-  });
+      expect(find.text('该链暂不支持历史查询'), findsOneWidget);
+      expect(find.text('-120.00 USDT'), findsNothing);
+      expect(find.text('离线，显示演示数据'), findsNothing);
+      controller.dispose();
+    },
+  );
 
-  testWidgets('records tab shows the empty state for a live but empty history',
-      (tester) async {
-    final controller = _controller({
-      Coin.tron: const HistoryResult.ok([]),
-      Coin.eth: _unsupported,
-      Coin.polygon: _unsupported,
-      Coin.solana: _unsupported,
-    });
-    await controller.refresh();
+  testWidgets(
+    'records tab shows the empty state for a live but empty history',
+    (tester) async {
+      final controller = _controller({
+        Coin.tron: const HistoryResult.ok([]),
+        Coin.eth: _unsupported,
+        Coin.polygon: _unsupported,
+        Coin.solana: _unsupported,
+      });
+      await controller.refresh();
 
-    await tester.pumpWidget(_app(controller));
-    await tester.pumpAndSettle();
-    await _openRecordsTab(tester);
+      await tester.pumpWidget(_app(controller));
+      await tester.pumpAndSettle();
+      await _openRecordsTab(tester);
 
-    expect(find.text('暂无交易记录'), findsOneWidget);
-    expect(find.text('-120.00 USDT'), findsNothing);
-    controller.dispose();
-  });
+      expect(find.text('暂无交易记录'), findsOneWidget);
+      expect(find.text('-120.00 USDT'), findsNothing);
+      controller.dispose();
+    },
+  );
 
-  testWidgets('records tab shows -- placeholders while loading', (tester) async {
+  testWidgets('records tab shows -- placeholders while loading', (
+    tester,
+  ) async {
     final controller = _controller({
       for (final coin in Coin.values) coin: _unsupported,
     });
@@ -162,15 +181,18 @@ void main() {
     controller.dispose();
   });
 
-  testWidgets('records tab WITHOUT any live context renders the demo rows',
-      (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      debugShowCheckedModeBanner: false,
-      locale: const Locale('zh'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: const HomeScreen(),
-    ));
+  testWidgets('records tab WITHOUT any live context renders the demo rows', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const HomeScreen(),
+      ),
+    );
     await tester.pumpAndSettle();
     await _openRecordsTab(tester);
 

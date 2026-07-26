@@ -612,6 +612,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appLockDesc => 'Require biometrics to open the app';
 
   @override
+  String get authMethod => 'Authentication method';
+
+  @override
+  String get authMethodDesc => 'Used to unlock the app and approve transfers';
+
+  @override
+  String get authBiometrics => 'Face ID / Biometrics';
+
+  @override
+  String get authBiometricsDesc => 'Fast approval using this device';
+
+  @override
+  String get authPassword => 'Wallet password';
+
+  @override
+  String get authPasswordDesc => 'Enter your 6-digit wallet password';
+
+  @override
   String get autoLock => 'Auto-lock';
 
   @override
@@ -732,7 +750,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get watchWalletCreated => 'Watch wallet created';
 
   @override
-  String get marketOfflineDemo => 'Offline — showing demo data';
+  String get marketOfflineDemo =>
+      'Network unavailable — live data could not be loaded';
 
   @override
   String get actionDone => 'Done';

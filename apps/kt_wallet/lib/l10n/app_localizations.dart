@@ -1195,8 +1195,44 @@ abstract class AppLocalizations {
   /// No description provided for @appLockDesc.
   ///
   /// In zh, this message translates to:
-  /// **'打开 App 时需要生物识别'**
+  /// **'打开 App 时进行安全验证'**
   String get appLockDesc;
+
+  /// No description provided for @authMethod.
+  ///
+  /// In zh, this message translates to:
+  /// **'验证方式'**
+  String get authMethod;
+
+  /// No description provided for @authMethodDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'用于解锁 App 和确认转账'**
+  String get authMethodDesc;
+
+  /// No description provided for @authBiometrics.
+  ///
+  /// In zh, this message translates to:
+  /// **'人脸 / 生物识别'**
+  String get authBiometrics;
+
+  /// No description provided for @authBiometricsDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用本机生物识别快速确认'**
+  String get authBiometricsDesc;
+
+  /// No description provided for @authPassword.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包密码'**
+  String get authPassword;
+
+  /// No description provided for @authPasswordDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用 6 位钱包密码验证'**
+  String get authPasswordDesc;
 
   /// No description provided for @autoLock.
   ///
@@ -1417,7 +1453,7 @@ abstract class AppLocalizations {
   /// No description provided for @marketOfflineDemo.
   ///
   /// In zh, this message translates to:
-  /// **'离线，显示演示数据'**
+  /// **'网络不可用，实时数据加载失败'**
   String get marketOfflineDemo;
 
   /// No description provided for @actionDone.

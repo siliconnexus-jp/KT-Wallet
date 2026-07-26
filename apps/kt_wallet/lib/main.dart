@@ -20,7 +20,6 @@ import 'src/state/networks.dart';
 import 'src/state/wallet_controller.dart';
 import 'src/state/wallet_scope.dart';
 import 'src/transfer/transfer_draft.dart';
-import 'src/wallets/directory_seeder.dart';
 import 'src/wallets/wallet_manager.dart';
 import 'src/wallets/wallet_model.dart';
 import 'src/wallets/wallet_store.dart';
@@ -69,10 +68,6 @@ Future<WalletController> _bootstrapWallet(
     await _seedFirstRun(crypto, store, l10n);
     manager = await store.load();
   }
-  // Runs on every launch (guarded by a one-shot flag + emptiness checks):
-  // upgraders from the pre-directory schema get the demo contacts/tokens too.
-  await seedDirectoryDefaults(store, l10n);
-
   return WalletController(manager, crypto: crypto, store: store);
 }
 
@@ -125,21 +120,6 @@ Future<void> _seedFirstRun(
       backedUp: true,
     ),
   );
-  await store.save(
-    WatchWallet(
-      id: 'cold',
-      name: l10n.walletSeedMain,
-      avatarColor: 0xFF0C1220,
-      addresses: _addr('c'),
-      sortOrder: 1,
-      coldWalletId: 'WLT-3E8A91',
-      protocolVersion: 1,
-    ),
-  );
-
-  // Address-book / token-list seeding lives in seedDirectoryDefaults — it
-  // must also run for installs upgrading from the pre-directory schema, whose
-  // wallets already exist so this function never runs again.
 }
 
 /// In-memory demo controller for the design gallery and widget tests (no
@@ -203,37 +183,40 @@ class RootApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: modeController,
-      builder: (context, _) {
-        // Screenshot protection follows the mode: signer content (mnemonics,
-        // signing QRs) must never land in screenshots or the recents
-        // switcher, so entering signer mode raises Android's FLAG_SECURE and
-        // every other mode clears it again. Best-effort + idempotent (the
-        // builder may rerun); a no-op on iOS/tests (see SecureScreen).
-        SecureScreen.set(modeController.mode == DeviceMode.signer);
-        switch (modeController.mode) {
-          case null:
-            return ModeSelectApp(
-              localeController: localeController,
-              modeController: modeController,
-            );
-          case DeviceMode.wallet:
-            return DeviceModeScope(
-              exitMode: modeController.clear,
-              child: _WalletBootstrap(
+    return ScreenSecurityGuard(
+      child: ListenableBuilder(
+        listenable: modeController,
+        builder: (context, _) {
+          // Screenshot protection follows the mode: signer content (mnemonics,
+          // signing QRs) must never land in screenshots or the recents
+          // switcher, so entering signer mode raises Android's FLAG_SECURE and
+          // every other mode clears it again. Best-effort + idempotent (the
+          // builder may rerun); a no-op on iOS/tests (see SecureScreen).
+          SecureScreen.set(modeController.mode == DeviceMode.signer);
+          switch (modeController.mode) {
+            case null:
+              return ModeSelectApp(
                 localeController: localeController,
-                bootstrap:
-                    walletBootstrap ?? () => _bootstrapWallet(localeController),
-              ),
-            );
-          case DeviceMode.signer:
-            return DeviceModeScope(
-              exitMode: modeController.clear,
-              child: ColdSignerApp(initialLocation: '/welcome'),
-            );
-        }
-      },
+                modeController: modeController,
+              );
+            case DeviceMode.wallet:
+              return DeviceModeScope(
+                exitMode: modeController.clear,
+                child: _WalletBootstrap(
+                  localeController: localeController,
+                  bootstrap:
+                      walletBootstrap ??
+                      () => _bootstrapWallet(localeController),
+                ),
+              );
+            case DeviceMode.signer:
+              return DeviceModeScope(
+                exitMode: modeController.clear,
+                child: ColdSignerApp(initialLocation: '/welcome'),
+              );
+          }
+        },
+      ),
     );
   }
 }

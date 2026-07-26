@@ -8,6 +8,7 @@ export 'components/device_mode_scope.dart';
 export 'components/primary_button.dart';
 export 'components/qr_code.dart';
 export 'components/screen_kit.dart';
+export 'components/screen_security.dart';
 export 'components/shard_progress.dart';
 export 'tokens/colors.dart';
 export 'tokens/dimens.dart';

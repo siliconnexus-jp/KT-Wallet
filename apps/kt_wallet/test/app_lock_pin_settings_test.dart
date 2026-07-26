@@ -19,8 +19,10 @@ void main() {
     storage = InMemoryPinStorage();
     // Low iteration count keeps PBKDF2 fast; the record stores its own count.
     WalletPin.instance = WalletPin(storage, iterations: 1000);
-    BiometricAuth.instance =
-        const FakeBiometricAuth(BiometricOutcome.unavailable, available: false);
+    BiometricAuth.instance = const FakeBiometricAuth(
+      BiometricOutcome.unavailable,
+      available: false,
+    );
   });
 
   tearDown(() {
@@ -28,7 +30,10 @@ void main() {
     BiometricAuth.instance = realAuth;
   });
 
-  Future<void> openSecurity(WidgetTester tester, {required bool appLock}) async {
+  Future<void> openSecurity(
+    WidgetTester tester, {
+    required bool appLock,
+  }) async {
     SharedPreferences.setMockInitialValues({'prefs.appLock': appLock});
     tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
     addTearDown(tester.platformDispatcher.clearLocalesTestValue);
@@ -54,25 +59,31 @@ void main() {
   Future<bool?> persistedAppLock() async =>
       (await SharedPreferences.getInstance()).getBool('prefs.appLock');
 
-  testWidgets('switching ON with no PIN opens enrollment; twice-entry enrolls',
-      (tester) async {
-    await openSecurity(tester, appLock: false);
+  Future<String?> persistedAuthMethod() async =>
+      (await SharedPreferences.getInstance()).getString('prefs.authMethod');
 
-    await tapAppLockSwitch(tester);
-    expect(find.text('设置 6 位密码'), findsOneWidget);
+  testWidgets(
+    'switching ON with no PIN opens enrollment; twice-entry enrolls',
+    (tester) async {
+      await openSecurity(tester, appLock: false);
 
-    await tapPin(tester, '135790');
-    expect(find.text('再次输入以确认'), findsOneWidget);
+      await tapAppLockSwitch(tester);
+      expect(find.text('设置 6 位密码'), findsOneWidget);
 
-    await tapPin(tester, '135790');
-    expect(find.text('设置 6 位密码'), findsNothing); // sheet closed
-    expect(await WalletPin.instance.isSet(), isTrue);
-    expect((await WalletPin.instance.verify('135790')).isOk, isTrue);
-    expect(await persistedAppLock(), isTrue);
-  });
+      await tapPin(tester, '135790');
+      expect(find.text('再次输入以确认'), findsOneWidget);
 
-  testWidgets('mismatched confirmation resets enrollment; lock stays off',
-      (tester) async {
+      await tapPin(tester, '135790');
+      expect(find.text('设置 6 位密码'), findsNothing); // sheet closed
+      expect(await WalletPin.instance.isSet(), isTrue);
+      expect((await WalletPin.instance.verify('135790')).isOk, isTrue);
+      expect(await persistedAppLock(), isTrue);
+    },
+  );
+
+  testWidgets('mismatched confirmation resets enrollment; lock stays off', (
+    tester,
+  ) async {
     await openSecurity(tester, appLock: false);
 
     await tapAppLockSwitch(tester);
@@ -90,8 +101,9 @@ void main() {
     expect(await persistedAppLock(), isNot(isTrue));
   });
 
-  testWidgets('switching ON with a PIN already enrolled skips the sheet',
-      (tester) async {
+  testWidgets('switching ON with a PIN already enrolled skips the sheet', (
+    tester,
+  ) async {
     await WalletPin.instance.setPin('135790');
     await openSecurity(tester, appLock: false);
 
@@ -100,8 +112,9 @@ void main() {
     expect(await persistedAppLock(), isTrue);
   });
 
-  testWidgets('switching OFF requires the current PIN when biometrics cannot',
-      (tester) async {
+  testWidgets('switching OFF requires the current PIN when biometrics cannot', (
+    tester,
+  ) async {
     await WalletPin.instance.setPin('135790');
     await openSecurity(tester, appLock: true);
 
@@ -119,8 +132,9 @@ void main() {
     expect(await persistedAppLock(), isFalse);
   });
 
-  testWidgets('a biometric success also authorizes switching OFF',
-      (tester) async {
+  testWidgets('a biometric success also authorizes switching OFF', (
+    tester,
+  ) async {
     BiometricAuth.instance = const FakeBiometricAuth(BiometricOutcome.success);
     await WalletPin.instance.setPin('135790');
     await openSecurity(tester, appLock: true);
@@ -140,4 +154,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(await persistedAppLock(), isTrue);
   });
+
+  testWidgets(
+    'password authentication choice enrolls PIN with the custom keypad',
+    (tester) async {
+      await openSecurity(tester, appLock: true);
+
+      await tester.tap(find.text('人脸 / 生物识别'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('钱包密码'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('设置 6 位密码'), findsOneWidget);
+      await tapPin(tester, '135790');
+      expect(find.text('再次输入以确认'), findsOneWidget);
+      await tapPin(tester, '135790');
+
+      expect(find.text('钱包密码'), findsOneWidget);
+      expect(await persistedAuthMethod(), 'password');
+      expect((await WalletPin.instance.verify('135790')).isOk, isTrue);
+    },
+  );
 }

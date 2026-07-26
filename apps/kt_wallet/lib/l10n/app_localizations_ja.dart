@@ -592,7 +592,25 @@ class AppLocalizationsJa extends AppLocalizations {
   String get appLock => 'アプリロック';
 
   @override
-  String get appLockDesc => 'アプリ起動時に生体認証を要求';
+  String get appLockDesc => 'アプリ起動時に安全認証を要求';
+
+  @override
+  String get authMethod => '認証方法';
+
+  @override
+  String get authMethodDesc => 'アプリのロック解除と送金承認に使用します';
+
+  @override
+  String get authBiometrics => 'Face ID / 生体認証';
+
+  @override
+  String get authBiometricsDesc => 'このデバイスの生体認証ですばやく承認';
+
+  @override
+  String get authPassword => 'ウォレットパスワード';
+
+  @override
+  String get authPasswordDesc => '6桁のウォレットパスワードを入力';
 
   @override
   String get autoLock => '自動ロック';
@@ -710,7 +728,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get watchWalletCreated => 'ウォッチウォレットを作成しました';
 
   @override
-  String get marketOfflineDemo => 'オフライン — デモデータを表示中';
+  String get marketOfflineDemo => 'ネットワークに接続できず、ライブデータを取得できません';
 
   @override
   String get actionDone => '完了';

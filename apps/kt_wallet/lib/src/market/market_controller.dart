@@ -172,7 +172,17 @@ class MarketController extends ChangeNotifier {
     // via the fiat guards above.
     final skipPrices = Coin.values.every(_isTestnet);
     final (balances, prices, tokenBalances) = await (
-      _balances.fetchAll(wallet.addresses),
+      _balances.fetchAll(
+        wallet.addresses,
+        onResult: (coin, result) {
+          // Reveal each fast chain immediately. A slow or unavailable RPC on
+          // another chain must not keep an already-known ETH/SOL/etc. balance
+          // behind the same '--' placeholder.
+          if (generation != _generation) return;
+          _results = {..._results, coin: result};
+          notifyListeners();
+        },
+      ),
       skipPrices
           ? Future<Map<Coin, double>?>.value(null)
           : _prices.fetchUsdPrices(),

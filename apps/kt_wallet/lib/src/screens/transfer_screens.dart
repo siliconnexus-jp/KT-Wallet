@@ -13,10 +13,11 @@ import '../market/balance_service.dart' show BalanceStatus;
 import '../market/explorer_links.dart' show explorerTxUrl;
 import '../market/market_scope.dart'
     show MarketScope, effectiveRpcEndpoints, prefsGatewayResolver;
+import '../market/token_balance_service.dart' show usdcSolanaDevnetToken;
 import '../platform/external_actions.dart';
 import '../security/biometric_auth.dart';
 import '../security/wallet_pin.dart';
-import '../state/app_prefs.dart' show AppPrefsScope;
+import '../state/app_prefs.dart' show AppPrefsScope, AuthMethod;
 import '../state/networks.dart' show Network, NetworkScope, ethSepolia;
 import '../transfer/airgap_codec.dart';
 import '../transfer/broadcast_service.dart';
@@ -139,6 +140,7 @@ class _TransferAsset {
         'base-sepolia' => '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
         'arbitrum-sepolia' => '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d',
         'avalanche-fuji' => '0x5425890298aed601595a70AB815c96711a31Bc65',
+        'sol-devnet' => usdcSolanaDevnetToken.contract,
         _ => null,
       };
       if (contract != null) {
@@ -225,6 +227,18 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
       '◎',
     ),
     _TransferAsset(
+      'USDC',
+      'Solana · SPL',
+      'Solana',
+      Chain.solana,
+      6,
+      '100.00',
+      '100.00',
+      Color(0xFF2775CA),
+      r'$',
+      contract: 'EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v',
+    ),
+    _TransferAsset(
       'ETH',
       'Base',
       'Base',
@@ -295,6 +309,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     ),
   ];
   int _assetIndex = 0;
+  bool _liveInputInitialized = false;
   _TransferAsset _assetAt(int index) {
     final selected = _assets[index];
     final network = NetworkScope.maybeOf(context)?.activeFor(selected.chain);
@@ -358,6 +373,20 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
   );
   final _amountController = TextEditingController(text: '120.00');
   int _fee = 1;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_liveInputInitialized) return;
+    final wallet = WalletScope.of(context).current;
+    if (MarketScope.maybeOf(context) != null &&
+        wallet != null &&
+        wallet.addresses.hasExpandedEvm) {
+      _addrController.clear();
+      _amountController.clear();
+      _liveInputInitialized = true;
+    }
+  }
 
   @override
   void dispose() {
@@ -1968,7 +1997,15 @@ class TransferAuthSheet extends StatelessWidget {
     final networkScope = NetworkScope.maybeOf(context);
     final network = networkScope?.activeFor(draft.chain);
     final chainId = network?.evmChainId;
-    if (chainId == null) {
+    final isEvm = switch (draft.chain) {
+      Chain.ethereum ||
+      Chain.polygon ||
+      Chain.base ||
+      Chain.arbitrum ||
+      Chain.avalanche => true,
+      Chain.tron || Chain.solana => false,
+    };
+    if (isEvm && chainId == null) {
       _showTransferError(context, 'Missing EVM chain ID');
       return;
     }
@@ -1984,7 +2021,7 @@ class TransferAuthSheet extends StatelessWidget {
         wallet: wallet,
         crypto: controller.crypto,
         draft: draft,
-        evmChainId: chainId,
+        evmChainId: chainId ?? 0,
       );
       session!.broadcastTxHash = hash;
       if (context.mounted) context.go('/broadcast-result');
@@ -2002,6 +2039,8 @@ class TransferAuthSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final passwordFirst =
+        AppPrefsScope.maybeOf(context)?.authMethod == AuthMethod.password;
     return Scaffold(
       backgroundColor: WalletColors.text.withValues(alpha: 0.5),
       body: GestureDetector(
@@ -2040,8 +2079,8 @@ class TransferAuthSheet extends StatelessWidget {
                       color: WalletColors.accent.withValues(alpha: 0.06),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.face,
+                    child: Icon(
+                      passwordFirst ? Icons.password_rounded : Icons.face,
                       size: 44,
                       color: WalletColors.accent,
                     ),
@@ -2065,15 +2104,17 @@ class TransferAuthSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
                   KtPrimaryButton(
-                    label: l10n.useFaceId,
-                    onPressed: () => _faceId(context),
+                    label: passwordFirst ? l10n.authPassword : l10n.useFaceId,
+                    onPressed: () =>
+                        passwordFirst ? _usePin(context) : _faceId(context),
                   ),
                   const SizedBox(height: 12),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () => _usePin(context),
+                    onTap: () =>
+                        passwordFirst ? _faceId(context) : _usePin(context),
                     child: Text(
-                      l10n.usePasscode,
+                      passwordFirst ? l10n.authBiometrics : l10n.usePasscode,
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,

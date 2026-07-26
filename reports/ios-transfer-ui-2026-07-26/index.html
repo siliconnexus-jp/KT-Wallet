@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>KT Wallet iOS 正常 UI 转账实测</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif }
+    * { box-sizing: border-box }
+    body { margin: 0; background: #080b12; color: #f5f7fb }
+    main { max-width: 1120px; margin: auto; padding: 52px 24px 80px }
+    h1 { margin: 10px 0; font-size: clamp(36px,6vw,64px); letter-spacing: -.05em }
+    h2 { margin: 0 0 16px }
+    .eyebrow,.ok { color: #61e5a2; font-weight: 750 }
+    .lead,.muted { color: #aab4c8; line-height: 1.65 }
+    .summary,.stage { border: 1px solid #20283a; background: #101521; border-radius: 22px }
+    .summary { padding: 24px; margin: 30px 0 }
+    .tx { display: grid; grid-template-columns: 120px 1fr; gap: 12px; margin: 12px 0 }
+    a { color: #9eb1ff; overflow-wrap: anywhere }
+    .stage { padding: 24px; margin-top: 20px }
+    .shots { display: grid; grid-template-columns: repeat(auto-fit,minmax(230px,1fr)); gap: 16px }
+    figure { margin: 0 }
+    img { width: 100%; display: block; border-radius: 18px; border: 1px solid #2c3548 }
+    figcaption { color: #929db2; font-size: 13px; margin-top: 8px }
+    .issue { border-color: #654d1c; background: #19150d }
+    code { color: #dce3f5 }
+    @media(max-width:650px){.tx{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">已检查截图 · iPhone 17 Pro · iOS 26.2</div>
+  <h1>正常 App UI 转账实测</h1>
+  <p class="lead">本报告不再使用黑色 Integration Testing 页面。截图全部来自 KT Wallet 正常界面，覆盖真实余额、输入、确认、App 授权、WalletCore Face ID、本地签名、广播与成功结果。</p>
+
+  <div class="summary">
+    <div class="ok">✓ ETH 与 Test USDT 均通过</div>
+    <div class="tx"><strong>ETH</strong><a href="https://sepolia.etherscan.io/tx/0x1d169ac07119de5ae0cbf05b87b0990c7d55d1ec4dd6c0cbdce35751d7e33449">0x1d169ac07119de5ae0cbf05b87b0990c7d55d1ec4dd6c0cbdce35751d7e33449</a></div>
+    <div class="tx"><strong>Test USDT</strong><a href="https://sepolia.etherscan.io/tx/0x4c08d0d2be0465f5edd89c866ee0f6ebc225b495e1a15710074635353f0b8353">0x4c08d0d2be0465f5edd89c866ee0f6ebc225b495e1a15710074635353f0b8353</a></div>
+    <p class="muted">两笔交易已再次从 Sepolia Etherscan 页面验证为 Success；本轮测试输出为 All tests passed。</p>
+  </div>
+
+  <section class="stage">
+    <h2>1. 真实余额与转账输入</h2>
+    <div class="shots">
+      <figure><img src="screenshots/02-eth-form.png" alt="ETH send form"><figcaption>真实可用余额 0.062120… ETH、完整地址校验与金额输入</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="stage">
+    <h2>2. 交易确认</h2>
+    <div class="shots">
+      <figure><img src="screenshots/03-eth-confirm.png" alt="ETH confirmation"><figcaption>ETH · Sepolia：金额、收付款地址、Gas 与总支出</figcaption></figure>
+      <figure><img src="screenshots/07-usdt-input.png" alt="USDT confirmation"><figcaption>Test USDT · Sepolia ERC-20：1 USDT 与网络手续费</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="stage">
+    <h2>3. 身份验证与 WalletCore 签名</h2>
+    <div class="shots">
+      <figure><img src="screenshots/04-eth-auth-sheet.png" alt="App auth sheet"><figcaption>KT Wallet 身份验证界面</figcaption></figure>
+      <figure><img src="screenshots/10-usdt-native-face-id.png" alt="Native Face ID"><figcaption>正常确认页上触发的 iOS 原生 Face ID 密钥授权</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="stage">
+    <h2>4. 广播结果</h2>
+    <div class="shots">
+      <figure><img src="screenshots/11-usdt-result.png" alt="USDT submitted"><figcaption>正常 App 成功页：-1 USDT · Sepolia · ERC-20，Hash 0x4c08…0b8353</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="stage issue">
+    <h2>仍发现的问题</h2>
+    <p class="muted">首页首屏的原生币列表在部分 RPC 刷新轮次仍显示 <code>--</code>，而转账页能够读取真实 ETH 可用余额并完成发送。说明签名/发送链路已经通过，但首页余额聚合的刷新与 RPC 容错仍需单独修复，不能宣称整个余额展示完全正常。</p>
+  </section>
+</main>
+</body>
+</html>

@@ -71,3 +71,27 @@ Never use that define for release artifacts or real assets.
    `~/.gradle/gradle.properties`), then `flutter build apk`.
 
 iOS is unaffected by this flag.
+
+## Release identity and signing
+
+The shipping app uses `com.ktwallet.kt_wallet` on Android and
+`com.ktwallet.ktWallet` on iOS. Its launcher name is **KT Wallet** on both
+platforms.
+
+Android release builds are deliberately **not** signed with the debug key.
+Provide the four values below only in the local shell or CI secret store:
+
+```sh
+export KT_RELEASE_STORE_FILE=/absolute/path/to/kt-wallet-release.jks
+export KT_RELEASE_STORE_PASSWORD='...'
+export KT_RELEASE_KEY_ALIAS='...'
+export KT_RELEASE_KEY_PASSWORD='...'
+flutter build appbundle --release
+```
+
+Without all four values Gradle produces no falsely publishable debug-signed
+release. Do not commit the keystore or its passwords.
+
+For iOS, select the SiliconNexus Apple team and the App Store provisioning
+profile in Xcode, then archive `apps/kt_wallet/ios/Runner.xcworkspace`.
+Signing identities and provisioning profiles remain local/CI secrets.

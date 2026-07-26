@@ -1,0 +1,5 @@
+<resources>
+    <string name="privacy_app_name">KT Wallet</string>
+    <string name="privacy_protection_active">天秤保护已启动</string>
+    <string name="privacy_content_hidden">您的钱包内容已隐藏</string>
+</resources>

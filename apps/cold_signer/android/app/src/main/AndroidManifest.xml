@@ -2,6 +2,7 @@
     <!-- local_auth: BiometricPrompt-based authentication. (mobile_scanner
          injects its own CAMERA permission via the manifest merge.) -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <uses-permission android:name="android.permission.DETECT_SCREEN_CAPTURE"/>
     <application
         android:label="cold_signer"
         android:name="${applicationName}"

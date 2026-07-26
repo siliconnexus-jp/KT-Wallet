@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>KT Wallet · iOS 身份验证测试报告</title>
+  <style>
+    :root{color-scheme:dark;--bg:#070b14;--card:#101725;--line:#263044;--text:#f7f9fc;--muted:#9aa7ba;--blue:#5b86ff;--green:#49d597;--red:#ff7070}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 82% 0,#172a50 0,transparent 36%),var(--bg);color:var(--text);font:15px/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    main{width:min(1180px,calc(100% - 32px));margin:auto;padding:52px 0 80px}.hero{display:flex;justify-content:space-between;gap:24px;align-items:center}.brand{display:flex;gap:18px;align-items:center}.brand img{width:72px;height:72px;border-radius:19px}.eyebrow{color:var(--blue);font-weight:750;letter-spacing:.12em;text-transform:uppercase}.hero h1{font-size:clamp(30px,5vw,52px);line-height:1.05;margin:4px 0 8px}.muted{color:var(--muted)}.stamp,.badge{display:inline-block;border-radius:99px;padding:5px 11px;background:#182338;color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:28px}.card{background:linear-gradient(145deg,#121b2b,#0d1320);border:1px solid var(--line);border-radius:18px;padding:20px}.metric strong{display:block;font-size:27px;margin-top:4px}.ok{color:var(--green)}h2{font-size:23px;margin:40px 0 15px}.table{overflow:auto;border:1px solid var(--line);border-radius:16px}table{width:100%;border-collapse:collapse;background:#0d1421}th,td{text-align:left;padding:13px 16px;border-bottom:1px solid var(--line)}th{color:var(--muted)}tr:last-child td{border:0}.gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.shot{margin:0;background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden}.shot img{display:block;width:100%;aspect-ratio:9/19.5;object-fit:cover}.shot figcaption{padding:12px 14px;color:var(--muted)}code,a{color:#9eb8ff}.note{border-left:4px solid var(--blue)}footer{margin-top:42px;color:var(--muted)}
+    @media(max-width:860px){.grid{grid-template-columns:repeat(2,1fr)}.gallery{grid-template-columns:repeat(2,1fr)}}@media(max-width:560px){.hero{align-items:flex-start;flex-direction:column}.grid,.gallery{grid-template-columns:1fr}}
+  </style>
+</head>
+<body><main>
+  <header class="hero">
+    <div class="brand"><img src="../../branding/kt-wallet-logo-256.png" alt="KT Wallet"><div><div class="eyebrow">iOS Simulator · Native UI</div><h1>身份验证测试报告</h1><div class="muted">Face ID / 钱包密码切换、键盘、错误反馈与持久化解锁</div></div></div>
+    <div class="stamp">2026-07-26 · iPhone 17 Pro · iOS 26.2</div>
+  </header>
+
+  <section class="grid">
+    <div class="card metric"><span class="muted">Flutter 回归</span><strong class="ok">329 / 329</strong></div>
+    <div class="card metric"><span class="muted">iOS 截图步骤</span><strong class="ok">9 / 9</strong></div>
+    <div class="card metric"><span class="muted">验证方式</span><strong class="ok">2 / 2</strong></div>
+    <div class="card metric"><span class="muted">Golden 页面</span><strong class="ok">30 / 30</strong></div>
+  </section>
+
+  <h2>结论</h2>
+  <div class="card">iOS App 已完成并实机式验收“Face ID / 生物识别”和“6 位钱包密码”两种首选验证方式。设置会持久化；选择密码但尚未设置时，App 自动进入双次确认键盘。重启后直接展示密码解锁页，错误密码不放行，正确密码恢复到安全设置页。</div>
+
+  <h2>自动化测试结果</h2>
+  <div class="table"><table>
+    <thead><tr><th>测试项目</th><th>结果</th><th>证据</th></tr></thead>
+    <tbody>
+      <tr><td>Flutter 单元 / UI / Golden 回归</td><td><span class="badge ok">通过</span></td><td><code>329 / 329</code></td></tr>
+      <tr><td>验证方式默认值与持久化</td><td><span class="badge ok">通过</span></td><td><code>prefs.authMethod = password</code></td></tr>
+      <tr><td>密码双次输入与 PBKDF2 校验</td><td><span class="badge ok">通过</span></td><td>不保存明文；错误次数与锁定状态持久化</td></tr>
+      <tr><td>App 重启后的密码优先解锁</td><td><span class="badge ok">通过</span></td><td>未触发 Face ID，直接展示自定义键盘</td></tr>
+      <tr><td>错误密码反馈 / 正确密码放行</td><td><span class="badge ok">通过</span></td><td>错误状态留在锁屏；正确输入恢复 App</td></tr>
+      <tr><td>iOS 测试网签名与广播</td><td><span class="badge ok">通过</span></td><td>Sepolia ETH/ERC-20、Nile TRX/TRC-20、Devnet SOL/SPL 已通过上一轮真实链上确认</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>逐步截图</h2>
+  <section class="gallery">
+    <figure class="shot"><img src="screenshots/01-security-faceid.png" alt="安全设置"><figcaption>1. 安全设置 · 当前首选 Face ID / 生物识别</figcaption></figure>
+    <figure class="shot"><img src="screenshots/02-auth-picker.png" alt="验证方式选择"><figcaption>2. 打开验证方式选择器 · 两种方式清晰并列</figcaption></figure>
+    <figure class="shot"><img src="screenshots/03-password-keypad-empty.png" alt="密码键盘"><figcaption>3. 选择钱包密码 · 自动进入 6 位键盘</figcaption></figure>
+    <figure class="shot"><img src="screenshots/04-password-keypad-progress.png" alt="密码输入进度"><figcaption>4. 输入中 · 圆点反馈且不暴露数字</figcaption></figure>
+    <figure class="shot"><img src="screenshots/05-password-confirm.png" alt="确认密码"><figcaption>5. 再次输入 · 明确的确认阶段</figcaption></figure>
+    <figure class="shot"><img src="screenshots/06-password-selected.png" alt="密码已选择"><figcaption>6. 设置完成 · 首选方式更新为钱包密码</figcaption></figure>
+    <figure class="shot"><img src="screenshots/07-password-unlock.png" alt="密码解锁"><figcaption>7. App 重启 · 直接展示密码解锁键盘</figcaption></figure>
+    <figure class="shot"><img src="screenshots/08-password-error.png" alt="密码错误"><figcaption>8. 错误输入 · 红色内联反馈，不误放行</figcaption></figure>
+    <figure class="shot"><img src="screenshots/09-password-unlocked.png" alt="解锁成功"><figcaption>9. 正确输入 · 解锁并保持钱包密码首选</figcaption></figure>
+  </section>
+
+  <h2>UI 设计检查</h2>
+  <div class="card note">键盘遵循 Emil Kowalski 的高频交互原则：不添加拖慢输入的入场动画；每个按键仅使用 120ms ease-out 轻微缩放反馈。数字、删除键、输入圆点和错误信息形成稳定层级，并提供按钮语义供 VoiceOver 读取。截图使用模拟器系统日语环境，因此同时验证了日文本地化与布局。</div>
+
+  <footer>KT Wallet · siliconnexus-jp/KT-Wallet · 报告不包含钱包助记词、私钥、PIN 明文或 GitHub 凭据。</footer>
+</main></body>
+</html>

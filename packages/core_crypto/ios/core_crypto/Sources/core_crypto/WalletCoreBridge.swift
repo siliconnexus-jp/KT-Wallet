@@ -43,9 +43,13 @@ enum WalletCoreBridge {
 
   static func addresses(fromEntropy entropy: Data) throws -> [String: String] {
     let wallet = try wallet(fromEntropy: entropy)
+    let evm = wallet.getAddressForCoin(coin: .ethereum)
     return [
-      "eth": wallet.getAddressForCoin(coin: .ethereum),
+      "eth": evm,
       "polygon": wallet.getAddressForCoin(coin: .polygon),
+      "base": evm,
+      "arbitrum": evm,
+      "avalanche": evm,
       "tron": wallet.getAddressForCoin(coin: .tron),
       "solana": wallet.getAddressForCoin(coin: .solana),
     ]
@@ -55,26 +59,179 @@ enum WalletCoreBridge {
     switch coin {
     case "eth": return .ethereum
     case "polygon": return .polygon
+    case "base", "arbitrum", "avalanche": return .ethereum
     case "tron": return .tron
     case "solana": return .solana
     default: return nil
     }
   }
 
-  /// Signs a wallet-core SigningInput.
-  ///
-  /// IMPORTANT (must be completed + verified on device — P1-4 DoD):
-  /// `chains` builds the SigningInput WITHOUT a private key; the derived key
-  /// must be injected into the per-chain SigningInput proto here before
-  /// `AnySigner.sign`, and the transaction hash must be read from the
-  /// per-chain SigningOutput (keccak for EVM, but NOT for TRON/Solana). The
-  /// current form is a structural stub and returns SIGN_FAILED until wired,
-  /// so it can never emit a wrong-but-plausible signature.
   static func sign(entropy: Data, coin: String, signingInput: Data) throws
     -> (signedTx: Data, txHash: String)
   {
-    guard coinType(coin) != nil else { throw BridgeError.invalidInput }
-    _ = try wallet(fromEntropy: entropy)
-    throw BridgeError.signFailed  // per-chain key injection wired in P1-4
+    guard let type = coinType(coin) else { throw BridgeError.invalidInput }
+    if type == .tron { return try signTron(entropy: entropy, rawData: signingInput) }
+    if type == .solana { return try signSolana(entropy: entropy, message: signingInput) }
+    return try signEvm(entropy: entropy, coin: type, encoded: signingInput)
+  }
+
+  private static func signEvm(entropy: Data, coin: CoinType, encoded: Data) throws
+    -> (signedTx: Data, txHash: String)
+  {
+    let tx = try decodeEip1559(encoded)
+    let key = try wallet(fromEntropy: entropy).getKeyForCoin(coin: coin)
+    let input = EthereumSigningInput.with {
+      $0.chainID = tx.chainID
+      $0.nonce = tx.nonce
+      $0.txMode = .enveloped
+      $0.maxInclusionFeePerGas = tx.maxPriorityFeePerGas
+      $0.maxFeePerGas = tx.maxFeePerGas
+      $0.gasLimit = tx.gasLimit
+      $0.toAddress = "0x" + tx.to.hexString
+      $0.privateKey = key.data
+      $0.transaction = EthereumTransaction.with {
+        if tx.data.isEmpty {
+          $0.transfer = EthereumTransaction.Transfer.with { $0.amount = tx.value }
+        } else {
+          $0.contractGeneric = EthereumTransaction.ContractGeneric.with {
+            $0.amount = tx.value
+            $0.data = tx.data
+          }
+        }
+      }
+    }
+    let output: EthereumSigningOutput = AnySigner.sign(input: input, coin: coin)
+    guard output.error == .ok, !output.encoded.isEmpty else {
+      throw BridgeError.signFailed
+    }
+    let hash = Hash.keccak256(data: output.encoded)
+    return (output.encoded, "0x" + hash.hexString)
+  }
+
+  private static func signTron(entropy: Data, rawData: Data) throws
+    -> (signedTx: Data, txHash: String)
+  {
+    guard !rawData.isEmpty else { throw BridgeError.invalidInput }
+    let key = try wallet(fromEntropy: entropy).getKeyForCoin(coin: .tron)
+    let txID = Hash.sha256(data: rawData)
+    guard let signature = key.sign(digest: txID, curve: .secp256k1),
+          signature.count == 65 else { throw BridgeError.signFailed }
+    let transaction = protoBytes(field: 1, value: rawData)
+      + protoBytes(field: 2, value: signature)
+    let json: [String: String] = [
+      "transaction": transaction.hexString,
+      "txID": txID.hexString,
+    ]
+    return (
+      try JSONSerialization.data(withJSONObject: json, options: []),
+      txID.hexString
+    )
+  }
+
+  private static func signSolana(entropy: Data, message: Data) throws
+    -> (signedTx: Data, txHash: String)
+  {
+    guard !message.isEmpty else { throw BridgeError.invalidInput }
+    let key = try wallet(fromEntropy: entropy).getKeyForCoin(coin: .solana)
+    guard let signature = key.sign(digest: message, curve: .ed25519),
+          signature.count == 64 else { throw BridgeError.signFailed }
+    return (Data([1]) + signature + message, signature.hexString)
+  }
+
+  private static func protoBytes(field: Int, value: Data) -> Data {
+    encodeVarint((field << 3) | 2) + encodeVarint(value.count) + value
+  }
+
+  private static func encodeVarint(_ value: Int) -> Data {
+    var current = value
+    var out = Data()
+    repeat {
+      var byte = UInt8(current & 0x7f)
+      current >>= 7
+      if current != 0 { byte |= 0x80 }
+      out.append(byte)
+    } while current != 0
+    return out
+  }
+
+  private struct Eip1559Fields {
+    let chainID, nonce, maxPriorityFeePerGas, maxFeePerGas: Data
+    let gasLimit, to, value, data: Data
+  }
+
+  private struct RlpItem {
+    let bytes: Data
+    let isList: Bool
+    let next: Int
+  }
+
+  private static func decodeEip1559(_ input: Data) throws -> Eip1559Fields {
+    guard input.count > 2, input[0] == 0x02 else {
+      throw BridgeError.invalidInput
+    }
+    let outer = try readRlp(input, at: 1)
+    guard outer.isList, outer.next == input.count else {
+      throw BridgeError.invalidInput
+    }
+    var fields: [RlpItem] = []
+    var offset = 0
+    while offset < outer.bytes.count {
+      let item = try readRlp(outer.bytes, at: offset)
+      fields.append(item)
+      offset = item.next
+    }
+    guard fields.count == 9,
+          !fields[0...7].contains(where: { $0.isList }),
+          fields[8].isList, fields[8].bytes.isEmpty,
+          fields[5].bytes.count == 20 else {
+      throw BridgeError.invalidInput
+    }
+    return Eip1559Fields(
+      chainID: fields[0].bytes, nonce: fields[1].bytes,
+      maxPriorityFeePerGas: fields[2].bytes, maxFeePerGas: fields[3].bytes,
+      gasLimit: fields[4].bytes, to: fields[5].bytes,
+      value: fields[6].bytes, data: fields[7].bytes)
+  }
+
+  private static func readRlp(_ data: Data, at offset: Int) throws -> RlpItem {
+    guard offset < data.count else { throw BridgeError.invalidInput }
+    let prefix = Int(data[offset])
+    if prefix <= 0x7f {
+      return RlpItem(bytes: Data([data[offset]]), isList: false, next: offset + 1)
+    }
+    if prefix <= 0xb7 {
+      let length = prefix - 0x80
+      return try rlpPayload(data, offset, 1, length, false)
+    }
+    if prefix <= 0xbf {
+      let lengthOfLength = prefix - 0xb7
+      let length = try rlpLength(data, offset + 1, lengthOfLength)
+      return try rlpPayload(data, offset, 1 + lengthOfLength, length, false)
+    }
+    if prefix <= 0xf7 {
+      let length = prefix - 0xc0
+      return try rlpPayload(data, offset, 1, length, true)
+    }
+    let lengthOfLength = prefix - 0xf7
+    let length = try rlpLength(data, offset + 1, lengthOfLength)
+    return try rlpPayload(data, offset, 1 + lengthOfLength, length, true)
+  }
+
+  private static func rlpLength(_ data: Data, _ start: Int, _ count: Int) throws -> Int {
+    guard count > 0, count <= 4, start + count <= data.count else {
+      throw BridgeError.invalidInput
+    }
+    var value = 0
+    for byte in data[start..<(start + count)] { value = (value << 8) | Int(byte) }
+    return value
+  }
+
+  private static func rlpPayload(
+    _ data: Data, _ offset: Int, _ header: Int, _ length: Int, _ isList: Bool
+  ) throws -> RlpItem {
+    let start = offset + header
+    let end = start + length
+    guard length >= 0, end <= data.count else { throw BridgeError.invalidInput }
+    return RlpItem(bytes: data.subdata(in: start..<end), isList: isList, next: end)
   }
 }

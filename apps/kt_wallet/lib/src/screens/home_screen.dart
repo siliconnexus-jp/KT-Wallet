@@ -166,7 +166,7 @@ class _HomeTab extends StatelessWidget {
     // explicit offline banner. Otherwise → live values ('--' while loading).
     final market = MarketScope.maybeOf(context);
     final offline = market?.isOffline ?? false;
-    final live = market != null && !offline;
+    final live = market != null;
     // ANY active chain on a testnet → the fiat total is meaningless (testnet
     // assets have no market price): show '--' plus the explanatory note.
     // Absent scope falls back to the all-mainnet controller → false, so demo
@@ -230,7 +230,7 @@ class _AssetsTab extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final market = MarketScope.maybeOf(context);
     final offline = market?.isOffline ?? false;
-    final live = market != null && !offline;
+    final live = market != null;
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
@@ -455,13 +455,16 @@ class _RecordsTabState extends State<_RecordsTab> {
     } else if (history.isLoading) {
       body = _loadingCard();
     } else if (history.isError) {
-      // Live fetch failed (e.g. demo mock addresses rejected on-chain): demo
-      // rows behind the explicit offline banner, mirroring the market tabs.
       body = Column(
         children: [
           const MarketOfflineBanner(),
           const SizedBox(height: 12),
-          _demoCard(context, l10n),
+          Center(
+            child: Text(
+              l10n.walletLoadErrorDesc,
+              style: const TextStyle(fontSize: 13, color: WalletColors.text3),
+            ),
+          ),
         ],
       );
     } else {

@@ -2,6 +2,8 @@ import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+enum AuthMethod { biometrics, password }
+
 /// User preferences from the settings screens: app lock, privacy mode,
 /// auto-lock delay, fiat display currency and per-chain RPC endpoint
 /// overrides. Persisted via SharedPreferences.
@@ -14,6 +16,7 @@ class AppPrefsController extends ChangeNotifier {
   static const _keyPrivacyMode = 'prefs.privacyMode';
   static const _keyAutoLockMinutes = 'prefs.autoLockMinutes';
   static const _keyFiat = 'prefs.fiat';
+  static const _keyAuthMethod = 'prefs.authMethod';
 
   /// Storage key for the optional KT gateway URL. No stored value (null)
   /// means "direct mode": every chain query goes straight to the nodes.
@@ -41,6 +44,7 @@ class AppPrefsController extends ChangeNotifier {
   bool _privacyMode = false;
   int _autoLockMinutes = 1;
   String _fiat = 'USD';
+  AuthMethod _authMethod = AuthMethod.biometrics;
 
   bool get appLock => _appLock;
   bool get privacyMode => _privacyMode;
@@ -48,6 +52,7 @@ class AppPrefsController extends ChangeNotifier {
   /// Minutes in the background before the app re-locks; 0 = immediately.
   int get autoLockMinutes => _autoLockMinutes;
   String get fiat => _fiat;
+  AuthMethod get authMethod => _authMethod;
 
   final Map<Coin, String> _rpcOverrides = {};
 
@@ -70,6 +75,9 @@ class AppPrefsController extends ChangeNotifier {
       _privacyMode = prefs.getBool(_keyPrivacyMode) ?? _privacyMode;
       _autoLockMinutes = prefs.getInt(_keyAutoLockMinutes) ?? _autoLockMinutes;
       _fiat = prefs.getString(_keyFiat) ?? _fiat;
+      _authMethod = prefs.getString(_keyAuthMethod) == 'password'
+          ? AuthMethod.password
+          : AuthMethod.biometrics;
       for (final entry in rpcPrefKeys.entries) {
         final url = prefs.getString(entry.value);
         if (url != null && url.isNotEmpty) {
@@ -119,6 +127,21 @@ class AppPrefsController extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_keyFiat, fiat);
+    } catch (_) {
+      // Persistence is best-effort; the in-memory choice still applies.
+    }
+  }
+
+  Future<void> setAuthMethod(AuthMethod method) async {
+    if (method == _authMethod) return;
+    _authMethod = method;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _keyAuthMethod,
+        method == AuthMethod.password ? 'password' : 'biometrics',
+      );
     } catch (_) {
       // Persistence is best-effort; the in-memory choice still applies.
     }

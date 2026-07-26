@@ -607,32 +607,39 @@ void main() {
       },
     );
 
-    test('direct mode is unchanged: eth/polygon/solana unsupported, no '
-        'gateway contact', () async {
-      final service = HistoryService(
-        client: MockClient(
-          (request) async =>
-              http.Response(jsonEncode({'data': <Object?>[]}), 200),
-        ),
-        gateway: () => null,
-      );
-      expect(
-        (await service.fetch(Coin.eth, '0xA')).status,
-        HistoryStatus.unsupported,
-      );
-      expect(
-        (await service.fetch(Coin.polygon, '0xA')).status,
-        HistoryStatus.unsupported,
-      );
-      expect(
-        (await service.fetch(Coin.solana, 'S')).status,
-        HistoryStatus.unsupported,
-      );
-      expect(
-        (await service.fetch(Coin.tron, 'TTronAddr')).status,
-        HistoryStatus.ok,
-      );
-    });
+    test(
+      'direct mode queries public history without gateway contact',
+      () async {
+        final service = HistoryService(
+          client: MockClient((request) async {
+            if (request.url.host.contains('blockscout')) {
+              return http.Response(jsonEncode({'items': <Object?>[]}), 200);
+            }
+            if (request.url.host.contains('solana')) {
+              return http.Response(
+                jsonEncode({'jsonrpc': '2.0', 'id': 1, 'result': <Object?>[]}),
+                200,
+              );
+            }
+            return http.Response(jsonEncode({'data': <Object?>[]}), 200);
+          }),
+          gateway: () => null,
+        );
+        expect((await service.fetch(Coin.eth, '0xA')).status, HistoryStatus.ok);
+        expect(
+          (await service.fetch(Coin.polygon, '0xA')).status,
+          HistoryStatus.ok,
+        );
+        expect(
+          (await service.fetch(Coin.solana, 'S')).status,
+          HistoryStatus.ok,
+        );
+        expect(
+          (await service.fetch(Coin.tron, 'TTronAddr')).status,
+          HistoryStatus.ok,
+        );
+      },
+    );
   });
 
   group('BroadcastService gateway mode', () {

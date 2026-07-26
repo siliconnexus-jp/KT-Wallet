@@ -60,4 +60,15 @@ void main() {
     expect(find.text('JPY'), findsOneWidget);
     expect(find.text('USD'), findsNothing);
   });
+
+  testWidgets('biometric authentication remains the safe default', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await _openSecurity(tester);
+
+    expect(find.text('人脸 / 生物识别'), findsOneWidget);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('prefs.authMethod'), isNull);
+  });
 }

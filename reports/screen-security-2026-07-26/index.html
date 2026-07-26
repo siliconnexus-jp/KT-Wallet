@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>KT Wallet 屏幕安全测试报告</title>
+  <style>
+    :root{color-scheme:dark;--bg:#080c18;--card:#121827;--line:#283147;--ok:#42d392;--warn:#f5b942}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:#eef2ff;font:15px/1.6 system-ui,-apple-system,sans-serif}
+    main{max-width:1120px;margin:auto;padding:42px 20px 80px}h1{font-size:32px;margin:0 0 8px}.muted{color:#9ca8c2}
+    .summary,.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px;margin-top:20px}
+    .pill{display:inline-block;padding:4px 10px;border-radius:99px;background:#153829;color:var(--ok);font-weight:700}
+    table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px;border-bottom:1px solid var(--line)}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:18px;margin-top:16px}
+    figure{margin:0;background:#0b101d;border:1px solid var(--line);border-radius:16px;overflow:hidden}
+    img{width:100%;max-height:620px;object-fit:contain;background:#050811;display:block}
+    figcaption{padding:12px 14px;color:#c8d0e3}.ok{color:var(--ok)}.warn{color:var(--warn)}
+    code{color:#b9a8ff}h2{margin:0 0 10px}
+  </style>
+</head>
+<body><main>
+  <h1>KT Wallet 后台隐私保护与截屏提醒</h1>
+  <div class="muted">测试日期：2026-07-26 · Android API 35 Emulator · iPhone 17 Pro / iOS 26.2 Simulator</div>
+  <section class="summary">
+    <span class="pill">实现与回归通过</span>
+    <p>普通钱包、内嵌离线签名器和独立 Cold Signer 已统一接入屏幕安全层。原生端不读取、不保存截图内容；Android API 34+ 使用官方回调，旧版本不申请 MediaStore 扫描权限。</p>
+  </section>
+  <section class="card"><h2>自动化与构建结果</h2>
+    <table>
+      <tr><th>项目</th><th>结果</th><th>说明</th></tr>
+      <tr><td>KT Wallet Widget / Unit</td><td class="ok">330 passed</td><td>包含转账、App Lock、Face ID/PIN、余额与导航回归</td></tr>
+      <tr><td>Cold Signer</td><td class="ok">104 passed</td><td>包含 PIN、生物识别、签名、重放保护与安全检查</td></tr>
+      <tr><td>ScreenSecurity</td><td class="ok">5 passed</td><td>自动消失、关闭、连续重计时、后台排队、中英日文案</td></tr>
+      <tr><td>Android builds</td><td class="ok">2 passed</td><td>KT Wallet 与 Cold Signer debug APK</td></tr>
+      <tr><td>iOS builds</td><td class="ok">2 passed</td><td>KT Wallet 与 Cold Signer Simulator App</td></tr>
+    </table>
+  </section>
+  <section class="card"><h2>Android 证据</h2><div class="grid">
+    <figure><img src="screenshots/android-wallet-normal.png"><figcaption>普通钱包正常 UI</figcaption></figure>
+    <figure><img src="screenshots/android-wallet-recents.png"><figcaption><b class="ok">通过：</b>最近任务卡仅显示品牌保护页，无原页面像素。</figcaption></figure>
+    <figure><img src="screenshots/android-wallet-screenshot-warning.png"><figcaption><b class="ok">通过：</b>API 35 截屏事件显示顶部非阻塞安全横幅。</figcaption></figure>
+    <figure><img src="screenshots/android-cold-signer-flag-secure.png"><figcaption><b class="ok">通过：</b>Cold Signer 的 <code>FLAG_SECURE</code> 保持启用，截图不包含签名器内容。</figcaption></figure>
+  </div></section>
+  <section class="card"><h2>iOS 证据</h2><div class="grid">
+    <figure><img src="screenshots/ios-wallet-normal.png"><figcaption>普通钱包正常 UI</figcaption></figure>
+    <figure><img src="screenshots/ios-wallet-privacy-cover-direct.png"><figcaption><b class="ok">通过：</b>原生生命周期保护回调激活后，品牌页完全替换 Flutter 内容。</figcaption></figure>
+    <figure><img src="screenshots/ios-wallet-screenshot-warning.png"><figcaption><b class="ok">通过：</b><code>userDidTakeScreenshotNotification</code> 事件显示日文安全横幅。</figcaption></figure>
+  </div></section>
+  <section class="card"><h2>实现说明</h2>
+    <ul>
+      <li>Android：<code>onWindowFocusChanged(false)</code>、<code>onUserLeaveHint</code>、<code>onPause</code> 三层提前覆盖，<code>onResume</code> 恢复。</li>
+      <li>iOS：监听 will-resign-active / did-become-active，并预先挂载隐藏的原生 UIView，避免恢复闪帧。</li>
+      <li>截屏横幅持续 6 秒，可关闭；连续事件重置计时；后台事件恢复后展示。</li>
+      <li>Android 13 及以下不宣称可靠截屏检测；Cold Signer/内嵌签名器仍优先由 <code>FLAG_SECURE</code> 阻止截图。</li>
+    </ul>
+  </section>
+</main></body></html>

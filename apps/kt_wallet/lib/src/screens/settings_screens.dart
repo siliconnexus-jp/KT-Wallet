@@ -1969,6 +1969,37 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     );
   }
 
+  Future<void> _pickAuthMethod() async {
+    final l10n = AppLocalizations.of(context);
+    AuthMethod? selectedMethod;
+    await _pickOption(
+      title: l10n.authMethod,
+      labels: [l10n.authBiometrics, l10n.authPassword],
+      selected: _prefs.authMethod == AuthMethod.biometrics ? 0 : 1,
+      onSelect: (index) {
+        selectedMethod = index == 0
+            ? AuthMethod.biometrics
+            : AuthMethod.password;
+      },
+    );
+    final method = selectedMethod;
+    if (method == null || !mounted) return;
+    if (method == AuthMethod.password && !await WalletPin.instance.isSet()) {
+      if (!mounted) return;
+      final enrolled = await showModalBottomSheet<bool>(
+        context: context,
+        backgroundColor: WalletColors.surface,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (ctx) => _SetPinSheet(pin: WalletPin.instance),
+      );
+      if (enrolled != true) return;
+    }
+    await _prefs.setAuthMethod(method);
+  }
+
   /// Danger row: deletes the first watch wallet after confirmation (a watch
   /// wallet holds only public addresses, so this never touches key material).
   Future<void> _deleteWatchWallet() async {
@@ -2158,6 +2189,38 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                 l10n.appLock,
                 l10n.appLockDesc,
                 _switch(_prefs.appLock, onTap: _toggleAppLock),
+              ),
+              const SizedBox(height: 16),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _pickAuthMethod,
+                child: _row(
+                  _prefs.authMethod == AuthMethod.biometrics
+                      ? Icons.face_outlined
+                      : Icons.password_rounded,
+                  l10n.authMethod,
+                  l10n.authMethodDesc,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _prefs.authMethod == AuthMethod.biometrics
+                            ? l10n.authBiometrics
+                            : l10n.authPassword,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: WalletColors.text2,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.chevron_right,
+                        size: 16,
+                        color: WalletColors.text3,
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
               GestureDetector(

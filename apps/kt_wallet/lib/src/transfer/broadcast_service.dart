@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:chains/chains.dart' show Chain, sha256;
 import 'package:chains/rpc.dart';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 
 import '../market/balance_service.dart'
     show RpcEndpointResolver, defaultRpcEndpointFor;
@@ -107,6 +108,11 @@ class BroadcastService {
   /// to today's direct path.
   Future<BroadcastOutcome> broadcast(Chain chain, Uint8List signedTx) async {
     if (isDemoSignature(signedTx)) {
+      if (kReleaseMode) {
+        return const BroadcastOutcome.unsupported(
+          'Simulated signatures are disabled in release builds',
+        );
+      }
       // Simulated success, no network: the demo hash matches what
       // buildDemoSignResult put in the SignResult (sha256 of the bytes).
       return BroadcastOutcome.simulated(hexEncode(sha256(signedTx)));

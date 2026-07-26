@@ -73,6 +73,10 @@ class _AppLockGateState extends State<AppLockGate> {
       return;
     }
     _pinSet = await _pin.isSet();
+    if (_prefs.authMethod == AuthMethod.password && _pinSet) {
+      setState(() => _state = _LockState.lockedPin);
+      return;
+    }
     final canPrompt = await _auth.canAuthenticate();
     if (!mounted) return;
     setState(() {

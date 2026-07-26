@@ -76,14 +76,21 @@ class _FailOnContactRest implements RestTransport {
 class _CountingBalanceService extends BalanceService {
   int calls = 0;
   @override
-  Future<Map<Coin, BalanceResult>> fetchAll(ChainAddresses addresses) async {
+  Future<Map<Coin, BalanceResult>> fetchAll(
+    ChainAddresses addresses, {
+    BalanceResultCallback? onResult,
+  }) async {
     calls++;
-    return {
+    final results = {
       for (final coin in Coin.values)
         coin: BalanceResult.ok(
           Amount(raw: BigInt.from(1000000), decimals: 6, symbol: 'X'),
         ),
     };
+    for (final entry in results.entries) {
+      onResult?.call(entry.key, entry.value);
+    }
+    return results;
   }
 }
 
@@ -315,6 +322,7 @@ void main() {
         usdcArbitrumToken,
         usdcAvalancheToken,
         usdtTronToken,
+        usdcSolanaToken,
       ]);
       // 无网络来源(旧接线)也解析为完整主网注册表。
       expect(networkTokenRegistry(null)(), builtinTokens);

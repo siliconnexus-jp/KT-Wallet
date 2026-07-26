@@ -588,7 +588,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appLock => 'App 锁';
 
   @override
-  String get appLockDesc => '打开 App 时需要生物识别';
+  String get appLockDesc => '打开 App 时进行安全验证';
+
+  @override
+  String get authMethod => '验证方式';
+
+  @override
+  String get authMethodDesc => '用于解锁 App 和确认转账';
+
+  @override
+  String get authBiometrics => '人脸 / 生物识别';
+
+  @override
+  String get authBiometricsDesc => '使用本机生物识别快速确认';
+
+  @override
+  String get authPassword => '钱包密码';
+
+  @override
+  String get authPasswordDesc => '使用 6 位钱包密码验证';
 
   @override
   String get autoLock => '自动锁定';
@@ -704,7 +722,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get watchWalletCreated => '观察钱包已创建';
 
   @override
-  String get marketOfflineDemo => '离线，显示演示数据';
+  String get marketOfflineDemo => '网络不可用，实时数据加载失败';
 
   @override
   String get actionDone => '完成';

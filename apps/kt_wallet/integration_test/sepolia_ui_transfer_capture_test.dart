@@ -1,0 +1,192 @@
+import 'dart:async';
+
+import 'package:core_crypto/core_crypto.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:integration_test/integration_test.dart';
+import 'package:kt_wallet/main.dart';
+import 'package:kt_wallet/src/security/biometric_auth.dart';
+import 'package:kt_wallet/src/state/networks.dart';
+import 'package:kt_wallet/src/state/wallet_controller.dart';
+import 'package:kt_wallet/src/wallets/wallet_manager.dart';
+import 'package:kt_wallet/src/wallets/wallet_model.dart';
+
+const _mnemonic = String.fromEnvironment('SEPOLIA_E2E_MNEMONIC');
+const _walletId = 'sepolia-ui-transfer-capture-v1';
+
+void main() {
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets(
+    'normal app UI submits ETH and Test USDT on Sepolia',
+    (tester) async {
+      expect(_mnemonic, isNotEmpty);
+      tester.platformDispatcher.localesTestValue = const [Locale('zh')];
+      addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+
+      final crypto = MethodChannelCoreCrypto();
+      final originalAuth = BiometricAuth.instance;
+      BiometricAuth.instance = const FakeBiometricAuth(
+        BiometricOutcome.success,
+      );
+      addTearDown(() => BiometricAuth.instance = originalAuth);
+      await crypto.storeWallet(
+        walletId: _walletId,
+        mnemonic: _mnemonic,
+        requireAuth: false,
+      );
+      final addresses = await crypto.deriveAddresses(_walletId);
+      final wallets = WalletController(
+        WalletManager(
+          initial: [
+            HotWallet(
+              id: _walletId,
+              name: 'Sepolia 实测钱包',
+              avatarColor: 0xFF5B86FF,
+              addresses: addresses,
+              backedUp: true,
+            ),
+          ],
+        ),
+        crypto: crypto,
+      );
+      final networks = NetworkController(
+        initialEnvironment: NetworkEnvironment.testnet,
+      );
+
+      await binding.convertFlutterSurfaceToImage();
+      await tester.pumpWidget(
+        KtWalletApp(
+          controller: wallets,
+          networkController: networks,
+          initialLocation: '/home',
+        ),
+      );
+      await _waitUntil(
+        tester,
+        () => find.text('Sepolia 实测钱包').evaluate().isNotEmpty,
+      );
+      await _capture(binding, 'UI_CAPTURE_HOME');
+
+      await _submitTransfer(
+        binding,
+        tester,
+        assetSubtitle: 'Sepolia',
+        symbol: 'ETH',
+        recipient: addresses.eth,
+        amount: '0.00001',
+        inputMarker: 'UI_CAPTURE_ETH_INPUT',
+        confirmMarker: 'UI_CAPTURE_ETH_CONFIRM',
+        authMarker: 'UI_CAPTURE_ETH_AUTH',
+        resultMarker: 'UI_CAPTURE_ETH_RESULT',
+      );
+
+      await tester.tap(find.text('返回首页'));
+      await tester.pumpAndSettle();
+
+      await _submitTransfer(
+        binding,
+        tester,
+        assetSubtitle: 'Sepolia · ERC-20',
+        symbol: 'USDT',
+        recipient: addresses.eth,
+        amount: '1',
+        inputMarker: 'UI_CAPTURE_USDT_INPUT',
+        confirmMarker: 'UI_CAPTURE_USDT_CONFIRM',
+        authMarker: 'UI_CAPTURE_USDT_AUTH',
+        resultMarker: 'UI_CAPTURE_USDT_RESULT',
+      );
+      // Keep the final success screen and the app sandbox alive long enough
+      // for the host-side report collector to copy all captured PNGs.
+      // ignore: avoid_print
+      print('UI_CAPTURE_FILES_READY');
+      await Future<void>.delayed(const Duration(seconds: 60));
+    },
+    timeout: const Timeout(Duration(minutes: 8)),
+  );
+}
+
+Future<void> _submitTransfer(
+  IntegrationTestWidgetsFlutterBinding binding,
+  WidgetTester tester, {
+  required String assetSubtitle,
+  required String symbol,
+  required String recipient,
+  required String amount,
+  required String inputMarker,
+  required String confirmMarker,
+  required String authMarker,
+  required String resultMarker,
+}) async {
+  await tester.tap(find.text('转账'));
+  await tester.pumpAndSettle();
+
+  // Open the normal asset picker and select the requested Sepolia asset by
+  // its network subtitle, avoiding ambiguous repeated token symbols.
+  await tester.tap(find.byIcon(Icons.keyboard_arrow_down));
+  await tester.pumpAndSettle();
+  final networkChoice = find.byWidgetPredicate(
+    (widget) =>
+        widget is Text &&
+        (widget.data ?? '').startsWith('$assetSubtitle · 可用'),
+    description: 'asset subtitle starting with "$assetSubtitle · 可用"',
+  );
+  expect(networkChoice, findsOneWidget);
+  await tester.ensureVisible(networkChoice);
+  await tester.tap(networkChoice);
+  await tester.pumpAndSettle();
+
+  final fields = find.byType(TextField);
+  expect(fields, findsNWidgets(2));
+  await tester.enterText(fields.at(0), recipient);
+  await tester.enterText(fields.at(1), amount);
+  await tester.pumpAndSettle();
+  expect(find.textContaining('地址格式正确'), findsOneWidget);
+  expect(find.text(symbol), findsWidgets);
+  await _capture(binding, inputMarker);
+
+  await tester.tap(find.text('下一步'));
+  await tester.pumpAndSettle();
+  expect(find.text('确认转账'), findsOneWidget);
+  await _capture(binding, confirmMarker);
+
+  await tester.tap(find.text('确认转账'));
+  await tester.pumpAndSettle();
+  expect(find.text('验证以确认转账'), findsOneWidget);
+  await _capture(binding, authMarker);
+
+  await tester.tap(find.text('使用生物识别验证'));
+  await _waitUntil(
+    tester,
+    () => find.text('交易已提交').evaluate().isNotEmpty,
+    timeout: const Duration(minutes: 2),
+  );
+  expect(find.text('交易已提交'), findsOneWidget);
+  await _capture(binding, resultMarker);
+}
+
+Future<void> _waitUntil(
+  WidgetTester tester,
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 30),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!condition()) {
+    if (DateTime.now().isAfter(deadline)) {
+      throw TimeoutException('UI condition was not reached');
+    }
+    await tester.pump(const Duration(milliseconds: 250));
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+  }
+}
+
+Future<void> _capture(
+  IntegrationTestWidgetsFlutterBinding binding,
+  String marker,
+) async {
+  // The host-side runner captures the full Simulator screen at these markers,
+  // including native Face ID overlays which a Flutter surface capture omits.
+  // ignore: avoid_print
+  print(marker);
+  await Future<void>.delayed(const Duration(seconds: 8));
+}

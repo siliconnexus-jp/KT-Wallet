@@ -98,38 +98,80 @@ class PinPad extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 for (final k in row)
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: k.isEmpty ? null : () => onKey(k),
-                    child: Container(
-                      width: 64,
-                      height: 64,
-                      margin: const EdgeInsets.symmetric(horizontal: 10),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: k.isEmpty || k == 'del' ? null : colors.key,
-                        shape: BoxShape.circle,
-                      ),
-                      child: k == 'del'
-                          ? Icon(
-                              Icons.backspace_outlined,
-                              size: 20,
-                              color: colors.icon,
-                            )
-                          : Text(
-                              k,
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w500,
-                                color: colors.digit,
-                              ),
-                            ),
-                    ),
-                  ),
+                  _PinKey(value: k, colors: colors, onKey: onKey),
               ],
             ),
           ),
       ],
+    );
+  }
+}
+
+class _PinKey extends StatefulWidget {
+  const _PinKey({
+    required this.value,
+    required this.colors,
+    required this.onKey,
+  });
+
+  final String value;
+  final PinPadColors colors;
+  final ValueChanged<String> onKey;
+
+  @override
+  State<_PinKey> createState() => _PinKeyState();
+}
+
+class _PinKeyState extends State<_PinKey> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final empty = widget.value.isEmpty;
+    return Semantics(
+      button: !empty,
+      label: widget.value == 'del' ? 'Delete' : widget.value,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: empty ? null : (_) => setState(() => _pressed = true),
+        onTapCancel: empty ? null : () => setState(() => _pressed = false),
+        onTapUp: empty ? null : (_) => setState(() => _pressed = false),
+        onTap: empty ? null : () => widget.onKey(widget.value),
+        child: AnimatedScale(
+          scale: _pressed ? 0.96 : 1,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          child: Container(
+            width: 64,
+            height: 64,
+            margin: const EdgeInsets.symmetric(horizontal: 10),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: empty || widget.value == 'del' ? null : widget.colors.key,
+              shape: BoxShape.circle,
+              border: empty || widget.value == 'del'
+                  ? null
+                  : Border.all(
+                      color: widget.colors.dotBorder.withValues(alpha: 0.55),
+                    ),
+            ),
+            child: widget.value == 'del'
+                ? Icon(
+                    Icons.backspace_outlined,
+                    size: 20,
+                    color: widget.colors.icon,
+                  )
+                : Text(
+                    widget.value,
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w500,
+                      color: widget.colors.digit,
+                    ),
+                  ),
+          ),
+        ),
+      ),
     );
   }
 }

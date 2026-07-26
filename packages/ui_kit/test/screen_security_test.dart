@@ -1,0 +1,104 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:ui_kit/ui_kit.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  Future<StreamController<void>> pumpGuard(
+    WidgetTester tester, {
+    Duration duration = const Duration(seconds: 6),
+  }) async {
+    final events = StreamController<void>.broadcast();
+    await tester.pumpWidget(
+      ScreenSecurityGuard(
+        screenshotEvents: events.stream,
+        warningDuration: duration,
+        child: const MaterialApp(home: Scaffold(body: Text('wallet'))),
+      ),
+    );
+    return events;
+  }
+
+  testWidgets('shows and automatically hides screenshot warning', (
+    tester,
+  ) async {
+    final events = await pumpGuard(tester);
+    events.add(null);
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('screen-security-warning')),
+      findsOneWidget,
+    );
+    expect(
+      find.text('A screenshot was taken. Please protect your wallet.'),
+      findsOneWidget,
+    );
+    await tester.pump(const Duration(seconds: 6));
+    expect(find.byKey(const ValueKey('screen-security-warning')), findsNothing);
+    await events.close();
+  });
+
+  testWidgets('close button dismisses warning', (tester) async {
+    final events = await pumpGuard(tester);
+    events.add(null);
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey('screen-security-warning-close')),
+    );
+    await tester.pump();
+    expect(find.byKey(const ValueKey('screen-security-warning')), findsNothing);
+    await events.close();
+  });
+
+  testWidgets('a repeated screenshot resets the timer', (tester) async {
+    final events = await pumpGuard(tester);
+    events.add(null);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 5));
+    events.add(null);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    expect(
+      find.byKey(const ValueKey('screen-security-warning')),
+      findsOneWidget,
+    );
+    await tester.pump(const Duration(seconds: 4));
+    expect(find.byKey(const ValueKey('screen-security-warning')), findsNothing);
+    await events.close();
+  });
+
+  testWidgets('queues a background event until resumed', (tester) async {
+    final events = await pumpGuard(tester);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    events.add(null);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('screen-security-warning')), findsNothing);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('screen-security-warning')),
+      findsOneWidget,
+    );
+    await events.close();
+  });
+
+  testWidgets('uses Chinese and Japanese warning copy', (tester) async {
+    tester.binding.platformDispatcher.localeTestValue = const Locale('zh');
+    var events = await pumpGuard(tester);
+    events.add(null);
+    await tester.pump();
+    expect(find.text('当前屏幕已被截图，请注意您的钱包安全'), findsOneWidget);
+    await events.close();
+
+    tester.binding.platformDispatcher.localeTestValue = const Locale('ja');
+    events = await pumpGuard(tester);
+    events.add(null);
+    await tester.pump();
+    expect(find.text('スクリーンショットが撮影されました。ウォレットの安全にご注意ください'), findsOneWidget);
+    await events.close();
+    tester.binding.platformDispatcher.clearLocaleTestValue();
+  });
+}

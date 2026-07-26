@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'balance_service.dart' show RpcEndpointResolver, defaultRpcEndpointFor;
 import 'gateway_client.dart';
 
-/// TronGrid REST base URL — the only chain with a keyless public history API.
+/// Default TronGrid REST base URL.
 const String defaultTronHistoryApiUrl = 'https://api.trongrid.io';
 
 /// Per-chain history fetch outcome.
@@ -56,20 +56,8 @@ class HistoryResult {
   final List<ChainTxRecord> records;
 }
 
-/// Fetches recent transaction history where a keyless public API exists.
-///
-/// HONESTY NOTE on coverage:
-/// - TRON: TronGrid serves both TRC-20 transfers and native transactions
-///   without an API key, so TRON history is fetched for real. Today's demo
-///   wallets carry mock addresses that TronGrid rejects (4xx/empty) — that
-///   surfaces as a graceful [HistoryStatus.error], rendered as the demo
-///   fallback, never a crash or a fabricated "live" list.
-/// - Ethereum/Polygon: readable history needs an indexer (Etherscan-family
-///   APIs require keys; raw JSON-RPC has no per-address tx index), so they
-///   return [HistoryStatus.unsupported] instead of pretending.
-/// - Solana: `getSignaturesForAddress` is keyless but yields only signatures;
-///   turning those into readable transfer rows requires per-tx decoding well
-///   beyond this plumbing pass — also [HistoryStatus.unsupported].
+/// Fetches recent transactions directly from public chain APIs. The optional
+/// gateway is tried first, but every supported chain has a direct path.
 class HistoryService {
   HistoryService({
     http.Client? client,
@@ -100,16 +88,10 @@ class HistoryService {
 
   /// Fetches recent transactions for [coin]/[address]. Never throws: every
   /// failure (HTTP status, timeout, malformed body) collapses to
-  /// [HistoryStatus.error]; chains without a keyless API return
-  /// [HistoryStatus.unsupported].
+  /// [HistoryStatus.error].
   ///
-  /// GATEWAY SEMANTICS: with a gateway configured, `kt_getHistory` is asked
-  /// for EVERY chain — this is what UNLOCKS eth/polygon/solana history
-  /// (indexer keys live server-side); "unsupported" is returned only when the
-  /// gateway itself says so, or in direct mode. On a gateway failure, TRON
-  /// falls back to the direct TronGrid path (the one keyless API we have);
-  /// the other chains have no direct path, so they surface an honest
-  /// [HistoryStatus.error] rather than pretending "unsupported".
+  /// With a gateway configured, `kt_getHistory` is asked first. If it is
+  /// unreachable, the request falls through to the chain's public API.
   Future<HistoryResult> fetch(Coin coin, String address) async {
     final gateway = _gateway();
     if (gateway != null) {
@@ -125,8 +107,7 @@ class HistoryService {
         ]..sort((a, b) => b.timestamp.compareTo(a.timestamp));
         return HistoryResult.ok(List.unmodifiable(records.take(pageSize)));
       } catch (_) {
-        // Gateway unreachable/erroring: only TRON has a direct alternative.
-        if (coin != Coin.tron) return const HistoryResult.error();
+        // Gateway unreachable/erroring: fall through to direct chain APIs.
       }
     }
     switch (coin) {
@@ -137,9 +118,183 @@ class HistoryService {
       case Coin.base:
       case Coin.arbitrum:
       case Coin.avalanche:
+        return _fetchEvm(coin, address);
       case Coin.solana:
-        return const HistoryResult.unsupported();
+        return _fetchSolana(address);
     }
+  }
+
+  Future<HistoryResult> _fetchEvm(Coin coin, String address) async {
+    try {
+      if (coin == Coin.avalanche) {
+        return _fetchAvalanche(address);
+      }
+      final base = _blockscoutApi(coin);
+      final uri = Uri.parse(
+        '$base/addresses/$address/transactions?items_count=$pageSize',
+      );
+      final response = await _client.get(uri).timeout(timeout);
+      if (response.statusCode != 200) {
+        throw http.ClientException('HTTP ${response.statusCode}', uri);
+      }
+      final body = jsonDecode(response.body);
+      final items = body is Map ? body['items'] : null;
+      if (items is! List) throw const FormatException('missing items');
+      final lower = address.toLowerCase();
+      final records = <ChainTxRecord>[];
+      for (final item in items) {
+        if (item is! Map) continue;
+        final hash = item['hash'];
+        final timestamp = DateTime.tryParse('${item['timestamp']}');
+        if (hash is! String || timestamp == null) continue;
+        final from = item['from'];
+        final fromHash = from is Map ? from['hash'] : null;
+        final value = BigInt.tryParse('${item['value'] ?? ''}');
+        records.add(
+          ChainTxRecord(
+            hash: hash,
+            outgoing: fromHash is String && fromHash.toLowerCase() == lower,
+            amountText: value == null
+                ? null
+                : _formatAmount(value, 18, _nativeSymbol(coin)),
+            timestamp: timestamp,
+            confirmed: item['status'] == 'ok',
+          ),
+        );
+      }
+      return HistoryResult.ok(List.unmodifiable(records.take(pageSize)));
+    } catch (_) {
+      return const HistoryResult.error();
+    }
+  }
+
+  Future<HistoryResult> _fetchAvalanche(String address) async {
+    final endpoint = _endpoints(Coin.avalanche).toLowerCase();
+    final testnet = endpoint.contains('test') || endpoint.contains('fuji');
+    final network = testnet ? 'testnet' : 'mainnet';
+    final chainId = testnet ? 43113 : 43114;
+    try {
+      final uri = Uri.parse(
+        'https://api.routescan.io/v2/network/$network/evm/$chainId/etherscan/api'
+        '?module=account&action=txlist&address=$address&page=1'
+        '&offset=$pageSize&sort=desc',
+      );
+      final response = await _client.get(uri).timeout(timeout);
+      if (response.statusCode != 200) {
+        throw http.ClientException('HTTP ${response.statusCode}', uri);
+      }
+      final body = jsonDecode(response.body);
+      final items = body is Map ? body['result'] : null;
+      if (items is! List) throw const FormatException('missing result');
+      final lower = address.toLowerCase();
+      final records = <ChainTxRecord>[];
+      for (final item in items) {
+        if (item is! Map || item['hash'] is! String) continue;
+        final seconds = int.tryParse('${item['timeStamp']}');
+        if (seconds == null) continue;
+        final value = BigInt.tryParse('${item['value']}');
+        records.add(
+          ChainTxRecord(
+            hash: item['hash'] as String,
+            outgoing: '${item['from']}'.toLowerCase() == lower,
+            amountText: value == null ? null : _formatAmount(value, 18, 'AVAX'),
+            timestamp: DateTime.fromMillisecondsSinceEpoch(seconds * 1000),
+            confirmed: item['isError'] != '1',
+          ),
+        );
+      }
+      return HistoryResult.ok(List.unmodifiable(records));
+    } catch (_) {
+      return const HistoryResult.error();
+    }
+  }
+
+  String _blockscoutApi(Coin coin) {
+    final endpoint = _endpoints(coin).toLowerCase();
+    final testnet = endpoint.contains('sepolia') || endpoint.contains('amoy');
+    return switch (coin) {
+      Coin.eth =>
+        testnet
+            ? 'https://eth-sepolia.blockscout.com/api/v2'
+            : 'https://eth.blockscout.com/api/v2',
+      Coin.polygon =>
+        testnet
+            ? 'https://polygon-amoy.blockscout.com/api/v2'
+            : 'https://polygon.blockscout.com/api/v2',
+      Coin.base =>
+        testnet
+            ? 'https://base-sepolia.blockscout.com/api/v2'
+            : 'https://base.blockscout.com/api/v2',
+      Coin.arbitrum =>
+        testnet
+            ? 'https://arbitrum-sepolia.blockscout.com/api/v2'
+            : 'https://arbitrum.blockscout.com/api/v2',
+      Coin.avalanche => throw ArgumentError('Avalanche uses Routescan'),
+      _ => throw ArgumentError('not EVM: $coin'),
+    };
+  }
+
+  String _nativeSymbol(Coin coin) => switch (coin) {
+    Coin.polygon => 'POL',
+    Coin.avalanche => 'AVAX',
+    _ => 'ETH',
+  };
+
+  Future<HistoryResult> _fetchSolana(String address) async {
+    try {
+      final rpc = _endpoints(Coin.solana);
+      final signatures = await _solanaCall(rpc, 'getSignaturesForAddress', [
+        address,
+        {'limit': pageSize},
+      ]);
+      if (signatures is! List) throw const FormatException('bad signatures');
+      final records = <ChainTxRecord>[];
+      for (final item in signatures) {
+        if (item is! Map || item['signature'] is! String) continue;
+        final blockTime = item['blockTime'];
+        records.add(
+          ChainTxRecord(
+            hash: item['signature'] as String,
+            outgoing: false,
+            timestamp: blockTime is int
+                ? DateTime.fromMillisecondsSinceEpoch(blockTime * 1000)
+                : DateTime.fromMillisecondsSinceEpoch(0),
+            confirmed: item['err'] == null,
+          ),
+        );
+      }
+      return HistoryResult.ok(List.unmodifiable(records));
+    } catch (_) {
+      return const HistoryResult.error();
+    }
+  }
+
+  Future<Object?> _solanaCall(
+    String url,
+    String method,
+    List<Object?> params,
+  ) async {
+    final uri = Uri.parse(url);
+    final response = await _client
+        .post(
+          uri,
+          headers: const {'content-type': 'application/json'},
+          body: jsonEncode({
+            'jsonrpc': '2.0',
+            'id': 1,
+            'method': method,
+            'params': params,
+          }),
+        )
+        .timeout(timeout);
+    if (response.statusCode != 200) {
+      throw http.ClientException('HTTP ${response.statusCode}', uri);
+    }
+    final body = jsonDecode(response.body);
+    if (body is! Map || body['error'] != null) {
+      throw const FormatException('RPC error');
+    }
+    return body['result'];
   }
 
   /// Normalizes one gateway record onto the display shape; an unparseable

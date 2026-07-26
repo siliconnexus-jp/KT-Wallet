@@ -152,6 +152,16 @@ const usdtTronNileToken = TokenInfo(
   network: 'Nile',
 );
 
+/// Circle's canonical USDC mint on Solana mainnet.
+const usdcSolanaToken = TokenInfo(
+  id: 'usdc-solana',
+  symbol: 'USDC',
+  chain: Coin.solana,
+  contract: 'EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v',
+  decimals: 6,
+  network: 'Solana',
+);
+
 /// Circle's canonical USDC mint on Solana Devnet.
 const usdcSolanaDevnetToken = TokenInfo(
   id: 'usdc-solana-devnet',
@@ -184,6 +194,7 @@ const builtinTokensByNetworkId = <String, List<TokenInfo>>{
   'avalanche-fuji': [usdcAvalancheFujiToken],
   'tron-mainnet': [usdtTronToken],
   'tron-nile': [usdtTronNileToken],
+  'sol-mainnet': [usdcSolanaToken],
   'sol-devnet': [usdcSolanaDevnetToken],
 };
 
