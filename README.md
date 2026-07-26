@@ -1,106 +1,227 @@
-# KT-Wallet
-
-Open-source air-gapped multi-chain wallet for **Ethereum, Polygon, Base,
-Arbitrum, Avalanche, TRON, and Solana**.
+# KT Wallet
 
 <p align="center">
   <img src="branding/kt-wallet-logo-256.png" width="160" alt="KT Wallet logo">
 </p>
 
-## Open source
+<p align="center">
+  Open-source, air-gapped multi-chain wallet for iOS and Android.
+</p>
+
+<p align="center">
+  Ethereum · Polygon · Base · Arbitrum · Avalanche · TRON · Solana
+</p>
 
 Source code, issues, and releases:
-[github.com/siliconnexus-jp/KT-Wallet](https://github.com/siliconnexus-jp/KT-Wallet)
+[siliconnexus-jp/KT-Wallet](https://github.com/siliconnexus-jp/KT-Wallet).
+The project is licensed under [MPL-2.0](LICENSE).
 
-## One installer, two roles
+## What is included
 
-KT Wallet ships as a **single app** (`apps/kt_wallet`). On first launch you choose
-what this phone is:
+KT Wallet can be used in two complementary roles:
 
-- **联网钱包 / Online Wallet** — everyday use: multi-wallet management, balances,
-  transfers, broadcasting. Holds public addresses (watch wallets) and optional
-  hot wallets for small amounts.
-- **离线签名器 / Offline Signer** — install on a phone that never goes online.
-  The recovery phrase is generated, stored, and used for signing only on this
-  device; it communicates with the online phone exclusively by scanning QR codes.
+- **Online Wallet** — manages hot wallets and watch-only accounts, reads live
+  balances and history, builds transactions, broadcasts them, and follows their
+  confirmation state.
+- **KT Wallet Cold Signer** — keeps recovery phrases and signing keys on an
+  offline device. Transaction requests and signed responses move between
+  devices through QR codes.
 
-The choice persists across restarts and can be changed later from Settings
-(mode data is kept — switching back does not wipe wallets). Picking "Offline
-Signer" is gated behind an air-gap warning, and the signer welcome screen keeps
-an escape hatch back to the picker so a mis-tap never forces onboarding.
+The main `apps/kt_wallet` installer includes both roles and asks which mode the
+device should use on first launch. `apps/cold_signer` is also available as an
+independent install for a dedicated offline phone.
 
-For maximum isolation, `apps/cold_signer` still builds as its **own standalone
-app** — the combined installer embeds the same package.
+The interface is localized in **简体中文**, **English**, and **日本語**.
 
-### How a transfer works (air-gapped)
+## Air-gapped signing
 
+```text
+Online Wallet                         KT Wallet Cold Signer
+
+build unsigned transaction
+show request QR          ── camera ──▶ parse raw transaction
+                                      show recipient, amount, token,
+                                      network and fee
+                                      verify PIN / biometrics
+                                      sign with the native key
+verify signed response   ◀─ camera ── show signed-response QR
+broadcast and track
 ```
-kt_wallet (online)                 cold_signer (offline)
-    build tx → show QR   ── 📷 ──▶  parse & display tx
-                                    verify password → sign with local key
-    verify sig → broadcast ◀─ 📷 ── show signature QR
+
+The Cold Signer derives real accounts for every supported chain and exports
+wallet ID, address, public key, derivation path, and protocol version. The
+online wallet creates a watch-only account from this payload.
+
+Before broadcasting, the online side validates that the signer, network, and
+signed transaction match the original request. A modified payload, wrong
+signer, wrong network, or mismatched transaction is rejected.
+
+## Chain support
+
+| Chain | Balance | Native transfer | Token transfer | History |
+|---|:---:|:---:|:---:|:---:|
+| Ethereum | ✅ | ETH | ERC-20 | Blockscout |
+| Polygon | ✅ | POL | ERC-20 | Blockscout |
+| Base | ✅ | ETH | ERC-20 | Blockscout |
+| Arbitrum | ✅ | ETH | ERC-20 | Blockscout |
+| Avalanche C-Chain | ✅ | AVAX | ERC-20 | Routescan |
+| TRON | ✅ | TRX | TRC-20 | TronGrid |
+| Solana | ✅ | SOL | SPL Token | Solana RPC |
+
+Hot wallets sign through the native Trust Wallet Core bridge. Watch-only
+wallets have no private-key signing capability and use the QR workflow.
+
+The table describes implemented transaction families. Public RPC availability,
+faucet limits, and testnet token liquidity are external dependencies and are not
+reported as successful when unavailable.
+
+### Fees and preflight checks
+
+- EVM transactions use the pending nonce, `eth_estimateGas`, and
+  EIP-1559 fee history.
+- TRON transactions query bandwidth, energy, and contract energy usage to
+  derive `feeLimit`.
+- Solana transactions use a fresh blockhash, `getFeeForMessage`, and node
+  simulation.
+- If a required fee or simulation call fails, sending is blocked instead of
+  falling back to a demo fee.
+
+SPL transfers currently require the recipient's associated token account to
+already exist. Automatic ATA creation is not yet implemented.
+
+## Transaction lifecycle
+
+Transactions are stored locally as `submitted`, `pending`, `confirmed`,
+`failed`, or `dropped`. KT Wallet resumes polling after restart and merges local
+pending records with chain history so a newly submitted transaction does not
+temporarily disappear.
+
+Pending EVM transactions support:
+
+- **Speed up** — sends a replacement with the same nonce, recipient, value, and
+  calldata, but a higher EIP-1559 fee.
+- **Cancel** — sends a zero-value self-transfer with the same nonce and a higher
+  fee.
+
+A speed-up does not intentionally create a second transfer. Only one
+same-nonce transaction can be accepted by the chain. Until one replacement is
+confirmed, however, the original transaction may still win the race; the UI
+therefore distinguishes signing, broadcasting, and chain confirmation.
+
+## Security model
+
+- Recovery phrases are committed to the native crypto vault under a random
+  wallet ID; production flows do not persist the complete phrase in Dart
+  secure storage.
+- BIP-39 words and checksums are validated before import. Failed imports do not
+  leave a partial wallet.
+- Each Cold Signer signature requires PIN or biometric authentication. PIN
+  retry limits and lockout state persist across restarts.
+- Offline safety checks use `safe`, `unsafe`, and `unknown`; an unavailable
+  probe is never displayed as a successful check.
+- Signing is blocked when the signer detects an online connection, screen
+  recording, or a failed device-integrity check.
+- Android Cold Signer uses `FLAG_SECURE`. Android 14+ uses the official screen
+  capture callback; iOS uses the system screenshot notification.
+- Both apps replace their content with a branded privacy cover when entering
+  the background or app switcher. Successful screenshots trigger a
+  non-blocking security warning where the operating system supports detection.
+- Production routes do not seed sample wallets, fake balances, or simulated
+  successful transactions.
+
+Security controls reduce risk but cannot make a compromised device safe. Read
+[Security and Risk](SECURITY_AND_RISK.md) before using real assets.
+
+## Reliability and data sources
+
+RPC requests use bounded timeouts and per-network endpoint fallback. A custom
+RPC selected by the user remains authoritative and is not silently replaced.
+Balance failures remain visible as errors rather than being converted to zero.
+
+History works directly through chain data providers and does not require the
+optional KT Gateway. The gateway can still be configured as an infrastructure
+override.
+
+## Build and test
+
+Requirements:
+
+- Flutter SDK compatible with the workspace lockfile
+- Xcode and CocoaPods for iOS
+- Android SDK for Android
+- GitHub Packages `read:packages` access when enabling Trust Wallet Core on
+  Android
+
+Install workspace dependencies:
+
+```sh
+flutter pub get
 ```
 
-The only channel between the two devices is optical (QR), carried by the
-`airgap_protocol` package. Watch wallets have no signing capability at the type
-level — the online app cannot sign for them even in principle.
+Run the main test suites:
 
-## Languages
+```sh
+(cd packages/ui_kit && flutter test)
+(cd packages/chains && flutter test)
+(cd packages/wallet_data && flutter test)
+(cd apps/kt_wallet && flutter test)
+(cd apps/cold_signer && flutter test)
+```
 
-Fully localized in **简体中文 (base), English, and 日本語** — follows the system
-language with a persisted manual override in Settings (both roles).
+Build the applications:
 
-## Chain capabilities
+```sh
+(cd apps/kt_wallet && flutter build ios --no-codesign)
+(cd apps/kt_wallet && flutter build apk)
+(cd apps/cold_signer && flutter build ios --no-codesign)
+(cd apps/cold_signer && flutter build apk)
+```
 
-| Chain | Live balance | Native transfer | Token transfer | Direct history |
-|---|---:|---:|---:|---:|
-| Ethereum | ✅ | ✅ | ERC-20 | ✅ Blockscout |
-| Polygon | ✅ | ✅ | ERC-20 | ✅ Blockscout |
-| Base | ✅ | ✅ | ERC-20 | ✅ Blockscout |
-| Arbitrum | ✅ | ✅ | ERC-20 | ✅ Blockscout |
-| Avalanche C-Chain | ✅ | ✅ | ERC-20 | ✅ Routescan |
-| TRON | ✅ | ✅ TRX | TRC-20 | ✅ TronGrid |
-| Solana | ✅ | ✅ SOL | SPL | ✅ Solana RPC |
+Android builds without Wallet Core use a fail-closed crypto stub: signing and
+key operations return `CRYPTO_UNAVAILABLE` rather than producing placeholder
+cryptography. See [BUILDING.md](BUILDING.md) for Wallet Core setup, package
+credentials, and release-signing requirements.
 
-Hot wallets sign on-device through Trust Wallet Core on Android and iOS.
-Watch-only wallets continue to use the QR air-gap flow. Production screens do
-not seed sample wallets, balances, assets, or successful transactions. If all
-configured RPC endpoints fail, the UI reports the network error instead of
-substituting demo values.
+Recent device and simulator evidence is available in:
 
-The table describes implemented transaction families, not a guarantee that
-every public testnet endpoint or faucet is currently available. EVM sends use
-live nonce, fee history and gas estimation. TRC-20 sends estimate energy and
-derive `feeLimit` from current resources. Solana sends use a fresh blockhash,
-`getFeeForMessage` and node simulation. SPL transfers currently require the
-recipient token account to already exist; automatic associated-token-account
-creation is not yet implemented.
+- [Security hardening report](reports/hardening-2026-07-26/index.html)
+- [Pending replacement UI report](reports/pending-replacement-ui-2026-07-26/index.html)
+- [Testnet cryptography report](reports/testnet-real-crypto-2026-07-26/index.html)
+- [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
-Public RPC calls use bounded timeouts and per-network fallbacks. A custom RPC
-selected in Settings remains authoritative and is never silently replaced.
-Transaction history no longer requires the optional KT Gateway; the gateway can
-still be configured as an infrastructure override.
+## Application identities
+
+| Application | Android application ID | iOS bundle ID |
+|---|---|---|
+| KT Wallet | `com.ktwallet.kt_wallet` | `com.ktwallet.ktWallet` |
+| KT Wallet Cold Signer | `cc.siliconnexus.ktwallet.coldsigner` | `cc.siliconnexus.ktwallet.coldsigner` |
 
 ## Repository layout
 
-| Path | What it is |
+| Path | Purpose |
 |---|---|
-| `apps/kt_wallet` | The shipping app: mode picker + online wallet + embedded signer |
-| `apps/cold_signer` | The signer, also independently buildable/installable |
-| `packages/core_crypto` | Trust Wallet Core bridge (mnemonic / derivation / signing) |
-| `packages/wallet_data` | drift (SQLite) persistence layer |
-| `packages/airgap_protocol` | QR transport protocol between the two roles |
-| `packages/chains` | Per-chain RPC / tx assembly |
-| `packages/ui_kit` | Shared design system (1:1 with the Pencil design in `ui.pen`) |
+| `apps/kt_wallet` | Online wallet and embedded Cold Signer |
+| `apps/cold_signer` | Independently installable KT Wallet Cold Signer |
+| `packages/core_crypto` | Native mnemonic, derivation, vault, and signing bridge |
+| `packages/wallet_data` | Drift/SQLite wallets, transactions, and pending state |
+| `packages/airgap_protocol` | Versioned QR request and response protocol |
+| `packages/chains` | Address validation, RPC, parsing, and signature verification |
+| `packages/ui_kit` | Shared KT design system and screen-security UI |
+| `backend/gateway` | Optional infrastructure gateway |
+| `reports` | HTML acceptance reports and screenshots |
 
-## Building & testing
+## Current scope
 
-See [BUILDING.md](BUILDING.md) for build instructions (including the wallet-core
-Android setup and release signing). Run the test suites from each package/app directory with
-`flutter test`; golden tests replicate the Pencil design (including its mock
-status bar — the real apps suppress it via `KtDeviceChrome`).
+The following are intentionally outside the current release scope:
 
-Privacy, security and dependency disclosures are in
-[PRIVACY_POLICY.md](PRIVACY_POLICY.md),
-[SECURITY_AND_RISK.md](SECURITY_AND_RISK.md), and
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- WalletConnect and DApp browser
+- NFT gallery
+- Swap
+- Staking
+- Production store signing and native CI
+
+## Disclosures
+
+- [Privacy Policy](PRIVACY_POLICY.md)
+- [Security and Risk](SECURITY_AND_RISK.md)
+- [Third-party Notices](THIRD_PARTY_NOTICES.md)
