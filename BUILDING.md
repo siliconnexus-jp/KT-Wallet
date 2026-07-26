@@ -74,9 +74,9 @@ iOS is unaffected by this flag.
 
 ## Release identity and signing
 
-The shipping app uses `com.ktwallet.kt_wallet` on Android and
-`com.ktwallet.ktWallet` on iOS. Its launcher name is **KT Wallet** on both
-platforms.
+The shipping app uses `cc.siliconnexus.ktwallet` on Android and iOS. Its
+launcher name is **KT Wallet** on both platforms. The independently installable
+Cold Signer uses `cc.siliconnexus.ktwallet.coldsigner`.
 
 Android release builds are deliberately **not** signed with the debug key.
 Provide the four values below only in the local shell or CI secret store:

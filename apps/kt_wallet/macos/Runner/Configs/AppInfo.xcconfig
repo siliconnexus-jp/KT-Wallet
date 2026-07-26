@@ -8,7 +8,7 @@
 PRODUCT_NAME = kt_wallet
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.ktwallet.ktWallet
+PRODUCT_BUNDLE_IDENTIFIER = cc.siliconnexus.ktwallet
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 com.ktwallet. All rights reserved.

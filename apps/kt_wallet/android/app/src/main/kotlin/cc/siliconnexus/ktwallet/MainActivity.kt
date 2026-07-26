@@ -1,4 +1,4 @@
-package com.ktwallet.kt_wallet
+package cc.siliconnexus.ktwallet
 
 import android.app.Activity
 import android.app.KeyguardManager

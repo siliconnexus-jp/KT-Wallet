@@ -16,7 +16,7 @@ val hasReleaseSigning = listOf(
 ).all { !it.isNullOrBlank() }
 
 android {
-    namespace = "com.ktwallet.kt_wallet"
+    namespace = "cc.siliconnexus.ktwallet"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -26,7 +26,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.ktwallet.kt_wallet"
+        applicationId = "cc.siliconnexus.ktwallet"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

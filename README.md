@@ -193,7 +193,7 @@ Recent device and simulator evidence is available in:
 
 | Application | Android application ID | iOS bundle ID |
 |---|---|---|
-| KT Wallet | `com.ktwallet.kt_wallet` | `com.ktwallet.ktWallet` |
+| KT Wallet | `cc.siliconnexus.ktwallet` | `cc.siliconnexus.ktwallet` |
 | KT Wallet Cold Signer | `cc.siliconnexus.ktwallet.coldsigner` | `cc.siliconnexus.ktwallet.coldsigner` |
 
 ## Repository layout
