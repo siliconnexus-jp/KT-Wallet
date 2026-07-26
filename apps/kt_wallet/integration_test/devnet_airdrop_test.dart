@@ -17,9 +17,14 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   test('devnet airdrop → real SOL visible through BalanceService', () async {
+    const requestedLamports = lamportsPerSol ~/ 10;
     final crypto = MethodChannelCoreCrypto();
     const id = 'itest-devnet';
-    await crypto.storeWallet(walletId: id, mnemonic: await crypto.generateMnemonic());
+    await crypto.storeWallet(
+      walletId: id,
+      mnemonic: await crypto.generateMnemonic(),
+      requireAuth: false,
+    );
     final addrs = await crypto.deriveAddresses(id);
     // ignore: avoid_print
     print('DEVNET addr=${addrs.solana}');
@@ -30,7 +35,7 @@ void main() {
       signature = await airdrop.requestAirdrop(
         rpcUrl: solanaDevnet.rpcUrl,
         address: addrs.solana,
-        lamports: lamportsPerSol,
+        lamports: requestedLamports,
       );
       // ignore: avoid_print
       print('AIRDROP sig=$signature');
@@ -40,6 +45,9 @@ void main() {
       // real node. Mark and bail without failing the suite.
       // ignore: avoid_print
       print('AIRDROP-RATE-LIMITED: ${e.message}');
+      markTestSkipped(
+        'Solana public Devnet faucet rejected the request: ${e.message}',
+      );
       return;
     }
 
@@ -50,14 +58,18 @@ void main() {
     for (var i = 0; i < 15; i++) {
       await Future<void>.delayed(const Duration(seconds: 2));
       final result = (await balances.fetchAll(addrs))[Coin.solana]!;
-      if (result.status == BalanceStatus.ok && result.amount!.raw > BigInt.zero) {
+      if (result.status == BalanceStatus.ok &&
+          result.amount!.raw > BigInt.zero) {
         seen = result.amount!.raw;
         break;
       }
     }
     // ignore: avoid_print
     print('DEVNET balance raw=$seen');
-    expect(seen, BigInt.from(lamportsPerSol),
-        reason: 'the airdropped 1 SOL must be visible through the app service');
+    expect(
+      seen,
+      BigInt.from(requestedLamports),
+      reason: 'the airdropped 0.1 SOL must be visible through the app service',
+    );
   });
 }

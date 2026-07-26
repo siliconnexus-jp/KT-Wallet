@@ -43,6 +43,18 @@ const usdtEthToken = TokenInfo(
   network: 'Ethereum',
 );
 
+/// ERC20Mock used as Test USDT on Sepolia by the real mobile E2E suite.
+/// This is deliberately keyed only to `eth-sepolia`; it can never leak into
+/// Ethereum mainnet balance queries.
+const usdtSepoliaToken = TokenInfo(
+  id: 'usdt-eth-sepolia',
+  symbol: 'USDT',
+  chain: Coin.eth,
+  contract: '0xc4DCC311c028e341fd8602D8eB89c5de94625927',
+  decimals: 18,
+  network: 'Sepolia',
+);
+
 // USDC on Polygon PoS — Circle's NATIVE issuance (not the bridged USDC.e at
 // 0x2791...), 6 decimals, per Circle's "USDC on Polygon PoS" contract list
 // (https://developers.circle.com/stablecoins/usdc-on-main-networks).
@@ -53,6 +65,70 @@ const usdcPolygonToken = TokenInfo(
   contract: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
   decimals: 6,
   network: 'Polygon',
+);
+
+/// Circle's canonical USDC deployment on Polygon Amoy.
+const usdcPolygonAmoyToken = TokenInfo(
+  id: 'usdc-polygon-amoy',
+  symbol: 'USDC',
+  chain: Coin.polygon,
+  contract: '0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582',
+  decimals: 6,
+  network: 'Amoy',
+);
+
+const usdcBaseToken = TokenInfo(
+  id: 'usdc-base',
+  symbol: 'USDC',
+  chain: Coin.base,
+  contract: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+  decimals: 6,
+  network: 'Base',
+);
+
+const usdcBaseSepoliaToken = TokenInfo(
+  id: 'usdc-base-sepolia',
+  symbol: 'USDC',
+  chain: Coin.base,
+  contract: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  decimals: 6,
+  network: 'Base Sepolia',
+);
+
+const usdcArbitrumToken = TokenInfo(
+  id: 'usdc-arbitrum',
+  symbol: 'USDC',
+  chain: Coin.arbitrum,
+  contract: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+  decimals: 6,
+  network: 'Arbitrum One',
+);
+
+const usdcArbitrumSepoliaToken = TokenInfo(
+  id: 'usdc-arbitrum-sepolia',
+  symbol: 'USDC',
+  chain: Coin.arbitrum,
+  contract: '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d',
+  decimals: 6,
+  network: 'Arbitrum Sepolia',
+);
+
+const usdcAvalancheToken = TokenInfo(
+  id: 'usdc-avalanche',
+  symbol: 'USDC',
+  chain: Coin.avalanche,
+  contract: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E',
+  decimals: 6,
+  network: 'Avalanche C-Chain',
+);
+
+const usdcAvalancheFujiToken = TokenInfo(
+  id: 'usdc-avalanche-fuji',
+  symbol: 'USDC',
+  chain: Coin.avalanche,
+  contract: '0x5425890298aed601595a70AB815c96711a31Bc65',
+  decimals: 6,
+  network: 'Avalanche Fuji',
 );
 
 // USDT on TRON — Tether's canonical TRC-20 contract, 6 decimals
@@ -66,6 +142,26 @@ const usdtTronToken = TokenInfo(
   network: 'TRON',
 );
 
+/// Nile faucet's test USDT deployment.
+const usdtTronNileToken = TokenInfo(
+  id: 'usdt-tron-nile',
+  symbol: 'USDT',
+  chain: Coin.tron,
+  contract: 'TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf',
+  decimals: 6,
+  network: 'Nile',
+);
+
+/// Circle's canonical USDC mint on Solana Devnet.
+const usdcSolanaDevnetToken = TokenInfo(
+  id: 'usdc-solana-devnet',
+  symbol: 'USDC',
+  chain: Coin.solana,
+  contract: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+  decimals: 6,
+  network: 'Devnet',
+);
+
 /// Built-in token registry (V1: the three canonical stablecoin deployments;
 /// user-added tokens stay display-only in the token-manage directory).
 const builtinTokens = [usdtEthToken, usdcPolygonToken, usdtTronToken];
@@ -77,8 +173,18 @@ const builtinTokens = [usdtEthToken, usdcPolygonToken, usdtTronToken];
 /// at best).
 const builtinTokensByNetworkId = <String, List<TokenInfo>>{
   'eth-mainnet': [usdtEthToken],
+  'eth-sepolia': [usdtSepoliaToken],
   'polygon-mainnet': [usdcPolygonToken],
+  'polygon-amoy': [usdcPolygonAmoyToken],
+  'base-mainnet': [usdcBaseToken],
+  'base-sepolia': [usdcBaseSepoliaToken],
+  'arbitrum-mainnet': [usdcArbitrumToken],
+  'arbitrum-sepolia': [usdcArbitrumSepoliaToken],
+  'avalanche-mainnet': [usdcAvalancheToken],
+  'avalanche-fuji': [usdcAvalancheFujiToken],
   'tron-mainnet': [usdtTronToken],
+  'tron-nile': [usdtTronNileToken],
+  'sol-devnet': [usdcSolanaDevnetToken],
 };
 
 /// Resolves the token registry to fetch, re-evaluated on every fetch so a
@@ -105,13 +211,13 @@ class TokenBalanceService {
     GatewayResolver? gateway,
     List<TokenInfo> tokens = builtinTokens,
     TokenRegistryResolver? registry,
-  })  : _jsonRpc = jsonRpcTransport ?? HttpJsonRpcTransport(),
-        _rest = restTransport ?? HttpRestTransport(),
-        _endpoints = endpoints ?? defaultRpcEndpointFor,
-        _gateway = gateway ?? _noGateway,
-        _staticTokens = tokens,
-        // ignore: prefer_initializing_formals
-        _registry = registry;
+  }) : _jsonRpc = jsonRpcTransport ?? HttpJsonRpcTransport(),
+       _rest = restTransport ?? HttpRestTransport(),
+       _endpoints = endpoints ?? defaultRpcEndpointFor,
+       _gateway = gateway ?? _noGateway,
+       _staticTokens = tokens,
+       // ignore: prefer_initializing_formals
+       _registry = registry;
 
   static GatewayClient? _noGateway() => null;
 
@@ -157,8 +263,9 @@ class TokenBalanceService {
       ]);
       return {for (final map in chainMaps) ...map};
     }
-    final entries = await Future.wait(
-        [for (final token in tokens) _guard(token, addresses)]);
+    final entries = await Future.wait([
+      for (final token in tokens) _guard(token, addresses),
+    ]);
     return {for (final (id, result) in entries) id: result};
   }
 
@@ -183,9 +290,7 @@ class TokenBalanceService {
             ),
         ],
       );
-      final byContract = {
-        for (final row in balances.tokens) row.contract: row,
-      };
+      final byContract = {for (final row in balances.tokens) row.contract: row};
       return {
         for (final token in chainTokens)
           token.id: _mapGatewayRow(token, byContract[token.contract]),
@@ -193,8 +298,9 @@ class TokenBalanceService {
     } catch (_) {
       // Gateway unreachable/erroring for this chain: direct fallback, same
       // per-token isolation as direct mode.
-      final entries = await Future.wait(
-          [for (final token in chainTokens) _guard(token, addresses)]);
+      final entries = await Future.wait([
+        for (final token in chainTokens) _guard(token, addresses),
+      ]);
       return {for (final (id, result) in entries) id: result};
     }
   }
@@ -209,23 +315,24 @@ class TokenBalanceService {
     }
     try {
       return BalanceResult.ok(
-          Amount(raw: raw, decimals: token.decimals, symbol: token.symbol));
+        Amount(raw: raw, decimals: token.decimals, symbol: token.symbol),
+      );
     } catch (_) {
       return const BalanceResult.error();
     }
   }
 
   Future<(String, BalanceResult)> _guard(
-      TokenInfo token, ChainAddresses addresses) async {
+    TokenInfo token,
+    ChainAddresses addresses,
+  ) async {
     try {
       final raw = await _fetchRaw(token, addresses);
       return (
         token.id,
-        BalanceResult.ok(Amount(
-          raw: raw,
-          decimals: token.decimals,
-          symbol: token.symbol,
-        )),
+        BalanceResult.ok(
+          Amount(raw: raw, decimals: token.decimals, symbol: token.symbol),
+        ),
       );
     } on UnsupportedError {
       return (token.id, const BalanceResult.unsupported());
@@ -240,14 +347,19 @@ class TokenBalanceService {
     switch (token.chain) {
       case Coin.eth:
       case Coin.polygon:
+      case Coin.base:
+      case Coin.arbitrum:
+      case Coin.avalanche:
         final rpc = EvmRpc(url: _endpoints(token.chain), transport: _jsonRpc);
         return rpc.erc20Balance(token.contract, addresses.forCoin(token.chain));
       case Coin.tron:
         return _trc20Balance(token, addresses.tron);
       case Coin.solana:
-        // No SPL entries in the built-in registry; decoding token accounts is
-        // out of scope for this plumbing pass.
-        throw UnsupportedError('SPL token balances not supported');
+        final rpc = SolanaRpc(
+          url: _endpoints(token.chain),
+          transport: _jsonRpc,
+        );
+        return rpc.getTokenBalance(addresses.solana, token.contract);
     }
   }
 
@@ -256,8 +368,9 @@ class TokenBalanceService {
   /// Empty `data` = unactivated account = zero; a `trc20` array without the
   /// contract = no balance record = zero; anything malformed throws (→ error).
   Future<BigInt> _trc20Balance(TokenInfo token, String address) async {
-    final resp =
-        await _rest.getJson('${_endpoints(Coin.tron)}/v1/accounts/$address');
+    final resp = await _rest.getJson(
+      '${_endpoints(Coin.tron)}/v1/accounts/$address',
+    );
     if (resp is! Map) throw const FormatException('bad account response');
     final data = resp['data'];
     if (data is! List) throw const FormatException('missing data list');

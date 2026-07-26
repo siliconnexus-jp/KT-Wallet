@@ -12,11 +12,14 @@ import '../rpc/http_transport.dart';
 /// The RPC-endpoint coin for a transfer chain (ETH and Polygon resolve to
 /// their own endpoints even though they share an address).
 Coin rpcCoinForChain(Chain chain) => switch (chain) {
-      Chain.ethereum => Coin.eth,
-      Chain.polygon => Coin.polygon,
-      Chain.tron => Coin.tron,
-      Chain.solana => Coin.solana,
-    };
+  Chain.ethereum => Coin.eth,
+  Chain.polygon => Coin.polygon,
+  Chain.base => Coin.base,
+  Chain.arbitrum => Coin.arbitrum,
+  Chain.avalanche => Coin.avalanche,
+  Chain.tron => Coin.tron,
+  Chain.solana => Coin.solana,
+};
 
 /// Live chain-state parameters needed to build a real EVM transaction: the
 /// sender's pending nonce and the current EIP-1559 fee estimate.
@@ -29,10 +32,10 @@ class EvmChainParams {
   /// The estimate tier matching the draft's fee selection
   /// (0 slow / 1 standard / 2 fast).
   GasFeeEstimateTier tierFor(int feeTier) => switch (feeTier) {
-        0 => fees.slow,
-        2 => fees.fast,
-        _ => fees.standard,
-      };
+    0 => fees.slow,
+    2 => fees.fast,
+    _ => fees.standard,
+  };
 }
 
 /// Fetches real chain-state parameters over the tested `chains/rpc` clients.
@@ -48,9 +51,9 @@ class ChainParamsService {
     JsonRpcTransport? jsonRpcTransport,
     RpcEndpointResolver? endpoints,
     GatewayResolver? gateway,
-  })  : _jsonRpc = jsonRpcTransport ?? HttpJsonRpcTransport(),
-        _endpoints = endpoints ?? defaultRpcEndpointFor,
-        _gateway = gateway ?? _noGateway;
+  }) : _jsonRpc = jsonRpcTransport ?? HttpJsonRpcTransport(),
+       _endpoints = endpoints ?? defaultRpcEndpointFor,
+       _gateway = gateway ?? _noGateway;
 
   static GatewayClient? _noGateway() => null;
 
@@ -72,20 +75,32 @@ class ChainParamsService {
   /// (getNonce + estimateFees), and only a failure of BOTH paths throws.
   /// Direct mode never contacts the gateway.
   Future<EvmChainParams> fetchEvmParams(Chain chain, String fromAddress) async {
-    if (chain != Chain.ethereum && chain != Chain.polygon) {
+    if (chain != Chain.ethereum &&
+        chain != Chain.polygon &&
+        chain != Chain.base &&
+        chain != Chain.arbitrum &&
+        chain != Chain.avalanche) {
       throw ArgumentError('not an EVM chain: $chain');
     }
     final gateway = _gateway();
     if (gateway != null) {
       try {
         final params = await gateway.getChainParams(
-            chain: rpcCoinForChain(chain), address: fromAddress);
-        return EvmChainParams(nonce: params.nonce, fees: params.fees);
+          chain: rpcCoinForChain(chain),
+          address: fromAddress,
+        );
+        return EvmChainParams(
+          nonce: params.nonce,
+          fees: _applyChainFeeFloor(chain, params.fees),
+        );
       } catch (_) {
         // GatewayException / transport failure: direct node path below.
       }
     }
-    final rpc = EvmRpc(url: _endpoints(rpcCoinForChain(chain)), transport: _jsonRpc);
+    final rpc = EvmRpc(
+      url: _endpoints(rpcCoinForChain(chain)),
+      transport: _jsonRpc,
+    );
     // Future.wait (not records .wait) so the first failure propagates as-is
     // (RpcException / TimeoutException), not wrapped in a ParallelWaitError.
     final results = await Future.wait<Object>([
@@ -94,7 +109,36 @@ class ChainParamsService {
     ]);
     return EvmChainParams(
       nonce: results[0] as int,
-      fees: results[1] as GasFeeEstimate,
+      fees: _applyChainFeeFloor(chain, results[1] as GasFeeEstimate),
     );
   }
+}
+
+GasFeeEstimate _applyChainFeeFloor(Chain chain, GasFeeEstimate fees) {
+  if (chain != Chain.polygon && chain != Chain.arbitrum) return fees;
+  // Polygon nodes require a 25 gwei priority floor. Arbitrum Sepolia can
+  // return maxFee equal to the sampled base fee; a tiny next-block increase
+  // then rejects an otherwise valid transaction, so retain a 0.05 gwei
+  // safety floor there.
+  final floor = chain == Chain.polygon
+      ? BigInt.from(25000000000)
+      : BigInt.from(50000000);
+  GasFeeEstimateTier normalize(GasFeeEstimateTier tier) {
+    final tip = chain == Chain.polygon && tier.maxPriorityFeePerGas < floor
+        ? floor
+        : tier.maxPriorityFeePerGas;
+    final minimumMaxFee = chain == Chain.polygon
+        ? tip + BigInt.from(5000000000)
+        : floor;
+    final maxFee = tier.maxFeePerGas < minimumMaxFee
+        ? minimumMaxFee
+        : tier.maxFeePerGas;
+    return GasFeeEstimateTier(maxPriorityFeePerGas: tip, maxFeePerGas: maxFee);
+  }
+
+  return GasFeeEstimate(
+    slow: normalize(fees.slow),
+    standard: normalize(fees.standard),
+    fast: normalize(fees.fast),
+  );
 }

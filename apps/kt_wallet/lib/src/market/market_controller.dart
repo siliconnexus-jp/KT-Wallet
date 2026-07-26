@@ -22,17 +22,16 @@ class MarketController extends ChangeNotifier {
     PriceService? prices,
     TokenBalanceService? tokens,
     bool Function(Coin coin)? isTestnet,
-  })  :
-        // ignore: prefer_initializing_formals
-        _wallets = wallets,
-        _balances = balances ?? BalanceService(),
-        _prices = prices ?? PriceService(),
-        _isTestnet = isTestnet ?? _neverTestnet,
-        // Deliberately nullable (no network-hitting default): contexts that
-        // never wire a token service (older tests, gallery) simply have no
-        // token rows.
-        // ignore: prefer_initializing_formals
-        _tokens = tokens {
+  }) : // ignore: prefer_initializing_formals
+       _wallets = wallets,
+       _balances = balances ?? BalanceService(),
+       _prices = prices ?? PriceService(),
+       _isTestnet = isTestnet ?? _neverTestnet,
+       // Deliberately nullable (no network-hitting default): contexts that
+       // never wire a token service (older tests, gallery) simply have no
+       // token rows.
+       // ignore: prefer_initializing_formals
+       _tokens = tokens {
     _walletId = _wallets.current?.id;
     _wallets.addListener(_onWalletsChanged);
     _tokenResults = {
@@ -70,7 +69,8 @@ class MarketController extends ChangeNotifier {
   /// True once at least one refresh has completed (success or not).
   bool get hasRefreshed => _hasRefreshed;
 
-  BalanceResult balanceFor(Coin coin) => _results[coin]!;
+  BalanceResult balanceFor(Coin coin) =>
+      _results[coin] ?? const BalanceResult.unsupported();
 
   /// The token registry rendered under the native rows (empty when no token
   /// service was wired up).
@@ -102,7 +102,7 @@ class MarketController extends ChangeNotifier {
     // Testnet coins have no market price by definition — fiat is unavailable
     // even when a (mainnet) quote for the same symbol is in the cache.
     if (_isTestnet(coin)) return null;
-    final result = _results[coin]!;
+    final result = balanceFor(coin);
     final amount = result.amount;
     if (result.status != BalanceStatus.ok || amount == null) return null;
     final price = _pricesUsd?[coin];
@@ -173,7 +173,9 @@ class MarketController extends ChangeNotifier {
     final skipPrices = Coin.values.every(_isTestnet);
     final (balances, prices, tokenBalances) = await (
       _balances.fetchAll(wallet.addresses),
-      skipPrices ? Future<Map<Coin, double>?>.value(null) : _prices.fetchUsdPrices(),
+      skipPrices
+          ? Future<Map<Coin, double>?>.value(null)
+          : _prices.fetchUsdPrices(),
       tokenService == null
           ? Future.value(const <String, BalanceResult>{})
           : tokenService.fetchAll(wallet.addresses),

@@ -19,16 +19,22 @@ class MarketOfflineBanner extends StatelessWidget {
         color: WalletColors.surface,
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Row(children: [
-        const Icon(Icons.cloud_off_outlined, size: 14, color: WalletColors.text3),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            l10n.marketOfflineDemo,
-            style: const TextStyle(fontSize: 12, color: WalletColors.text3),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.cloud_off_outlined,
+            size: 14,
+            color: WalletColors.text3,
           ),
-        ),
-      ]),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              l10n.marketOfflineDemo,
+              style: const TextStyle(fontSize: 12, color: WalletColors.text3),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

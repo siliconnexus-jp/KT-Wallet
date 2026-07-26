@@ -15,46 +15,82 @@ void main() {
   final crypto = MethodChannelCoreCrypto();
   const walletId = 'itest-real-crypto';
 
-  test('real wallet-core: generate → store → derive, all addresses validate', () async {
-    final mnemonic = await crypto.generateMnemonic();
-    final words = mnemonic.trim().split(RegExp(r'\s+'));
-    expect(words.length, anyOf(12, 24), reason: 'BIP-39 mnemonic length');
-    expect(await crypto.validateMnemonic(mnemonic), isTrue);
+  test(
+    'real wallet-core: generate → store → derive, all addresses validate',
+    () async {
+      final mnemonic = await crypto.generateMnemonic();
+      final words = mnemonic.trim().split(RegExp(r'\s+'));
+      expect(words.length, anyOf(12, 24), reason: 'BIP-39 mnemonic length');
+      expect(await crypto.validateMnemonic(mnemonic), isTrue);
 
-    await crypto.storeWallet(walletId: walletId, mnemonic: mnemonic);
-    final addrs = await crypto.deriveAddresses(walletId);
+      await crypto.storeWallet(
+        walletId: walletId,
+        mnemonic: mnemonic,
+        requireAuth: false,
+      );
+      final addrs = await crypto.deriveAddresses(walletId);
 
-    // Our own validators must accept what wallet-core derived.
-    expect(Addresses.validate(Chain.ethereum, addrs.eth).isValid, isTrue, reason: 'ETH ${addrs.eth}');
-    expect(Addresses.validate(Chain.polygon, addrs.polygon).isValid, isTrue, reason: 'POL ${addrs.polygon}');
-    expect(Addresses.validate(Chain.tron, addrs.tron).isValid, isTrue, reason: 'TRON ${addrs.tron}');
-    expect(Addresses.validate(Chain.solana, addrs.solana).isValid, isTrue, reason: 'SOL ${addrs.solana}');
+      // Our own validators must accept what wallet-core derived.
+      expect(
+        Addresses.validate(Chain.ethereum, addrs.eth).isValid,
+        isTrue,
+        reason: 'ETH ${addrs.eth}',
+      );
+      expect(
+        Addresses.validate(Chain.polygon, addrs.polygon).isValid,
+        isTrue,
+        reason: 'POL ${addrs.polygon}',
+      );
+      expect(
+        Addresses.validate(Chain.tron, addrs.tron).isValid,
+        isTrue,
+        reason: 'TRON ${addrs.tron}',
+      );
+      expect(
+        Addresses.validate(Chain.solana, addrs.solana).isValid,
+        isTrue,
+        reason: 'SOL ${addrs.solana}',
+      );
 
-    // EVM chains share the same derivation path in this design.
-    expect(addrs.polygon, addrs.eth);
+      // EVM chains share the same derivation path in this design.
+      expect(addrs.polygon, addrs.eth);
 
-    // Deterministic: deriving again yields identical addresses.
-    final again = await crypto.deriveAddresses(walletId);
-    expect(again.eth, addrs.eth);
-    expect(again.tron, addrs.tron);
-    expect(again.solana, addrs.solana);
+      // Deterministic: deriving again yields identical addresses.
+      final again = await crypto.deriveAddresses(walletId);
+      expect(again.eth, addrs.eth);
+      expect(again.tron, addrs.tron);
+      expect(again.solana, addrs.solana);
 
-    // Surface the real addresses in the run log for the session report.
-    // ignore: avoid_print
-    print('REAL-DERIVED eth=${addrs.eth} tron=${addrs.tron} sol=${addrs.solana}');
-  });
+      // Surface the real addresses in the run log for the session report.
+      // ignore: avoid_print
+      print(
+        'REAL-DERIVED eth=${addrs.eth} tron=${addrs.tron} sol=${addrs.solana}',
+      );
+    },
+  );
 
-  test('same mnemonic imported under two ids derives identical addresses', () async {
-    // Deliberately avoids exportMnemonic (biometric AuthGate can't be
-    // satisfied headlessly) — determinism is proven with a fresh mnemonic
-    // stored under two independent wallet ids.
-    final mnemonic = await crypto.generateMnemonic();
-    await crypto.storeWallet(walletId: 'itest-det-a', mnemonic: mnemonic);
-    await crypto.storeWallet(walletId: 'itest-det-b', mnemonic: mnemonic);
-    final a = await crypto.deriveAddresses('itest-det-a');
-    final b = await crypto.deriveAddresses('itest-det-b');
-    expect(b.eth, a.eth);
-    expect(b.tron, a.tron);
-    expect(b.solana, a.solana);
-  });
+  test(
+    'same mnemonic imported under two ids derives identical addresses',
+    () async {
+      // Deliberately avoids exportMnemonic (biometric AuthGate can't be
+      // satisfied headlessly) — determinism is proven with a fresh mnemonic
+      // stored under two independent wallet ids.
+      final mnemonic = await crypto.generateMnemonic();
+      await crypto.storeWallet(
+        walletId: 'itest-det-a',
+        mnemonic: mnemonic,
+        requireAuth: false,
+      );
+      await crypto.storeWallet(
+        walletId: 'itest-det-b',
+        mnemonic: mnemonic,
+        requireAuth: false,
+      );
+      final a = await crypto.deriveAddresses('itest-det-a');
+      final b = await crypto.deriveAddresses('itest-det-b');
+      expect(b.eth, a.eth);
+      expect(b.tron, a.tron);
+      expect(b.solana, a.solana);
+    },
+  );
 }

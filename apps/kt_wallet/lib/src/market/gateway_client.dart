@@ -26,8 +26,8 @@ class GatewayClient {
     required String baseUrl,
     http.Client? client,
     this.timeout = const Duration(seconds: 10),
-  })  : baseUrl = _stripTrailingSlash(baseUrl),
-        _client = client ?? http.Client();
+  }) : baseUrl = _stripTrailingSlash(baseUrl),
+       _client = client ?? http.Client();
 
   /// Gateway base URL without a trailing slash; requests go to `$baseUrl/rpc`.
   final String baseUrl;
@@ -67,7 +67,9 @@ class GatewayClient {
         .timeout(timeout);
     if (resp.statusCode != 200) {
       throw http.ClientException(
-          'HTTP ${resp.statusCode}', Uri.parse('$baseUrl/rpc'));
+        'HTTP ${resp.statusCode}',
+        Uri.parse('$baseUrl/rpc'),
+      );
     }
     final decoded = jsonDecode(resp.body);
     if (decoded is! Map) {
@@ -78,8 +80,9 @@ class GatewayClient {
       final data = error['data'];
       throw GatewayException(
         code: error['code'] is int ? error['code'] as int : 0,
-        message:
-            error['message'] is String ? error['message'] as String : 'error',
+        message: error['message'] is String
+            ? error['message'] as String
+            : 'error',
         upstream: data is Map && data['upstream'] is String
             ? data['upstream'] as String
             : null,
@@ -116,7 +119,11 @@ class GatewayClient {
       if (tokens.isNotEmpty)
         'tokens': [
           for (final t in tokens)
-            {'contract': t.contract, 'decimals': t.decimals, 'symbol': t.symbol}
+            {
+              'contract': t.contract,
+              'decimals': t.decimals,
+              'symbol': t.symbol,
+            },
         ],
     });
     if (result is! Map) throw const FormatException('bad balances result');
@@ -228,16 +235,19 @@ class GatewayClient {
       final ts = row['timestampMs'];
       if (hash is! String || ts is! int) continue;
       if (direction != 'in' && direction != 'out') continue;
-      records.add(GatewayHistoryRecord(
-        hash: hash,
-        outgoing: direction == 'out',
-        amountRaw:
-            row['amountRaw'] is String ? BigInt.tryParse(row['amountRaw'] as String) : null,
-        decimals: row['decimals'] is int ? row['decimals'] as int : null,
-        symbol: row['symbol'] is String ? row['symbol'] as String : null,
-        timestampMs: ts,
-        failed: row['status'] == 'failed',
-      ));
+      records.add(
+        GatewayHistoryRecord(
+          hash: hash,
+          outgoing: direction == 'out',
+          amountRaw: row['amountRaw'] is String
+              ? BigInt.tryParse(row['amountRaw'] as String)
+              : null,
+          decimals: row['decimals'] is int ? row['decimals'] as int : null,
+          symbol: row['symbol'] is String ? row['symbol'] as String : null,
+          timestampMs: ts,
+          failed: row['status'] == 'failed',
+        ),
+      );
     }
     return GatewayHistory.ok(List.unmodifiable(records));
   }
@@ -307,7 +317,8 @@ class GatewayException implements Exception {
   bool get isUpstreamError => code == -32000;
 
   @override
-  String toString() => 'GatewayException($code, $message'
+  String toString() =>
+      'GatewayException($code, $message'
       '${upstreamMessage == null ? '' : ', upstream: $upstreamMessage'})';
 }
 
@@ -402,9 +413,7 @@ class GatewayHistoryRecord {
 
 class GatewayHistory {
   const GatewayHistory.ok(this.records) : unsupported = false;
-  const GatewayHistory.unsupported()
-      : unsupported = true,
-        records = const [];
+  const GatewayHistory.unsupported() : unsupported = true, records = const [];
 
   /// True when the gateway itself reports no history source for the chain.
   final bool unsupported;

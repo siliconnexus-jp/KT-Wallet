@@ -12,10 +12,9 @@ class HistoryController extends ChangeNotifier {
   HistoryController({
     required WalletController wallets,
     HistoryService? service,
-  })  :
-        // ignore: prefer_initializing_formals
-        _wallets = wallets,
-        _service = service ?? HistoryService() {
+  }) : // ignore: prefer_initializing_formals
+       _wallets = wallets,
+       _service = service ?? HistoryService() {
     _walletId = _wallets.current?.id;
     _wallets.addListener(_onWalletsChanged);
   }
@@ -74,13 +73,12 @@ class HistoryController extends ChangeNotifier {
     if (wallet == null) return;
     final generation = ++_generation;
     _refreshing = true;
-    _results = {
-      for (final coin in Coin.values) coin: const HistoryResult.loading(),
-    };
+    final coins = wallet.addresses.enabledCoins;
+    _results = {for (final coin in coins) coin: const HistoryResult.loading()};
     notifyListeners();
 
     final entries = await Future.wait([
-      for (final coin in Coin.values)
+      for (final coin in coins)
         _service
             .fetch(coin, wallet.addresses.forCoin(coin))
             .then((result) => (coin, result)),

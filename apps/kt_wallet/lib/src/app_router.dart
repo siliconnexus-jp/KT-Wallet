@@ -31,8 +31,14 @@ final screenRegistry = <String, (String, WidgetBuilder)>{
   'W14 收款': ('/receive', (c) => const ReceiveScreen()),
   'W4 转账输入': ('/transfer', (c) => const TransferInputScreen()),
   'W31 手续费选择': ('/fee', (c) => const FeeSelectScreen()),
-  'W5 交易确认(观察)': ('/confirm-watch', (c) => const TransferConfirmScreen(isHot: false)),
-  'W29 交易确认(普通)': ('/confirm-hot', (c) => const TransferConfirmScreen(isHot: true)),
+  'W5 交易确认(观察)': (
+    '/confirm-watch',
+    (c) => const TransferConfirmScreen(isHot: false),
+  ),
+  'W29 交易确认(普通)': (
+    '/confirm-hot',
+    (c) => const TransferConfirmScreen(isHot: true),
+  ),
   'W30 转账身份验证': ('/transfer-auth', (c) => const TransferAuthSheet()),
   'W6 待签名二维码': ('/sign-qr', (c) => const SignRequestQrScreen()),
   'W7 扫描签名结果': ('/scan-result', (c) => const ScanResultScreen()),
@@ -52,45 +58,53 @@ final screenRegistry = <String, (String, WidgetBuilder)>{
 const _sheetRoutes = {'/switcher', '/transfer-auth'};
 
 GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
-      initialLocation: initialLocation,
-      routes: [
-        GoRoute(path: '/', builder: (c, s) => const _Gallery()),
-        // Flow-only screen: deliberately outside the gallery registry so it is
-        // not enumerated by the design gallery / golden tests.
-        GoRoute(path: '/scan-address', builder: (c, s) => const ScanAddressScreen()),
-        for (final entry in screenRegistry.entries)
-          if (_sheetRoutes.contains(entry.value.$1))
-            GoRoute(
-              path: entry.value.$1,
-              pageBuilder: (c, s) => CustomTransitionPage(
-                key: s.pageKey,
-                opaque: false,
-                child: entry.value.$2(c),
-                transitionsBuilder: (c, animation, _, child) =>
-                    FadeTransition(opacity: animation, child: child),
-              ),
-            )
-          else
-            GoRoute(
-              path: entry.value.$1,
-              // Wallet detail accepts ?id=<walletId> when pushed from the manage
-              // list; import-confirm accepts the decoded AccountExport from the
-              // pairing scan via `extra`. Without them (gallery / goldens) both
-              // render their demo snapshots.
-              builder: switch (entry.value.$1) {
-                '/wallet-detail' => (c, s) => WalletDetailScreen(walletId: s.uri.queryParameters['id']),
-                '/import-confirm' => (c, s) =>
-                    ImportConfirmScreen(export: s.extra is AccountExport ? s.extra as AccountExport : null),
-                // Live W12: the registry (gallery + goldens) keeps the
-                // design-snapshot ScanAccountScreen; actual navigation gets
-                // the camera-enabled variant, which renders identically when
-                // no camera is available.
-                '/scan-account' => (c, s) => const ScanAccountCameraScreen(),
-                _ => (c, s) => entry.value.$2(c),
-              },
+  initialLocation: initialLocation,
+  routes: [
+    GoRoute(path: '/', builder: (c, s) => const _Gallery()),
+    // Flow-only screen: deliberately outside the gallery registry so it is
+    // not enumerated by the design gallery / golden tests.
+    GoRoute(
+      path: '/scan-address',
+      builder: (c, s) => const ScanAddressScreen(),
+    ),
+    for (final entry in screenRegistry.entries)
+      if (_sheetRoutes.contains(entry.value.$1))
+        GoRoute(
+          path: entry.value.$1,
+          pageBuilder: (c, s) => CustomTransitionPage(
+            key: s.pageKey,
+            opaque: false,
+            child: entry.value.$2(c),
+            transitionsBuilder: (c, animation, _, child) =>
+                FadeTransition(opacity: animation, child: child),
+          ),
+        )
+      else
+        GoRoute(
+          path: entry.value.$1,
+          // Wallet detail accepts ?id=<walletId> when pushed from the manage
+          // list; import-confirm accepts the decoded AccountExport from the
+          // pairing scan via `extra`. Without them (gallery / goldens) both
+          // render their demo snapshots.
+          builder: switch (entry.value.$1) {
+            '/wallet-detail' => (c, s) => WalletDetailScreen(
+              walletId: s.uri.queryParameters['id'],
             ),
-      ],
-    );
+            '/import-confirm' => (c, s) => ImportConfirmScreen(
+              export: s.extra is AccountExport
+                  ? s.extra as AccountExport
+                  : null,
+            ),
+            // Live W12: the registry (gallery + goldens) keeps the
+            // design-snapshot ScanAccountScreen; actual navigation gets
+            // the camera-enabled variant, which renders identically when
+            // no camera is available.
+            '/scan-account' => (c, s) => const ScanAccountCameraScreen(),
+            _ => (c, s) => entry.value.$2(c),
+          },
+        ),
+  ],
+);
 
 class _Gallery extends StatelessWidget {
   const _Gallery();
@@ -98,7 +112,10 @@ class _Gallery extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: WalletColors.bg,
-      appBar: AppBar(title: const Text('KT Wallet — 屏幕库'), backgroundColor: WalletColors.surface),
+      appBar: AppBar(
+        title: const Text('KT Wallet — 屏幕库'),
+        backgroundColor: WalletColors.surface,
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -107,7 +124,13 @@ class _Gallery extends StatelessWidget {
               color: WalletColors.surface,
               child: ListTile(
                 title: Text(entry.key),
-                subtitle: Text(entry.value.$1, style: const TextStyle(fontFamily: KtFonts.mono, fontSize: 12)),
+                subtitle: Text(
+                  entry.value.$1,
+                  style: const TextStyle(
+                    fontFamily: KtFonts.mono,
+                    fontSize: 12,
+                  ),
+                ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.go(entry.value.$1),
               ),

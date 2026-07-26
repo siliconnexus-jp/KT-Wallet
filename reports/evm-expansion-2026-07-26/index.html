@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>KT Wallet · EVM 扩展测试报告</title>
+  <style>
+    :root{--bg:#080b10;--card:#111722;--line:#253047;--text:#eef4ff;--muted:#96a3b8;--blue:#4e7cff;--green:#35d07f;--amber:#ffbd4a}
+    *{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at 10% 0,#142449 0,transparent 32%),var(--bg);color:var(--text);font:15px/1.65 system-ui,-apple-system,"PingFang SC",sans-serif}
+    main{max-width:1160px;margin:auto;padding:48px 24px 80px}.eyebrow{color:#79a0ff;font-weight:750;letter-spacing:.12em;text-transform:uppercase}
+    h1{font-size:clamp(34px,6vw,68px);line-height:1.04;margin:.18em 0}.lead{font-size:20px;color:#b8c4d8;max-width:850px}
+    .summary,.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:30px 0}.card{background:linear-gradient(145deg,#141b29,#0e131d);border:1px solid var(--line);border-radius:18px;padding:20px}
+    .metric{font-size:30px;font-weight:800}.ok{color:var(--green)}.muted{color:var(--muted)}h2{margin-top:48px;font-size:28px}h3{margin:.1em 0 8px}
+    table{width:100%;border-collapse:collapse;background:#0d131d;border:1px solid var(--line);border-radius:14px;overflow:hidden;display:table}th,td{text-align:left;padding:13px;border-bottom:1px solid var(--line);vertical-align:top}th{color:#9fb0c8;background:#141b27}
+    code{font:12px/1.4 ui-monospace,SFMono-Regular,monospace;word-break:break-all;color:#c9d8f7}.shotgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}.shot{background:#111722;border:1px solid var(--line);border-radius:18px;padding:12px}.shot img{display:block;width:100%;border-radius:11px}.shot p{margin:10px 5px 3px;color:#b7c4d8}
+    a{color:#79a0ff}.badge{display:inline-block;padding:3px 9px;border-radius:999px;background:#153523;color:#67e39c;font-weight:700}.note{border-left:4px solid var(--amber);padding:12px 16px;background:#211b10;border-radius:6px}
+    @media(max-width:800px){.summary,.grid,.shotgrid{grid-template-columns:1fr}table{display:block;overflow:auto}}
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">KT Wallet · Android Emulator · 2026-07-26</div>
+  <h1>Base、Arbitrum、Avalanche<br>接入与真实测试报告</h1>
+  <p class="lead">三条新增 EVM 链均完成主网/测试网配置、地址派生、余额读取、原生币转账、USDC 转账、签名、广播和浏览器链接接入。测试交易由 Android 模拟器内的真实 Wallet Core 本地签名完成。</p>
+  <div class="summary">
+    <div class="card"><div class="metric ok">6 / 6</div><div>真实链上交易成功</div></div>
+    <div class="card"><div class="metric ok">327 / 327</div><div>单元与组件测试通过</div></div>
+    <div class="card"><div class="metric ok">3 / 3</div><div>测试网原生币 + USDC 跑通</div></div>
+  </div>
+
+  <h2>结论</h2>
+  <div class="grid">
+    <div class="card"><h3>Base Sepolia</h3><span class="badge">通过</span><p class="muted">余额读取、ETH 转账、USDC 转账、回执确认均成功。</p></div>
+    <div class="card"><h3>Arbitrum Sepolia</h3><span class="badge">通过</span><p class="muted">修复 L2 gas limit 与 maxFee 安全余量后，两种转账均成功。</p></div>
+    <div class="card"><h3>Avalanche Fuji</h3><span class="badge">通过</span><p class="muted">AVAX 水龙头入金、AVAX 转账和 USDC 转账均成功。</p></div>
+  </div>
+
+  <h2>链与资产配置</h2>
+  <table>
+    <thead><tr><th>网络</th><th>Chain ID / RPC</th><th>USDC 合约</th></tr></thead>
+    <tbody>
+      <tr><td>Base / Base Sepolia</td><td><code>8453 / 84532<br>https://mainnet.base.org<br>https://sepolia.base.org</code></td><td><code>0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913<br>0x036CbD53842c5426634e7929541eC2318f3dCF7e</code></td></tr>
+      <tr><td>Arbitrum One / Sepolia</td><td><code>42161 / 421614<br>https://arb1.arbitrum.io/rpc<br>https://sepolia-rollup.arbitrum.io/rpc</code></td><td><code>0xaf88d065e77c8cC2239327C5EDb3A432268e5831<br>0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d</code></td></tr>
+      <tr><td>Avalanche C-Chain / Fuji</td><td><code>43114 / 43113<br>https://api.avax.network/ext/bc/C/rpc<br>https://api.avax-test.network/ext/bc/C/rpc</code></td><td><code>0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E<br>0x5425890298aed601595a70AB815c96711a31Bc65</code></td></tr>
+    </tbody>
+  </table>
+
+  <h2>真实交易证据</h2>
+  <table>
+    <thead><tr><th>链</th><th>资产</th><th>交易哈希</th><th>RPC 回执</th></tr></thead>
+    <tbody>
+      <tr><td>Base Sepolia</td><td>ETH</td><td><a href="https://sepolia.basescan.org/tx/0x619c53f1751038c7a8e28571faa6ed44f256c2a49473a27cc8e27a64ee20148f"><code>0x619c…148f</code></a></td><td><span class="badge">status 0x1</span> block 0x2a909ba</td></tr>
+      <tr><td>Base Sepolia</td><td>USDC</td><td><a href="https://sepolia.basescan.org/tx/0x898ea1dc2255ce0ee3e6d97242955aa33a02fca7b7a2b782e2848e84da7c0648"><code>0x898e…0648</code></a></td><td><span class="badge">status 0x1</span> block 0x2a909c1</td></tr>
+      <tr><td>Arbitrum Sepolia</td><td>ETH</td><td><a href="https://sepolia.arbiscan.io/tx/0xc8af1590df63ab01f2ac8c3f028122b0e00fae5c251a32981b5bb6dc035a1fa0"><code>0xc8af…1fa0</code></a></td><td><span class="badge">status 0x1</span> block 0x115e53ec</td></tr>
+      <tr><td>Arbitrum Sepolia</td><td>USDC</td><td><a href="https://sepolia.arbiscan.io/tx/0xd4ad6bbe7f8f8b5f8c0edea413df3eecf331892cc5d2921a8b3c7aebf3628d76"><code>0xd4ad…8d76</code></a></td><td><span class="badge">status 0x1</span> block 0x115e5437</td></tr>
+      <tr><td>Avalanche Fuji</td><td>AVAX</td><td><a href="https://testnet.snowtrace.io/tx/0x7b34b1f2d1352b1756faf8144e7375ac4946b1ff13a7e788016295cce82504bb"><code>0x7b34…04bb</code></a></td><td><span class="badge">status 0x1</span> block 0x36ac8fe</td></tr>
+      <tr><td>Avalanche Fuji</td><td>USDC</td><td><a href="https://testnet.snowtrace.io/tx/0xc683cb819c7930a9ac8aa0eb36f48947934956f2aeadc59fdac9264ec8d7c626"><code>0xc683…c626</code></a></td><td><span class="badge">status 0x1</span> block 0x36ac904</td></tr>
+    </tbody>
+  </table>
+
+  <h2>测试中发现并修复</h2>
+  <table><tbody>
+    <tr><td>Arbitrum 普通转账报 <code>intrinsic gas too low</code></td><td>为 Arbitrum 原生/代币转账设置合适的 L2 gas 下限。</td></tr>
+    <tr><td><code>max fee per gas less than block base fee</code></td><td>为 Arbitrum maxFee 加入下一块波动安全余量。</td></tr>
+    <tr><td>网络设置只显示旧的 4 条链</td><td>补齐 Base、Arbitrum、Avalanche 的主网/测试网卡片与 RPC。</td></tr>
+    <tr><td>测试网切换后 RPC 文案仍显示主网</td><td>界面 RPC 改为跟随活动网络，且用户自定义 RPC 仍具有最高优先级。</td></tr>
+    <tr><td>发送资产列表使用演示余额</td><td>联网模式改为读取 MarketController 的真实原生币/代币余额；失败或未加载时不再伪造可用余额。</td></tr>
+  </tbody></table>
+
+  <h2>模拟器截图</h2>
+  <div class="shotgrid">
+    <div class="shot"><img src="screenshots/02-mainnet-expanded-assets.png"><p>首页资产列表已经出现 Base、Arbitrum、Avalanche。</p></div>
+    <div class="shot"><img src="screenshots/03-network-settings-seven-chains.png"><p>主网网络设置：7 条链完整列出。</p></div>
+    <div class="shot"><img src="screenshots/04-testnet-seven-chains-rpc.png"><p>测试网一键切换：Base Sepolia、Arbitrum Sepolia、Avalanche Fuji。</p></div>
+    <div class="shot"><img src="screenshots/05-testnet-arbitrum-avalanche-rpc.png"><p>活动测试网 RPC：Arbitrum 与 Avalanche 的真实节点地址。</p></div>
+    <div class="shot"><img src="screenshots/06-receive-chain-picker.png"><p>收款链选择器已扩展到 7 条链。</p></div>
+    <div class="shot"><img src="screenshots/07-receive-arbitrum.png"><p>Arbitrum 收款页与 EVM 地址展示。</p></div>
+    <div class="shot"><img src="screenshots/09-send-asset-picker.png"><p>发送资产选择器：Base / Arbitrum 原生币与 USDC。</p></div>
+    <div class="shot"><img src="screenshots/10-send-avalanche-picker.png"><p>发送资产选择器：Avalanche Fuji AVAX 与 USDC。</p></div>
+  </div>
+
+  <h2>验证范围</h2>
+  <p>静态分析无 error；Flutter 单元/组件测试 327 项全部通过；地址派生使用 Wallet Core；交易在 Android 模拟器内经系统生物识别授权后本地签名；广播后通过各链 JSON-RPC 的 <code>eth_getTransactionReceipt</code> 再确认，六笔交易均返回 <code>status = 0x1</code>。</p>
+  <p class="note">测试网代币没有美元估值；这是刻意行为。应用以 “--” 展示法币价值，避免把测试币误报成真实资产。</p>
+</main></body></html>

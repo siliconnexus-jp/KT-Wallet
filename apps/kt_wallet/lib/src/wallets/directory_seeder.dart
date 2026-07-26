@@ -10,7 +10,10 @@ import 'wallet_store.dart';
 /// again. Guarded by a persisted flag so a user who deletes every row does
 /// not get them resurrected on the next launch; the per-table emptiness check
 /// keeps us from double-seeding alongside a concurrent first run.
-Future<void> seedDirectoryDefaults(WalletStore store, AppLocalizations l10n) async {
+Future<void> seedDirectoryDefaults(
+  WalletStore store,
+  AppLocalizations l10n,
+) async {
   const flagKey = 'seed.directoryDefaults.v1';
   SharedPreferences? prefs;
   try {
@@ -27,7 +30,15 @@ Future<void> seedDirectoryDefaults(WalletStore store, AppLocalizations l10n) asy
       ('contact-cold', l10n.contactColdBackup, '0x8f3C2a…7E19bE1', 'polygon'),
       ('contact-dana', 'Dana', '6yKp…Vr2W', 'solana'),
     ].indexed) {
-      await store.addContact(Contact(id: id, name: name, address: address, chain: chain, createdAt: i));
+      await store.addContact(
+        Contact(
+          id: id,
+          name: name,
+          address: address,
+          chain: chain,
+          createdAt: i,
+        ),
+      );
     }
   }
 
@@ -39,16 +50,18 @@ Future<void> seedDirectoryDefaults(WalletStore store, AppLocalizations l10n) asy
       ('token-busd-eth', 'BUSD', 'Binance USD', 'Ethereum · ERC-20', false),
       ('token-uni-eth', 'UNI', 'Uniswap', 'Ethereum · ERC-20', false),
     ].indexed) {
-      await store.addToken(CustomToken(
-        id: id,
-        symbol: symbol,
-        name: name,
-        contract: null,
-        network: network,
-        enabled: enabled,
-        sortOrder: i,
-        createdAt: i,
-      ));
+      await store.addToken(
+        CustomToken(
+          id: id,
+          symbol: symbol,
+          name: name,
+          contract: null,
+          network: network,
+          enabled: enabled,
+          sortOrder: i,
+          createdAt: i,
+        ),
+      );
     }
   }
 

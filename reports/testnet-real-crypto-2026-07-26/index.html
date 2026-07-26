@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>KT Wallet 测试网实测报告 · 2026-07-26</title>
+  <style>
+    :root{color-scheme:dark;--bg:#070b14;--card:#101725;--line:#263044;--text:#f7f9fc;--muted:#9aa7ba;--blue:#5b86ff;--green:#49d597;--amber:#ffbd59;--red:#ff7070}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% 0,#142443 0,transparent 35%),var(--bg);color:var(--text);font:15px/1.65 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    main{width:min(1180px,calc(100% - 32px));margin:auto;padding:56px 0 80px}.hero{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:center;margin-bottom:28px}.brand{display:flex;gap:18px;align-items:center}.brand img{width:76px;height:76px;border-radius:20px}.eyebrow{color:var(--blue);font-weight:750;letter-spacing:.12em;text-transform:uppercase}.hero h1{font-size:clamp(30px,5vw,56px);line-height:1.05;margin:4px 0 12px}.muted{color:var(--muted)}.stamp{border:1px solid var(--line);border-radius:99px;padding:8px 14px;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.card{background:linear-gradient(145deg,#121b2b,#0d1320);border:1px solid var(--line);border-radius:18px;padding:20px}.metric strong{display:block;font-size:28px;margin-top:4px}.ok{color:var(--green)}.warn{color:var(--amber)}.fail{color:var(--red)}h2{font-size:24px;margin:42px 0 16px}.table{overflow:auto;border:1px solid var(--line);border-radius:16px}table{width:100%;border-collapse:collapse;background:#0d1421}th,td{text-align:left;padding:14px 16px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:600}tr:last-child td{border:0}.badge{display:inline-block;padding:2px 9px;border-radius:99px;background:#182338;font-size:12px;font-weight:700}
+    .gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.shot{margin:0;background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden}.shot img{display:block;width:100%;aspect-ratio:9/20;object-fit:cover;object-position:top}.shot figcaption{padding:12px 14px;color:var(--muted)}code{color:#b9ccff}a{color:#8eacff}.note{border-left:4px solid var(--amber)}footer{margin-top:42px;color:var(--muted)}
+    @media(max-width:860px){.grid{grid-template-columns:repeat(2,1fr)}.gallery{grid-template-columns:repeat(2,1fr)}}@media(max-width:560px){main{width:min(100% - 20px,1180px);padding-top:28px}.hero{grid-template-columns:1fr}.stamp{width:max-content}.grid,.gallery{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div class="brand">
+      <img src="../../branding/kt-wallet-logo-256.png" alt="KT Wallet">
+      <div><div class="eyebrow">Android Emulator · Real Crypto</div><h1>测试网实测报告</h1><div class="muted">真实 Wallet Core、真实公开 RPC、真实二维码与系统认证流程</div></div>
+    </div>
+    <div class="stamp">2026-07-26 · emulator-5554</div>
+  </header>
+
+  <section class="grid">
+    <div class="card metric"><span class="muted">静态检查</span><strong class="ok">0 问题</strong></div>
+    <div class="card metric"><span class="muted">目标测试网</span><strong class="ok">3 / 3</strong></div>
+    <div class="card metric"><span class="muted">真实转账</span><strong class="ok">6 / 6</strong></div>
+    <div class="card metric"><span class="muted">原生币 / 稳定币</span><strong class="ok">3 + 3</strong></div>
+  </section>
+
+  <h2>结论</h2>
+  <div class="card">
+    Polygon Amoy、TRON Nile、Solana Devnet 已在 Android 模拟器上完整跑通「真实余额读取 → 获取链参数 → Wallet Core 本地签名 → App 广播 → 链上确认 → 余额减少断言」。三条链分别完成原生币与稳定币转账，共 6 笔真实交易；没有把模拟签名、复制到剪贴板或水龙头请求当成转账成功。
+  </div>
+
+  <h2>Mobile 基础链路验收（三链）</h2>
+  <div class="table"><table>
+    <thead><tr><th>网络</th><th>余额展示</th><th>普通转账</th><th>稳定币转账</th></tr></thead>
+    <tbody>
+      <tr><td>Polygon Amoy</td><td><span class="badge ok">POL + USDC</span></td><td><a href="https://amoy.polygonscan.com/tx/0x7bbb6f784889ee179a07fafc87b7853163c7702443217e8e52fafd41fbbb20fb">POL · 0x7bbb…20fb</a></td><td><a href="https://amoy.polygonscan.com/tx/0x4ab2bac62769ce220c6afb0b7b327bfed8d3abb5e8ea27bb361ebbbfa2118041">USDC · 0x4ab2…8041</a></td></tr>
+      <tr><td>TRON Nile</td><td><span class="badge ok">TRX + USDT</span></td><td><a href="https://nile.tronscan.org/#/transaction/e567f61b845eddb43c016ad7e3ee5215b8aef06826dca7786b834d59db4e5b6a">TRX · e567…5b6a</a></td><td><a href="https://nile.tronscan.org/#/transaction/8948f9fad8a0be218a585b2aae7d840b9c199485467e694f3b5a4c5d761adf29">USDT · 8948…df29</a></td></tr>
+      <tr><td>Solana Devnet</td><td><span class="badge ok">SOL + USDC</span></td><td><a href="https://explorer.solana.com/tx/XEN86X2sKFfZnsSQmzd3sw8NwG3pxGAfWLaBBad356faxMZVc1JE7ycLMz6Kf2DtsUSWUXKjta9aZjTBAGnwKtH?cluster=devnet">SOL · XEN8…wKtH</a></td><td><a href="https://explorer.solana.com/tx/23a1fJCmGCDEWWrR9oxot35C9QUuf81Ru7pkkNV8Tivo5fvsW5QdSk8pQDCdDw2zNyKaTu6NVswSgBpK5WH1yszU?cluster=devnet">USDC · 23a1…yszU</a></td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>在线实测明细</h2>
+  <div class="table"><table>
+    <thead><tr><th>项目</th><th>结果</th><th>证据 / 说明</th></tr></thead>
+    <tbody>
+      <tr><td>Wallet Core 原生库</td><td><span class="badge ok">通过</span></td><td><code>com.trustwallet:wallet-core:4.6.13</code>；JNI 加载、助记词生成、四链地址派生通过。</td></tr>
+      <tr><td>Flutter 单元 / UI 回归</td><td><span class="badge ok">327 / 327</span></td><td><code>flutter test</code> 全量通过；<code>flutter analyze</code> 为 0 问题。</td></tr>
+      <tr><td>Sepolia RPC</td><td><span class="badge ok">通过</span></td><td><code>eth_chainId = 0xaa36a7</code></td></tr>
+      <tr><td>Polygon Amoy RPC</td><td><span class="badge ok">通过</span></td><td><code>eth_chainId = 0x13882</code>；广播节点切换为 <code>polygon-amoy-bor-rpc.publicnode.com</code>，并加入 Polygon 25 gwei 最低优先费保护。</td></tr>
+      <tr><td>TRON Nile RPC</td><td><span class="badge ok">通过</span></td><td><code>/wallet/getnowblock</code> 返回 64 字符 blockID。</td></tr>
+      <tr><td>Solana Devnet RPC</td><td><span class="badge ok">通过</span></td><td><code>getVersion</code> 返回有效版本信息。</td></tr>
+      <tr><td>真实余额读取</td><td><span class="badge ok">三链双资产通过</span></td><td>Amoy POL/USDC、Nile TRX/USDT、Devnet SOL/USDC 均由生产余额服务读取；新增 SPL <code>getTokenAccountsByOwner</code> 汇总，不再把 Solana 稳定币标记为 unsupported。</td></tr>
+      <tr><td>测试币准备</td><td><span class="badge ok">通过</span></td><td>Nile 官方水龙头到账 2000 TRX + 1000 USDT；Circle 水龙头到账 Amoy/Devnet 各 20 USDC；Solana 官方 GitHub 验证后到账 2.5 SOL；Polygon PoW 水龙头到账 0.01 POL。</td></tr>
+      <tr><td>Wallet Core 多链签名</td><td><span class="badge ok">通过</span></td><td>EVM EIP-1559、TRON secp256k1 protobuf、Solana ed25519 legacy transaction 均在 Android 本地密钥中完成签名。</td></tr>
+      <tr><td>TRON 广播</td><td><span class="badge ok">通过</span></td><td>修复 TAPOS blockID 取值与 <code>/wallet/broadcasthex</code> 格式；TRC-20 余额缓存采用确认后轮询。</td></tr>
+      <tr><td>Wallet Core EVM 签名</td><td><span class="badge ok">通过</span></td><td>解析 App 生成的 type-2 EIP-1559 envelope，通过 <code>AnySigner</code> 生成原始签名交易及交易哈希；不支持的链继续 fail-closed。</td></tr>
+      <tr><td>Sepolia 原生 ETH 转账</td><td><span class="badge ok">通过</span></td><td>回执 <code>status = 0x1</code> · <a href="https://sepolia.etherscan.io/tx/0xee6b472dd40f4e48fa52aabc3cd78988229494dcac10db2237a15923acfee3b8">查看交易 0xee6b…e3b8</a></td></tr>
+      <tr><td>Test USDT 铸币</td><td><span class="badge ok">通过</span></td><td>向测试钱包铸造 100 Test USDT，余额断言通过 · <a href="https://sepolia.etherscan.io/tx/0x34b44abd519694fc270921d0df242e8bba73a5d9b4e99d89aed933742ff5f945">查看交易 0x34b4…f945</a></td></tr>
+      <tr><td>Test USDT 转账</td><td><span class="badge ok">通过</span></td><td>转出 1 Test USDT，发送方余额减少断言通过 · <a href="https://sepolia.etherscan.io/tx/0x85235ac62f430fe9d09dd55fcebda1d3b4430911fdb2bbd83e09d53b50fb749b">查看交易 0x8523…749b</a></td></tr>
+      <tr><td>App 一体化发送</td><td><span class="badge ok">通过</span></td><td>热钱包确认后读取当前网络、获取实时参数、本地签名并仅广播一次；Sepolia 资产选择自动使用 Test USDT 合约与 18 位精度。</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>模拟器截图</h2>
+  <section class="gallery">
+    <figure class="shot"><img src="screenshots/01-real-wallet-home.png" alt="真实钱包首页"><figcaption>真实钱包首页 · 系统凭据解锁后</figcaption></figure>
+    <figure class="shot"><img src="screenshots/02-settings-testnet.png" alt="测试网设置"><figcaption>网络设置 · 切换 TESTNET</figcaption></figure>
+    <figure class="shot"><img src="screenshots/03-receive-sepolia.png" alt="Sepolia 收款"><figcaption>Ethereum · Sepolia</figcaption></figure>
+    <figure class="shot"><img src="screenshots/04-receive-amoy.png" alt="Amoy 收款"><figcaption>Polygon · Amoy</figcaption></figure>
+    <figure class="shot"><img src="screenshots/05-receive-nile.png" alt="Nile 收款"><figcaption>TRON · Nile</figcaption></figure>
+    <figure class="shot"><img src="screenshots/06-receive-devnet.png" alt="Solana Devnet 收款"><figcaption>Solana · Devnet</figcaption></figure>
+  </section>
+
+  <h2>本轮修复</h2>
+  <div class="card note">
+    <strong>三链不再停留在占位序列化或复制到剪贴板。</strong> Android Wallet Core Bridge 已实现 TRON 与 Solana 的真实签名载荷；TRON 使用规范 protobuf raw_data 与 broadcasthex，Solana 使用 ed25519 签名的 legacy transaction。余额注册表增加 Amoy USDC、Nile USDT、Devnet USDC，并实现 SPL 余额汇总。Polygon 广播改用可写 RPC，费用估算加入节点要求的最低优先费。
+  </div>
+
+  <h2>测试账户安全</h2>
+  <div class="card">
+    链上回归使用独立的 Sepolia 测试钱包；助记词仅保存在被 Git 忽略且权限为 <code>0600</code> 的本地测试配置中，不进入源码、日志或本报告。公开示例助记词地址曾出现自动扫币行为，因此已永久停止使用。
+  </div>
+
+  <footer>KT Wallet · siliconnexus-jp/KT-Wallet · 此报告不包含助记词、私钥或 GitHub 凭据。</footer>
+</main>
+</body>
+</html>

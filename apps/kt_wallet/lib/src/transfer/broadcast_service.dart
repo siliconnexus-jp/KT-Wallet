@@ -34,13 +34,13 @@ enum BroadcastStatus {
 class BroadcastOutcome {
   const BroadcastOutcome._(this.status, {this.txHash, this.message});
   const BroadcastOutcome.ok(String txHash)
-      : this._(BroadcastStatus.ok, txHash: txHash);
+    : this._(BroadcastStatus.ok, txHash: txHash);
   const BroadcastOutcome.simulated(String txHash)
-      : this._(BroadcastStatus.simulated, txHash: txHash);
+    : this._(BroadcastStatus.simulated, txHash: txHash);
   const BroadcastOutcome.error(String message)
-      : this._(BroadcastStatus.error, message: message);
+    : this._(BroadcastStatus.error, message: message);
   const BroadcastOutcome.unsupported(String message)
-      : this._(BroadcastStatus.unsupported, message: message);
+    : this._(BroadcastStatus.unsupported, message: message);
 
   final BroadcastStatus status;
   final String? txHash;
@@ -64,10 +64,10 @@ class BroadcastService {
     RestTransport? restTransport,
     RpcEndpointResolver? endpoints,
     GatewayResolver? gateway,
-  })  : _jsonRpc = jsonRpcTransport ?? HttpJsonRpcTransport(),
-        _rest = restTransport ?? HttpRestTransport(),
-        _endpoints = endpoints ?? defaultRpcEndpointFor,
-        _gateway = gateway ?? _noGateway;
+  }) : _jsonRpc = jsonRpcTransport ?? HttpJsonRpcTransport(),
+       _rest = restTransport ?? HttpRestTransport(),
+       _endpoints = endpoints ?? defaultRpcEndpointFor,
+       _gateway = gateway ?? _noGateway;
 
   static GatewayClient? _noGateway() => null;
 
@@ -79,8 +79,9 @@ class BroadcastService {
   final GatewayResolver _gateway;
 
   /// The demo signature marker (see `buildDemoSignResult`).
-  static final Uint8List _demoPrefix =
-      Uint8List.fromList(utf8.encode('SIGNED-V1:'));
+  static final Uint8List _demoPrefix = Uint8List.fromList(
+    utf8.encode('SIGNED-V1:'),
+  );
 
   /// True when [signedTx] is a simulated-signer payload, not a real signature.
   static bool isDemoSignature(Uint8List signedTx) {
@@ -117,12 +118,17 @@ class BroadcastService {
         // Same honesty rule as the direct path: a TRON payload that is not
         // the TronGrid JSON transaction cannot be submitted anywhere.
         return const BroadcastOutcome.unsupported(
-            'TRON signed payload is not the TronGrid JSON transaction');
+          'TRON signed payload is not the TronGrid JSON transaction',
+        );
       }
       if (payload != null) {
         try {
           return BroadcastOutcome.ok(
-              await gateway.broadcast(chain: rpcCoinForChain(chain), payload: payload));
+            await gateway.broadcast(
+              chain: rpcCoinForChain(chain),
+              payload: payload,
+            ),
+          );
         } on GatewayException catch (e) {
           if (e.isUpstreamError) {
             return BroadcastOutcome.error(e.upstreamMessage ?? e.message);
@@ -136,16 +142,26 @@ class BroadcastService {
     }
     try {
       switch (chain) {
-        case Chain.ethereum || Chain.polygon:
+        case Chain.ethereum ||
+            Chain.polygon ||
+            Chain.base ||
+            Chain.arbitrum ||
+            Chain.avalanche:
           final rpc = EvmRpc(
-              url: _endpoints(rpcCoinForChain(chain)), transport: _jsonRpc);
+            url: _endpoints(rpcCoinForChain(chain)),
+            transport: _jsonRpc,
+          );
           return BroadcastOutcome.ok(
-              await rpc.sendRawTransaction('0x${hexEncode(signedTx)}'));
+            await rpc.sendRawTransaction('0x${hexEncode(signedTx)}'),
+          );
         case Chain.solana:
           final rpc = SolanaRpc(
-              url: _endpoints(rpcCoinForChain(chain)), transport: _jsonRpc);
+            url: _endpoints(rpcCoinForChain(chain)),
+            transport: _jsonRpc,
+          );
           return BroadcastOutcome.ok(
-              await rpc.sendTransaction(base64Encode(signedTx)));
+            await rpc.sendTransaction(base64Encode(signedTx)),
+          );
         case Chain.tron:
           // TronRpc.broadcast posts the signed transaction as TronGrid's
           // JSON body (`/wallet/broadcasttransaction`). Until the real TRON
@@ -157,14 +173,18 @@ class BroadcastService {
             decoded = json.decode(utf8.decode(signedTx));
           } on FormatException {
             return const BroadcastOutcome.unsupported(
-                'TRON signed payload is not the TronGrid JSON transaction');
+              'TRON signed payload is not the TronGrid JSON transaction',
+            );
           }
           if (decoded is! Map) {
             return const BroadcastOutcome.unsupported(
-                'TRON signed payload is not the TronGrid JSON transaction');
+              'TRON signed payload is not the TronGrid JSON transaction',
+            );
           }
           final rpc = TronRpc(
-              baseUrl: _endpoints(rpcCoinForChain(chain)), transport: _rest);
+            baseUrl: _endpoints(rpcCoinForChain(chain)),
+            transport: _rest,
+          );
           return BroadcastOutcome.ok(await rpc.broadcast(decoded));
       }
     } on RpcException catch (e) {
@@ -181,7 +201,11 @@ class BroadcastService {
   /// shapes the direct path reports as unsupported).
   static String? _gatewayPayload(Chain chain, Uint8List signedTx) {
     switch (chain) {
-      case Chain.ethereum || Chain.polygon:
+      case Chain.ethereum ||
+          Chain.polygon ||
+          Chain.base ||
+          Chain.arbitrum ||
+          Chain.avalanche:
         return '0x${hexEncode(signedTx)}';
       case Chain.solana:
         return base64Encode(signedTx);

@@ -32,6 +32,9 @@ abstract final class SignerColors {
 abstract final class ChainColors {
   static const ethereum = Color(0xFF627EEA);
   static const polygon = Color(0xFF8247E5);
+  static const base = Color(0xFF0052FF);
+  static const arbitrum = Color(0xFF28A0F0);
+  static const avalanche = Color(0xFFE84142);
   static const tron = Color(0xFFEB0029);
   static const solana = Color(0xFF9945FF);
 }

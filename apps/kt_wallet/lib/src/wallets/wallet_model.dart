@@ -46,22 +46,25 @@ class HotWallet extends Wallet {
     CoreCrypto crypto, {
     required Coin coin,
     required Uint8List signingInput,
-  }) =>
-      crypto.signTransaction(
-        walletId: id,
-        coin: coin,
-        signingInput: signingInput,
-      );
+  }) => crypto.signTransaction(
+    walletId: id,
+    coin: coin,
+    signingInput: signingInput,
+  );
 
-  HotWallet copyWith({String? name, int? avatarColor, bool? backedUp, int? sortOrder}) =>
-      HotWallet(
-        id: id,
-        name: name ?? this.name,
-        avatarColor: avatarColor ?? this.avatarColor,
-        addresses: addresses,
-        sortOrder: sortOrder ?? this.sortOrder,
-        backedUp: backedUp ?? this.backedUp,
-      );
+  HotWallet copyWith({
+    String? name,
+    int? avatarColor,
+    bool? backedUp,
+    int? sortOrder,
+  }) => HotWallet(
+    id: id,
+    name: name ?? this.name,
+    avatarColor: avatarColor ?? this.avatarColor,
+    addresses: addresses,
+    sortOrder: sortOrder ?? this.sortOrder,
+    backedUp: backedUp ?? this.backedUp,
+  );
 }
 
 /// Watch wallet: public addresses only, paired to a Cold Signer. No signing

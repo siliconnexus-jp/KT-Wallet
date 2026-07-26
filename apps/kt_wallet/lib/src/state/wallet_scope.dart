@@ -8,8 +8,11 @@ import 'wallet_controller.dart';
 /// Provides the app-wide [WalletController] to the widget tree and rebuilds
 /// dependents when it changes.
 class WalletScope extends InheritedNotifier<WalletController> {
-  const WalletScope({super.key, required WalletController controller, required super.child})
-      : super(notifier: controller);
+  const WalletScope({
+    super.key,
+    required WalletController controller,
+    required super.child,
+  }) : super(notifier: controller);
 
   /// The live controller, or a shared demo controller when a screen is rendered
   /// standalone (the gallery index and golden tests). Real navigation always
@@ -22,18 +25,22 @@ class WalletScope extends InheritedNotifier<WalletController> {
   // Fallback id/addresses match the design-demo literals so standalone screens
   // (wallet detail's Wallet ID row, the receive screen's TRON address) render
   // exactly like the Pencil designs and the recorded goldens.
-  static final WalletController _fallback = WalletController(WalletManager(initial: [
-    HotWallet(
-      id: 'WLT-91A4C7',
-      name: '日常钱包',
-      avatarColor: 0xFFF59E0B,
-      addresses: const ChainAddresses(
-        eth: '0xa71c8B29b3d4b79E19bE1',
-        polygon: '0xa71c8B29b3d4b79E19bE1',
-        tron: 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
-        solana: 'ayKpXwMWd4qmDqVr2W',
-      ),
-      backedUp: false,
+  static final WalletController _fallback = WalletController(
+    WalletManager(
+      initial: [
+        HotWallet(
+          id: 'WLT-91A4C7',
+          name: '日常钱包',
+          avatarColor: 0xFFF59E0B,
+          addresses: const ChainAddresses(
+            eth: '0xa71c8B29b3d4b79E19bE1',
+            polygon: '0xa71c8B29b3d4b79E19bE1',
+            tron: 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
+            solana: 'ayKpXwMWd4qmDqVr2W',
+          ),
+          backedUp: false,
+        ),
+      ],
     ),
-  ]));
+  );
 }

@@ -13,7 +13,8 @@ class TronRpc {
     final resp = await transport.getJson('$baseUrl/v1/accounts/$address');
     if (resp is! Map) throw RpcException('bad account response');
     final data = resp['data'];
-    if (data is! List || data.isEmpty) return BigInt.zero; // unactivated account
+    if (data is! List || data.isEmpty)
+      return BigInt.zero; // unactivated account
     final account = data.first;
     if (account is! Map) throw RpcException('bad account entry');
     final balance = account['balance'];
@@ -28,23 +29,28 @@ class TronRpc {
   Future<TronBlockRef> getNowBlock() async {
     final resp = await transport.postJson('$baseUrl/wallet/getnowblock', {});
     if (resp is! Map) throw RpcException('bad block');
+    final blockId = resp['blockID'];
     final header = resp['block_header'];
     final raw = header is Map ? header['raw_data'] : null;
     if (raw is! Map) throw RpcException('bad block header');
     final number = raw['number'];
-    final txTrieRoot = raw['txTrieRoot'];
-    if (number is! int || txTrieRoot is! String) {
+    if (number is! int || blockId is! String || blockId.length != 64) {
       throw RpcException('missing block fields');
     }
-    return TronBlockRef(number: number, txTrieRoot: txTrieRoot);
+    return TronBlockRef(number: number, blockId: blockId);
   }
 
   /// Broadcasts a signed transaction (hex). Returns the txid on success.
   Future<String> broadcast(Object signedTx) async {
-    final resp = await transport.postJson('$baseUrl/wallet/broadcasttransaction', signedTx);
+    final broadcastHex = signedTx is Map && signedTx['transaction'] is String;
+    final resp = await transport.postJson(
+      '$baseUrl/wallet/${broadcastHex ? 'broadcasthex' : 'broadcasttransaction'}',
+      signedTx,
+    );
     if (resp is! Map) throw RpcException('bad broadcast response');
-    if (resp['result'] == true && resp['txid'] is String) {
-      return resp['txid'] as String;
+    final txid = resp['txid'] ?? (signedTx is Map ? signedTx['txID'] : null);
+    if (resp['result'] == true && txid is String) {
+      return txid;
     }
     final message = resp['message'];
     throw RpcException('broadcast rejected: ${message ?? resp['code']}');
@@ -52,7 +58,7 @@ class TronRpc {
 }
 
 class TronBlockRef {
-  const TronBlockRef({required this.number, required this.txTrieRoot});
+  const TronBlockRef({required this.number, required this.blockId});
   final int number;
-  final String txTrieRoot;
+  final String blockId;
 }

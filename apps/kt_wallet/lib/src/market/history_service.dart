@@ -42,15 +42,15 @@ class ChainTxRecord {
 /// [records] is non-empty only when [status] == [HistoryStatus.ok].
 class HistoryResult {
   const HistoryResult.loading()
-      : status = HistoryStatus.loading,
-        records = const [];
+    : status = HistoryStatus.loading,
+      records = const [];
   const HistoryResult.ok(this.records) : status = HistoryStatus.ok;
   const HistoryResult.error()
-      : status = HistoryStatus.error,
-        records = const [];
+    : status = HistoryStatus.error,
+      records = const [];
   const HistoryResult.unsupported()
-      : status = HistoryStatus.unsupported,
-        records = const [];
+    : status = HistoryStatus.unsupported,
+      records = const [];
 
   final HistoryStatus status;
   final List<ChainTxRecord> records;
@@ -76,9 +76,9 @@ class HistoryService {
     RpcEndpointResolver? endpoints,
     GatewayResolver? gateway,
     this.timeout = const Duration(seconds: 10),
-  })  : _client = client ?? http.Client(),
-        _endpoints = endpoints ?? defaultRpcEndpointFor,
-        _gateway = gateway ?? _noGateway;
+  }) : _client = client ?? http.Client(),
+       _endpoints = endpoints ?? defaultRpcEndpointFor,
+       _gateway = gateway ?? _noGateway;
 
   static GatewayClient? _noGateway() => null;
 
@@ -115,13 +115,15 @@ class HistoryService {
     if (gateway != null) {
       try {
         final history = await gateway.getHistory(
-            chain: coin, address: address, limit: pageSize);
+          chain: coin,
+          address: address,
+          limit: pageSize,
+        );
         if (history.unsupported) return const HistoryResult.unsupported();
         final records = [
           for (final record in history.records) _mapGatewayRecord(record),
         ]..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-        return HistoryResult.ok(
-            List.unmodifiable(records.take(pageSize)));
+        return HistoryResult.ok(List.unmodifiable(records.take(pageSize)));
       } catch (_) {
         // Gateway unreachable/erroring: only TRON has a direct alternative.
         if (coin != Coin.tron) return const HistoryResult.error();
@@ -132,6 +134,9 @@ class HistoryService {
         return _fetchTron(address);
       case Coin.eth:
       case Coin.polygon:
+      case Coin.base:
+      case Coin.arbitrum:
+      case Coin.avalanche:
       case Coin.solana:
         return const HistoryResult.unsupported();
     }
@@ -161,8 +166,12 @@ class HistoryService {
   Future<HistoryResult> _fetchTron(String address) async {
     try {
       final (trc20, native) = await (
-        _getData('$tronApiUrl/v1/accounts/$address/transactions/trc20?limit=$pageSize'),
-        _getData('$tronApiUrl/v1/accounts/$address/transactions?limit=$pageSize'),
+        _getData(
+          '$tronApiUrl/v1/accounts/$address/transactions/trc20?limit=$pageSize',
+        ),
+        _getData(
+          '$tronApiUrl/v1/accounts/$address/transactions?limit=$pageSize',
+        ),
       ).wait;
 
       final myHex = tronAddressHex(address);
@@ -177,8 +186,7 @@ class HistoryService {
       }
       final records = byHash.values.toList()
         ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      return HistoryResult.ok(
-          List.unmodifiable(records.take(pageSize)));
+      return HistoryResult.ok(List.unmodifiable(records.take(pageSize)));
     } catch (_) {
       // ClientException / TimeoutException / FormatException / a 4xx for the
       // demo mock addresses — all mean "no trustworthy history".
@@ -259,9 +267,8 @@ class HistoryService {
       // Hex owner vs our base58-decoded address; an undecodable address (the
       // demo mocks) can't match, so those rows read as incoming — moot in
       // practice because TronGrid rejects mock addresses before this point.
-      outgoing: myHex != null &&
-          owner is String &&
-          owner.toLowerCase() == myHex,
+      outgoing:
+          myHex != null && owner is String && owner.toLowerCase() == myHex,
       amountText: amount is int && amount >= 0
           ? _formatAmount(BigInt.from(amount), 6, 'TRX')
           : null,

@@ -16,9 +16,9 @@ import '../wallets/wallet_store.dart';
 /// can omit it (in-memory only).
 class WalletController extends ChangeNotifier {
   WalletController(this._manager, {CoreCrypto? crypto, WalletStore? store})
-      : _crypto = crypto ?? MockCoreCrypto(),
-        // ignore: prefer_initializing_formals
-        _store = store;
+    : _crypto = crypto ?? MockCoreCrypto(),
+      // ignore: prefer_initializing_formals
+      _store = store;
 
   final WalletManager _manager;
   final CoreCrypto _crypto;
@@ -36,11 +36,18 @@ class WalletController extends ChangeNotifier {
   String? get pendingMnemonic => _pendingMnemonic;
 
   static const _palette = [
-    0xFF0EA5E9, 0xFF10B981, 0xFFEF4444, 0xFFF59E0B, 0xFF8B5CF6, 0xFFEC4899,
+    0xFF0EA5E9,
+    0xFF10B981,
+    0xFFEF4444,
+    0xFFF59E0B,
+    0xFF8B5CF6,
+    0xFFEC4899,
   ];
 
   List<Wallet> get wallets => _manager.wallets;
   Wallet? get current => _manager.current;
+  CoreCrypto get crypto => _crypto;
+  bool get usesDemoCrypto => _crypto is MockCoreCrypto;
   int get count => _manager.count;
   bool get canAddMore => _manager.canAddMore;
 

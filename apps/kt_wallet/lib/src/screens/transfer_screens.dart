@@ -2,23 +2,26 @@ import 'dart:async';
 
 import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:chains/chains.dart';
+import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../market/balance_service.dart' show BalanceStatus;
 import '../market/explorer_links.dart' show explorerTxUrl;
 import '../market/market_scope.dart'
-    show effectiveRpcEndpoints, prefsGatewayResolver;
+    show MarketScope, effectiveRpcEndpoints, prefsGatewayResolver;
 import '../platform/external_actions.dart';
 import '../security/biometric_auth.dart';
 import '../security/wallet_pin.dart';
 import '../state/app_prefs.dart' show AppPrefsScope;
-import '../state/networks.dart' show Network, NetworkScope;
+import '../state/networks.dart' show Network, NetworkScope, ethSepolia;
 import '../transfer/airgap_codec.dart';
 import '../transfer/broadcast_service.dart';
 import '../transfer/chain_params_service.dart';
+import '../transfer/local_transfer_service.dart';
 import '../transfer/frame_scan.dart';
 import '../transfer/transfer_draft.dart';
 import '../widgets/scan_viewfinder.dart';
@@ -30,6 +33,9 @@ import '../wallets/wallet_model.dart';
 Color _chainDot(Chain chain) => switch (chain) {
   Chain.ethereum => ChainColors.ethereum,
   Chain.polygon => ChainColors.polygon,
+  Chain.base => const Color(0xFF0052FF),
+  Chain.arbitrum => const Color(0xFF28A0F0),
+  Chain.avalanche => const Color(0xFFE84142),
   Chain.tron => ChainColors.tron,
   Chain.solana => ChainColors.solana,
 };
@@ -97,9 +103,80 @@ class _TransferAsset {
   final String? contract;
   Amount get availableAmount =>
       Amount.parse(available, decimals, symbol: symbol);
+
+  _TransferAsset withAvailable(String value) => _TransferAsset(
+    symbol,
+    network,
+    networkName,
+    chain,
+    decimals,
+    value,
+    value,
+    color,
+    initial,
+    contract: contract,
+  );
+
+  _TransferAsset forNetwork(Network activeNetwork) {
+    if (chain == Chain.ethereum &&
+        symbol == 'USDT' &&
+        activeNetwork.id == ethSepolia.id) {
+      return _TransferAsset(
+        symbol,
+        'Sepolia · ERC-20',
+        activeNetwork.name,
+        chain,
+        18,
+        available,
+        availableLabel,
+        color,
+        initial,
+        contract: _TransferInputScreenState.sepoliaTestUsdtContract,
+      );
+    }
+    if (symbol == 'USDC' && activeNetwork.isTestnet) {
+      final contract = switch (activeNetwork.id) {
+        'base-sepolia' => '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+        'arbitrum-sepolia' => '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d',
+        'avalanche-fuji' => '0x5425890298aed601595a70AB815c96711a31Bc65',
+        _ => null,
+      };
+      if (contract != null) {
+        return _TransferAsset(
+          symbol,
+          '${activeNetwork.name} · ERC-20',
+          activeNetwork.name,
+          chain,
+          decimals,
+          available,
+          availableLabel,
+          color,
+          initial,
+          contract: contract,
+        );
+      }
+    }
+    if (activeNetwork.isTestnet) {
+      return _TransferAsset(
+        symbol,
+        activeNetwork.name,
+        activeNetwork.name,
+        chain,
+        decimals,
+        available,
+        availableLabel,
+        color,
+        initial,
+        contract: contract,
+      );
+    }
+    return this;
+  }
 }
 
 class _TransferInputScreenState extends State<TransferInputScreen> {
+  static const sepoliaTestUsdtContract =
+      '0xc4DCC311c028e341fd8602D8eB89c5de94625927';
   static const _assets = [
     _TransferAsset(
       'USDT',
@@ -125,6 +202,18 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
       'Ξ',
     ),
     _TransferAsset(
+      'USDT',
+      'Ethereum · ERC-20',
+      'Ethereum',
+      Chain.ethereum,
+      6,
+      '100.00',
+      '100.00',
+      Color(0xFF26A17B),
+      '₮',
+      contract: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+    ),
+    _TransferAsset(
       'SOL',
       'Solana',
       'Solana',
@@ -135,9 +224,134 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
       Color(0xFF9945FF),
       '◎',
     ),
+    _TransferAsset(
+      'ETH',
+      'Base',
+      'Base',
+      Chain.base,
+      18,
+      '0.1',
+      '0.1',
+      Color(0xFF0052FF),
+      'B',
+    ),
+    _TransferAsset(
+      'USDC',
+      'Base · ERC-20',
+      'Base',
+      Chain.base,
+      6,
+      '100.00',
+      '100.00',
+      Color(0xFF2775CA),
+      r'$',
+      contract: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    ),
+    _TransferAsset(
+      'ETH',
+      'Arbitrum One',
+      'Arbitrum One',
+      Chain.arbitrum,
+      18,
+      '0.1',
+      '0.1',
+      Color(0xFF28A0F0),
+      'A',
+    ),
+    _TransferAsset(
+      'USDC',
+      'Arbitrum One · ERC-20',
+      'Arbitrum One',
+      Chain.arbitrum,
+      6,
+      '100.00',
+      '100.00',
+      Color(0xFF2775CA),
+      r'$',
+      contract: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+    ),
+    _TransferAsset(
+      'AVAX',
+      'Avalanche C-Chain',
+      'Avalanche C-Chain',
+      Chain.avalanche,
+      18,
+      '1.0',
+      '1.0',
+      Color(0xFFE84142),
+      'A',
+    ),
+    _TransferAsset(
+      'USDC',
+      'Avalanche C-Chain · ERC-20',
+      'Avalanche C-Chain',
+      Chain.avalanche,
+      6,
+      '100.00',
+      '100.00',
+      Color(0xFF2775CA),
+      r'$',
+      contract: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E',
+    ),
   ];
   int _assetIndex = 0;
-  _TransferAsset get _asset => _assets[_assetIndex];
+  _TransferAsset _assetAt(int index) {
+    final selected = _assets[index];
+    final network = NetworkScope.maybeOf(context)?.activeFor(selected.chain);
+    final networkAsset = network == null
+        ? selected
+        : selected.forNetwork(network);
+    final market = MarketScope.maybeOf(context);
+    // Keep gallery/widget-test fixtures deterministic until their controller
+    // has actually refreshed; the live app replaces demo balances as soon as
+    // the first real balance pass completes.
+    final wallet = WalletScope.of(context).current;
+    if (market == null ||
+        !market.hasRefreshed ||
+        wallet == null ||
+        !wallet.addresses.hasExpandedEvm) {
+      return networkAsset;
+    }
+
+    final result = networkAsset.contract == null
+        ? market.balanceFor(switch (networkAsset.chain) {
+            Chain.ethereum => Coin.eth,
+            Chain.polygon => Coin.polygon,
+            Chain.base => Coin.base,
+            Chain.arbitrum => Coin.arbitrum,
+            Chain.avalanche => Coin.avalanche,
+            Chain.tron => Coin.tron,
+            Chain.solana => Coin.solana,
+          })
+        : market.tokens
+              .where(
+                (token) =>
+                    token.chain ==
+                        switch (networkAsset.chain) {
+                          Chain.ethereum => Coin.eth,
+                          Chain.polygon => Coin.polygon,
+                          Chain.base => Coin.base,
+                          Chain.arbitrum => Coin.arbitrum,
+                          Chain.avalanche => Coin.avalanche,
+                          Chain.tron => Coin.tron,
+                          Chain.solana => Coin.solana,
+                        } &&
+                    token.contract.toLowerCase() ==
+                        networkAsset.contract!.toLowerCase(),
+              )
+              .map((token) => market.tokenBalanceFor(token.id))
+              .firstOrNull;
+    final amount = result?.amount;
+    return networkAsset.withAvailable(
+      result?.status == BalanceStatus.ok && amount != null
+          ? amount.format()
+          : '0',
+    );
+  }
+
+  _TransferAsset get _asset {
+    return _assetAt(_assetIndex);
+  }
 
   final _addrController = TextEditingController(
     text: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
@@ -213,72 +427,78 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: WalletColors.border,
-                borderRadius: BorderRadius.circular(2),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: WalletColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  Text(
-                    l10n.selectAsset,
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Text(
+                      l10n.selectAsset,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: WalletColors.text,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (var i = 0; i < _assets.length; i++)
+                ListTile(
+                  leading: TokenIcon(
+                    symbol: _assetAt(i).symbol,
+                    size: 36,
+                    fallbackColor: _assetAt(i).color,
+                    fallbackInitial: _assetAt(i).initial,
+                  ),
+                  title: Text(
+                    switch (_assetAt(i).chain) {
+                      Chain.base || Chain.arbitrum || Chain.avalanche =>
+                        '${_assetAt(i).symbol} · ${_assetAt(i).networkName}',
+                      _ => _assetAt(i).symbol,
+                    },
                     style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
                       color: WalletColors.text,
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            for (var i = 0; i < _assets.length; i++)
-              ListTile(
-                leading: TokenIcon(
-                  symbol: _assets[i].symbol,
-                  size: 36,
-                  fallbackColor: _assets[i].color,
-                  fallbackInitial: _assets[i].initial,
-                ),
-                title: Text(
-                  _assets[i].symbol,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: WalletColors.text,
+                  subtitle: Text(
+                    '${_assetAt(i).network} · ${l10n.availableBalance(_assetAt(i).availableLabel, _assetAt(i).symbol)}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: WalletColors.text3,
+                    ),
                   ),
+                  trailing: i == _assetIndex
+                      ? const Icon(
+                          Icons.check,
+                          size: 20,
+                          color: WalletColors.accent,
+                        )
+                      : null,
+                  onTap: () {
+                    setState(() => _assetIndex = i);
+                    Navigator.of(ctx).pop();
+                  },
                 ),
-                subtitle: Text(
-                  '${_assets[i].network} · ${l10n.availableBalance(_assets[i].availableLabel, _assets[i].symbol)}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: WalletColors.text3,
-                  ),
-                ),
-                trailing: i == _assetIndex
-                    ? const Icon(
-                        Icons.check,
-                        size: 20,
-                        color: WalletColors.accent,
-                      )
-                    : null,
-                onTap: () {
-                  setState(() => _assetIndex = i);
-                  Navigator.of(ctx).pop();
-                },
-              ),
-            const SizedBox(height: 12),
-          ],
+              const SizedBox(height: 12),
+            ],
+          ),
         ),
       ),
     );
@@ -1509,6 +1729,10 @@ class BroadcastResultScreen extends StatelessWidget {
     // consistency with broadcast-confirm; demo constant otherwise.
     final session = TransferSessionScope.maybeOf(context);
     final fullHash = session?.broadcastTxHash ?? session?.result?.txHash;
+    final draft = session?.draft;
+    final transferLabel = draft == null
+        ? '-120.00 USDT · TRON'
+        : '-${draft.amountText} · ${draft.networkLabel}';
     final hashValue = fullHash == null
         ? '8f6d2c…a94e07'
         : truncateMiddle(fullHash, head: 6, tail: 6);
@@ -1552,9 +1776,9 @@ class BroadcastResultScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              '-120.00 USDT · TRON',
-              style: TextStyle(fontSize: 14, color: WalletColors.text2),
+            Text(
+              transferLabel,
+              style: const TextStyle(fontSize: 14, color: WalletColors.text2),
             ),
           ],
         ),
@@ -1675,26 +1899,28 @@ class TxDetailScreen extends StatelessWidget {
   }
 }
 
-/// W30 转账身份验证 (bottom sheet). The Face ID button runs a real biometric
-/// prompt through [BiometricAuth]: success proceeds, failure stays on the
-/// sheet with a snackbar, and an unavailable platform (no hardware / nothing
-/// enrolled / tests) proceeds like before — an honest demo shortcut, since
-/// the online app has no PIN of its own to fall back to yet.
+/// W30 转账身份验证 (bottom sheet). Production submits through native Wallet
+/// Core, whose protected key access supplies the device authentication prompt.
+/// An injected [BiometricAuth] keeps widget tests deterministic.
 class TransferAuthSheet extends StatelessWidget {
-  const TransferAuthSheet({super.key, this.auth});
+  const TransferAuthSheet({super.key, this.auth, this.transferService});
 
   /// Injectable authenticator; defaults to [BiometricAuth.instance].
   final BiometricAuth? auth;
+  final LocalTransferService? transferService;
 
   Future<void> _faceId(BuildContext context) async {
     final l10n = AppLocalizations.of(context);
+    // Injected auth keeps widget tests deterministic. Production signing uses
+    // the native CoreCrypto prompt itself, avoiding a misleading auth-only
+    // success path and avoiding two consecutive biometric prompts.
     final outcome = await (auth ?? BiometricAuth.instance).authenticate(
       reason: l10n.authToConfirmTransfer,
     );
     if (!context.mounted) return;
     switch (outcome) {
       case BiometricOutcome.success:
-        context.go('/broadcast-result');
+        await _submitLive(context);
       case BiometricOutcome.failure:
         ScaffoldMessenger.of(context)
           ..clearSnackBars()
@@ -1724,8 +1950,53 @@ class TransferAuthSheet extends StatelessWidget {
       builder: (_) => _TransferPinSheet(pin: pin),
     );
     if (verified == true && context.mounted) {
-      context.go('/broadcast-result');
+      await _submitLive(context);
     }
+  }
+
+  Future<void> _submitLive(BuildContext context) async {
+    final session = TransferSessionScope.maybeOf(context);
+    final draft = session?.draft;
+    final controller = WalletScope.of(context);
+    final wallet = controller.current;
+    // Standalone gallery and legacy widget fixtures have no live transfer;
+    // preserve their navigation-only behavior.
+    if (draft == null || wallet is! HotWallet || controller.usesDemoCrypto) {
+      if (context.mounted) context.go('/broadcast-result');
+      return;
+    }
+    final networkScope = NetworkScope.maybeOf(context);
+    final network = networkScope?.activeFor(draft.chain);
+    final chainId = network?.evmChainId;
+    if (chainId == null) {
+      _showTransferError(context, 'Missing EVM chain ID');
+      return;
+    }
+    final prefs = AppPrefsScope.maybeOf(context);
+    final service =
+        transferService ??
+        LocalTransferService(
+          endpoints: effectiveRpcEndpoints(prefs, networkScope),
+          gateway: prefsGatewayResolver(prefs),
+        );
+    try {
+      final hash = await service.execute(
+        wallet: wallet,
+        crypto: controller.crypto,
+        draft: draft,
+        evmChainId: chainId,
+      );
+      session!.broadcastTxHash = hash;
+      if (context.mounted) context.go('/broadcast-result');
+    } catch (e) {
+      if (context.mounted) _showTransferError(context, '$e');
+    }
+  }
+
+  void _showTransferError(BuildContext context, String message) {
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override

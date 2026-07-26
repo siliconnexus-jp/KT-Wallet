@@ -34,8 +34,11 @@ const _addresses = ChainAddresses(
   solana: 'SolAddr',
 );
 
-Map<String, Object?> _rpcResult(Object? result) =>
-    {'jsonrpc': '2.0', 'id': 1, 'result': result};
+Map<String, Object?> _rpcResult(Object? result) => {
+  'jsonrpc': '2.0',
+  'id': 1,
+  'result': result,
+};
 
 void main() {
   group('BalanceService', () {
@@ -56,19 +59,21 @@ void main() {
           }
           fail('unexpected url $url');
         }),
-        restTransport: _FakeRest(onGet: (url) async {
-          expect(url, '$defaultTronApiUrl/v1/accounts/TTronAddr');
-          return {
-            'data': [
-              {'balance': 5000000} // 5 TRX in SUN
-            ]
-          };
-        }),
+        restTransport: _FakeRest(
+          onGet: (url) async {
+            expect(url, '$defaultTronApiUrl/v1/accounts/TTronAddr');
+            return {
+              'data': [
+                {'balance': 5000000}, // 5 TRX in SUN
+              ],
+            };
+          },
+        ),
       );
 
       final results = await service.fetchAll(_addresses);
-      expect(results.length, Coin.values.length);
-      for (final coin in Coin.values) {
+      expect(results.length, _addresses.enabledCoins.length);
+      for (final coin in _addresses.enabledCoins) {
         expect(results[coin]!.status, BalanceStatus.ok, reason: '$coin');
       }
       expect(results[Coin.eth]!.amount!.format(), '1');
@@ -88,7 +93,7 @@ void main() {
             return {
               'jsonrpc': '2.0',
               'id': 1,
-              'error': {'code': -32000, 'message': 'invalid address'}
+              'error': {'code': -32000, 'message': 'invalid address'},
             };
           }
           if (url == defaultPolygonRpcUrl) return _rpcResult('0x0');
@@ -111,12 +116,14 @@ void main() {
     test('transport timeout surfaces as error status (never throws)', () async {
       final service = BalanceService(
         jsonRpcTransport: _FakeJsonRpc(
-            (url, body) => throw TimeoutException('rpc timeout')),
+          (url, body) => throw TimeoutException('rpc timeout'),
+        ),
         restTransport: _FakeRest(
-            onGet: (url) => throw TimeoutException('rest timeout')),
+          onGet: (url) => throw TimeoutException('rest timeout'),
+        ),
       );
       final results = await service.fetchAll(_addresses);
-      for (final coin in Coin.values) {
+      for (final coin in _addresses.enabledCoins) {
         expect(results[coin]!.status, BalanceStatus.error, reason: '$coin');
         expect(results[coin]!.amount, isNull);
       }
@@ -128,48 +135,55 @@ void main() {
         restTransport: _FakeRest(onGet: (url) async => 'not a map'),
       );
       final results = await service.fetchAll(_addresses);
-      for (final coin in Coin.values) {
+      for (final coin in _addresses.enabledCoins) {
         expect(results[coin]!.status, BalanceStatus.error, reason: '$coin');
       }
     });
 
-    test('an injected endpoint resolver overrides the URLs the transports see',
-        () async {
-      final seenJsonUrls = <String>[];
-      final seenRestUrls = <String>[];
-      final service = BalanceService(
-        endpoints: (coin) => 'https://custom-${coin.name}.example',
-        jsonRpcTransport: _FakeJsonRpc((url, body) async {
-          seenJsonUrls.add(url);
-          return (body as Map)['method'] == 'getBalance'
-              ? _rpcResult({'context': <String, Object?>{}, 'value': 0})
-              : _rpcResult('0x0');
-        }),
-        restTransport: _FakeRest(onGet: (url) async {
-          seenRestUrls.add(url);
-          return {'data': <Object?>[]};
-        }),
-      );
+    test(
+      'an injected endpoint resolver overrides the URLs the transports see',
+      () async {
+        final seenJsonUrls = <String>[];
+        final seenRestUrls = <String>[];
+        final service = BalanceService(
+          endpoints: (coin) => 'https://custom-${coin.name}.example',
+          jsonRpcTransport: _FakeJsonRpc((url, body) async {
+            seenJsonUrls.add(url);
+            return (body as Map)['method'] == 'getBalance'
+                ? _rpcResult({'context': <String, Object?>{}, 'value': 0})
+                : _rpcResult('0x0');
+          }),
+          restTransport: _FakeRest(
+            onGet: (url) async {
+              seenRestUrls.add(url);
+              return {'data': <Object?>[]};
+            },
+          ),
+        );
 
-      final results = await service.fetchAll(_addresses);
-      for (final coin in Coin.values) {
-        expect(results[coin]!.status, BalanceStatus.ok, reason: '$coin');
-      }
-      expect(
+        final results = await service.fetchAll(_addresses);
+        for (final coin in _addresses.enabledCoins) {
+          expect(results[coin]!.status, BalanceStatus.ok, reason: '$coin');
+        }
+        expect(
           seenJsonUrls,
           containsAll([
             'https://custom-eth.example',
             'https://custom-polygon.example',
             'https://custom-solana.example',
-          ]));
-      expect(seenRestUrls.single,
-          'https://custom-tron.example/v1/accounts/TTronAddr');
-      // And the default resolver maps each chain to the built-in consts.
-      expect(defaultRpcEndpointFor(Coin.eth), defaultEthRpcUrl);
-      expect(defaultRpcEndpointFor(Coin.polygon), defaultPolygonRpcUrl);
-      expect(defaultRpcEndpointFor(Coin.tron), defaultTronApiUrl);
-      expect(defaultRpcEndpointFor(Coin.solana), defaultSolanaRpcUrl);
-    });
+          ]),
+        );
+        expect(
+          seenRestUrls.single,
+          'https://custom-tron.example/v1/accounts/TTronAddr',
+        );
+        // And the default resolver maps each chain to the built-in consts.
+        expect(defaultRpcEndpointFor(Coin.eth), defaultEthRpcUrl);
+        expect(defaultRpcEndpointFor(Coin.polygon), defaultPolygonRpcUrl);
+        expect(defaultRpcEndpointFor(Coin.tron), defaultTronApiUrl);
+        expect(defaultRpcEndpointFor(Coin.solana), defaultSolanaRpcUrl);
+      },
+    );
   });
 
   group('PriceService', () {
@@ -202,9 +216,16 @@ void main() {
     test('non-200 → null, keeping the previous last-good cache', () async {
       var fail = false;
       final service = PriceService(
-        client: MockClient((request) async => fail
-            ? http.Response('rate limited', 429)
-            : http.Response(jsonEncode({'ethereum': {'usd': 2000.0}}), 200)),
+        client: MockClient(
+          (request) async => fail
+              ? http.Response('rate limited', 429)
+              : http.Response(
+                  jsonEncode({
+                    'ethereum': {'usd': 2000.0},
+                  }),
+                  200,
+                ),
+        ),
       );
       final first = await service.fetchUsdPrices();
       expect(first![Coin.eth], 2000.0);

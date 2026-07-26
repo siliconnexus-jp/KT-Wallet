@@ -86,36 +86,72 @@ class _HomeTab extends StatelessWidget {
     final entries = <(IconData, String, String)>[
       (Icons.qr_code_2, l10n.connectColdWallet, '/connect-cold'),
       (Icons.contacts_outlined, l10n.settingsAddressBook, '/address-book'),
-      (Icons.account_balance_wallet_outlined, l10n.settingsWalletManage, '/wallet-manage'),
+      (
+        Icons.account_balance_wallet_outlined,
+        l10n.settingsWalletManage,
+        '/wallet-manage',
+      ),
     ];
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: WalletColors.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const SizedBox(height: 12),
-          Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(children: [
-              Text(l10n.actionMore, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: WalletColors.text)),
-            ]),
-          ),
-          const SizedBox(height: 8),
-          for (final (icon, label, route) in entries)
-            ListTile(
-              leading: Icon(icon, size: 22, color: WalletColors.accent),
-              title: Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: WalletColors.text)),
-              trailing: const Icon(Icons.chevron_right, size: 18, color: WalletColors.text3),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                context.push(route);
-              },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: WalletColors.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          const SizedBox(height: 12),
-        ]),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Text(
+                    l10n.actionMore,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: WalletColors.text,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (final (icon, label, route) in entries)
+              ListTile(
+                leading: Icon(icon, size: 22, color: WalletColors.accent),
+                title: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: WalletColors.text,
+                  ),
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: WalletColors.text3,
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  context.push(route);
+                },
+              ),
+            const SizedBox(height: 12),
+          ],
+        ),
       ),
     );
   }
@@ -141,7 +177,11 @@ class _HomeTab extends StatelessWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
-        _Header(wallet: wallet, onTapPill: () => context.push('/switcher'), onTapSettings: onOpenSettings),
+        _Header(
+          wallet: wallet,
+          onTapPill: () => context.push('/switcher'),
+          onTapSettings: onOpenSettings,
+        ),
         if (offline) ...[
           const SizedBox(height: 12),
           const MarketOfflineBanner(),
@@ -168,7 +208,10 @@ class _HomeTab extends StatelessWidget {
         const SizedBox(height: 24),
         const _NetworkChips(),
         const SizedBox(height: 24),
-        _AssetsCard(assets: live ? liveAssetRows(market) : assets, onViewAll: onViewAll),
+        _AssetsCard(
+          assets: live ? liveAssetRows(market) : assets,
+          onViewAll: onViewAll,
+        ),
       ],
     );
     if (market == null) return listView;
@@ -192,12 +235,24 @@ class _AssetsTab extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
         const SizedBox(height: 8),
-        Row(children: [
-          Text(l10n.tabAssets, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
-          const TestnetBadge(),
-        ]),
+        Row(
+          children: [
+            Text(
+              l10n.tabAssets,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: WalletColors.text,
+              ),
+            ),
+            const TestnetBadge(),
+          ],
+        ),
         const SizedBox(height: 4),
-        Text(l10n.assetsSortByValue, style: const TextStyle(fontSize: 13, color: WalletColors.text3)),
+        Text(
+          l10n.assetsSortByValue,
+          style: const TextStyle(fontSize: 13, color: WalletColors.text3),
+        ),
         const SizedBox(height: 20),
         if (offline) ...[
           const MarketOfflineBanner(),
@@ -233,9 +288,12 @@ class _RecordsTabState extends State<_RecordsTab> {
         // rpcUrl (Nile is TronGrid-compatible, same paths) → builtin default;
         // a configured gateway unlocks eth/polygon/solana history too.
         service: HistoryService(
-            endpoints: effectiveRpcEndpoints(AppPrefsScope.maybeOf(context),
-                NetworkScope.maybeOf(context)),
-            gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context))),
+          endpoints: effectiveRpcEndpoints(
+            AppPrefsScope.maybeOf(context),
+            NetworkScope.maybeOf(context),
+          ),
+          gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
+        ),
       );
       _owned = controller..addListener(_onHistoryChanged);
       // Post-frame: refresh() notifies synchronously, never mid-build.
@@ -257,58 +315,96 @@ class _RecordsTabState extends State<_RecordsTab> {
   /// Demo rows exactly as before live wiring existed (gallery/goldens, and
   /// the labeled offline fallback).
   Widget _demoCard(BuildContext context, AppLocalizations l10n) => KtCard(
-        child: Column(
-          children: [
-            for (final (i, r) in _demoRecords(l10n).indexed) ...[
-              if (i > 0) Divider(height: 1, color: WalletColors.text.withValues(alpha: 0.06)),
-              _RecordRow(record: r, onTap: () => context.push('/tx-detail')),
-            ],
-          ],
-        ),
-      );
+    child: Column(
+      children: [
+        for (final (i, r) in _demoRecords(l10n).indexed) ...[
+          if (i > 0)
+            Divider(
+              height: 1,
+              color: WalletColors.text.withValues(alpha: 0.06),
+            ),
+          _RecordRow(record: r, onTap: () => context.push('/tx-detail')),
+        ],
+      ],
+    ),
+  );
 
   /// Loading placeholder: three '--' shimmer rows, mirroring the row layout.
   Widget _loadingCard() => KtCard(
-        child: Column(
-          children: [
-            for (var i = 0; i < 3; i++) ...[
-              if (i > 0) Divider(height: 1, color: WalletColors.text.withValues(alpha: 0.06)),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(color: WalletColors.text3.withValues(alpha: 0.08), shape: BoxShape.circle),
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('--', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text3)),
-                          SizedBox(height: 2),
-                          Text('--', style: TextStyle(fontSize: 12, color: WalletColors.text3)),
-                        ],
-                      ),
-                    ),
-                    const Text('--', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text3)),
-                  ],
+    child: Column(
+      children: [
+        for (var i = 0; i < 3; i++) ...[
+          if (i > 0)
+            Divider(
+              height: 1,
+              color: WalletColors.text.withValues(alpha: 0.06),
+            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: WalletColors.text3.withValues(alpha: 0.08),
+                    shape: BoxShape.circle,
+                  ),
                 ),
-              ),
-            ],
-          ],
-        ),
-      );
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '--',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: WalletColors.text3,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        '--',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: WalletColors.text3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Text(
+                  '--',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: WalletColors.text3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
 
-  Widget _liveCard(BuildContext context, AppLocalizations l10n, List<ChainTxRecord> records) {
+  Widget _liveCard(
+    BuildContext context,
+    AppLocalizations l10n,
+    List<ChainTxRecord> records,
+  ) {
     if (records.isEmpty) {
       return KtCard(
         child: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 18),
-            child: Text(l10n.historyEmpty, style: const TextStyle(fontSize: 13, color: WalletColors.text3)),
+            child: Text(
+              l10n.historyEmpty,
+              style: const TextStyle(fontSize: 13, color: WalletColors.text3),
+            ),
           ),
         ),
       );
@@ -317,9 +413,17 @@ class _RecordsTabState extends State<_RecordsTab> {
       child: Column(
         children: [
           for (final (i, r) in records.indexed) ...[
-            if (i > 0) Divider(height: 1, color: WalletColors.text.withValues(alpha: 0.06)),
+            if (i > 0)
+              Divider(
+                height: 1,
+                color: WalletColors.text.withValues(alpha: 0.06),
+              ),
             _RecordRow(
-              record: _TxRecord(r.outgoing, r.amountText ?? '--', _formatRecordTime(l10n, r.timestamp)),
+              record: _TxRecord(
+                r.outgoing,
+                r.amountText ?? '--',
+                _formatRecordTime(l10n, r.timestamp),
+              ),
               onTap: () => context.push('/tx-detail'),
             ),
           ],
@@ -342,7 +446,10 @@ class _RecordsTabState extends State<_RecordsTab> {
       body = Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Center(
-          child: Text(l10n.historyUnsupportedChain, style: const TextStyle(fontSize: 13, color: WalletColors.text3)),
+          child: Text(
+            l10n.historyUnsupportedChain,
+            style: const TextStyle(fontSize: 13, color: WalletColors.text3),
+          ),
         ),
       );
     } else if (history.isLoading) {
@@ -350,11 +457,13 @@ class _RecordsTabState extends State<_RecordsTab> {
     } else if (history.isError) {
       // Live fetch failed (e.g. demo mock addresses rejected on-chain): demo
       // rows behind the explicit offline banner, mirroring the market tabs.
-      body = Column(children: [
-        const MarketOfflineBanner(),
-        const SizedBox(height: 12),
-        _demoCard(context, l10n),
-      ]);
+      body = Column(
+        children: [
+          const MarketOfflineBanner(),
+          const SizedBox(height: 12),
+          _demoCard(context, l10n),
+        ],
+      );
     } else {
       body = _liveCard(context, l10n, history.records);
     }
@@ -362,10 +471,19 @@ class _RecordsTabState extends State<_RecordsTab> {
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
         const SizedBox(height: 8),
-        Row(children: [
-          Text(l10n.recordsTitle, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
-          const TestnetBadge(),
-        ]),
+        Row(
+          children: [
+            Text(
+              l10n.recordsTitle,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: WalletColors.text,
+              ),
+            ),
+            const TestnetBadge(),
+          ],
+        ),
         const SizedBox(height: 20),
         body,
       ],
@@ -379,9 +497,11 @@ String _formatRecordTime(AppLocalizations l10n, DateTime t) {
   final now = DateTime.now();
   final day = DateTime(t.year, t.month, t.day);
   final today = DateTime(now.year, now.month, now.day);
-  final hm = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+  final hm =
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
   if (day == today) return '${l10n.dateToday} $hm';
-  if (day == today.subtract(const Duration(days: 1))) return '${l10n.dateYesterday} $hm';
+  if (day == today.subtract(const Duration(days: 1)))
+    return '${l10n.dateYesterday} $hm';
   return '${l10n.monthDay(t.month, t.day)} $hm';
 }
 
@@ -402,23 +522,53 @@ class _RecordRow extends StatelessWidget {
             Container(
               width: 40,
               height: 40,
-              decoration: BoxDecoration(color: (sent ? WalletColors.text3 : WalletColors.green).withValues(alpha: 0.12), shape: BoxShape.circle),
-              child: Icon(sent ? Icons.arrow_upward : Icons.arrow_downward, size: 20, color: sent ? WalletColors.text3 : WalletColors.green),
+              decoration: BoxDecoration(
+                color: (sent ? WalletColors.text3 : WalletColors.green)
+                    .withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                sent ? Icons.arrow_upward : Icons.arrow_downward,
+                size: 20,
+                color: sent ? WalletColors.text3 : WalletColors.green,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(sent ? l10n.txSent : l10n.txReceived, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
+                  Text(
+                    sent ? l10n.txSent : l10n.txReceived,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: WalletColors.text,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(record.time, style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
+                  Text(
+                    record.time,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: WalletColors.text3,
+                    ),
+                  ),
                 ],
               ),
             ),
             // Unparseable live amounts render as a plain '--' (no sign);
             // demo rows always carry an amount, so their output is unchanged.
-            Text(record.amount == '--' ? '--' : '${sent ? '-' : '+'}${record.amount}', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: sent ? WalletColors.text : WalletColors.green)),
+            Text(
+              record.amount == '--'
+                  ? '--'
+                  : '${sent ? '-' : '+'}${record.amount}',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: sent ? WalletColors.text : WalletColors.green,
+              ),
+            ),
           ],
         ),
       ),
@@ -433,11 +583,11 @@ class _TxRecord {
 }
 
 List<_TxRecord> _demoRecords(AppLocalizations l10n) => [
-      _TxRecord(true, '120.00 USDT', '${l10n.dateToday} 14:32'),
-      _TxRecord(false, '0.05 ETH', '${l10n.dateYesterday} 09:11'),
-      _TxRecord(true, '1.2 SOL', '${l10n.monthDay(7, 17)} 20:04'),
-      _TxRecord(false, '300.00 USDT', '${l10n.monthDay(7, 15)} 11:47'),
-    ];
+  _TxRecord(true, '120.00 USDT', '${l10n.dateToday} 14:32'),
+  _TxRecord(false, '0.05 ETH', '${l10n.dateYesterday} 09:11'),
+  _TxRecord(true, '1.2 SOL', '${l10n.monthDay(7, 17)} 20:04'),
+  _TxRecord(false, '300.00 USDT', '${l10n.monthDay(7, 15)} 11:47'),
+];
 
 class _SettingsTab extends StatelessWidget {
   const _SettingsTab();
@@ -449,17 +599,31 @@ class _SettingsTab extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
         const SizedBox(height: 8),
-        Row(children: [
-          Text(l10n.tabSettings, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
-          const TestnetBadge(),
-        ]),
+        Row(
+          children: [
+            Text(
+              l10n.tabSettings,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: WalletColors.text,
+              ),
+            ),
+            const TestnetBadge(),
+          ],
+        ),
         const SizedBox(height: 20),
         KtCard(
           padding: EdgeInsets.zero,
           child: Column(
             children: [
               for (final (i, item) in items.indexed) ...[
-                if (i > 0) Divider(height: 1, indent: 56, color: WalletColors.text.withValues(alpha: 0.06)),
+                if (i > 0)
+                  Divider(
+                    height: 1,
+                    indent: 56,
+                    color: WalletColors.text.withValues(alpha: 0.06),
+                  ),
                 _SettingsRow(item: item, onTap: () => context.push(item.route)),
               ],
             ],
@@ -476,19 +640,28 @@ class _SettingsRow extends StatelessWidget {
   final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) => InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          child: Row(
-            children: [
-              Icon(item.icon, size: 20, color: WalletColors.accent),
-              const SizedBox(width: 16),
-              Expanded(child: Text(item.label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: WalletColors.text))),
-              const Icon(Icons.chevron_right, size: 20, color: WalletColors.text3),
-            ],
+    onTap: onTap,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      child: Row(
+        children: [
+          Icon(item.icon, size: 20, color: WalletColors.accent),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              item.label,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: WalletColors.text,
+              ),
+            ),
           ),
-        ),
-      );
+          const Icon(Icons.chevron_right, size: 20, color: WalletColors.text3),
+        ],
+      ),
+    ),
+  );
 }
 
 class _SettingsItem {
@@ -498,17 +671,49 @@ class _SettingsItem {
 }
 
 List<_SettingsItem> _settingsItems(AppLocalizations l10n) => [
-      _SettingsItem(Icons.account_balance_wallet_outlined, l10n.settingsWalletManage, '/wallet-manage'),
-      _SettingsItem(Icons.shield_outlined, l10n.settingsSecurity, '/security'),
-      _SettingsItem(Icons.contacts_outlined, l10n.settingsAddressBook, '/address-book'),
-      _SettingsItem(Icons.hub_outlined, l10n.settingsNetwork, '/network'),
-      _SettingsItem(Icons.toll_outlined, l10n.settingsTokenManage, '/token-manage'),
-    ];
+  _SettingsItem(
+    Icons.account_balance_wallet_outlined,
+    l10n.settingsWalletManage,
+    '/wallet-manage',
+  ),
+  _SettingsItem(Icons.shield_outlined, l10n.settingsSecurity, '/security'),
+  _SettingsItem(
+    Icons.contacts_outlined,
+    l10n.settingsAddressBook,
+    '/address-book',
+  ),
+  _SettingsItem(Icons.hub_outlined, l10n.settingsNetwork, '/network'),
+  _SettingsItem(Icons.toll_outlined, l10n.settingsTokenManage, '/token-manage'),
+];
 
 const demoAssets = [
-  AssetRow(Color(0xFF26A17B), '₮', 'USDT', '500.00 USDT · TRON', r'$500.00', '0.0%', WalletColors.text3),
-  AssetRow(Color(0xFF627EEA), 'Ξ', 'Ethereum', '0.0842 ETH', r'$279.80', '+2.4%', WalletColors.green),
-  AssetRow(Color(0xFF9945FF), '◎', 'Solana', '0.531 SOL', r'$82.60', '+5.1%', WalletColors.green),
+  AssetRow(
+    Color(0xFF26A17B),
+    '₮',
+    'USDT',
+    '500.00 USDT · TRON',
+    r'$500.00',
+    '0.0%',
+    WalletColors.text3,
+  ),
+  AssetRow(
+    Color(0xFF627EEA),
+    'Ξ',
+    'Ethereum',
+    '0.0842 ETH',
+    r'$279.80',
+    '+2.4%',
+    WalletColors.green,
+  ),
+  AssetRow(
+    Color(0xFF9945FF),
+    '◎',
+    'Solana',
+    '0.531 SOL',
+    r'$82.60',
+    '+5.1%',
+    WalletColors.green,
+  ),
 ];
 
 /// Display metadata for the live native-coin rows (token balances arrive with
@@ -516,6 +721,9 @@ const demoAssets = [
 const liveChainRows = [
   (Coin.eth, 'Ethereum', 'ETH', Color(0xFF627EEA), 'Ξ'),
   (Coin.polygon, 'Polygon', 'POL', Color(0xFF8247E5), '⬡'),
+  (Coin.base, 'Base', 'ETH', Color(0xFF0052FF), 'B'),
+  (Coin.arbitrum, 'Arbitrum', 'ETH', Color(0xFF28A0F0), 'A'),
+  (Coin.avalanche, 'Avalanche', 'AVAX', Color(0xFFE84142), 'A'),
   (Coin.tron, 'TRON', 'TRX', Color(0xFF26A17B), '₮'),
   (Coin.solana, 'Solana', 'SOL', Color(0xFF9945FF), '◎'),
 ];
@@ -535,7 +743,8 @@ AssetRow liveTokenRow(MarketController market, TokenInfo token) {
   final amount = result.amount;
   final ok = result.status == BalanceStatus.ok && amount != null;
   final fiat = market.tokenFiatValueUsd(token);
-  final (color, glyph) = tokenRowMeta[token.symbol] ??
+  final (color, glyph) =
+      tokenRowMeta[token.symbol] ??
       (WalletColors.accent, token.symbol.substring(0, 1));
   return AssetRow(
     color,
@@ -553,27 +762,35 @@ AssetRow liveTokenRow(MarketController market, TokenInfo token) {
 /// fabricated number); no 24h-change feed exists yet, so the change column
 /// stays empty in live mode.
 List<AssetRow> liveAssetRows(MarketController market) => [
-      for (final (coin, name, symbol, color, glyph) in liveChainRows)
-        () {
-          final result = market.balanceFor(coin);
-          final amount = result.amount;
-          final ok = result.status == BalanceStatus.ok && amount != null;
-          final fiat = market.fiatValueUsd(coin);
-          return AssetRow(
-            color,
-            glyph,
-            name,
-            ok ? '${amount.format(maxFraction: 6)} $symbol' : '-- $symbol',
-            fiat == null ? '--' : formatUsd(fiat),
-            '',
-            WalletColors.text3,
-          );
-        }(),
-      for (final token in market.tokens) liveTokenRow(market, token),
-    ];
+  for (final (coin, name, symbol, color, glyph) in liveChainRows)
+    () {
+      final result = market.balanceFor(coin);
+      final amount = result.amount;
+      final ok = result.status == BalanceStatus.ok && amount != null;
+      final fiat = market.fiatValueUsd(coin);
+      return AssetRow(
+        color,
+        glyph,
+        name,
+        ok ? '${amount.format(maxFraction: 6)} $symbol' : '-- $symbol',
+        fiat == null ? '--' : formatUsd(fiat),
+        '',
+        WalletColors.text3,
+      );
+    }(),
+  for (final token in market.tokens) liveTokenRow(market, token),
+];
 
 class AssetRow {
-  const AssetRow(this.color, this.letter, this.name, this.sub, this.value, this.change, this.changeColor);
+  const AssetRow(
+    this.color,
+    this.letter,
+    this.name,
+    this.sub,
+    this.value,
+    this.change,
+    this.changeColor,
+  );
   final Color color;
   final String letter, name, sub, value, change;
   final Color changeColor;
@@ -597,27 +814,42 @@ class _Header extends StatelessWidget {
             GestureDetector(
               onTap: onTapPill,
               child: Container(
-              padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
-              decoration: BoxDecoration(
-                color: WalletColors.surface,
-                borderRadius: BorderRadius.circular(999),
+                padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
+                decoration: BoxDecoration(
+                  color: WalletColors.surface,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _Avatar(
+                      color: Color(wallet.avatarColor),
+                      initial: wallet.name.characters.first,
+                      size: 26,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      wallet.name,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: WalletColors.text,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    WalletTypeBadge(
+                      kind: isHot ? WalletKind.hot : WalletKind.watch,
+                      label: isHot ? l10n.walletKindHot : l10n.walletKindWatch,
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 18,
+                      color: WalletColors.text2,
+                    ),
+                  ],
+                ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _Avatar(color: Color(wallet.avatarColor), initial: wallet.name.characters.first, size: 26),
-                  const SizedBox(width: 8),
-                  Text(wallet.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
-                  const SizedBox(width: 8),
-                  WalletTypeBadge(
-                    kind: isHot ? WalletKind.hot : WalletKind.watch,
-                    label: isHot ? l10n.walletKindHot : l10n.walletKindWatch,
-                  ),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.keyboard_arrow_down, size: 18, color: WalletColors.text2),
-                ],
-              ),
-            ),
             ),
             // Amber testnet pill next to the wallet pill whenever ANY active
             // chain is a testnet; renders nothing (zero-size) on all-mainnet,
@@ -628,7 +860,11 @@ class _Header extends StatelessWidget {
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTapSettings,
-          child: const Icon(Icons.settings_outlined, size: 22, color: WalletColors.text2),
+          child: const Icon(
+            Icons.settings_outlined,
+            size: 22,
+            color: WalletColors.text2,
+          ),
         ),
       ],
     );
@@ -636,18 +872,29 @@ class _Header extends StatelessWidget {
 }
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.color, required this.initial, required this.size});
+  const _Avatar({
+    required this.color,
+    required this.initial,
+    required this.size,
+  });
   final Color color;
   final String initial;
   final double size;
   @override
   Widget build(BuildContext context) => Container(
-        width: size,
-        height: size,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        child: Text(initial, style: TextStyle(fontSize: size * 0.46, fontWeight: FontWeight.w600, color: Colors.white)),
-      );
+    width: size,
+    height: size,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    child: Text(
+      initial,
+      style: TextStyle(
+        fontSize: size * 0.46,
+        fontWeight: FontWeight.w600,
+        color: Colors.white,
+      ),
+    ),
+  );
 }
 
 /// Compact amber "TESTNET" pill, visible on every home tab whenever ANY
@@ -700,16 +947,22 @@ class _FiatHiddenTestnetNote extends StatelessWidget {
         color: WalletColors.surface,
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Row(children: [
-        const Icon(Icons.science_outlined, size: 14, color: WalletColors.amber),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            l10n.fiatHiddenTestnet,
-            style: const TextStyle(fontSize: 12, color: WalletColors.text3),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.science_outlined,
+            size: 14,
+            color: WalletColors.amber,
           ),
-        ),
-      ]),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              l10n.fiatHiddenTestnet,
+              style: const TextStyle(fontSize: 12, color: WalletColors.text3),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -724,13 +977,36 @@ class _BackupBanner extends StatelessWidget {
       onTap: () => context.push('/create-warn'),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(color: WalletColors.amber.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
+        decoration: BoxDecoration(
+          color: WalletColors.amber.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+        ),
         child: Row(
           children: [
-            const Icon(Icons.warning_amber_rounded, size: 16, color: WalletColors.amber),
+            const Icon(
+              Icons.warning_amber_rounded,
+              size: 16,
+              color: WalletColors.amber,
+            ),
             const SizedBox(width: 10),
-            Expanded(child: Text(l10n.backupBannerText, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF9A6503)))),
-            Text(l10n.backupNow, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: WalletColors.amber)),
+            Expanded(
+              child: Text(
+                l10n.backupBannerText,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF9A6503),
+                ),
+              ),
+            ),
+            Text(
+              l10n.backupNow,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: WalletColors.amber,
+              ),
+            ),
           ],
         ),
       ),
@@ -753,20 +1029,46 @@ class _BalanceState extends State<_Balance> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(children: [
-          Text(l10n.balanceTitle, style: const TextStyle(fontSize: 13, color: WalletColors.text2)),
-          const SizedBox(width: 6),
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => setState(() => _hidden = !_hidden),
-            child: Icon(_hidden ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 14, color: WalletColors.text3),
-          ),
-        ]),
+        Row(
+          children: [
+            Text(
+              l10n.balanceTitle,
+              style: const TextStyle(fontSize: 13, color: WalletColors.text2),
+            ),
+            const SizedBox(width: 6),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setState(() => _hidden = !_hidden),
+              child: Icon(
+                _hidden
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                size: 14,
+                color: WalletColors.text3,
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 6),
-        Text(_hidden ? '••••••' : widget.amount, style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: WalletColors.text)),
+        Text(
+          _hidden ? '••••••' : widget.amount,
+          style: const TextStyle(
+            fontSize: 36,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.5,
+            color: WalletColors.text,
+          ),
+        ),
         if (widget.change.isNotEmpty) ...[
           const SizedBox(height: 6),
-          Text(_hidden ? '••••' : widget.change, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.green)),
+          Text(
+            _hidden ? '••••' : widget.change,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: WalletColors.green,
+            ),
+          ),
         ],
       ],
     );
@@ -800,17 +1102,33 @@ class _ActionRow extends StatelessWidget {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: route == null ? onMore : () => context.push(route),
-            child: Column(children: [
-              Container(
-                width: 54,
-                height: 54,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(color: primary ? WalletColors.accent : WalletColors.surface, shape: BoxShape.circle),
-                child: Icon(icon, size: 22, color: primary ? Colors.white : WalletColors.accent),
-              ),
-              const SizedBox(height: 8),
-              Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: WalletColors.text2)),
-            ]),
+            child: Column(
+              children: [
+                Container(
+                  width: 54,
+                  height: 54,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: primary ? WalletColors.accent : WalletColors.surface,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 22,
+                    color: primary ? Colors.white : WalletColors.accent,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: WalletColors.text2,
+                  ),
+                ),
+              ],
+            ),
           ),
       ],
     );
@@ -837,12 +1155,14 @@ class _NetworkChips extends StatelessWidget {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
-      child: Row(children: [
-        for (final (i, (chain, dot)) in _chainDots.indexed) ...[
-          if (i > 0) const SizedBox(width: 8),
-          NetworkBadge(label: networks.activeFor(chain).name, dotColor: dot),
+      child: Row(
+        children: [
+          for (final (i, (chain, dot)) in _chainDots.indexed) ...[
+            if (i > 0) const SizedBox(width: 8),
+            NetworkBadge(label: networks.activeFor(chain).name, dotColor: dot),
+          ],
         ],
-      ]),
+      ),
     );
   }
 }
@@ -856,21 +1176,43 @@ class _AssetsCard extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: WalletColors.surface, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: WalletColors.surface,
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(l10n.tabAssets, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
+              Text(
+                l10n.tabAssets,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: WalletColors.text,
+                ),
+              ),
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: onViewAll,
-                child: Row(children: [
-                  Text(l10n.viewAll, style: const TextStyle(fontSize: 13, color: WalletColors.text2)),
-                  const Icon(Icons.chevron_right, size: 14, color: WalletColors.text2),
-                ]),
+                child: Row(
+                  children: [
+                    Text(
+                      l10n.viewAll,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: WalletColors.text2,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.chevron_right,
+                      size: 14,
+                      color: WalletColors.text2,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -894,29 +1236,58 @@ class _AssetTile extends StatelessWidget {
   final AssetRow a;
   @override
   Widget build(BuildContext context) => Row(
+    children: [
+      TokenIcon(
+        symbol: a.name,
+        size: 40,
+        fallbackColor: a.color,
+        fallbackInitial: a.letter,
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              a.name,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: WalletColors.text,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              a.sub,
+              style: const TextStyle(fontSize: 12, color: WalletColors.text2),
+            ),
+          ],
+        ),
+      ),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          TokenIcon(symbol: a.name, size: 40, fallbackColor: a.color, fallbackInitial: a.letter),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(a.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
-                const SizedBox(height: 3),
-                Text(a.sub, style: const TextStyle(fontSize: 12, color: WalletColors.text2)),
-              ],
+          Text(
+            a.value,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: WalletColors.text,
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(a.value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
-              const SizedBox(height: 3),
-              Text(a.change, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: a.changeColor)),
-            ],
+          const SizedBox(height: 3),
+          Text(
+            a.change,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: a.changeColor,
+            ),
           ),
         ],
-      );
+      ),
+    ],
+  );
 }
 
 class _TabBar extends StatelessWidget {
@@ -941,7 +1312,13 @@ class _TabBar extends StatelessWidget {
         decoration: BoxDecoration(
           color: WalletColors.surface,
           borderRadius: BorderRadius.circular(28),
-          boxShadow: [BoxShadow(color: WalletColors.text.withValues(alpha: 0.08), blurRadius: 24, offset: const Offset(0, 8))],
+          boxShadow: [
+            BoxShadow(
+              color: WalletColors.text.withValues(alpha: 0.08),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
         child: Row(
           children: [
@@ -951,13 +1328,35 @@ class _TabBar extends StatelessWidget {
                   behavior: HitTestBehavior.opaque,
                   onTap: () => onTap(i),
                   child: Container(
-                    decoration: BoxDecoration(color: i == selected ? WalletColors.accent.withValues(alpha: 0.08) : null, borderRadius: BorderRadius.circular(22)),
+                    decoration: BoxDecoration(
+                      color: i == selected
+                          ? WalletColors.accent.withValues(alpha: 0.08)
+                          : null,
+                      borderRadius: BorderRadius.circular(22),
+                    ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(tab.$2, size: 22, color: i == selected ? WalletColors.accent : WalletColors.text3),
+                        Icon(
+                          tab.$2,
+                          size: 22,
+                          color: i == selected
+                              ? WalletColors.accent
+                              : WalletColors.text3,
+                        ),
                         const SizedBox(height: 2),
-                        Text(tab.$1, style: TextStyle(fontSize: 10, fontWeight: i == selected ? FontWeight.w600 : FontWeight.w500, color: i == selected ? WalletColors.accent : WalletColors.text3)),
+                        Text(
+                          tab.$1,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: i == selected
+                                ? FontWeight.w600
+                                : FontWeight.w500,
+                            color: i == selected
+                                ? WalletColors.accent
+                                : WalletColors.text3,
+                          ),
+                        ),
                       ],
                     ),
                   ),

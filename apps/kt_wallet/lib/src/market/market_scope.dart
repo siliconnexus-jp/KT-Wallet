@@ -31,19 +31,22 @@ class MarketScope extends InheritedNotifier<MarketController> {
   /// Reads the controller without registering a dependency — safe outside
   /// build (post-frame refresh triggers, pull-to-refresh callbacks).
   static MarketController? read(BuildContext context) {
-    final element =
-        context.getElementForInheritedWidgetOfExactType<MarketScope>();
+    final element = context
+        .getElementForInheritedWidgetOfExactType<MarketScope>();
     return (element?.widget as MarketScope?)?.notifier;
   }
 }
 
 /// The [Chain] (protocol family) served by an RPC-endpoint [Coin] slot.
 Chain chainForRpcCoin(Coin coin) => switch (coin) {
-      Coin.eth => Chain.ethereum,
-      Coin.polygon => Chain.polygon,
-      Coin.tron => Chain.tron,
-      Coin.solana => Chain.solana,
-    };
+  Coin.eth => Chain.ethereum,
+  Coin.polygon => Chain.polygon,
+  Coin.base => Chain.base,
+  Coin.arbitrum => Chain.arbitrum,
+  Coin.avalanche => Chain.avalanche,
+  Coin.tron => Chain.tron,
+  Coin.solana => Chain.solana,
+};
 
 /// Builds the effective per-chain endpoint resolver, precedence highest first:
 ///
@@ -58,7 +61,9 @@ Chain chainForRpcCoin(Coin coin) => switch (coin) {
 /// skips that level (a null [networks] reproduces the pre-network behavior
 /// exactly, because the mainnet profile's URLs equal the built-in defaults).
 RpcEndpointResolver effectiveRpcEndpoints(
-        AppPrefsController? prefs, NetworkController? networks) =>
+  AppPrefsController? prefs,
+  NetworkController? networks,
+) =>
     (Coin coin) =>
         prefs?.rpcOverride(coin) ??
         networks?.activeFor(chainForRpcCoin(coin)).rpcUrl ??
@@ -75,12 +80,12 @@ RpcEndpointResolver prefsRpcEndpoints(AppPrefsController? prefs) =>
 /// full mainnet registry, i.e. today's behavior.
 TokenRegistryResolver networkTokenRegistry(NetworkController? networks) =>
     () => networks == null
-        ? builtinTokens
-        : [
-            for (final chain in Chain.values)
-              ...builtinTokensByNetworkId[networks.activeFor(chain).id] ??
-                  const <TokenInfo>[],
-          ];
+    ? builtinTokens
+    : [
+        for (final chain in Chain.values)
+          ...builtinTokensByNetworkId[networks.activeFor(chain).id] ??
+              const <TokenInfo>[],
+      ];
 
 /// Builds the gateway resolver backing the OPTIONAL gateway mode: it returns
 /// a [GatewayClient] for the currently persisted `gateway.url`, or null when
@@ -151,15 +156,16 @@ class _MarketScopeHostState extends State<MarketScopeHost> {
   /// resolvers on every fetch.
   NetworkController? _networks;
 
-  late final MarketController _controller = widget.controller ??
+  late final MarketController _controller =
+      widget.controller ??
       MarketController(
         wallets: widget.wallets,
-        balances: BalanceService(
-            endpoints: _endpoints, gateway: _gateway),
+        balances: BalanceService(endpoints: _endpoints, gateway: _gateway),
         tokens: TokenBalanceService(
-            endpoints: _endpoints,
-            gateway: _gateway,
-            registry: () => networkTokenRegistry(_networks)()),
+          endpoints: _endpoints,
+          gateway: _gateway,
+          registry: () => networkTokenRegistry(_networks)(),
+        ),
         prices: PriceService(gateway: _gateway),
         isTestnet: (coin) =>
             _networks?.activeFor(chainForRpcCoin(coin)).isTestnet ?? false,

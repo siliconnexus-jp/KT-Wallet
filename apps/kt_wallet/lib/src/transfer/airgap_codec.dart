@@ -18,33 +18,46 @@ import 'transfer_draft.dart';
 /// SLIP-44 coin types (same convention as the airgap_protocol fixtures and
 /// the wallet-core derivation paths).
 int coinForChain(Chain chain) => switch (chain) {
-      Chain.ethereum => 60,
-      Chain.polygon => 966,
-      Chain.tron => 195,
-      Chain.solana => 501,
-    };
+  Chain.ethereum => 60,
+  Chain.polygon => 966,
+  Chain.base => 8453,
+  Chain.arbitrum => 42161,
+  Chain.avalanche => 9000,
+  Chain.tron => 195,
+  Chain.solana => 501,
+};
 
 Chain chainForCoin(int coin) => switch (coin) {
-      60 => Chain.ethereum,
-      966 => Chain.polygon,
-      195 => Chain.tron,
-      501 => Chain.solana,
-      _ => throw ArgumentError('unsupported coin type $coin'),
-    };
+  60 => Chain.ethereum,
+  966 => Chain.polygon,
+  8453 => Chain.base,
+  42161 => Chain.arbitrum,
+  9000 => Chain.avalanche,
+  195 => Chain.tron,
+  501 => Chain.solana,
+  _ => throw ArgumentError('unsupported coin type $coin'),
+};
 
 /// DEFAULT (mainnet) EVM chain id where applicable; null for non-EVM chains.
 /// The live transfer flow passes the ACTIVE network's evmChainId instead
 /// (Sepolia 11155111, Amoy 80002, ...) — these constants only back demo /
 /// golden renderings and callers without a network source.
 int? chainIdForChain(Chain chain) => switch (chain) {
-      Chain.ethereum => 1,
-      Chain.polygon => 137,
-      _ => null,
-    };
+  Chain.ethereum => 1,
+  Chain.polygon => 137,
+  Chain.base => 8453,
+  Chain.arbitrum => 42161,
+  Chain.avalanche => 43114,
+  _ => null,
+};
 
-String addressForChain(ChainAddresses addresses, Chain chain) => switch (chain) {
+String addressForChain(ChainAddresses addresses, Chain chain) =>
+    switch (chain) {
       Chain.ethereum => addresses.eth,
       Chain.polygon => addresses.polygon,
+      Chain.base => addresses.base,
+      Chain.arbitrum => addresses.arbitrum,
+      Chain.avalanche => addresses.avalanche,
       Chain.tron => addresses.tron,
       Chain.solana => addresses.solana,
     };
@@ -58,9 +71,16 @@ Amount networkFeeFor(Chain chain, int feeTier) {
     Chain.tron => (('6.8', '13.7', '27.4'), 6, 'TRX'),
     Chain.ethereum => (('0.00021', '0.00042', '0.00084'), 18, 'ETH'),
     Chain.polygon => (('0.01', '0.02', '0.04'), 18, 'POL'),
+    Chain.base => (('0.000001', '0.000002', '0.000004'), 18, 'ETH'),
+    Chain.arbitrum => (('0.00001', '0.00002', '0.00004'), 18, 'ETH'),
+    Chain.avalanche => (('0.0005', '0.001', '0.002'), 18, 'AVAX'),
     Chain.solana => (('0.000005', '0.00001', '0.00002'), 9, 'SOL'),
   };
-  final value = switch (feeTier) { 0 => tiers.$1, 2 => tiers.$3, _ => tiers.$2 };
+  final value = switch (feeTier) {
+    0 => tiers.$1,
+    2 => tiers.$3,
+    _ => tiers.$2,
+  };
   return Amount.parse(value, decimals, symbol: symbol);
 }
 
@@ -114,8 +134,16 @@ const demoFromAddress = 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa';
 
 /// Fixed demo reqId — its first three bytes render as the design's
 /// `REQ-7F3A2C` label, and being constant keeps the demo QR golden-stable.
-final Uint8List demoReqId =
-    Uint8List.fromList(const [0x7F, 0x3A, 0x2C, 0x91, 0x5D, 0x08, 0xB4, 0xE6]);
+final Uint8List demoReqId = Uint8List.fromList(const [
+  0x7F,
+  0x3A,
+  0x2C,
+  0x91,
+  0x5D,
+  0x08,
+  0xB4,
+  0xE6,
+]);
 
 /// Fixed demo timestamp (2026-01-01T00:00:00Z) for golden determinism.
 const demoCreatedAtSec = 1767225600;
@@ -125,7 +153,8 @@ const demoCreatedAtSec = 1767225600;
 Uint8List randomReqId() {
   final rng = Random.secure();
   return Uint8List.fromList(
-      List.generate(AirgapLimits.reqIdLength, (_) => rng.nextInt(256)));
+    List.generate(AirgapLimits.reqIdLength, (_) => rng.nextInt(256)),
+  );
 }
 
 /// Expiry window for a displayed sign-request (well under
@@ -155,7 +184,11 @@ Uint8List rawTxFor(
   BigInt? maxFeePerGas,
   int? evmChainId,
 }) {
-  if (draft.chain == Chain.ethereum || draft.chain == Chain.polygon) {
+  if (draft.chain == Chain.ethereum ||
+      draft.chain == Chain.polygon ||
+      draft.chain == Chain.base ||
+      draft.chain == Chain.arbitrum ||
+      draft.chain == Chain.avalanche) {
     final intent = TransferIntent(
       chain: draft.chain,
       operation: draft.operation,
@@ -173,7 +206,13 @@ Uint8List rawTxFor(
       nonce: nonce ?? BigInt.zero,
       maxPriorityFeePerGas: maxPriorityFeePerGas ?? BigInt.two * gwei,
       maxFeePerGas: maxFeePerGas ?? BigInt.from(40) * gwei,
-      gasLimit: BigInt.from(draft.operation == TxOperation.nativeTransfer ? 21000 : 65000),
+      // Arbitrum accounts for L1 posting overhead in its gas estimate, so a
+      // plain 21,000 limit is rejected as "intrinsic gas too low".
+      gasLimit: BigInt.from(
+        draft.operation == TxOperation.nativeTransfer
+            ? (draft.chain == Chain.arbitrum ? 100000 : 21000)
+            : (draft.chain == Chain.arbitrum ? 150000 : 65000),
+      ),
     );
     return tx.encodeUnsigned();
   }
@@ -184,18 +223,22 @@ Uint8List rawTxFor(
 /// serialization isn't integrated yet (TRON protobuf, Solana message):
 /// utf8 of the canonical JSON of the transfer intent.
 Uint8List _jsonRawTx(TransferDraft draft, {required String from}) =>
-    Uint8List.fromList(utf8.encode(json.encode({
-      'v': 1,
-      'chain': draft.chain.name,
-      'operation': draft.operation.name,
-      'from': from,
-      'to': draft.recipient,
-      'amountRaw': draft.amount.raw.toString(),
-      'decimals': draft.decimals,
-      'symbol': draft.symbol,
-      if (draft.tokenContract != null) 'contract': draft.tokenContract,
-      'fee': networkFeeFor(draft.chain, draft.feeTier).toString(),
-    })));
+    Uint8List.fromList(
+      utf8.encode(
+        json.encode({
+          'v': 1,
+          'chain': draft.chain.name,
+          'operation': draft.operation.name,
+          'from': from,
+          'to': draft.recipient,
+          'amountRaw': draft.amount.raw.toString(),
+          'decimals': draft.decimals,
+          'symbol': draft.symbol,
+          if (draft.tokenContract != null) 'contract': draft.tokenContract,
+          'fee': networkFeeFor(draft.chain, draft.feeTier).toString(),
+        }),
+      ),
+    );
 
 /// Back-compat alias for existing tests/callers; the demo (TRON) draft keeps
 /// its JSON placeholder shape under either name.
@@ -232,7 +275,8 @@ SignRequest buildSignRequest({
   final live = draft != null;
   final d = draft ?? demoDraft;
   final created =
-      nowEpochSeconds ?? (live ? DateTime.now().millisecondsSinceEpoch ~/ 1000 : demoCreatedAtSec);
+      nowEpochSeconds ??
+      (live ? DateTime.now().millisecondsSinceEpoch ~/ 1000 : demoCreatedAtSec);
   final id = walletId.length > AirgapLimits.maxWalletId
       ? walletId.substring(0, AirgapLimits.maxWalletId)
       : walletId;
@@ -242,8 +286,9 @@ SignRequest buildSignRequest({
     coin: coinForChain(d.chain),
     // Non-EVM chains have no signing-domain id; EVM chains carry the active
     // network's (defaulting to mainnet).
-    chainId:
-        chainIdForChain(d.chain) == null ? null : (evmChainId ?? chainIdForChain(d.chain)),
+    chainId: chainIdForChain(d.chain) == null
+        ? null
+        : (evmChainId ?? chainIdForChain(d.chain)),
     rawTx: rawTxFor(
       d,
       from: fromAddress,
@@ -271,11 +316,15 @@ const airgapChunkSize = 120;
 
 /// Fragments a payload and encodes each frame as the base64url string that a
 /// single QR in the animation carries.
-List<String> encodeQrFrames(AirgapPayload payload, {required Uint8List reqId}) => [
-      for (final frame in Fragmenter(chunkSize: airgapChunkSize)
-          .fragment(payload.encode(), reqId: reqId))
-        base64Url.encode(frame.encode()),
-    ];
+List<String> encodeQrFrames(
+  AirgapPayload payload, {
+  required Uint8List reqId,
+}) => [
+  for (final frame in Fragmenter(
+    chunkSize: airgapChunkSize,
+  ).fragment(payload.encode(), reqId: reqId))
+    base64Url.encode(frame.encode()),
+];
 
 // ---- sign-result (simulated signer) -------------------------------------------
 
@@ -284,8 +333,10 @@ List<String> encodeQrFrames(AirgapPayload payload, {required Uint8List reqId}) =
 /// — and the signer's key — stay simulated); everything around them is the
 /// genuine AIRGAP-V1 encoding.
 SignResult buildDemoSignResult(SignRequest request, {required String signer}) {
-  final signedTx =
-      Uint8List.fromList([...utf8.encode('SIGNED-V1:'), ...request.rawTx]);
+  final signedTx = Uint8List.fromList([
+    ...utf8.encode('SIGNED-V1:'),
+    ...request.rawTx,
+  ]);
   return SignResult(
     reqId: request.reqId,
     walletId: request.walletId,
@@ -300,15 +351,20 @@ SignResult buildDemoSignResult(SignRequest request, {required String signer}) {
 /// aggregate (dedupe/CRC via [FrameAggregator]), decode the payload, and
 /// verify it answers [expected] (reqId / walletId / coin must match — the
 /// return-path counterpart of the signer's §3.4 checks).
-SignResult decodeSignResultFrames(List<String> qrFrames, {required SignRequest expected}) {
+SignResult decodeSignResultFrames(
+  List<String> qrFrames, {
+  required SignRequest expected,
+}) {
   final aggregator = FrameAggregator();
   for (final qr in qrFrames) {
     aggregator.addFrame(AirgapFrame.decode(base64Url.decode(qr)));
     if (aggregator.state == AggregatorState.done) break;
   }
   if (aggregator.state != AggregatorState.done) {
-    throw StateError('incomplete frame set: ${aggregator.state}'
-        '${aggregator.failure == null ? '' : ' (${aggregator.failure})'}');
+    throw StateError(
+      'incomplete frame set: ${aggregator.state}'
+      '${aggregator.failure == null ? '' : ' (${aggregator.failure})'}',
+    );
   }
   return verifySignResultPayload(aggregator.payload!, expected: expected);
 }
@@ -316,7 +372,10 @@ SignResult decodeSignResultFrames(List<String> qrFrames, {required SignRequest e
 /// Decodes an assembled payload as a [SignResult] and verifies it answers
 /// [expected] — the shared tail of [decodeSignResultFrames], also used by the
 /// live camera path where frames arrive one by one instead of as a list.
-SignResult verifySignResultPayload(Uint8List payload, {required SignRequest expected}) {
+SignResult verifySignResultPayload(
+  Uint8List payload, {
+  required SignRequest expected,
+}) {
   final decoded = AirgapPayload.decode(payload);
   if (decoded is! SignResult) {
     throw StateError('expected a sign-result payload, got ${decoded.type}');
@@ -341,5 +400,5 @@ String hexEncode(List<int> bytes) =>
 /// `TQm9xPa2Wc8h…` → `TQm9…3kFa`-style middle truncation for address display.
 String truncateMiddle(String value, {int head = 8, int tail = 8}) =>
     value.length <= head + tail
-        ? value
-        : '${value.substring(0, head)}…${value.substring(value.length - tail)}';
+    ? value
+    : '${value.substring(0, head)}…${value.substring(value.length - tail)}';

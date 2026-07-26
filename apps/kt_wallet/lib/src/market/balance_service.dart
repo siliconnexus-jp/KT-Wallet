@@ -7,8 +7,11 @@ import 'gateway_client.dart';
 
 /// Default public mainnet endpoints (no API keys). Overridable per instance
 /// for tests or self-hosted nodes.
-const String defaultEthRpcUrl = 'https://eth.llamarpc.com';
-const String defaultPolygonRpcUrl = 'https://polygon-rpc.com';
+const String defaultEthRpcUrl = 'https://ethereum-rpc.publicnode.com';
+const String defaultPolygonRpcUrl = 'https://polygon-bor-rpc.publicnode.com';
+const String defaultBaseRpcUrl = 'https://mainnet.base.org';
+const String defaultArbitrumRpcUrl = 'https://arb1.arbitrum.io/rpc';
+const String defaultAvalancheRpcUrl = 'https://api.avax.network/ext/bc/C/rpc';
 
 /// TronGrid REST base URL — the [TronRpc] client speaks TronGrid's REST API
 /// (`/v1/accounts/...`, `/wallet/...`), not JSON-RPC, so it takes the
@@ -24,11 +27,14 @@ typedef RpcEndpointResolver = String Function(Coin coin);
 /// The built-in default endpoint per chain — the resolver used when no
 /// override source is wired up (tests, gallery).
 String defaultRpcEndpointFor(Coin coin) => switch (coin) {
-      Coin.eth => defaultEthRpcUrl,
-      Coin.polygon => defaultPolygonRpcUrl,
-      Coin.tron => defaultTronApiUrl,
-      Coin.solana => defaultSolanaRpcUrl,
-    };
+  Coin.eth => defaultEthRpcUrl,
+  Coin.polygon => defaultPolygonRpcUrl,
+  Coin.base => defaultBaseRpcUrl,
+  Coin.arbitrum => defaultArbitrumRpcUrl,
+  Coin.avalanche => defaultAvalancheRpcUrl,
+  Coin.tron => defaultTronApiUrl,
+  Coin.solana => defaultSolanaRpcUrl,
+};
 
 /// Per-chain fetch outcome. Chains are independent: one failing endpoint (or
 /// one invalid address) never taints the others.
@@ -37,16 +43,12 @@ enum BalanceStatus { loading, ok, error, unsupported }
 /// A native-coin balance for one chain, or the reason there isn't one.
 /// [amount] is non-null iff [status] == [BalanceStatus.ok].
 class BalanceResult {
-  const BalanceResult.loading()
-      : amount = null,
-        status = BalanceStatus.loading;
+  const BalanceResult.loading() : amount = null, status = BalanceStatus.loading;
   BalanceResult.ok(Amount this.amount) : status = BalanceStatus.ok;
-  const BalanceResult.error()
-      : amount = null,
-        status = BalanceStatus.error;
+  const BalanceResult.error() : amount = null, status = BalanceStatus.error;
   const BalanceResult.unsupported()
-      : amount = null,
-        status = BalanceStatus.unsupported;
+    : amount = null,
+      status = BalanceStatus.unsupported;
 
   final Amount? amount;
   final BalanceStatus status;
@@ -67,10 +69,10 @@ class BalanceService {
     RestTransport? restTransport,
     RpcEndpointResolver? endpoints,
     GatewayResolver? gateway,
-  })  : _jsonRpc = jsonRpcTransport ?? HttpJsonRpcTransport(),
-        _rest = restTransport ?? HttpRestTransport(),
-        _endpoints = endpoints ?? defaultRpcEndpointFor,
-        _gateway = gateway ?? _noGateway;
+  }) : _jsonRpc = jsonRpcTransport ?? HttpJsonRpcTransport(),
+       _rest = restTransport ?? HttpRestTransport(),
+       _endpoints = endpoints ?? defaultRpcEndpointFor,
+       _gateway = gateway ?? _noGateway;
 
   static GatewayClient? _noGateway() => null;
 
@@ -88,6 +90,9 @@ class BalanceService {
   static const decimalsFor = {
     Coin.eth: 18,
     Coin.polygon: 18,
+    Coin.base: 18,
+    Coin.arbitrum: 18,
+    Coin.avalanche: 18,
     Coin.tron: 6,
     Coin.solana: 9,
   };
@@ -96,6 +101,9 @@ class BalanceService {
   static const symbolFor = {
     Coin.eth: 'ETH',
     Coin.polygon: 'POL',
+    Coin.base: 'ETH',
+    Coin.arbitrum: 'ETH',
+    Coin.avalanche: 'AVAX',
     Coin.tron: 'TRX',
     Coin.solana: 'SOL',
   };
@@ -113,18 +121,30 @@ class BalanceService {
   Future<Map<Coin, BalanceResult>> fetchAll(ChainAddresses addresses) async {
     final eth = EvmRpc(url: _endpoints(Coin.eth), transport: _jsonRpc);
     final polygon = EvmRpc(url: _endpoints(Coin.polygon), transport: _jsonRpc);
+    final base = EvmRpc(url: _endpoints(Coin.base), transport: _jsonRpc);
+    final arbitrum = EvmRpc(
+      url: _endpoints(Coin.arbitrum),
+      transport: _jsonRpc,
+    );
+    final avalanche = EvmRpc(
+      url: _endpoints(Coin.avalanche),
+      transport: _jsonRpc,
+    );
     final tron = TronRpc(baseUrl: _endpoints(Coin.tron), transport: _rest);
     final solana = SolanaRpc(url: _endpoints(Coin.solana), transport: _jsonRpc);
 
     final direct = {
       Coin.eth: () => eth.getBalance(addresses.eth),
       Coin.polygon: () => polygon.getBalance(addresses.polygon),
+      Coin.base: () => base.getBalance(addresses.base),
+      Coin.arbitrum: () => arbitrum.getBalance(addresses.arbitrum),
+      Coin.avalanche: () => avalanche.getBalance(addresses.avalanche),
       Coin.tron: () => tron.getTrxBalance(addresses.tron),
       Coin.solana: () => solana.getBalance(addresses.solana),
     };
     final gateway = _gateway();
     final entries = await Future.wait([
-      for (final coin in Coin.values)
+      for (final coin in addresses.enabledCoins)
         _fetchChain(gateway, coin, addresses.forCoin(coin), direct[coin]!),
     ]);
     return {for (final (coin, result) in entries) coin: result};
@@ -138,16 +158,20 @@ class BalanceService {
   ) async {
     if (gateway != null) {
       try {
-        final balances =
-            await gateway.getBalances(chain: coin, address: address);
+        final balances = await gateway.getBalances(
+          chain: coin,
+          address: address,
+        );
         final native = balances.native;
         return (
           coin,
-          BalanceResult.ok(Amount(
-            raw: native.raw,
-            decimals: native.decimals,
-            symbol: native.symbol,
-          )),
+          BalanceResult.ok(
+            Amount(
+              raw: native.raw,
+              decimals: native.decimals,
+              symbol: native.symbol,
+            ),
+          ),
         );
       } catch (_) {
         // GatewayException / transport failure / malformed answer: fall back
@@ -158,16 +182,20 @@ class BalanceService {
   }
 
   Future<(Coin, BalanceResult)> _guard(
-      Coin coin, Future<BigInt> Function() fetch) async {
+    Coin coin,
+    Future<BigInt> Function() fetch,
+  ) async {
     try {
       final raw = await fetch();
       return (
         coin,
-        BalanceResult.ok(Amount(
-          raw: raw,
-          decimals: decimalsFor[coin]!,
-          symbol: symbolFor[coin]!,
-        )),
+        BalanceResult.ok(
+          Amount(
+            raw: raw,
+            decimals: decimalsFor[coin]!,
+            symbol: symbolFor[coin]!,
+          ),
+        ),
       );
     } catch (_) {
       // RpcException / TimeoutException / ClientException / FormatException /

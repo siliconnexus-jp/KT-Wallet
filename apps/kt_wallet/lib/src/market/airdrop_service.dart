@@ -20,10 +20,11 @@ class AirdropException implements Exception {
 /// external site involved). The client is injectable so widget tests assert
 /// the exact request; production constructs its own and [close]s it.
 class AirdropService {
-  AirdropService(
-      {http.Client? client, this.timeout = const Duration(seconds: 10)})
-      : _client = client ?? http.Client(),
-        _ownsClient = client == null;
+  AirdropService({
+    http.Client? client,
+    this.timeout = const Duration(seconds: 10),
+  }) : _client = client ?? http.Client(),
+       _ownsClient = client == null;
 
   final http.Client _client;
   final bool _ownsClient;
@@ -60,7 +61,11 @@ class AirdropService {
       throw AirdropException('$e');
     }
     if (resp.statusCode != 200) {
-      throw AirdropException('HTTP ${resp.statusCode}');
+      final retryAfter = resp.headers['retry-after'];
+      throw AirdropException(
+        'HTTP ${resp.statusCode}'
+        '${retryAfter == null ? '' : ' (retry after $retryAfter)'}',
+      );
     }
     final Object? decoded;
     try {

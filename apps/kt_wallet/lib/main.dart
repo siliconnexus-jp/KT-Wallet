@@ -105,7 +105,15 @@ Future<void> _seedFirstRun(
 ) async {
   final id = 'daily';
   final mnemonic = await crypto.generateMnemonic();
-  await crypto.storeWallet(walletId: id, mnemonic: mnemonic);
+  // The first-run bootstrap happens before the app has a screen from which it
+  // can reliably complete a biometric/device-credential prompt. The mnemonic
+  // is still encrypted by an Android Keystore-backed key; interactive auth is
+  // reserved for later sensitive operations once the wallet UI is available.
+  await crypto.storeWallet(
+    walletId: id,
+    mnemonic: mnemonic,
+    requireAuth: false,
+  );
   final addresses = await crypto.deriveAddresses(id);
   await store.save(
     HotWallet(
@@ -636,12 +644,15 @@ class KtWalletApp extends StatefulWidget {
     super.key,
     WalletController? controller,
     LocaleController? localeController,
+    NetworkController? networkController,
     this.initialLocation = '/',
   }) : controller = controller ?? _seedController(),
-       localeController = localeController ?? LocaleController();
+       localeController = localeController ?? LocaleController(),
+       networkController = networkController ?? NetworkController();
 
   final WalletController controller;
   final LocaleController localeController;
+  final NetworkController networkController;
   final String initialLocation;
 
   @override
@@ -661,7 +672,7 @@ class _KtWalletAppState extends State<KtWalletApp> {
 
   /// Active-network state (mainnet/testnet environment, per-chain overrides,
   /// custom networks), shared app-wide via [NetworkScope].
-  final NetworkController _networks = NetworkController();
+  NetworkController get _networks => widget.networkController;
 
   @override
   void initState() {

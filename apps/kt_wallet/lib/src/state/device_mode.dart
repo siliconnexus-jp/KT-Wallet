@@ -46,7 +46,10 @@ class DeviceModeController extends ChangeNotifier {
     notifyListeners();
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_prefsKey, mode == DeviceMode.wallet ? 'wallet' : 'signer');
+      await prefs.setString(
+        _prefsKey,
+        mode == DeviceMode.wallet ? 'wallet' : 'signer',
+      );
     } catch (_) {
       // Persistence is best-effort; the in-memory choice still applies.
     }

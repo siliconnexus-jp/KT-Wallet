@@ -1,5 +1,6 @@
 package com.ktwallet.core_crypto
 
+import android.util.Log
 import androidx.annotation.NonNull
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
@@ -59,7 +60,17 @@ class CoreCryptoPlugin :
                     result.success(WalletCoreBridge.isValidWord(call.arg("word", "")))
                 "suggestWords" ->
                     result.success(WalletCoreBridge.suggest(call.arg("prefix", "")))
-                "storeWallet" -> { storeWallet(call); result.success(true) }
+                "storeWallet" -> {
+                    if (call.arg("requireAuth", true)) {
+                        promptThen(result, "Protect wallet") {
+                            storeWallet(call)
+                            true
+                        }
+                    } else {
+                        storeWallet(call)
+                        result.success(true)
+                    }
+                }
                 "deriveAddresses" -> result.success(deriveAddresses(call))
                 "signTransaction" -> signTransaction(call, result)
                 "exportMnemonic" -> exportMnemonic(call, result)
@@ -69,6 +80,7 @@ class CoreCryptoPlugin :
             }
         } catch (e: Exception) {
             // Never forward raw exception text (may carry library internals).
+            Log.e("KtCoreCrypto", "${call.method} failed: ${e.javaClass.name}")
             result.error(mapError(e), null, errorDetails(e))
         }
     }

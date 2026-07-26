@@ -43,8 +43,8 @@ class RpcProbeFailure extends RpcProbeResult {
 /// production constructs its own and [close]s it after the call.
 class RpcProbe {
   RpcProbe({http.Client? client, this.timeout = const Duration(seconds: 10)})
-      : _client = client ?? http.Client(),
-        _ownsClient = client == null;
+    : _client = client ?? http.Client(),
+      _ownsClient = client == null;
 
   final http.Client _client;
   final bool _ownsClient;
@@ -65,6 +65,9 @@ class RpcProbe {
       switch (chain) {
         case Chain.ethereum:
         case Chain.polygon:
+        case Chain.base:
+        case Chain.arbitrum:
+        case Chain.avalanche:
           final resp = await _jsonRpc(url, 'eth_chainId');
           if (resp.statusCode != 200) return const RpcProbeFailure();
           final decoded = jsonDecode(resp.body);
@@ -109,8 +112,12 @@ class RpcProbe {
       .post(
         Uri.parse(url),
         headers: const {'content-type': 'application/json'},
-        body: jsonEncode(
-            {'jsonrpc': '2.0', 'id': 1, 'method': method, 'params': []}),
+        body: jsonEncode({
+          'jsonrpc': '2.0',
+          'id': 1,
+          'method': method,
+          'params': [],
+        }),
       )
       .timeout(timeout);
 }

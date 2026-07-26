@@ -21,8 +21,8 @@ class Eip1559Tx {
     required Uint8List? to,
     required this.value,
     required Uint8List data,
-  })  : to = to == null ? null : Uint8List.fromList(to),
-        data = Uint8List.fromList(data) {
+  }) : to = to == null ? null : Uint8List.fromList(to),
+       data = Uint8List.fromList(data) {
     if (chainId <= BigInt.zero) {
       throw ArgumentError('chainId must be positive: $chainId');
     }
@@ -52,30 +52,34 @@ class Eip1559Tx {
     required BigInt maxFeePerGas,
     required BigInt gasLimit,
   }) {
-    if (intent.chain != Chain.ethereum && intent.chain != Chain.polygon) {
+    if (intent.chain != Chain.ethereum &&
+        intent.chain != Chain.polygon &&
+        intent.chain != Chain.base &&
+        intent.chain != Chain.arbitrum &&
+        intent.chain != Chain.avalanche) {
       throw ArgumentError('not an EVM chain: ${intent.chain}');
     }
     return switch (intent.operation) {
       TxOperation.nativeTransfer => Eip1559Tx(
-          chainId: chainId,
-          nonce: nonce,
-          maxPriorityFeePerGas: maxPriorityFeePerGas,
-          maxFeePerGas: maxFeePerGas,
-          gasLimit: gasLimit,
-          to: addressBytes(intent.to),
-          value: intent.amount.raw,
-          data: Uint8List(0),
-        ),
+        chainId: chainId,
+        nonce: nonce,
+        maxPriorityFeePerGas: maxPriorityFeePerGas,
+        maxFeePerGas: maxFeePerGas,
+        gasLimit: gasLimit,
+        to: addressBytes(intent.to),
+        value: intent.amount.raw,
+        data: Uint8List(0),
+      ),
       TxOperation.tokenTransfer => Eip1559Tx(
-          chainId: chainId,
-          nonce: nonce,
-          maxPriorityFeePerGas: maxPriorityFeePerGas,
-          maxFeePerGas: maxFeePerGas,
-          gasLimit: gasLimit,
-          to: addressBytes(intent.tokenContract!),
-          value: BigInt.zero,
-          data: Erc20.transferCalldata(to: intent.to, amount: intent.amount.raw),
-        ),
+        chainId: chainId,
+        nonce: nonce,
+        maxPriorityFeePerGas: maxPriorityFeePerGas,
+        maxFeePerGas: maxFeePerGas,
+        gasLimit: gasLimit,
+        to: addressBytes(intent.tokenContract!),
+        value: BigInt.zero,
+        data: Erc20.transferCalldata(to: intent.to, amount: intent.amount.raw),
+      ),
     };
   }
 

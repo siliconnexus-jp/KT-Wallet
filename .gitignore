@@ -79,5 +79,6 @@ build/
 **/ios/Flutter/ephemeral/
 **/android/.gradle/
 **/android/local.properties
+apps/kt_wallet/integration_test/.sepolia-e2e.json
 **/android/app/.cxx/
 **/test/failures/

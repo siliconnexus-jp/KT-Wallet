@@ -13,7 +13,20 @@ import '../wallets/wallet_manager.dart';
 import '../wallets/wallet_model.dart';
 import 'camera_screen.dart';
 
-const _mnemonic = ['walnut', 'breeze', 'copper', 'stadium', 'lyric', 'fossil', 'drift', 'mosaic', 'tunnel', 'prairie', 'zebra', 'anchor'];
+const _mnemonic = [
+  'walnut',
+  'breeze',
+  'copper',
+  'stadium',
+  'lyric',
+  'fossil',
+  'drift',
+  'mosaic',
+  'tunnel',
+  'prairie',
+  'zebra',
+  'anchor',
+];
 
 /// The mnemonic shown in the backup flow: the one just generated during
 /// create-onboarding, or the demo constant when the screen is opened standalone
@@ -25,28 +38,55 @@ List<String> _activeMnemonic(BuildContext context) {
 }
 
 Widget _wordGrid(List<String> words) {
-  return Column(children: [
-    for (var r = 0; r < (words.length / 2).ceil(); r++)
-      Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Row(children: [
-          for (var c = 0; c < 2; c++) ...[
-            if (c > 0) const SizedBox(width: 10),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(color: WalletColors.surface, borderRadius: BorderRadius.circular(10)),
-                child: Row(children: [
-                  Text((r * 2 + c + 1).toString().padLeft(2, '0'), style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text3)),
-                  const SizedBox(width: 10),
-                  Text(words[r * 2 + c], style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, fontFamily: KtFonts.mono, color: WalletColors.text)),
-                ]),
-              ),
-            ),
-          ],
-        ]),
-      ),
-  ]);
+  return Column(
+    children: [
+      for (var r = 0; r < (words.length / 2).ceil(); r++)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
+            children: [
+              for (var c = 0; c < 2; c++) ...[
+                if (c > 0) const SizedBox(width: 10),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: WalletColors.surface,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          (r * 2 + c + 1).toString().padLeft(2, '0'),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontFamily: KtFonts.mono,
+                            color: WalletColors.text3,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          words[r * 2 + c],
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            fontFamily: KtFonts.mono,
+                            color: WalletColors.text,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+    ],
+  );
 }
 
 /// W10 启动页.
@@ -58,17 +98,38 @@ class SplashScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: WalletColors.bg,
       body: Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: 96, height: 96,
-            decoration: BoxDecoration(color: WalletColors.accent, borderRadius: BorderRadius.circular(26)),
-            child: const Icon(Icons.account_balance_wallet, size: 48, color: Colors.white),
-          ),
-          const SizedBox(height: 20),
-          const Text('KT Wallet', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: WalletColors.text)),
-          const SizedBox(height: 8),
-          Text(l10n.appTagline, style: const TextStyle(fontSize: 14, color: WalletColors.text2)),
-        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: WalletColors.accent,
+                borderRadius: BorderRadius.circular(26),
+              ),
+              child: const Icon(
+                Icons.account_balance_wallet,
+                size: 48,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'KT Wallet',
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w700,
+                color: WalletColors.text,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              l10n.appTagline,
+              style: const TextStyle(fontSize: 14, color: WalletColors.text2),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -88,39 +149,116 @@ class AddWalletScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    Widget entry(IconData icon, String t, String s, {bool dark = false, VoidCallback? onTap}) => GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: dark ? const Color(0xFF0C1220) : WalletColors.surface, borderRadius: BorderRadius.circular(16)),
-            child: Row(children: [
-              Container(
-                width: 44, height: 44,
-                decoration: BoxDecoration(color: dark ? SignerColors.surface2 : WalletColors.accent.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(14)),
-                child: Icon(icon, size: 20, color: dark ? SignerColors.ok : WalletColors.accent),
+    Widget entry(
+      IconData icon,
+      String t,
+      String s, {
+      bool dark = false,
+      VoidCallback? onTap,
+    }) => GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: dark ? const Color(0xFF0C1220) : WalletColors.surface,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: dark
+                    ? SignerColors.surface2
+                    : WalletColors.accent.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(14),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(t, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: dark ? Colors.white : WalletColors.text)),
+              child: Icon(
+                icon,
+                size: 20,
+                color: dark ? SignerColors.ok : WalletColors.accent,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    t,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: dark ? Colors.white : WalletColors.text,
+                    ),
+                  ),
                   const SizedBox(height: 3),
-                  Text(s, style: TextStyle(fontSize: 12, height: 1.5, color: dark ? SignerColors.text2 : WalletColors.text2)),
-                ]),
+                  Text(
+                    s,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.5,
+                      color: dark ? SignerColors.text2 : WalletColors.text2,
+                    ),
+                  ),
+                ],
               ),
-              Icon(Icons.chevron_right, size: 18, color: dark ? const Color(0xFF5A616C) : WalletColors.text3),
-            ]),
-          ),
-        );
+            ),
+            Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: dark ? const Color(0xFF5A616C) : WalletColors.text3,
+            ),
+          ],
+        ),
+      ),
+    );
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: l10n.addWalletTitle, onBack: () => Navigator.of(context).maybePop()),
+      navBar: KtNavBar(
+        title: l10n.addWalletTitle,
+        onBack: () => Navigator.of(context).maybePop(),
+      ),
       children: [
-        Text(l10n.addWalletStandardSection, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: WalletColors.text2)),
-        entry(Icons.add, l10n.createNewWallet, l10n.createNewWalletDesc, onTap: () => _createHotWallet(context)),
-        entry(Icons.key, l10n.importMnemonic, l10n.importMnemonicDesc, onTap: () => context.push('/mnemonic-import')),
-        Text(l10n.coldWalletSection, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: WalletColors.text2)),
-        entry(Icons.verified_user, l10n.connectColdWallet, l10n.connectColdWalletDesc, dark: true, onTap: () => context.push('/connect-cold')),
+        Text(
+          l10n.addWalletStandardSection,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+            color: WalletColors.text2,
+          ),
+        ),
+        entry(
+          Icons.add,
+          l10n.createNewWallet,
+          l10n.createNewWalletDesc,
+          onTap: () => _createHotWallet(context),
+        ),
+        entry(
+          Icons.key,
+          l10n.importMnemonic,
+          l10n.importMnemonicDesc,
+          onTap: () => context.push('/mnemonic-import'),
+        ),
+        Text(
+          l10n.coldWalletSection,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+            color: WalletColors.text2,
+          ),
+        ),
+        entry(
+          Icons.verified_user,
+          l10n.connectColdWallet,
+          l10n.connectColdWalletDesc,
+          dark: true,
+          onTap: () => context.push('/connect-cold'),
+        ),
       ],
     );
   }
@@ -133,37 +271,105 @@ class CreateWarnScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return KtScreen(
-      navBar: KtNavBar(title: l10n.createWalletTitle, onBack: () => Navigator.of(context).maybePop(), trailingText: '1 / 3'),
-      bottom: KtPrimaryButton(label: l10n.showMnemonic, onPressed: () => context.push('/mnemonic-show')),
+      navBar: KtNavBar(
+        title: l10n.createWalletTitle,
+        onBack: () => Navigator.of(context).maybePop(),
+        trailingText: '1 / 3',
+      ),
+      bottom: KtPrimaryButton(
+        label: l10n.showMnemonic,
+        onPressed: () => context.push('/mnemonic-show'),
+      ),
       children: [
-        Column(children: [
-          Container(width: 72, height: 72, decoration: BoxDecoration(color: WalletColors.amber.withValues(alpha: 0.08), shape: BoxShape.circle), child: const Icon(Icons.key, size: 34, color: WalletColors.amber)),
-          const SizedBox(height: 12),
-          Text(l10n.mnemonicWillGenerate, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: WalletColors.text)),
-        ]),
+        Column(
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: WalletColors.amber.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.key, size: 34, color: WalletColors.amber),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              l10n.mnemonicWillGenerate,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: WalletColors.text,
+              ),
+            ),
+          ],
+        ),
         Container(
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: WalletColors.accent.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(12)),
-          child: Text(l10n.hotWalletNotice,
-              style: const TextStyle(fontSize: 13, height: 1.5, color: Color(0xFF1D46B8))),
+          decoration: BoxDecoration(
+            color: WalletColors.accent.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            l10n.hotWalletNotice,
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.5,
+              color: Color(0xFF1D46B8),
+            ),
+          ),
         ),
-        _rule(Icons.workspace_premium, l10n.ruleFullControlTitle, l10n.ruleFullControlDesc),
+        _rule(
+          Icons.workspace_premium,
+          l10n.ruleFullControlTitle,
+          l10n.ruleFullControlDesc,
+        ),
         _rule(Icons.edit, l10n.ruleHandwriteTitle, l10n.ruleHandwriteDesc),
       ],
     );
   }
 
   static Widget _rule(IconData icon, String t, String s) => KtCard(
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Container(width: 36, height: 36, decoration: BoxDecoration(color: const Color(0xFFF2F4F7), borderRadius: BorderRadius.circular(10)), child: Icon(icon, size: 18, color: WalletColors.amber)),
-          const SizedBox(width: 14),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(t, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, height: 1.4, color: WalletColors.text)),
-            const SizedBox(height: 4),
-            Text(s, style: const TextStyle(fontSize: 12, height: 1.5, color: WalletColors.text2)),
-          ])),
-        ]),
-      );
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF2F4F7),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, size: 18, color: WalletColors.amber),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                t,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  height: 1.4,
+                  color: WalletColors.text,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                s,
+                style: const TextStyle(
+                  fontSize: 12,
+                  height: 1.5,
+                  color: WalletColors.text2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 /// W24 助记词展示.
@@ -174,17 +380,43 @@ class MnemonicShowScreen extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 18,
-      navBar: KtNavBar(title: l10n.backupMnemonicTitle, onBack: () => Navigator.of(context).maybePop(), trailingText: '2 / 3'),
-      bottom: KtPrimaryButton(label: l10n.mnemonicShowConfirmBtn, onPressed: () => context.push('/mnemonic-verify')),
+      navBar: KtNavBar(
+        title: l10n.backupMnemonicTitle,
+        onBack: () => Navigator.of(context).maybePop(),
+        trailingText: '2 / 3',
+      ),
+      bottom: KtPrimaryButton(
+        label: l10n.mnemonicShowConfirmBtn,
+        onPressed: () => context.push('/mnemonic-verify'),
+      ),
       children: [
         Container(
           padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(color: WalletColors.red.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Icon(Icons.no_photography, size: 18, color: WalletColors.red),
-            const SizedBox(width: 10),
-            Expanded(child: Text(l10n.mnemonicShowWarning, style: const TextStyle(fontSize: 13, height: 1.5, color: WalletColors.red))),
-          ]),
+          decoration: BoxDecoration(
+            color: WalletColors.red.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.no_photography,
+                size: 18,
+                color: WalletColors.red,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  l10n.mnemonicShowWarning,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.5,
+                    color: WalletColors.red,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         _wordGrid(_activeMnemonic(context)),
       ],
@@ -231,7 +463,9 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
       // Create-onboarding: commit the new wallet now that backup is verified.
       final name = l10n.walletDefaultName(controller.count + 1);
       await controller.finalizeCreate(name: name);
-      messenger.showSnackBar(SnackBar(content: Text(l10n.walletCreatedBackedUp)));
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.walletCreatedBackedUp)),
+      );
     } else {
       // Standalone backup of the current wallet.
       final current = controller.current;
@@ -247,49 +481,103 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
     final options = _options();
     return KtScreen(
       gap: 24,
-      navBar: KtNavBar(title: l10n.verifyBackupTitle, onBack: () => Navigator.of(context).maybePop(), trailingText: '3 / 3'),
-      bottom: KtPrimaryButton(label: l10n.actionConfirm, onPressed: _selected == null ? null : _confirm),
+      navBar: KtNavBar(
+        title: l10n.verifyBackupTitle,
+        onBack: () => Navigator.of(context).maybePop(),
+        trailingText: '3 / 3',
+      ),
+      bottom: KtPrimaryButton(
+        label: l10n.actionConfirm,
+        onPressed: _selected == null ? null : _confirm,
+      ),
       children: [
-        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          for (final done in [true, false, false]) ...[
-            Container(width: 28, height: 4, margin: const EdgeInsets.symmetric(horizontal: 4), decoration: BoxDecoration(color: done ? WalletColors.green : WalletColors.border, borderRadius: BorderRadius.circular(2))),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (final done in [true, false, false]) ...[
+              Container(
+                width: 28,
+                height: 4,
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: done ? WalletColors.green : WalletColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ],
           ],
-        ]),
-        Column(children: [
-          Text(l10n.mnemonicWordChallenge(_challengePosition), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: WalletColors.text)),
-          const SizedBox(height: 8),
-          Text(l10n.mnemonicChallengeHint, style: const TextStyle(fontSize: 13, color: WalletColors.text2)),
-        ]),
-        Column(children: [
-          for (var r = 0; r < (options.length / 2).ceil(); r++)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(children: [
-                for (var c = 0; c < 2; c++) ...[
-                  if (c > 0) const SizedBox(width: 10),
-                  Expanded(child: () {
-                    final idx = r * 2 + c;
-                    if (idx >= options.length) return const SizedBox();
-                    final word = options[idx];
-                    final sel = word == _selected;
-                    return GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => setState(() => _selected = word),
-                      child: Container(
-                        height: 48, alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: sel ? WalletColors.green.withValues(alpha: 0.06) : WalletColors.surface,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: sel ? WalletColors.green : WalletColors.border, width: sel ? 1.5 : 1),
-                        ),
-                        child: Text(word, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, fontFamily: KtFonts.mono, color: sel ? WalletColors.green : WalletColors.text)),
-                      ),
-                    );
-                  }()),
-                ],
-              ]),
+        ),
+        Column(
+          children: [
+            Text(
+              l10n.mnemonicWordChallenge(_challengePosition),
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: WalletColors.text,
+              ),
             ),
-        ]),
+            const SizedBox(height: 8),
+            Text(
+              l10n.mnemonicChallengeHint,
+              style: const TextStyle(fontSize: 13, color: WalletColors.text2),
+            ),
+          ],
+        ),
+        Column(
+          children: [
+            for (var r = 0; r < (options.length / 2).ceil(); r++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: [
+                    for (var c = 0; c < 2; c++) ...[
+                      if (c > 0) const SizedBox(width: 10),
+                      Expanded(
+                        child: () {
+                          final idx = r * 2 + c;
+                          if (idx >= options.length) return const SizedBox();
+                          final word = options[idx];
+                          final sel = word == _selected;
+                          return GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => setState(() => _selected = word),
+                            child: Container(
+                              height: 48,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: sel
+                                    ? WalletColors.green.withValues(alpha: 0.06)
+                                    : WalletColors.surface,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: sel
+                                      ? WalletColors.green
+                                      : WalletColors.border,
+                                  width: sel ? 1.5 : 1,
+                                ),
+                              ),
+                              child: Text(
+                                word,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: KtFonts.mono,
+                                  color: sel
+                                      ? WalletColors.green
+                                      : WalletColors.text,
+                                ),
+                              ),
+                            ),
+                          );
+                        }(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -324,7 +612,11 @@ class _MnemonicImportScreenState extends State<MnemonicImportScreen> {
 
   Future<void> _paste() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final words = (data?.text ?? '').trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    final words = (data?.text ?? '')
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .toList();
     if (words.isEmpty) return;
     setState(() {
       // A pasted 18/24-word phrase switches the field count to match.
@@ -359,54 +651,97 @@ class _MnemonicImportScreenState extends State<MnemonicImportScreen> {
     final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 18,
-      navBar: KtNavBar(title: l10n.importMnemonic, onBack: () => Navigator.of(context).maybePop()),
-      bottom: KtPrimaryButton(label: l10n.actionImport, onPressed: _complete ? _import : null),
+      navBar: KtNavBar(
+        title: l10n.importMnemonic,
+        onBack: () => Navigator.of(context).maybePop(),
+      ),
+      bottom: KtPrimaryButton(
+        label: l10n.actionImport,
+        onPressed: _complete ? _import : null,
+      ),
       children: [
         KtSegmented(
           options: [for (final c in _wordCounts) l10n.wordsCount(c)],
           selected: _countIndex,
           onChanged: (i) => setState(() => _countIndex = i),
         ),
-        Column(children: [
-          for (var r = 0; r < _wordCounts[_countIndex] ~/ 2; r++)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(children: [
-                for (var c = 0; c < 2; c++) ...[
-                  if (c > 0) const SizedBox(width: 10),
-                  Expanded(child: () {
-                    final idx = r * 2 + c;
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: WalletColors.surface, borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: WalletColors.border),
+        Column(
+          children: [
+            for (var r = 0; r < _wordCounts[_countIndex] ~/ 2; r++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: [
+                    for (var c = 0; c < 2; c++) ...[
+                      if (c > 0) const SizedBox(width: 10),
+                      Expanded(
+                        child: () {
+                          final idx = r * 2 + c;
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: WalletColors.surface,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: WalletColors.border),
+                            ),
+                            child: Row(
+                              children: [
+                                Text(
+                                  (idx + 1).toString().padLeft(2, '0'),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontFamily: KtFonts.mono,
+                                    color: WalletColors.text3,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _controllers[idx],
+                                    onChanged: (_) => setState(() {}),
+                                    textInputAction: TextInputAction.next,
+                                    autocorrect: false,
+                                    enableSuggestions: false,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                      fontFamily: KtFonts.mono,
+                                      color: WalletColors.text,
+                                    ),
+                                    decoration: const InputDecoration(
+                                      isCollapsed: true,
+                                      border: InputBorder.none,
+                                      contentPadding: EdgeInsets.symmetric(
+                                        vertical: 8,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }(),
                       ),
-                      child: Row(children: [
-                        Text((idx + 1).toString().padLeft(2, '0'), style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text3)),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: _controllers[idx],
-                            onChanged: (_) => setState(() {}),
-                            textInputAction: TextInputAction.next,
-                            autocorrect: false,
-                            enableSuggestions: false,
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, fontFamily: KtFonts.mono, color: WalletColors.text),
-                            decoration: const InputDecoration(isCollapsed: true, border: InputBorder.none, contentPadding: EdgeInsets.symmetric(vertical: 8)),
-                          ),
-                        ),
-                      ]),
-                    );
-                  }()),
-                ],
-              ]),
-            ),
-        ]),
+                    ],
+                  ],
+                ),
+              ),
+          ],
+        ),
         Center(
           child: GestureDetector(
             onTap: _paste,
-            child: Text(l10n.pasteMnemonic, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.accent)),
+            child: Text(
+              l10n.pasteMnemonic,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: WalletColors.accent,
+              ),
+            ),
           ),
         ),
       ],
@@ -422,28 +757,105 @@ class ConnectColdScreen extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 24,
-      navBar: KtNavBar(title: l10n.connectColdWallet, onBack: () => Navigator.of(context).maybePop()),
-      bottom: KtPrimaryButton(label: l10n.scanAccountQr, onPressed: () => context.push('/scan-account')),
+      navBar: KtNavBar(
+        title: l10n.connectColdWallet,
+        onBack: () => Navigator.of(context).maybePop(),
+      ),
+      bottom: KtPrimaryButton(
+        label: l10n.scanAccountQr,
+        onPressed: () => context.push('/scan-account'),
+      ),
       children: [
-        Column(children: [
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Container(width: 72, height: 120, decoration: BoxDecoration(color: const Color(0xFF0C1220), borderRadius: BorderRadius.circular(14)), child: const Icon(Icons.qr_code_2, size: 32, color: Colors.white)),
-            const Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Icon(Icons.arrow_forward, size: 28, color: WalletColors.accent)),
-            Container(width: 72, height: 120, decoration: BoxDecoration(color: WalletColors.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: WalletColors.border, width: 1.5)), child: const Icon(Icons.qr_code_scanner, size: 32, color: WalletColors.accent)),
-          ]),
-          const SizedBox(height: 12),
-          Text(l10n.connectColdWallet, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: WalletColors.text)),
-          const SizedBox(height: 8),
-          Text(l10n.connectColdSubtitle, textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, height: 1.6, color: WalletColors.text2)),
-        ]),
+        Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 72,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0C1220),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Icons.qr_code_2,
+                    size: 32,
+                    color: Colors.white,
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Icon(
+                    Icons.arrow_forward,
+                    size: 28,
+                    color: WalletColors.accent,
+                  ),
+                ),
+                Container(
+                  width: 72,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    color: WalletColors.surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: WalletColors.border, width: 1.5),
+                  ),
+                  child: const Icon(
+                    Icons.qr_code_scanner,
+                    size: 32,
+                    color: WalletColors.accent,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              l10n.connectColdWallet,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: WalletColors.text,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              l10n.connectColdSubtitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                height: 1.6,
+                color: WalletColors.text2,
+              ),
+            ),
+          ],
+        ),
         Container(
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: WalletColors.green.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(12)),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Icon(Icons.verified_user, size: 18, color: WalletColors.green),
-            const SizedBox(width: 10),
-            Expanded(child: Text(l10n.connectColdSafety, style: const TextStyle(fontSize: 13, height: 1.5, color: Color(0xFF0A7A45)))),
-          ]),
+          decoration: BoxDecoration(
+            color: WalletColors.green.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.verified_user,
+                size: 18,
+                color: WalletColors.green,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  l10n.connectColdSafety,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.5,
+                    color: Color(0xFF0A7A45),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -510,36 +922,38 @@ class ImportConfirmScreen extends StatelessWidget {
   ];
 
   static (Color, String) _chainMeta(int coin) => switch (coin) {
-        60 => (ChainColors.ethereum, 'Ethereum'),
-        966 => (ChainColors.polygon, 'Polygon'),
-        195 => (ChainColors.tron, 'TRON'),
-        501 => (ChainColors.solana, 'Solana'),
-        _ => (WalletColors.text3, 'SLIP-44 $coin'),
-      };
+    60 => (ChainColors.ethereum, 'Ethereum'),
+    966 => (ChainColors.polygon, 'Polygon'),
+    195 => (ChainColors.tron, 'TRON'),
+    501 => (ChainColors.solana, 'Solana'),
+    _ => (WalletColors.text3, 'SLIP-44 $coin'),
+  };
 
   void _createWatchWallet(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final controller = WalletScope.of(context);
     if (!controller.canAddMore) return;
     final id = 'w${DateTime.now().microsecondsSinceEpoch}';
-    controller.add(WatchWallet(
-      id: id,
-      // The wallet's name/id/addresses are DATA from the signer's export —
-      // never retranslated. Demo fallback mirrors the old hardcoded values.
-      name: export?.walletName ?? l10n.walletSeedMain,
-      avatarColor: 0xFF0C1220,
-      addresses: export != null
-          ? addressesFromExport(export!)
-          : const ChainAddresses(
-              eth: '0x8f3C2a71c8B29b3d4b79E19bE1',
-              polygon: '0x8f3C2a71c8B29b3d4b79E19bE1',
-              tron: 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
-              solana: '6yKpXwMWd4qmDqVr2W',
-            ),
-      sortOrder: controller.count,
-      coldWalletId: export?.walletId ?? 'WLT-3E8A91',
-      protocolVersion: 1,
-    ));
+    controller.add(
+      WatchWallet(
+        id: id,
+        // The wallet's name/id/addresses are DATA from the signer's export —
+        // never retranslated. Demo fallback mirrors the old hardcoded values.
+        name: export?.walletName ?? l10n.walletSeedMain,
+        avatarColor: 0xFF0C1220,
+        addresses: export != null
+            ? addressesFromExport(export!)
+            : const ChainAddresses(
+                eth: '0x8f3C2a71c8B29b3d4b79E19bE1',
+                polygon: '0x8f3C2a71c8B29b3d4b79E19bE1',
+                tron: 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
+                solana: '6yKpXwMWd4qmDqVr2W',
+              ),
+        sortOrder: controller.count,
+        coldWalletId: export?.walletId ?? 'WLT-3E8A91',
+        protocolVersion: 1,
+      ),
+    );
     controller.select(id);
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
@@ -562,32 +976,101 @@ class ImportConfirmScreen extends StatelessWidget {
           ];
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: l10n.importConfirmTitle, onBack: () => Navigator.of(context).maybePop()),
-      bottom: KtPrimaryButton(label: l10n.createWatchWallet, onPressed: () => _createWatchWallet(context)),
+      navBar: KtNavBar(
+        title: l10n.importConfirmTitle,
+        onBack: () => Navigator.of(context).maybePop(),
+      ),
+      bottom: KtPrimaryButton(
+        label: l10n.createWatchWallet,
+        onPressed: () => _createWatchWallet(context),
+      ),
       children: [
         KtCard(
-          child: Row(children: [
-            Container(width: 48, height: 48, decoration: BoxDecoration(color: const Color(0xFF0C1220), borderRadius: BorderRadius.circular(14)), child: const Icon(Icons.verified_user, size: 24, color: SignerColors.ok)),
-            const SizedBox(width: 14),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(export?.walletName ?? l10n.walletSeedMain, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: WalletColors.text)),
-              const SizedBox(height: 4),
-              Text(l10n.walletIdProtocol(export?.walletId ?? 'WLT-3E8A91', 1), style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text3)),
-            ])),
-          ]),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0C1220),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.verified_user,
+                  size: 24,
+                  color: SignerColors.ok,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      export?.walletName ?? l10n.walletSeedMain,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: WalletColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      l10n.walletIdProtocol(
+                        export?.walletId ?? 'WLT-3E8A91',
+                        1,
+                      ),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontFamily: KtFonts.mono,
+                        color: WalletColors.text3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         KtCard(
-          child: Column(children: [
-            for (var i = 0; i < nets.length; i++) ...[
-              if (i > 0) const SizedBox(height: 13),
-              Row(children: [
-                Container(width: 8, height: 8, decoration: BoxDecoration(color: nets[i].$1, shape: BoxShape.circle)),
-                const SizedBox(width: 12),
-                Expanded(child: Text(nets[i].$2, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: WalletColors.text))),
-                Text(nets[i].$3, style: const TextStyle(fontSize: 12, fontFamily: KtFonts.mono, color: WalletColors.text2)),
-              ]),
+          child: Column(
+            children: [
+              for (var i = 0; i < nets.length; i++) ...[
+                if (i > 0) const SizedBox(height: 13),
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: nets[i].$1,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        nets[i].$2,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: WalletColors.text,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      nets[i].$3,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontFamily: KtFonts.mono,
+                        color: WalletColors.text2,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
-          ]),
+          ),
         ),
       ],
     );
@@ -600,7 +1083,12 @@ class WalletSwitcherSheet extends StatelessWidget {
   const WalletSwitcherSheet({super.key});
 
   // 'WLT-91A4C7' is the standalone fallback wallet (gallery / goldens).
-  static const _demoValue = {'daily': r'$862.40', 'savings': r'$3,210.55', 'cold': r'$12,847.32', 'WLT-91A4C7': r'$862.40'};
+  static const _demoValue = {
+    'daily': r'$862.40',
+    'savings': r'$3,210.55',
+    'cold': r'$12,847.32',
+    'WLT-91A4C7': r'$862.40',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -619,60 +1107,175 @@ class WalletSwitcherSheet extends StatelessWidget {
             onTap: () {},
             child: Container(
               width: double.infinity,
-              decoration: const BoxDecoration(color: WalletColors.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+              decoration: const BoxDecoration(
+                color: WalletColors.surface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2))),
-                const SizedBox(height: 16),
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  Text(l10n.walletsTitle, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: WalletColors.text)),
-                  GestureDetector(
-                    onTap: () { context.pop(); context.push('/wallet-manage'); },
-                    child: Row(children: [const Icon(Icons.settings, size: 15, color: WalletColors.text2), const SizedBox(width: 4), Text(l10n.manage, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: WalletColors.text2))]),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: WalletColors.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                ]),
-                const SizedBox(height: 16),
-                for (final w in controller.wallets)
-                  () {
-                    final current = w.id == controller.current?.id;
-                    final isHot = w is HotWallet;
-                    final unbacked = isHot && !w.backedUp;
-                    return GestureDetector(
-                      onTap: () { controller.select(w.id); context.pop(); },
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: current ? WalletColors.accent.withValues(alpha: 0.04) : WalletColors.bg,
-                          borderRadius: BorderRadius.circular(14),
-                          border: current ? Border.all(color: WalletColors.accent, width: 1.5) : null,
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        l10n.walletsTitle,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: WalletColors.text,
                         ),
-                        child: Row(children: [
-                          Stack(clipBehavior: Clip.none, children: [
-                            KtAvatar(color: Color(w.avatarColor), initial: w.name.characters.first),
-                            if (unbacked) Positioned(right: -2, top: -2, child: Container(width: 12, height: 12, decoration: BoxDecoration(color: WalletColors.red, shape: BoxShape.circle, border: Border.all(color: WalletColors.surface, width: 2)))),
-                          ]),
-                          const SizedBox(width: 12),
-                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Row(children: [
-                              Text(w.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text)),
-                              const SizedBox(width: 8),
-                              WalletTypeBadge(
-                                kind: isHot ? WalletKind.hot : WalletKind.watch,
-                                label: isHot ? l10n.walletKindHot : l10n.walletKindWatch,
-                              ),
-                            ]),
-                            const SizedBox(height: 3),
-                            Text(_demoValue[w.id] ?? '\$0.00', style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
-                          ])),
-                          if (current) const Icon(Icons.check_circle, size: 20, color: WalletColors.accent),
-                        ]),
                       ),
-                    );
-                  }(),
-                const SizedBox(height: 8),
-                KtPrimaryButton(label: l10n.addWalletTitle, onPressed: () { context.pop(); context.push('/add-wallet'); }),
-              ]),
+                      GestureDetector(
+                        onTap: () {
+                          context.pop();
+                          context.push('/wallet-manage');
+                        },
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.settings,
+                              size: 15,
+                              color: WalletColors.text2,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              l10n.manage,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: WalletColors.text2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  for (final w in controller.wallets)
+                    () {
+                      final current = w.id == controller.current?.id;
+                      final isHot = w is HotWallet;
+                      final unbacked = isHot && !w.backedUp;
+                      return GestureDetector(
+                        onTap: () {
+                          controller.select(w.id);
+                          context.pop();
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: current
+                                ? WalletColors.accent.withValues(alpha: 0.04)
+                                : WalletColors.bg,
+                            borderRadius: BorderRadius.circular(14),
+                            border: current
+                                ? Border.all(
+                                    color: WalletColors.accent,
+                                    width: 1.5,
+                                  )
+                                : null,
+                          ),
+                          child: Row(
+                            children: [
+                              Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  KtAvatar(
+                                    color: Color(w.avatarColor),
+                                    initial: w.name.characters.first,
+                                  ),
+                                  if (unbacked)
+                                    Positioned(
+                                      right: -2,
+                                      top: -2,
+                                      child: Container(
+                                        width: 12,
+                                        height: 12,
+                                        decoration: BoxDecoration(
+                                          color: WalletColors.red,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: WalletColors.surface,
+                                            width: 2,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          w.name,
+                                          style: const TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
+                                            color: WalletColors.text,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        WalletTypeBadge(
+                                          kind: isHot
+                                              ? WalletKind.hot
+                                              : WalletKind.watch,
+                                          label: isHot
+                                              ? l10n.walletKindHot
+                                              : l10n.walletKindWatch,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      _demoValue[w.id] ?? '\$0.00',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: WalletColors.text3,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (current)
+                                const Icon(
+                                  Icons.check_circle,
+                                  size: 20,
+                                  color: WalletColors.accent,
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }(),
+                  const SizedBox(height: 8),
+                  KtPrimaryButton(
+                    label: l10n.addWalletTitle,
+                    onPressed: () {
+                      context.pop();
+                      context.push('/add-wallet');
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -704,10 +1307,16 @@ class _WalletManageScreenState extends State<WalletManageScreen> {
         title: Text(l10n.deleteWalletTitle),
         content: Text(l10n.deleteWalletConfirm(w.name)),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l10n.actionCancel)),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.actionCancel),
+          ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(l10n.actionDelete, style: const TextStyle(color: WalletColors.red)),
+            child: Text(
+              l10n.actionDelete,
+              style: const TextStyle(color: WalletColors.red),
+            ),
           ),
         ],
       ),
@@ -731,11 +1340,43 @@ class _WalletManageScreenState extends State<WalletManageScreen> {
       HotWallet() => l10n.walletStateNotBackedUp,
       WatchWallet() => 'Cold Signer',
     };
-    return Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [Flexible(child: Text(w.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WalletColors.text))), const SizedBox(width: 8), WalletTypeBadge(kind: kind, label: isHot ? l10n.walletKindHot : l10n.walletKindWatch)]),
-      const SizedBox(height: 3),
-      Text(state, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, fontWeight: unbacked ? FontWeight.w600 : FontWeight.w400, color: unbacked ? WalletColors.red : WalletColors.text3)),
-    ]));
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Flexible(
+                child: Text(
+                  w.name,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: WalletColors.text,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              WalletTypeBadge(
+                kind: kind,
+                label: isHot ? l10n.walletKindHot : l10n.walletKindWatch,
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            state,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: unbacked ? FontWeight.w600 : FontWeight.w400,
+              color: unbacked ? WalletColors.red : WalletColors.text3,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Reorder-mode list: long-pressable drag handles per row (delete buttons
@@ -761,18 +1402,27 @@ class _WalletManageScreenState extends State<WalletManageScreen> {
             padding: EdgeInsets.only(bottom: i == wallets.length - 1 ? 0 : 16),
             child: KtCard(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              child: Row(children: [
-                KtAvatar(color: Color(w.avatarColor), initial: w.name.characters.first),
-                const SizedBox(width: 12),
-                _rowBody(l10n, w),
-                ReorderableDragStartListener(
-                  index: i,
-                  child: const Padding(
-                    padding: EdgeInsets.all(10),
-                    child: Icon(Icons.drag_handle, size: 20, color: WalletColors.text3),
+              child: Row(
+                children: [
+                  KtAvatar(
+                    color: Color(w.avatarColor),
+                    initial: w.name.characters.first,
                   ),
-                ),
-              ]),
+                  const SizedBox(width: 12),
+                  _rowBody(l10n, w),
+                  ReorderableDragStartListener(
+                    index: i,
+                    child: const Padding(
+                      padding: EdgeInsets.all(10),
+                      child: Icon(
+                        Icons.drag_handle,
+                        size: 20,
+                        color: WalletColors.text3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
       ],
@@ -794,10 +1444,15 @@ class _WalletManageScreenState extends State<WalletManageScreen> {
       ),
       bottom: KtPrimaryButton(
         label: l10n.addWalletTitle,
-        onPressed: controller.canAddMore ? () => context.push('/add-wallet') : null,
+        onPressed: controller.canAddMore
+            ? () => context.push('/add-wallet')
+            : null,
       ),
       children: [
-        Text(l10n.walletCountLimit(wallets.length, WalletManager.maxWallets), style: const TextStyle(fontSize: 13, color: WalletColors.text3)),
+        Text(
+          l10n.walletCountLimit(wallets.length, WalletManager.maxWallets),
+          style: const TextStyle(fontSize: 13, color: WalletColors.text3),
+        ),
         if (_reordering)
           _reorderList(l10n, wallets)
         else
@@ -806,16 +1461,28 @@ class _WalletManageScreenState extends State<WalletManageScreen> {
               behavior: HitTestBehavior.opaque,
               onTap: () => context.push('/wallet-detail?id=${w.id}'),
               child: KtCard(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                child: Row(children: [
-                  KtAvatar(color: Color(w.avatarColor), initial: w.name.characters.first),
-                  const SizedBox(width: 12),
-                  _rowBody(l10n, w),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20, color: WalletColors.text3),
-                    onPressed: () => _confirmDelete(context, w),
-                  ),
-                ]),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                child: Row(
+                  children: [
+                    KtAvatar(
+                      color: Color(w.avatarColor),
+                      initial: w.name.characters.first,
+                    ),
+                    const SizedBox(width: 12),
+                    _rowBody(l10n, w),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        size: 20,
+                        color: WalletColors.text3,
+                      ),
+                      onPressed: () => _confirmDelete(context, w),
+                    ),
+                  ],
+                ),
               ),
             ),
       ],
@@ -833,7 +1500,13 @@ class WalletDetailScreen extends StatelessWidget {
   final String? walletId;
 
   /// The 5 avatar colors offered by the design.
-  static const _palette = [0xFFF59E0B, 0xFF8B5CF6, 0xFF0EA5E9, 0xFF10B981, 0xFFEF4444];
+  static const _palette = [
+    0xFFF59E0B,
+    0xFF8B5CF6,
+    0xFF0EA5E9,
+    0xFF10B981,
+    0xFFEF4444,
+  ];
 
   Future<void> _rename(BuildContext context, Wallet w) async {
     final l10n = AppLocalizations.of(context);
@@ -844,7 +1517,14 @@ class WalletDetailScreen extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         backgroundColor: WalletColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(l10n.renameWallet, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: WalletColors.text)),
+        title: Text(
+          l10n.renameWallet,
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color: WalletColors.text,
+          ),
+        ),
         content: TextField(
           controller: nameController,
           autofocus: true,
@@ -852,22 +1532,36 @@ class WalletDetailScreen extends StatelessWidget {
           decoration: InputDecoration(labelText: l10n.nameLabel),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(l10n.actionCancel, style: const TextStyle(color: WalletColors.text2))),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(
+              l10n.actionCancel,
+              style: const TextStyle(color: WalletColors.text2),
+            ),
+          ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(nameController.text.trim()),
-            child: Text(l10n.actionConfirm, style: const TextStyle(color: WalletColors.accent)),
+            child: Text(
+              l10n.actionConfirm,
+              style: const TextStyle(color: WalletColors.accent),
+            ),
           ),
         ],
       ),
     );
-    if (name != null && name.isNotEmpty && name != w.name) controller.rename(w.id, name);
+    if (name != null && name.isNotEmpty && name != w.name)
+      controller.rename(w.id, name);
   }
 
   /// Bottom sheet showing the wallet's mnemonic (exported from CoreCrypto).
   /// When [offerMarkBackedUp] the sheet ends with a "我已抄写" confirmation
   /// that marks the wallet backed up. Demo-seeded wallets without stored key
   /// material fall back to the demo mnemonic so the flow stays exercisable.
-  Future<void> _showMnemonicSheet(BuildContext context, Wallet w, {required bool offerMarkBackedUp}) async {
+  Future<void> _showMnemonicSheet(
+    BuildContext context,
+    Wallet w, {
+    required bool offerMarkBackedUp,
+  }) async {
     final l10n = AppLocalizations.of(context);
     final controller = WalletScope.of(context);
     final messenger = ScaffoldMessenger.of(context);
@@ -882,40 +1576,83 @@ class WalletDetailScreen extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: WalletColors.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: WalletColors.border, borderRadius: BorderRadius.circular(2)))),
-            const SizedBox(height: 16),
-            Text(l10n.viewMnemonic, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: WalletColors.text)),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: WalletColors.red.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Icon(Icons.no_photography, size: 18, color: WalletColors.red),
-                const SizedBox(width: 10),
-                Expanded(child: Text(l10n.mnemonicShowWarning, style: const TextStyle(fontSize: 13, height: 1.5, color: WalletColors.red))),
-              ]),
-            ),
-            const SizedBox(height: 16),
-            _wordGrid(words),
-            if (offerMarkBackedUp) ...[
-              const SizedBox(height: 8),
-              KtPrimaryButton(
-                label: l10n.backupTranscribed,
-                onPressed: () {
-                  controller.markBackedUp(w.id);
-                  Navigator.of(ctx).pop();
-                  messenger
-                    ..clearSnackBars()
-                    ..showSnackBar(SnackBar(content: Text(l10n.backupVerified)));
-                },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: WalletColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
               ),
+              const SizedBox(height: 16),
+              Text(
+                l10n.viewMnemonic,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: WalletColors.text,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: WalletColors.red.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.no_photography,
+                      size: 18,
+                      color: WalletColors.red,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        l10n.mnemonicShowWarning,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          height: 1.5,
+                          color: WalletColors.red,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              _wordGrid(words),
+              if (offerMarkBackedUp) ...[
+                const SizedBox(height: 8),
+                KtPrimaryButton(
+                  label: l10n.backupTranscribed,
+                  onPressed: () {
+                    controller.markBackedUp(w.id);
+                    Navigator.of(ctx).pop();
+                    messenger
+                      ..clearSnackBars()
+                      ..showSnackBar(
+                        SnackBar(content: Text(l10n.backupVerified)),
+                      );
+                  },
+                ),
+              ],
             ],
-          ]),
+          ),
         ),
       ),
     );
@@ -930,10 +1667,16 @@ class WalletDetailScreen extends StatelessWidget {
         title: Text(l10n.deleteWalletTitle),
         content: Text(l10n.deleteWalletConfirm(w.name)),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l10n.actionCancel)),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.actionCancel),
+          ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(l10n.actionDelete, style: const TextStyle(color: WalletColors.red)),
+            child: Text(
+              l10n.actionDelete,
+              style: const TextStyle(color: WalletColors.red),
+            ),
           ),
         ],
       ),
@@ -951,86 +1694,182 @@ class WalletDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final controller = WalletScope.of(context);
-    final wallet = (walletId == null ? null : controller.wallets.where((w) => w.id == walletId).firstOrNull) ?? controller.current;
+    final wallet =
+        (walletId == null
+            ? null
+            : controller.wallets.where((w) => w.id == walletId).firstOrNull) ??
+        controller.current;
     if (wallet == null) {
       // Wallet deleted (or none exists): render an empty shell while popping.
       return KtScreen(
-        navBar: KtNavBar(title: l10n.walletDetailTitle, onBack: () => Navigator.of(context).maybePop()),
+        navBar: KtNavBar(
+          title: l10n.walletDetailTitle,
+          onBack: () => Navigator.of(context).maybePop(),
+        ),
         children: const [],
       );
     }
     final isHot = wallet is HotWallet;
     final backedUp = isHot && wallet.backedUp;
-    final colors = _palette.contains(wallet.avatarColor) ? _palette : [..._palette, wallet.avatarColor];
+    final colors = _palette.contains(wallet.avatarColor)
+        ? _palette
+        : [..._palette, wallet.avatarColor];
     return KtScreen(
       gap: 16,
-      navBar: KtNavBar(title: l10n.walletDetailTitle, onBack: () => Navigator.of(context).maybePop()),
+      navBar: KtNavBar(
+        title: l10n.walletDetailTitle,
+        onBack: () => Navigator.of(context).maybePop(),
+      ),
       children: [
-        Column(children: [
-          KtAvatar(color: Color(wallet.avatarColor), initial: wallet.name.characters.first, size: 72),
-          const SizedBox(height: 12),
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _rename(context, wallet),
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text(wallet.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: WalletColors.text)),
-              const SizedBox(width: 8),
-              const Icon(Icons.edit, size: 16, color: WalletColors.text3),
-            ]),
-          ),
-          const SizedBox(height: 12),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            for (final c in colors)
-              GestureDetector(
-                key: ValueKey('palette-$c'),
-                onTap: () => controller.setColor(wallet.id, c),
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 5),
-                  width: 26, height: 26,
-                  decoration: BoxDecoration(color: Color(c), shape: BoxShape.circle, border: c == wallet.avatarColor ? Border.all(color: WalletColors.accent, width: 2) : null),
-                ),
+        Column(
+          children: [
+            KtAvatar(
+              color: Color(wallet.avatarColor),
+              initial: wallet.name.characters.first,
+              size: 72,
+            ),
+            const SizedBox(height: 12),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _rename(context, wallet),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    wallet.name,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: WalletColors.text,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.edit, size: 16, color: WalletColors.text3),
+                ],
               ),
-          ]),
-        ]),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (final c in colors)
+                  GestureDetector(
+                    key: ValueKey('palette-$c'),
+                    onTap: () => controller.setColor(wallet.id, c),
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 5),
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        color: Color(c),
+                        shape: BoxShape.circle,
+                        border: c == wallet.avatarColor
+                            ? Border.all(color: WalletColors.accent, width: 2)
+                            : null,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
         KtCard(
-          child: Column(children: [
-            KtDetailRow(label: l10n.walletTypeLabel, value: isHot ? l10n.standardWallet : l10n.walletKindWatch),
-            const SizedBox(height: 14),
-            KtDetailRow(label: 'Wallet ID', value: wallet.id, mono: true),
-            if (wallet is WatchWallet) ...[
+          child: Column(
+            children: [
+              KtDetailRow(
+                label: l10n.walletTypeLabel,
+                value: isHot ? l10n.standardWallet : l10n.walletKindWatch,
+              ),
               const SizedBox(height: 14),
-              KtDetailRow(label: 'Cold Signer', value: wallet.coldWalletId, mono: true),
+              KtDetailRow(label: 'Wallet ID', value: wallet.id, mono: true),
+              if (wallet is WatchWallet) ...[
+                const SizedBox(height: 14),
+                KtDetailRow(
+                  label: 'Cold Signer',
+                  value: wallet.coldWalletId,
+                  mono: true,
+                ),
+              ],
             ],
-          ]),
+          ),
         ),
         if (isHot && !backedUp)
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => _showMnemonicSheet(context, wallet, offerMarkBackedUp: true),
+            onTap: () =>
+                _showMnemonicSheet(context, wallet, offerMarkBackedUp: true),
             child: Container(
               padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: WalletColors.amber.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
-              child: Row(children: [
-                const Icon(Icons.warning_amber_rounded, size: 18, color: WalletColors.amber),
-                const SizedBox(width: 10),
-                Expanded(child: Text(l10n.backupNotYet, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF9A6503)))),
-                Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8), decoration: BoxDecoration(color: WalletColors.amber, borderRadius: BorderRadius.circular(999)), child: Text(l10n.backupNow, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white))),
-              ]),
+              decoration: BoxDecoration(
+                color: WalletColors.amber.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    size: 18,
+                    color: WalletColors.amber,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      l10n.backupNotYet,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF9A6503),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: WalletColors.amber,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      l10n.backupNow,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         if (isHot)
           KtCard(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () => _showMnemonicSheet(context, wallet, offerMarkBackedUp: !backedUp),
-              child: SecurityRow(Icons.key, l10n.viewMnemonic, l10n.viewMnemonicDesc),
+              onTap: () => _showMnemonicSheet(
+                context,
+                wallet,
+                offerMarkBackedUp: !backedUp,
+              ),
+              child: SecurityRow(
+                Icons.key,
+                l10n.viewMnemonic,
+                l10n.viewMnemonicDesc,
+              ),
             ),
           ),
         KtCard(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => _confirmDelete(context, wallet),
-            child: SecurityRow(Icons.delete_outline, l10n.deleteWalletTitle, l10n.deleteWalletDesc, danger: true),
+            child: SecurityRow(
+              Icons.delete_outline,
+              l10n.deleteWalletTitle,
+              l10n.deleteWalletDesc,
+              danger: true,
+            ),
           ),
         ),
       ],
@@ -1039,19 +1878,46 @@ class WalletDetailScreen extends StatelessWidget {
 }
 
 class SecurityRow extends StatelessWidget {
-  const SecurityRow(this.icon, this.label, this.sub, {super.key, this.danger = false});
+  const SecurityRow(
+    this.icon,
+    this.label,
+    this.sub, {
+    super.key,
+    this.danger = false,
+  });
   final IconData icon;
   final String label, sub;
   final bool danger;
   @override
-  Widget build(BuildContext context) => Row(children: [
-        Icon(icon, size: 19, color: danger ? WalletColors.red : WalletColors.text2),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: danger ? WalletColors.red : WalletColors.text)),
-          const SizedBox(height: 2),
-          Text(sub, style: const TextStyle(fontSize: 12, color: WalletColors.text3)),
-        ])),
-        const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3),
-      ]);
+  Widget build(BuildContext context) => Row(
+    children: [
+      Icon(
+        icon,
+        size: 19,
+        color: danger ? WalletColors.red : WalletColors.text2,
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: danger ? WalletColors.red : WalletColors.text,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              sub,
+              style: const TextStyle(fontSize: 12, color: WalletColors.text3),
+            ),
+          ],
+        ),
+      ),
+      const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3),
+    ],
+  );
 }

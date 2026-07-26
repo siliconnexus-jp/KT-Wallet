@@ -12,9 +12,9 @@ import 'wallet_model.dart';
 /// wallet row + its four account rows.
 class WalletStore {
   WalletStore(this._db)
-      : _wallets = db.WalletsRepository(_db),
-        _contacts = db.ContactsRepository(_db),
-        _tokens = db.TokensRepository(_db);
+    : _wallets = db.WalletsRepository(_db),
+      _contacts = db.ContactsRepository(_db),
+      _tokens = db.TokensRepository(_db);
   final db.WalletDatabase _db;
   final db.WalletsRepository _wallets;
   final db.ContactsRepository _contacts;
@@ -36,12 +36,12 @@ class WalletStore {
   /// Persists a domain wallet: the wallet row + its four account rows, in one
   /// transaction.
   Future<void> save(Wallet wallet) => _db.transaction(() async {
-        await _wallets.insert(_walletCompanion(wallet));
-        final scoped = _wallets.scoped(wallet.id);
-        for (final coin in _coins) {
-          await scoped.upsertAccount(_accountCompanion(wallet, coin));
-        }
-      });
+    await _wallets.insert(_walletCompanion(wallet));
+    final scoped = _wallets.scoped(wallet.id);
+    for (final coin in _coins) {
+      await scoped.upsertAccount(_accountCompanion(wallet, coin));
+    }
+  });
 
   /// Applies domain-level metadata changes back to the wallet row.
   Future<void> updateMetadata(Wallet wallet) =>
@@ -83,51 +83,54 @@ class WalletStore {
     final addresses = ChainAddresses(
       eth: addr('eth'),
       polygon: addr('polygon'),
+      base: addr('eth'),
+      arbitrum: addr('eth'),
+      avalanche: addr('eth'),
       tron: addr('tron'),
       solana: addr('solana'),
     );
     return switch (row.type) {
       db.WalletType.hot => HotWallet(
-          id: row.id,
-          name: row.name,
-          avatarColor: row.avatarColor,
-          addresses: addresses,
-          sortOrder: row.sortOrder,
-          backedUp: row.backedUp,
-        ),
+        id: row.id,
+        name: row.name,
+        avatarColor: row.avatarColor,
+        addresses: addresses,
+        sortOrder: row.sortOrder,
+        backedUp: row.backedUp,
+      ),
       db.WalletType.watch => WatchWallet(
-          id: row.id,
-          name: row.name,
-          avatarColor: row.avatarColor,
-          addresses: addresses,
-          sortOrder: row.sortOrder,
-          coldWalletId: row.coldWalletId ?? '',
-          protocolVersion: row.protocolVer ?? 1,
-        ),
+        id: row.id,
+        name: row.name,
+        avatarColor: row.avatarColor,
+        addresses: addresses,
+        sortOrder: row.sortOrder,
+        coldWalletId: row.coldWalletId ?? '',
+        protocolVersion: row.protocolVer ?? 1,
+      ),
     };
   }
 
   db.WalletsCompanion _walletCompanion(Wallet w) => switch (w) {
-        HotWallet() => db.WalletsCompanion.insert(
-            id: w.id,
-            name: w.name,
-            type: db.WalletType.hot,
-            avatarColor: w.avatarColor,
-            sortOrder: Value(w.sortOrder),
-            backedUp: Value(w.backedUp),
-            createdAt: 0,
-          ),
-        WatchWallet() => db.WalletsCompanion.insert(
-            id: w.id,
-            name: w.name,
-            type: db.WalletType.watch,
-            avatarColor: w.avatarColor,
-            sortOrder: Value(w.sortOrder),
-            coldWalletId: Value(w.coldWalletId),
-            protocolVer: Value(w.protocolVersion),
-            createdAt: 0,
-          ),
-      };
+    HotWallet() => db.WalletsCompanion.insert(
+      id: w.id,
+      name: w.name,
+      type: db.WalletType.hot,
+      avatarColor: w.avatarColor,
+      sortOrder: Value(w.sortOrder),
+      backedUp: Value(w.backedUp),
+      createdAt: 0,
+    ),
+    WatchWallet() => db.WalletsCompanion.insert(
+      id: w.id,
+      name: w.name,
+      type: db.WalletType.watch,
+      avatarColor: w.avatarColor,
+      sortOrder: Value(w.sortOrder),
+      coldWalletId: Value(w.coldWalletId),
+      protocolVer: Value(w.protocolVersion),
+      createdAt: 0,
+    ),
+  };
 
   db.AccountsCompanion _accountCompanion(Wallet w, String coin) =>
       db.AccountsCompanion.insert(
@@ -139,17 +142,17 @@ class WalletStore {
       );
 
   static Coin _coinEnum(String coin) => switch (coin) {
-        'eth' => Coin.eth,
-        'polygon' => Coin.polygon,
-        'tron' => Coin.tron,
-        'solana' => Coin.solana,
-        _ => throw ArgumentError('unknown coin $coin'),
-      };
+    'eth' => Coin.eth,
+    'polygon' => Coin.polygon,
+    'tron' => Coin.tron,
+    'solana' => Coin.solana,
+    _ => throw ArgumentError('unknown coin $coin'),
+  };
 
   static String _pathFor(String coin) => switch (coin) {
-        'eth' || 'polygon' => "m/44'/60'/0'/0/0",
-        'tron' => "m/44'/195'/0'/0/0",
-        'solana' => "m/44'/501'/0'",
-        _ => throw ArgumentError('unknown coin $coin'),
-      };
+    'eth' || 'polygon' => "m/44'/60'/0'/0/0",
+    'tron' => "m/44'/195'/0'/0/0",
+    'solana' => "m/44'/501'/0'",
+    _ => throw ArgumentError('unknown coin $coin'),
+  };
 }

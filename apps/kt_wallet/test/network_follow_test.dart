@@ -58,16 +58,6 @@ class _FakeRest implements RestTransport {
       throw UnimplementedError('本测试不应发起 POST');
 }
 
-/// 一旦被联系立即失败并记录的传输层——用于断言"测试网下不得查询任何主网代币合约"。
-class _FailOnContactJsonRpc implements JsonRpcTransport {
-  int contacts = 0;
-  @override
-  Future<Object?> post(String url, Object body) {
-    contacts++;
-    fail('测试网环境下不应联系任何 JSON-RPC 节点: $url');
-  }
-}
-
 class _FailOnContactRest implements RestTransport {
   int contacts = 0;
   @override
@@ -267,12 +257,22 @@ void main() {
   });
 
   group('测试网代币注册表', () {
-    test('测试网环境注册表为空,且不发出任何代币查询(fail-on-contact)', () async {
+    test('测试网环境查询七条链各自的测试稳定币', () async {
       final networks = NetworkController(
         initialEnvironment: NetworkEnvironment.testnet,
       );
-      final jsonRpc = _FailOnContactJsonRpc();
-      final rest = _FailOnContactRest();
+      final jsonRpc = _FakeJsonRpc((url, body) async {
+        final request = body as Map;
+        if (request['method'] == 'getTokenAccountsByOwner') {
+          return {
+            'jsonrpc': '2.0',
+            'id': request['id'],
+            'result': {'value': <Object>[]},
+          };
+        }
+        return _rpcResult('0x0');
+      });
+      final rest = _FakeRest((url) async => {'data': <Object>[]});
       final service = TokenBalanceService(
         registry: networkTokenRegistry(networks),
         endpoints: effectiveRpcEndpoints(null, networks),
@@ -280,16 +280,42 @@ void main() {
         restTransport: rest,
       );
 
-      expect(service.tokens, isEmpty);
+      expect(service.tokens, [
+        usdtSepoliaToken,
+        usdcPolygonAmoyToken,
+        usdcBaseSepoliaToken,
+        usdcArbitrumSepoliaToken,
+        usdcAvalancheFujiToken,
+        usdtTronNileToken,
+        usdcSolanaDevnetToken,
+      ]);
       final results = await service.fetchAll(_addresses);
-      expect(results, isEmpty);
-      expect(jsonRpc.contacts, 0);
-      expect(rest.contacts, 0);
+      for (final token in service.tokens) {
+        expect(results[token.id]!.amount!.raw, BigInt.zero);
+      }
+      expect(jsonRpc.seenUrls, [
+        ethSepolia.rpcUrl,
+        polygonAmoy.rpcUrl,
+        baseSepolia.rpcUrl,
+        arbitrumSepolia.rpcUrl,
+        avalancheFuji.rpcUrl,
+        solanaDevnet.rpcUrl,
+      ]);
+      expect(rest.seenUrls, [
+        '${tronNile.rpcUrl}/v1/accounts/${_addresses.tron}',
+      ]);
     });
 
-    test('主网环境注册表保持今天的三个内置代币(顺序不变)', () {
+    test('主网环境注册表包含七条链的内置稳定币', () {
       final networks = NetworkController();
-      expect(networkTokenRegistry(networks)(), builtinTokens);
+      expect(networkTokenRegistry(networks)(), [
+        usdtEthToken,
+        usdcPolygonToken,
+        usdcBaseToken,
+        usdcArbitrumToken,
+        usdcAvalancheToken,
+        usdtTronToken,
+      ]);
       // 无网络来源(旧接线)也解析为完整主网注册表。
       expect(networkTokenRegistry(null)(), builtinTokens);
     });

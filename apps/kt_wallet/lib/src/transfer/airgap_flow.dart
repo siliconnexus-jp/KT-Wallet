@@ -56,21 +56,57 @@ const _liveStates = {
 };
 
 List<AirgapTransition> _buildTransitions() => [
-      const AirgapTransition(AirgapState.draft, AirgapEvent.reviewed, AirgapState.confirming),
-      const AirgapTransition(AirgapState.confirming, AirgapEvent.confirm, AirgapState.qrDisplaying),
-      const AirgapTransition(AirgapState.qrDisplaying, AirgapEvent.resultScanned, AirgapState.scanningResult),
-      const AirgapTransition(AirgapState.scanningResult, AirgapEvent.verifyOk, AirgapState.verifying),
-      const AirgapTransition(AirgapState.verifying, AirgapEvent.verifyOk, AirgapState.broadcastConfirm),
-      const AirgapTransition(AirgapState.verifying, AirgapEvent.verifyFailed, AirgapState.scanningResult),
-      const AirgapTransition(AirgapState.broadcastConfirm, AirgapEvent.broadcast, AirgapState.broadcasting),
-      const AirgapTransition(AirgapState.broadcasting, AirgapEvent.broadcastOk, AirgapState.done),
-      const AirgapTransition(AirgapState.broadcasting, AirgapEvent.broadcastError, AirgapState.failed),
-      // cancel + expire fire from any live state.
-      for (final s in _liveStates)
-        AirgapTransition(s, AirgapEvent.cancel, AirgapState.cancelled),
-      for (final s in _liveStates)
-        AirgapTransition(s, AirgapEvent.expire, AirgapState.expired),
-    ];
+  const AirgapTransition(
+    AirgapState.draft,
+    AirgapEvent.reviewed,
+    AirgapState.confirming,
+  ),
+  const AirgapTransition(
+    AirgapState.confirming,
+    AirgapEvent.confirm,
+    AirgapState.qrDisplaying,
+  ),
+  const AirgapTransition(
+    AirgapState.qrDisplaying,
+    AirgapEvent.resultScanned,
+    AirgapState.scanningResult,
+  ),
+  const AirgapTransition(
+    AirgapState.scanningResult,
+    AirgapEvent.verifyOk,
+    AirgapState.verifying,
+  ),
+  const AirgapTransition(
+    AirgapState.verifying,
+    AirgapEvent.verifyOk,
+    AirgapState.broadcastConfirm,
+  ),
+  const AirgapTransition(
+    AirgapState.verifying,
+    AirgapEvent.verifyFailed,
+    AirgapState.scanningResult,
+  ),
+  const AirgapTransition(
+    AirgapState.broadcastConfirm,
+    AirgapEvent.broadcast,
+    AirgapState.broadcasting,
+  ),
+  const AirgapTransition(
+    AirgapState.broadcasting,
+    AirgapEvent.broadcastOk,
+    AirgapState.done,
+  ),
+  const AirgapTransition(
+    AirgapState.broadcasting,
+    AirgapEvent.broadcastError,
+    AirgapState.failed,
+  ),
+  // cancel + expire fire from any live state.
+  for (final s in _liveStates)
+    AirgapTransition(s, AirgapEvent.cancel, AirgapState.cancelled),
+  for (final s in _liveStates)
+    AirgapTransition(s, AirgapEvent.expire, AirgapState.expired),
+];
 
 final airgapTransitions = _buildTransitions();
 

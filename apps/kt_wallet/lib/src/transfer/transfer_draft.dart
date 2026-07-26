@@ -77,7 +77,11 @@ class TransferSession {
 /// object itself is mutable and never replaced, so lookups use
 /// [BuildContext.getInheritedWidgetOfExactType] (no rebuild dependency).
 class TransferSessionScope extends InheritedWidget {
-  const TransferSessionScope({super.key, required this.session, required super.child});
+  const TransferSessionScope({
+    super.key,
+    required this.session,
+    required super.child,
+  });
 
   final TransferSession session;
 
@@ -85,5 +89,6 @@ class TransferSessionScope extends InheritedWidget {
       context.getInheritedWidgetOfExactType<TransferSessionScope>()?.session;
 
   @override
-  bool updateShouldNotify(TransferSessionScope oldWidget) => session != oldWidget.session;
+  bool updateShouldNotify(TransferSessionScope oldWidget) =>
+      session != oldWidget.session;
 }

@@ -39,9 +39,11 @@ abstract final class TransferValidation {
     if (!addr.isValid) {
       // Distinguish a well-formed address for the wrong chain from garbage.
       final looksLikeOtherChain = _matchesAnyOtherChain(chain, to);
-      return TransferCheck(looksLikeOtherChain
-          ? TransferProblem.wrongNetworkAddress
-          : TransferProblem.invalidAddress);
+      return TransferCheck(
+        looksLikeOtherChain
+            ? TransferProblem.wrongNetworkAddress
+            : TransferProblem.invalidAddress,
+      );
     }
 
     if (amount.raw == BigInt.zero) {
@@ -91,7 +93,9 @@ abstract final class TransferValidation {
 
   static void _requireSameScale(Amount a, Amount b, String what) {
     if (a.decimals != b.decimals) {
-      throw ArgumentError('$what decimals mismatch: ${a.decimals} vs ${b.decimals}');
+      throw ArgumentError(
+        '$what decimals mismatch: ${a.decimals} vs ${b.decimals}',
+      );
     }
   }
 

@@ -20,8 +20,8 @@ class PriceService {
     this.baseUrl = defaultCoinGeckoBaseUrl,
     this.timeout = const Duration(seconds: 10),
     GatewayResolver? gateway,
-  })  : _client = client ?? http.Client(),
-        _gateway = gateway ?? _noGateway;
+  }) : _client = client ?? http.Client(),
+       _gateway = gateway ?? _noGateway;
 
   static GatewayClient? _noGateway() => null;
 
@@ -37,6 +37,9 @@ class PriceService {
   static const coinGeckoIds = {
     Coin.eth: 'ethereum',
     Coin.polygon: 'polygon-ecosystem-token',
+    Coin.base: 'ethereum',
+    Coin.arbitrum: 'ethereum',
+    Coin.avalanche: 'avalanche-2',
     Coin.tron: 'tron',
     Coin.solana: 'solana',
   };
@@ -61,8 +64,9 @@ class PriceService {
     final gateway = _gateway();
     if (gateway != null) {
       try {
-        final quoted = await gateway.getPrices(
-            [for (final coin in Coin.values) BalanceService.symbolFor[coin]!]);
+        final quoted = await gateway.getPrices([
+          for (final coin in Coin.values) BalanceService.symbolFor[coin]!,
+        ]);
         final out = <Coin, double>{
           for (final coin in Coin.values)
             if (quoted.usdBySymbol[BalanceService.symbolFor[coin]!] != null)

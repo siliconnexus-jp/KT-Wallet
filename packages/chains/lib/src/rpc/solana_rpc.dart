@@ -32,10 +32,33 @@ class SolanaRpc {
     return BigInt.from(result['value'] as int);
   }
 
+  /// Sum of all SPL token accounts owned by [owner] for [mint].
+  Future<BigInt> getTokenBalance(String owner, String mint) async {
+    final result = await _call('getTokenAccountsByOwner', [
+      owner,
+      {'mint': mint},
+      {'encoding': 'jsonParsed', 'commitment': 'confirmed'},
+    ]);
+    final value = result is Map ? result['value'] : null;
+    if (value is! List) throw RpcException('bad token account response');
+    var total = BigInt.zero;
+    for (final entry in value) {
+      final account = entry is Map ? entry['account'] : null;
+      final data = account is Map ? account['data'] : null;
+      final parsed = data is Map ? data['parsed'] : null;
+      final info = parsed is Map ? parsed['info'] : null;
+      final tokenAmount = info is Map ? info['tokenAmount'] : null;
+      final amount = tokenAmount is Map ? tokenAmount['amount'] : null;
+      if (amount is! String) throw RpcException('bad token amount');
+      total += BigInt.parse(amount);
+    }
+    return total;
+  }
+
   /// Latest blockhash (needed to build a transaction; short-lived).
   Future<String> getLatestBlockhash() async {
     final result = await _call('getLatestBlockhash', [
-      {'commitment': 'finalized'}
+      {'commitment': 'finalized'},
     ]);
     final value = result is Map ? result['value'] : null;
     if (value is! Map || value['blockhash'] is! String) {
@@ -47,7 +70,7 @@ class SolanaRpc {
   Future<String> sendTransaction(String base64Tx) async {
     final result = await _call('sendTransaction', [
       base64Tx,
-      {'encoding': 'base64'}
+      {'encoding': 'base64'},
     ]);
     if (result is! String) throw RpcException('no signature returned');
     return result;
@@ -56,7 +79,7 @@ class SolanaRpc {
   /// Confirmation status for a signature, or null if unknown.
   Future<String?> signatureStatus(String signature) async {
     final result = await _call('getSignatureStatuses', [
-      [signature]
+      [signature],
     ]);
     final value = result is Map ? result['value'] : null;
     if (value is! List || value.isEmpty) return null;

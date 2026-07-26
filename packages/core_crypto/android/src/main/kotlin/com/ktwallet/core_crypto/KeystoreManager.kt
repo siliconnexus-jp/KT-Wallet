@@ -1,5 +1,6 @@
 package com.ktwallet.core_crypto
 
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import java.security.KeyStore
@@ -20,6 +21,7 @@ class KeystoreManager {
         private const val KEY_ALIAS_PREFIX = "kt_entropy_"
         private const val IV_LENGTH = 12
         private const val TAG_LENGTH_BITS = 128
+        private const val AUTH_VALIDITY_SECONDS = 30
     }
 
     private fun alias(walletId: String) = "$KEY_ALIAS_PREFIX$walletId"
@@ -38,8 +40,22 @@ class KeystoreManager {
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
-            .setUserAuthenticationRequired(requireAuth)
-            .setInvalidatedByBiometricEnrollment(true)
+        if (requireAuth) {
+            builder.setUserAuthenticationRequired(true)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                builder.setUserAuthenticationParameters(
+                    AUTH_VALIDITY_SECONDS,
+                    KeyProperties.AUTH_BIOMETRIC_STRONG or
+                        KeyProperties.AUTH_DEVICE_CREDENTIAL,
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                builder.setUserAuthenticationValidityDurationSeconds(
+                    AUTH_VALIDITY_SECONDS,
+                )
+            }
+            builder.setInvalidatedByBiometricEnrollment(true)
+        }
         runCatching { builder.setIsStrongBoxBacked(true) } // TEE fallback below
         return try {
             generator.init(builder.build())

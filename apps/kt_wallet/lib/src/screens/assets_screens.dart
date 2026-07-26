@@ -80,7 +80,16 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
       'Solana',
     ),
   ];
-  static const _networks = ['Ethereum', 'Polygon', 'TRON', 'Solana'];
+  static const _networks = [
+    'Ethereum',
+    'Polygon',
+    'Base',
+    'Arbitrum One',
+    'Avalanche C-Chain',
+    'TRON',
+    'Solana',
+  ];
+  static const _legacyNetworks = ['Ethereum', 'Polygon', 'TRON', 'Solana'];
 
   String _query = '';
   int _net = 0; // 0 = all
@@ -105,6 +114,23 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
       for (final (coin, name, symbol, color, glyph, network) in const [
         (Coin.eth, 'Ethereum', 'ETH', Color(0xFF627EEA), 'Ξ', 'Ethereum'),
         (Coin.polygon, 'POL', 'POL', Color(0xFF8247E5), '⬡', 'Polygon'),
+        (Coin.base, 'Base', 'ETH', Color(0xFF0052FF), 'B', 'Base'),
+        (
+          Coin.arbitrum,
+          'Arbitrum',
+          'ETH',
+          Color(0xFF28A0F0),
+          'A',
+          'Arbitrum One',
+        ),
+        (
+          Coin.avalanche,
+          'Avalanche',
+          'AVAX',
+          Color(0xFFE84142),
+          'A',
+          'Avalanche C-Chain',
+        ),
         (Coin.tron, 'TRON', 'TRX', Color(0xFF26A17B), '₮', 'TRON'),
         (Coin.solana, 'Solana', 'SOL', Color(0xFF9945FF), '◎', 'Solana'),
       ])
@@ -156,10 +182,11 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
     final offline = market?.isOffline ?? false;
     final live = market != null && !offline;
     final rows = live ? _liveRows(market) : _assets;
+    final networks = market == null ? _legacyNetworks : _networks;
     final q = _query.trim().toLowerCase();
     final results = [
       for (final a in rows)
-        if ((_net == 0 || a.$8 == _networks[_net - 1]) &&
+        if ((_net == 0 || a.$8 == networks[_net - 1]) &&
             (q.isEmpty ||
                 a.$3.toLowerCase().contains(q) ||
                 a.$4.toLowerCase().contains(q)))
@@ -217,7 +244,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
           ),
         ),
         KtSegmented(
-          options: [l10n.viewAll, ..._networks],
+          options: [l10n.viewAll, ...networks],
           selected: _net,
           onChanged: (i) => setState(() => _net = i),
         ),
@@ -473,6 +500,30 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       ChainColors.polygon,
     ),
     _ReceiveChain(
+      Coin.base,
+      'Base',
+      'ETH · Base',
+      'B',
+      Color(0xFF0052FF),
+      Color(0xFF0052FF),
+    ),
+    _ReceiveChain(
+      Coin.arbitrum,
+      'Arbitrum One',
+      'ETH · Arbitrum',
+      'A',
+      Color(0xFF28A0F0),
+      Color(0xFF28A0F0),
+    ),
+    _ReceiveChain(
+      Coin.avalanche,
+      'Avalanche C-Chain',
+      'AVAX · Avalanche',
+      'A',
+      Color(0xFFE84142),
+      Color(0xFFE84142),
+    ),
+    _ReceiveChain(
       Coin.tron,
       'TRON',
       'USDT · TRON',
@@ -496,13 +547,32 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   /// True while a devnet airdrop request is in flight (guards double-taps).
   bool _airdropping = false;
 
-  _ReceiveChain get _chain => _chains[_selected];
+  List<_ReceiveChain> get _availableChains {
+    final expanded =
+        WalletScope.of(context).current?.addresses.hasExpandedEvm ?? false;
+    return expanded
+        ? [
+            _chains[0],
+            _chains[1],
+            _chains[5],
+            _chains[6],
+            _chains[2],
+            _chains[3],
+            _chains[4],
+          ]
+        : [_chains[0], _chains[1], _chains[5], _chains[6]];
+  }
+
+  _ReceiveChain get _chain => _availableChains[_selected];
 
   /// Protocol family of the selected coin (Coin is the derivation-level enum,
   /// Chain the network-level one; they map 1:1).
   static Chain _familyOf(Coin coin) => switch (coin) {
     Coin.eth => Chain.ethereum,
     Coin.polygon => Chain.polygon,
+    Coin.base => Chain.base,
+    Coin.arbitrum => Chain.arbitrum,
+    Coin.avalanche => Chain.avalanche,
     Coin.tron => Chain.tron,
     Coin.solana => Chain.solana,
   };
@@ -529,10 +599,20 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           ..clearSnackBars()
           ..showSnackBar(SnackBar(content: Text(l10n.airdropOk)));
       } on AirdropException catch (e) {
+        final faucetUrl = net.faucetUrl;
+        final opened =
+            widget.airdropClient == null &&
+            faucetUrl != null &&
+            await ExternalActions.instance.open(Uri.parse(faucetUrl));
+        if (!mounted) return;
         messenger
           ..clearSnackBars()
           ..showSnackBar(
-            SnackBar(content: Text(l10n.airdropFailed(e.message))),
+            SnackBar(
+              content: Text(
+                opened ? l10n.faucetOpened : l10n.airdropFailed(e.message),
+              ),
+            ),
           );
       } finally {
         if (widget.airdropClient == null) service.close();
@@ -601,6 +681,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
 
   Future<void> _pickChain() async {
     final l10n = AppLocalizations.of(context);
+    final chains = _availableChains;
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: WalletColors.surface,
@@ -608,67 +689,69 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: WalletColors.border,
-                borderRadius: BorderRadius.circular(2),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: WalletColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  Text(
-                    l10n.networkRow,
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Text(
+                      l10n.networkRow,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: WalletColors.text,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (var i = 0; i < chains.length; i++)
+                ListTile(
+                  leading: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: chains[i].dotColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  title: Text(
+                    chains[i].network,
                     style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
                       color: WalletColors.text,
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            for (var i = 0; i < _chains.length; i++)
-              ListTile(
-                leading: Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: _chains[i].dotColor,
-                    shape: BoxShape.circle,
-                  ),
+                  trailing: i == _selected
+                      ? const Icon(
+                          Icons.check,
+                          size: 20,
+                          color: WalletColors.accent,
+                        )
+                      : null,
+                  onTap: () {
+                    setState(() => _selected = i);
+                    Navigator.of(ctx).pop();
+                  },
                 ),
-                title: Text(
-                  _chains[i].network,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: WalletColors.text,
-                  ),
-                ),
-                trailing: i == _selected
-                    ? const Icon(
-                        Icons.check,
-                        size: 20,
-                        color: WalletColors.accent,
-                      )
-                    : null,
-                onTap: () {
-                  setState(() => _selected = i);
-                  Navigator.of(ctx).pop();
-                },
-              ),
-            const SizedBox(height: 12),
-          ],
+              const SizedBox(height: 12),
+            ],
+          ),
         ),
       ),
     );

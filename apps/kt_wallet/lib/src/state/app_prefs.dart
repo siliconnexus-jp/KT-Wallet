@@ -24,6 +24,9 @@ class AppPrefsController extends ChangeNotifier {
   static const rpcPrefKeys = {
     Coin.eth: 'rpc.eth',
     Coin.polygon: 'rpc.polygon',
+    Coin.base: 'rpc.base',
+    Coin.arbitrum: 'rpc.arbitrum',
+    Coin.avalanche: 'rpc.avalanche',
     Coin.tron: 'rpc.tron',
     Coin.solana: 'rpc.solana',
   };

@@ -53,21 +53,20 @@ class Network {
   final bool builtin;
 
   Map<String, Object?> toJson() => {
-        'id': id,
-        'chain': chain.name,
-        'name': name,
-        'rpcUrl': rpcUrl,
-        'symbol': symbol,
-        if (evmChainId != null) 'evmChainId': evmChainId,
-        if (explorerUrl != null) 'explorerUrl': explorerUrl,
-        if (faucetUrl != null) 'faucetUrl': faucetUrl,
-        'isTestnet': isTestnet,
-      };
+    'id': id,
+    'chain': chain.name,
+    'name': name,
+    'rpcUrl': rpcUrl,
+    'symbol': symbol,
+    if (evmChainId != null) 'evmChainId': evmChainId,
+    if (explorerUrl != null) 'explorerUrl': explorerUrl,
+    if (faucetUrl != null) 'faucetUrl': faucetUrl,
+    'isTestnet': isTestnet,
+  };
 
   static Network? fromJson(Map<String, Object?> m) {
     final chainName = m['chain'];
-    final chain =
-        Chain.values.where((c) => c.name == chainName).firstOrNull;
+    final chain = Chain.values.where((c) => c.name == chainName).firstOrNull;
     final id = m['id'];
     final name = m['name'];
     final rpcUrl = m['rpcUrl'];
@@ -102,7 +101,7 @@ const ethMainnet = Network(
   id: 'eth-mainnet',
   chain: Chain.ethereum,
   name: 'Ethereum',
-  rpcUrl: 'https://eth.llamarpc.com',
+  rpcUrl: 'https://ethereum-rpc.publicnode.com',
   symbol: 'ETH',
   evmChainId: 1,
   explorerUrl: 'https://etherscan.io',
@@ -126,7 +125,7 @@ const polygonMainnet = Network(
   id: 'polygon-mainnet',
   chain: Chain.polygon,
   name: 'Polygon',
-  rpcUrl: 'https://polygon-rpc.com',
+  rpcUrl: 'https://polygon-bor-rpc.publicnode.com',
   symbol: 'POL',
   evmChainId: 137,
   explorerUrl: 'https://polygonscan.com',
@@ -137,11 +136,83 @@ const polygonAmoy = Network(
   id: 'polygon-amoy',
   chain: Chain.polygon,
   name: 'Amoy',
-  rpcUrl: 'https://rpc-amoy.polygon.technology',
+  rpcUrl: 'https://polygon-amoy-bor-rpc.publicnode.com',
   symbol: 'POL',
   evmChainId: 80002,
   explorerUrl: 'https://amoy.polygonscan.com',
   faucetUrl: 'https://faucet.polygon.technology',
+  isTestnet: true,
+  builtin: true,
+);
+
+const baseMainnet = Network(
+  id: 'base-mainnet',
+  chain: Chain.base,
+  name: 'Base',
+  rpcUrl: 'https://mainnet.base.org',
+  symbol: 'ETH',
+  evmChainId: 8453,
+  explorerUrl: 'https://basescan.org',
+  builtin: true,
+);
+
+const baseSepolia = Network(
+  id: 'base-sepolia',
+  chain: Chain.base,
+  name: 'Base Sepolia',
+  rpcUrl: 'https://sepolia.base.org',
+  symbol: 'ETH',
+  evmChainId: 84532,
+  explorerUrl: 'https://sepolia.basescan.org',
+  faucetUrl: 'https://docs.base.org/base-chain/tools/network-faucets',
+  isTestnet: true,
+  builtin: true,
+);
+
+const arbitrumMainnet = Network(
+  id: 'arbitrum-mainnet',
+  chain: Chain.arbitrum,
+  name: 'Arbitrum One',
+  rpcUrl: 'https://arb1.arbitrum.io/rpc',
+  symbol: 'ETH',
+  evmChainId: 42161,
+  explorerUrl: 'https://arbiscan.io',
+  builtin: true,
+);
+
+const arbitrumSepolia = Network(
+  id: 'arbitrum-sepolia',
+  chain: Chain.arbitrum,
+  name: 'Arbitrum Sepolia',
+  rpcUrl: 'https://sepolia-rollup.arbitrum.io/rpc',
+  symbol: 'ETH',
+  evmChainId: 421614,
+  explorerUrl: 'https://sepolia.arbiscan.io',
+  faucetUrl: 'https://faucet.quicknode.com/arbitrum/sepolia',
+  isTestnet: true,
+  builtin: true,
+);
+
+const avalancheMainnet = Network(
+  id: 'avalanche-mainnet',
+  chain: Chain.avalanche,
+  name: 'Avalanche C-Chain',
+  rpcUrl: 'https://api.avax.network/ext/bc/C/rpc',
+  symbol: 'AVAX',
+  evmChainId: 43114,
+  explorerUrl: 'https://snowtrace.io',
+  builtin: true,
+);
+
+const avalancheFuji = Network(
+  id: 'avalanche-fuji',
+  chain: Chain.avalanche,
+  name: 'Avalanche Fuji',
+  rpcUrl: 'https://api.avax-test.network/ext/bc/C/rpc',
+  symbol: 'AVAX',
+  evmChainId: 43113,
+  explorerUrl: 'https://testnet.snowtrace.io',
+  faucetUrl: 'https://core.app/tools/testnet-faucet',
   isTestnet: true,
   builtin: true,
 );
@@ -185,8 +256,7 @@ const solanaDevnet = Network(
   rpcUrl: 'https://api.devnet.solana.com',
   symbol: 'SOL',
   explorerUrl: 'https://explorer.solana.com?cluster=devnet',
-  // Devnet's faucet is the RPC requestAirdrop call itself — the receive
-  // screen offers a one-tap airdrop instead of an external link.
+  faucetUrl: 'https://faucet.solana.com',
   isTestnet: true,
   builtin: true,
 );
@@ -196,6 +266,12 @@ const builtinNetworks = [
   ethSepolia,
   polygonMainnet,
   polygonAmoy,
+  baseMainnet,
+  baseSepolia,
+  arbitrumMainnet,
+  arbitrumSepolia,
+  avalancheMainnet,
+  avalancheFuji,
   tronMainnet,
   tronNile,
   solanaMainnet,
@@ -205,6 +281,9 @@ const builtinNetworks = [
 const _mainnetProfile = {
   Chain.ethereum: 'eth-mainnet',
   Chain.polygon: 'polygon-mainnet',
+  Chain.base: 'base-mainnet',
+  Chain.arbitrum: 'arbitrum-mainnet',
+  Chain.avalanche: 'avalanche-mainnet',
   Chain.tron: 'tron-mainnet',
   Chain.solana: 'sol-mainnet',
 };
@@ -212,6 +291,9 @@ const _mainnetProfile = {
 const _testnetProfile = {
   Chain.ethereum: 'eth-sepolia',
   Chain.polygon: 'polygon-amoy',
+  Chain.base: 'base-sepolia',
+  Chain.arbitrum: 'arbitrum-sepolia',
+  Chain.avalanche: 'avalanche-fuji',
   Chain.tron: 'tron-nile',
   Chain.solana: 'sol-devnet',
 };
@@ -228,7 +310,8 @@ class NetworkController extends ChangeNotifier {
   }) : _environment = initialEnvironment;
 
   static const _keyEnvironment = 'network.environment';
-  static const _keyOverrides = 'network.overrides'; // JSON {chainName: networkId}
+  static const _keyOverrides =
+      'network.overrides'; // JSON {chainName: networkId}
   static const _keyCustom = 'network.custom'; // JSON list of Network.toJson
 
   NetworkEnvironment _environment;
@@ -245,8 +328,7 @@ class NetworkController extends ChangeNotifier {
   List<Network> networksFor(Chain chain) =>
       allNetworks.where((n) => n.chain == chain).toList();
 
-  Network? byId(String id) =>
-      allNetworks.where((n) => n.id == id).firstOrNull;
+  Network? byId(String id) => allNetworks.where((n) => n.id == id).firstOrNull;
 
   /// The active instance for [chain]: per-chain override first, else the
   /// environment profile. Falls back to mainnet if an override points at a
@@ -265,8 +347,7 @@ class NetworkController extends ChangeNotifier {
 
   /// True when ANY active chain instance is a testnet (drives the app-wide
   /// amber badge and fiat suppression).
-  bool get anyTestnetActive =>
-      Chain.values.any((c) => activeFor(c).isTestnet);
+  bool get anyTestnetActive => Chain.values.any((c) => activeFor(c).isTestnet);
 
   Future<void> load() async {
     try {
@@ -281,10 +362,12 @@ class NetworkController extends ChangeNotifier {
         if (list is List) {
           _custom
             ..clear()
-            ..addAll(list
-                .whereType<Map<String, Object?>>()
-                .map(Network.fromJson)
-                .whereType<Network>());
+            ..addAll(
+              list
+                  .whereType<Map<String, Object?>>()
+                  .map(Network.fromJson)
+                  .whereType<Network>(),
+            );
         }
       }
       final overrides = prefs.getString(_keyOverrides);
@@ -292,8 +375,7 @@ class NetworkController extends ChangeNotifier {
         final m = json.decode(overrides);
         if (m is Map) {
           m.forEach((k, v) {
-            final chain =
-                Chain.values.where((c) => c.name == k).firstOrNull;
+            final chain = Chain.values.where((c) => c.name == k).firstOrNull;
             if (chain != null && v is String) _overrides[chain] = v;
           });
         }
@@ -361,9 +443,13 @@ class NetworkController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_keyEnvironment, _environment.name);
       await prefs.setString(
-          _keyCustom, json.encode([for (final n in _custom) n.toJson()]));
-      await prefs.setString(_keyOverrides,
-          json.encode({for (final e in _overrides.entries) e.key.name: e.value}));
+        _keyCustom,
+        json.encode([for (final n in _custom) n.toJson()]),
+      );
+      await prefs.setString(
+        _keyOverrides,
+        json.encode({for (final e in _overrides.entries) e.key.name: e.value}),
+      );
     } catch (_) {
       // Best-effort; in-memory state still applies.
     }
@@ -374,9 +460,11 @@ class NetworkController extends ChangeNotifier {
 /// falls back to a shared mainnet-default controller so every screen renders
 /// exactly as before this feature existed.
 class NetworkScope extends InheritedNotifier<NetworkController> {
-  const NetworkScope(
-      {super.key, required NetworkController controller, required super.child})
-      : super(notifier: controller);
+  const NetworkScope({
+    super.key,
+    required NetworkController controller,
+    required super.child,
+  }) : super(notifier: controller);
 
   static NetworkController of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<NetworkScope>();

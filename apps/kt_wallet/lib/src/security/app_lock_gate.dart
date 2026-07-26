@@ -94,7 +94,8 @@ class _AppLockGateState extends State<AppLockGate> {
     if (_prompting) return;
     _prompting = true;
     final l10n = await AppLocalizations.delegate.load(
-        widget.localeController.locale ?? AppLocalizations.supportedLocales.first);
+      widget.localeController.locale ?? AppLocalizations.supportedLocales.first,
+    );
     final outcome = await _auth.authenticate(reason: l10n.appLock);
     _prompting = false;
     if (!mounted) return;
@@ -105,7 +106,9 @@ class _AppLockGateState extends State<AppLockGate> {
         // Availability vanished mid-session (e.g. biometrics disabled in the
         // system settings): fall back to the PIN when one exists; otherwise
         // the same legacy pass-through reasoning as in [_resolve].
-        setState(() => _state = _pinSet ? _LockState.lockedPin : _LockState.unlocked);
+        setState(
+          () => _state = _pinSet ? _LockState.lockedPin : _LockState.unlocked,
+        );
       case BiometricOutcome.failure:
         // A failed prompt falls back to the PIN numpad when one is enrolled;
         // without one the button remains available for another attempt.
@@ -133,13 +136,16 @@ class _AppLockGateState extends State<AppLockGate> {
             onUnlock: _promptBiometric,
             // Direct PIN path so the user is never forced through a prompt
             // they know will fail (e.g. wet fingers).
-            onUsePin: _pinSet ? () => setState(() => _state = _LockState.lockedPin) : null,
+            onUsePin: _pinSet
+                ? () => setState(() => _state = _LockState.lockedPin)
+                : null,
           ),
         );
       case _LockState.lockedPin:
         return _LockScreenApp(
           localeController: widget.localeController,
-          body: (l10n) => _PinLockBody(l10n: l10n, pin: _pin, onVerified: _onPinVerified),
+          body: (l10n) =>
+              _PinLockBody(l10n: l10n, pin: _pin, onVerified: _onPinVerified),
         );
     }
   }
@@ -167,7 +173,10 @@ class _LockScreenApp extends StatelessWidget {
         theme: ThemeData(
           fontFamily: 'Inter',
           brightness: Brightness.dark,
-          colorScheme: ColorScheme.fromSeed(seedColor: WalletColors.accent, brightness: Brightness.dark),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: WalletColors.accent,
+            brightness: Brightness.dark,
+          ),
           scaffoldBackgroundColor: SignerColors.bg,
         ),
         home: Builder(
@@ -189,7 +198,11 @@ class _LockScreenApp extends StatelessWidget {
 /// The biometric face of the lock screen (unchanged visuals from the original
 /// gate, plus an optional "unlock with PIN" escape hatch).
 class _BiometricLockBody extends StatelessWidget {
-  const _BiometricLockBody({required this.l10n, required this.onUnlock, this.onUsePin});
+  const _BiometricLockBody({
+    required this.l10n,
+    required this.onUnlock,
+    this.onUsePin,
+  });
 
   final AppLocalizations l10n;
   final VoidCallback onUnlock;
@@ -203,13 +216,25 @@ class _BiometricLockBody extends StatelessWidget {
       children: [
         const Icon(Icons.lock_outline, size: 48, color: SignerColors.text2),
         const SizedBox(height: 16),
-        Text(l10n.appLock,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: SignerColors.text)),
+        Text(
+          l10n.appLock,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: SignerColors.text,
+          ),
+        ),
         const SizedBox(height: 8),
-        Text(l10n.appLockDesc,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 13, height: 1.6, color: SignerColors.text2)),
+        Text(
+          l10n.appLockDesc,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 13,
+            height: 1.6,
+            color: SignerColors.text2,
+          ),
+        ),
         const SizedBox(height: 24),
         KtPrimaryButton(label: l10n.useFaceId, onPressed: onUnlock),
         if (onUsePin != null) ...[
@@ -217,9 +242,15 @@ class _BiometricLockBody extends StatelessWidget {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: onUsePin,
-            child: Text(l10n.usePinUnlock,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: SignerColors.text2)),
+            child: Text(
+              l10n.usePinUnlock,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: SignerColors.text2,
+              ),
+            ),
           ),
         ],
       ],
@@ -230,7 +261,11 @@ class _BiometricLockBody extends StatelessWidget {
 /// The PIN face of the lock screen: 6-digit numpad verified against
 /// [WalletPin] with wrong-PIN and persisted-lockout messaging.
 class _PinLockBody extends StatefulWidget {
-  const _PinLockBody({required this.l10n, required this.pin, required this.onVerified});
+  const _PinLockBody({
+    required this.l10n,
+    required this.pin,
+    required this.onVerified,
+  });
 
   final AppLocalizations l10n;
   final WalletPin pin;
@@ -256,14 +291,17 @@ class _PinLockBodyState extends State<_PinLockBody> {
   Future<void> _preflightLockout() async {
     final remaining = await widget.pin.lockRemaining();
     if (remaining != null && mounted) {
-      setState(() => _error = widget.l10n.pinLockedRetry(remaining.inSeconds + 1));
+      setState(
+        () => _error = widget.l10n.pinLockedRetry(remaining.inSeconds + 1),
+      );
     }
   }
 
   Future<void> _onKey(String k) async {
     if (_verifying) return;
     if (k == 'del') {
-      if (_entry.isNotEmpty) setState(() => _entry = _entry.substring(0, _entry.length - 1));
+      if (_entry.isNotEmpty)
+        setState(() => _entry = _entry.substring(0, _entry.length - 1));
       return;
     }
     if (_entry.length >= 6) return;
@@ -296,9 +334,15 @@ class _PinLockBodyState extends State<_PinLockBody> {
       children: [
         const Icon(Icons.lock_outline, size: 40, color: SignerColors.text2),
         const SizedBox(height: 16),
-        Text(widget.l10n.enterPinToUnlock,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: SignerColors.text)),
+        Text(
+          widget.l10n.enterPinToUnlock,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color: SignerColors.text,
+          ),
+        ),
         const SizedBox(height: 18),
         PinDots(filled: _entry.length, colors: PinPadColors.signer),
         SizedBox(
@@ -306,9 +350,14 @@ class _PinLockBodyState extends State<_PinLockBody> {
           child: Center(
             child: _error == null
                 ? null
-                : Text(_error!,
+                : Text(
+                    _error!,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 13, color: SignerColors.danger)),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: SignerColors.danger,
+                    ),
+                  ),
           ),
         ),
         PinPad(onKey: _onKey, colors: PinPadColors.signer),

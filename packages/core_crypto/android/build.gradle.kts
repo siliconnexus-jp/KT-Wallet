@@ -1,3 +1,5 @@
+import java.util.Properties
+
 group = "com.ktwallet.core_crypto"
 version = "1.0-SNAPSHOT"
 
@@ -14,10 +16,32 @@ buildscript {
     }
 }
 
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use(::load)
+}
+
+val useWalletCore = (
+    project.findProperty("walletCore")?.toString()
+        ?: localProperties.getProperty("walletCore")
+        ?: "false"
+).toBoolean()
+
 allprojects {
     repositories {
         google()
         mavenCentral()
+        if (useWalletCore) {
+            maven {
+                url = uri("https://maven.pkg.github.com/trustwallet/wallet-core")
+                credentials {
+                    username = localProperties.getProperty("gpr.user")
+                        ?: providers.gradleProperty("gpr.user").orNull
+                    password = localProperties.getProperty("gpr.token")
+                        ?: providers.gradleProperty("gpr.token").orNull
+                }
+            }
+        }
     }
 }
 
@@ -31,9 +55,6 @@ plugins {
 // (or walletCore=true in the app's android/gradle.properties). When off (the
 // default), an API-identical fail-closed stub bridge is compiled instead so the
 // full UI runs, but no key/address/signature can be produced on Android.
-val useWalletCore = (project.findProperty("walletCore")?.toString() ?: "false")
-    .toBoolean()
-
 android {
     namespace = "com.ktwallet.core_crypto"
 
@@ -91,7 +112,7 @@ dependencies {
     //     credentials { username = <gh-user>; password = <gh-token:read:packages> }
     //   }
     if (useWalletCore) {
-        implementation("com.trustwallet:wallet-core:4.7.0")
+        implementation("com.trustwallet:wallet-core:4.6.13")
     }
     // Biometric prompt for the AuthGate.
     implementation("androidx.biometric:biometric:1.1.0")

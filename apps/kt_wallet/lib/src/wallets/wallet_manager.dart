@@ -19,8 +19,7 @@ class WalletManager {
   bool get canAddMore => _wallets.length < maxWallets;
 
   String? get currentId => _currentId;
-  Wallet? get current =>
-      _currentId == null ? null : _byId(_currentId!);
+  Wallet? get current => _currentId == null ? null : _byId(_currentId!);
 
   List<Wallet> _sorted() =>
       [..._wallets]..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
@@ -52,25 +51,35 @@ class WalletManager {
   }
 
   void rename(String id, String name) {
-    _replace(id, (w) => switch (w) {
-          HotWallet() => w.copyWith(name: name),
-          WatchWallet() => w.copyWith(name: name),
-        });
+    _replace(
+      id,
+      (w) => switch (w) {
+        HotWallet() => w.copyWith(name: name),
+        WatchWallet() => w.copyWith(name: name),
+      },
+    );
   }
 
   void setColor(String id, int color) {
-    _replace(id, (w) => switch (w) {
-          HotWallet() => w.copyWith(avatarColor: color),
-          WatchWallet() => w.copyWith(avatarColor: color),
-        });
+    _replace(
+      id,
+      (w) => switch (w) {
+        HotWallet() => w.copyWith(avatarColor: color),
+        WatchWallet() => w.copyWith(avatarColor: color),
+      },
+    );
   }
 
   void markBackedUp(String id) {
-    _replace(id, (w) => switch (w) {
-          HotWallet() => w.copyWith(backedUp: true),
-          WatchWallet() =>
-            throw WalletError('watch wallets have no backup state'),
-        });
+    _replace(
+      id,
+      (w) => switch (w) {
+        HotWallet() => w.copyWith(backedUp: true),
+        WatchWallet() => throw WalletError(
+          'watch wallets have no backup state',
+        ),
+      },
+    );
   }
 
   /// Removes a wallet; if it was current, selection falls back to the first
@@ -97,10 +106,13 @@ class WalletManager {
       throw WalletError('reorder must be a full permutation of wallet ids');
     }
     for (var i = 0; i < orderedIds.length; i++) {
-      _replace(orderedIds[i], (w) => switch (w) {
-            HotWallet() => w.copyWith(sortOrder: i),
-            WatchWallet() => w.copyWith(sortOrder: i),
-          });
+      _replace(
+        orderedIds[i],
+        (w) => switch (w) {
+          HotWallet() => w.copyWith(sortOrder: i),
+          WatchWallet() => w.copyWith(sortOrder: i),
+        },
+      );
     }
   }
 

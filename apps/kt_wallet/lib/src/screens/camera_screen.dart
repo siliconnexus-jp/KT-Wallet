@@ -37,25 +37,42 @@ class KtCameraScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: SignerColors.bg,
-        body: SafeArea(
-          bottom: false,
-          child: Column(children: [
-            const KtStatusBar(theme: AppTheme.signer),
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: KtNavBar(title: title, theme: AppTheme.signer, leading: Icons.close, onBack: onClose)),
-            const SizedBox(height: 24),
-            ScanViewfinder(
-              height: 400,
-              frameColor: SignerColors.blue,
-              onSimulatedTap: onSimulatedScan,
-              onScanned: onScanned,
-              availability: availability,
+    backgroundColor: SignerColors.bg,
+    body: SafeArea(
+      bottom: false,
+      child: Column(
+        children: [
+          const KtStatusBar(theme: AppTheme.signer),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: KtNavBar(
+              title: title,
+              theme: AppTheme.signer,
+              leading: Icons.close,
+              onBack: onClose,
             ),
-            const SizedBox(height: 24),
-            Text(hint, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white)),
-          ]),
-        ),
-      );
+          ),
+          const SizedBox(height: 24),
+          ScanViewfinder(
+            height: 400,
+            frameColor: SignerColors.blue,
+            onSimulatedTap: onSimulatedScan,
+            onScanned: onScanned,
+            availability: availability,
+          ),
+          const SizedBox(height: 24),
+          Text(
+            hint,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 /// Returns the address a scanned QR string carries if it validates on any
@@ -130,7 +147,8 @@ class ScanAccountCameraScreen extends StatefulWidget {
   final CameraAvailability? availability;
 
   @override
-  State<ScanAccountCameraScreen> createState() => _ScanAccountCameraScreenState();
+  State<ScanAccountCameraScreen> createState() =>
+      _ScanAccountCameraScreenState();
 }
 
 class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
@@ -175,7 +193,9 @@ class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final progress = _received == 0 ? '' : ' · $_received / ${_session.progress.total == 0 ? _frames.length : _session.progress.total}';
+    final progress = _received == 0
+        ? ''
+        : ' · $_received / ${_session.progress.total == 0 ? _frames.length : _session.progress.total}';
     return KtCameraScreen(
       title: l10n.scanAccountQr,
       hint: '${l10n.scanAccountHint}$progress',

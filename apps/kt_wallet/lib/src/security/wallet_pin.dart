@@ -33,7 +33,7 @@ abstract class PinStorage {
 /// plugin is always registered and the fallback never engages.
 class SecurePinStorage implements PinStorage {
   SecurePinStorage({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? const FlutterSecureStorage();
 
   final FlutterSecureStorage _storage;
 
@@ -106,9 +106,13 @@ Uint8List pbkdf2Sha256({
   final out = BytesBuilder(copy: false);
   for (var block = 1; block <= blockCount; block++) {
     // U1 = HMAC(password, salt || INT_32_BE(block))
-    var u = hmac
-        .convert([...salt, block >> 24, (block >> 16) & 0xff, (block >> 8) & 0xff, block & 0xff])
-        .bytes;
+    var u = hmac.convert([
+      ...salt,
+      block >> 24,
+      (block >> 16) & 0xff,
+      (block >> 8) & 0xff,
+      block & 0xff,
+    ]).bytes;
     final t = Uint8List.fromList(u);
     for (var i = 1; i < iterations; i++) {
       u = hmac.convert(u).bytes;
@@ -129,10 +133,13 @@ class PinVerdict {
 
   const PinVerdict.ok() : this._(PinVerdictKind.ok);
   const PinVerdict.wrong(int failedAttempts)
-      : this._(PinVerdictKind.wrong, failedAttempts: failedAttempts);
+    : this._(PinVerdictKind.wrong, failedAttempts: failedAttempts);
   const PinVerdict.locked(Duration remaining, int failedAttempts)
-      : this._(PinVerdictKind.locked,
-            failedAttempts: failedAttempts, lockRemaining: remaining);
+    : this._(
+        PinVerdictKind.locked,
+        failedAttempts: failedAttempts,
+        lockRemaining: remaining,
+      );
 
   final PinVerdictKind kind;
 
@@ -161,8 +168,8 @@ class WalletPin {
     this.iterations = 100000,
     Random? random,
     DateTime Function()? clock,
-  })  : _random = random ?? Random.secure(),
-        _now = clock ?? DateTime.now;
+  }) : _random = random ?? Random.secure(),
+       _now = clock ?? DateTime.now;
 
   /// Process-wide default (real secure storage), swappable in tests — same
   /// pattern as [BiometricAuth.instance].
@@ -192,17 +199,22 @@ class WalletPin {
   /// Enrolls (or replaces) the PIN and clears any lockout state.
   Future<void> setPin(String pin) async {
     final salt = Uint8List.fromList(
-        List.generate(saltLength, (_) => _random.nextInt(256)));
+      List.generate(saltLength, (_) => _random.nextInt(256)),
+    );
     final hash = pbkdf2Sha256(
-        password: utf8.encode(pin), salt: salt, iterations: iterations);
+      password: utf8.encode(pin),
+      salt: salt,
+      iterations: iterations,
+    );
     await _storage.write(
-        pinKey,
-        jsonEncode({
-          'algo': 'pbkdf2-hmac-sha256',
-          'salt': base64Encode(salt),
-          'hash': base64Encode(hash),
-          'iterations': iterations,
-        }));
+      pinKey,
+      jsonEncode({
+        'algo': 'pbkdf2-hmac-sha256',
+        'salt': base64Encode(salt),
+        'hash': base64Encode(hash),
+        'iterations': iterations,
+      }),
+    );
     await _storage.delete(pinLockoutKey);
   }
 
@@ -246,11 +258,12 @@ class WalletPin {
       until = now.add(baseLockout * factor);
     }
     await _storage.write(
-        pinLockoutKey,
-        jsonEncode({
-          'fails': newFails,
-          if (until != null) 'lockedUntil': until.millisecondsSinceEpoch,
-        }));
+      pinLockoutKey,
+      jsonEncode({
+        'fails': newFails,
+        if (until != null) 'lockedUntil': until.millisecondsSinceEpoch,
+      }),
+    );
     return until == null
         ? PinVerdict.wrong(newFails)
         : PinVerdict.locked(until.difference(now), newFails);

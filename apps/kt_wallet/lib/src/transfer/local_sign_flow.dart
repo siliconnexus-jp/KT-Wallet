@@ -42,14 +42,38 @@ class IllegalLocalTransition implements Exception {
 
 const localTransitions = <LocalTransition>[
   LocalTransition(LocalState.draft, LocalEvent.reviewed, LocalState.confirming),
-  LocalTransition(LocalState.confirming, LocalEvent.confirm, LocalState.authenticating),
-  LocalTransition(LocalState.authenticating, LocalEvent.authOk, LocalState.signing),
+  LocalTransition(
+    LocalState.confirming,
+    LocalEvent.confirm,
+    LocalState.authenticating,
+  ),
+  LocalTransition(
+    LocalState.authenticating,
+    LocalEvent.authOk,
+    LocalState.signing,
+  ),
   // Auth lockout/cancel returns to the confirm screen, not a dead end.
-  LocalTransition(LocalState.authenticating, LocalEvent.authFailedOrCancelled, LocalState.confirming),
-  LocalTransition(LocalState.signing, LocalEvent.signOk, LocalState.broadcasting),
+  LocalTransition(
+    LocalState.authenticating,
+    LocalEvent.authFailedOrCancelled,
+    LocalState.confirming,
+  ),
+  LocalTransition(
+    LocalState.signing,
+    LocalEvent.signOk,
+    LocalState.broadcasting,
+  ),
   LocalTransition(LocalState.signing, LocalEvent.signError, LocalState.failed),
-  LocalTransition(LocalState.broadcasting, LocalEvent.broadcastOk, LocalState.done),
-  LocalTransition(LocalState.broadcasting, LocalEvent.broadcastError, LocalState.failed),
+  LocalTransition(
+    LocalState.broadcasting,
+    LocalEvent.broadcastOk,
+    LocalState.done,
+  ),
+  LocalTransition(
+    LocalState.broadcasting,
+    LocalEvent.broadcastError,
+    LocalState.failed,
+  ),
   // Broadcast is NEVER auto-retried; a failed tx is rebuilt only on explicit
   // user retry (fresh nonce/blockhash) — INV-15.
   LocalTransition(LocalState.failed, LocalEvent.retry, LocalState.confirming),

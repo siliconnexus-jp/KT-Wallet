@@ -7,8 +7,10 @@ import 'package:http/http.dart' as http;
 /// the injectable transport in `chains/rpc`). Lives in kt_wallet — never in the
 /// offline signer, which has no network capability.
 class HttpJsonRpcTransport implements JsonRpcTransport {
-  HttpJsonRpcTransport({http.Client? client, this.timeout = const Duration(seconds: 10)})
-      : _client = client ?? http.Client();
+  HttpJsonRpcTransport({
+    http.Client? client,
+    this.timeout = const Duration(seconds: 10),
+  }) : _client = client ?? http.Client();
   final http.Client _client;
   final Duration timeout;
 
@@ -32,8 +34,10 @@ class HttpJsonRpcTransport implements JsonRpcTransport {
 
 /// HTTP-backed REST transport (TronGrid).
 class HttpRestTransport implements RestTransport {
-  HttpRestTransport({http.Client? client, this.timeout = const Duration(seconds: 10)})
-      : _client = client ?? http.Client();
+  HttpRestTransport({
+    http.Client? client,
+    this.timeout = const Duration(seconds: 10),
+  }) : _client = client ?? http.Client();
   final http.Client _client;
   final Duration timeout;
 

@@ -1,7 +1,26 @@
+import java.util.Properties
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use(::load)
+}
+
+val useWalletCore =
+    (localProperties.getProperty("walletCore") ?: "false").toBoolean()
+
 allprojects {
     repositories {
         google()
         mavenCentral()
+        if (useWalletCore) {
+            maven {
+                url = uri("https://maven.pkg.github.com/trustwallet/wallet-core")
+                credentials {
+                    username = localProperties.getProperty("gpr.user")
+                    password = localProperties.getProperty("gpr.token")
+                }
+            }
+        }
     }
 }
 

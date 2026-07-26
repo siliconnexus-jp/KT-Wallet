@@ -5,7 +5,7 @@ import 'keccak.dart';
 import 'sha256.dart';
 
 /// Supported chains for address validation (matches core_crypto Coin).
-enum Chain { ethereum, polygon, tron, solana }
+enum Chain { ethereum, polygon, base, arbitrum, avalanche, tron, solana }
 
 /// Validates and normalizes destination addresses per chain, so a wrong-network
 /// paste (e.g. a TRON address in an EVM transfer) is caught before building a
@@ -27,7 +27,11 @@ abstract final class Addresses {
     final a = address.trim();
     if (a.isEmpty) return AddressValidation.bad('empty address');
     return switch (chain) {
-      Chain.ethereum || Chain.polygon => _validateEvm(a),
+      Chain.ethereum ||
+      Chain.polygon ||
+      Chain.base ||
+      Chain.arbitrum ||
+      Chain.avalanche => _validateEvm(a),
       Chain.tron => _validateTron(a),
       Chain.solana => _validateSolana(a),
     };
@@ -77,7 +81,8 @@ abstract final class Addresses {
   // ---- TRON (Base58Check, 0x41 prefix) ------------------------------------
 
   static AddressValidation _validateTron(String a) {
-    if (!a.startsWith('T')) return AddressValidation.bad('TRON address starts with T');
+    if (!a.startsWith('T'))
+      return AddressValidation.bad('TRON address starts with T');
     Uint8List decoded;
     try {
       decoded = base58Decode(a);
