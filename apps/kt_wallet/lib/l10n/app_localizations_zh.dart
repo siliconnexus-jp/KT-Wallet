@@ -1063,11 +1063,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupSaved => '备份已保存';
 
   @override
-  String backupSavedTo(String location) {
-    return '备份已保存到 $location';
-  }
-
-  @override
   String get backupCancelled => '已取消备份';
 
   @override

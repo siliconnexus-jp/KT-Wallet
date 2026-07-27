@@ -1123,11 +1123,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backupSaved => 'Backup saved';
 
   @override
-  String backupSavedTo(String location) {
-    return 'Backup saved to $location';
-  }
-
-  @override
   String get backupCancelled => 'Backup cancelled';
 
   @override

@@ -2104,12 +2104,6 @@ abstract class AppLocalizations {
   /// **'备份已保存'**
   String get backupSaved;
 
-  /// No description provided for @backupSavedTo.
-  ///
-  /// In zh, this message translates to:
-  /// **'备份已保存到 {location}'**
-  String backupSavedTo(String location);
-
   /// No description provided for @backupCancelled.
   ///
   /// In zh, this message translates to:

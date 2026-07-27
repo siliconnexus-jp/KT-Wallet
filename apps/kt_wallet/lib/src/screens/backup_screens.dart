@@ -87,10 +87,7 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
       );
       if (!mounted) return;
       final message = switch (saved.outcome) {
-        FileExchangeOutcome.done =>
-          saved.location == null || saved.location!.isEmpty
-              ? l10n.backupSaved
-              : l10n.backupSavedTo(saved.location!),
+        FileExchangeOutcome.done => l10n.backupSaved,
         FileExchangeOutcome.cancelled => l10n.backupCancelled,
         FileExchangeOutcome.unsupported => l10n.backupUnsupported,
         FileExchangeOutcome.failed => l10n.backupFailed,

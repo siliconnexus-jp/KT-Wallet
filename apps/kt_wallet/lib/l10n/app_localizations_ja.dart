@@ -1077,11 +1077,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get backupSaved => 'バックアップを保存しました';
 
   @override
-  String backupSavedTo(String location) {
-    return '$location に保存しました';
-  }
-
-  @override
   String get backupCancelled => 'バックアップをキャンセルしました';
 
   @override

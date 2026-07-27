@@ -159,8 +159,19 @@ import UniformTypeIdentifiers
   /// the moment this method returns and the callback never fires.
   private var documentCoordinator: DocumentPickerCoordinator?
 
+  /// The presenting controller.
+  ///
+  /// `AppDelegate.window` is nil in a scene-based app — the window belongs to
+  /// the SceneDelegate — so the key window has to come from the connected
+  /// scenes, or the picker silently has nowhere to appear.
   private func topViewController() -> UIViewController? {
-    var top = window?.rootViewController
+    var top =
+      window?.rootViewController
+      ?? UIApplication.shared.connectedScenes
+        .compactMap { $0 as? UIWindowScene }
+        .flatMap { $0.windows }
+        .first(where: { $0.isKeyWindow })?
+        .rootViewController
     while let presented = top?.presentedViewController { top = presented }
     return top
   }
@@ -179,19 +190,21 @@ import UniformTypeIdentifiers
       result(FlutterError(code: "FAILED", message: error.localizedDescription, details: nil))
       return
     }
-    let picker = UIDocumentPickerViewController(forExporting: [staged], asCopy: true)
+    // forExporting: is iOS 14+; this app still targets 13, where the same
+    // sheet is reached through the `.exportToService` mode.
+    let picker: UIDocumentPickerViewController
+    if #available(iOS 14, *) {
+      picker = UIDocumentPickerViewController(forExporting: [staged], asCopy: true)
+    } else {
+      picker = UIDocumentPickerViewController(url: staged, in: .exportToService)
+    }
     let coordinator = DocumentPickerCoordinator { [weak self] urls in
       try? FileManager.default.removeItem(at: staged)
       self?.documentCoordinator = nil
-      guard let saved = urls.first else {
-        result(["cancelled": true])
-        return
-      }
-      // Two path components ("iCloud Drive/KT Wallet") read as a place; the
-      // full sandbox path does not.
-      let location = saved.deletingLastPathComponent().pathComponents.suffix(2).joined(
-        separator: "/")
-      result(["cancelled": false, "location": location])
+      // Only whether it happened. The URL we get back is a sandbox path
+      // whose tail is a container UUID, not the "iCloud Drive" the user just
+      // picked — reporting it would be worse than saying nothing.
+      result(["cancelled": urls.isEmpty])
     }
     picker.delegate = coordinator
     documentCoordinator = coordinator
@@ -204,9 +217,15 @@ import UniformTypeIdentifiers
       return
     }
     // A backup carries a private extension, so there is no system UTType for
-    // it; `.data` keeps every file selectable and the format check happens in
-    // Dart, which can explain the mismatch far better than a greyed-out row.
-    let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.data], asCopy: true)
+    // it; plain data keeps every file selectable and the format check happens
+    // in Dart, which can explain the mismatch far better than a greyed-out row.
+    // The UTType initializer is iOS 14+; this app still targets 13.
+    let picker: UIDocumentPickerViewController
+    if #available(iOS 14, *) {
+      picker = UIDocumentPickerViewController(forOpeningContentTypes: [.data], asCopy: true)
+    } else {
+      picker = UIDocumentPickerViewController(documentTypes: ["public.data"], in: .import)
+    }
     let coordinator = DocumentPickerCoordinator { [weak self] urls in
       self?.documentCoordinator = nil
       guard let picked = urls.first else {

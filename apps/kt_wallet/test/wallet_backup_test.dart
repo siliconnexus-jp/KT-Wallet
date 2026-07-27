@@ -168,7 +168,7 @@ void main() {
     ) async {
       final crypto = MockCoreCrypto();
       final controller = await _controllerWithWallet(crypto);
-      final files = FakeFileExchange(saveLocation: 'iCloud Drive/KT Wallet');
+      final files = FakeFileExchange();
 
       await tester.pumpWidget(
         _app(

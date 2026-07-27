@@ -369,14 +369,6 @@
   "backupPasswordWarning": "There is no way to recover this password. Lose it and the backup is unopenable — keep your written recovery phrase as well.",
   "backupCreate": "Create backup",
   "backupSaved": "Backup saved",
-  "backupSavedTo": "Backup saved to {location}",
-  "@backupSavedTo": {
-    "placeholders": {
-      "location": {
-        "type": "String"
-      }
-    }
-  },
   "backupCancelled": "Backup cancelled",
   "backupFailed": "Could not create the backup",
   "backupUnsupported": "This device cannot save files",

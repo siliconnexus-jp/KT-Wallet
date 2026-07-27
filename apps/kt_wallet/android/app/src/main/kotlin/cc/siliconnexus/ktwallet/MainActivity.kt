@@ -338,9 +338,9 @@ class MainActivity : FlutterFragmentActivity() {
                     ?: throw IllegalStateException("no bytes staged")
                 contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
                     ?: throw IllegalStateException("provider refused the write")
-                finishFileCall(
-                    mapOf("cancelled" to false, "location" to (uri.lastPathSegment ?: ""))
-                )
+                // Only whether it happened: the SAF uri's tail is a provider
+                // document id, not the folder the user picked.
+                finishFileCall(mapOf("cancelled" to false))
             } else {
                 val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
                     ?: throw IllegalStateException("provider refused the read")

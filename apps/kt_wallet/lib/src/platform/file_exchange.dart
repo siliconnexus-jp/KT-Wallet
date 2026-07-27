@@ -5,13 +5,16 @@ import 'package:flutter/services.dart';
 /// reported as one — the user closing the Files sheet is a decision, not a bug.
 enum FileExchangeOutcome { done, cancelled, unsupported, failed }
 
-/// Result of a save: [outcome] plus the human-readable destination the picker
-/// reported ("iCloud Drive/KT Wallet"), when it gave one.
+/// Result of a save.
+///
+/// Deliberately just the outcome. Naming the destination back to the user
+/// sounds helpful but is not: the picker gives us a sandbox URL, whose last
+/// components are a container UUID, not the "iCloud Drive" the user saw
+/// themselves when they chose it.
 class SavedFile {
-  const SavedFile(this.outcome, {this.location});
+  const SavedFile(this.outcome);
 
   final FileExchangeOutcome outcome;
-  final String? location;
 }
 
 class PickedFile {
@@ -55,10 +58,7 @@ class FileExchange {
       if (res['cancelled'] == true) {
         return const SavedFile(FileExchangeOutcome.cancelled);
       }
-      return SavedFile(
-        FileExchangeOutcome.done,
-        location: res['location'] as String?,
-      );
+      return const SavedFile(FileExchangeOutcome.done);
     } on MissingPluginException {
       // No handler (tests, desktop, an older shell): say unsupported rather
       // than failed, so the caller can offer another route.
@@ -94,14 +94,9 @@ class FileExchange {
 
 /// Keeps whatever it was handed and replays a scripted pick.
 class FakeFileExchange implements FileExchange {
-  FakeFileExchange({
-    this.saveOutcome = FileExchangeOutcome.done,
-    this.saveLocation = 'iCloud Drive',
-    this.pick,
-  });
+  FakeFileExchange({this.saveOutcome = FileExchangeOutcome.done, this.pick});
 
   final FileExchangeOutcome saveOutcome;
-  final String? saveLocation;
   PickedFile? pick;
 
   final List<({String name, Uint8List bytes})> saved = [];
@@ -113,7 +108,7 @@ class FakeFileExchange implements FileExchange {
     required Uint8List bytes,
   }) async {
     saved.add((name: suggestedName, bytes: bytes));
-    return SavedFile(saveOutcome, location: saveLocation);
+    return SavedFile(saveOutcome);
   }
 
   @override

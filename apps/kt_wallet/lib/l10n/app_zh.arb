@@ -519,14 +519,6 @@
   "backupPasswordWarning": "这个密码无法找回。密码丢了备份就打不开了 —— 请同时保留手抄的助记词。",
   "backupCreate": "生成备份",
   "backupSaved": "备份已保存",
-  "backupSavedTo": "备份已保存到 {location}",
-  "@backupSavedTo": {
-    "placeholders": {
-      "location": {
-        "type": "String"
-      }
-    }
-  },
   "backupCancelled": "已取消备份",
   "backupFailed": "生成备份失败",
   "backupUnsupported": "此设备无法保存文件",

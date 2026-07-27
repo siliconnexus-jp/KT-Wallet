@@ -369,14 +369,6 @@
   "backupPasswordWarning": "このパスワードは復元できません。失うとバックアップは開けません。手書きのリカバリーフレーズも保管してください。",
   "backupCreate": "バックアップを作成",
   "backupSaved": "バックアップを保存しました",
-  "backupSavedTo": "{location} に保存しました",
-  "@backupSavedTo": {
-    "placeholders": {
-      "location": {
-        "type": "String"
-      }
-    }
-  },
   "backupCancelled": "バックアップをキャンセルしました",
   "backupFailed": "バックアップを作成できませんでした",
   "backupUnsupported": "この端末ではファイルを保存できません",
