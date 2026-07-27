@@ -2422,7 +2422,13 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
       // Latin copy happened to be short enough to hide it; the Japanese
       // strings fill the line and the two collide.
       const SizedBox(width: 12),
-      Flexible(child: trailing),
+      // Flexible so a long localized value can ellipsize instead of
+      // overflowing, Align so it still sits on the card's right edge:
+      // a bare Flexible splits the row 1:1 with the Expanded label and
+      // parks every switch and chevron at the midpoint.
+      Flexible(
+        child: Align(alignment: Alignment.centerRight, child: trailing),
+      ),
     ],
   );
 }
