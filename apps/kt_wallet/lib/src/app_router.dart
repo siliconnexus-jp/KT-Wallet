@@ -6,6 +6,7 @@ import 'package:ui_kit/ui_kit.dart';
 
 import 'market/asset_ref.dart';
 import 'market/history_service.dart' show ChainTxRecord;
+import 'screens/about_screen.dart';
 import 'screens/assets_screens.dart';
 import 'screens/backup_screens.dart';
 import 'screens/camera_screen.dart';
@@ -55,6 +56,7 @@ final screenRegistry = <String, (String, WidgetBuilder)>{
   'W19 安全设置': ('/security', (c) => const SecuritySettingsScreen()),
   'W32 加密备份': ('/backup', (c) => const BackupExportScreen()),
   'W33 从备份恢复': ('/restore', (c) => const BackupRestoreScreen()),
+  'W34 关于': ('/about', (c) => const AboutScreen()),
 };
 
 /// Sheet-style screens (translucent scrim over the previous screen). Pushed as

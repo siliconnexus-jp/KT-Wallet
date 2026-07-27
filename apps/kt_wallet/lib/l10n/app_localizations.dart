@@ -1432,6 +1432,60 @@ abstract class AppLocalizations {
   /// **'代币符号'**
   String get tokenSymbolLabel;
 
+  /// No description provided for @searchTokenHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索币种名称、符号或合约地址'**
+  String get searchTokenHint;
+
+  /// No description provided for @myTokens.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的币种'**
+  String get myTokens;
+
+  /// No description provided for @addedTokenSearchResults.
+  ///
+  /// In zh, this message translates to:
+  /// **'已添加'**
+  String get addedTokenSearchResults;
+
+  /// No description provided for @popularOfficialTokens.
+  ///
+  /// In zh, this message translates to:
+  /// **'热门官方币'**
+  String get popularOfficialTokens;
+
+  /// No description provided for @officialTokenSearchResults.
+  ///
+  /// In zh, this message translates to:
+  /// **'官方币'**
+  String get officialTokenSearchResults;
+
+  /// No description provided for @officialTokenVerified.
+  ///
+  /// In zh, this message translates to:
+  /// **'KT Wallet 官方认证'**
+  String get officialTokenVerified;
+
+  /// No description provided for @noMatchingTokens.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有找到相关币种\\n可点右上角 + 按合约地址添加'**
+  String get noMatchingTokens;
+
+  /// No description provided for @addOfficialToken.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加官方币 {symbol}'**
+  String addOfficialToken(String symbol);
+
+  /// No description provided for @officialTokenAdded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已添加官方币 {symbol}'**
+  String officialTokenAdded(String symbol);
+
   /// No description provided for @networkSettingsTitle.
   ///
   /// In zh, this message translates to:
@@ -2187,6 +2241,48 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'已选择：{name}'**
   String backupFileChosen(String name);
+
+  /// No description provided for @settingsAbout.
+  ///
+  /// In zh, this message translates to:
+  /// **'关于'**
+  String get settingsAbout;
+
+  /// No description provided for @aboutTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'关于'**
+  String get aboutTitle;
+
+  /// No description provided for @aboutVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'版本'**
+  String get aboutVersion;
+
+  /// No description provided for @aboutOpenSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'开源地址'**
+  String get aboutOpenSource;
+
+  /// No description provided for @aboutOpenSourceDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'你的私钥交给了这份代码,它是可以被审阅的'**
+  String get aboutOpenSourceDesc;
+
+  /// No description provided for @aboutTagline.
+  ///
+  /// In zh, this message translates to:
+  /// **'气隙钱包 —— 私钥永不离开你的设备。'**
+  String get aboutTagline;
+
+  /// No description provided for @aboutCopiedLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'链接已复制'**
+  String get aboutCopiedLink;
 }
 
 class _AppLocalizationsDelegate

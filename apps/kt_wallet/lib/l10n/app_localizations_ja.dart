@@ -723,6 +723,37 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tokenSymbolLabel => 'シンボル';
 
   @override
+  String get searchTokenHint => '名前、シンボル、コントラクトアドレスを検索';
+
+  @override
+  String get myTokens => 'マイトークン';
+
+  @override
+  String get addedTokenSearchResults => '追加済み';
+
+  @override
+  String get popularOfficialTokens => '人気の公式トークン';
+
+  @override
+  String get officialTokenSearchResults => '公式トークン';
+
+  @override
+  String get officialTokenVerified => 'KT Wallet 公式認証';
+
+  @override
+  String get noMatchingTokens => '該当するトークンがありません\\n右上の + からコントラクトで追加できます';
+
+  @override
+  String addOfficialToken(String symbol) {
+    return '公式 $symbol を追加';
+  }
+
+  @override
+  String officialTokenAdded(String symbol) {
+    return '公式 $symbol を追加しました';
+  }
+
+  @override
   String get networkSettingsTitle => 'ネットワーク設定';
 
   @override
@@ -1121,4 +1152,25 @@ class AppLocalizationsJa extends AppLocalizations {
   String backupFileChosen(String name) {
     return '選択済み：$name';
   }
+
+  @override
+  String get settingsAbout => 'このアプリについて';
+
+  @override
+  String get aboutTitle => 'このアプリについて';
+
+  @override
+  String get aboutVersion => 'バージョン';
+
+  @override
+  String get aboutOpenSource => 'ソースコード';
+
+  @override
+  String get aboutOpenSourceDesc => '鍵を預けるコードは検証できます';
+
+  @override
+  String get aboutTagline => 'エアギャップウォレット。鍵が端末を離れることはありません。';
+
+  @override
+  String get aboutCopiedLink => 'リンクをコピーしました';
 }

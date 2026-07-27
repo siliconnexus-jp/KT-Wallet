@@ -236,6 +236,29 @@
   "tokenManageTitle": "Token management",
   "addTokenTitle": "Add token",
   "tokenSymbolLabel": "Symbol",
+  "searchTokenHint": "Search name, symbol, or contract address",
+  "myTokens": "My tokens",
+  "addedTokenSearchResults": "Added",
+  "popularOfficialTokens": "Popular verified tokens",
+  "officialTokenSearchResults": "Verified tokens",
+  "officialTokenVerified": "Verified by KT Wallet",
+  "noMatchingTokens": "No matching token found\\nTap + to add one by contract address",
+  "addOfficialToken": "Add verified {symbol}",
+  "@addOfficialToken": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
+  "officialTokenAdded": "Added verified {symbol}",
+  "@officialTokenAdded": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
   "networkSettingsTitle": "Network settings",
   "screenCaptureBlocked": "Screen recording detected",
   "screenCaptureBlockedHint": "Content is hidden to protect your recovery phrase. It returns when the recording or mirroring stops.",
@@ -396,5 +419,12 @@
         "type": "String"
       }
     }
-  }
+  },
+  "settingsAbout": "About",
+  "aboutTitle": "About",
+  "aboutVersion": "Version",
+  "aboutOpenSource": "Open source",
+  "aboutOpenSourceDesc": "Read the code that holds your keys",
+  "aboutTagline": "Air-gapped wallet. Keys never leave your device.",
+  "aboutCopiedLink": "Link copied"
 }

@@ -376,6 +376,29 @@
   "tokenManageTitle": "Token 管理",
   "addTokenTitle": "添加代币",
   "tokenSymbolLabel": "代币符号",
+  "searchTokenHint": "搜索币种名称、符号或合约地址",
+  "myTokens": "我的币种",
+  "addedTokenSearchResults": "已添加",
+  "popularOfficialTokens": "热门官方币",
+  "officialTokenSearchResults": "官方币",
+  "officialTokenVerified": "KT Wallet 官方认证",
+  "noMatchingTokens": "没有找到相关币种\\n可点右上角 + 按合约地址添加",
+  "addOfficialToken": "添加官方币 {symbol}",
+  "@addOfficialToken": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
+  "officialTokenAdded": "已添加官方币 {symbol}",
+  "@officialTokenAdded": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
   "networkSettingsTitle": "网络设置",
   "screenCaptureBlocked": "检测到录屏或投屏",
   "screenCaptureBlockedHint": "为保护助记词,内容已隐藏。停止录屏或断开投屏后会自动恢复。",
@@ -546,5 +569,12 @@
         "type": "String"
       }
     }
-  }
+  },
+  "settingsAbout": "关于",
+  "aboutTitle": "关于",
+  "aboutVersion": "版本",
+  "aboutOpenSource": "开源地址",
+  "aboutOpenSourceDesc": "你的私钥交给了这份代码,它是可以被审阅的",
+  "aboutTagline": "气隙钱包 —— 私钥永不离开你的设备。",
+  "aboutCopiedLink": "链接已复制"
 }

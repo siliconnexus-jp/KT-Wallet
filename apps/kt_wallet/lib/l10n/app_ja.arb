@@ -236,6 +236,29 @@
   "tokenManageTitle": "トークン管理",
   "addTokenTitle": "トークンを追加",
   "tokenSymbolLabel": "シンボル",
+  "searchTokenHint": "名前、シンボル、コントラクトアドレスを検索",
+  "myTokens": "マイトークン",
+  "addedTokenSearchResults": "追加済み",
+  "popularOfficialTokens": "人気の公式トークン",
+  "officialTokenSearchResults": "公式トークン",
+  "officialTokenVerified": "KT Wallet 公式認証",
+  "noMatchingTokens": "該当するトークンがありません\\n右上の + からコントラクトで追加できます",
+  "addOfficialToken": "公式 {symbol} を追加",
+  "@addOfficialToken": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
+  "officialTokenAdded": "公式 {symbol} を追加しました",
+  "@officialTokenAdded": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
   "networkSettingsTitle": "ネットワーク設定",
   "screenCaptureBlocked": "画面収録・ミラーリングを検出しました",
   "screenCaptureBlockedHint": "リカバリーフレーズを保護するため内容を隠しています。収録・ミラーリングを停止すると復帰します。",
@@ -396,5 +419,12 @@
         "type": "String"
       }
     }
-  }
+  },
+  "settingsAbout": "このアプリについて",
+  "aboutTitle": "このアプリについて",
+  "aboutVersion": "バージョン",
+  "aboutOpenSource": "ソースコード",
+  "aboutOpenSourceDesc": "鍵を預けるコードは検証できます",
+  "aboutTagline": "エアギャップウォレット。鍵が端末を離れることはありません。",
+  "aboutCopiedLink": "リンクをコピーしました"
 }

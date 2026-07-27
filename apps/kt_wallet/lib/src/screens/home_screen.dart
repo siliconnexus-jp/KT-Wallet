@@ -819,6 +819,7 @@ List<_SettingsItem> _settingsItems(AppLocalizations l10n) => [
   ),
   _SettingsItem(Icons.hub_outlined, l10n.settingsNetwork, '/network'),
   _SettingsItem(Icons.toll_outlined, l10n.settingsTokenManage, '/token-manage'),
+  _SettingsItem(Icons.info_outline, l10n.settingsAbout, '/about'),
 ];
 
 /// Demo rows for the design gallery, the goldens, and the offline fallback.

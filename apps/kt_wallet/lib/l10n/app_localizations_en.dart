@@ -757,6 +757,38 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tokenSymbolLabel => 'Symbol';
 
   @override
+  String get searchTokenHint => 'Search name, symbol, or contract address';
+
+  @override
+  String get myTokens => 'My tokens';
+
+  @override
+  String get addedTokenSearchResults => 'Added';
+
+  @override
+  String get popularOfficialTokens => 'Popular verified tokens';
+
+  @override
+  String get officialTokenSearchResults => 'Verified tokens';
+
+  @override
+  String get officialTokenVerified => 'Verified by KT Wallet';
+
+  @override
+  String get noMatchingTokens =>
+      'No matching token found\\nTap + to add one by contract address';
+
+  @override
+  String addOfficialToken(String symbol) {
+    return 'Add verified $symbol';
+  }
+
+  @override
+  String officialTokenAdded(String symbol) {
+    return 'Added verified $symbol';
+  }
+
+  @override
   String get networkSettingsTitle => 'Network settings';
 
   @override
@@ -1168,4 +1200,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String backupFileChosen(String name) {
     return 'Selected: $name';
   }
+
+  @override
+  String get settingsAbout => 'About';
+
+  @override
+  String get aboutTitle => 'About';
+
+  @override
+  String get aboutVersion => 'Version';
+
+  @override
+  String get aboutOpenSource => 'Open source';
+
+  @override
+  String get aboutOpenSourceDesc => 'Read the code that holds your keys';
+
+  @override
+  String get aboutTagline => 'Air-gapped wallet. Keys never leave your device.';
+
+  @override
+  String get aboutCopiedLink => 'Link copied';
 }

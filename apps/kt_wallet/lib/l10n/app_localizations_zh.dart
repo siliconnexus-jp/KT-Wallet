@@ -715,6 +715,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tokenSymbolLabel => '代币符号';
 
   @override
+  String get searchTokenHint => '搜索币种名称、符号或合约地址';
+
+  @override
+  String get myTokens => '我的币种';
+
+  @override
+  String get addedTokenSearchResults => '已添加';
+
+  @override
+  String get popularOfficialTokens => '热门官方币';
+
+  @override
+  String get officialTokenSearchResults => '官方币';
+
+  @override
+  String get officialTokenVerified => 'KT Wallet 官方认证';
+
+  @override
+  String get noMatchingTokens => '没有找到相关币种\\n可点右上角 + 按合约地址添加';
+
+  @override
+  String addOfficialToken(String symbol) {
+    return '添加官方币 $symbol';
+  }
+
+  @override
+  String officialTokenAdded(String symbol) {
+    return '已添加官方币 $symbol';
+  }
+
+  @override
   String get networkSettingsTitle => '网络设置';
 
   @override
@@ -1107,4 +1138,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String backupFileChosen(String name) {
     return '已选择：$name';
   }
+
+  @override
+  String get settingsAbout => '关于';
+
+  @override
+  String get aboutTitle => '关于';
+
+  @override
+  String get aboutVersion => '版本';
+
+  @override
+  String get aboutOpenSource => '开源地址';
+
+  @override
+  String get aboutOpenSourceDesc => '你的私钥交给了这份代码,它是可以被审阅的';
+
+  @override
+  String get aboutTagline => '气隙钱包 —— 私钥永不离开你的设备。';
+
+  @override
+  String get aboutCopiedLink => '链接已复制';
 }
