@@ -79,6 +79,44 @@ class AssetRef {
   /// chain picker.
   final List<TokenInfo> group;
 
+  /// Narrows a group to the deployment at [index], keeping [group] intact.
+  ///
+  /// This is what Send and Receive are handed. They need to know the exact
+  /// deployment — which chain, which contract, which decimals — while still
+  /// being able to offer the network picker, and they must NOT be able to
+  /// change the symbol: arriving from the USDT page and finding a dropdown
+  /// full of other coins is how the user ended up sending the wrong asset.
+  AssetRef selecting(int index) {
+    if (group.isEmpty) return this;
+    final token = group[index.clamp(0, group.length - 1)];
+    return AssetRef._(
+      coin: token.chain,
+      name: name,
+      symbol: symbol,
+      tokenId: token.id,
+      contract: token.contract,
+      network: token.network,
+      group: group,
+    );
+  }
+
+  const AssetRef._({
+    required this.coin,
+    required this.name,
+    required this.symbol,
+    required this.tokenId,
+    required this.contract,
+    required this.network,
+    required this.group,
+  });
+
+  /// Index of the current deployment within [group]; 0 when there is no group.
+  int get chainIndex {
+    if (group.isEmpty) return 0;
+    final at = group.indexWhere((t) => t.id == tokenId);
+    return at < 0 ? 0 : at;
+  }
+
   bool get isToken => tokenId != null || group.isNotEmpty;
 
   /// True when the same symbol lives on more than one chain.

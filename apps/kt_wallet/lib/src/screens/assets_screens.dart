@@ -569,7 +569,13 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
               child: KtPrimaryButton(
                 label: l10n.actionSend,
                 icon: Icons.north_east,
-                onPressed: () => context.push('/transfer'),
+                // Same for Send, which used to carry nothing at all and so
+                // fell through to the first entry of its own asset list —
+                // USDT on TRON — whatever asset you came from.
+                onPressed: () => context.push(
+                  '/transfer',
+                  extra: ref.selecting(_chainIndex),
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -577,10 +583,14 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
               child: SizedBox(
                 height: 48,
                 child: OutlinedButton.icon(
-                  // Carries the chain the user is looking at; without it the
-                  // receive screen always opened on its own default (USDT on
-                  // TRON), whatever asset you came from.
-                  onPressed: () => context.push('/receive', extra: actionCoin),
+                  // Carries the exact deployment being viewed — symbol AND
+                  // chain. It used to carry only the Coin, so opening Receive
+                  // from the USDT page landed on "ETH · Ethereum": the right
+                  // chain, the wrong asset.
+                  onPressed: () => context.push(
+                    '/receive',
+                    extra: ref.selecting(_chainIndex),
+                  ),
                   icon: const Icon(
                     Icons.qr_code,
                     size: 18,
@@ -960,12 +970,22 @@ class ReceiveScreen extends StatefulWidget {
     this.tempDirectory,
     this.cardRenderer,
     this.initialCoin,
+    this.asset,
   });
 
   /// Chain to open on, passed by whatever the user tapped "receive" from.
   /// Without it this screen always opened on its own default (USDT on TRON)
   /// no matter which asset you arrived from.
   final Coin? initialCoin;
+
+  /// The asset to receive, when the caller knows it. Carrying only the chain
+  /// was not enough: arriving from USDT on Ethereum, the screen announced
+  /// "ETH · Ethereum" — the right address, labelled as the wrong asset, which
+  /// is exactly the confusion that gets funds sent to the wrong place.
+  ///
+  /// When it names a multi-chain token the picker is narrowed to that token's
+  /// deployments; the symbol itself is never selectable here.
+  final AssetRef? asset;
 
   /// Injectable http client for the devnet airdrop faucet (tests); null in
   /// production (the [AirdropService] creates and closes its own).
@@ -1061,7 +1081,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     super.didChangeDependencies();
     if (_appliedInitial) return;
     _appliedInitial = true;
-    final wanted = widget.initialCoin;
+    final wanted = widget.initialCoin ?? widget.asset?.coin;
     if (wanted == null) return;
     final index = _availableChains.indexWhere((c) => c.coin == wanted);
     if (index >= 0) _selected = index;
@@ -1075,6 +1095,16 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   bool _sharing = false;
 
   List<_ReceiveChain> get _availableChains {
+    // An asset that lives on specific chains restricts the picker to those:
+    // offering Solana while the user is receiving USDT on Ethereum invites a
+    // cross-chain mistake the wallet cannot undo.
+    final group = widget.asset?.group ?? const [];
+    if (group.isNotEmpty) {
+      return [
+        for (final token in group)
+          ..._chains.where((c) => c.coin == token.chain),
+      ];
+    }
     final expanded =
         WalletScope.of(context).current?.addresses.hasExpandedEvm ?? false;
     return expanded
@@ -1090,7 +1120,20 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         : [_chains[0], _chains[1], _chains[5], _chains[6]];
   }
 
-  _ReceiveChain get _chain => _availableChains[_selected];
+  _ReceiveChain get _chain =>
+      _availableChains[_selected.clamp(0, _availableChains.length - 1)];
+
+  /// What the user came here to receive. With an asset in hand that is the
+  /// token on its chain ("USDT · Ethereum"); otherwise the chain's own pill
+  /// ("ETH · Ethereum").
+  String get _assetLabel {
+    final symbol = widget.asset?.symbol;
+    return symbol == null ? _chain.pillLabel : '$symbol · ${_chain.network}';
+  }
+
+  /// Symbol the pill's icon stands for — the token when there is one.
+  String get _iconSymbol =>
+      widget.asset?.symbol ?? _chain.pillLabel.split(' ').first;
 
   /// Protocol family of the selected coin (Coin is the derivation-level enum,
   /// Chain the network-level one; they map 1:1).
@@ -1417,7 +1460,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         Center(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: _pickChain,
+            onTap: _availableChains.length > 1 ? _pickChain : null,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
@@ -1428,26 +1471,28 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TokenIcon(
-                    symbol: chain.pillLabel.split(' ').first,
+                    symbol: _iconSymbol,
                     size: 24,
                     fallbackColor: chain.tokenColor,
                     fallbackInitial: chain.glyph,
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    chain.pillLabel,
+                    _assetLabel,
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: WalletColors.text,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  const Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 16,
-                    color: WalletColors.text3,
-                  ),
+                  if (_availableChains.length > 1) ...[
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 16,
+                      color: WalletColors.text3,
+                    ),
+                  ],
                 ],
               ),
             ),

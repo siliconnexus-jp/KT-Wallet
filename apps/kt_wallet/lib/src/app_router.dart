@@ -108,9 +108,15 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
                   ? s.extra as ChainTxRecord
                   : null,
             ),
-            // Receive opens on the chain the caller was looking at.
+            // Receive and Send open on the asset the caller was looking at —
+            // symbol AND chain. Receive used to take a bare Coin, so it landed
+            // on the native coin of the right chain; Send took nothing at all.
             '/receive' => (c, s) => ReceiveScreen(
+              asset: s.extra is AssetRef ? s.extra as AssetRef : null,
               initialCoin: s.extra is Coin ? s.extra as Coin : null,
+            ),
+            '/transfer' => (c, s) => TransferInputScreen(
+              asset: s.extra is AssetRef ? s.extra as AssetRef : null,
             ),
             // The tapped asset rides in `extra`. Without it the screen used to
             // render one hardcoded token for every row; now a live scope with

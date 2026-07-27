@@ -21,13 +21,15 @@ import 'package:wallet_data/wallet_data.dart'
         TxStatus;
 
 import '../../l10n/app_localizations.dart';
-import '../market/balance_service.dart' show BalanceStatus;
-import '../market/asset_ref.dart' show chainOf;
+import 'home_screen.dart' show tokenRowMeta;
+import '../market/balance_service.dart' show BalanceService, BalanceStatus;
+import '../market/asset_ref.dart' show AssetRef, chainOf;
 import '../market/explorer_links.dart' show explorerTxUrl;
 import '../market/history_service.dart' show ChainTxRecord;
 import '../market/market_scope.dart'
     show MarketScope, effectiveRpcEndpoints, prefsGatewayResolver;
-import '../market/token_balance_service.dart' show usdcSolanaDevnetToken;
+import '../market/token_balance_service.dart'
+    show TokenInfo, usdcSolanaDevnetToken;
 import '../platform/external_actions.dart';
 import '../rpc/http_transport.dart';
 import '../security/biometric_auth.dart';
@@ -171,7 +173,16 @@ Widget _amberWarn(String text) => Container(
 /// (rejecting mispastes and wrong-network addresses) and the amount is parsed
 /// with the tested [Amount] type and checked against the available balance.
 class TransferInputScreen extends StatefulWidget {
-  const TransferInputScreen({super.key});
+  const TransferInputScreen({super.key, this.asset});
+
+  /// The asset to send, when the caller already knows it — arriving from a
+  /// token detail page. The symbol is then FIXED: the only thing the picker
+  /// offers is that symbol's other chains.
+  ///
+  /// Null from the home Send button, which is the one legitimate "choose what
+  /// to send" entry point and keeps the full asset list.
+  final AssetRef? asset;
+
   @override
   State<TransferInputScreen> createState() => _TransferInputScreenState();
 }
@@ -407,8 +418,66 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
   ];
   int _assetIndex = 0;
   bool _liveInputInitialized = false;
+
+  /// True when the caller already decided WHAT to send. The picker then only
+  /// offers that symbol's other chains — arriving from the USDT page and
+  /// finding ETH and USDC in the dropdown is how a user sends the wrong coin.
+  bool get _assetLocked => widget.asset != null;
+
+  /// The rows the picker may switch between: this symbol's deployments when
+  /// locked, the full list when the user came from the home Send button.
+  List<_TransferAsset> get _options {
+    final asset = widget.asset;
+    if (asset == null) return _assets;
+    if (asset.group.isEmpty) return [_refAsset(asset, null)];
+    return [for (final token in asset.group) _refAsset(asset, token)];
+  }
+
+  /// A transfer row for one deployment of the incoming asset. Balance is left
+  /// at zero here; [_assetAt] fills in the live figure the same way it does
+  /// for the built-in list.
+  static _TransferAsset _refAsset(AssetRef ref, TokenInfo? token) {
+    final (color, glyph) =
+        tokenRowMeta[ref.symbol] ??
+        (WalletColors.accent, ref.symbol.substring(0, 1));
+    if (token == null) {
+      // Native coin: no contract, and decimals come from the chain.
+      return _TransferAsset(
+        ref.symbol,
+        ref.network ?? chainOf(ref.coin).name,
+        ref.network ?? chainOf(ref.coin).name,
+        chainOf(ref.coin),
+        BalanceService.decimalsFor[ref.coin]!,
+        '0',
+        '0',
+        color,
+        glyph,
+      );
+    }
+    return _TransferAsset(
+      ref.symbol,
+      token.network,
+      token.network,
+      chainOf(token.chain),
+      token.decimals,
+      '0',
+      '0',
+      color,
+      glyph,
+      contract: token.contract,
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Open on the chain the caller was looking at, not on index 0.
+    _assetIndex = widget.asset?.chainIndex ?? 0;
+  }
+
   _TransferAsset _assetAt(int index) {
-    final selected = _assets[index];
+    final options = _options;
+    final selected = options[index.clamp(0, options.length - 1)];
     final network = NetworkScope.maybeOf(context)?.activeFor(selected.chain);
     final networkAsset = network == null
         ? selected
@@ -638,7 +707,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                 child: Row(
                   children: [
                     Text(
-                      l10n.selectAsset,
+                      _assetLocked ? l10n.chooseNetwork : l10n.selectAsset,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -649,20 +718,27 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              for (var i = 0; i < _assets.length; i++)
+              for (var i = 0; i < _options.length; i++)
                 ListTile(
-                  leading: TokenIcon(
-                    symbol: _assetAt(i).symbol,
-                    size: 36,
-                    fallbackColor: _assetAt(i).color,
-                    fallbackInitial: _assetAt(i).initial,
-                  ),
+                  // Locked to one symbol: the row identifies the CHAIN, so it
+                  // carries the chain's logo and name. Unlocked, it identifies
+                  // the asset.
+                  leading: _assetLocked
+                      ? ChainIcon(chain: _assetAt(i).chain, size: 36)
+                      : TokenIcon(
+                          symbol: _assetAt(i).symbol,
+                          size: 36,
+                          fallbackColor: _assetAt(i).color,
+                          fallbackInitial: _assetAt(i).initial,
+                        ),
                   title: Text(
-                    switch (_assetAt(i).chain) {
-                      Chain.base || Chain.arbitrum || Chain.avalanche =>
-                        '${_assetAt(i).symbol} · ${_assetAt(i).networkName}',
-                      _ => _assetAt(i).symbol,
-                    },
+                    _assetLocked
+                        ? _assetAt(i).networkName
+                        : switch (_assetAt(i).chain) {
+                            Chain.base || Chain.arbitrum || Chain.avalanche =>
+                              '${_assetAt(i).symbol} · ${_assetAt(i).networkName}',
+                            _ => _assetAt(i).symbol,
+                          },
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -670,7 +746,12 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                     ),
                   ),
                   subtitle: Text(
-                    '${_assetAt(i).network} · ${l10n.availableBalance(_assetAt(i).availableLabel, _assetAt(i).symbol)}',
+                    _assetLocked
+                        ? l10n.availableBalance(
+                            _assetAt(i).availableLabel,
+                            _assetAt(i).symbol,
+                          )
+                        : '${_assetAt(i).network} · ${l10n.availableBalance(_assetAt(i).availableLabel, _assetAt(i).symbol)}',
                     style: const TextStyle(
                       fontSize: 12,
                       color: WalletColors.text3,
@@ -739,8 +820,12 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
         KtCard(
           padding: const EdgeInsets.all(14),
           child: GestureDetector(
+            key: const ValueKey('transfer-asset'),
             behavior: HitTestBehavior.opaque,
-            onTap: _pickAsset,
+            // Nothing to choose when the asset is locked to a single chain —
+            // an inert row that still shows a chevron just invites a tap that
+            // does nothing.
+            onTap: _options.length > 1 ? _pickAsset : null,
             child: Row(
               children: [
                 TokenIcon(
@@ -773,11 +858,12 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                     ],
                   ),
                 ),
-                const Icon(
-                  Icons.keyboard_arrow_down,
-                  size: 18,
-                  color: WalletColors.text3,
-                ),
+                if (_options.length > 1)
+                  const Icon(
+                    Icons.keyboard_arrow_down,
+                    size: 18,
+                    color: WalletColors.text3,
+                  ),
               ],
             ),
           ),
