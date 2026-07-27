@@ -1,6 +1,7 @@
 import 'package:chains/chains.dart' show Chain;
 import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:ui_kit/ui_kit.dart';
@@ -757,6 +758,19 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     );
   }
 
+  /// Copying the receive address is the single most common action here, and
+  /// the address text used to be inert — the only way out was the system
+  /// share sheet's own "copy to clipboard".
+  Future<void> _copyAddress() async {
+    final l10n = AppLocalizations.of(context);
+    final address = _address(context);
+    if (address.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    await Clipboard.setData(ClipboardData(text: address));
+    if (!mounted) return;
+    messenger.showSnackBar(SnackBar(content: Text(l10n.addressCopied)));
+  }
+
   Future<void> _shareAddress() async {
     final l10n = AppLocalizations.of(context);
     final address = _address(context);
@@ -849,14 +863,45 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                   ),
                 ),
               const SizedBox(height: 18),
-              Text(
-                address,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontFamily: KtFonts.mono,
-                  height: 1.6,
-                  color: WalletColors.text,
+              GestureDetector(
+                key: const ValueKey('receive-copy'),
+                behavior: HitTestBehavior.opaque,
+                onTap: address.isEmpty ? null : _copyAddress,
+                child: Column(
+                  children: [
+                    Text(
+                      address,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontFamily: KtFonts.mono,
+                        height: 1.6,
+                        color: WalletColors.text,
+                      ),
+                    ),
+                    if (address.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.copy_rounded,
+                            size: 16,
+                            color: WalletColors.accent,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.actionCopy,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: WalletColors.accent,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ],

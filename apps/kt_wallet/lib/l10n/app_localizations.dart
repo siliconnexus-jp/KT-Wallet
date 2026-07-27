@@ -1228,6 +1228,12 @@ abstract class AppLocalizations {
   /// **'地址已复制'**
   String get addressCopied;
 
+  /// No description provided for @actionCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制地址'**
+  String get actionCopy;
+
   /// No description provided for @addressBookTitle.
   ///
   /// In zh, this message translates to:
@@ -1245,6 +1251,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'没有匹配的联系人'**
   String get noMatchingContacts;
+
+  /// No description provided for @contactsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有联系人,点右上角 + 添加'**
+  String get contactsEmpty;
+
+  /// No description provided for @tokensEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有自定义代币,点右上角 + 添加'**
+  String get tokensEmpty;
 
   /// No description provided for @contactBobExchange.
   ///

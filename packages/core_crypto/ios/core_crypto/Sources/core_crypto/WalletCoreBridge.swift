@@ -127,6 +127,14 @@ enum WalletCoreBridge {
     return (output.encoded, "0x" + hash.hexString)
   }
 
+  /// Signs canonical TRON `Transaction.raw` bytes and emits the broadcasthex
+  /// payload: `{"transaction": "<hex>", "txID": "<hex>"}`.
+  ///
+  /// `transaction` is the full signed `Transaction` protobuf (`raw_data` =
+  /// field 1, `signature` = repeated field 2), which is what
+  /// `/wallet/broadcasthex` takes. Emitting only `raw_data_hex` + `signature`
+  /// is NOT broadcastable: `/wallet/broadcasttransaction` dereferences the
+  /// `raw_data` object and answers a bare NullPointerException without it.
   private static func signTron(entropy: Data, rawData: Data) throws
     -> (signedTx: Data, txHash: String)
   {
@@ -136,14 +144,38 @@ enum WalletCoreBridge {
     guard let signature = key.sign(digest: txID, curve: .secp256k1),
           signature.count == 65 else { throw BridgeError.signFailed }
     let json: [String: Any] = [
-      "raw_data_hex": rawData.hexString,
-      "signature": [signature.hexString],
+      "transaction": tronSignedTransaction(rawData: rawData, signature: signature).hexString,
       "txID": txID.hexString,
     ]
     return (
       try JSONSerialization.data(withJSONObject: json, options: []),
       txID.hexString
     )
+  }
+
+  /// Serializes `Transaction { raw_data = 1; repeated signature = 2; }` —
+  /// each field is a length-delimited (wire type 2) tag byte, a varint
+  /// length, then the payload.
+  private static func tronSignedTransaction(rawData: Data, signature: Data) -> Data {
+    var out = Data([0x0a])
+    out.append(protobufVarint(rawData.count))
+    out.append(rawData)
+    out.append(0x12)
+    out.append(protobufVarint(signature.count))
+    out.append(signature)
+    return out
+  }
+
+  /// Base-128 varint, low group first, continuation bit on every group but the last.
+  private static func protobufVarint(_ value: Int) -> Data {
+    var remaining = value
+    var out = Data()
+    repeat {
+      let group = UInt8(remaining & 0x7f)
+      remaining >>= 7
+      out.append(remaining != 0 ? group | 0x80 : group)
+    } while remaining != 0
+    return out
   }
 
   private static func signSolana(entropy: Data, message: Data) throws

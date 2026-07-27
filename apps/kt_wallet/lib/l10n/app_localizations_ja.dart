@@ -617,6 +617,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get addressCopied => 'アドレスをコピーしました';
 
   @override
+  String get actionCopy => 'アドレスをコピー';
+
+  @override
   String get addressBookTitle => 'アドレス帳';
 
   @override
@@ -624,6 +627,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get noMatchingContacts => '一致する連絡先がありません';
+
+  @override
+  String get contactsEmpty => '連絡先がまだありません。右上の + から追加できます';
+
+  @override
+  String get tokensEmpty => 'カスタムトークンがまだありません。右上の + から追加できます';
 
   @override
   String get contactBobExchange => 'Bob 取引所';

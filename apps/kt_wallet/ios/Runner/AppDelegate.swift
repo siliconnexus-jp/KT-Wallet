@@ -159,12 +159,12 @@ import UIKit
   private func localizedProtectionText() -> (active: String, hidden: String) {
     let language = Locale.preferredLanguages.first ?? "en"
     if language.hasPrefix("zh") {
-      return ("天秤保护已启动", "您的钱包内容已隐藏")
+      return ("KT 钱包保护已启动", "您的钱包内容已隐藏")
     }
     if language.hasPrefix("ja") {
-      return ("Libra 保護が有効です", "ウォレットの内容は非表示です")
+      return ("KT Wallet 保護が有効です", "ウォレットの内容は非表示です")
     }
-    return ("Libra Protection is active", "Your wallet content is hidden")
+    return ("KT Wallet Protection is active", "Your wallet content is hidden")
   }
 
   private func appIcon() -> UIImage? {

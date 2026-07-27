@@ -221,11 +221,13 @@ Uint8List rawTxFor(
       maxFeePerGas: maxFeePerGas ?? BigInt.from(40) * gwei,
       // Arbitrum accounts for L1 posting overhead in its gas estimate, so a
       // plain 21,000 limit is rejected as "intrinsic gas too low".
-      gasLimit: gasLimit ?? BigInt.from(
-        draft.operation == TxOperation.nativeTransfer
-            ? (draft.chain == Chain.arbitrum ? 100000 : 21000)
-            : (draft.chain == Chain.arbitrum ? 150000 : 65000),
-      ),
+      gasLimit:
+          gasLimit ??
+          BigInt.from(
+            draft.operation == TxOperation.nativeTransfer
+                ? (draft.chain == Chain.arbitrum ? 100000 : 21000)
+                : (draft.chain == Chain.arbitrum ? 150000 : 65000),
+          ),
     );
     return tx.encodeUnsigned();
   }

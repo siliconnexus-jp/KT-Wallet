@@ -304,7 +304,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String walletCountLimit(int count, int max) {
-    return '$count wallets · limit $max';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count wallets',
+      one: '$count wallet',
+    );
+    return '$_temp0 · limit $max';
   }
 
   @override
@@ -638,6 +644,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addressCopied => 'Address copied';
 
   @override
+  String get actionCopy => 'Copy address';
+
+  @override
   String get addressBookTitle => 'Address book';
 
   @override
@@ -645,6 +654,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noMatchingContacts => 'No matching contacts';
+
+  @override
+  String get contactsEmpty => 'No contacts yet — tap + to add one';
+
+  @override
+  String get tokensEmpty => 'No custom tokens yet — tap + to add one';
 
   @override
   String get contactBobExchange => 'Bob Exchange';

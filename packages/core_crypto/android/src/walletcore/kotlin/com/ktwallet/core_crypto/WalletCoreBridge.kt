@@ -137,7 +137,16 @@ object WalletCoreBridge {
         }
     }
 
-    /** Signs canonical TRON Transaction.raw bytes and emits broadcasthex JSON. */
+    /**
+     * Signs canonical TRON `Transaction.raw` bytes and emits the broadcasthex
+     * payload: `{"transaction": "<hex>", "txID": "<hex>"}`.
+     *
+     * `transaction` is the full signed `Transaction` protobuf
+     * (`raw_data` = field 1, `signature` = repeated field 2), which is what
+     * `/wallet/broadcasthex` takes. Emitting only `raw_data_hex` + `signature`
+     * is NOT broadcastable: `/wallet/broadcasttransaction` dereferences the
+     * `raw_data` object and answers a bare NullPointerException without it.
+     */
     private fun signTron(entropy: ByteArray, rawData: ByteArray): Signed {
         if (rawData.isEmpty()) throw InvalidInputException()
         val key = HDWallet(entropy, "").getKeyForCoin(CoinType.TRON)
@@ -147,8 +156,9 @@ object WalletCoreBridge {
             val signature = key.sign(txIdBytes, Curve.SECP256K1)
             if (signature.size != 65) throw SignFailedException()
             val txId = txIdBytes.toHex()
+            val transaction = tronSignedTransaction(rawData, signature)
             val json =
-                """{"raw_data_hex":"${rawData.toHex()}","signature":["${signature.toHex()}"],"txID":"$txId"}"""
+                """{"transaction":"${transaction.toHex()}","txID":"$txId"}"""
                     .toByteArray(Charsets.UTF_8)
             return Signed(json, txId)
         } catch (e: SignFailedException) {
@@ -157,6 +167,34 @@ object WalletCoreBridge {
             throw SignFailedException()
         } finally {
             keyBytes.fill(0)
+        }
+    }
+
+    /**
+     * Serializes `Transaction { raw_data = 1; repeated signature = 2; }` —
+     * each field is a length-delimited (wire type 2) tag byte, a varint
+     * length, then the payload.
+     */
+    private fun tronSignedTransaction(rawData: ByteArray, signature: ByteArray): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        out.write(0x0a)
+        out.write(protobufVarint(rawData.size))
+        out.write(rawData)
+        out.write(0x12)
+        out.write(protobufVarint(signature.size))
+        out.write(signature)
+        return out.toByteArray()
+    }
+
+    /** Base-128 varint, low group first, continuation bit on every group but the last. */
+    private fun protobufVarint(value: Int): ByteArray {
+        var remaining = value
+        val out = java.io.ByteArrayOutputStream()
+        while (true) {
+            val group = remaining and 0x7f
+            remaining = remaining ushr 7
+            out.write(if (remaining != 0) group or 0x80 else group)
+            if (remaining == 0) return out.toByteArray()
         }
     }
 

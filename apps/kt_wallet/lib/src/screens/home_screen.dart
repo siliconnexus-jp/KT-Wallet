@@ -32,8 +32,42 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+/// Whether balances are masked, shared by the total and every asset row.
+///
+/// Seeded from the persisted "privacy mode" preference — which the home screen
+/// previously ignored entirely — and flipped for the session by the eye next
+/// to the total. Masking the total alone was not privacy: the per-asset
+/// amounts underneath it stayed in plain sight.
+class BalancePrivacy extends InheritedWidget {
+  const BalancePrivacy({
+    super.key,
+    required this.hidden,
+    required this.toggle,
+    required super.child,
+  });
+
+  final bool hidden;
+  final VoidCallback toggle;
+
+  /// False when no scope is present (design gallery, goldens, plain widget
+  /// tests), so those renderings are unchanged.
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<BalancePrivacy>()?.hidden ??
+      false;
+
+  static VoidCallback? toggleOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<BalancePrivacy>()?.toggle;
+
+  @override
+  bool updateShouldNotify(BalancePrivacy oldWidget) =>
+      oldWidget.hidden != hidden;
+}
+
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
+
+  /// Session override of the persisted default; null = follow the preference.
+  bool? _hiddenOverride;
 
   @override
   void initState() {
@@ -55,28 +89,35 @@ class _HomeScreenState extends State<HomeScreen> {
     if (WalletScope.of(context).current == null) {
       return const AddWalletScreen();
     }
-    return Scaffold(
-      backgroundColor: WalletColors.bg,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: IndexedStack(
-                index: _tab,
-                children: [
-                  _HomeTab(
-                    assets: widget.assets,
-                    onViewAll: () => setState(() => _tab = 1),
-                    onOpenSettings: () => setState(() => _tab = 3),
-                  ),
-                  const _AssetsTab(),
-                  const _RecordsTab(),
-                  const _SettingsTab(),
-                ],
+    final hidden =
+        _hiddenOverride ??
+        (AppPrefsScope.maybeOf(context)?.privacyMode ?? false);
+    return BalancePrivacy(
+      hidden: hidden,
+      toggle: () => setState(() => _hiddenOverride = !hidden),
+      child: Scaffold(
+        backgroundColor: WalletColors.bg,
+        body: SafeArea(
+          child: Column(
+            children: [
+              Expanded(
+                child: IndexedStack(
+                  index: _tab,
+                  children: [
+                    _HomeTab(
+                      assets: widget.assets,
+                      onViewAll: () => setState(() => _tab = 1),
+                      onOpenSettings: () => setState(() => _tab = 3),
+                    ),
+                    const _AssetsTab(),
+                    const _RecordsTab(),
+                    const _SettingsTab(),
+                  ],
+                ),
               ),
-            ),
-            _TabBar(selected: _tab, onTap: (i) => setState(() => _tab = i)),
-          ],
+              _TabBar(selected: _tab, onTap: (i) => setState(() => _tab = i)),
+            ],
+          ),
         ),
       ),
     );
@@ -1058,18 +1099,17 @@ class _BackupBanner extends StatelessWidget {
   }
 }
 
-class _Balance extends StatefulWidget {
+class _Balance extends StatelessWidget {
   const _Balance({required this.amount, required this.change});
   final String amount, change;
-  @override
-  State<_Balance> createState() => _BalanceState();
-}
 
-class _BalanceState extends State<_Balance> {
-  bool _hidden = false;
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final hidden = BalancePrivacy.of(context);
+    // Absent scope (gallery/goldens): the eye is inert rather than pretending
+    // to toggle something nothing else can see.
+    final toggle = BalancePrivacy.toggleOf(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1082,9 +1122,9 @@ class _BalanceState extends State<_Balance> {
             const SizedBox(width: 6),
             GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () => setState(() => _hidden = !_hidden),
+              onTap: toggle,
               child: Icon(
-                _hidden
+                hidden
                     ? Icons.visibility_off_outlined
                     : Icons.visibility_outlined,
                 size: 14,
@@ -1095,7 +1135,7 @@ class _BalanceState extends State<_Balance> {
         ),
         const SizedBox(height: 6),
         Text(
-          _hidden ? '••••••' : widget.amount,
+          hidden ? '••••••' : amount,
           style: const TextStyle(
             fontSize: 36,
             fontWeight: FontWeight.w700,
@@ -1103,10 +1143,10 @@ class _BalanceState extends State<_Balance> {
             color: WalletColors.text,
           ),
         ),
-        if (widget.change.isNotEmpty) ...[
+        if (change.isNotEmpty) ...[
           const SizedBox(height: 6),
           Text(
-            _hidden ? '••••' : widget.change,
+            hidden ? '••••' : change,
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w500,
@@ -1201,9 +1241,20 @@ class _NetworkChips extends StatelessWidget {
       physics: const BouncingScrollPhysics(),
       child: Row(
         children: [
+          // These read as filter chips, so a tap has to do something. They
+          // show which network each chain is pointed at, and the one thing a
+          // user wants after reading that is to change it — so they open
+          // network settings rather than sitting there inert.
           for (final (i, (chain, dot)) in _chainDots.indexed) ...[
             if (i > 0) const SizedBox(width: 8),
-            NetworkBadge(label: networks.activeFor(chain).name, dotColor: dot),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => context.push('/network'),
+              child: NetworkBadge(
+                label: networks.activeFor(chain).name,
+                dotColor: dot,
+              ),
+            ),
           ],
         ],
       ),
@@ -1278,22 +1329,46 @@ class _AssetsCard extends StatelessWidget {
 class _AssetTile extends StatelessWidget {
   const _AssetTile(this.a);
   final AssetRow a;
+
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      TokenIcon(
-        symbol: a.name,
-        size: 40,
-        fallbackColor: a.color,
-        fallbackInitial: a.letter,
-      ),
-      const SizedBox(width: 12),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) {
+    // Privacy mode has to reach the rows too — masking only the total left
+    // every per-token amount readable over the user's shoulder.
+    final hidden = BalancePrivacy.of(context);
+    return Row(
+      children: [
+        TokenIcon(
+          symbol: a.name,
+          size: 40,
+          fallbackColor: a.color,
+          fallbackInitial: a.letter,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                a.name,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: WalletColors.text,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                hidden ? '••••' : a.sub,
+                style: const TextStyle(fontSize: 12, color: WalletColors.text2),
+              ),
+            ],
+          ),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              a.name,
+              hidden ? '••••' : a.value,
               style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
@@ -1302,36 +1377,18 @@ class _AssetTile extends StatelessWidget {
             ),
             const SizedBox(height: 3),
             Text(
-              a.sub,
-              style: const TextStyle(fontSize: 12, color: WalletColors.text2),
+              hidden ? '••' : a.change,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: a.changeColor,
+              ),
             ),
           ],
         ),
-      ),
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            a.value,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: WalletColors.text,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            a.change,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: a.changeColor,
-            ),
-          ),
-        ],
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class _TabBar extends StatelessWidget {

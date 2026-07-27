@@ -88,6 +88,123 @@ void main() {
         throwsA(isA<SignatureVerificationError>()),
       );
     });
+
+    // The signers emit the broadcasthex shape; verification must accept it,
+    // since that is the only payload the online side ever gets to check.
+    test('accepts the {transaction} protobuf shape the signers emit', () async {
+      final unsigned = Uint8List.fromList(
+        List<int>.generate(200, (index) => (index * 13) & 0xff),
+      );
+      final digest = sha256(unsigned);
+      final signature = _signSecp256k1(digest);
+      final expectedSigner = _privateKeyOneTronAddress();
+      final legacy = await _tronSignedWithRecovery(
+        unsigned,
+        digest,
+        signature,
+        expectedSigner,
+      );
+      final wireSignature = _hexDecode(
+        ((jsonDecode(utf8.decode(legacy)) as Map)['signature'] as List).first
+            as String,
+      );
+
+      // raw_data is 200 bytes here on purpose: its length needs a two-byte
+      // varint, which a naive single-byte length would corrupt.
+      final protobuf = Uint8List.fromList([
+        0x0a, 0xc8, 0x01, ...unsigned, //
+        0x12, 0x41, ...wireSignature,
+      ]);
+      final signed = Uint8List.fromList(
+        utf8.encode(
+          jsonEncode({
+            'transaction': _hex(protobuf),
+            'txID': _hex(digest),
+          }),
+        ),
+      );
+
+      final verified = await verifySignedTransaction(
+        chain: Chain.tron,
+        unsignedTx: unsigned,
+        signedTx: signed,
+        claimedSigner: expectedSigner,
+      );
+      expect(verified.signer, expectedSigner);
+      expect(verified.txHash, _hex(digest));
+    });
+
+    test('rejects a {transaction} whose raw_data was swapped', () async {
+      final unsigned = Uint8List.fromList(
+        List<int>.generate(96, (index) => (index * 17) & 0xff),
+      );
+      final digest = sha256(unsigned);
+      final signature = _signSecp256k1(digest);
+      final expectedSigner = _privateKeyOneTronAddress();
+      final legacy = await _tronSignedWithRecovery(
+        unsigned,
+        digest,
+        signature,
+        expectedSigner,
+      );
+      final wireSignature = _hexDecode(
+        ((jsonDecode(utf8.decode(legacy)) as Map)['signature'] as List).first
+            as String,
+      );
+
+      final tampered = Uint8List.fromList(unsigned)..[0] ^= 0xff;
+      final protobuf = Uint8List.fromList([
+        0x0a, 96, ...tampered, //
+        0x12, 0x41, ...wireSignature,
+      ]);
+      expect(
+        () => verifySignedTransaction(
+          chain: Chain.tron,
+          unsignedTx: unsigned,
+          signedTx: Uint8List.fromList(
+            utf8.encode(jsonEncode({'transaction': _hex(protobuf)})),
+          ),
+          claimedSigner: expectedSigner,
+        ),
+        throwsA(isA<SignatureVerificationError>()),
+      );
+    });
+
+    test('rejects a {transaction} with trailing bytes', () async {
+      final unsigned = Uint8List.fromList(
+        List<int>.generate(96, (index) => (index * 17) & 0xff),
+      );
+      final digest = sha256(unsigned);
+      final signature = _signSecp256k1(digest);
+      final expectedSigner = _privateKeyOneTronAddress();
+      final legacy = await _tronSignedWithRecovery(
+        unsigned,
+        digest,
+        signature,
+        expectedSigner,
+      );
+      final wireSignature = _hexDecode(
+        ((jsonDecode(utf8.decode(legacy)) as Map)['signature'] as List).first
+            as String,
+      );
+
+      final protobuf = Uint8List.fromList([
+        0x0a, 96, ...unsigned, //
+        0x12, 0x41, ...wireSignature,
+        0x1a, 0x01, 0x00, // an extra field we never wrote
+      ]);
+      expect(
+        () => verifySignedTransaction(
+          chain: Chain.tron,
+          unsignedTx: unsigned,
+          signedTx: Uint8List.fromList(
+            utf8.encode(jsonEncode({'transaction': _hex(protobuf)})),
+          ),
+          claimedSigner: expectedSigner,
+        ),
+        throwsA(isA<SignatureVerificationError>()),
+      );
+    });
   });
 
   group('Solana signed transaction verification', () {
@@ -277,3 +394,8 @@ Uint8List _leftPad32(BigInt value) {
 
 String _hex(List<int> bytes) =>
     bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+
+Uint8List _hexDecode(String hex) => Uint8List.fromList([
+      for (var i = 0; i < hex.length; i += 2)
+        int.parse(hex.substring(i, i + 2), radix: 16),
+    ]);

@@ -209,9 +209,7 @@ class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
       title: l10n.scanAccountQr,
       hint: '${l10n.scanAccountHint}$progress',
       onClose: () => Navigator.of(context).maybePop(),
-      onSimulatedScan: kReleaseMode
-          ? null
-          : () => _onSimulatedScan(context),
+      onSimulatedScan: kReleaseMode ? null : () => _onSimulatedScan(context),
       onScanned: _onScanned,
       availability: widget.availability,
     );

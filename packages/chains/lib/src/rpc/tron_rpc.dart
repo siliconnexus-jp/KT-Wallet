@@ -112,20 +112,37 @@ class TronRpc {
     );
   }
 
-  /// Broadcasts a signed transaction (hex). Returns the txid on success.
+  /// Broadcasts a signed transaction. Returns the txid on success.
+  ///
+  /// Two payload shapes are accepted, and the endpoint follows from the shape:
+  ///
+  /// * `{"transaction": "<hex>"}` — the full signed `Transaction` protobuf,
+  ///   what the wallet-core signers emit. Goes to `/wallet/broadcasthex`,
+  ///   which is the ONLY endpoint that takes a serialized transaction. Only
+  ///   the `transaction` key is forwarded; TronGrid rejects unknown fields.
+  /// * anything else — a complete TronGrid transaction JSON (`raw_data` +
+  ///   `raw_data_hex` + `signature`), posted verbatim to
+  ///   `/wallet/broadcasttransaction`. That endpoint dereferences `raw_data`
+  ///   unconditionally, so a body without it comes back as a bare
+  ///   NullPointerException.
   Future<String> broadcast(Object signedTx) async {
-    final broadcastHex = signedTx is Map && signedTx['transaction'] is String;
+    final hexTx = signedTx is Map ? signedTx['transaction'] : null;
+    final broadcastHex = hexTx is String;
     final resp = await transport.postJson(
       '$baseUrl/wallet/${broadcastHex ? 'broadcasthex' : 'broadcasttransaction'}',
-      signedTx,
+      broadcastHex ? {'transaction': hexTx} : signedTx,
     );
     if (resp is! Map) throw RpcException('bad broadcast response');
     final txid = resp['txid'] ?? (signedTx is Map ? signedTx['txID'] : null);
     if (resp['result'] == true && txid is String) {
       return txid;
     }
-    final message = resp['message'];
-    throw RpcException('broadcast rejected: ${message ?? resp['code']}');
+    // TronGrid reports node-level failures as a top-level `Error` string and
+    // contract-level ones as `code` + hex-encoded `message`; without `Error`
+    // in this chain the reason came back as a bare `null`, hiding the cause.
+    final message =
+        resp['message'] ?? resp['Error'] ?? resp['code'] ?? 'no reason given';
+    throw RpcException('broadcast rejected: $message');
   }
 }
 

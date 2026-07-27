@@ -176,11 +176,8 @@ class _AppLockGateState extends State<AppLockGate> {
       case _LockState.enrollPin:
         return _LockScreenApp(
           localeController: widget.localeController,
-          body: (l10n) => _PinEnrollBody(
-            l10n: l10n,
-            pin: _pin,
-            onEnrolled: _onPinEnrolled,
-          ),
+          body: (l10n) =>
+              _PinEnrollBody(l10n: l10n, pin: _pin, onEnrolled: _onPinEnrolled),
         );
     }
   }

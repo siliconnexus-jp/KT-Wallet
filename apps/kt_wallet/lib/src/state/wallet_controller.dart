@@ -61,9 +61,7 @@ class WalletController extends ChangeNotifier {
   /// Locally recorded transactions for the current wallet. [networkIds] keeps
   /// only rows recorded on those network instances (callers pass the ACTIVE
   /// ids so a testnet row never shows up in a mainnet list); null keeps all.
-  Future<List<Transaction>> localTransactions({
-    Set<String>? networkIds,
-  }) async {
+  Future<List<Transaction>> localTransactions({Set<String>? networkIds}) async {
     final walletId = current?.id;
     if (walletId == null || _store == null) return const [];
     return _store.transactions(walletId, networkIds: networkIds);

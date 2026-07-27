@@ -87,6 +87,74 @@ VerifiedTransaction _verifyEvm(
   );
 }
 
+/// Pulls `(raw_data, signature)` out of either TRON signed-payload shape.
+///
+/// The signers emit `{"transaction": "<full signed Transaction protobuf>"}`
+/// (what `/wallet/broadcasthex` takes). The older
+/// `{"raw_data_hex", "signature": [...]}` shape is still accepted here: a
+/// signature is authentic or not regardless of how it was framed, and an
+/// offline signer running an older build must still be verifiable.
+(Uint8List, Uint8List) _tronRawAndSignature(Map<String, Object?> map) {
+  final transaction = map['transaction'];
+  if (transaction is String) {
+    final (raw, signature) = _decodeTronTransaction(_hexDecode(transaction));
+    return (raw, signature);
+  }
+  final rawHex = map['raw_data_hex'];
+  final signatures = map['signature'];
+  if (rawHex is! String ||
+      signatures is! List ||
+      signatures.length != 1 ||
+      signatures.first is! String) {
+    throw const SignatureVerificationError('incomplete TRON signature');
+  }
+  return (_hexDecode(rawHex), _hexDecode(signatures.first as String));
+}
+
+/// Reads `Transaction { raw_data = 1; repeated signature = 2; }` — exactly the
+/// two length-delimited fields the signers write, in that order, nothing else.
+/// V1 accepts a single signature, matching the single-signer policy enforced
+/// on every other chain.
+(Uint8List, Uint8List) _decodeTronTransaction(Uint8List bytes) {
+  var offset = 0;
+
+  (int, int) readVarint(int at) {
+    var result = 0;
+    var shift = 0;
+    var cursor = at;
+    while (true) {
+      if (cursor >= bytes.length || shift > 28) {
+        throw const SignatureVerificationError('invalid TRON transaction');
+      }
+      final group = bytes[cursor++];
+      result |= (group & 0x7f) << shift;
+      if (group & 0x80 == 0) return (result, cursor);
+      shift += 7;
+    }
+  }
+
+  Uint8List readField(int tag) {
+    if (offset >= bytes.length || bytes[offset] != tag) {
+      throw const SignatureVerificationError('invalid TRON transaction');
+    }
+    final (length, after) = readVarint(offset + 1);
+    if (length < 0 || after + length > bytes.length) {
+      throw const SignatureVerificationError('invalid TRON transaction');
+    }
+    offset = after + length;
+    return Uint8List.sublistView(bytes, after, offset);
+  }
+
+  final raw = readField(0x0a);
+  final signature = readField(0x12);
+  if (offset != bytes.length) {
+    // Trailing bytes would mean extra signatures or unknown fields; either way
+    // this is not the payload we signed.
+    throw const SignatureVerificationError('invalid TRON transaction');
+  }
+  return (raw, signature);
+}
+
 VerifiedTransaction _verifyTron(
   Uint8List unsigned,
   Uint8List signed,
@@ -102,19 +170,10 @@ VerifiedTransaction _verifyTron(
     throw const SignatureVerificationError('invalid TRON signed payload');
   }
   final map = decoded.cast<String, Object?>();
-  final rawHex = map['raw_data_hex'];
-  final signatures = map['signature'];
-  if (rawHex is! String ||
-      signatures is! List ||
-      signatures.length != 1 ||
-      signatures.first is! String) {
-    throw const SignatureVerificationError('incomplete TRON signature');
-  }
-  final raw = _hexDecode(rawHex);
+  final (raw, signature) = _tronRawAndSignature(map);
   if (!_bytesEqual(raw, unsigned)) {
     throw const SignatureVerificationError('TRON raw_data was modified');
   }
-  final signature = _hexDecode(signatures.first as String);
   if (signature.length != 65) {
     throw const SignatureVerificationError('invalid TRON signature length');
   }

@@ -218,6 +218,82 @@ void main() {
       expect(() => rpc.broadcast({'raw': 'x'}), throwsA(isA<RpcException>()));
     });
 
+    // A signer payload carries the full signed Transaction protobuf, which
+    // only /wallet/broadcasthex accepts — posting it to
+    // /wallet/broadcasttransaction (which dereferences `raw_data`) made every
+    // TRON transfer fail with a bare NullPointerException from the node.
+    test('a {transaction} payload goes to broadcasthex, alone', () async {
+      final transport = FakeRest(
+        onPost: (u, b) => {'result': true, 'txid': 'abc123'},
+      );
+      final rpc = TronRpc(baseUrl: 'https://api', transport: transport);
+      expect(
+        await rpc.broadcast({'transaction': 'deadbeef', 'txID': 'abc123'}),
+        'abc123',
+      );
+      expect(transport.posts.single.$1, 'https://api/wallet/broadcasthex');
+      // txID must NOT ride along: TronGrid rejects unknown body fields.
+      expect(transport.posts.single.$2, {'transaction': 'deadbeef'});
+    });
+
+    test('a full transaction JSON still goes to broadcasttransaction', () async {
+      final transport = FakeRest(
+        onPost: (u, b) => {'result': true, 'txid': 'abc123'},
+      );
+      final rpc = TronRpc(baseUrl: 'https://api', transport: transport);
+      final body = {
+        'raw_data': {'contract': <Object?>[]},
+        'raw_data_hex': '0a02',
+        'signature': ['ff'],
+      };
+      expect(await rpc.broadcast(body), 'abc123');
+      expect(
+        transport.posts.single.$1,
+        'https://api/wallet/broadcasttransaction',
+      );
+      expect(transport.posts.single.$2, same(body));
+    });
+
+    // TronGrid answers node-level failures with a top-level `Error` and no
+    // `code`/`message`; reading only the latter reported "rejected: null".
+    test('a top-level Error is surfaced, never swallowed as null', () async {
+      final rpc = TronRpc(
+        baseUrl: 'https://api',
+        transport: FakeRest(
+          onPost: (u, b) => {
+            'Error': 'class java.lang.NullPointerException : null',
+          },
+        ),
+      );
+      expect(
+        () => rpc.broadcast({'transaction': 'ab'}),
+        throwsA(
+          isA<RpcException>().having(
+            (e) => e.message,
+            'message',
+            contains('NullPointerException'),
+          ),
+        ),
+      );
+    });
+
+    test('a reasonless rejection says so instead of printing null', () async {
+      final rpc = TronRpc(
+        baseUrl: 'https://api',
+        transport: FakeRest(onPost: (u, b) => {'result': false}),
+      );
+      expect(
+        () => rpc.broadcast({'transaction': 'ab'}),
+        throwsA(
+          isA<RpcException>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('no reason given'), isNot(contains('null'))),
+          ),
+        ),
+      );
+    });
+
     test('malformed balance is an error, not a silent zero', () async {
       final rpc = TronRpc(
         baseUrl: 'https://api',

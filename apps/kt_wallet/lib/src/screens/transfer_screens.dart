@@ -519,6 +519,27 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     }
   }
 
+  /// Strips leading zeros as the user types: tapping Max writes `0`, and the
+  /// next keystroke used to leave `01.5` sitting in the field.
+  ///
+  /// `0.` and a lone `0` are left alone — those are prefixes of a number the
+  /// user is still typing, not junk.
+  void _normalizeAmount() {
+    final text = _amountController.text;
+    final trimmed = text.replaceFirst(RegExp(r'^0+(?=\d)'), '');
+    if (trimmed == text) return;
+    _amountController.value = _amountController.value.copyWith(
+      text: trimmed,
+      selection: TextSelection.collapsed(
+        offset:
+            (_amountController.selection.baseOffset -
+                    (text.length - trimmed.length))
+                .clamp(0, trimmed.length),
+      ),
+      composing: TextRange.empty,
+    );
+  }
+
   String? _amountErrorFor(AppLocalizations l10n) {
     final text = _amountController.text.trim();
     if (text.isEmpty) return null; // don't nag before typing
@@ -912,7 +933,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                   Expanded(
                     child: TextField(
                       controller: _amountController,
-                      onChanged: (_) => setState(() {}),
+                      onChanged: (_) => setState(_normalizeAmount),
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
@@ -1201,7 +1222,11 @@ enum _FeeEstimate {
 /// unavailable. Without a draft (gallery / goldens) the design demo values
 /// render unchanged.
 class TransferConfirmScreen extends StatefulWidget {
-  const TransferConfirmScreen({super.key, required this.isHot, this.paramsService});
+  const TransferConfirmScreen({
+    super.key,
+    required this.isHot,
+    this.paramsService,
+  });
 
   final bool isHot;
 
@@ -1251,7 +1276,9 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
           gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
         );
     _state = _FeeEstimate.estimating;
-    unawaited(_estimate(service, draft, from: from, symbol: _nativeSymbol(draft.chain)));
+    unawaited(
+      _estimate(service, draft, from: from, symbol: _nativeSymbol(draft.chain)),
+    );
   }
 
   /// Native symbol of the ACTIVE network for [chain] (POL on Polygon, AVAX on
@@ -1280,7 +1307,10 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
       final tokenContract = draft.tokenContract;
       final calldata = tokenContract == null
           ? Uint8List(0)
-          : Erc20.transferCalldata(to: draft.recipient, amount: draft.amount.raw);
+          : Erc20.transferCalldata(
+              to: draft.recipient,
+              amount: draft.amount.raw,
+            );
       final gasLimit = await service.estimateEvmGas(
         draft.chain,
         from: from,
@@ -2564,7 +2594,8 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
     if (chain == null || hash == null || hash.isEmpty) return;
     // The explorer of the network the transaction was actually broadcast on;
     // the active one is only a fallback for legacy rows without a network.
-    final network = _rowNetwork(tx) ?? NetworkScope.of(context).activeFor(chain);
+    final network =
+        _rowNetwork(tx) ?? NetworkScope.of(context).activeFor(chain);
     final opened = await ExternalActions.instance.open(
       Uri.parse(explorerTxUrl(network, hash)),
     );
@@ -2788,7 +2819,9 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
     final networkName =
         _rowNetwork(tx)?.name ??
         tx.networkId ??
-        (chain == null ? tx.coin : NetworkScope.of(context).activeFor(chain).name);
+        (chain == null
+            ? tx.coin
+            : NetworkScope.of(context).activeFor(chain).name);
     // Replacement is offered only while the row's own network is active.
     final canReplace = _canReplace(tx) && _rowNetworkIsActive(tx);
     return KtScreen(

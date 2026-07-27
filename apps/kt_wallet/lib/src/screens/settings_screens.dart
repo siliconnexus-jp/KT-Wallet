@@ -471,7 +471,10 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
             padding: const EdgeInsets.symmetric(vertical: 32),
             child: Center(
               child: Text(
-                l10n.noMatchingContacts,
+                // An empty address book is not a failed search: on a fresh
+                // install nothing has been typed yet, and "no matching
+                // contacts" reads as if the app lost something.
+                q.isEmpty ? l10n.contactsEmpty : l10n.noMatchingContacts,
                 style: const TextStyle(fontSize: 14, color: WalletColors.text3),
               ),
             ),
@@ -724,61 +727,75 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
         onTrailing: _addToken,
       ),
       children: [
-        KtCard(
-          child: Column(
-            children: [
-              for (var i = 0; i < _tokens.length; i++) ...[
-                if (i > 0) const SizedBox(height: 14),
-                Builder(
-                  builder: (context) {
-                    final token = _tokens[i];
-                    final (color, initial) =
-                        _brand[token.symbol] ??
-                        (
-                          const Color(0xFF64748B),
-                          token.symbol.characters.first,
-                        );
-                    return Row(
-                      children: [
-                        TokenIcon(
-                          symbol: token.symbol,
-                          size: 36,
-                          fallbackColor: color,
-                          fallbackInitial: initial,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                token.symbol,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: WalletColors.text,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                token.network,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: WalletColors.text3,
-                                ),
-                              ),
-                            ],
+        // With no tokens the card used to render as a bare empty pill that
+        // read like a broken search field. Say what the screen is instead.
+        if (_tokens.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 32),
+            child: Center(
+              child: Text(
+                l10n.tokensEmpty,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14, color: WalletColors.text3),
+              ),
+            ),
+          )
+        else
+          KtCard(
+            child: Column(
+              children: [
+                for (var i = 0; i < _tokens.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 14),
+                  Builder(
+                    builder: (context) {
+                      final token = _tokens[i];
+                      final (color, initial) =
+                          _brand[token.symbol] ??
+                          (
+                            const Color(0xFF64748B),
+                            token.symbol.characters.first,
+                          );
+                      return Row(
+                        children: [
+                          TokenIcon(
+                            symbol: token.symbol,
+                            size: 36,
+                            fallbackColor: color,
+                            fallbackInitial: initial,
                           ),
-                        ),
-                        _switch(token.enabled, onTap: () => _toggle(token)),
-                      ],
-                    );
-                  },
-                ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  token.symbol,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: WalletColors.text,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  token.network,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: WalletColors.text3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          _switch(token.enabled, onTap: () => _toggle(token)),
+                        ],
+                      );
+                    },
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
-        ),
       ],
     );
   }

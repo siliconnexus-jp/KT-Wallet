@@ -135,12 +135,13 @@ class RootApp extends StatelessWidget {
       child: ListenableBuilder(
         listenable: modeController,
         builder: (context, _) {
-          // Screenshot protection follows the mode: signer content (mnemonics,
-          // signing QRs) must never land in screenshots or the recents
-          // switcher, so entering signer mode raises Android's FLAG_SECURE and
-          // every other mode clears it again. Best-effort + idempotent (the
-          // builder may rerun); a no-op on iOS/tests (see SecureScreen).
-          SecureScreen.set(modeController.mode == DeviceMode.signer);
+          // Signer content (mnemonics, signing QRs) must never land in
+          // screenshots or the recents switcher, so signer mode latches
+          // Android's FLAG_SECURE for its whole lifetime and every other mode
+          // clears it again. Wallet mode raises it per-screen instead, via
+          // SecureContent — see SecureScreen. Idempotent (the builder may
+          // rerun); a no-op on iOS/tests.
+          SecureScreen.modeSecure = modeController.mode == DeviceMode.signer;
           switch (modeController.mode) {
             case null:
               return ModeSelectApp(

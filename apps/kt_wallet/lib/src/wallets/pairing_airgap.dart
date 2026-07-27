@@ -167,13 +167,9 @@ bool _publicKeyMatchesAddress(
   if (chain == Chain.tron) {
     final payload = Uint8List.fromList([0x41, ...body]);
     final checksum = sha256(sha256(payload)).sublist(0, 4);
-    return base58Encode(
-          Uint8List.fromList([...payload, ...checksum]),
-        ) ==
+    return base58Encode(Uint8List.fromList([...payload, ...checksum])) ==
         address;
   }
-  final hex = body
-      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
-      .join();
+  final hex = body.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
   return '0x$hex'.toLowerCase() == address.toLowerCase();
 }

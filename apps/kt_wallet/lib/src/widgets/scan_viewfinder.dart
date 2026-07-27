@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../state/flutter_test_env.dart';
 
 /// Injectable probe deciding whether a live [MobileScanner] session should be
@@ -149,25 +150,36 @@ class _ScanViewfinderState extends State<ScanViewfinder> {
         : null,
   );
 
-  Widget _fallbackContent() => ColoredBox(
+  /// Shown when the camera cannot start — most often because the permission
+  /// prompt was declined. The old copy was a bare, unlocalized "Camera
+  /// unavailable" that never said why or what to do about it.
+  Widget _fallbackContent(BuildContext context) => ColoredBox(
     color: SignerColors.surface,
     child: Center(
       child: isFlutterTestEnv
           ? _scanFrame(withIcon: true)
-          : const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.no_photography_outlined,
-                  size: 52,
-                  color: SignerColors.border,
-                ),
-                SizedBox(height: 12),
-                Text(
-                  'Camera unavailable',
-                  style: TextStyle(fontSize: 14, color: SignerColors.text2),
-                ),
-              ],
+          : Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.no_photography_outlined,
+                    size: 52,
+                    color: SignerColors.border,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    AppLocalizations.of(context).cameraUnavailable,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      height: 1.5,
+                      color: SignerColors.text2,
+                    ),
+                  ),
+                ],
+              ),
             ),
     ),
   );
@@ -195,7 +207,7 @@ class _ScanViewfinderState extends State<ScanViewfinder> {
           clip: false,
           child: isFlutterTestEnv
               ? Center(child: _scanFrame(withIcon: true))
-              : _fallbackContent(),
+              : _fallbackContent(context),
         ),
       );
     }
@@ -217,8 +229,8 @@ class _ScanViewfinderState extends State<ScanViewfinder> {
                   onDetect: _onDetect,
                   // Both builders render the simulated viewfinder so a camera
                   // that never comes up (or dies) degrades to the demo look.
-                  placeholderBuilder: (_) => _fallbackContent(),
-                  errorBuilder: (_, _) => _fallbackContent(),
+                  placeholderBuilder: (context) => _fallbackContent(context),
+                  errorBuilder: (context, _) => _fallbackContent(context),
                 ),
                 if (live) Center(child: _scanFrame(withIcon: false)),
               ],

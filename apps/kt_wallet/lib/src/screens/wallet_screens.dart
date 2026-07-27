@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../security/secure_screen.dart';
 import '../state/wallet_controller.dart';
 import '../state/wallet_scope.dart';
 import '../transfer/airgap_codec.dart' show truncateMiddle;
@@ -77,11 +78,7 @@ Widget _mnemonicUnavailable(
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(
-              Icons.lock_outline,
-              size: 18,
-              color: WalletColors.red,
-            ),
+            const Icon(Icons.lock_outline, size: 18, color: WalletColors.red),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -456,8 +453,16 @@ class CreateWarnScreen extends StatelessWidget {
 /// W24 助记词展示.
 class MnemonicShowScreen extends StatelessWidget {
   const MnemonicShowScreen({super.key});
+
+  // The whole screen is sensitive, both branches: FLAG_SECURE has to be up
+  // before a single word can paint, and guarding the refusal panel too costs
+  // nothing. Without this the backup screen told the user "don't screenshot
+  // this" while the OS happily allowed it.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      SecureContent(child: _buildContent(context));
+
+  Widget _buildContent(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final words = _activeMnemonic(context);
     // No phrase to show (an existing wallet reached this flow via the backup
@@ -583,8 +588,14 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
     if (mounted) context.go('/home');
   }
 
+  // The challenge options are drawn from the real phrase, so this screen
+  // leaks words too — it gets the same FLAG_SECURE treatment as the backup
+  // screen.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      SecureContent(child: _buildContent(context));
+
+  Widget _buildContent(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final options = _options();
     if (options == null) {
@@ -768,8 +779,13 @@ class _MnemonicImportScreenState extends State<MnemonicImportScreen> {
     if (mounted) context.go('/home');
   }
 
+  // The user types their existing phrase in here; the fields are as sensitive
+  // as a generated phrase on screen.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      SecureContent(child: _buildContent(context));
+
+  Widget _buildContent(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return KtScreen(
       gap: 18,
@@ -2055,8 +2071,12 @@ class _MnemonicSheetBodyState extends State<_MnemonicSheetBody> {
     }
   }
 
+  // The view-phrase sheet renders the wallet's live recovery phrase.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      SecureContent(child: _buildContent(context));
+
+  Widget _buildContent(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final words = _words;
     return SafeArea(

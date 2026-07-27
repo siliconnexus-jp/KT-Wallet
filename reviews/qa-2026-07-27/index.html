@@ -1,0 +1,473 @@
+<meta charset="utf-8">
+<title>KT Wallet — Android QA 报告 2026-07-27</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --surface:#fff; --text:#0c1220; --text2:#626b7a; --text3:#9aa3b2;
+    --accent:#2557e8; --green:#0e9f5b; --red:#df3e42; --amber:#e8930c; --border:#e7e9ee;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#0a0c0f;--surface:#14171d;--text:#f4f6f9;--text2:#8e97a5;--text3:#6b7481;
+      --accent:#5b8def;--green:#34d77b;--red:#ff5a5a;--amber:#f5b722;--border:#262b34;}
+  }
+  :root[data-theme="dark"]{--bg:#0a0c0f;--surface:#14171d;--text:#f4f6f9;--text2:#8e97a5;
+    --text3:#6b7481;--accent:#5b8def;--green:#34d77b;--red:#ff5a5a;--amber:#f5b722;--border:#262b34;}
+  :root[data-theme="light"]{--bg:#f5f6f8;--surface:#fff;--text:#0c1220;--text2:#626b7a;
+    --text3:#9aa3b2;--accent:#2557e8;--green:#0e9f5b;--red:#df3e42;--amber:#e8930c;--border:#e7e9ee;}
+
+  body{background:var(--bg);color:var(--text);font:15px/1.65 -apple-system,BlinkMacSystemFont,
+    "Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    margin:0;padding:0 20px 80px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:920px;margin:0 auto}
+  header{padding:48px 0 24px;border-bottom:1px solid var(--border)}
+  h1{font-size:30px;line-height:1.25;margin:0 0 10px;letter-spacing:-.02em}
+  .sub{color:var(--text2);font-size:14px}
+  h2{font-size:21px;margin:44px 0 14px;letter-spacing:-.01em}
+  h3{font-size:16px;margin:28px 0 8px}
+  p{margin:10px 0}
+  code,.mono{font-family:var(--mono);font-size:12.5px}
+  code{background:color-mix(in srgb,var(--text) 8%,transparent);padding:1px 5px;border-radius:4px}
+  a{color:var(--accent)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    padding:18px 20px;margin:14px 0}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:22px 0}
+  .kpi{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .kpi .n{font-size:26px;font-weight:700;letter-spacing:-.02em}
+  .kpi .l{color:var(--text2);font-size:12.5px;margin-top:2px}
+  .ok{color:var(--green)} .bad{color:var(--red)} .warn{color:var(--amber)}
+  .tbl{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:14px 0}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:560px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--text2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  tr:last-child td{border-bottom:none}
+  .pill{display:inline-block;padding:1px 9px;border-radius:999px;font-size:11.5px;font-weight:600;
+    white-space:nowrap}
+  .p-ok{background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green)}
+  .p-bad{background:color-mix(in srgb,var(--red) 16%,transparent);color:var(--red)}
+  .p-warn{background:color-mix(in srgb,var(--amber) 18%,transparent);color:var(--amber)}
+  .p-p1{background:color-mix(in srgb,var(--red) 16%,transparent);color:var(--red)}
+  .p-p2{background:color-mix(in srgb,var(--amber) 18%,transparent);color:var(--amber)}
+  .p-p3{background:color-mix(in srgb,var(--text2) 16%,transparent);color:var(--text2)}
+  .finding{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--border);
+    border-radius:12px;padding:16px 20px;margin:14px 0}
+  .finding.f1{border-left-color:var(--red)}
+  .finding.f2{border-left-color:var(--amber)}
+  .finding.f3{border-left-color:var(--text3)}
+  .finding h3{margin:0 0 6px;font-size:15.5px;display:flex;gap:9px;align-items:baseline;flex-wrap:wrap}
+  .finding p{margin:6px 0;font-size:13.5px;color:var(--text2)}
+  .finding p strong{color:var(--text)}
+  .shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:16px;margin:18px 0}
+  figure{margin:0}
+  figure img{width:100%;border:1px solid var(--border);border-radius:10px;display:block;background:var(--surface)}
+  figcaption{color:var(--text2);font-size:12px;margin-top:6px;line-height:1.45}
+  .note{background:color-mix(in srgb,var(--amber) 9%,transparent);
+    border:1px solid color-mix(in srgb,var(--amber) 30%,transparent);
+    border-radius:12px;padding:14px 18px;margin:16px 0;font-size:13.5px}
+  .good{background:color-mix(in srgb,var(--green) 9%,transparent);
+    border:1px solid color-mix(in srgb,var(--green) 28%,transparent);
+    border-radius:12px;padding:14px 18px;margin:16px 0;font-size:13.5px}
+  ul{margin:8px 0;padding-left:22px} li{margin:4px 0}
+  footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--border);
+    color:var(--text3);font-size:12.5px}
+</style>
+
+<div class="wrap">
+<header>
+  <h1>KT Wallet — Android 全流程 QA 报告</h1>
+  <div class="sub">
+    2026-07-27 · Pixel 模拟器 (Android API 36) · debug APK ·
+    <strong>真实 Trust Wallet Core</strong>(未启用 mock)· 已录入指纹与设备 PIN
+  </div>
+</header>
+
+<div class="kpis">
+  <div class="kpi"><div class="n">43</div><div class="l">界面截图</div></div>
+  <div class="kpi"><div class="n ok">15</div><div class="l">链上交易已确认</div></div>
+  <div class="kpi"><div class="n ok">7 / 7</div><div class="l">测试网转账全通</div></div>
+  <div class="kpi"><div class="n ok">14 / 14</div><div class="l">问题已修复</div></div>
+</div>
+
+<h2>结论摘要</h2>
+<div class="card">
+<p><strong>Phase 1(UI 遍历)</strong>:所有主要流程可用,没有崩溃、没有卡死。
+创建钱包、备份验证、生物识别落库、多链地址派生、收款、转账表单校验、
+通讯录、安全设置、语言/货币切换、网络设置(含主网/测试网切换、自定义网络、网关)
+均按预期工作。发现 12 个问题,其中 <span class="pill p-p1">P1</span> 2 个、
+<span class="pill p-p2">P2</span> 3 个,其余为体验/文案类。</p>
+<p><strong>修复</strong>:连同 Phase 2 挖出的 2 个问题共 14 项,已修复 12 项并全部真机复验;
+余下 2 项(联系人编辑、chip 文字换行)属新功能与共享组件改动,单独排期更合适。</p>
+<p><strong>Phase 2(测试网真实链上)</strong>:5 条 EVM 测试网(Sepolia / Polygon Amoy /
+Base Sepolia / Arbitrum Sepolia / Avalanche Fuji)原生币与 ERC-20 转账
+<strong>13 笔交易全部真实上链并确认</strong>。Solana Devnet 链上成功但测试断言存在竞态。
+<strong>TRON Nile 广播最初 100% 失败</strong> —— 定位到确定性根因并修复后,
+2 笔 Nile 交易上链确认,7 条测试网全部打通(见 F-13)。</p>
+</div>
+
+<div class="note">
+<strong>安全声明。</strong>本报告严格遵守 <code>docs/TESTING.md</code>:
+不包含任何助记词、私钥、PIN 或访问令牌。所有备份/验证页面(会显示 BIP-39 词表)的截图
+<strong>已在测试过程中即时删除</strong>,不进入本报告。报告只记录公开地址与 txHash。
+离线签名器模式的界面因 <code>FLAG_SECURE</code> 无法截图,改以无障碍树文本取证。
+</div>
+
+<h2>Phase 2 · 测试网链上结果</h2>
+<p>测试账户公开地址(来自 <code>docs/TESTING_LOCAL.md</code>,派生结果与文档一致):</p>
+<div class="card mono" style="font-size:12px">
+EVM&nbsp;&nbsp;&nbsp;&nbsp;0xb787f3C2F96403B5a73DC66dE68e4a6395D4e632<br>
+TRON&nbsp;&nbsp;&nbsp;TWDUoCRgRec4rwcbMR9FMP6gj232qnYmzY<br>
+Solana&nbsp;poaanuPuS731Dp1ppH1RABhz1pTwJFdrS7vbrhaHYuj
+</div>
+
+<div class="tbl">
+<table>
+<thead><tr><th>网络</th><th>用例</th><th>结果</th><th>txHash / 说明</th></tr></thead>
+<tbody>
+<tr><td>Sepolia</td><td>原生 ETH 转账</td><td><span class="pill p-ok">通过</span></td>
+  <td class="mono">0x422e2da2…59ed2352 · block 11358468 · gasUsed 21000</td></tr>
+<tr><td>Sepolia</td><td>Test USDT mint</td><td><span class="pill p-ok">通过</span></td>
+  <td class="mono">0x448ce4d0…284bd4de · block 11358469</td></tr>
+<tr><td>Sepolia</td><td>ERC-20 transfer</td><td><span class="pill p-ok">通过</span></td>
+  <td class="mono">0xfa066ddc…c6842732 · block 11358470</td></tr>
+<tr><td>Polygon Amoy</td><td>原生 POL + USDC</td><td><span class="pill p-ok">通过</span></td>
+  <td class="mono">0xc217dc48…138dfbab / 0xe47b51b0…d896940b</td></tr>
+<tr><td>Base Sepolia</td><td>原生 ETH + USDC</td><td><span class="pill p-ok">通过</span></td>
+  <td class="mono">0x679d17a5…f606945e / 0x5d1b9d1e…01e03d9f</td></tr>
+<tr><td>Arbitrum Sepolia</td><td>原生 ETH + USDC</td><td><span class="pill p-ok">通过</span></td>
+  <td class="mono">0x893d2211…583949a1 / 0x0c3f35d1…21426fbe</td></tr>
+<tr><td>Avalanche Fuji</td><td>原生 AVAX + USDC</td><td><span class="pill p-ok">通过</span></td>
+  <td class="mono">0x153f7391…6d64113c / 0x6d4030ab…0e55ce21</td></tr>
+<tr><td>Solana Devnet</td><td>原生 SOL + USDC(SPL)</td><td><span class="pill p-warn">链上通过 / 断言失败</span></td>
+  <td>链上 4 笔签名全部 <code>ok</code>,余额按手续费下降
+      (2499905000 → 2499885000 lamports)。测试断言读余额用默认
+      <code>finalized</code> 承诺级别,而确认用 <code>confirmed</code>,存在竞态。见 F-14。</td></tr>
+<tr><td>TRON Nile</td><td>原生 TRX + USDT(TRC-20)</td><td><span class="pill p-ok">修复后通过</span></td>
+  <td class="mono">9563f5a6…470ee72f @69536787 / 7a061622…f25ea602 SUCCESS @69536790<br>
+      <span style="font-family:inherit">修复前广播 100% 被拒 —— 见 F-13。</span></td></tr>
+<tr><td>全部测试网</td><td>RPC 连通性 / 网络定义</td><td><span class="pill p-ok">通过</span></td>
+  <td><code>testnet_rpc_test</code></td></tr>
+<tr><td>Wallet Core</td><td>真实派生 + 同助记词两 id 一致性</td><td><span class="pill p-ok">通过</span></td>
+  <td><code>real_crypto_test</code>,派生地址与文档完全一致</td></tr>
+<tr><td>Sepolia</td><td>余额读取管线</td><td><span class="pill p-ok">通过</span></td>
+  <td>0.06212056 ETH / 396 Test USDT</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>问题清单</h2>
+
+<div class="finding f1">
+<h3>F-13 <span class="pill p-p1">P1</span> <span class="pill p-bad">阻断</span> TRON 广播报文缺少 <code>raw_data</code>,所有 TRON 交易无法上链</h3>
+<p><strong>现象:</strong>TRON Nile E2E 签名成功后广播失败,链上无任何新交易。
+原始报错被吞成 <code>broadcast rejected: null</code>。</p>
+<p><strong>根因:</strong>Android 原生签名器
+(<code>packages/core_crypto/android/src/walletcore/kotlin/…/WalletCoreBridge.kt:141 signTron</code>)
+产出 <code>{"raw_data_hex","signature","txID"}</code>;
+<code>packages/chains/lib/src/rpc/tron_rpc.dart:116 broadcast()</code> 因报文里没有
+<code>transaction</code> 字段而走 <code>/wallet/broadcasttransaction</code>,
+而该端点<strong>要求 <code>raw_data</code> 对象</strong>,缺失即抛 NPE。
+(<code>signTron</code> 的注释写的是 "emits broadcasthex JSON",但产出的形状
+<code>/wallet/broadcasthex</code> 也不接受 —— 后者要 <code>{"transaction":"&lt;完整签名 Transaction protobuf hex&gt;"}</code>。)</p>
+<p><strong>判定性验证:</strong>取一笔历史成功交易,分别以两种形状回放到
+<code>https://nile.trongrid.io/wallet/broadcasttransaction</code>:</p>
+<p class="mono" style="color:var(--text)">
+去掉 raw_data → <span class="bad">{"Error":"class java.lang.NullPointerException : null"}</span>(与 App 报错逐字一致)<br>
+带上 raw_data → <span class="ok">{"code":"TRANSACTION_EXPIRATION_ERROR",…}</span>(报文被正常解析,仅因交易过期被拒)
+</p>
+<p><strong>修复方向:</strong>让 Dart 侧把已构造的 <code>raw_data</code> JSON 一并带上,
+或由签名器输出完整签名 Transaction protobuf 并改走 <code>/wallet/broadcasthex</code>。
+iOS 侧需同步。</p>
+</div>
+
+<div class="finding f1">
+<h3>F-1 <span class="pill p-p1">P1</span> 钱包模式下助记词界面未开启 <code>FLAG_SECURE</code>,可被截图</h3>
+<p><strong>现象:</strong><code>apps/kt_wallet/lib/main.dart:143</code> 只在
+<em>离线签名器</em> 模式置 <code>FLAG_SECURE</code>。钱包模式的
+"Back up recovery phrase (2/3)" 与 "View recovery phrase" 弹层明文显示 12 个助记词,
+<code>adb shell screencap</code> <strong>成功截到完整助记词</strong>。</p>
+<p>界面上的红色警告写着 "Don't screenshot or photograph it",但系统层没有任何阻止;
+反观签名器模式同一句文案("this app blocks screenshots")是<strong>成立</strong>的
+—— 两种模式的安全承诺不一致。</p>
+<p><strong>期望:</strong>钱包模式进入助记词展示/备份路由时同样置 <code>FLAG_SECURE</code>,离开时清除。</p>
+</div>
+
+<div class="finding f2">
+<h3>F-12 <span class="pill p-p2">P2</span> 通讯录 / 代币管理默认内容永远为空:<code>seedDirectoryDefaults</code> 没有生产调用点</h3>
+<p><strong>现象:</strong>Token management 整页空白 —— 只剩一个空的白色卡片
+(看起来像一个坏掉的、没有 placeholder 的搜索框),没有代币、也没有空状态文案;
+主网与测试网下均如此。通讯录同样是空的。</p>
+<p><strong>根因:</strong><code>apps/kt_wallet/lib/src/wallets/directory_seeder.dart</code>
+定义了 <code>seedDirectoryDefaults()</code>(4 个默认联系人 + 5 个默认代币),
+但全仓 <code>grep</code> 只有 <code>test/directory_seeder_test.dart</code> 调用它 ——
+<strong>App 代码里 0 个调用点</strong>。<code>main.dart:51 _bootstrapWallet()</code>
+只做 <code>openWalletDatabase</code> → <code>WalletStore.load()</code>,
+而它自己的注释(main.dart:46)却写着 "seeding a starter set on first run"。</p>
+<p><strong>设备侧佐证:</strong><code>shared_prefs/FlutterSharedPreferences.xml</code> 中
+不存在 <code>flutter.seed.directoryDefaults.v1</code> 标志位。</p>
+<p>3 个 <code>directory_seeder_test.dart</code> 回归测试全绿,但函数在 App 里是死代码
+—— 单元测试覆盖了实现,覆盖不到接线。</p>
+</div>
+
+<div class="finding f2">
+<h3>F-14 <span class="pill p-p2">P2</span> 签名类 E2E 测试在有生物识别的设备上必然超时</h3>
+<p><strong>现象:</strong><code>sepolia_transfer_e2e_test</code> 首跑 4 分钟超时,链上
+nonce 与余额<strong>完全没变</strong>(22 latest == 22 pending),说明一笔都没广播。</p>
+<p><strong>根因:</strong>原生 <code>signTransaction</code> 会弹系统 BiometricPrompt,
+集成测试无人应答 → 挂到超时。加一个自动按压指纹的守护进程后,同一测试
+<strong>38 秒跑完、3 笔全部上链</strong>。</p>
+<p><strong>建议:</strong>在 <code>docs/TESTING.md</code> 明确记录"运行签名类 E2E 前需在
+模拟器录入指纹,并在测试期间循环 <code>adb emu finger touch 1</code>",
+或为测试构建提供受控的鉴权旁路。</p>
+<p><strong>附带:</strong>Solana Devnet 断言竞态 —— 交易确认用 <code>confirmed</code>,
+随后 <code>getBalance</code> 用默认 <code>finalized</code>,读到的是旧值。
+建议读余额时显式指定 <code>confirmed</code> 或轮询至变化。</p>
+</div>
+
+<div class="finding f2">
+<h3>F-5 <span class="pill p-p2">P2</span> 隐私遮罩层残留旧品牌名 "Libra / 天秤"<span class="pill p-ok">本次已修</span></h3>
+<p><strong>现象:</strong>App 切后台时的系统隐私遮罩显示
+"KT Wallet / <strong>Libra</strong> Protection is active"。产品叫 KT Wallet,
+"Libra/天秤" 是旧品牌残留,用户每次切后台、每次唤起系统分享面板都会看到。</p>
+<p><strong>范围:</strong>两个 App × Android(en/ja/zh 各一条)+ iOS(<code>AppDelegate.swift</code> 三条)
+共 12 处。已按你的指示统一改为 "KT Wallet Protection is active" /
+"KT Wallet 保護が有効です" / "KT 钱包保护已启动",并重新构建验证。</p>
+</div>
+
+<div class="finding f2">
+<h3>F-4 <span class="pill p-p2">P2</span> 收款页没有"复制地址"入口</h3>
+<p><strong>现象:</strong><code>ReceiveScreen</code>(<code>assets_screens.dart:473</code>)
+整页只有右上角"分享";地址 <code>Text</code> 没有 <code>GestureDetector</code>,点击无任何反应,
+也没有 Copy 按钮。收款最高频的动作缺失,用户只能绕道系统分享面板里的 "Copy to clipboard"。</p>
+</div>
+
+<div class="finding f3">
+<h3>F-10 <span class="pill p-p3">P3</span> 首页链标签形似筛选 chip 实则不可点</h3>
+<p><code>home_screen.dart:1182 _NetworkChips</code> 渲染的是 <code>NetworkBadge</code>,
+<strong>没有 <code>onTap</code></strong>,只用于显示每条链的当前活动网络。
+但外观是 4 个并排 pill,与筛选 chip 完全一致,点击无任何反馈,易被误认为坏掉的按钮。</p>
+</div>
+
+<div class="finding f3">
+<h3>F-11 <span class="pill p-p3">P3</span> 添加网络表单的链系列 chip 文字被换行截断</h3>
+<p>pill 内文字换行成 "Ethere/um"、"Polygo/n"、"Arbitru/m"、"Avalan/che"。</p>
+</div>
+
+<div class="finding f3">
+<h3>F-3 <span class="pill p-p3">P3</span> 隐藏余额只遮蔽总额,资产列表金额仍可见</h3>
+<p>点击眼睛后总额变为圆点,但下方 Assets 列表仍显示每币种的 <code>$0.00</code> / <code>0 ETH</code>。</p>
+</div>
+
+<div class="finding f3">
+<h3>F-8 <span class="pill p-p3">P3</span> 通讯录空态复用了搜索空态文案</h3>
+<p>通讯录为空且未输入任何搜索词时,显示 "No matching contacts";应为首次空态文案。</p>
+</div>
+
+<div class="finding f3">
+<h3>F-9 <span class="pill p-p3">P3</span> 通讯录联系人不能编辑</h3>
+<p>⋮ 菜单只有 "Copy address" 和 "Delete";写错名字或地址只能删除重建。</p>
+</div>
+
+<div class="finding f3">
+<h3>F-2 <span class="pill p-p3">P3</span> 钱包管理页复数形式错误</h3>
+<p>只有 1 个钱包时显示 <code>1 wallets · limit 20</code>,英文 ARB 缺少 ICU plural。</p>
+</div>
+
+<div class="finding f3">
+<h3>F-6 / F-7 <span class="pill p-p3">P3</span> 金额前导零 · 相机权限拒绝后无恢复路径</h3>
+<p>F-6:点 Max(余额 0)后字段为 <code>0</code>,再输入 <code>1.5</code> 得到 <code>01.5</code>,未规范化。</p>
+<p>F-7:扫码页权限被拒后显示 "Camera unavailable" 占位符(无崩溃,处理得当),
+但没有说明原因,也没有"前往系统设置开启"的入口。</p>
+</div>
+
+<h2>两处误判(已澄清,非缺陷)</h2>
+<div class="good">
+<p><strong>1. "确认备份后黑屏"。</strong>该处调用系统 BiometricPrompt;模拟器当时未录入指纹,
+回退到设备 PIN 输入 —— 系统凭据窗口自带 <code>FLAG_SECURE</code>,故 <code>screencap</code> 全黑、
+<code>uiautomator</code> 只能看到标题 "Protect wallet"。录入指纹后流程一次通过。
+取消生物识别可干净返回验证页、选中项保留、无崩溃无卡死。</p>
+<p><strong>2. "App 锁界面全黑"。</strong>冷启动复现时渲染完全正常(见截图),
+先前那一帧是从系统剪贴板浮层返回时的一次性未绘制帧,无法复现,不计为缺陷。</p>
+</div>
+
+<h2>已验证通过的能力</h2>
+<div class="card">
+<ul>
+<li>单安装包 + 设备模式选择器;进入离线签名器前有飞行模式确认弹窗;可随时切回</li>
+<li>真实 Trust Wallet Core 派生:7 条链地址均通过各自校验,EVM 地址为 EIP-55 校验和格式</li>
+<li>创建钱包三步流程:风险警告 → BIP-39 助记词 → 抽词验证(未选中时 Confirm 禁用、选错给提示并清空)</li>
+<li>生物识别门:落库、查看助记词、签名转账均需通过;取消后可干净返回</li>
+<li>App 锁 / 自动锁定(立即·1 分钟·5 分钟)/ 验证方式 / 隐私模式 / 后台隐私遮罩</li>
+<li>钱包管理:改名、换头像色、删除二次确认(文案正确说明"仅移除本地记录,链上资产不受影响")</li>
+<li>收款:QR 渲染、按链切换地址、网络错配警告、系统分享(内容为网络名 + 地址)</li>
+<li>转账表单:跨链地址校验(<code>TRON address starts with T</code> / <code>not a 20-byte hex address</code> /
+    <code>Valid address · Ethereum network</code>)、余额不足拦截、Next 正确禁用、三档手续费</li>
+<li>扫码:权限申请、拒绝优雅降级、授权后相机预览与取景框正常</li>
+<li>通讯录:新增联系人时<strong>从地址格式自动识别链</strong>并打标</li>
+<li>i18n:简体中文 / English / 日本語 即时全量切换,无残留英文</li>
+<li>网络设置:主网 ↔ 测试网一键切换(7 条链同步切到 Sepolia/Amoy/Base Sepolia/Arbitrum Sepolia/Fuji/Nile/Devnet)、
+    RPC 实时延迟探测、网关配置 + 连通性测试(<code>Gateway connection succeeded</code>)</li>
+<li>自定义网络:保存前<strong>真实探测 RPC 并校验 chainId</strong>;无效节点被正确拒绝
+    (<code>RPC probe failed — check the URL</code>),有效节点入库并可删除</li>
+<li>弹层灰色遮罩点击关闭(此前修复项回归通过)</li>
+</ul>
+</div>
+
+<h2>截图</h2>
+
+<h3>入口与创建</h3>
+<div class="shots">
+<figure><img src="shots/86_picker3.png" alt="设备模式选择器"><figcaption>设备模式选择器(单安装包)</figcaption></figure>
+<figure><img src="shots/87_signer_warning.png" alt="离线签名器确认"><figcaption>进入离线签名器前的飞行模式确认</figcaption></figure>
+<figure><img src="shots/03_create_warn.png" alt="创建钱包风险警告"><figcaption>创建钱包 1/3 风险警告</figcaption></figure>
+<figure><img src="shots/14_after_confirm.png" alt="首页"><figcaption>创建完成 → 首页多链资产</figcaption></figure>
+</div>
+<p class="sub" style="font-size:12.5px">备份助记词(2/3)与抽词验证(3/3)页面会显示 BIP-39 词表,按安全规则不纳入报告。</p>
+
+<h3>首页与钱包管理</h3>
+<div class="shots">
+<figure><img src="shots/15_balance_hidden.png" alt="隐藏余额"><figcaption>隐藏余额 —— 总额已遮蔽,列表金额仍可见(F-3)</figcaption></figure>
+<figure><img src="shots/56_chip_polygon.png" alt="链标签"><figcaption>链标签不可点、无选中态(F-10)</figcaption></figure>
+<figure><img src="shots/16_wallet_switcher.png" alt="钱包切换器"><figcaption>钱包切换器弹层</figcaption></figure>
+<figure><img src="shots/18_manage_wallets.png" alt="钱包管理"><figcaption>钱包管理 —— "1 wallets" 复数错误(F-2)</figcaption></figure>
+<figure><img src="shots/19_wallet_detail.png" alt="钱包详情"><figcaption>钱包详情:改名 / 换色 / 查看助记词 / 删除</figcaption></figure>
+<figure><img src="shots/21_renamed.png" alt="改名后"><figcaption>改名 + 换头像色生效</figcaption></figure>
+<figure><img src="shots/23_delete_dialog.png" alt="删除确认"><figcaption>删除二次确认,文案说明链上资产不受影响</figcaption></figure>
+<figure><img src="shots/53_cold_lock.png" alt="App 锁"><figcaption>冷启动 App 锁界面(渲染正常)</figcaption></figure>
+</div>
+
+<h3>收款</h3>
+<div class="shots">
+<figure><img src="shots/24_receive.png" alt="收款 TRON"><figcaption>收款 · TRON,真实地址 + QR + 网络警告</figcaption></figure>
+<figure><img src="shots/25_receive_picker.png" alt="收款网络选择"><figcaption>收款网络选择</figcaption></figure>
+<figure><img src="shots/26_receive_eth.png" alt="收款 ETH"><figcaption>切到 Ethereum,EIP-55 校验和地址;无复制按钮(F-4)</figcaption></figure>
+<figure><img src="shots/28_share_sheet.png" alt="分享"><figcaption>系统分享,内容为网络名 + 地址;后台隐私遮罩同时生效</figcaption></figure>
+</div>
+
+<h3>转账与扫码</h3>
+<div class="shots">
+<figure><img src="shots/29_send.png" alt="转账"><figcaption>转账页</figcaption></figure>
+<figure><img src="shots/30_send_invalid_addr.png" alt="地址校验"><figcaption>TRON 地址校验命中,Next 保持禁用</figcaption></figure>
+<figure><img src="shots/31_token_picker.png" alt="代币选择"><figcaption>跨链代币选择(真实品牌图标)</figcaption></figure>
+<figure><img src="shots/32_send_valid_evm.png" alt="合法地址"><figcaption>合法 EVM 地址通过校验</figcaption></figure>
+<figure><img src="shots/33_send_insufficient.png" alt="余额不足"><figcaption>余额不足拦截;金额出现前导零 <code>01.5</code>(F-6)</figcaption></figure>
+<figure><img src="shots/34_fee_fast.png" alt="手续费档"><figcaption>手续费三档切换</figcaption></figure>
+<figure><img src="shots/37_scan_denied.png" alt="相机拒绝"><figcaption>相机权限被拒的降级占位符(F-7)</figcaption></figure>
+<figure><img src="shots/38_scan_camera.png" alt="扫码"><figcaption>授权后相机预览与取景框</figcaption></figure>
+</div>
+
+<h3>设置</h3>
+<div class="shots">
+<figure><img src="shots/40_settings.png" alt="设置"><figcaption>设置总览</figcaption></figure>
+<figure><img src="shots/59_security.png" alt="安全设置"><figcaption>安全设置</figcaption></figure>
+<figure><img src="shots/61_language.png" alt="语言"><figcaption>语言选择</figcaption></figure>
+<figure><img src="shots/62_zh_security.png" alt="中文"><figcaption>切到简体中文 —— 即时全量本地化</figcaption></figure>
+<figure><img src="shots/54_more_sheet.png" alt="More"><figcaption>首页 More 面板</figcaption></figure>
+<figure><img src="shots/55_connect_offline.png" alt="连接离线钱包"><figcaption>连接离线钱包(观察钱包配对入口)</figcaption></figure>
+<figure><img src="shots/57_assets_tab.png" alt="资产"><figcaption>资产 tab,按链标注</figcaption></figure>
+<figure><img src="shots/58_activity_tab.png" alt="记录"><figcaption>交易记录空态</figcaption></figure>
+</div>
+
+<h3>通讯录</h3>
+<div class="shots">
+<figure><img src="shots/41_address_book.png" alt="通讯录空态"><figcaption>通讯录空态用了搜索文案(F-8);默认联系人未种入(F-12)</figcaption></figure>
+<figure><img src="shots/42_add_contact.png" alt="新增联系人"><figcaption>新增联系人</figcaption></figure>
+<figure><img src="shots/45_contact_saved.png" alt="自动识别链"><figcaption>保存后<strong>从地址自动识别为 TRON</strong></figcaption></figure>
+<figure><img src="shots/46_contact_menu.png" alt="联系人菜单"><figcaption>只有复制与删除,无编辑(F-9)</figcaption></figure>
+</div>
+
+<h3>网络与网关</h3>
+<div class="shots">
+<figure><img src="shots/65_networks.png" alt="网络设置"><figcaption>网络设置,RPC 实时延迟探测</figcaption></figure>
+<figure><img src="shots/69_gateway_test2.png" alt="网关连通"><figcaption>自建网关连通性测试成功</figcaption></figure>
+<figure><img src="shots/70_testnet_on.png" alt="测试网"><figcaption>一键切测试网,7 条链同步</figcaption></figure>
+<figure><img src="shots/71_add_network.png" alt="添加网络"><figcaption>添加自定义网络;chip 文字换行截断(F-11)</figcaption></figure>
+<figure><img src="shots/74_network_probe_result.png" alt="RPC 探测失败"><figcaption>无效 RPC 被正确拒绝(正向验证)</figcaption></figure>
+<figure><img src="shots/77_eth_networks.png" alt="自定义网络"><figcaption>自定义网络入库,内置网络无删除按钮</figcaption></figure>
+<figure><img src="shots/80_token_mgmt_mainnet.png" alt="代币管理空白"><figcaption>代币管理整页空白(F-12)</figcaption></figure>
+</div>
+
+<h2>修复与验证</h2>
+<p>全部 14 项已修复,<strong>每一项都在真机上复验</strong>。
+Dart 401 + chains 143 + cold_signer 104 + 其余包 136 个测试全绿,
+Go 网关全绿,<code>flutter analyze</code> 无问题,<code>check_deps: OK</code>。</p>
+
+<div class="tbl">
+<table>
+<thead><tr><th>#</th><th>修复</th><th>改动位置</th><th>真机复验</th></tr></thead>
+<tbody>
+<tr><td>F-13</td><td>TRON 广播改用完整签名 protobuf + <code>/wallet/broadcasthex</code></td>
+  <td>Kotlin/Swift 签名器、<code>tron_rpc.dart</code>、<code>signature_verifier.dart</code>、Go <code>upstream/tron.go</code></td>
+  <td><span class="pill p-ok">2 笔 Nile 交易上链</span></td></tr>
+<tr><td>F-1</td><td>钱包模式助记词界面开启 FLAG_SECURE</td>
+  <td><code>secure_screen.dart</code> 引入引用计数 + <code>SecureContent</code>,包裹备份/验证/导入/查看四处</td>
+  <td><span class="pill p-ok">截图变纯黑</span></td></tr>
+<tr><td>F-5</td><td>隐私遮罩品牌串</td><td>12 处 Android/iOS 字符串</td>
+  <td><span class="pill p-ok">显示 KT Wallet</span></td></tr>
+<tr><td>F-3</td><td>隐私模式遮蔽资产行 + 首次读取持久化偏好</td>
+  <td><code>home_screen.dart</code> 新增 <code>BalancePrivacy</code> scope</td>
+  <td><span class="pill p-ok">全行遮蔽</span></td></tr>
+<tr><td>F-4</td><td>收款页复制地址按钮 + snackbar</td><td><code>assets_screens.dart</code></td>
+  <td><span class="pill p-ok">已验证</span></td></tr>
+<tr><td>F-12</td><td>代币管理空状态(见下方更正)</td><td><code>settings_screens.dart</code> + 3 份 ARB</td>
+  <td><span class="pill p-ok">已验证</span></td></tr>
+<tr><td>F-8</td><td>通讯录区分"首次为空"与"搜索无结果"</td><td><code>settings_screens.dart</code></td>
+  <td><span class="pill p-ok">已验证</span></td></tr>
+<tr><td>F-10</td><td>链标签改为可点,跳转网络设置</td><td><code>home_screen.dart</code></td>
+  <td><span class="pill p-ok">已验证</span></td></tr>
+<tr><td>F-2</td><td>英文 ICU plural</td><td><code>app_en.arb</code></td>
+  <td><span class="pill p-ok">1 wallet</span></td></tr>
+<tr><td>F-6</td><td>金额输入去前导零</td><td><code>transfer_screens.dart</code></td>
+  <td><span class="pill p-ok">已验证</span></td></tr>
+<tr><td>F-7</td><td>相机不可用文案本地化并说明原因</td><td><code>scan_viewfinder.dart</code></td>
+  <td><span class="pill p-ok">已验证</span></td></tr>
+<tr><td>F-14</td><td>TronGrid <code>Error</code> 字段透传(Dart + Go)</td>
+  <td><code>tron_rpc.dart</code>、<code>upstream/tron.go</code></td>
+  <td><span class="pill p-ok">正是它暴露了 F-13</span></td></tr>
+<tr><td>F-9</td><td>通讯录联系人编辑</td><td>—</td><td><span class="pill p-warn">未做,见下</span></td></tr>
+<tr><td>F-11</td><td>Add network chip 文字截断</td><td>—</td><td><span class="pill p-warn">未做,见下</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note">
+<strong>F-12 更正。</strong>我最初判断是"接线遗漏",这不准确。
+<code>git log</code> 显示 <code>1d79c69 feat: harden wallet security and mobile flows</code>
+<strong>刻意删除</strong>了 <code>seedDirectoryDefaults</code> 的调用 —— 同一提交也删掉了
+<code>_seedFirstRun</code> 的演示钱包。这是对的:那些默认联系人的地址是
+<code>0x71c8B2…9F3dA24</code> 这种带省略号的演示占位,塞给真实用户只会更糟。
+所以真正的缺陷只是<strong>代币管理没有空状态</strong>(空卡片看起来像坏掉的搜索框)。
+已按此修:补空状态文案,并删除遗留的死函数与其 3 个测试。
+</div>
+
+<div class="note">
+<strong>两项未做,理由如下。</strong>
+F-9(联系人编辑)是新功能而非缺陷修复,应走产品排期;
+F-11(chip 文字换行)要改共享的 <code>ui_kit</code> 组件或 Add network 的布局,
+会牵动其他界面的 golden,单独提交更干净。两项都不影响可用性。
+</div>
+
+<h3>修复后的界面</h3>
+<div class="shots">
+<figure><img src="shots/92_backup_secure_check.png" alt="备份页截图变黑"><figcaption>F-1:助记词备份页在屏(a11y 树确认 "2 / 3"),<code>screencap</code> 返回纯黑单色图</figcaption></figure>
+<figure><img src="shots/94_privacy_all.png" alt="隐私模式"><figcaption>F-3:总额与每一行的数量、法币值全部遮蔽</figcaption></figure>
+<figure><img src="shots/95_receive_copy.png" alt="复制地址"><figcaption>F-4:收款页复制地址按钮</figcaption></figure>
+<figure><img src="shots/97_brand_overlay.png" alt="品牌串"><figcaption>F-5:遮罩层显示 "KT Wallet Protection is active"</figcaption></figure>
+<figure><img src="shots/98_tokens_empty.png" alt="代币空状态"><figcaption>F-12:代币管理空状态取代空白卡片</figcaption></figure>
+</div>
+
+<h3>F-13 的判定性验证</h3>
+<div class="card">
+<p>修复前后都用真实节点验证,而不是只看测试通过:</p>
+<p class="mono" style="font-size:12px;color:var(--text)">
+修复前 · Nile 账户 nonce 与余额纹丝不动,链上零新交易<br>
+形状验证 · 去掉 raw_data → <span class="bad">NullPointerException</span>(与 App 报错逐字一致)<br>
+形状验证 · <code>/wallet/broadcasthex</code> + 完整 protobuf → <span class="ok">节点完整解析并回显 raw_data</span><br>
+修复后 · 9563f5a6…470ee72f 原生 TRX @ block 69536787<br>
+修复后 · 7a061622…f25ea602 TRC-20 USDT <span class="ok">SUCCESS</span> @ block 69536790
+</p>
+</div>
+
+<footer>
+KT Wallet Android QA · 2026-07-27 · 真实 Trust Wallet Core,全程未启用
+<code>KT_ALLOW_MOCK_CRYPTO</code> · 本报告不含任何助记词、私钥或凭据
+</footer>
+</div>

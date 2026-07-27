@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"ktwallet/gateway/internal/handlers"
@@ -73,6 +74,49 @@ func TestBroadcastTronForwardsJSONBody(t *testing.T) {
 	}
 	if hits[0].Body != tronRawTx {
 		t.Fatalf("tron payload must be forwarded verbatim:\n sent %s\n want %s", hits[0].Body, tronRawTx)
+	}
+}
+
+// The wallet-core signers emit the full signed Transaction protobuf, which
+// only /wallet/broadcasthex accepts. Routing it to /wallet/broadcasttransaction
+// (which dereferences `raw_data`) made every TRON transfer fail with a bare
+// NullPointerException from the node.
+func TestBroadcastTronHexPayloadUsesBroadcastHex(t *testing.T) {
+	grid := newRESTFake(t)
+	grid.routeJSON("/wallet/broadcasthex", `{"result":true,"txid":"deadbeef"}`)
+	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
+
+	payload := `{"transaction":"0a02ab12","txID":"deadbeef"}`
+	resp := e.rpc("kt_broadcast", fmt.Sprintf(`{"chain":"tron","payload":%q}`, payload))
+	assertJSONEq(t, `{"txHash":"deadbeef"}`, result(t, resp))
+
+	if hits := grid.hitsFor("/wallet/broadcasttransaction"); len(hits) != 0 {
+		t.Fatalf("a hex payload must not hit broadcasttransaction, got %d", len(hits))
+	}
+	hits := grid.hitsFor("/wallet/broadcasthex")
+	if len(hits) != 1 {
+		t.Fatalf("expected 1 broadcasthex POST, got %d", len(hits))
+	}
+	// txID must not ride along: TronGrid rejects unknown body fields.
+	if want := `{"transaction":"0a02ab12"}`; hits[0].Body != want {
+		t.Fatalf("broadcasthex body:\n got %s\nwant %s", hits[0].Body, want)
+	}
+}
+
+// TronGrid answers node-level failures with a top-level `Error` and no
+// code/message; reading only the latter reported an empty reason.
+func TestBroadcastTronSurfacesTopLevelError(t *testing.T) {
+	grid := newRESTFake(t)
+	grid.routeJSON("/wallet/broadcasthex",
+		`{"Error":"class java.lang.NullPointerException : null"}`)
+	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
+
+	payload := `{"transaction":"0a02ab12"}`
+	resp := e.rpc("kt_broadcast", fmt.Sprintf(`{"chain":"tron","payload":%q}`, payload))
+	errObj := assertErrCode(t, resp, rpc.CodeUpstream)
+	msg, _ := errObj["message"].(string)
+	if !strings.Contains(msg, "NullPointerException") {
+		t.Fatalf("top-level Error must surface, got %q", msg)
 	}
 }
 

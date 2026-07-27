@@ -609,6 +609,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get addressCopied => '地址已复制';
 
   @override
+  String get actionCopy => '复制地址';
+
+  @override
   String get addressBookTitle => '地址管理';
 
   @override
@@ -616,6 +619,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get noMatchingContacts => '没有匹配的联系人';
+
+  @override
+  String get contactsEmpty => '还没有联系人,点右上角 + 添加';
+
+  @override
+  String get tokensEmpty => '还没有自定义代币,点右上角 + 添加';
 
   @override
   String get contactBobExchange => 'Bob 交易所';

@@ -210,21 +210,50 @@ func (t *Tron) NativeTransactions(ctx context.Context, addr string, limit int) (
 	return transfers, nil
 }
 
-// Broadcast POSTs a signed transaction JSON to /wallet/broadcasttransaction
-// verbatim and returns the txid. A node-side rejection comes back as
-// *NodeError carrying the node's (hex-decoded when possible) message.
+// Broadcast POSTs a signed transaction and returns the txid. The endpoint
+// follows from the payload shape, matching the mobile client:
+//
+//   - {"transaction": "<hex>"} — the full signed Transaction protobuf the
+//     wallet-core signers emit, which only /wallet/broadcasthex accepts. Only
+//     that one key is forwarded; TronGrid rejects unknown fields.
+//   - anything else — a complete TronGrid transaction JSON, forwarded verbatim
+//     to /wallet/broadcasttransaction. That endpoint dereferences `raw_data`
+//     unconditionally and answers a bare NullPointerException without it.
+//
+// A node-side rejection comes back as *NodeError carrying the node's
+// (hex-decoded when possible) message.
 func (t *Tron) Broadcast(ctx context.Context, payload []byte) (string, error) {
+	path := "/wallet/broadcasttransaction"
+	var shape struct {
+		Transaction string `json:"transaction"`
+	}
+	if err := json.Unmarshal(payload, &shape); err == nil && shape.Transaction != "" {
+		path = "/wallet/broadcasthex"
+		body, err := json.Marshal(map[string]string{"transaction": shape.Transaction})
+		if err != nil {
+			return "", err
+		}
+		payload = body
+	}
+
 	var out struct {
 		Result  bool   `json:"result"`
 		TxID    string `json:"txid"`
 		Code    string `json:"code"`
 		Message string `json:"message"`
+		// Node-level failures (an unparsable body, most often) arrive as a
+		// top-level `Error` with no `code`/`message` at all; without this the
+		// reason was reported as an empty string.
+		Error string `json:"Error"`
 	}
-	if err := t.do(ctx, http.MethodPost, "/wallet/broadcasttransaction", payload, &out); err != nil {
+	if err := t.do(ctx, http.MethodPost, path, payload, &out); err != nil {
 		return "", err
 	}
 	if !out.Result {
 		msg := decodeTronMessage(out.Message)
+		if msg == "" {
+			msg = out.Error
+		}
 		if msg == "" {
 			msg = out.Code
 		}
