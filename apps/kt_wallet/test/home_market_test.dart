@@ -176,7 +176,7 @@ void main() {
     // sum and shows '--' in the detail breakdown — the row still reports the
     // 25 that did load.
     expect(find.text('25 USDT · 7 条链'), findsWidgets);
-    expect(find.text('10 USDC · Polygon'), findsWidgets);
+    expect(find.text('10 USDC · 6 条链'), findsWidgets);
     expect(find.text(r'$24.75'), findsWidgets);
     expect(find.text(r'$10.10'), findsWidgets);
     expect(find.text('-- USDT · TRON'), findsNothing);
@@ -234,7 +234,7 @@ void main() {
     expect(find.text(r'$0.50'), findsOneWidget); // 5 TRX * $0.10
     // Token rows appended under the natives.
     expect(find.text('25 USDT · 7 条链'), findsOneWidget);
-    expect(find.text('10 USDC · Polygon'), findsOneWidget);
+    expect(find.text('10 USDC · 6 条链'), findsOneWidget);
     expect(find.text('-- USDT · TRON'), findsNothing);
     expect(find.text('2.4805 ETH'), findsNothing); // demo row absent
     controller.dispose();
@@ -253,8 +253,12 @@ void main() {
 
       await tester.tap(find.text('Polygon').first);
       await tester.pumpAndSettle();
-      expect(find.text('10 USDC · Polygon'), findsOneWidget);
-      expect(find.text('25 USDT · 7 条链'), findsNothing);
+      // Both stablecoins ARE deployed on Polygon, so both survive the filter.
+      // The multi-chain rows used to carry a '*' sentinel that matched no
+      // specific chip, so picking a network hid the very tokens held on it.
+      expect(find.text('10 USDC · 6 条链'), findsOneWidget);
+      expect(find.text('25 USDT · 7 条链'), findsOneWidget);
+      // Native rows still filter to their own chain.
       expect(find.text('1 ETH'), findsNothing);
       controller.dispose();
     },

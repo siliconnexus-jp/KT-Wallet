@@ -300,10 +300,12 @@ void main() {
 
     test('主网环境注册表包含七条链的内置稳定币', () {
       final networks = NetworkController();
+      // 每条主网都同时带 USDT 与 USDC,TRON 除外 —— Circle 已停用 TRON 上的
+      // USDC,那份合约现在链上自称 USDCOLD / "USD Coin Old"。
       expect(networkTokenRegistry(networks)(), [
         usdtEthToken,
+        usdcEthToken,
         usdcPolygonToken,
-        // 除以太坊外,每条 EVM 主网都同时带 USDC 与 USDT。
         usdtPolygonToken,
         usdcBaseToken,
         usdtBaseToken,

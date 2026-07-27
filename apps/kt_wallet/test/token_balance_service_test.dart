@@ -62,13 +62,20 @@ void main() {
   test('the default static registry carries canonical stablecoins', () {
     expect(builtinTokens.map((t) => t.id).toSet(), {
       'usdt-eth',
+      // Circle's original issuance, and the largest of the lot; the registry
+      // listed USDC on five chains and not the one it was born on.
+      'usdc-eth',
       'usdc-polygon',
       'usdt-tron',
       'usdt-polygon',
       'usdt-base',
+      'usdc-base',
       'usdt-arbitrum',
+      'usdc-arbitrum',
       'usdt-avalanche',
+      'usdc-avalanche',
       'usdt-solana',
+      'usdc-solana',
     });
     for (final token in builtinTokens) {
       expect(token.decimals, 6, reason: token.id);
@@ -256,5 +263,62 @@ void main() {
       seenRestUrls.single,
       'https://custom-tron.example/v1/accounts/TTronAddr',
     );
+  });
+
+  _registryAddressShapes();
+}
+
+/// A 50-character string sat in the registry as the Solana USDC mint for
+/// months. It is six characters longer than a Solana address can be, so every
+/// query for it came back "Invalid param: WrongSize" and USDC on Solana simply
+/// never resolved — silently, because a failed balance renders as '--' and an
+/// empty wallet renders as 0.
+///
+/// Shape is all that can be checked offline; it is still enough to stop a
+/// value that could not possibly be an address.
+void _registryAddressShapes() {
+  test('every registry contract has a plausible address for its chain', () {
+    final evm = RegExp(r'^0x[0-9a-fA-F]{40}$');
+    // Base58, no 0/O/I/l. Solana keys are 32 bytes, which is 43-44 chars.
+    final base58 = RegExp(r'^[1-9A-HJ-NP-Za-km-z]+$');
+
+    final all = {
+      ...builtinTokens,
+      ...builtinTokensByNetworkId.values.expand((v) => v),
+    };
+    expect(all, isNotEmpty);
+
+    for (final token in all) {
+      switch (token.chain) {
+        case Coin.solana:
+          expect(base58.hasMatch(token.contract), isTrue, reason: token.id);
+          expect(
+            token.contract.length,
+            inInclusiveRange(32, 44),
+            reason: '${token.id}: not a Solana address',
+          );
+        case Coin.tron:
+          expect(token.contract, startsWith('T'), reason: token.id);
+          expect(token.contract.length, 34, reason: token.id);
+          expect(base58.hasMatch(token.contract), isTrue, reason: token.id);
+        case Coin.eth ||
+            Coin.polygon ||
+            Coin.base ||
+            Coin.arbitrum ||
+            Coin.avalanche:
+          expect(evm.hasMatch(token.contract), isTrue, reason: token.id);
+      }
+      // Every stablecoin in this registry is 6-decimal; a stray 18 scales a
+      // balance by a trillion, which is how the Sepolia test USDT read wrong.
+      expect(token.decimals, 6, reason: token.id);
+    }
+  });
+
+  test('registry ids are unique', () {
+    final ids = builtinTokensByNetworkId.values
+        .expand((v) => v)
+        .map((t) => t.id)
+        .toList();
+    expect(ids.toSet().length, ids.length, reason: 'duplicate registry id');
   });
 }

@@ -336,13 +336,18 @@ void main() {
       // Registry exposed; everything starts as loading.
       expect(controller.tokens.map((t) => t.id), [
         'usdt-eth',
-        'usdc-polygon',
+        'usdc-eth',
         'usdt-polygon',
+        'usdc-polygon',
         'usdt-base',
+        'usdc-base',
         'usdt-arbitrum',
-        'usdt-tron',
+        'usdc-arbitrum',
         'usdt-avalanche',
+        'usdc-avalanche',
+        'usdt-tron',
         'usdt-solana',
+        'usdc-solana',
       ]);
       expect(
         controller.tokenBalanceFor('usdt-eth').status,

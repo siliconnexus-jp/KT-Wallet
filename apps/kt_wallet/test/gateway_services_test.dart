@@ -285,6 +285,11 @@ void main() {
             'decimals': 6,
             'symbol': 'USDT',
           },
+          {
+            'contract': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+            'decimals': 6,
+            'symbol': 'USDC',
+          },
         ]);
       },
     );
@@ -317,9 +322,9 @@ void main() {
         expect(results['usdt-eth']!.status, BalanceStatus.ok);
         expect(results['usdt-tron']!.status, BalanceStatus.ok);
         expect(results['usdt-tron']!.amount!.format(), '5');
-        // erc20 balanceOf on eth, polygon (x2), base, arbitrum, avalanche,
-        // and the Solana token-account query; TRON goes over REST.
-        expect(direct.calls, hasLength(7));
+        // erc20 balanceOf on eth/polygon/base/arbitrum/avalanche (two tokens
+        // each) plus the two Solana token-account queries; TRON goes over REST.
+        expect(direct.calls, hasLength(12));
         expect(rest.gets, hasLength(1)); // tron account
       },
     );
@@ -336,7 +341,7 @@ void main() {
       );
       final results = await service.fetchAll(_addresses);
       expect(results['usdt-eth']!.status, BalanceStatus.ok);
-      expect(direct.calls, hasLength(7));
+      expect(direct.calls, hasLength(12));
     });
   });
 
@@ -808,6 +813,53 @@ void main() {
         expect(gateway.calls, isEmpty);
       },
     );
+  });
+
+  group('Official token catalog', () {
+    test('search parses only server-verified token identities', () async {
+      final gateway = _FakeGateway(
+        results: {
+          'kt_searchTokens': {
+            'tokens': [
+              {
+                'network': 'eth-mainnet',
+                'symbol': 'USDT',
+                'name': 'Tether USD',
+                'contract': '0xdac17f958d2ee523a2206206994597c13d831ec7',
+                'decimals': 6,
+                'popular': true,
+                'verified': true,
+              },
+              {
+                'network': 'eth-mainnet',
+                'symbol': 'FAKE',
+                'name': 'Untrusted',
+                'contract': '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                'decimals': 18,
+                'verified': false,
+              },
+            ],
+          },
+        },
+      );
+
+      final rows = await gateway.client.searchOfficialTokens(
+        query: 'usdt',
+        networks: const ['eth-mainnet'],
+      );
+      expect(rows, hasLength(1));
+      expect(rows.single.symbol, 'USDT');
+      expect(rows.single.popular, isTrue);
+      expect(
+        rows.single.identityKey,
+        'eth-mainnet|0xdac17f958d2ee523a2206206994597c13d831ec7',
+      );
+      expect(gateway.paramsOf('kt_searchTokens').single, {
+        'query': 'usdt',
+        'networks': ['eth-mainnet'],
+        'limit': 50,
+      });
+    });
   });
 
   group('prefsGatewayResolver (settings-driven mode switch)', () {

@@ -108,9 +108,15 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
   ];
   static const _legacyNetworks = ['Ethereum', 'Polygon', 'TRON', 'Solana'];
 
-  /// Sentinel network for a row that spans several chains, so the per-network
-  /// filter never hides it.
-  static const _allNetworks = '*';
+  /// Separator for the networks a multi-chain row spans. The row used to
+  /// carry a single '*' sentinel, which matched NO specific filter — so
+  /// picking "Polygon" hid every multi-chain token, including the USDT and
+  /// USDC the user actually holds on Polygon. A row now lists its networks
+  /// and matches when any one of them is the filtered chain.
+  static const _networkSep = '|';
+
+  static bool _onNetwork(String field, String network) =>
+      field.split(_networkSep).contains(network);
 
   String _query = '';
   int _net = 0; // 0 = all
@@ -195,7 +201,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
             row.changeColor,
             // Network filter: a multi-chain row belongs to every network it is
             // deployed on, so it survives any of their filters.
-            group.length == 1 ? group.first.network : _allNetworks,
+            group.map((t) => t.network).join(_networkSep),
             row.ref,
           );
         }(),
@@ -215,7 +221,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
     final q = _query.trim().toLowerCase();
     final results = [
       for (final a in rows)
-        if ((_net == 0 || a.$8 == networks[_net - 1]) &&
+        if ((_net == 0 || _onNetwork(a.$8, networks[_net - 1])) &&
             (q.isEmpty ||
                 a.$3.toLowerCase().contains(q) ||
                 a.$4.toLowerCase().contains(q)))

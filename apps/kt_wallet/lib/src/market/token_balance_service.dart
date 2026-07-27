@@ -46,13 +46,29 @@ const usdtEthToken = TokenInfo(
 /// ERC20Mock used as Test USDT on Sepolia by the real mobile E2E suite.
 /// This is deliberately keyed only to `eth-sepolia`; it can never leak into
 /// Ethereum mainnet balance queries.
+///
+/// Decimals were 18 here and are 6 on the deployed contract, which scaled
+/// every Sepolia test balance down by a factor of a trillion.
 const usdtSepoliaToken = TokenInfo(
   id: 'usdt-eth-sepolia',
   symbol: 'USDT',
   chain: Coin.eth,
   contract: '0xc4DCC311c028e341fd8602D8eB89c5de94625927',
-  decimals: 18,
+  decimals: 6,
   network: 'Sepolia',
+);
+
+// USDC on Ethereum — Circle's original issuance and the largest stablecoin
+// deployment there is (50.1B supply, read back from mainnet). Its absence was
+// the plainest gap in the registry: USDC listed five chains and not the one it
+// was born on.
+const usdcEthToken = TokenInfo(
+  id: 'usdc-eth',
+  symbol: 'USDC',
+  chain: Coin.eth,
+  contract: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+  decimals: 6,
+  network: 'Ethereum',
 );
 
 // USDC on Polygon PoS — Circle's NATIVE issuance (not the bridged USDC.e at
@@ -203,7 +219,9 @@ const usdtAvalancheToken = TokenInfo(
   chain: Coin.avalanche,
   contract: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7',
   decimals: 6,
-  network: 'Avalanche',
+  // Matches usdcAvalancheToken: the network chips filter on this string, and
+  // a bare 'Avalanche' would never match the 'Avalanche C-Chain' chip.
+  network: 'Avalanche C-Chain',
 );
 
 // USDT on Solana — Tether's native SPL mint, likewise from their own list,
@@ -218,11 +236,16 @@ const usdtSolanaToken = TokenInfo(
 );
 
 /// Circle's canonical USDC mint on Solana mainnet.
+///
+/// This was wrong — and not subtly wrong. The value here was 50 characters,
+/// six longer than a Solana address can be, so the RPC rejected every query
+/// for it with "Invalid param: WrongSize" and USDC on Solana had simply never
+/// resolved. The real mint verified against mainnet: 6 decimals, 7.6B supply.
 const usdcSolanaToken = TokenInfo(
   id: 'usdc-solana',
   symbol: 'USDC',
   chain: Coin.solana,
-  contract: 'EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v',
+  contract: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
   decimals: 6,
   network: 'Solana',
 );
@@ -240,21 +263,35 @@ const usdcSolanaDevnetToken = TokenInfo(
 /// Built-in token registry (the canonical stablecoin deployments;
 /// user-added tokens stay display-only in the token-manage directory).
 ///
-/// USDT shipped on two chains while USDC had five, which read as an oversight
-/// and was one. Tether-issued or bridged is not the test — what matters is
-/// whether a user can hold it there, and on Polygon, Base and Arbitrum they
-/// very much can. Every address here comes from a vetted token list and was
-/// then read back from its own chain (symbol, decimals, total supply) before
-/// landing.
+/// This is the full MAINNET set, and it must stay that way: it is what
+/// [networkTokenRegistry] falls back to when no network controller is wired,
+/// and it had drifted into a subset — USDC listed on two chains here while
+/// the network-keyed map below had five, so the same wallet reported a
+/// different number of chains depending on which registry it was reading.
+///
+/// Tether-issued or Circle-issued is not the test for inclusion; whether a
+/// user can hold it there is. What IS excluded is a deployment its issuer has
+/// retired: USDC on TRON still exists but Circle wound it down, and the
+/// contract now identifies itself on-chain as "USDCOLD" / "USD Coin Old".
+///
+/// Every address here came from a vetted token list and was then read back
+/// from its own chain — symbol, decimals and total supply — before landing.
+/// That audit is not decoration: it is what caught the Solana USDC mint being
+/// a 50-character string that no Solana RPC would even parse.
 const builtinTokens = [
   usdtEthToken,
-  usdcPolygonToken,
+  usdcEthToken,
   usdtPolygonToken,
+  usdcPolygonToken,
   usdtBaseToken,
+  usdcBaseToken,
   usdtArbitrumToken,
-  usdtTronToken,
+  usdcArbitrumToken,
   usdtAvalancheToken,
+  usdcAvalancheToken,
+  usdtTronToken,
   usdtSolanaToken,
+  usdcSolanaToken,
 ];
 
 /// The built-in registry keyed by NETWORK id: these are MAINNET contract
@@ -263,7 +300,7 @@ const builtinTokens = [
 /// contracts (same addresses on a testnet are a different, untrusted token
 /// at best).
 const builtinTokensByNetworkId = <String, List<TokenInfo>>{
-  'eth-mainnet': [usdtEthToken],
+  'eth-mainnet': [usdtEthToken, usdcEthToken],
   'eth-sepolia': [usdtSepoliaToken],
   'polygon-mainnet': [usdcPolygonToken, usdtPolygonToken],
   'polygon-amoy': [usdcPolygonAmoyToken],
