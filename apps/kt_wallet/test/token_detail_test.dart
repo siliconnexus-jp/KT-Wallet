@@ -36,10 +36,13 @@ class _FakeBalances extends BalanceService {
 }
 
 class _FakePrices extends PriceService {
-  _FakePrices(this.prices);
+  _FakePrices(this.prices, {this.tokenPrices = const {'USDT': 0.95}});
   final Map<Coin, double>? prices;
+  final Map<String, double> tokenPrices;
   @override
   Future<Map<Coin, double>?> fetchUsdPrices() async => prices;
+  @override
+  double? tokenPriceUsd(String symbol) => tokenPrices[symbol];
 }
 
 class _FakeTokens extends TokenBalanceService {
@@ -154,7 +157,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('7.5 USDT'), findsOneWidget);
-    expect(find.text(r'≈ $7.50'), findsOneWidget);
+    expect(find.text(r'≈ $7.13'), findsOneWidget);
+    expect(find.text(r'$0.95'), findsOneWidget);
     expect(find.text('3,120.00 USDT'), findsNothing);
   });
 
@@ -288,6 +292,39 @@ void main() {
 
     // The contract row follows the selection.
     expect(find.text(truncateMiddle(second.contract)), findsOneWidget);
+  });
+
+  // Stablecoin fiat comes from live quotes now, not a hardcoded $1 peg, so a
+  // depeg has to show through instead of being rounded back to par.
+  testWidgets('a depegged stablecoin is valued at its quote', (tester) async {
+    final wallets = _wallets();
+    _walletController = wallets;
+    final market = MarketController(
+      wallets: wallets,
+      balances: _FakeBalances({}),
+      // 100 USDT quoted at $0.80.
+      prices: _FakePrices({}, tokenPrices: const {'USDT': 0.80}),
+      tokens: _FakeTokens({
+        'usdt-eth': BalanceResult.ok(
+          Amount(raw: BigInt.from(100000000), decimals: 6, symbol: 'USDT'),
+        ),
+      }),
+    );
+    addTearDown(market.dispose);
+    await market.refresh();
+    final usdt = market.tokens.firstWhere((t) => t.id == 'usdt-eth');
+
+    await tester.pumpWidget(
+      _app(market, TokenDetailScreen(asset: AssetRef.token(usdt))),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('100 USDT'), findsOneWidget);
+    expect(find.text(r'≈ $80.00'), findsOneWidget);
+    expect(find.text(r'$0.80'), findsOneWidget); // price row
+    // The old behaviour would have shown par.
+    expect(find.text(r'≈ $100.00'), findsNothing);
+    expect(find.text(r'$1.00'), findsNothing);
   });
 
   group('explorer links', () {

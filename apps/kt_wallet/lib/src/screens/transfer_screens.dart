@@ -27,7 +27,6 @@ import '../market/explorer_links.dart' show explorerTxUrl;
 import '../market/history_service.dart' show ChainTxRecord;
 import '../market/market_scope.dart'
     show MarketScope, effectiveRpcEndpoints, prefsGatewayResolver;
-import '../market/price_service.dart' show PriceService;
 import '../market/token_balance_service.dart' show usdcSolanaDevnetToken;
 import '../platform/external_actions.dart';
 import '../rpc/http_transport.dart';
@@ -120,7 +119,9 @@ double? _unitPriceUsd(
   if (NetworkScope.maybeOf(context)?.activeFor(chain).isTestnet ?? false) {
     return null;
   }
-  if (tokenContract != null) return PriceService.peggedUsdBySymbol[symbol];
+  if (tokenContract != null) {
+    return MarketScope.maybeOf(context)?.tokenPriceUsd(symbol);
+  }
   return MarketScope.maybeOf(context)?.priceUsd(rpcCoinForChain(chain));
 }
 
@@ -3017,6 +3018,17 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
                 color: WalletColors.text,
               ),
             ),
+            if (!record.assetVerified) ...[
+              const SizedBox(height: 8),
+              Text(
+                l10n.unverifiedToken,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: WalletColors.amber,
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             Text(
               record.confirmed ? l10n.txStatusConfirmed : l10n.txStatusFailed,
@@ -3037,6 +3049,14 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
               ),
               const SizedBox(height: 14),
               KtDetailRow(label: l10n.networkRow, value: network.name),
+              if (record.assetContract != null) ...[
+                const SizedBox(height: 14),
+                KtDetailRow(
+                  label: l10n.contractAddress,
+                  value: record.assetContract!,
+                  mono: true,
+                ),
+              ],
               const SizedBox(height: 14),
               KtDetailRow(
                 label: l10n.txTimeLabel,

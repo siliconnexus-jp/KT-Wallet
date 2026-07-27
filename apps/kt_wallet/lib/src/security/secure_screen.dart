@@ -26,6 +26,40 @@ import '../../l10n/app_localizations.dart';
 abstract final class SecureScreen {
   static const _channel = MethodChannel('kt/secure_screen');
 
+  /// Last copy pushed to the platform, so a rebuild storm is not a call storm.
+  static (String, String, String)? _pushedStrings;
+
+  /// Hands the privacy-overlay wording to the native side.
+  ///
+  /// That overlay is drawn by the OS layer while the app is backgrounded, so
+  /// it cannot read [AppLocalizations]. It used to pick its own copy from the
+  /// SYSTEM language, which ignored an in-app language override — a user on a
+  /// Japanese phone who set the app to Chinese got a Japanese overlay. The ARB
+  /// stays the single source of truth; the platform just renders what it is
+  /// told, falling back to its built-in table before Dart has spoken (the
+  /// very first frames of a cold start).
+  static void setPrivacyStrings({
+    required String appName,
+    required String active,
+    required String hidden,
+  }) {
+    final next = (appName, active, hidden);
+    if (_pushedStrings == next) return;
+    _pushedStrings = next;
+    _channel
+        .invokeMethod<void>('setPrivacyStrings', {
+          'appName': appName,
+          'active': active,
+          'hidden': hidden,
+        })
+        .catchError((_) {
+          // No handler (tests / older host): the native fallback still shows.
+        });
+  }
+
+  @visibleForTesting
+  static void resetPrivacyStringsForTest() => _pushedStrings = null;
+
   static bool _modeSecure = false;
   static int _holders = 0;
 

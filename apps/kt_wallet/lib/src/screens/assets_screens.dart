@@ -14,7 +14,6 @@ import '../market/airdrop_service.dart';
 import '../market/asset_ref.dart';
 import '../market/balance_service.dart';
 import '../market/explorer_links.dart';
-import '../market/price_service.dart';
 import '../market/receive_card.dart';
 import '../market/market_controller.dart';
 import '../market/market_scope.dart';
@@ -495,7 +494,7 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
         ? _tokenFiat(market, ref)
         : market.fiatValueUsd(ref.coin);
     final price = ref.isToken
-        ? PriceService.peggedUsdBySymbol[ref.symbol]
+        ? market.tokenPriceUsd(ref.symbol)
         : market.priceUsd(ref.coin);
 
     final contract = selected?.contract ?? ref.contract;

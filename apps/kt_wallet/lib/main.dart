@@ -105,6 +105,25 @@ WalletController _seedController() => WalletController(
   ),
 );
 
+/// Resolves the app's copy for the native privacy overlay and pushes it down.
+/// Loading a delegate is async, so this fires and forgets; the platform keeps
+/// its own fallback until the strings land.
+void _pushPrivacyStrings(Locale? override) {
+  final locale = basicLocaleListResolution(
+    override != null
+        ? [override]
+        : WidgetsBinding.instance.platformDispatcher.locales,
+    AppLocalizations.supportedLocales,
+  );
+  AppLocalizations.delegate.load(locale).then((l10n) {
+    SecureScreen.setPrivacyStrings(
+      appName: l10n.appName,
+      active: l10n.privacyOverlayActive,
+      hidden: l10n.privacyOverlayHidden,
+    );
+  }).ignore();
+}
+
 /// Root gate of the combined installer. Listens to the [DeviceModeController]:
 ///
 /// * no mode chosen yet → [ModeSelectApp] (first-launch picker);
@@ -149,6 +168,9 @@ class RootApp extends StatelessWidget {
             // SecureContent — see SecureScreen. Idempotent (the builder may
             // rerun); a no-op on iOS/tests.
             SecureScreen.modeSecure = modeController.mode == DeviceMode.signer;
+            // Hand the overlay wording to the platform, which draws it while
+            // backgrounded and otherwise falls back to the system language.
+            _pushPrivacyStrings(localeController.locale);
             switch (modeController.mode) {
               case null:
                 return ModeSelectApp(

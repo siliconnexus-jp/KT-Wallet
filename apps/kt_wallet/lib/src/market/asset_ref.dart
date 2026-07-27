@@ -47,7 +47,7 @@ class AssetRef {
   /// chain, so the same coin appeared five times in a row; it is one row now,
   /// and the detail screen breaks it down per chain.
   AssetRef.tokenGroup(List<TokenInfo> tokens)
-    : assert(tokens.length > 0, 'a group needs at least one deployment'),
+    : assert(tokens.isNotEmpty, 'a group needs at least one deployment'),
       coin = tokens.first.chain,
       name = tokens.first.symbol,
       symbol = tokens.first.symbol,

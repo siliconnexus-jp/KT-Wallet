@@ -637,6 +637,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get contractAddress => 'Contract';
 
   @override
+  String get unverifiedToken => 'Unverified token — check the contract address';
+
+  @override
   String get receiveWarning =>
       'Only TRON network (TRC-20) assets are supported. Sending from other networks will lose funds.';
 
@@ -648,6 +651,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get saveReceiveImage => 'Save receive image';
+
+  @override
+  String get privacyOverlayActive => 'KT Wallet Protection is active';
+
+  @override
+  String get privacyOverlayHidden => 'Your wallet content is hidden';
 
   @override
   String get chooseNetwork => 'Choose a network';

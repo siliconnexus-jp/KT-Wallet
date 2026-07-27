@@ -603,6 +603,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get contractAddress => '合约地址';
 
   @override
+  String get unverifiedToken => '未经验证的代币，请核对合约地址';
+
+  @override
   String get receiveWarning => '仅支持接收 TRON 网络（TRC-20）资产。从其他网络转入将导致资产丢失。';
 
   @override
@@ -613,6 +616,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get saveReceiveImage => '保存收款图片';
+
+  @override
+  String get privacyOverlayActive => 'KT 钱包保护已启动';
+
+  @override
+  String get privacyOverlayHidden => '您的钱包内容已隐藏';
 
   @override
   String get chooseNetwork => '选择网络';

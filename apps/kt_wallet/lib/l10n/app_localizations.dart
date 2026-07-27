@@ -1216,6 +1216,12 @@ abstract class AppLocalizations {
   /// **'合约地址'**
   String get contractAddress;
 
+  /// No description provided for @unverifiedToken.
+  ///
+  /// In zh, this message translates to:
+  /// **'未经验证的代币，请核对合约地址'**
+  String get unverifiedToken;
+
   /// No description provided for @receiveWarning.
   ///
   /// In zh, this message translates to:
@@ -1239,6 +1245,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'保存收款图片'**
   String get saveReceiveImage;
+
+  /// No description provided for @privacyOverlayActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'KT 钱包保护已启动'**
+  String get privacyOverlayActive;
+
+  /// No description provided for @privacyOverlayHidden.
+  ///
+  /// In zh, this message translates to:
+  /// **'您的钱包内容已隐藏'**
+  String get privacyOverlayHidden;
 
   /// No description provided for @chooseNetwork.
   ///

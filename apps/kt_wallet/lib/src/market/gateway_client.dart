@@ -345,6 +345,7 @@ class GatewayClient {
       if (direction != 'in' && direction != 'out') continue;
       records.add(
         GatewayHistoryRecord(
+          id: row['id'] is String ? row['id'] as String : hash,
           hash: hash,
           outgoing: direction == 'out',
           amountRaw: row['amountRaw'] is String
@@ -352,6 +353,10 @@ class GatewayClient {
               : null,
           decimals: row['decimals'] is int ? row['decimals'] as int : null,
           symbol: row['symbol'] is String ? row['symbol'] as String : null,
+          contract: row['contract'] is String
+              ? row['contract'] as String
+              : null,
+          verified: row['verified'] == true,
           timestampMs: ts,
           failed: row['status'] == 'failed',
         ),
@@ -537,20 +542,26 @@ class GatewayChainParams {
 
 class GatewayHistoryRecord {
   const GatewayHistoryRecord({
+    required this.id,
     required this.hash,
     required this.outgoing,
     required this.amountRaw,
     required this.decimals,
     required this.symbol,
+    required this.contract,
+    required this.verified,
     required this.timestampMs,
     required this.failed,
   });
 
+  final String id;
   final String hash;
   final bool outgoing;
   final BigInt? amountRaw;
   final int? decimals;
   final String? symbol;
+  final String? contract;
+  final bool verified;
   final int timestampMs;
   final bool failed;
 }

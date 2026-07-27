@@ -63,12 +63,19 @@ type Config struct {
 	// shares HeliusKey with the mainnet endpoint.
 	HeliusDevnetURL string
 	HeliusKey       string
+
+	// EVMHistoryFallbackURLs maps network ids to keyless Etherscan-compatible
+	// explorer endpoints. A nil map uses the production defaults; an empty
+	// non-nil map disables the public fallback (useful for tests/private
+	// deployments). Polygon Amoy intentionally has no default because its
+	// official explorer requires an API key.
+	EVMHistoryFallbackURLs map[string]string
 }
 
 // Defaults returns the production upstream configuration.
 func Defaults() Config {
 	return Config{
-		Version:        "1.0.0",
+		Version:        "1.3.0",
 		Clock:          clock.Real{},
 		AttemptTimeout: 10 * time.Second,
 		EthURLs:        []string{"https://eth.llamarpc.com", "https://cloudflare-eth.com"},
@@ -91,8 +98,19 @@ func Defaults() Config {
 		CoinGeckoURL:        "https://api.coingecko.com",
 		CoinGeckoInterval:   time.Second,
 		EtherscanURL:        "https://api.etherscan.io/v2/api",
-		HeliusURL:           "https://api.helius.xyz",
-		HeliusDevnetURL:     "https://api-devnet.helius.xyz",
+		HeliusURL:           "https://mainnet.helius-rpc.com",
+		HeliusDevnetURL:     "https://devnet.helius-rpc.com",
+		EVMHistoryFallbackURLs: map[string]string{
+			"eth-mainnet":       "https://eth.blockscout.com/api",
+			"eth-sepolia":       "https://eth-sepolia.blockscout.com/api",
+			"polygon-mainnet":   "https://polygon.blockscout.com/api",
+			"base-mainnet":      "https://base.blockscout.com/api",
+			"base-sepolia":      "https://base-sepolia.blockscout.com/api",
+			"arbitrum-mainnet":  "https://arbitrum.blockscout.com/api",
+			"arbitrum-sepolia":  "https://arbitrum-sepolia.blockscout.com/api",
+			"avalanche-mainnet": "https://api.routescan.io/v2/network/mainnet/evm/43114/etherscan/api",
+			"avalanche-fuji":    "https://api.routescan.io/v2/network/testnet/evm/43113/etherscan/api",
+		},
 	}
 }
 
@@ -107,7 +125,11 @@ type Gateway struct {
 	sol  map[string]*upstream.Solana // sol-mainnet, sol-devnet
 	cg   *upstream.CoinGecko
 	scan *upstream.Etherscan
-	hel  map[string]*upstream.Helius // sol-mainnet, sol-devnet
+	// historyScan contains keyless public explorer clients keyed by network.
+	// The configured Etherscan v2 client above remains preferred when a key is
+	// available because it also covers Polygon Amoy.
+	historyScan map[string]*upstream.Etherscan
+	hel         map[string]*upstream.Helius // sol-mainnet, sol-devnet
 
 	priceCache   *cache.Cache
 	balanceCache *cache.Cache
@@ -187,10 +209,19 @@ func New(cfg Config) *Gateway {
 	if cfg.HeliusDevnetURL == "" {
 		cfg.HeliusDevnetURL = def.HeliusDevnetURL
 	}
+	if cfg.EVMHistoryFallbackURLs == nil {
+		cfg.EVMHistoryFallbackURLs = def.EVMHistoryFallbackURLs
+	}
 
 	clk := cfg.Clock
 	hc := cfg.HTTPClient
 	at := cfg.AttemptTimeout
+	historyScan := make(map[string]*upstream.Etherscan, len(cfg.EVMHistoryFallbackURLs))
+	for network, baseURL := range cfg.EVMHistoryFallbackURLs {
+		if baseURL != "" {
+			historyScan[network] = upstream.NewEtherscan(baseURL, "", hc, at)
+		}
+	}
 	g := &Gateway{
 		cfg: cfg,
 		clk: clk,
@@ -214,8 +245,9 @@ func New(cfg Config) *Gateway {
 			"sol-mainnet": upstream.NewSolana(cfg.SolanaURLs, clk, hc, at),
 			"sol-devnet":  upstream.NewSolana(cfg.SolanaDevnetURLs, clk, hc, at),
 		},
-		cg:   upstream.NewCoinGecko(cfg.CoinGeckoURL, hc, ratelimit.NewInterval(cfg.CoinGeckoInterval), at),
-		scan: upstream.NewEtherscan(cfg.EtherscanURL, cfg.EtherscanKey, hc, at),
+		cg:          upstream.NewCoinGecko(cfg.CoinGeckoURL, hc, ratelimit.NewInterval(cfg.CoinGeckoInterval), at),
+		scan:        upstream.NewEtherscan(cfg.EtherscanURL, cfg.EtherscanKey, hc, at),
+		historyScan: historyScan,
 		hel: map[string]*upstream.Helius{
 			"sol-mainnet": upstream.NewHelius(cfg.HeliusURL, cfg.HeliusKey, hc, at),
 			"sol-devnet":  upstream.NewHelius(cfg.HeliusDevnetURL, cfg.HeliusKey, hc, at),

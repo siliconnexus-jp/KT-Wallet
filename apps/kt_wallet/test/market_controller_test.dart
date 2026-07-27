@@ -70,13 +70,20 @@ class ProgressiveBalanceService extends BalanceService {
 }
 
 class FakePriceService extends PriceService {
-  FakePriceService(this.prices, {this.cached});
+  FakePriceService(
+    this.prices, {
+    this.cached,
+    this.tokenPrices = const {'USDT': 0.99, 'USDC': 1.01, 'BUSD': 0.98},
+  });
   Map<Coin, double>? prices;
   Map<Coin, double>? cached;
+  final Map<String, double> tokenPrices;
   @override
   Future<Map<Coin, double>?> fetchUsdPrices() async => prices;
   @override
   Map<Coin, double>? get lastGoodUsd => cached;
+  @override
+  double? tokenPriceUsd(String symbol) => tokenPrices[symbol];
 }
 
 ChainAddresses _addr(String seed) => ChainAddresses(
@@ -314,19 +321,19 @@ void main() {
       );
 
       final byId = {for (final t in controller.tokens) t.id: t};
-      // Stablecoin fiat comes from the existing $1.00 peg.
+      // Stablecoin fiat uses the live market quote, including depegs.
       expect(
         controller.tokenFiatValueUsd(byId['usdt-eth']!),
-        closeTo(25, 1e-9),
+        closeTo(24.75, 1e-9),
       );
       expect(
         controller.tokenFiatValueUsd(byId['usdc-polygon']!),
-        closeTo(10, 1e-9),
+        closeTo(10.1, 1e-9),
       );
       // Errored token: no fiat value, never an invented number.
       expect(controller.tokenFiatValueUsd(byId['usdt-tron']!), isNull);
-      // Natives 2051.50 + tokens 35.00.
-      expect(controller.totalUsd, closeTo(2086.5, 1e-9));
+      // Natives 2051.50 + live-priced tokens 34.85.
+      expect(controller.totalUsd, closeTo(2086.35, 1e-9));
       controller.dispose();
     },
   );

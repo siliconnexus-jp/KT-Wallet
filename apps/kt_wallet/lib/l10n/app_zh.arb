@@ -326,10 +326,13 @@
   "price": "价格",
   "change24h": "24h 涨跌",
   "contractAddress": "合约地址",
+  "unverifiedToken": "未经验证的代币，请核对合约地址",
   "receiveWarning": "仅支持接收 TRON 网络（TRC-20）资产。从其他网络转入将导致资产丢失。",
   "explorerLinkCopied": "区块浏览器链接已复制",
   "addressCopied": "地址已复制",
   "saveReceiveImage": "保存收款图片",
+  "privacyOverlayActive": "KT 钱包保护已启动",
+  "privacyOverlayHidden": "您的钱包内容已隐藏",
   "chooseNetwork": "选择网络",
   "assetOnChains": "{count} 条链",
   "@assetOnChains": {

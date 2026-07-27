@@ -44,14 +44,25 @@ class PriceService {
     Coin.solana: 'solana',
   };
 
-  /// USD-pegged stablecoins quoted at exactly 1.0 without a network call.
-  static const peggedUsdBySymbol = {'USDT': 1.0, 'USDC': 1.0, 'BUSD': 1.0};
+  /// CoinGecko ids for the token symbols shown by the built-in registry.
+  static const coinGeckoTokenIds = {
+    'USDT': 'tether',
+    'USDC': 'usd-coin',
+    'BUSD': 'binance-usd',
+  };
 
   Map<Coin, double>? _lastGood;
+  Map<String, double>? _lastGoodTokenUsd;
 
   /// Last successfully fetched quote set (in-memory only), or null if no
   /// fetch has ever succeeded in this session.
   Map<Coin, double>? get lastGoodUsd => _lastGood;
+
+  /// Last successful token quote set. Stablecoins are market-priced too so a
+  /// depeg is reflected instead of being silently forced to $1.
+  Map<String, double>? get lastGoodTokenUsd => _lastGoodTokenUsd;
+
+  double? tokenPriceUsd(String symbol) => _lastGoodTokenUsd?[symbol];
 
   /// Fetches spot USD prices. Returns null on any failure; partial responses
   /// keep whichever coins were present.
@@ -64,15 +75,26 @@ class PriceService {
     final gateway = _gateway();
     if (gateway != null) {
       try {
-        final quoted = await gateway.getPrices([
-          for (final coin in Coin.values) BalanceService.symbolFor[coin]!,
-        ]);
+        final quoted = await gateway.getPrices(
+          {
+            for (final coin in Coin.values) BalanceService.symbolFor[coin]!,
+            ...coinGeckoTokenIds.keys,
+          }.toList(),
+        );
         final out = <Coin, double>{
           for (final coin in Coin.values)
             if (quoted.usdBySymbol[BalanceService.symbolFor[coin]!] != null)
               coin: quoted.usdBySymbol[BalanceService.symbolFor[coin]!]!,
         };
-        if (out.isNotEmpty) {
+        final tokenOut = <String, double>{
+          for (final symbol in coinGeckoTokenIds.keys)
+            if (quoted.usdBySymbol[symbol] != null)
+              symbol: quoted.usdBySymbol[symbol]!,
+        };
+        if (out.isNotEmpty || tokenOut.isNotEmpty) {
+          if (tokenOut.isNotEmpty) {
+            _lastGoodTokenUsd = Map.unmodifiable(tokenOut);
+          }
           _lastGood = Map.unmodifiable(out);
           return _lastGood;
         }
@@ -82,7 +104,10 @@ class PriceService {
       }
     }
     try {
-      final ids = coinGeckoIds.values.join(',');
+      final ids = {
+        ...coinGeckoIds.values,
+        ...coinGeckoTokenIds.values,
+      }.join(',');
       final uri = Uri.parse('$baseUrl/simple/price?ids=$ids&vs_currencies=usd');
       final resp = await _client.get(uri).timeout(timeout);
       if (resp.statusCode != 200) return null;
@@ -94,7 +119,16 @@ class PriceService {
         final usd = row is Map ? row['usd'] : null;
         if (usd is num) out[entry.key] = usd.toDouble();
       }
-      if (out.isEmpty) return null;
+      final tokenOut = <String, double>{};
+      for (final entry in coinGeckoTokenIds.entries) {
+        final row = body[entry.value];
+        final usd = row is Map ? row['usd'] : null;
+        if (usd is num) tokenOut[entry.key] = usd.toDouble();
+      }
+      if (out.isEmpty && tokenOut.isEmpty) return null;
+      if (tokenOut.isNotEmpty) {
+        _lastGoodTokenUsd = Map.unmodifiable(tokenOut);
+      }
       _lastGood = Map.unmodifiable(out);
       return _lastGood;
     } catch (_) {

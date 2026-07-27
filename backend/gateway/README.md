@@ -47,11 +47,11 @@ curl -s localhost:8080/rpc -d '{"jsonrpc":"2.0","id":1,"method":"kt_health"}'
 | `SOLANA_DEVNET_RPC_URLS` | `https://api.devnet.solana.com` | `sol-devnet` RPC endpoints |
 | `TRON_NILE_API_URL` | `https://nile.trongrid.io` | `tron-nile` TronGrid base URL |
 | `COINGECKO_API_URL` | `https://api.coingecko.com` | CoinGecko base URL (override for tests/proxies) |
-| `ETHERSCAN_API_KEY` | *(unset)* | Enables EVM history via the Etherscan v2 multichain API (all ten EVM networks) |
+| `ETHERSCAN_API_KEY` | *(unset)* | Optional EVM history enrichment/fallback for all ten EVM networks; required only for Polygon Amoy |
 | `ETHERSCAN_API_URL` | `https://api.etherscan.io/v2/api` | Etherscan-family endpoint |
-| `HELIUS_API_KEY` | *(unset)* | Enables solana history via Helius (mainnet and devnet) |
-| `HELIUS_API_URL` | `https://api.helius.xyz` | Helius base URL (`sol-mainnet` history) |
-| `HELIUS_DEVNET_API_URL` | `https://api-devnet.helius.xyz` | Helius devnet base URL (`sol-devnet` history) |
+| `HELIUS_API_KEY` | *(unset)* | Optional Solana parsed-history enrichment (exact native transfer); standard RPC remains available without it |
+| `HELIUS_API_URL` | `https://mainnet.helius-rpc.com` | Helius RPC base URL (`sol-mainnet` transfer history) |
+| `HELIUS_DEVNET_API_URL` | `https://devnet.helius-rpc.com` | Helius RPC base URL (`sol-devnet` transfer history) |
 | `RATE_LIMIT_RPS` | `10` | Inbound token-bucket refill per client IP |
 | `RATE_LIMIT_BURST` | `20` | Inbound token-bucket burst per client IP |
 
@@ -144,15 +144,15 @@ EVM tokens `eth_call` `0x70a08231` balanceOf; tron native + TRC-20 via
 TronGrid `/v1/accounts/{addr}`; solana native `getBalance` (SPL tokens:
 per-token `error: "unsupported"` for now).
 
-### `kt_getPrices` `{"symbols": ["ETH","POL","TRX","SOL","USDT","USDC"]}`
+### `kt_getPrices` `{"symbols": ["ETH","POL","AVAX","TRX","SOL","USDT","USDC","BUSD"]}`
 
 → `{"prices": {"ETH": {"usd": 1234.56}, ...}, "cachedAtMs": <int>}`
 
-Unknown symbols are omitted. USDT/USDC are answered from the built-in 1.0 peg
-without an upstream call. `cachedAtMs` is the time the underlying upstream
-data was fetched (cache hits report the original fetch time). Prices are
-mainnet-only and take no `network` param — testnet clients shouldn't ask
-(see [Networks](#networks)).
+Unknown symbols are omitted. ETH is shared by Ethereum, Base and Arbitrum.
+USDT/USDC/BUSD use CoinGecko spot quotes too, so depegs are reflected rather
+than silently fixed at 1.0. `cachedAtMs` is the time the underlying data was fetched
+(cache hits report the original fetch time). Prices are mainnet-only and take
+no `network` param — testnet clients shouldn't ask (see [Networks](#networks)).
 
 ### `kt_getChainParams` `{"chain": C, "network": N?, "address": A}`
 
@@ -169,17 +169,34 @@ monotonic: slow ≤ standard ≤ fast.
 ### `kt_getHistory` `{"chain": C, "network": N?, "address": A, "limit": N?}`
 
 → `{"status": "ok" | "unsupported",
-    "records": [{"hash": S, "direction": "in"|"out", "amountRaw": "<dec>", "decimals": N, "symbol": S, "timestampMs": <int>, "status": "ok"|"failed"}]}`
+    "records": [{"id": S, "hash": S, "direction": "in"|"out",
+    "amountRaw": "<dec>", "decimals": N, "symbol": S, "contract": S?,
+    "verified": B, "timestampMs": <int>, "status": "ok"|"failed"}]}`
 
 - **tron** — always supported via TronGrid: TRC-20 transfers + native
-  `TransferContract` transactions, merged newest-first, deduplicated by hash.
+  `TransferContract` transactions, merged newest-first. TRC-20 rows include
+  their contract and are verified against the active network's registry.
   `tron-nile` runs the same code against the nile TronGrid base URL.
-- **EVM families** — supported only when `ETHERSCAN_API_KEY` is configured
-  (Etherscan v2 multichain, `chainid` selected by network — see the table in
-  [Networks](#networks)); otherwise `{"status":"unsupported","records":[]}`.
-- **solana** — supported only when `HELIUS_API_KEY` is set (Helius parsed
-  history, native transfers; `sol-devnet` uses the Helius devnet endpoint
-  with the same key); otherwise unsupported.
+- **EVM families** — Etherscan v2 is preferred when `ETHERSCAN_API_KEY` is
+  configured. Without a key (or when Etherscan is temporarily unavailable),
+  Ethereum, Polygon mainnet, Base, Arbitrum and Avalanche use keyless
+  Blockscout/Routescan explorers. Polygon Amoy is the sole exception: its
+  official explorer requires an API key, so it reports `unsupported` when no
+  Etherscan key is configured. Normal transactions and ERC-20 transfers are
+  kept as event-level rows (`hash + logIndex`), so multiple transfers in one
+  transaction are not lost; only its zero-value contract wrapper is removed.
+  Token symbols/decimals are authoritative only for registered contracts.
+- **solana** — Helius `getTransfersByAddress` is preferred when
+  `HELIUS_API_KEY` is set. Without it, standard Solana RPC loads signatures
+  and transaction details and derives native/SPL balance deltas. Unknown SPL
+  mints remain visible as unverified `SPL` rows carrying the mint; pure
+  program activity with no asset movement is omitted instead of being
+  mislabeled as an incoming `0 SOL` transfer.
+
+`id` identifies the transfer event, while `hash` remains the explorer
+transaction identifier. `verified:false` means the contract/mint is not in
+KT Wallet's active-network registry; clients must not render it as a canonical
+asset based on symbol alone.
 
 `limit` defaults to 20 and is capped at 100; `limit <= 0` → `-32602`.
 

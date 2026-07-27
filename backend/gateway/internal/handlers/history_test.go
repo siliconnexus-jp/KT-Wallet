@@ -58,10 +58,10 @@ func TestTronHistoryMergeDedupeDirection(t *testing.T) {
 		t.Fatalf("tron history must always be supported, got %v", res["status"])
 	}
 	assertJSONEq(t, `[
-		{"hash":"t1","direction":"out","amountRaw":"1000000","decimals":6,"symbol":"USDT","timestampMs":5000,"status":"ok"},
-		{"hash":"n1","direction":"in","amountRaw":"7000000","decimals":6,"symbol":"TRX","timestampMs":4000,"status":"ok"},
-		{"hash":"tdup","direction":"in","amountRaw":"250000","decimals":6,"symbol":"USDT","timestampMs":3000,"status":"ok"},
-		{"hash":"n3","direction":"out","amountRaw":"42","decimals":6,"symbol":"TRX","timestampMs":2000,"status":"failed"}
+		{"id":"t1:trc20:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:0","hash":"t1","direction":"out","amountRaw":"1000000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":true,"timestampMs":5000,"status":"ok"},
+		{"id":"n1","hash":"n1","direction":"in","amountRaw":"7000000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":4000,"status":"ok"},
+		{"id":"tdup:trc20:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:1","hash":"tdup","direction":"in","amountRaw":"250000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":true,"timestampMs":3000,"status":"ok"},
+		{"id":"n3","hash":"n3","direction":"out","amountRaw":"42","decimals":6,"symbol":"TRX","verified":true,"timestampMs":2000,"status":"failed"}
 	]`, res["records"])
 	// n4 (TriggerSmartContract) skipped; tdup deduped across the two feeds.
 }
@@ -93,25 +93,60 @@ func TestTronHistoryUpstreamFailure(t *testing.T) {
 	}
 }
 
-func TestEthHistoryWithoutKeyUnsupported(t *testing.T) {
-	scan := newRESTFake(t) // must not be called
-	e := newEnv(t, func(cfg *handlers.Config) { cfg.EtherscanURL = scan.srv.URL })
+func TestEthHistoryWithoutKeyUsesPublicExplorer(t *testing.T) {
+	explorer := newRESTFake(t)
+	explorer.routeJSON("/", fmt.Sprintf(`{
+		"message":"OK",
+		"result":[
+			{"hash":"0xf1","from":%q,"to":"0x2222222222222222222222222222222222222222","value":"77","timeStamp":"1700000300","isError":"0"}
+		]}`, evmSelf))
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.EVMHistoryFallbackURLs = map[string]string{
+			"eth-mainnet": explorer.srv.URL,
+		}
+	})
 
 	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf)))
-	assertJSONEq(t, `{"status":"unsupported","records":[]}`, res)
-	if len(scan.hitsFor("/")) != 0 {
-		t.Fatal("without ETHERSCAN_API_KEY no upstream call may happen")
+	if res["status"] != "ok" {
+		t.Fatalf("status = %v", res["status"])
 	}
+	assertJSONEq(t, `[
+		{"id":"0xf1","hash":"0xf1","direction":"out","amountRaw":"77","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000300000,"status":"ok"}
+	]`, res["records"])
+	if explorer.hitCount("/") != 2 {
+		t.Fatal("keyless history must use the configured public explorer")
+	}
+}
+
+func TestPolygonAmoyHistoryWithoutKeyUnsupported(t *testing.T) {
+	e := newEnv(t, nil)
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(
+		`{"chain":"polygon","network":"polygon-amoy","address":%q}`, evmSelf,
+	)))
+	assertJSONEq(t, `{"status":"unsupported","records":[]}`, res)
 }
 
 func TestEthHistoryWithKey(t *testing.T) {
 	scan := newRESTFake(t)
-	scan.routeJSON("/", fmt.Sprintf(`{
-		"status":"1","message":"OK",
-		"result":[
-			{"hash":"0xh1","from":%q,"to":"0x2222222222222222222222222222222222222222","value":"1000","timeStamp":"1700000100","isError":"0"},
-			{"hash":"0xh2","from":"0x2222222222222222222222222222222222222222","to":%q,"value":"2000","timeStamp":"1700000000","isError":"1"}
-		]}`, evmSelf, evmSelf))
+	scan.route("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("action") == "tokentx" {
+			_, _ = fmt.Fprintf(w, `{
+				"status":"1","message":"OK",
+				"result":[
+					{"hash":"0xh1","logIndex":"7","from":%q,"to":"0x2222222222222222222222222222222222222222",
+					 "value":"2500000","timeStamp":"1700000100","tokenDecimal":"6",
+					 "tokenSymbol":"FAKE","contractAddress":"0xdAC17F958D2ee523a2206206994597C13D831ec7"}
+				]}`, evmSelf)
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{
+			"status":"1","message":"OK",
+			"result":[
+				{"hash":"0xh1","from":%q,"to":"0x2222222222222222222222222222222222222222","value":"0","timeStamp":"1700000100","isError":"0"},
+				{"hash":"0xh2","from":"0x2222222222222222222222222222222222222222","to":%q,"value":"2000","timeStamp":"1700000000","isError":"1"}
+			]}`, evmSelf, evmSelf)
+	})
 	e := newEnv(t, func(cfg *handlers.Config) {
 		cfg.EtherscanURL = scan.srv.URL
 		cfg.EtherscanKey = "test-key"
@@ -122,13 +157,13 @@ func TestEthHistoryWithKey(t *testing.T) {
 		t.Fatalf("status = %v", res["status"])
 	}
 	assertJSONEq(t, `[
-		{"hash":"0xh1","direction":"out","amountRaw":"1000","decimals":18,"symbol":"ETH","timestampMs":1700000100000,"status":"ok"},
-		{"hash":"0xh2","direction":"in","amountRaw":"2000","decimals":18,"symbol":"ETH","timestampMs":1700000000000,"status":"failed"}
+		{"id":"0xh1:7","hash":"0xh1","direction":"out","amountRaw":"2500000","decimals":6,"symbol":"USDT","contract":"0xdac17f958d2ee523a2206206994597c13d831ec7","verified":true,"timestampMs":1700000100000,"status":"ok"},
+		{"id":"0xh2","hash":"0xh2","direction":"in","amountRaw":"2000","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000000000,"status":"failed"}
 	]`, res["records"])
 
 	hits := scan.hitsFor("/")
-	if len(hits) != 1 {
-		t.Fatalf("expected 1 Etherscan call, got %d", len(hits))
+	if len(hits) != 2 {
+		t.Fatalf("expected normal + token Etherscan calls, got %d", len(hits))
 	}
 	u, _ := url.Parse(hits[0].Path)
 	q := u.Query()
@@ -139,6 +174,51 @@ func TestEthHistoryWithKey(t *testing.T) {
 		if q.Get(k) != want {
 			t.Fatalf("etherscan query %s = %q, want %q (full: %s)", k, q.Get(k), want, hits[0].Path)
 		}
+	}
+	tokenURL, _ := url.Parse(hits[1].Path)
+	if tokenURL.Query().Get("action") != "tokentx" {
+		t.Fatalf("second Etherscan call must query tokentx: %s", hits[1].Path)
+	}
+}
+
+func TestEthHistoryKeepsMultipleLogsAndMarksUnknownToken(t *testing.T) {
+	const other = "0x2222222222222222222222222222222222222222"
+	scan := newRESTFake(t)
+	scan.route("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("action") == "tokentx" {
+			_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[
+				{"hash":"0xmulti","logIndex":"3","from":%q,"to":%q,
+				 "value":"1000000","timeStamp":"1700000100","tokenDecimal":"6",
+				 "tokenSymbol":"USDT","contractAddress":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+				{"hash":"0xmulti","logIndex":"4","from":%q,"to":%q,
+				 "value":"2000000","timeStamp":"1700000100","tokenDecimal":"6",
+				 "tokenSymbol":"USDT","contractAddress":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
+			]}`, evmSelf, other, evmSelf, other)
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[
+			{"hash":"0xmulti","from":%q,"to":%q,"value":"0","timeStamp":"1700000100","isError":"0"}
+		]}`, evmSelf, other)
+	})
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.EtherscanURL = scan.srv.URL
+		cfg.EtherscanKey = "test-key"
+	})
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf)))
+	records := res["records"].([]any)
+	if len(records) != 2 {
+		t.Fatalf("both transfer logs must survive while the zero-value wrapper is removed: %v", records)
+	}
+	for _, raw := range records {
+		record := raw.(map[string]any)
+		if record["verified"] != false || record["symbol"] != "USDT" {
+			t.Fatalf("symbol-spoofing contracts must remain visibly unverified: %v", record)
+		}
+	}
+	if records[0].(map[string]any)["id"] == records[1].(map[string]any)["id"] {
+		t.Fatal("each log needs a distinct event id")
 	}
 }
 
@@ -173,21 +253,162 @@ func TestEthHistoryEtherscanErrorSurfaces(t *testing.T) {
 	}
 }
 
-func TestSolanaHistoryWithoutKeyUnsupported(t *testing.T) {
-	e := newEnv(t, nil)
+func TestEthHistoryEtherscanFailureFallsBackToPublicExplorer(t *testing.T) {
+	scan := newRESTFake(t)
+	scan.routeJSON("/", `{"status":"0","message":"NOTOK","result":"Max rate limit reached"}`)
+	explorer := newRESTFake(t)
+	explorer.routeJSON("/", fmt.Sprintf(`{
+		"message":"OK",
+		"result":[
+			{"hash":"0xfallback","from":"0x2222222222222222222222222222222222222222","to":%q,"value":"9","timeStamp":"1700000500","isError":"0"}
+		]}`, evmSelf))
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.EtherscanURL = scan.srv.URL
+		cfg.EtherscanKey = "bad-or-limited-key"
+		cfg.EVMHistoryFallbackURLs = map[string]string{
+			"eth-mainnet": explorer.srv.URL,
+		}
+	})
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf)))
+	assertJSONEq(t, `[
+		{"id":"0xfallback","hash":"0xfallback","direction":"in","amountRaw":"9","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000500000,"status":"ok"}
+	]`, res["records"])
+	if scan.hitCount("/") != 1 || explorer.hitCount("/") != 2 {
+		t.Fatalf("expected primary then fallback, got scan=%d explorer=%d",
+			scan.hitCount("/"), explorer.hitCount("/"))
+	}
+}
+
+func TestSolanaHistoryWithoutKeyUsesRPC(t *testing.T) {
+	node := newRPCFake(t)
+	node.result("getSignaturesForAddress", []any{
+		map[string]any{
+			"signature": "rpc-sig-1",
+			"blockTime": 1700000400,
+			"err":       nil,
+		},
+	})
+	node.result("getTransaction", map[string]any{
+		"meta": map[string]any{
+			"preBalances":  []any{5000000, 100},
+			"postBalances": []any{3000000, 2000100},
+			"preTokenBalances": []any{
+				map[string]any{
+					"mint":          "EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v",
+					"owner":         solSelf,
+					"uiTokenAmount": map[string]any{"amount": "3000000", "decimals": 6},
+				},
+			},
+			"postTokenBalances": []any{
+				map[string]any{
+					"mint":          "EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v",
+					"owner":         solSelf,
+					"uiTokenAmount": map[string]any{"amount": "1000000", "decimals": 6},
+				},
+			},
+		},
+		"transaction": map[string]any{
+			"message": map[string]any{
+				"accountKeys": []any{
+					map[string]any{"pubkey": solSelf, "signer": true},
+					map[string]any{"pubkey": solOther, "signer": false},
+				},
+			},
+		},
+	})
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.SolanaURLs = []string{node.srv.URL}
+	})
 	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"solana","address":%q}`, solSelf)))
-	assertJSONEq(t, `{"status":"unsupported","records":[]}`, res)
+	if res["status"] != "ok" {
+		t.Fatalf("status = %v", res["status"])
+	}
+	assertJSONEq(t, `[
+		{"id":"rpc-sig-1:spl:EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v","hash":"rpc-sig-1","direction":"out","amountRaw":"2000000","decimals":6,"symbol":"USDC","contract":"EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v","verified":true,"timestampMs":1700000400000,"status":"ok"}
+	]`, res["records"])
+	if node.count("getSignaturesForAddress") != 1 || node.count("getTransaction") != 1 {
+		t.Fatalf("expected signature + transaction RPC calls, got %d/%d",
+			node.count("getSignaturesForAddress"), node.count("getTransaction"))
+	}
+}
+
+func TestSolanaZeroMovementProgramActivityIsNotTransfer(t *testing.T) {
+	node := newRPCFake(t)
+	node.result("getSignaturesForAddress", []any{
+		map[string]any{"signature": "program-only", "blockTime": 1700000400, "err": nil},
+	})
+	node.result("getTransaction", map[string]any{
+		"meta": map[string]any{
+			"preBalances":  []any{5000000, 100},
+			"postBalances": []any{5000000, 100},
+		},
+		"transaction": map[string]any{
+			"message": map[string]any{
+				"accountKeys": []any{
+					map[string]any{"pubkey": solSelf, "signer": false},
+					map[string]any{"pubkey": solOther, "signer": true},
+				},
+			},
+		},
+	})
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.SolanaURLs = []string{node.srv.URL}
+	})
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"solana","address":%q}`, solSelf)))
+	assertJSONEq(t, `[]`, res["records"])
+}
+
+func TestSolanaHeliusFailureFallsBackToRPC(t *testing.T) {
+	hel := newRESTFake(t)
+	hel.route("/", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	})
+	node := newRPCFake(t)
+	node.result("getSignaturesForAddress", []any{
+		map[string]any{"signature": "fallback-sig", "blockTime": 1700000600, "err": nil},
+	})
+	node.result("getTransaction", map[string]any{
+		"meta": map[string]any{
+			"preBalances":  []any{100, 20},
+			"postBalances": []any{40, 80},
+		},
+		"transaction": map[string]any{
+			"message": map[string]any{
+				"accountKeys": []any{
+					map[string]any{"pubkey": solOther, "signer": true},
+					map[string]any{"pubkey": solSelf, "signer": false},
+				},
+			},
+		},
+	})
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.HeliusURL = hel.srv.URL
+		cfg.HeliusKey = "limited-key"
+		cfg.SolanaURLs = []string{node.srv.URL}
+	})
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"solana","address":%q}`, solSelf)))
+	assertJSONEq(t, `[
+		{"id":"fallback-sig","hash":"fallback-sig","direction":"in","amountRaw":"60","decimals":9,"symbol":"SOL","verified":true,"timestampMs":1700000600000,"status":"ok"}
+	]`, res["records"])
 }
 
 func TestSolanaHistoryWithHeliusKey(t *testing.T) {
 	hel := newRESTFake(t)
-	hel.routeJSON("/v0/addresses/"+solSelf+"/transactions", fmt.Sprintf(`[
-		{"signature":"sig1","timestamp":1700000200,"transactionError":null,
-		 "nativeTransfers":[{"fromUserAccount":%q,"toUserAccount":%q,"amount":5000000}]},
-		{"signature":"sig2","timestamp":1700000100,"transactionError":{"InstructionError":[0,"Custom"]},
-		 "nativeTransfers":[{"fromUserAccount":%q,"toUserAccount":%q,"amount":123}]},
-		{"signature":"sig3","timestamp":1700000050,"transactionError":null,"nativeTransfers":[]}
-	]`, solSelf, solOther, solOther, solSelf))
+	hel.routeJSON("/", fmt.Sprintf(`{"jsonrpc":"2.0","id":"kt-wallet","result":{"data":[
+		{"signature":"sig1","blockTime":1700000200,"type":"transfer",
+		 "fromUserAccount":%q,"toUserAccount":%q,
+		 "mint":"EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v",
+		 "amount":"2500000","decimals":6,"confirmationStatus":"finalized",
+		 "transactionIdx":1,"instructionIdx":2,"innerInstructionIdx":0},
+		{"signature":"sig2","blockTime":1700000100,"type":"transfer",
+		 "fromUserAccount":%q,"toUserAccount":%q,
+		 "mint":"So11111111111111111111111111111111111111111",
+		 "amount":"123","decimals":9,"confirmationStatus":"finalized",
+		 "transactionIdx":2,"instructionIdx":3}
+	]}}`, solSelf, solOther, solOther, solSelf))
 	e := newEnv(t, func(cfg *handlers.Config) {
 		cfg.HeliusURL = hel.srv.URL
 		cfg.HeliusKey = "helius-key"
@@ -198,13 +419,20 @@ func TestSolanaHistoryWithHeliusKey(t *testing.T) {
 		t.Fatalf("status = %v", res["status"])
 	}
 	assertJSONEq(t, `[
-		{"hash":"sig1","direction":"out","amountRaw":"5000000","decimals":9,"symbol":"SOL","timestampMs":1700000200000,"status":"ok"},
-		{"hash":"sig2","direction":"in","amountRaw":"123","decimals":9,"symbol":"SOL","timestampMs":1700000100000,"status":"failed"}
+		{"id":"sig1:1:2:0","hash":"sig1","direction":"out","amountRaw":"2500000","decimals":6,"symbol":"USDC","contract":"EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v","verified":true,"timestampMs":1700000200000,"status":"ok"},
+		{"id":"sig2:2:3:-1","hash":"sig2","direction":"in","amountRaw":"123","decimals":9,"symbol":"SOL","verified":true,"timestampMs":1700000100000,"status":"ok"}
 	]`, res["records"])
 
-	u, _ := url.Parse(hel.hitsFor("/v0/addresses/")[0].Path)
+	u, _ := url.Parse(hel.hitsFor("/")[0].Path)
 	if u.Query().Get("api-key") != "helius-key" {
 		t.Fatal("Helius api-key must be attached by the gateway")
+	}
+	var request map[string]any
+	if err := json.Unmarshal([]byte(hel.hitsFor("/")[0].Body), &request); err != nil {
+		t.Fatal(err)
+	}
+	if request["method"] != "getTransfersByAddress" {
+		t.Fatalf("deprecated Helius enhanced-transactions endpoint must not be used: %v", request)
 	}
 }
 

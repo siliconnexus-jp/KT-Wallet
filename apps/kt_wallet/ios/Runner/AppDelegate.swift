@@ -7,7 +7,13 @@ import UIKit
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var privacyCover: UIView?
+
+  /// Overlay copy pushed from Dart. `localizedProtectionText()` resolves
+  /// against the SYSTEM language, which ignores an in-app language override;
+  /// these win once Dart has spoken (nil until then, on a cold start).
+  private var pushedPrivacyStrings: (appName: String, active: String, hidden: String)?
   private var screenSecurityChannel: FlutterMethodChannel?
+  private var privacyProtectionRequired = false
 
   override func application(
     _ application: UIApplication,
@@ -51,6 +57,38 @@ import UIKit
         binaryMessenger: registrar.messenger()
       )
       screenCaptureChanged()
+      let secureScreenChannel = FlutterMethodChannel(
+        name: "kt/secure_screen",
+        binaryMessenger: registrar.messenger()
+      )
+      secureScreenChannel.setMethodCallHandler { [weak self] call, result in
+        switch call.method {
+        case "setPrivacyStrings":
+          let args = call.arguments as? [String: Any] ?? [:]
+          if let appName = args["appName"] as? String,
+            let active = args["active"] as? String,
+            let hidden = args["hidden"] as? String
+          {
+            let next = (appName: appName, active: active, hidden: hidden)
+            let changed =
+              self?.pushedPrivacyStrings.map {
+                $0.appName != next.appName || $0.active != next.active || $0.hidden != next.hidden
+              } ?? true
+            if changed {
+              self?.pushedPrivacyStrings = next
+              self?.rebuildPrivacyCover()
+            }
+          }
+          result(nil)
+        case "setSecure":
+          // iOS has no FLAG_SECURE equivalent; the Dart side documents this
+          // as an honest no-op here.
+          result(nil)
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+
       let deviceSecurityChannel = FlutterMethodChannel(
         name: "kt/device_security",
         binaryMessenger: registrar.messenger()
@@ -158,7 +196,29 @@ import UIKit
     hidePrivacyCover()
   }
 
+  /// Throws away the cached cover so the next show rebuilds it.
+  private func discardPrivacyCover() {
+    privacyCover?.removeFromSuperview()
+    privacyCover = nil
+  }
+
+  private func rebuildPrivacyCover() {
+    let keepProtected =
+      privacyProtectionRequired || privacyCover?.isHidden == false
+      || UIApplication.shared.applicationState != .active
+    discardPrivacyCover()
+    if keepProtected {
+      privacyProtectionRequired = true
+      presentPrivacyCover()
+    }
+  }
+
   func showPrivacyCover() {
+    privacyProtectionRequired = true
+    presentPrivacyCover()
+  }
+
+  private func presentPrivacyCover() {
     if let cover = privacyCover {
       cover.isHidden = false
       cover.superview?.bringSubviewToFront(cover)
@@ -181,7 +241,8 @@ import UIKit
       icon.heightAnchor.constraint(equalToConstant: 88),
     ])
 
-    let title = protectionLabel("KT Wallet", size: 26, weight: .bold, color: .white)
+    let title = protectionLabel(
+      pushedPrivacyStrings?.appName ?? "KT Wallet", size: 26, weight: .bold, color: .white)
     let text = localizedProtectionText()
     // No glyph here: the "⚖" that used to prefix this line was the scales of
     // Libra, left over from the old brand, and it sat directly above the app
@@ -215,8 +276,9 @@ import UIKit
   }
 
   func hidePrivacyCover() {
+    privacyProtectionRequired = false
     if privacyCover == nil {
-      showPrivacyCover()
+      presentPrivacyCover()
     }
     privacyCover?.isHidden = true
   }
@@ -242,6 +304,9 @@ import UIKit
   }
 
   private func localizedProtectionText() -> (active: String, hidden: String) {
+    if let pushed = pushedPrivacyStrings {
+      return (pushed.active, pushed.hidden)
+    }
     let language = Locale.preferredLanguages.first ?? "en"
     if language.hasPrefix("zh") {
       return ("KT 钱包保护已启动", "您的钱包内容已隐藏")

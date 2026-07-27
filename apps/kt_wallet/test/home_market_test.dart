@@ -34,10 +34,16 @@ class _FakeBalanceService extends BalanceService {
 }
 
 class _FakePriceService extends PriceService {
-  _FakePriceService(this.prices);
+  _FakePriceService(
+    this.prices, {
+    this.tokenPrices = const {'USDT': 0.99, 'USDC': 1.01},
+  });
   final Map<Coin, double>? prices;
+  final Map<String, double> tokenPrices;
   @override
   Future<Map<Coin, double>?> fetchUsdPrices() async => prices;
+  @override
+  double? tokenPriceUsd(String symbol) => tokenPrices[symbol];
 }
 
 class _FakeTokenBalanceService extends TokenBalanceService {
@@ -114,7 +120,9 @@ MarketController _offlineController() => MarketController(
   balances: _FakeBalanceService({
     for (final c in Coin.values) c: const BalanceResult.error(),
   }),
-  prices: _FakePriceService(null),
+  // No token quotes either: an offline session must not fall back to a $1
+  // peg for stablecoins.
+  prices: _FakePriceService(null, tokenPrices: const {}),
   tokens: _FakeTokenBalanceService({
     for (final t in builtinTokens) t.id: const BalanceResult.error(),
   }),
@@ -138,15 +146,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // Token fiat uses live quotes (USDT 0.99, USDC 1.01), not a $1 peg.
     // Live total: 1 ETH*2000 + 2 POL*0.5 + 5 TRX*0.1 + 0.5 SOL*100 = 2051.50,
-    // plus the pegged token balances 25 USDT + 10 USDC = 2086.50.
-    expect(find.text(r'$2,086.50'), findsOneWidget);
+    // plus live-priced tokens: 25*0.99 + 10*1.01 = 2086.35.
+    expect(find.text(r'$2,086.35'), findsOneWidget);
     // Live rows (home tab card; the assets tab inside the IndexedStack builds
     // them too, hence findsWidgets).
     expect(find.text('1 ETH'), findsWidgets);
     expect(find.text('0.5 SOL'), findsWidgets);
     expect(find.text(r'$2,000.00'), findsWidgets);
-    // Token rows render under the native rows, fiat via the USD peg; the
+    // Token rows render under the native rows using live market quotes; the
     // errored TRON USDT stays an honest '--'.
     // USDT is deployed on Ethereum and TRON, so it is ONE row now, not two.
     // TronGrid rejected the demo address, so that leg is excluded from the
@@ -154,8 +163,8 @@ void main() {
     // 25 that did load.
     expect(find.text('25 USDT · 2 条链'), findsWidgets);
     expect(find.text('10 USDC · Polygon'), findsWidgets);
-    expect(find.text(r'$25.00'), findsWidgets);
-    expect(find.text(r'$10.00'), findsWidgets);
+    expect(find.text(r'$24.75'), findsWidgets);
+    expect(find.text(r'$10.10'), findsWidgets);
     expect(find.text('-- USDT · TRON'), findsNothing);
     // The demo constants must NOT render as if they were live.
     expect(find.text(r'$862.40'), findsNothing);

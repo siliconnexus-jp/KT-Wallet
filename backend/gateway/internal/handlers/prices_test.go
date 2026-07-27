@@ -29,41 +29,51 @@ func newCoinGeckoFake(t *testing.T, table map[string]float64) *restFake {
 	return f
 }
 
-func TestPricesStablecoinPegNoUpstreamCall(t *testing.T) {
-	cg := newCoinGeckoFake(t, map[string]float64{"tether": 0.999}) // must NOT be consulted
+func TestPricesStablecoinsUseMarketQuotes(t *testing.T) {
+	cg := newCoinGeckoFake(t, map[string]float64{
+		"tether":   0.999,
+		"usd-coin": 1.001,
+	})
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.CoinGeckoURL = cg.srv.URL })
 
 	resp := e.rpc("kt_getPrices", `{"symbols":["USDT","USDC"]}`)
 	res := result(t, resp)
-	assertJSONEq(t, `{"USDT":{"usd":1},"USDC":{"usd":1}}`, res["prices"])
+	assertJSONEq(t, `{"USDT":{"usd":0.999},"USDC":{"usd":1.001}}`, res["prices"])
 	if _, ok := res["cachedAtMs"].(float64); !ok {
 		t.Fatalf("cachedAtMs missing: %v", res)
 	}
-	if got := cg.hitCount("/api/v3/simple/price"); got != 0 {
-		t.Fatalf("stablecoin peg must short-circuit: CoinGecko saw %d calls", got)
+	if got := cg.hitCount("/api/v3/simple/price"); got != 1 {
+		t.Fatalf("stablecoins must use the live market feed: CoinGecko saw %d calls", got)
 	}
 }
 
 func TestPricesMixedFetch(t *testing.T) {
-	cg := newCoinGeckoFake(t, map[string]float64{"ethereum": 2345.67, "solana": 98.5})
+	cg := newCoinGeckoFake(t, map[string]float64{
+		"ethereum": 2345.67, "solana": 98.5, "avalanche-2": 22.25,
+		"tether": 0.998, "binance-usd": 0.997,
+	})
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.CoinGeckoURL = cg.srv.URL })
 
-	resp := e.rpc("kt_getPrices", `{"symbols":["ETH","USDT","SOL"]}`)
+	resp := e.rpc("kt_getPrices", `{"symbols":["ETH","USDT","BUSD","SOL","AVAX"]}`)
 	res := result(t, resp)
-	assertJSONEq(t, `{"ETH":{"usd":2345.67},"SOL":{"usd":98.5},"USDT":{"usd":1}}`, res["prices"])
+	assertJSONEq(t, `{
+		"ETH":{"usd":2345.67},"SOL":{"usd":98.5},"AVAX":{"usd":22.25},
+		"USDT":{"usd":0.998},"BUSD":{"usd":0.997}
+	}`, res["prices"])
 
 	hits := cg.hitsFor("/api/v3/simple/price")
 	if len(hits) != 1 {
 		t.Fatalf("expected exactly one CoinGecko call, got %d", len(hits))
 	}
-	// Pegged symbols must not leak into the upstream query.
+	// Stablecoins must be queried too so depegs are visible.
 	u, _ := url.Parse(hits[0].Path)
 	ids := u.Query().Get("ids")
-	if strings.Contains(ids, "tether") || strings.Contains(ids, "usd-coin") {
-		t.Fatalf("pegged ids should not be fetched, got ids=%q", ids)
+	if !strings.Contains(ids, "tether") || !strings.Contains(ids, "binance-usd") {
+		t.Fatalf("stablecoin ids must be fetched, got ids=%q", ids)
 	}
-	if !strings.Contains(ids, "ethereum") || !strings.Contains(ids, "solana") {
-		t.Fatalf("expected ethereum+solana in ids, got %q", ids)
+	if !strings.Contains(ids, "ethereum") || !strings.Contains(ids, "solana") ||
+		!strings.Contains(ids, "avalanche-2") {
+		t.Fatalf("expected ethereum+solana+avalanche in ids, got %q", ids)
 	}
 	if u.Query().Get("vs_currencies") != "usd" {
 		t.Fatalf("vs_currencies must be usd, got %q", u.Query().Get("vs_currencies"))

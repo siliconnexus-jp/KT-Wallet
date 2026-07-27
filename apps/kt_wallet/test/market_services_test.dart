@@ -201,6 +201,8 @@ void main() {
               'polygon-ecosystem-token': {'usd': 0.4},
               'tron': {'usd': 0.12},
               'solana': {'usd': 150},
+              'tether': {'usd': 0.997},
+              'usd-coin': {'usd': 1.001},
             }),
             200,
           );
@@ -214,6 +216,8 @@ void main() {
       expect(prices[Coin.tron], 0.12);
       expect(prices[Coin.solana], 150.0);
       expect(service.lastGoodUsd, prices);
+      expect(service.tokenPriceUsd('USDT'), 0.997);
+      expect(service.tokenPriceUsd('USDC'), 1.001);
     });
 
     test('non-200 → null, keeping the previous last-good cache', () async {
@@ -250,13 +254,16 @@ void main() {
       expect(service.lastGoodUsd, isNull);
     });
 
-    test('malformed body → null; stablecoins pegged at exactly 1.0', () async {
-      final service = PriceService(
-        client: MockClient((request) async => http.Response('[]', 200)),
-      );
-      expect(await service.fetchUsdPrices(), isNull);
-      expect(PriceService.peggedUsdBySymbol['USDT'], 1.0);
-      expect(PriceService.peggedUsdBySymbol['USDC'], 1.0);
-    });
+    test(
+      'malformed body → null; stablecoin prices remain unavailable',
+      () async {
+        final service = PriceService(
+          client: MockClient((request) async => http.Response('[]', 200)),
+        );
+        expect(await service.fetchUsdPrices(), isNull);
+        expect(service.tokenPriceUsd('USDT'), isNull);
+        expect(service.tokenPriceUsd('USDC'), isNull);
+      },
+    );
   });
 }

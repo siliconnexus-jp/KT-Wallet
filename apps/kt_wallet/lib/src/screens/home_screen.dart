@@ -70,6 +70,22 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Session override of the persisted default; null = follow the preference.
   bool? _hiddenOverride;
 
+  /// Last preference value seen. Toggling the eye sets a session override,
+  /// and that override used to win forever — so flipping "privacy mode" in
+  /// settings afterwards appeared to do nothing. A change to the preference
+  /// is an explicit instruction and clears the override.
+  bool? _lastPrefPrivacy;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final pref = AppPrefsScope.maybeOf(context)?.privacyMode;
+    if (pref != null && pref != _lastPrefPrivacy) {
+      _lastPrefPrivacy = pref;
+      _hiddenOverride = null;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -98,25 +114,39 @@ class _HomeScreenState extends State<HomeScreen> {
       toggle: () => setState(() => _hiddenOverride = !hidden),
       child: Scaffold(
         backgroundColor: WalletColors.bg,
+        // The bar floats OVER the content instead of sitting in a column
+        // beside it: the strip around it used to be dead background, and the
+        // list stopped dead above it. Each tab pads its scroll view by
+        // [kTabBarInset] so nothing ends up permanently trapped underneath.
         body: SafeArea(
-          child: Column(
+          bottom: false,
+          child: Stack(
             children: [
-              Expanded(
-                child: IndexedStack(
-                  index: _tab,
-                  children: [
-                    _HomeTab(
-                      assets: widget.assets,
-                      onViewAll: () => setState(() => _tab = 1),
-                      onOpenSettings: () => setState(() => _tab = 3),
-                    ),
-                    const _AssetsTab(),
-                    const _RecordsTab(),
-                    const _SettingsTab(),
-                  ],
+              IndexedStack(
+                index: _tab,
+                children: [
+                  _HomeTab(
+                    assets: widget.assets,
+                    onViewAll: () => setState(() => _tab = 1),
+                    onOpenSettings: () => setState(() => _tab = 3),
+                  ),
+                  const _AssetsTab(),
+                  const _RecordsTab(),
+                  const _SettingsTab(),
+                ],
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: SafeArea(
+                  top: false,
+                  child: _TabBar(
+                    selected: _tab,
+                    onTap: (i) => setState(() => _tab = i),
+                  ),
                 ),
               ),
-              _TabBar(selected: _tab, onTap: (i) => setState(() => _tab = i)),
             ],
           ),
         ),
@@ -124,6 +154,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+
+/// Room a tab's scroll view must leave at the bottom so its last row is not
+/// stuck under the floating tab bar.
+const kTabBarInset = 88.0;
 
 class _HomeTab extends StatelessWidget {
   const _HomeTab({required this.assets, this.onViewAll, this.onOpenSettings});
@@ -226,7 +260,7 @@ class _HomeTab extends StatelessWidget {
     final total = live ? market.totalUsd : null;
     final listView = ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24 + kTabBarInset),
       children: [
         _Header(
           wallet: wallet,
@@ -285,7 +319,7 @@ class _AssetsTab extends StatelessWidget {
     final offline = market?.isOffline ?? false;
     final live = market != null;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24 + kTabBarInset),
       children: [
         const SizedBox(height: 8),
         Row(
@@ -488,7 +522,7 @@ class _RecordsTabState extends State<_RecordsTab> {
                 return _RecordRow(
                   record: _TxRecord(
                     r.outgoing,
-                    r.amountText ?? '--',
+                    '${r.amountText ?? '--'}${r.assetVerified ? '' : ' ⚠'}',
                     _formatRecordTime(l10n, r.timestamp),
                     status: local?.status,
                   ),
@@ -548,7 +582,7 @@ class _RecordsTabState extends State<_RecordsTab> {
       body = _liveCard(context, l10n, history);
     }
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24 + kTabBarInset),
       children: [
         const SizedBox(height: 8),
         Row(
@@ -691,7 +725,7 @@ class _SettingsTab extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final items = _settingsItems(l10n);
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24 + kTabBarInset),
       children: [
         const SizedBox(height: 8),
         Row(

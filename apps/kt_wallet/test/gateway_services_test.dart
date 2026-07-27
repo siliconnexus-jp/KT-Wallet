@@ -349,6 +349,8 @@ void main() {
                 'POL': {'usd': 0.4},
                 'TRX': {'usd': 0.12},
                 'SOL': {'usd': 150},
+                'USDT': {'usd': 0.998},
+                'USDC': {'usd': 1.001},
               },
               'cachedAtMs': 1753000000000,
             },
@@ -370,8 +372,19 @@ void main() {
         expect(prices[Coin.tron], 0.12);
         expect(prices[Coin.solana], 150.0);
         expect(service.lastGoodUsd, prices);
+        expect(service.tokenPriceUsd('USDT'), 0.998);
+        expect(service.tokenPriceUsd('USDC'), 1.001);
         expect(gateway.paramsOf('kt_getPrices').single, {
-          'symbols': ['ETH', 'POL', 'ETH', 'ETH', 'AVAX', 'TRX', 'SOL'],
+          'symbols': [
+            'ETH',
+            'POL',
+            'AVAX',
+            'TRX',
+            'SOL',
+            'USDT',
+            'USDC',
+            'BUSD',
+          ],
         });
       },
     );
@@ -516,20 +529,25 @@ void main() {
             'status': 'ok',
             'records': [
               {
+                'id': '0xaaa',
                 'hash': '0xaaa',
                 'direction': 'out',
                 'amountRaw': '1500000000000000000',
                 'decimals': 18,
                 'symbol': 'ETH',
+                'verified': true,
                 'timestampMs': 1753000000000,
                 'status': 'ok',
               },
               {
+                'id': '0xbbb:7',
                 'hash': '0xbbb',
                 'direction': 'in',
                 'amountRaw': '2000000',
                 'decimals': 6,
                 'symbol': 'USDT',
+                'contract': '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                'verified': false,
                 'timestampMs': 1753000100000,
                 'status': 'failed',
               },
@@ -553,10 +571,17 @@ void main() {
       expect(result.records[0].outgoing, isFalse);
       expect(result.records[0].confirmed, isFalse); // status: failed
       expect(result.records[0].amountText, '2 USDT');
+      expect(result.records[0].id, '0xbbb:7');
+      expect(result.records[0].assetVerified, isFalse);
+      expect(
+        result.records[0].assetContract,
+        '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      );
       expect(result.records[1].hash, '0xaaa');
       expect(result.records[1].outgoing, isTrue);
       expect(result.records[1].confirmed, isTrue);
       expect(result.records[1].amountText, '1.5 ETH');
+      expect(result.records[1].assetVerified, isTrue);
       expect(gateway.paramsOf('kt_getHistory').single, {
         'chain': 'eth',
         'address': '0xEthAddr',

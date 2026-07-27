@@ -19,7 +19,10 @@ class ChainTxRecord {
     required this.coin,
     required this.hash,
     required this.outgoing,
+    this.id,
     this.amountText,
+    this.assetContract,
+    this.assetVerified = true,
     required this.timestamp,
     required this.confirmed,
   });
@@ -31,12 +34,22 @@ class ChainTxRecord {
 
   final String hash;
 
+  /// Stable transfer-event identity. Unlike [hash], this distinguishes
+  /// multiple token transfer logs emitted by one transaction.
+  final String? id;
+
   /// Direction relative to the queried address (from == address → outgoing).
   final bool outgoing;
 
   /// Formatted "120.5 USDT" when the amount and symbol were parseable, null
   /// otherwise — the UI renders '--' instead of inventing a number.
   final String? amountText;
+
+  /// Token contract/mint when this is a token transfer.
+  final String? assetContract;
+
+  /// False for a token not present in KT Wallet's per-network registry.
+  final bool assetVerified;
 
   final DateTime timestamp;
 
@@ -314,11 +327,14 @@ class HistoryService {
     final symbol = record.symbol;
     return ChainTxRecord(
       coin: coin,
+      id: record.id,
       hash: record.hash,
       outgoing: record.outgoing,
       amountText: raw != null && decimals != null && symbol != null
           ? _formatAmount(raw, decimals, symbol)
           : null,
+      assetContract: record.contract,
+      assetVerified: record.verified,
       timestamp: DateTime.fromMillisecondsSinceEpoch(record.timestampMs),
       confirmed: !record.failed,
     );

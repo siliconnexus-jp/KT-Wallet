@@ -52,8 +52,9 @@ class KtStatusBar extends StatelessWidget {
   final AppTheme theme;
   @override
   Widget build(BuildContext context) {
-    if (!KtDeviceChrome.mockStatusBarOf(context))
+    if (!KtDeviceChrome.mockStatusBarOf(context)) {
       return const SizedBox.shrink();
+    }
     final fg = theme.text;
     return SizedBox(
       height: 44,

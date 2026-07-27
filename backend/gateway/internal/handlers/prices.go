@@ -10,16 +10,16 @@ import (
 	"ktwallet/gateway/internal/rpc"
 )
 
-// pegged stablecoins are answered from the built-in 1.0 USD peg without any
-// upstream call.
-var pegged = map[string]bool{"USDT": true, "USDC": true}
-
 // geckoIDs maps ticker symbols the wallet uses to CoinGecko coin ids.
 var geckoIDs = map[string]string{
-	"ETH": "ethereum",
-	"POL": "polygon-ecosystem-token",
-	"TRX": "tron",
-	"SOL": "solana",
+	"ETH":  "ethereum",
+	"POL":  "polygon-ecosystem-token",
+	"AVAX": "avalanche-2",
+	"TRX":  "tron",
+	"SOL":  "solana",
+	"USDT": "tether",
+	"USDC": "usd-coin",
+	"BUSD": "binance-usd",
 }
 
 type usdPrice struct {
@@ -31,9 +31,9 @@ type cachedPrices struct {
 	at     time.Time
 }
 
-// GetPrices implements kt_getPrices. Unknown symbols are omitted; stablecoins
-// short-circuit to the peg; everything else is fetched from CoinGecko behind
-// a 30s cache and a 1 rps outbound limiter.
+// GetPrices implements kt_getPrices. Unknown symbols are omitted; every quote,
+// including stablecoins, is fetched from CoinGecko so a depeg is reflected
+// instead of being silently fixed at 1.0 USD.
 func (g *Gateway) GetPrices(ctx context.Context, params json.RawMessage) (any, *rpc.Error) {
 	var p struct {
 		Symbols []string `json:"symbols"`
@@ -55,8 +55,6 @@ func (g *Gateway) GetPrices(ctx context.Context, params json.RawMessage) (any, *
 		}
 		seen[sym] = true
 		switch {
-		case pegged[sym]:
-			out[sym] = usdPrice{USD: 1.0}
 		case geckoIDs[sym] != "":
 			fetch = append(fetch, sym)
 		default:

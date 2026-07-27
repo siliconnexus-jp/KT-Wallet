@@ -34,6 +34,15 @@ class MainActivity : FlutterFragmentActivity() {
     private var securityChannel: MethodChannel? = null
     private var screenCaptureCallback: Activity.ScreenCaptureCallback? = null
     private var secureScreenEnabled = false
+    private var activityResumed = false
+    private var windowHasFocus = false
+
+    // Overlay copy pushed from Dart. The resource strings resolve against the
+    // SYSTEM language, which ignores an in-app language override; these win
+    // once Dart has spoken (null until then, on the very first frames).
+    private var privacyAppName: String? = null
+    private var privacyActive: String? = null
+    private var privacyHidden: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,6 +71,23 @@ class MainActivity : FlutterFragmentActivity() {
                         } else {
                             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
                         }
+                        result.success(null)
+                    }
+                    "setPrivacyStrings" -> {
+                        val appName = call.argument<String>("appName")
+                        val active = call.argument<String>("active")
+                        val hidden = call.argument<String>("hidden")
+                        val changed = appName != privacyAppName ||
+                            active != privacyActive ||
+                            hidden != privacyHidden
+                        privacyAppName = appName
+                        privacyActive = active
+                        privacyHidden = hidden
+                        // Rebuild in place when the app is protected. Removing
+                        // the cover unconditionally here can expose Flutter to
+                        // the Recents compositor if this async call arrives
+                        // after onPause/onWindowFocusChanged(false).
+                        if (changed) rebuildPrivacyCover()
                         result.success(null)
                     }
                     else -> result.notImplemented()
@@ -140,7 +166,8 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun onPause() {
-        showPrivacyCover()
+        activityResumed = false
+        refreshPrivacyCover()
         super.onPause()
     }
 
@@ -153,13 +180,28 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onResume() {
         super.onResume()
-        hidePrivacyCover()
+        activityResumed = true
+        refreshPrivacyCover()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
-        if (!hasFocus) showPrivacyCover()
+        windowHasFocus = hasFocus
+        if (!hasFocus) refreshPrivacyCover()
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus && !isFinishing) hidePrivacyCover()
+        if (hasFocus && !isFinishing) refreshPrivacyCover()
+    }
+
+    private fun privacyProtectionRequired() =
+        !activityResumed || !windowHasFocus
+
+    private fun refreshPrivacyCover() {
+        if (privacyProtectionRequired()) showPrivacyCover() else hidePrivacyCover()
+    }
+
+    private fun rebuildPrivacyCover() {
+        val keepProtected = privacyProtectionRequired() || privacyCover != null
+        removePrivacyCover()
+        if (keepProtected) showPrivacyCover()
     }
 
     private fun showPrivacyCover() {
@@ -172,17 +214,18 @@ class MainActivity : FlutterFragmentActivity() {
             setBackgroundColor(Color.rgb(8, 12, 24))
             isClickable = true
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
-            contentDescription = getString(R.string.privacy_protection_active)
+            contentDescription =
+                privacyActive ?: getString(R.string.privacy_protection_active)
             addView(ImageView(context).apply {
                 setImageResource(R.mipmap.ic_launcher)
             }, LinearLayout.LayoutParams((88 * density).toInt(), (88 * density).toInt()))
-            addView(privacyText(getString(R.string.privacy_app_name), 26f, true).apply {
+            addView(privacyText(privacyAppName ?: getString(R.string.privacy_app_name), 26f, true).apply {
                 setPadding(0, (24 * density).toInt(), 0, 0)
             })
-            addView(privacyText(getString(R.string.privacy_protection_active), 18f, true).apply {
+            addView(privacyText(privacyActive ?: getString(R.string.privacy_protection_active), 18f, true).apply {
                 setPadding(0, (14 * density).toInt(), 0, 0)
             })
-            addView(privacyText(getString(R.string.privacy_content_hidden), 14f, false).apply {
+            addView(privacyText(privacyHidden ?: getString(R.string.privacy_content_hidden), 14f, false).apply {
                 setPadding(0, (8 * density).toInt(), 0, 0)
             })
         }
@@ -239,6 +282,11 @@ class MainActivity : FlutterFragmentActivity() {
         }
 
     private fun hidePrivacyCover() {
+        if (privacyProtectionRequired()) return
+        removePrivacyCover()
+    }
+
+    private fun removePrivacyCover() {
         privacyCover?.let { (it.parent as? ViewGroup)?.removeView(it) }
         privacyCover = null
     }

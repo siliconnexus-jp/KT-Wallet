@@ -178,10 +178,10 @@ func TestTronNileHistory(t *testing.T) {
 		t.Fatalf("nile history must be supported through TronGrid, got %v", res["status"])
 	}
 	assertJSONEq(t, `[
-		{"hash":"t1","direction":"out","amountRaw":"1000000","decimals":6,"symbol":"USDT","timestampMs":5000,"status":"ok"},
-		{"hash":"n1","direction":"in","amountRaw":"7000000","decimals":6,"symbol":"TRX","timestampMs":4000,"status":"ok"},
-		{"hash":"tdup","direction":"in","amountRaw":"250000","decimals":6,"symbol":"USDT","timestampMs":3000,"status":"ok"},
-		{"hash":"n3","direction":"out","amountRaw":"42","decimals":6,"symbol":"TRX","timestampMs":2000,"status":"failed"}
+		{"id":"t1:trc20:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:0","hash":"t1","direction":"out","amountRaw":"1000000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":false,"timestampMs":5000,"status":"ok"},
+		{"id":"n1","hash":"n1","direction":"in","amountRaw":"7000000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":4000,"status":"ok"},
+		{"id":"tdup:trc20:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:1","hash":"tdup","direction":"in","amountRaw":"250000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":false,"timestampMs":3000,"status":"ok"},
+		{"id":"n3","hash":"n3","direction":"out","amountRaw":"42","decimals":6,"symbol":"TRX","verified":true,"timestampMs":2000,"status":"failed"}
 	]`, res["records"])
 	if got := nile.hitCount("/v1/accounts/"); got != 2 { // trc20 + native
 		t.Fatalf("nile base URL must serve the history calls, hits = %d", got)
@@ -235,10 +235,13 @@ func TestSepoliaHistoryWithoutKeyUnsupported(t *testing.T) {
 func TestSolDevnetHistoryUsesDevnetHelius(t *testing.T) {
 	mainHel := newRESTFake(t) // must never be called
 	devHel := newRESTFake(t)
-	devHel.routeJSON("/v0/addresses/"+solSelf+"/transactions", fmt.Sprintf(`[
-		{"signature":"dsig1","timestamp":1700000300,"transactionError":null,
-		 "nativeTransfers":[{"fromUserAccount":%q,"toUserAccount":%q,"amount":42}]}
-	]`, solSelf, solOther))
+	devHel.routeJSON("/", fmt.Sprintf(`{"jsonrpc":"2.0","id":"kt-wallet","result":{"data":[
+		{"signature":"dsig1","blockTime":1700000300,"type":"transfer",
+		 "fromUserAccount":%q,"toUserAccount":%q,
+		 "mint":"So11111111111111111111111111111111111111111",
+		 "amount":"42","decimals":9,"confirmationStatus":"finalized",
+		 "transactionIdx":1,"instructionIdx":2}
+	]}}`, solSelf, solOther))
 	e := newEnv(t, func(cfg *handlers.Config) {
 		cfg.HeliusURL = mainHel.srv.URL
 		cfg.HeliusDevnetURL = devHel.srv.URL
@@ -248,12 +251,12 @@ func TestSolDevnetHistoryUsesDevnetHelius(t *testing.T) {
 	res := result(t, e.rpc("kt_getHistory",
 		fmt.Sprintf(`{"chain":"solana","network":"sol-devnet","address":%q}`, solSelf)))
 	assertJSONEq(t, `[
-		{"hash":"dsig1","direction":"out","amountRaw":"42","decimals":9,"symbol":"SOL","timestampMs":1700000300000,"status":"ok"}
+		{"id":"dsig1:1:2:-1","hash":"dsig1","direction":"out","amountRaw":"42","decimals":9,"symbol":"SOL","verified":true,"timestampMs":1700000300000,"status":"ok"}
 	]`, res["records"])
 	if len(mainHel.hitsFor("/")) != 0 {
 		t.Fatal("sol-devnet history must use the devnet Helius endpoint, not mainnet")
 	}
-	u, _ := url.Parse(devHel.hitsFor("/v0/addresses/")[0].Path)
+	u, _ := url.Parse(devHel.hitsFor("/")[0].Path)
 	if u.Query().Get("api-key") != "helius-key" {
 		t.Fatal("the shared Helius key must be attached to devnet calls")
 	}

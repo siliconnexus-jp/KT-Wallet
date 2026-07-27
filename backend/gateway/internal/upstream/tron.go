@@ -110,6 +110,7 @@ type TRC20Transfer struct {
 	BlockTimestamp int64
 	Symbol         string
 	Decimals       int
+	Contract       string
 }
 
 // TRC20Transfers lists confirmed TRC-20 transfers touching addr, newest first.
@@ -124,6 +125,7 @@ func (t *Tron) TRC20Transfers(ctx context.Context, addr string, limit int) ([]TR
 			TokenInfo      *struct {
 				Symbol   string `json:"symbol"`
 				Decimals int    `json:"decimals"`
+				Address  string `json:"address"`
 			} `json:"token_info"`
 		} `json:"data"`
 	}
@@ -143,6 +145,7 @@ func (t *Tron) TRC20Transfers(ctx context.Context, addr string, limit int) ([]TR
 		if d.TokenInfo != nil {
 			tr.Symbol = d.TokenInfo.Symbol
 			tr.Decimals = d.TokenInfo.Decimals
+			tr.Contract = d.TokenInfo.Address
 		}
 		transfers = append(transfers, tr)
 	}

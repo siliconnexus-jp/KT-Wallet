@@ -62,6 +62,34 @@ void main() {
     expect(find.text('-120.00 USDT'), findsNothing);
   });
 
+  testWidgets('an unverified token shows its contract and warning', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        TxDetailScreen(
+          chainRecord: ChainTxRecord(
+            coin: Coin.eth,
+            hash: 'spoof',
+            outgoing: false,
+            amountText: '10 USDT',
+            assetContract: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            assetVerified: false,
+            timestamp: DateTime(2026, 3, 9),
+            confirmed: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('未经验证的代币，请核对合约地址'), findsOneWidget);
+    expect(
+      find.text('0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('an unparseable amount stays -- instead of a number', (
     tester,
   ) async {

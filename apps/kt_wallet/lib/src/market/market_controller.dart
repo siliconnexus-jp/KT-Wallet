@@ -112,15 +112,17 @@ class MarketController extends ChangeNotifier {
         price;
   }
 
-  /// USD value of one token's balance, or null when unavailable. Prices come
-  /// from the existing stablecoin pegs ([PriceService.peggedUsdBySymbol]);
-  /// non-pegged tokens without a price feed stay null ('--'), never invented.
+  double? tokenPriceUsd(String symbol) => _prices.tokenPriceUsd(symbol);
+
+  /// USD value of one token's balance, or null when unavailable. Stablecoins
+  /// use live market quotes, so a depeg is reflected instead of being forced
+  /// to $1. Tokens without a price feed stay null ('--'), never invented.
   double? tokenFiatValueUsd(TokenInfo token) {
     if (_isTestnet(token.chain)) return null;
     final result = tokenBalanceFor(token.id);
     final amount = result.amount;
     if (result.status != BalanceStatus.ok || amount == null) return null;
-    final price = PriceService.peggedUsdBySymbol[token.symbol];
+    final price = tokenPriceUsd(token.symbol);
     if (price == null) return null;
     return amount.raw.toDouble() /
         math.pow(10, amount.decimals).toDouble() *
