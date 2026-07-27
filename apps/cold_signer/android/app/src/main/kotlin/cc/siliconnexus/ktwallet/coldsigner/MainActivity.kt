@@ -126,7 +126,7 @@ class MainActivity : FlutterFragmentActivity() {
             addView(privacyText(getString(R.string.privacy_app_name), 26f, true).apply {
                 setPadding(0, (24 * density).toInt(), 0, 0)
             })
-            addView(privacyText("⚖  ${getString(R.string.privacy_protection_active)}", 18f, true).apply {
+            addView(privacyText(getString(R.string.privacy_protection_active), 18f, true).apply {
                 setPadding(0, (14 * density).toInt(), 0, 0)
             })
             addView(privacyText(getString(R.string.privacy_content_hidden), 14f, false).apply {

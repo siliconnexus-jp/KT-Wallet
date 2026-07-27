@@ -1,0 +1,308 @@
+<meta charset="utf-8">
+<title>KT Wallet — iOS QA 报告 2026-07-27</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --surface:#fff; --text:#0c1220; --text2:#626b7a; --text3:#9aa3b2;
+    --accent:#2557e8; --green:#0e9f5b; --red:#df3e42; --amber:#e8930c; --border:#e7e9ee;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#0a0c0f;--surface:#14171d;--text:#f4f6f9;--text2:#8e97a5;--text3:#6b7481;
+      --accent:#5b8def;--green:#34d77b;--red:#ff5a5a;--amber:#f5b722;--border:#262b34;}
+  }
+  :root[data-theme="dark"]{--bg:#0a0c0f;--surface:#14171d;--text:#f4f6f9;--text2:#8e97a5;
+    --text3:#6b7481;--accent:#5b8def;--green:#34d77b;--red:#ff5a5a;--amber:#f5b722;--border:#262b34;}
+  :root[data-theme="light"]{--bg:#f5f6f8;--surface:#fff;--text:#0c1220;--text2:#626b7a;
+    --text3:#9aa3b2;--accent:#2557e8;--green:#0e9f5b;--red:#df3e42;--amber:#e8930c;--border:#e7e9ee;}
+
+  body{background:var(--bg);color:var(--text);font:15px/1.65 -apple-system,BlinkMacSystemFont,
+    "Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    margin:0;padding:0 20px 80px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:940px;margin:0 auto}
+  header{padding:48px 0 24px;border-bottom:1px solid var(--border)}
+  h1{font-size:30px;line-height:1.25;margin:0 0 10px;letter-spacing:-.02em}
+  .sub{color:var(--text2);font-size:14px}
+  h2{font-size:21px;margin:44px 0 14px;letter-spacing:-.01em}
+  h3{font-size:16px;margin:28px 0 8px}
+  p{margin:10px 0}
+  code,.mono{font-family:var(--mono);font-size:12.5px}
+  code{background:color-mix(in srgb,var(--text) 8%,transparent);padding:1px 5px;border-radius:4px}
+  a{color:var(--accent)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    padding:18px 20px;margin:14px 0}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:22px 0}
+  .kpi{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .kpi .n{font-size:26px;font-weight:700;letter-spacing:-.02em}
+  .kpi .l{color:var(--text2);font-size:12.5px;margin-top:2px}
+  .ok{color:var(--green)} .bad{color:var(--red)} .warn{color:var(--amber)}
+  .tbl{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:14px 0}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:600px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--text2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  tr:last-child td{border-bottom:none}
+  .pill{display:inline-block;padding:1px 9px;border-radius:999px;font-size:11.5px;font-weight:600;
+    white-space:nowrap}
+  .p-ok{background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green)}
+  .p-bad{background:color-mix(in srgb,var(--red) 16%,transparent);color:var(--red)}
+  .p-warn{background:color-mix(in srgb,var(--amber) 18%,transparent);color:var(--amber)}
+  .p-p1{background:color-mix(in srgb,var(--red) 16%,transparent);color:var(--red)}
+  .p-p2{background:color-mix(in srgb,var(--amber) 18%,transparent);color:var(--amber)}
+  .p-p3{background:color-mix(in srgb,var(--text2) 16%,transparent);color:var(--text2)}
+  .finding{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--border);
+    border-radius:12px;padding:16px 20px;margin:14px 0}
+  .finding.f1{border-left-color:var(--red)}
+  .finding.f2{border-left-color:var(--amber)}
+  .finding.f3{border-left-color:var(--text3)}
+  .finding h3{margin:0 0 6px;font-size:15.5px;display:flex;gap:9px;align-items:baseline;flex-wrap:wrap}
+  .finding p{margin:6px 0;font-size:13.5px;color:var(--text2)}
+  .finding p strong{color:var(--text)}
+  .shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:16px;margin:18px 0}
+  figure{margin:0}
+  figure img{width:100%;border:1px solid var(--border);border-radius:10px;display:block;background:var(--surface)}
+  figcaption{color:var(--text2);font-size:12px;margin-top:6px;line-height:1.45}
+  .note{background:color-mix(in srgb,var(--amber) 9%,transparent);
+    border:1px solid color-mix(in srgb,var(--amber) 30%,transparent);
+    border-radius:12px;padding:14px 18px;margin:16px 0;font-size:13.5px}
+  .good{background:color-mix(in srgb,var(--green) 9%,transparent);
+    border:1px solid color-mix(in srgb,var(--green) 28%,transparent);
+    border-radius:12px;padding:14px 18px;margin:16px 0;font-size:13.5px}
+  ul{margin:8px 0;padding-left:22px} li{margin:4px 0}
+  footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--border);
+    color:var(--text3);font-size:12.5px}
+</style>
+
+<div class="wrap">
+<header>
+  <h1>KT Wallet — iOS QA 报告</h1>
+  <div class="sub">
+    2026-07-27 · iPhone 17 Pro 模拟器 · debug build ·
+    <strong>真实 Trust Wallet Core 4.7.0</strong>(CocoaPods,未启用 mock)· 已录入 Face ID
+    <br>配套文档:<a href="../qa-2026-07-27/index.html">Android QA 报告</a>
+  </div>
+</header>
+
+<div class="kpis">
+  <div class="kpi"><div class="n">18</div><div class="l">界面截图</div></div>
+  <div class="kpi"><div class="n ok">12 / 12</div><div class="l">Android 修复项在 iOS 复验通过</div></div>
+  <div class="kpi"><div class="n bad">2</div><div class="l">新发现 P1</div></div>
+  <div class="kpi"><div class="n warn">3</div><div class="l">平台差异</div></div>
+</div>
+
+<h2>结论摘要</h2>
+<div class="card">
+<p>iOS 端整体可用:构建、启动、真实 Wallet Core 派生、创建/备份/验证钱包、Face ID
+鉴权、收款、转账校验、设置全套、离线签名器模式,全部按预期工作,无崩溃。
+上一轮在 Android 上修的 12 项<strong>在 iOS 上全部生效</strong>。</p>
+<p>但这一轮挖出<strong>两个此前 Android 遍历漏掉的 P1</strong>,两个平台都存在:
+代币详情页显示<strong>写死的 3,120 USDT 余额</strong>,网络设置显示<strong>写死的 RPC 延迟与健康状态</strong>。
+两者都不是 iOS 独有——是我上一轮没点到 / 没核实的地方。另有 iOS 侧
+FLAG_SECURE 无等价物、鉴权时机与 Android 不一致等 3 项平台差异。</p>
+</div>
+
+<div class="note">
+<strong>安全声明。</strong>遵守 <code>docs/TESTING.md</code>:报告不含助记词、私钥、PIN 或令牌。
+iOS <strong>无法</strong>阻止截图,备份页与查看助记词页在测试中确实被完整捕获——
+这些截图<strong>已即时删除</strong>,不进入本报告。
+</div>
+
+<h2>新发现</h2>
+
+<div class="finding f1">
+<h3>F-15 <span class="pill p-p1">P1</span> <span class="pill p-bad">两平台</span> 代币详情页显示写死的 3,120 USDT 余额</h3>
+<p><strong>现象:</strong>钱包实际余额处处为 0(首页 <code>$0.00</code>、<code>0 USDT</code>),
+但点任意资产行进入的详情页显示 <strong>3,120.00 USDT ≈ $3,120.00</strong>,
+价格 $1.00、24h +0.02%、合约 <code>TR7NHq…gjLj6t</code> —— 全是假的。</p>
+<p><strong>根因:</strong><code>apps/kt_wallet/lib/src/screens/assets_screens.dart:343</code>
+的 <code>TokenDetailScreen</code> 是 <code>const</code> 且<strong>不接受任何参数</strong>:
+标题写死 <code>'USDT'</code>、余额写死 <code>'3,120.00 USDT'</code>、合约写死为常量
+<code>_contract</code>。而 <code>home_screen.dart:1319</code> 与
+<code>assets_screens.dart:271</code> 都是无参 <code>context.push('/token')</code> ——
+所以<strong>首页和资产 tab 的每一行资产,点开的都是同一个假的 USDT 页面</strong>。</p>
+<p><strong>为什么 Android 那轮没发现:</strong>我遍历时点了资产 tab 和链标签,
+但没有点开任何一条资产行。这是我上一轮的覆盖缺口,不是 iOS 独有问题。</p>
+<p><strong>影响:</strong>钱包向用户展示了一笔他并不持有的余额,并提供 Send / Receive 入口。
+这是本次两轮 QA 里最具误导性的一处。</p>
+</div>
+
+<div class="finding f1">
+<h3>F-16 <span class="pill p-p1">P1</span> <span class="pill p-bad">两平台</span> 网络设置显示写死的 RPC 延迟与健康状态</h3>
+<p><strong>现象:</strong>Ethereum <code>86 ms</code>、Polygon <code>112 ms</code>、TRON <code>64 ms</code>
+显示为绿色健康;Base / Arbitrum / Avalanche 恒为 <code>—</code>;
+<strong>Solana 恒为红色 <code>Timeout</code></strong>。</p>
+<p><strong>根因:</strong><code>settings_screens.dart:1610-1652</code> 里这些全是字符串字面量,
+没有任何测量:</p>
+<p class="mono" style="color:var(--text)">
+(ChainColors.ethereum, Coin.eth, 'Ethereum', …, <span class="bad">'86 ms'</span>, true),<br>
+(ChainColors.tron, Coin.tron, 'TRON', …, <span class="bad">'64 ms'</span>, true),<br>
+(ChainColors.solana, Coin.solana, 'Solana', …, <span class="bad">l10n.rpcTimeout</span>, false),
+</p>
+<p><strong>判定性反证:</strong>Android 那轮的 Solana Devnet 链上测试
+<strong>4 笔签名全部成功</strong>,余额按手续费正常下降 —— 节点完全健康,
+而 UI 一直显示 Timeout。反过来,两台不同设备、不同平台显示<strong>完全相同的
+86/112/64 ms</strong>,也说明它不可能是实测值。</p>
+<p><strong>更正:</strong>我在 Android 报告里把这一块写成了"RPC 实时延迟探测",那是错的,
+已在该报告中更正。</p>
+<p><strong>影响:</strong>用户会据此判断节点是否可用并去切换节点,而数据是编的;
+Solana 永久显示故障尤其糟糕。</p>
+</div>
+
+<div class="finding f2">
+<h3>F-17 <span class="pill p-p2">P2</span> <span class="pill p-bad">两平台</span> 隐私遮罩残留 Libra 的天平图标<span class="pill p-ok">本次已修</span></h3>
+<p><strong>现象:</strong>上一轮我把 "Libra Protection is active" 文案改成了 KT Wallet,
+但遮罩层还硬编码了一个 <strong>⚖(天秤座的天平)</strong> 前缀 —— 正是旧品牌的符号。
+iOS 上 Face ID 弹窗时露出的遮罩让它现了形。</p>
+<p><strong>范围:</strong>4 处,两个平台都有 ——
+<code>apps/{kt_wallet,cold_signer}/ios/Runner/AppDelegate.swift</code> 与
+<code>apps/{kt_wallet,cold_signer}/android/.../MainActivity.kt</code>。
+已全部移除(遮罩上方本来就有 App 图标,不需要额外字形)。iOS 重建后复验通过,
+Android 重新构建通过。</p>
+</div>
+
+<h2>iOS / Android 平台差异</h2>
+
+<div class="finding f2">
+<h3>D-1 <span class="pill p-p2">P2</span> iOS 无 FLAG_SECURE 等价物,助记词界面可被完整截图</h3>
+<p>上一轮给 Android 的助记词界面加了 FLAG_SECURE(截图变纯黑)。
+iOS 没有对应 API,<code>SecureScreen</code> 在 iOS 是<strong>诚实的 no-op</strong>
+(代码注释已写明)。实测:备份页、查看助记词页、以及整个离线签名器模式,
+在 iOS 上都能被 <code>simctl io screenshot</code> 完整捕获 —— 包括那句
+"Don't screenshot or photograph it" 本身。</p>
+<p><strong>这不是可以"修好"的缺陷,但可以缓解</strong>,且是 iOS 银行类 App 的通行做法:</p>
+<ul>
+<li><code>UIApplication.userDidTakeScreenshotNotification</code> —— 事后检测到截图,
+    立刻遮盖内容并警告用户"你刚刚截图了助记词,请立即转移资产"。</li>
+<li><code>UIScreen.main.isCaptured</code> + <code>capturedDidChangeNotification</code> ——
+    录屏/投屏时主动遮盖(这个是<strong>可以真正阻止</strong>的)。</li>
+</ul>
+<p>App 已经有 <code>AppDelegate</code> 的隐私遮罩基础设施,接上这两个通知成本很低。</p>
+</div>
+
+<div class="finding f3">
+<h3>D-2 <span class="pill p-p3">P3</span> 创建钱包时的鉴权时机两端不一致</h3>
+<p>Android <code>CoreCryptoPlugin.kt:63</code> 在 <code>storeWallet</code> 外面套了一层鉴权,
+创建钱包会弹 BiometricPrompt;iOS <code>CoreCryptoPlugin.swift:42</code> <strong>没有</strong> ——
+只把 <code>requireAuth</code> 传给 Keychain 的访问控制,创建时不弹窗。</p>
+<p><strong>安全上 iOS 这样并不弱</strong>:实测读取(查看助记词)确实弹了 Face ID,
+Keychain 访问控制是生效的;而给用户刚生成的新密钥做写入鉴权本来意义就不大。
+但同一个 API 在两端执行不同策略,应该显式对齐并写进文档,而不是各写各的。</p>
+</div>
+
+<div class="finding f3">
+<h3>D-3 <span class="pill p-p3">P3</span> Wallet Core 版本两端不一致</h3>
+<p>iOS 走 CocoaPods <code>TrustWalletCore 4.7.0</code>,Android 走 GitHub Packages
+<code>com.trustwallet:wallet-core:4.6.13</code>。目前派生结果一致,
+但密码学库在两端跑不同版本是应当收敛的,尤其在签名逻辑改动之后。</p>
+</div>
+
+<h2>上一轮 12 项修复的 iOS 复验</h2>
+<div class="tbl">
+<table>
+<thead><tr><th>#</th><th>修复</th><th>iOS 表现</th></tr></thead>
+<tbody>
+<tr><td>F-13</td><td>TRON 广播 protobuf + broadcasthex</td>
+  <td><span class="pill p-ok">通过</span> Swift 签名器已同步改造,与 Kotlin 输出同形状;链上验证见 Android 报告</td></tr>
+<tr><td>F-1</td><td>助记词界面 FLAG_SECURE</td>
+  <td><span class="pill p-warn">iOS 不适用</span> 平台无此能力,见 D-1</td></tr>
+<tr><td>F-5</td><td>隐私遮罩品牌串</td>
+  <td><span class="pill p-ok">通过</span> 显示 "KT Wallet Protection is active";另发现 ⚖ 残留,见 F-17</td></tr>
+<tr><td>F-3</td><td>隐私模式遮蔽资产行</td>
+  <td><span class="pill p-ok">通过</span> 总额与每行数量/法币值全部遮蔽</td></tr>
+<tr><td>F-4</td><td>收款页复制地址</td>
+  <td><span class="pill p-ok">通过</span> 按钮存在,<code>simctl pbpaste</code> 校验剪贴板内容与屏幕地址逐字一致</td></tr>
+<tr><td>F-12</td><td>代币管理空状态</td>
+  <td><span class="pill p-ok">通过</span> "No custom tokens yet — tap + to add one"</td></tr>
+<tr><td>F-8</td><td>通讯录首次空态</td>
+  <td><span class="pill p-ok">通过</span> "No contacts yet — tap + to add one"</td></tr>
+<tr><td>F-2</td><td>英文 ICU plural</td>
+  <td><span class="pill p-ok">通过</span> "1 wallet · limit 20"</td></tr>
+<tr><td>F-6</td><td>金额去前导零</td>
+  <td><span class="pill p-ok">通过</span> Max→输入 1.5 得到 <code>1.5</code>,非 <code>01.5</code></td></tr>
+<tr><td>F-10</td><td>链标签可点</td>
+  <td><span class="pill p-ok">通过</span> 跳转网络设置</td></tr>
+<tr><td>F-7</td><td>相机文案本地化</td>
+  <td><span class="pill p-ok">通过</span> 模拟器无相机,走的正是该降级分支</td></tr>
+<tr><td>F-14</td><td>TronGrid Error 透传</td>
+  <td><span class="pill p-ok">通过</span> 纯 Dart / Go,与平台无关</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>iOS 侧验证通过的能力</h2>
+<div class="card">
+<ul>
+<li>CocoaPods 装配真实 <code>TrustWalletCore 4.7.0</code>,全程未用 mock</li>
+<li>设备模式选择器 → 联网钱包 / 离线签名器(含飞行模式确认弹窗)</li>
+<li>创建钱包三步:风险提示 → 12 词 BIP-39 → 抽词验证(未选中时 Confirm 禁用)</li>
+<li>Face ID:查看助记词弹窗并放行;App 锁在冷启动拦截,通过后进入首页</li>
+<li>i18n:模拟器区域为日文时整个 App 呈日文;切到英文后即时全量切换</li>
+<li>收款:QR、地址、复制(剪贴板逐字校验)、TRON 网络警告</li>
+<li>转账:粘贴按钮读剪贴板并校验 "Valid address · TRON network"、余额不足拦截、Next 正确禁用、三档手续费</li>
+<li>设置全套:安全(App 锁 / 验证方式显示 "Face ID / Biometrics" / 自动锁定 / 隐私模式)、
+    货币、语言、设备模式、通讯录、网络、代币管理</li>
+<li>网络设置:主网/测试网切换、每链网络、自定义网络入口、网关配置(<em>延迟数字是假的,见 F-16</em>)</li>
+<li>离线签名器模式完整渲染,可从欢迎页切回设备模式选择器</li>
+</ul>
+</div>
+
+<h2>截图</h2>
+
+<h3>启动与本地化</h3>
+<div class="shots">
+<figure><img src="shots/01_picker_ja.png" alt="日文选择器"><figcaption>模拟器区域为日文时整个 App 呈日文</figcaption></figure>
+<figure><img src="shots/02_picker_en.png" alt="英文选择器"><figcaption>切到英文后的设备模式选择器</figcaption></figure>
+<figure><img src="shots/03_add_wallet.png" alt="添加钱包"><figcaption>Add wallet 空态</figcaption></figure>
+<figure><img src="shots/04_create_warn.png" alt="创建警告"><figcaption>创建钱包 1/3 风险提示</figcaption></figure>
+</div>
+<p class="sub" style="font-size:12.5px">备份页(2/3)与抽词验证(3/3)会显示 BIP-39 词表,按安全规则不纳入报告。</p>
+
+<h3>首页与钱包</h3>
+<div class="shots">
+<figure><img src="shots/05_home.png" alt="首页"><figcaption>创建完成 → 首页多链资产</figcaption></figure>
+<figure><img src="shots/06_privacy_on.png" alt="隐私模式"><figcaption>F-3:总额与每行金额全部遮蔽</figcaption></figure>
+<figure><img src="shots/08_wallet_manage.png" alt="钱包管理"><figcaption>F-2:"1 wallet · limit 20" 单数正确</figcaption></figure>
+<figure><img src="shots/09_wallet_detail.png" alt="钱包详情"><figcaption>钱包详情;"Requires biometrics or passcode" 文案与 iOS 实际行为一致</figcaption></figure>
+</div>
+
+<h3>两个 P1</h3>
+<div class="shots">
+<figure><img src="shots/21_fake_token_detail.png" alt="假余额"><figcaption><strong>F-15</strong>:钱包余额为 0,详情页却显示写死的 3,120 USDT</figcaption></figure>
+<figure><img src="shots/13_fake_latency.png" alt="假延迟"><figcaption><strong>F-16</strong>:写死的 86/112/64 ms,Solana 恒显 Timeout(实测该节点健康)</figcaption></figure>
+</div>
+
+<h3>收款与转账</h3>
+<div class="shots">
+<figure><img src="shots/14_receive_copy.png" alt="收款"><figcaption>F-4:复制地址按钮;剪贴板内容已逐字校验</figcaption></figure>
+<figure><img src="shots/15_send_validation.png" alt="转账校验"><figcaption>F-6:金额为 <code>1.5</code> 而非 <code>01.5</code>;地址校验 + 余额不足拦截</figcaption></figure>
+</div>
+
+<h3>设置</h3>
+<div class="shots">
+<figure><img src="shots/07_settings.png" alt="设置"><figcaption>设置总览</figcaption></figure>
+<figure><img src="shots/16_security.png" alt="安全设置"><figcaption>安全设置,验证方式显示 "Face ID / Biometrics"</figcaption></figure>
+<figure><img src="shots/11_contacts_empty.png" alt="通讯录空态"><figcaption>F-8:首次空态文案</figcaption></figure>
+<figure><img src="shots/12_tokens_empty.png" alt="代币空态"><figcaption>F-12:代币管理空状态</figcaption></figure>
+</div>
+
+<h3>离线签名器</h3>
+<div class="shots">
+<figure><img src="shots/17_signer_warning.png" alt="签名器确认"><figcaption>进入前的飞行模式确认</figcaption></figure>
+<figure><img src="shots/18_signer_screenshottable.png" alt="签名器可截图"><figcaption><strong>D-1</strong>:同一屏在 Android 上受 FLAG_SECURE 保护,iOS 上可被完整截图</figcaption></figure>
+</div>
+
+<h2>本次落地的修改</h2>
+<div class="card">
+<ul>
+<li><strong>F-17</strong> —— 移除 4 处 ⚖ 天平字形
+  (两个 app × iOS <code>AppDelegate.swift</code> + Android <code>MainActivity.kt</code>)。
+  iOS 重建后复验,Android <code>flutter build apk --debug</code> 通过。</li>
+</ul>
+<p style="font-size:13px;color:var(--text2)">
+F-15 与 F-16 只做了定位与取证,未改代码 —— 两处都需要产品决定:
+详情页要接哪些真实数据、延迟徽章是真做探测还是直接去掉。等你定。</p>
+</div>
+
+<footer>
+KT Wallet iOS QA · 2026-07-27 · iPhone 17 Pro 模拟器 · 真实 Trust Wallet Core 4.7.0 ·
+本报告不含任何助记词、私钥或凭据
+</footer>
+</div>

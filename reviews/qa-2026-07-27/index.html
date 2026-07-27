@@ -278,6 +278,15 @@ nonce 与余额<strong>完全没变</strong>(22 latest == 22 pending),说明一�
 但没有说明原因,也没有"前往系统设置开启"的入口。</p>
 </div>
 
+<div class="note">
+<strong>两处后续更正(2026-07-27 iOS 回归时发现)。</strong>
+<br>1. 本报告原先把网络设置的 RPC 延迟徽章描述为"实时延迟探测",<strong>那是错的</strong> ——
+<code>86/112/64 ms</code> 与 Solana 的 "Timeout" 全是写死的字面量,没有任何测量。
+详见 <a href="../qa-ios-2026-07-27/index.html">iOS 报告</a> F-16。
+<br>2. 本轮 UI 遍历<strong>没有点开任何一条资产行</strong>,因而漏掉了代币详情页显示
+写死 3,120 USDT 余额的问题(两平台都有)。详见 iOS 报告 F-15。
+</div>
+
 <h2>两处误判(已澄清,非缺陷)</h2>
 <div class="good">
 <p><strong>1. "确认备份后黑屏"。</strong>该处调用系统 BiometricPrompt;模拟器当时未录入指纹,
@@ -304,7 +313,7 @@ nonce 与余额<strong>完全没变</strong>(22 latest == 22 pending),说明一�
 <li>通讯录:新增联系人时<strong>从地址格式自动识别链</strong>并打标</li>
 <li>i18n:简体中文 / English / 日本語 即时全量切换,无残留英文</li>
 <li>网络设置:主网 ↔ 测试网一键切换(7 条链同步切到 Sepolia/Amoy/Base Sepolia/Arbitrum Sepolia/Fuji/Nile/Devnet)、
-    RPC 实时延迟探测、网关配置 + 连通性测试(<code>Gateway connection succeeded</code>)</li>
+    网关配置 + 连通性测试(<code>Gateway connection succeeded</code>)</li>
 <li>自定义网络:保存前<strong>真实探测 RPC 并校验 chainId</strong>;无效节点被正确拒绝
     (<code>RPC probe failed — check the URL</code>),有效节点入库并可删除</li>
 <li>弹层灰色遮罩点击关闭(此前修复项回归通过)</li>
@@ -376,7 +385,7 @@ nonce 与余额<strong>完全没变</strong>(22 latest == 22 pending),说明一�
 
 <h3>网络与网关</h3>
 <div class="shots">
-<figure><img src="shots/65_networks.png" alt="网络设置"><figcaption>网络设置,RPC 实时延迟探测</figcaption></figure>
+<figure><img src="shots/65_networks.png" alt="网络设置"><figcaption>网络设置(延迟徽章是写死的假数据 —— 见 iOS 报告 F-16)</figcaption></figure>
 <figure><img src="shots/69_gateway_test2.png" alt="网关连通"><figcaption>自建网关连通性测试成功</figcaption></figure>
 <figure><img src="shots/70_testnet_on.png" alt="测试网"><figcaption>一键切测试网,7 条链同步</figcaption></figure>
 <figure><img src="shots/71_add_network.png" alt="添加网络"><figcaption>添加自定义网络;chip 文字换行截断(F-11)</figcaption></figure>

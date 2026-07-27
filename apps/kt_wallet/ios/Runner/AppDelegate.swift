@@ -101,7 +101,10 @@ import UIKit
 
     let title = protectionLabel("KT Wallet", size: 26, weight: .bold, color: .white)
     let text = localizedProtectionText()
-    let active = protectionLabel("⚖  \(text.active)", size: 18, weight: .semibold, color: .white)
+    // No glyph here: the "⚖" that used to prefix this line was the scales of
+    // Libra, left over from the old brand, and it sat directly above the app
+    // icon that already identifies the app.
+    let active = protectionLabel(text.active, size: 18, weight: .semibold, color: .white)
     let hidden = protectionLabel(
       text.hidden, size: 14, weight: .regular,
       color: UIColor(red: 170/255, green: 178/255, blue: 198/255, alpha: 1)
