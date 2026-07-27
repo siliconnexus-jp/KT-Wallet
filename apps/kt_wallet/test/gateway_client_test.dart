@@ -283,8 +283,8 @@ void main() {
           ..results = {
             'kt_getPrices': {
               'prices': {
-                'ETH': {'usd': 2500.5},
-                'TRX': {'usd': 0.12},
+                'ETH': {'usd': 2500.5, 'change24h': 3.25},
+                'TRX': {'usd': 0.12, 'change24h': -1.5},
               },
               'cachedAtMs': 1753000000000,
             },
@@ -304,6 +304,7 @@ void main() {
           'symbols': ['ETH', 'POL', 'TRX', 'SOL'],
         });
         expect(prices.usdBySymbol, {'ETH': 2500.5, 'TRX': 0.12});
+        expect(prices.change24hBySymbol, {'ETH': 3.25, 'TRX': -1.5});
         expect(prices.cachedAtMs, 1753000000000);
       },
     );

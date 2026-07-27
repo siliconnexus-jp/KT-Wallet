@@ -146,13 +146,17 @@ per-token `error: "unsupported"` for now).
 
 ### `kt_getPrices` `{"symbols": ["ETH","POL","AVAX","TRX","SOL","USDT","USDC","BUSD"]}`
 
-→ `{"prices": {"ETH": {"usd": 1234.56}, ...}, "cachedAtMs": <int>}`
+→ `{"prices": {"ETH": {"usd": 1234.56, "change24h": 2.34}, ...}, "cachedAtMs": <int>}`
 
 Unknown symbols are omitted. ETH is shared by Ethereum, Base and Arbitrum.
 USDT/USDC/BUSD use CoinGecko spot quotes too, so depegs are reflected rather
-than silently fixed at 1.0. `cachedAtMs` is the time the underlying data was fetched
-(cache hits report the original fetch time). Prices are mainnet-only and take
-no `network` param — testnet clients shouldn't ask (see [Networks](#networks)).
+than silently fixed at 1.0. `change24h` is CoinGecko's rolling 24-hour USD
+percentage change; it is omitted when CoinGecko returns null or cannot
+calculate a fresh value, never replaced with `0`. Price and change share the
+same 30-second cache entry. `cachedAtMs` is the time the underlying data was
+fetched (cache hits report the original fetch time). Prices are mainnet-only
+and take no `network` param — testnet clients shouldn't ask (see
+[Networks](#networks)).
 
 ### `kt_getChainParams` `{"chain": C, "network": N?, "address": A}`
 

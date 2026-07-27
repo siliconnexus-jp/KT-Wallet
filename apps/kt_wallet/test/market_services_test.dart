@@ -195,14 +195,15 @@ void main() {
         client: MockClient((request) async {
           expect(request.url.path, '/api/v3/simple/price');
           expect(request.url.queryParameters['vs_currencies'], 'usd');
+          expect(request.url.queryParameters['include_24hr_change'], 'true');
           return http.Response(
             jsonEncode({
-              'ethereum': {'usd': 2500.0},
-              'polygon-ecosystem-token': {'usd': 0.4},
-              'tron': {'usd': 0.12},
-              'solana': {'usd': 150},
-              'tether': {'usd': 0.997},
-              'usd-coin': {'usd': 1.001},
+              'ethereum': {'usd': 2500.0, 'usd_24h_change': 2.5},
+              'polygon-ecosystem-token': {'usd': 0.4, 'usd_24h_change': -3.0},
+              'tron': {'usd': 0.12, 'usd_24h_change': null},
+              'solana': {'usd': 150, 'usd_24h_change': 1},
+              'tether': {'usd': 0.997, 'usd_24h_change': -0.1},
+              'usd-coin': {'usd': 1.001, 'usd_24h_change': 0.05},
             }),
             200,
           );
@@ -218,6 +219,11 @@ void main() {
       expect(service.lastGoodUsd, prices);
       expect(service.tokenPriceUsd('USDT'), 0.997);
       expect(service.tokenPriceUsd('USDC'), 1.001);
+      expect(service.change24hPercent(Coin.eth), 2.5);
+      expect(service.change24hPercent(Coin.polygon), -3.0);
+      expect(service.change24hPercent(Coin.tron), isNull);
+      expect(service.tokenChange24hPercent('USDT'), -0.1);
+      expect(service.tokenChange24hPercent('USDC'), 0.05);
     });
 
     test('non-200 → null, keeping the previous last-good cache', () async {

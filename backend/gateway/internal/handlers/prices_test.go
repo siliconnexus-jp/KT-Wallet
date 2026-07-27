@@ -17,6 +17,9 @@ import (
 func newCoinGeckoFake(t *testing.T, table map[string]float64) *restFake {
 	f := newRESTFake(t)
 	f.route("/api/v3/simple/price", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("include_24hr_change") != "true" {
+			t.Errorf("include_24hr_change must be true, got %q", r.URL.Query().Get("include_24hr_change"))
+		}
 		out := map[string]map[string]float64{}
 		for _, id := range strings.Split(r.URL.Query().Get("ids"), ",") {
 			if usd, ok := table[id]; ok {
@@ -27,6 +30,29 @@ func newCoinGeckoFake(t *testing.T, table map[string]float64) *restFake {
 		_ = json.NewEncoder(w).Encode(out)
 	})
 	return f
+}
+
+func TestPricesInclude24HourChangeAndPreserveUnknown(t *testing.T) {
+	f := newRESTFake(t)
+	f.route("/api/v3/simple/price", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("include_24hr_change") != "true" {
+			t.Errorf("include_24hr_change must be true, got %q", r.URL.Query().Get("include_24hr_change"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"ethereum":{"usd":2000,"usd_24h_change":3.25},
+			"tether":{"usd":0.999,"usd_24h_change":-0.08},
+			"usd-coin":{"usd":1.001,"usd_24h_change":null}
+		}`))
+	})
+	e := newEnv(t, func(cfg *handlers.Config) { cfg.CoinGeckoURL = f.srv.URL })
+
+	res := result(t, e.rpc("kt_getPrices", `{"symbols":["ETH","USDT","USDC"]}`))
+	assertJSONEq(t, `{
+		"ETH":{"usd":2000,"change24h":3.25},
+		"USDT":{"usd":0.999,"change24h":-0.08},
+		"USDC":{"usd":1.001}
+	}`, res["prices"])
 }
 
 func TestPricesStablecoinsUseMarketQuotes(t *testing.T) {
@@ -77,6 +103,9 @@ func TestPricesMixedFetch(t *testing.T) {
 	}
 	if u.Query().Get("vs_currencies") != "usd" {
 		t.Fatalf("vs_currencies must be usd, got %q", u.Query().Get("vs_currencies"))
+	}
+	if u.Query().Get("include_24hr_change") != "true" {
+		t.Fatalf("include_24hr_change must be true, got %q", u.Query().Get("include_24hr_change"))
 	}
 }
 

@@ -23,7 +23,8 @@ var geckoIDs = map[string]string{
 }
 
 type usdPrice struct {
-	USD float64 `json:"usd"`
+	USD       float64  `json:"usd"`
+	Change24h *float64 `json:"change24h,omitempty"`
 }
 
 type cachedPrices struct {
@@ -83,9 +84,13 @@ func (g *Gateway) GetPrices(ctx context.Context, params json.RawMessage) (any, *
 			}
 			fetched := make(map[string]usdPrice)
 			for _, sym := range fetch {
-				if usd, ok := res[geckoIDs[sym]]; ok {
-					fetched[sym] = usdPrice{USD: usd}
-					out[sym] = usdPrice{USD: usd}
+				if quote, ok := res[geckoIDs[sym]]; ok {
+					price := usdPrice{
+						USD:       quote.USD,
+						Change24h: quote.USD24hChange,
+					}
+					fetched[sym] = price
+					out[sym] = price
 				}
 			}
 			cachedAt = g.clk.Now()

@@ -85,6 +85,11 @@ class MarketController extends ChangeNotifier {
 
   double? priceUsd(Coin coin) => _pricesUsd?[coin];
 
+  /// CoinGecko market movement for the currently selected asset. Testnet
+  /// holdings deliberately suppress market data just like their USD value.
+  double? change24hPercent(Coin coin) =>
+      _isTestnet(coin) ? null : _prices.change24hPercent(coin);
+
   /// True when at least one chain or token returned a real balance.
   bool get hasLiveBalances =>
       _results.values.any((r) => r.status == BalanceStatus.ok) ||
@@ -114,6 +119,9 @@ class MarketController extends ChangeNotifier {
 
   double? tokenPriceUsd(String symbol) => _prices.tokenPriceUsd(symbol);
 
+  double? tokenChange24hPercent(String symbol) =>
+      _prices.tokenChange24hPercent(symbol);
+
   /// USD value of one token's balance, or null when unavailable. Stablecoins
   /// use live market quotes, so a depeg is reflected instead of being forced
   /// to $1. Tokens without a price feed stay null ('--'), never invented.
@@ -142,6 +150,44 @@ class MarketController extends ChangeNotifier {
       if (value != null) total = (total ?? 0) + value;
     }
     return total;
+  }
+
+  /// Estimated 24h movement of the current portfolio caused by market prices.
+  ///
+  /// CoinGecko gives a percentage per asset, not the wallet's historical
+  /// balance. We reconstruct each covered asset's previous value from its
+  /// current holding and quote. Assets without a fresh 24h quote are excluded
+  /// from both sides instead of being treated as flat.
+  PortfolioChange24h? get portfolioChange24h {
+    var current = 0.0;
+    var previous = 0.0;
+    var covered = 0;
+
+    void include(double? value, double? change) {
+      if (value == null || change == null || !value.isFinite) return;
+      final ratio = 1 + change / 100;
+      if (!ratio.isFinite || ratio <= 0) return;
+      current += value;
+      previous += value / ratio;
+      covered++;
+    }
+
+    for (final coin in Coin.values) {
+      include(fiatValueUsd(coin), change24hPercent(coin));
+    }
+    for (final token in tokens) {
+      include(
+        tokenFiatValueUsd(token),
+        _isTestnet(token.chain) ? null : tokenChange24hPercent(token.symbol),
+      );
+    }
+    if (covered == 0 || previous == 0) return null;
+    final delta = current - previous;
+    return PortfolioChange24h(
+      deltaUsd: delta,
+      percent: delta / previous * 100,
+      coveredAssetCount: covered,
+    );
   }
 
   /// First-entry refresh: no-op if one already ran or is running (wallet
@@ -218,6 +264,18 @@ class MarketController extends ChangeNotifier {
   }
 }
 
+class PortfolioChange24h {
+  const PortfolioChange24h({
+    required this.deltaUsd,
+    required this.percent,
+    required this.coveredAssetCount,
+  });
+
+  final double deltaUsd;
+  final double percent;
+  final int coveredAssetCount;
+}
+
 /// Formats a non-negative USD value as `$1,234.56` (grouped thousands, two
 /// fraction digits) to match the design's fiat strings.
 String formatUsd(double value) {
@@ -231,4 +289,15 @@ String formatUsd(double value) {
     if (remaining > 0 && remaining % 3 == 0) buf.write(',');
   }
   return '\$$buf${fixed.substring(dot)}';
+}
+
+String formatChange24h(double? value) {
+  if (value == null) return '';
+  final normalized = value.abs() < 0.005 ? 0.0 : value;
+  return '${normalized >= 0 ? '+' : ''}${normalized.toStringAsFixed(2)}%';
+}
+
+String formatSignedUsd(double value) {
+  final normalized = value.abs() < 0.005 ? 0.0 : value;
+  return '${normalized >= 0 ? '+' : '-'}${formatUsd(normalized.abs())}';
 }

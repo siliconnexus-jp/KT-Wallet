@@ -9,11 +9,11 @@ import 'gateway_client.dart';
 /// CoinGecko simple/price base URL — keyless public API tier.
 const String defaultCoinGeckoBaseUrl = 'https://api.coingecko.com/api/v3';
 
-/// Spot USD prices for the four native coins via CoinGecko `simple/price`
-/// (no API key). The http client is injectable for tests; any failure —
-/// non-200, timeout, malformed body — returns `null` (callers must treat
-/// prices as unavailable, never substitute a made-up number). The last
-/// successful quote set is cached in memory as [lastGoodUsd].
+/// Spot USD prices and 24h percentage changes for supported native coins via
+/// CoinGecko `simple/price` (no API key). The http client is injectable for
+/// tests; any failure — non-200, timeout, malformed body — returns `null`
+/// (callers must treat prices as unavailable, never substitute a made-up
+/// number). The last successful quote set is cached in memory as [lastGoodUsd].
 class PriceService {
   PriceService({
     http.Client? client,
@@ -53,6 +53,8 @@ class PriceService {
 
   Map<Coin, double>? _lastGood;
   Map<String, double>? _lastGoodTokenUsd;
+  Map<Coin, double> _lastGoodChange24h = const {};
+  Map<String, double> _lastGoodTokenChange24h = const {};
 
   /// Last successfully fetched quote set (in-memory only), or null if no
   /// fetch has ever succeeded in this session.
@@ -63,6 +65,9 @@ class PriceService {
   Map<String, double>? get lastGoodTokenUsd => _lastGoodTokenUsd;
 
   double? tokenPriceUsd(String symbol) => _lastGoodTokenUsd?[symbol];
+  double? change24hPercent(Coin coin) => _lastGoodChange24h[coin];
+  double? tokenChange24hPercent(String symbol) =>
+      _lastGoodTokenChange24h[symbol];
 
   /// Fetches spot USD prices. Returns null on any failure; partial responses
   /// keep whichever coins were present.
@@ -91,10 +96,23 @@ class PriceService {
             if (quoted.usdBySymbol[symbol] != null)
               symbol: quoted.usdBySymbol[symbol]!,
         };
+        final changeOut = <Coin, double>{
+          for (final coin in Coin.values)
+            if (quoted.change24hBySymbol[BalanceService.symbolFor[coin]!] !=
+                null)
+              coin: quoted.change24hBySymbol[BalanceService.symbolFor[coin]!]!,
+        };
+        final tokenChangeOut = <String, double>{
+          for (final symbol in coinGeckoTokenIds.keys)
+            if (quoted.change24hBySymbol[symbol] != null)
+              symbol: quoted.change24hBySymbol[symbol]!,
+        };
         if (out.isNotEmpty || tokenOut.isNotEmpty) {
           if (tokenOut.isNotEmpty) {
             _lastGoodTokenUsd = Map.unmodifiable(tokenOut);
           }
+          _lastGoodChange24h = Map.unmodifiable(changeOut);
+          _lastGoodTokenChange24h = Map.unmodifiable(tokenChangeOut);
           _lastGood = Map.unmodifiable(out);
           return _lastGood;
         }
@@ -108,27 +126,38 @@ class PriceService {
         ...coinGeckoIds.values,
         ...coinGeckoTokenIds.values,
       }.join(',');
-      final uri = Uri.parse('$baseUrl/simple/price?ids=$ids&vs_currencies=usd');
+      final uri = Uri.parse(
+        '$baseUrl/simple/price?ids=$ids&vs_currencies=usd'
+        '&include_24hr_change=true',
+      );
       final resp = await _client.get(uri).timeout(timeout);
       if (resp.statusCode != 200) return null;
       final body = jsonDecode(resp.body);
       if (body is! Map) return null;
       final out = <Coin, double>{};
+      final changeOut = <Coin, double>{};
       for (final entry in coinGeckoIds.entries) {
         final row = body[entry.value];
         final usd = row is Map ? row['usd'] : null;
         if (usd is num) out[entry.key] = usd.toDouble();
+        final change = row is Map ? row['usd_24h_change'] : null;
+        if (change is num) changeOut[entry.key] = change.toDouble();
       }
       final tokenOut = <String, double>{};
+      final tokenChangeOut = <String, double>{};
       for (final entry in coinGeckoTokenIds.entries) {
         final row = body[entry.value];
         final usd = row is Map ? row['usd'] : null;
         if (usd is num) tokenOut[entry.key] = usd.toDouble();
+        final change = row is Map ? row['usd_24h_change'] : null;
+        if (change is num) tokenChangeOut[entry.key] = change.toDouble();
       }
       if (out.isEmpty && tokenOut.isEmpty) return null;
       if (tokenOut.isNotEmpty) {
         _lastGoodTokenUsd = Map.unmodifiable(tokenOut);
       }
+      _lastGoodChange24h = Map.unmodifiable(changeOut);
+      _lastGoodTokenChange24h = Map.unmodifiable(tokenChangeOut);
       _lastGood = Map.unmodifiable(out);
       return _lastGood;
     } catch (_) {

@@ -256,22 +256,29 @@ class GatewayClient {
     );
   }
 
-  /// `kt_getPrices` — USD spot quotes keyed by symbol (unknown symbols are
-  /// omitted by the gateway; an empty map is a valid, useless answer).
+  /// `kt_getPrices` — USD spot quotes and optional 24h percentage changes
+  /// keyed by symbol (unknown symbols are omitted by the gateway; an empty
+  /// map is a valid, useless answer).
   Future<GatewayPrices> getPrices(List<String> symbols) async {
     final result = await _call('kt_getPrices', {'symbols': symbols});
     if (result is! Map) throw const FormatException('bad prices result');
     final prices = result['prices'];
     if (prices is! Map) throw const FormatException('missing prices map');
     final out = <String, double>{};
+    final changes = <String, double>{};
     for (final entry in prices.entries) {
-      final usd = entry.value is Map ? (entry.value as Map)['usd'] : null;
+      final row = entry.value;
+      final usd = row is Map ? row['usd'] : null;
       if (entry.key is String && usd is num) {
-        out[entry.key as String] = usd.toDouble();
+        final symbol = entry.key as String;
+        out[symbol] = usd.toDouble();
+        final change24h = row is Map ? row['change24h'] : null;
+        if (change24h is num) changes[symbol] = change24h.toDouble();
       }
     }
     return GatewayPrices(
       usdBySymbol: Map.unmodifiable(out),
+      change24hBySymbol: Map.unmodifiable(changes),
       cachedAtMs: result['cachedAtMs'] is int ? result['cachedAtMs'] as int : 0,
     );
   }
@@ -527,9 +534,14 @@ class GatewayBalances {
 }
 
 class GatewayPrices {
-  const GatewayPrices({required this.usdBySymbol, required this.cachedAtMs});
+  const GatewayPrices({
+    required this.usdBySymbol,
+    required this.change24hBySymbol,
+    required this.cachedAtMs,
+  });
 
   final Map<String, double> usdBySymbol;
+  final Map<String, double> change24hBySymbol;
   final int cachedAtMs;
 }
 

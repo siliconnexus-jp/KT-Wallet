@@ -34,9 +34,17 @@ func NewCoinGecko(base string, client *http.Client, limiter *ratelimit.Interval,
 	return &CoinGecko{base: strings.TrimRight(base, "/"), client: client, limiter: limiter, timeout: attemptTimeout}
 }
 
-// SimplePrice returns coin-id -> USD price for ids. Missing ids are simply
-// absent from the map.
-func (c *CoinGecko) SimplePrice(ctx context.Context, ids []string) (map[string]float64, error) {
+// MarketQuote is the subset of CoinGecko's simple-price response consumed by
+// the wallet. USD24hChange is nullable because CoinGecko reports null when it
+// cannot calculate a fresh change; callers must not turn that into 0%.
+type MarketQuote struct {
+	USD          float64  `json:"usd"`
+	USD24hChange *float64 `json:"usd_24h_change"`
+}
+
+// SimplePrice returns coin-id -> USD market quote for ids. Missing ids are
+// simply absent from the map.
+func (c *CoinGecko) SimplePrice(ctx context.Context, ids []string) (map[string]MarketQuote, error) {
 	if c.limiter != nil {
 		if err := c.limiter.Wait(ctx); err != nil {
 			return nil, &Unavailable{Upstream: "coingecko", Message: "request canceled while waiting for upstream rate limit"}
@@ -45,6 +53,7 @@ func (c *CoinGecko) SimplePrice(ctx context.Context, ids []string) (map[string]f
 	q := url.Values{}
 	q.Set("ids", strings.Join(ids, ","))
 	q.Set("vs_currencies", "usd")
+	q.Set("include_24hr_change", "true")
 	u := c.base + "/api/v3/simple/price?" + q.Encode()
 
 	actx, cancel := context.WithTimeout(ctx, c.timeout)
@@ -65,15 +74,9 @@ func (c *CoinGecko) SimplePrice(ctx context.Context, ids []string) (map[string]f
 	if resp.StatusCode != http.StatusOK {
 		return nil, &Unavailable{Upstream: "coingecko", Message: fmt.Sprintf("CoinGecko returned HTTP %d", resp.StatusCode)}
 	}
-	var out map[string]struct {
-		USD float64 `json:"usd"`
-	}
+	var out map[string]MarketQuote
 	if err := json.Unmarshal(data, &out); err != nil {
 		return nil, &Unavailable{Upstream: "coingecko", Message: "malformed CoinGecko response"}
 	}
-	prices := make(map[string]float64, len(out))
-	for id, v := range out {
-		prices[id] = v.USD
-	}
-	return prices, nil
+	return out, nil
 }

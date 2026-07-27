@@ -258,6 +258,7 @@ class _HomeTab extends StatelessWidget {
     // and golden renderings are untouched.
     final testnet = NetworkScope.of(context).anyTestnetActive;
     final total = live ? market.totalUsd : null;
+    final portfolioChange = live && !testnet ? market.portfolioChange24h : null;
     final listView = ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24 + kTabBarInset),
@@ -280,9 +281,13 @@ class _HomeTab extends StatelessWidget {
           amount: live
               ? (testnet || total == null ? '--' : formatUsd(total))
               : r'$862.40',
-          // No 24h-change source yet — live mode omits the line rather than
-          // showing an invented delta.
-          change: live ? '' : '+\$12.06 (+1.4%) ${l10n.balanceChangePeriod}',
+          change: live
+              ? (portfolioChange == null
+                    ? ''
+                    : '${formatSignedUsd(portfolioChange.deltaUsd)} '
+                          '(${formatChange24h(portfolioChange.percent)}) '
+                          '${l10n.balanceChangePeriod}')
+              : '+\$12.06 (+1.4%) ${l10n.balanceChangePeriod}',
         ),
         if (live && testnet) ...[
           const SizedBox(height: 12),
@@ -922,15 +927,16 @@ AssetRow liveTokenGroupRow(
   final where = tokens.length == 1
       ? first.network
       : (chainsLabel?.call(tokens.length) ?? '${tokens.length}');
+  final change = anyFiat ? market.tokenChange24hPercent(first.symbol) : null;
   return AssetRow(
     color,
     glyph,
     first.symbol,
     '${loaded == 0 || total == null ? '--' : total.format(maxFraction: 6)} '
-        '${first.symbol} · $where',
+    '${first.symbol} · $where',
     anyFiat ? formatUsd(fiat) : '--',
-    '',
-    WalletColors.text3,
+    formatChange24h(change),
+    (change ?? 0) < 0 ? WalletColors.red : WalletColors.green,
     ref: AssetRef.tokenGroup(tokens),
   );
 }
@@ -946,8 +952,8 @@ Map<String, List<TokenInfo>> tokensBySymbol(List<TokenInfo> tokens) {
 
 /// Builds the asset rows from live market data: the four native rows, then
 /// the registry tokens. Loading and errored chains render '--' (never a
-/// fabricated number); no 24h-change feed exists yet, so the change column
-/// stays empty in live mode.
+/// fabricated number). The change column uses the live market quote and stays
+/// empty when CoinGecko could not calculate a fresh 24h value.
 List<AssetRow> liveAssetRows(
   MarketController market, {
   String Function(int)? chainsLabel,
@@ -958,14 +964,15 @@ List<AssetRow> liveAssetRows(
       final amount = result.amount;
       final ok = result.status == BalanceStatus.ok && amount != null;
       final fiat = market.fiatValueUsd(coin);
+      final change = market.change24hPercent(coin);
       return AssetRow(
         color,
         glyph,
         name,
         ok ? '${amount.format(maxFraction: 6)} $symbol' : '-- $symbol',
         fiat == null ? '--' : formatUsd(fiat),
-        '',
-        WalletColors.text3,
+        formatChange24h(change),
+        (change ?? 0) < 0 ? WalletColors.red : WalletColors.green,
         ref: AssetRef.native(coin: coin, name: name, symbol: symbol),
       );
     }(),
@@ -1260,10 +1267,12 @@ class _Balance extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             hidden ? '••••' : change,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w500,
-              color: WalletColors.green,
+              color: change.startsWith('-')
+                  ? WalletColors.red
+                  : WalletColors.green,
             ),
           ),
         ],
