@@ -7,6 +7,8 @@ ReceiveCardData _data({
   String address = 'TDS2DLBpz9DGruw8yjn8HsYCpWF3Q1tdNt',
   bool isTestnet = false,
   String warning = 'Only TRON network assets are supported.',
+  String? tokenIconAsset,
+  String? networkIconAsset,
 }) => ReceiveCardData(
   address: address,
   assetLabel: 'USDT · TRON',
@@ -18,6 +20,8 @@ ReceiveCardData _data({
   generatedLabel: 'Generated',
   warning: warning,
   testnetLabel: 'TESTNET',
+  tokenIconAsset: tokenIconAsset,
+  networkIconAsset: networkIconAsset,
 );
 
 /// Minimal PNG sanity check: signature plus the IHDR width/height, so a
@@ -34,6 +38,8 @@ ReceiveCardData _data({
 }
 
 void main() {
+  _cardArtwork();
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('renders a non-trivial PNG at the requested scale', () async {
@@ -90,5 +96,41 @@ void main() {
       scale: 1,
     );
     expect(a, isNot(equals(b)));
+  });
+}
+
+/// The card is what a recipient looks at before sending. Naming the asset and
+/// chain in words alone asks them to read carefully; the marks let them
+/// recognise it. Two chains that used to draw as the same letter "A"
+/// (Arbitrum, Avalanche) are exactly the case this protects.
+void _cardArtwork() {
+  test('the token and network marks change the rendered card', () async {
+    final plain = await renderReceiveCardPng(_data(), scale: 1);
+    final withArt = await renderReceiveCardPng(
+      _data(tokenIconAsset: 'usdt', networkIconAsset: 'arb'),
+      scale: 1,
+    );
+    expect(withArt, isNot(plain));
+  });
+
+  test('two chains no longer render an identical card', () async {
+    final onArbitrum = await renderReceiveCardPng(
+      _data(tokenIconAsset: 'usdt', networkIconAsset: 'arb'),
+      scale: 1,
+    );
+    final onAvalanche = await renderReceiveCardPng(
+      _data(tokenIconAsset: 'usdt', networkIconAsset: 'avax'),
+      scale: 1,
+    );
+    expect(onArbitrum, isNot(onAvalanche));
+  });
+
+  test('an unknown mark degrades to text instead of failing', () async {
+    // A user-added token has no bundled artwork; the card must still render.
+    final png = await renderReceiveCardPng(
+      _data(tokenIconAsset: 'no-such-token'),
+      scale: 1,
+    );
+    expect(png.length, greaterThan(1000));
   });
 }

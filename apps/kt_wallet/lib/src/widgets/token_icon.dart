@@ -3,9 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 /// Circular token/brand icon. Renders the bundled logo PNG for known
-/// symbols/networks (assets/tokens/, MIT-licensed cryptocurrency-icons set)
-/// and falls back to the classic letter [KtAvatar] for anything unknown
-/// (e.g. user-added custom tokens).
+/// symbols/networks (assets/tokens/ — the MIT cryptocurrency-icons set, plus
+/// Arbitrum and Base from the MIT trustwallet/assets set, which the older
+/// icon set predates) and falls back to the classic letter [KtAvatar] for
+/// anything unknown (e.g. user-added custom tokens).
+///
+/// Those three mattered: without artwork, Base fell back to "B" while
+/// Arbitrum and Avalanche BOTH fell back to "A", so two different chains were
+/// drawn as the same letter in every picker.
 class TokenIcon extends StatelessWidget {
   const TokenIcon({
     super.key,
@@ -36,7 +41,21 @@ class TokenIcon extends StatelessWidget {
     'pol': 'matic',
     'matic': 'matic',
     'polygon': 'matic',
+    'base': 'base',
+    'arb': 'arb',
+    'arbitrum': 'arb',
+    'arbitrum one': 'arb',
+    'avax': 'avax',
+    'avalanche': 'avax',
+    'avalanche c-chain': 'avax',
   };
+
+  /// Bundled artwork file for [symbol], or null when only the letter fallback
+  /// applies. Public so surfaces that draw outside the widget tree — the
+  /// shared receive card, rendered straight onto a canvas — pick exactly the
+  /// same image the on-screen icon shows.
+  static String? assetFor(String symbol) =>
+      _assetBySymbol[symbol.toLowerCase()];
 
   @override
   Widget build(BuildContext context) {
@@ -91,6 +110,9 @@ class ChainIcon extends StatelessWidget {
     Chain.tron: ChainColors.tron,
     Chain.solana: ChainColors.solana,
   };
+
+  /// Bundled artwork for [chain]; see [TokenIcon.assetFor].
+  static String? assetFor(Chain chain) => TokenIcon.assetFor(_name[chain]!);
 
   @override
   Widget build(BuildContext context) {

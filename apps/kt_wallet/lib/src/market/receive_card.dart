@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -20,6 +21,8 @@ class ReceiveCardData {
     required this.generatedLabel,
     required this.warning,
     required this.testnetLabel,
+    this.tokenIconAsset,
+    this.networkIconAsset,
   });
 
   /// The receiving address, and the payload encoded in the QR.
@@ -27,6 +30,15 @@ class ReceiveCardData {
 
   /// Asset the address is for ("USDT · TRON").
   final String assetLabel;
+
+  /// Bundled artwork names (see [TokenIcon.assetFor]) for the token and the
+  /// chain. The card is the thing a recipient actually looks at before
+  /// sending, so it should show what they are sending and where — a saved
+  /// image that names "USDT · Ethereum" in text alone asks them to read
+  /// carefully; the two marks let them recognise it at a glance. Null falls
+  /// back to text only, which is what a custom token with no artwork gets.
+  final String? tokenIconAsset;
+  final String? networkIconAsset;
 
   /// Active network instance ("Ethereum", "Sepolia").
   final String networkName;
@@ -42,25 +54,32 @@ class ReceiveCardData {
   final String testnetLabel;
 }
 
-/// The shipped app icon, decoded once. Drawing the real mark matters: a
+/// Bundled artwork, decoded once each. Drawing the real marks matters: a
 /// stand-in tile with "KT" in it is not the brand the recipient sees on the
-/// App Store or their home screen.
-ui.Image? _brandIcon;
-Future<ui.Image?> _loadBrandIcon() async {
-  if (_brandIcon != null) return _brandIcon;
+/// App Store or their home screen, and a card that names its chain only in
+/// words makes the reader parse rather than recognise.
+final _icons = <String, ui.Image?>{};
+Future<ui.Image?> _loadIcon(String path, {int targetWidth = 144}) async {
+  if (_icons.containsKey(path)) return _icons[path];
   try {
-    final data = await rootBundle.load('assets/brand/app_icon.png');
+    final data = await rootBundle.load(path);
     final codec = await ui.instantiateImageCodec(
       data.buffer.asUint8List(),
-      targetWidth: 144,
+      targetWidth: targetWidth,
     );
-    return _brandIcon = (await codec.getNextFrame()).image;
+    return _icons[path] = (await codec.getNextFrame()).image;
   } on Object {
-    // Missing or undecodable asset: fall back to the drawn tile rather than
-    // failing the whole card.
-    return null;
+    // Missing or undecodable asset: fall back to text/tile rather than
+    // failing the whole card. Cached as null so it is not retried per render.
+    return _icons[path] = null;
   }
 }
+
+Future<ui.Image?> _loadBrandIcon() => _loadIcon('assets/brand/app_icon.png');
+
+Future<ui.Image?> _loadTokenIcon(String? name) => name == null
+    ? Future.value()
+    : _loadIcon('assets/tokens/$name.png', targetWidth: 96);
 
 /// Renders the shareable receive card as PNG bytes.
 ///
@@ -76,6 +95,15 @@ Future<Uint8List> renderReceiveCardPng(
   const qrSize = 420.0;
 
   final icon = await _loadBrandIcon();
+  final tokenIcon = await _loadTokenIcon(data.tokenIconAsset);
+  final networkIcon = await _loadTokenIcon(data.networkIconAsset);
+
+  // The token mark sits beside the asset line, the chain mark beside the
+  // network line; each row grows to whichever is taller.
+  const tokenMark = 44.0;
+  const netMark = 26.0;
+  final assetIndent = tokenIcon == null ? 0.0 : tokenMark + 14;
+  final netIndent = networkIcon == null ? 0.0 : netMark + 10;
 
   // Lay the text out first: the card grows to fit a long address or a
   // translated warning instead of clipping them.
@@ -92,7 +120,7 @@ Future<Uint8List> renderReceiveCardPng(
     size: 22,
     weight: FontWeight.w600,
     color: WalletColors.text,
-  )..layout(maxWidth: width - margin * 2);
+  )..layout(maxWidth: width - margin * 2 - assetIndent);
   final address = _painter(
     data.address,
     size: 19,
@@ -105,7 +133,7 @@ Future<Uint8List> renderReceiveCardPng(
     '${data.isTestnet ? '  ·  ${data.testnetLabel}' : ''}',
     size: 16,
     color: WalletColors.text2,
-  )..layout(maxWidth: width - margin * 2);
+  )..layout(maxWidth: width - margin * 2 - netIndent);
   final generated = _painter(
     '${data.generatedLabel}  ${_stamp(data.generatedAt)}',
     size: 16,
@@ -125,13 +153,13 @@ Future<Uint8List> renderReceiveCardPng(
       28 +
       title.height +
       10 +
-      asset.height +
+      math.max(asset.height, tokenIcon == null ? 0.0 : tokenMark) +
       28 +
       qrSize +
       26 +
       address.height +
       24 +
-      network.height +
+      math.max(network.height, networkIcon == null ? 0.0 : netMark) +
       8 +
       generated.height +
       24 +
@@ -188,8 +216,27 @@ Future<Uint8List> renderReceiveCardPng(
 
   title.paint(canvas, ui.Offset(margin, y));
   y += title.height + 10;
-  asset.paint(canvas, ui.Offset(margin, y));
-  y += asset.height + 28;
+  final assetRowHeight = math.max(
+    asset.height,
+    tokenIcon == null ? 0.0 : tokenMark,
+  );
+  if (tokenIcon != null) {
+    _drawCircularIcon(
+      canvas,
+      tokenIcon,
+      ui.Rect.fromLTWH(
+        margin,
+        y + (assetRowHeight - tokenMark) / 2,
+        tokenMark,
+        tokenMark,
+      ),
+    );
+  }
+  asset.paint(
+    canvas,
+    ui.Offset(margin + assetIndent, y + (assetRowHeight - asset.height) / 2),
+  );
+  y += assetRowHeight + 28;
 
   _paintQr(canvas, data.address, ui.Offset((width - qrSize) / 2, y), qrSize);
   y += qrSize + 26;
@@ -197,8 +244,27 @@ Future<Uint8List> renderReceiveCardPng(
   address.paint(canvas, ui.Offset(margin, y));
   y += address.height + 24;
 
-  network.paint(canvas, ui.Offset(margin, y));
-  y += network.height + 8;
+  final netRowHeight = math.max(
+    network.height,
+    networkIcon == null ? 0.0 : netMark,
+  );
+  if (networkIcon != null) {
+    _drawCircularIcon(
+      canvas,
+      networkIcon,
+      ui.Rect.fromLTWH(
+        margin,
+        y + (netRowHeight - netMark) / 2,
+        netMark,
+        netMark,
+      ),
+    );
+  }
+  network.paint(
+    canvas,
+    ui.Offset(margin + netIndent, y + (netRowHeight - network.height) / 2),
+  );
+  y += netRowHeight + 8;
   generated.paint(canvas, ui.Offset(margin, y));
   y += generated.height + 24;
 
@@ -283,4 +349,19 @@ String _stamp(DateTime at) {
   String two(int v) => v.toString().padLeft(2, '0');
   return '${t.year}-${two(t.month)}-${two(t.day)} '
       '${two(t.hour)}:${two(t.minute)}';
+}
+
+/// Draws [image] clipped to a circle inside [rect], matching how TokenIcon
+/// renders the same artwork on screen so the saved card and the live UI show
+/// the identical mark.
+void _drawCircularIcon(ui.Canvas canvas, ui.Image image, ui.Rect rect) {
+  canvas.save();
+  canvas.clipPath(ui.Path()..addOval(rect));
+  canvas.drawImageRect(
+    image,
+    ui.Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+    rect,
+    ui.Paint()..filterQuality = ui.FilterQuality.high,
+  );
+  canvas.restore();
 }

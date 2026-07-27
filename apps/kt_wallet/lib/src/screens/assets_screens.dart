@@ -1348,7 +1348,11 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     final network = NetworkScope.of(context).activeFor(_familyOf(chain.coin));
     final data = ReceiveCardData(
       address: address,
-      assetLabel: chain.pillLabel,
+      // The asset being received, matching the pill: "USDT · Ethereum" when
+      // the caller named a token, the chain's own coin otherwise.
+      assetLabel: _assetLabel,
+      tokenIconAsset: TokenIcon.assetFor(_iconSymbol),
+      networkIconAsset: ChainIcon.assetFor(_familyOf(chain.coin)),
       networkName: network.name,
       generatedAt: widget.clock?.call() ?? DateTime.now(),
       isTestnet: network.isTestnet,
