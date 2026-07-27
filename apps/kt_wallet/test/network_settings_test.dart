@@ -120,7 +120,7 @@ void main() {
   });
 
   testWidgets(
-    'gateway card: URL edit persists; blank save resets to direct mode',
+    'gateway card: production default, URL edit, and direct mode persist',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final prefs = AppPrefsController();
@@ -136,14 +136,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // The card renders above the chain rows with the explainer and the
-      // not-set placeholder (direct mode by default).
+      // The card renders above the chain rows with the production Gateway.
       expect(find.text('网关'), findsOneWidget);
       expect(find.text('统一查询网关，留空则直连各链节点'), findsOneWidget);
-      expect(find.text('未设置'), findsOneWidget);
+      expect(find.text(AppPrefsController.defaultGatewayUrl), findsOneWidget);
 
       // Enter a URL and save.
-      await tester.tap(find.text('未设置'));
+      await tester.tap(find.text(AppPrefsController.defaultGatewayUrl));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), ' https://gw.example ');
       await tester.tap(find.text('保存'));
@@ -160,7 +159,7 @@ void main() {
 
       // Saving a blank value clears back to direct mode: the prefs value is
       // null again (so prefsGatewayResolver returns null → direct path) and
-      // the stored key is removed.
+      // a blank sentinel preserves that explicit choice across restart.
       await tester.tap(find.text('https://gw.example'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), '   ');
@@ -170,13 +169,13 @@ void main() {
       expect(prefs.gatewayUrl, isNull);
       expect(find.text('未设置'), findsOneWidget);
       final store = await SharedPreferences.getInstance();
-      expect(store.getString('gateway.url'), isNull);
+      expect(store.getString('gateway.url'), '');
       await reloaded.load();
       expect(reloaded.gatewayUrl, isNull);
     },
   );
 
-  testWidgets('gateway card: reset button clears the URL to direct mode', (
+  testWidgets('gateway card: reset button restores production Gateway', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({
@@ -198,8 +197,8 @@ void main() {
     await tester.tap(find.text('恢复默认').last);
     await tester.pumpAndSettle();
 
-    expect(prefs.gatewayUrl, isNull);
-    expect(find.text('未设置'), findsOneWidget);
+    expect(prefs.gatewayUrl, AppPrefsController.defaultGatewayUrl);
+    expect(find.text(AppPrefsController.defaultGatewayUrl), findsOneWidget);
   });
 
   testWidgets('test connection: kt_health ok → success snackbar', (
@@ -280,6 +279,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final prefs = AppPrefsController();
     await prefs.load();
+    await prefs.setGatewayUrl(null);
 
     final client = MockClient(
       (request) async =>

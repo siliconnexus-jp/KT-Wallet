@@ -477,6 +477,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get txSubmitted => '取引を送信しました';
 
   @override
+  String get txTimeLabel => '日時';
+
+  @override
   String get txHash => '取引ハッシュ';
 
   @override

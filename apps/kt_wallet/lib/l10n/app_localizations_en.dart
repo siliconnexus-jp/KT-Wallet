@@ -499,6 +499,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get txSubmitted => 'Transaction submitted';
 
   @override
+  String get txTimeLabel => 'Time';
+
+  @override
   String get txHash => 'Tx hash';
 
   @override

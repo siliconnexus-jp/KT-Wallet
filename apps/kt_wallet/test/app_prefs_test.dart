@@ -87,12 +87,12 @@ void main() {
   );
 
   test(
-    'gateway url: null by default, round-trip, blank clears to direct',
+    'gateway url: production default, round-trip, blank persists direct mode',
     () async {
       SharedPreferences.setMockInitialValues({});
 
       final prefs = AppPrefsController();
-      expect(prefs.gatewayUrl, isNull); // direct mode is the default
+      expect(prefs.gatewayUrl, AppPrefsController.defaultGatewayUrl);
 
       await prefs.setGatewayUrl('  https://gw.example  ');
       expect(prefs.gatewayUrl, 'https://gw.example'); // trimmed
@@ -104,10 +104,11 @@ void main() {
       await reloaded.load();
       expect(reloaded.gatewayUrl, 'https://gw.example');
 
-      // Blank (or null) clears back to direct mode and removes the stored key.
+      // Blank (or null) selects direct mode and persists an explicit blank
+      // sentinel, distinguishing it from the absent-key production default.
       await prefs.setGatewayUrl('   ');
       expect(prefs.gatewayUrl, isNull);
-      expect(store.getString('gateway.url'), isNull);
+      expect(store.getString('gateway.url'), '');
       await reloaded.load();
       expect(reloaded.gatewayUrl, isNull);
     },

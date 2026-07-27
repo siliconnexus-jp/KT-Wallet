@@ -34,11 +34,18 @@ class ScreenSecurityGuard extends StatefulWidget {
     super.key,
     this.screenshotEvents,
     this.warningDuration = const Duration(seconds: 6),
+    this.locale,
   });
 
   final Widget child;
   final Stream<void>? screenshotEvents;
   final Duration warningDuration;
+
+  /// Language for the warning. This guard sits ABOVE the app's MaterialApp so
+  /// it cannot read `Localizations`; without an explicit value it falls back
+  /// to the platform locale, which ignores an in-app language override — the
+  /// banner then came out in the phone's language, not the app's.
+  final Locale? locale;
 
   @override
   State<ScreenSecurityGuard> createState() => _ScreenSecurityGuardState();
@@ -117,7 +124,8 @@ class _ScreenSecurityGuardState extends State<ScreenSecurityGuard>
 
   @override
   Widget build(BuildContext context) {
-    final locale = WidgetsBinding.instance.platformDispatcher.locale;
+    final locale =
+        widget.locale ?? WidgetsBinding.instance.platformDispatcher.locale;
     final view = View.of(context);
     final topPadding = MediaQueryData.fromView(view).padding.top;
     return Directionality(

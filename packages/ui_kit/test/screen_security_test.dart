@@ -10,12 +10,14 @@ void main() {
   Future<StreamController<void>> pumpGuard(
     WidgetTester tester, {
     Duration duration = const Duration(seconds: 6),
+    Locale? locale,
   }) async {
     final events = StreamController<void>.broadcast();
     await tester.pumpWidget(
       ScreenSecurityGuard(
         screenshotEvents: events.stream,
         warningDuration: duration,
+        locale: locale,
         child: const MaterialApp(home: Scaffold(body: Text('wallet'))),
       ),
     );
@@ -98,6 +100,36 @@ void main() {
     events.add(null);
     await tester.pump();
     expect(find.text('スクリーンショットが撮影されました。ウォレットの安全にご注意ください'), findsOneWidget);
+    await events.close();
+    tester.binding.platformDispatcher.clearLocaleTestValue();
+  });
+
+  // This guard sits above the app's MaterialApp, so it cannot read
+  // Localizations. Reading only the platform locale meant a user who set the
+  // in-app language to Chinese on a Japanese phone got a Japanese warning.
+  testWidgets('an explicit locale beats the platform one', (tester) async {
+    tester.binding.platformDispatcher.localeTestValue = const Locale('ja');
+    final events = await pumpGuard(tester, locale: const Locale('zh'));
+    events.add(null);
+    await tester.pump();
+    expect(find.text('当前屏幕已被截图，请注意您的钱包安全'), findsOneWidget);
+    expect(
+      find.text('スクリーンショットが撮影されました。ウォレットの安全にご注意ください'),
+      findsNothing,
+    );
+    await events.close();
+    tester.binding.platformDispatcher.clearLocaleTestValue();
+  });
+
+  testWidgets('no explicit locale still follows the platform', (tester) async {
+    tester.binding.platformDispatcher.localeTestValue = const Locale('ja');
+    final events = await pumpGuard(tester);
+    events.add(null);
+    await tester.pump();
+    expect(
+      find.text('スクリーンショットが撮影されました。ウォレットの安全にご注意ください'),
+      findsOneWidget,
+    );
     await events.close();
     tester.binding.platformDispatcher.clearLocaleTestValue();
   });

@@ -22,7 +22,9 @@ import 'package:wallet_data/wallet_data.dart'
 
 import '../../l10n/app_localizations.dart';
 import '../market/balance_service.dart' show BalanceStatus;
+import '../market/asset_ref.dart' show chainOf;
 import '../market/explorer_links.dart' show explorerTxUrl;
+import '../market/history_service.dart' show ChainTxRecord;
 import '../market/market_scope.dart'
     show MarketScope, effectiveRpcEndpoints, prefsGatewayResolver;
 import '../market/price_service.dart' show PriceService;
@@ -2428,10 +2430,16 @@ class TxDetailScreen extends StatefulWidget {
     super.key,
     this.transactionId,
     this.transaction,
+    this.chainRecord,
     this.transferService,
   });
 
   final String? transactionId;
+
+  /// An on-chain record with no local row behind it — an incoming transfer, or
+  /// one sent from another device. Without this the screen fell back to a
+  /// hardcoded demo transaction, so every such row opened a fabricated one.
+  final ChainTxRecord? chainRecord;
 
   /// Explicit row injection for deterministic widget tests.
   final Transaction? transaction;
@@ -2779,6 +2787,10 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
     if (widget.transaction != null) {
       return _buildLive(context, widget.transaction!);
     }
+    final record = widget.chainRecord;
+    if (record != null) return _buildChainOnly(context, record);
+    // Scope-absent gallery / goldens only: every real row now arrives with an
+    // id or a chain record.
     if (_activeId == null) return _buildDemo(context);
     return FutureBuilder<Transaction?>(
       future: _transaction,
@@ -2956,6 +2968,86 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
                   mono: true,
                 ),
               ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// A transaction this wallet did not broadcast: the chain gave us a hash, a
+  /// direction, a time and (usually) an amount, and nothing else. Everything
+  /// unknown is left out rather than filled in.
+  Widget _buildChainOnly(BuildContext context, ChainTxRecord record) {
+    final l10n = AppLocalizations.of(context);
+    final network = NetworkScope.of(context).activeFor(chainOf(record.coin));
+    final url = explorerTxUrl(network, record.hash);
+    return KtScreen(
+      gap: 16,
+      navBar: KtNavBar(
+        title: l10n.txDetailTitle,
+        onBack: () => Navigator.of(context).maybePop(),
+        trailing: Icons.open_in_new,
+        onTrailing: () async {
+          final opened = await ExternalActions.instance.open(Uri.parse(url));
+          if (!opened && context.mounted) {
+            ScaffoldMessenger.of(context)
+              ..clearSnackBars()
+              ..showSnackBar(
+                SnackBar(content: Text(l10n.externalActionFailed)),
+              );
+          }
+        },
+      ),
+      children: [
+        Column(
+          children: [
+            Icon(
+              record.outgoing ? Icons.north_east : Icons.south_west,
+              size: 40,
+              color: record.outgoing ? WalletColors.text : WalletColors.green,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              record.amountText ?? '--',
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.5,
+                color: WalletColors.text,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              record.confirmed ? l10n.txStatusConfirmed : l10n.txStatusFailed,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: record.confirmed ? WalletColors.green : WalletColors.red,
+              ),
+            ),
+          ],
+        ),
+        KtCard(
+          child: Column(
+            children: [
+              KtDetailRow(
+                label: l10n.statusLabel,
+                value: record.outgoing ? l10n.txSent : l10n.txReceived,
+              ),
+              const SizedBox(height: 14),
+              KtDetailRow(label: l10n.networkRow, value: network.name),
+              const SizedBox(height: 14),
+              KtDetailRow(
+                label: l10n.txTimeLabel,
+                value: _date(record.timestamp.millisecondsSinceEpoch),
+              ),
+              const SizedBox(height: 14),
+              KtDetailRow(
+                label: l10n.txHash,
+                value: _short(record.hash),
+                mono: true,
+              ),
             ],
           ),
         ),

@@ -131,38 +131,46 @@ class RootApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ScreenSecurityGuard(
-      child: ListenableBuilder(
-        listenable: modeController,
-        builder: (context, _) {
-          // Signer content (mnemonics, signing QRs) must never land in
-          // screenshots or the recents switcher, so signer mode latches
-          // Android's FLAG_SECURE for its whole lifetime and every other mode
-          // clears it again. Wallet mode raises it per-screen instead, via
-          // SecureContent — see SecureScreen. Idempotent (the builder may
-          // rerun); a no-op on iOS/tests.
-          SecureScreen.modeSecure = modeController.mode == DeviceMode.signer;
-          switch (modeController.mode) {
-            case null:
-              return ModeSelectApp(
-                localeController: localeController,
-                modeController: modeController,
-              );
-            case DeviceMode.wallet:
-              return DeviceModeScope(
-                exitMode: modeController.clear,
-                child: _WalletBootstrap(
+    // Listens to the locale too: the guard renders its warning outside the
+    // MaterialApp, so it needs the chosen language handed to it explicitly.
+    return ListenableBuilder(
+      listenable: localeController,
+      builder: (context, _) => ScreenSecurityGuard(
+        // Null = the user is following the system, which is exactly the
+        // guard's own fallback.
+        locale: localeController.locale,
+        child: ListenableBuilder(
+          listenable: modeController,
+          builder: (context, _) {
+            // Signer content (mnemonics, signing QRs) must never land in
+            // screenshots or the recents switcher, so signer mode latches
+            // Android's FLAG_SECURE for its whole lifetime and every other mode
+            // clears it again. Wallet mode raises it per-screen instead, via
+            // SecureContent — see SecureScreen. Idempotent (the builder may
+            // rerun); a no-op on iOS/tests.
+            SecureScreen.modeSecure = modeController.mode == DeviceMode.signer;
+            switch (modeController.mode) {
+              case null:
+                return ModeSelectApp(
                   localeController: localeController,
-                  bootstrap: walletBootstrap ?? _bootstrapWallet,
-                ),
-              );
-            case DeviceMode.signer:
-              return DeviceModeScope(
-                exitMode: modeController.clear,
-                child: ColdSignerApp(initialLocation: '/welcome'),
-              );
-          }
-        },
+                  modeController: modeController,
+                );
+              case DeviceMode.wallet:
+                return DeviceModeScope(
+                  exitMode: modeController.clear,
+                  child: _WalletBootstrap(
+                    localeController: localeController,
+                    bootstrap: walletBootstrap ?? _bootstrapWallet,
+                  ),
+                );
+              case DeviceMode.signer:
+                return DeviceModeScope(
+                  exitMode: modeController.clear,
+                  child: ColdSignerApp(initialLocation: '/welcome'),
+                );
+            }
+          },
+        ),
       ),
     );
   }

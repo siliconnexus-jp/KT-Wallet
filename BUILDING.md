@@ -110,14 +110,14 @@ Signing identities and provisioning profiles remain local/CI secrets.
 
 ## Apple export compliance
 
-Both iOS apps implement industry-standard cryptography outside Apple operating
-system APIs through Trust Wallet Core. Their `Info.plist` files therefore set
-`ITSAppUsesNonExemptEncryption` to `YES`; do not change this to `NO` merely to
-bypass App Store Connect's encryption questionnaire.
+Both iOS apps currently declare `ITSAppUsesNonExemptEncryption` as `NO`, matching
+the accepted NyxNet iOS release configuration. The apps use standard
+cryptographic primitives for blockchain transaction signatures and operating
+system facilities for secure storage and HTTPS; they do not implement
+proprietary encryption algorithms.
 
-Complete the App Encryption Documentation flow for each App Store Connect app.
-Distribution in France may require a French encryption declaration. If Apple
-approves the documentation and provides an export-compliance code, add that
-app-specific value as `ITSEncryptionExportComplianceCode` in the corresponding
-local release configuration. Do not commit or reuse a code before Apple issues
-it for the app.
+Do not add an empty `ITSEncryptionExportComplianceCode`: App Store Connect
+rejects an empty value as an invalid code. If the app's cryptographic use or
+distribution classification changes and Apple requires documentation, complete
+the App Encryption Documentation flow separately for each app, then add only
+the app-specific code Apple issues after approval.

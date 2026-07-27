@@ -473,6 +473,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get txSubmitted => '交易已提交';
 
   @override
+  String get txTimeLabel => '时间';
+
+  @override
   String get txHash => '交易 Hash';
 
   @override

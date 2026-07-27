@@ -964,6 +964,12 @@ abstract class AppLocalizations {
   /// **'交易已提交'**
   String get txSubmitted;
 
+  /// No description provided for @txTimeLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'时间'**
+  String get txTimeLabel;
+
   /// No description provided for @txHash.
   ///
   /// In zh, this message translates to:

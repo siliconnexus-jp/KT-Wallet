@@ -778,15 +778,18 @@ void main() {
   });
 
   group('prefsGatewayResolver (settings-driven mode switch)', () {
-    test('blank URL = direct; setting the URL flips to gateway; clearing '
-        'flips back to direct', () async {
+    test('production URL is default; blank flips to direct; custom URL flips '
+        'back to gateway', () async {
       SharedPreferences.setMockInitialValues({});
       final prefs = AppPrefsController();
       await prefs.load();
 
-      // The resolver is null exactly while gateway.url is blank.
+      // An absent preference resolves to the production Gateway.
       final resolver = prefsGatewayResolver(prefs);
-      expect(resolver(), isNull); // default: direct mode
+      expect(resolver()!.baseUrl, AppPrefsController.defaultGatewayUrl);
+
+      await prefs.setGatewayUrl('   ');
+      expect(resolver(), isNull);
 
       await prefs.setGatewayUrl('https://gw.example');
       final client = resolver();

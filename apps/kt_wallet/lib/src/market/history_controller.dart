@@ -89,6 +89,11 @@ class HistoryController extends ChangeNotifier {
       }
       merged.add(
         ChainTxRecord(
+          // Rows written by this app store the coin as its enum name.
+          coin: Coin.values.firstWhere(
+            (c) => c.name == transaction.coin,
+            orElse: () => Coin.eth,
+          ),
           hash: hash,
           outgoing: true,
           amountText: null,

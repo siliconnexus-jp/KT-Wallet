@@ -18,8 +18,12 @@ class AppPrefsController extends ChangeNotifier {
   static const _keyFiat = 'prefs.fiat';
   static const _keyAuthMethod = 'prefs.authMethod';
 
-  /// Storage key for the optional KT gateway URL. No stored value (null)
-  /// means "direct mode": every chain query goes straight to the nodes.
+  /// Production Gateway used when the user has not chosen an override.
+  static const defaultGatewayUrl = 'https://gateway.kt-wallet.com';
+
+  /// Storage key for the KT gateway URL. An absent key selects
+  /// [defaultGatewayUrl]; an explicitly stored blank value selects direct
+  /// mode so that opting out survives an app restart.
   static const gatewayPrefKey = 'gateway.url';
 
   /// Storage keys for the per-chain RPC endpoint overrides. No stored value
@@ -60,11 +64,10 @@ class AppPrefsController extends ChangeNotifier {
   /// default applies (callers resolve the effective URL themselves).
   String? rpcOverride(Coin coin) => _rpcOverrides[coin];
 
-  String? _gatewayUrl;
+  String? _gatewayUrl = defaultGatewayUrl;
 
-  /// The configured KT gateway URL, or null in direct mode (the default).
-  /// The gateway is strictly optional: a null/blank value keeps every chain
-  /// query on today's direct node paths.
+  /// The configured KT gateway URL, or null when the user selected direct
+  /// mode. Fresh installs use [defaultGatewayUrl].
   String? get gatewayUrl => _gatewayUrl;
 
   /// Loads persisted values (if any). Safe to call lazily from a screen.
@@ -86,8 +89,12 @@ class AppPrefsController extends ChangeNotifier {
           _rpcOverrides.remove(entry.key);
         }
       }
-      final gateway = prefs.getString(gatewayPrefKey);
-      _gatewayUrl = (gateway == null || gateway.isEmpty) ? null : gateway;
+      if (prefs.containsKey(gatewayPrefKey)) {
+        final gateway = prefs.getString(gatewayPrefKey);
+        _gatewayUrl = (gateway == null || gateway.isEmpty) ? null : gateway;
+      } else {
+        _gatewayUrl = defaultGatewayUrl;
+      }
       notifyListeners();
     } catch (_) {
       // No prefs plugin (tests) or read error: keep the defaults.
@@ -172,8 +179,8 @@ class AppPrefsController extends ChangeNotifier {
     }
   }
 
-  /// Sets (or, with null / blank, clears back to direct mode) the optional
-  /// KT gateway URL.
+  /// Sets the Gateway URL. Null / blank explicitly selects direct mode and is
+  /// stored as a blank sentinel so it remains selected after restart.
   Future<void> setGatewayUrl(String? url) async {
     final value = url?.trim();
     final normalized = (value == null || value.isEmpty) ? null : value;
@@ -182,11 +189,7 @@ class AppPrefsController extends ChangeNotifier {
     notifyListeners();
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (normalized == null) {
-        await prefs.remove(gatewayPrefKey);
-      } else {
-        await prefs.setString(gatewayPrefKey, normalized);
-      }
+      await prefs.setString(gatewayPrefKey, normalized ?? '');
     } catch (_) {
       // Persistence is best-effort; the in-memory choice still applies.
     }

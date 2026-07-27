@@ -151,6 +151,7 @@
   "txHashPreview": "取引ハッシュのプレビュー",
   "backToHome": "ホームへ戻る",
   "txSubmitted": "取引を送信しました",
+  "txTimeLabel": "日時",
   "txHash": "取引ハッシュ",
   "statusLabel": "ステータス",
   "txStatusSubmitted": "送信済み",

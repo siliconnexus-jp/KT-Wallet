@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import 'market/asset_ref.dart';
+import 'market/history_service.dart' show ChainTxRecord;
 import 'screens/assets_screens.dart';
 import 'screens/camera_screen.dart';
 import 'screens/home_screen.dart';
@@ -98,6 +99,10 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
             ),
             '/tx-detail' => (c, s) => TxDetailScreen(
               transactionId: s.uri.queryParameters['id'],
+              // On-chain rows with no local counterpart travel as `extra`.
+              chainRecord: s.extra is ChainTxRecord
+                  ? s.extra as ChainTxRecord
+                  : null,
             ),
             // The tapped asset rides in `extra`. Without it the screen used to
             // render one hardcoded token for every row; now a live scope with

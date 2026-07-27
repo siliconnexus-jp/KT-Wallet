@@ -841,9 +841,10 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
 /// hostnames byte-for-byte.
 ///
 /// Under a scope, an OPTIONAL gateway card renders above the per-chain rows:
-/// the persisted `gateway.url` (blank = direct mode), an edit sheet like the
-/// RPC rows, and a test-connection action (`kt_health` → snackbar). The card
-/// is scope-only, so the scope-absent gallery/golden rendering is unchanged.
+/// the effective `gateway.url` (the KT production Gateway by default; blank =
+/// direct mode), an edit sheet like the RPC rows, and a test-connection action
+/// (`kt_health` → snackbar). The card is scope-only, so the scope-absent
+/// gallery/golden rendering is unchanged.
 class NetworkSettingsScreen extends StatefulWidget {
   const NetworkSettingsScreen({
     super.key,
@@ -950,7 +951,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
   };
 
   /// Edit sheet for the gateway URL, mirroring the RPC row sheet. Saving a
-  /// blank value (or tapping reset) clears back to direct mode.
+  /// blank value selects direct mode; reset restores the production Gateway.
   Future<void> _editGateway(AppPrefsController prefs) async {
     final l10n = AppLocalizations.of(context);
     final controller = TextEditingController(text: prefs.gatewayUrl ?? '');
@@ -995,7 +996,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                 KtPrimaryButton(
                   label: l10n.actionSave,
                   onPressed: () {
-                    // Blank = back to direct mode (the gateway stays optional).
+                    // Blank explicitly selects direct mode.
                     prefs.setGatewayUrl(controller.text);
                     Navigator.of(ctx).pop();
                   },
@@ -1004,7 +1005,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                 Center(
                   child: TextButton(
                     onPressed: () {
-                      prefs.setGatewayUrl(null);
+                      prefs.setGatewayUrl(AppPrefsController.defaultGatewayUrl);
                       Navigator.of(ctx).pop();
                     },
                     child: Text(

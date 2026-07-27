@@ -16,12 +16,18 @@ enum HistoryStatus { loading, ok, error, unsupported }
 /// One on-chain transaction, normalized for display.
 class ChainTxRecord {
   const ChainTxRecord({
+    required this.coin,
     required this.hash,
     required this.outgoing,
     this.amountText,
     required this.timestamp,
     required this.confirmed,
   });
+
+  /// Which chain this record came from. The merged cross-chain list drops the
+  /// per-chain grouping, so without it the detail screen could not tell which
+  /// explorer a hash belongs to.
+  final Coin coin;
 
   final String hash;
 
@@ -103,7 +109,7 @@ class HistoryService {
         );
         if (history.unsupported) return const HistoryResult.unsupported();
         final records = [
-          for (final record in history.records) _mapGatewayRecord(record),
+          for (final record in history.records) _mapGatewayRecord(coin, record),
         ]..sort((a, b) => b.timestamp.compareTo(a.timestamp));
         return HistoryResult.ok(List.unmodifiable(records.take(pageSize)));
       } catch (_) {
@@ -152,6 +158,7 @@ class HistoryService {
         final value = BigInt.tryParse('${item['value'] ?? ''}');
         records.add(
           ChainTxRecord(
+            coin: coin,
             hash: hash,
             outgoing: fromHash is String && fromHash.toLowerCase() == lower,
             amountText: value == null
@@ -195,6 +202,7 @@ class HistoryService {
         final value = BigInt.tryParse('${item['value']}');
         records.add(
           ChainTxRecord(
+            coin: Coin.avalanche,
             hash: item['hash'] as String,
             outgoing: '${item['from']}'.toLowerCase() == lower,
             amountText: value == null ? null : _formatAmount(value, 18, 'AVAX'),
@@ -254,6 +262,7 @@ class HistoryService {
         final blockTime = item['blockTime'];
         records.add(
           ChainTxRecord(
+            coin: Coin.solana,
             hash: item['signature'] as String,
             outgoing: false,
             timestamp: blockTime is int
@@ -299,11 +308,12 @@ class HistoryService {
 
   /// Normalizes one gateway record onto the display shape; an unparseable
   /// amount renders as '--' (null), never a made-up number.
-  ChainTxRecord _mapGatewayRecord(GatewayHistoryRecord record) {
+  ChainTxRecord _mapGatewayRecord(Coin coin, GatewayHistoryRecord record) {
     final raw = record.amountRaw;
     final decimals = record.decimals;
     final symbol = record.symbol;
     return ChainTxRecord(
+      coin: coin,
       hash: record.hash,
       outgoing: record.outgoing,
       amountText: raw != null && decimals != null && symbol != null
@@ -382,6 +392,7 @@ class HistoryService {
       }
     }
     return ChainTxRecord(
+      coin: Coin.tron,
       hash: hash,
       outgoing: item['from'] == address,
       amountText: amountText,
@@ -418,6 +429,7 @@ class HistoryService {
     final amount = value['amount'];
     final owner = value['owner_address'];
     return ChainTxRecord(
+      coin: Coin.tron,
       hash: hash,
       // Hex owner vs our base58-decoded address; an undecodable address (the
       // demo mocks) can't match, so those rows read as incoming — moot in

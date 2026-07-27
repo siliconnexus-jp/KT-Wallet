@@ -151,6 +151,7 @@
   "txHashPreview": "Tx hash preview",
   "backToHome": "Back to home",
   "txSubmitted": "Transaction submitted",
+  "txTimeLabel": "Time",
   "txHash": "Tx hash",
   "statusLabel": "Status",
   "txStatusSubmitted": "Submitted",

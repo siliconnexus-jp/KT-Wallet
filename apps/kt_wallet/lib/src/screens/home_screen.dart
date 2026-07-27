@@ -486,8 +486,11 @@ class _RecordsTabState extends State<_RecordsTab> {
                     _formatRecordTime(l10n, r.timestamp),
                     status: local?.status,
                   ),
+                  // A row we broadcast ourselves opens its local record; one
+                  // that only exists on chain travels as `extra` so the detail
+                  // screen renders THAT transaction, not a demo one.
                   onTap: () => local == null
-                      ? context.push('/tx-detail')
+                      ? context.push('/tx-detail', extra: r)
                       : context.push(
                           '/tx-detail?id=${Uri.encodeComponent(local.id)}',
                         ),

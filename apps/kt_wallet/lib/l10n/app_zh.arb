@@ -267,6 +267,7 @@
   "txHashPreview": "交易 Hash 预览",
   "backToHome": "返回首页",
   "txSubmitted": "交易已提交",
+  "txTimeLabel": "时间",
   "txHash": "交易 Hash",
   "statusLabel": "状态",
   "txStatusSubmitted": "已提交",

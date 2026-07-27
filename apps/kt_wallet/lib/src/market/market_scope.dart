@@ -115,9 +115,9 @@ String? _activeNetworkId(
 }
 
 /// Builds the gateway resolver backing the OPTIONAL gateway mode: it returns
-/// a [GatewayClient] for the currently persisted `gateway.url`, or null when
-/// the preference is blank (direct mode — the default) or no [prefs] is
-/// wired. The client is cached per URL so repeated fetches reuse one
+/// a [GatewayClient] for the effective `gateway.url`, or null when the user
+/// explicitly selected direct mode or no [prefs] is wired. Fresh installs use
+/// the KT production Gateway. The client is cached per URL so repeated fetches reuse one
 /// http.Client; saving a new URL (or clearing it) applies from the very next
 /// call, same as the RPC override resolver.
 ///

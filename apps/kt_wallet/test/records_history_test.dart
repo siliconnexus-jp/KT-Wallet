@@ -69,6 +69,7 @@ void main() {
     final controller = _controller({
       Coin.tron: HistoryResult.ok([
         ChainTxRecord(
+          coin: Coin.tron,
           hash: 'a',
           outgoing: true,
           amountText: '88.5 USDT',
@@ -76,6 +77,7 @@ void main() {
           confirmed: true,
         ),
         ChainTxRecord(
+          coin: Coin.tron,
           hash: 'b',
           outgoing: false,
           amountText: '5 TRX',
