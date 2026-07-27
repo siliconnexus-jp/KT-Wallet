@@ -1875,21 +1875,38 @@ class SecuritySettingsScreen extends StatefulWidget {
 }
 
 class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
-  /// Screen-local prefs controller; values are persisted (SharedPreferences)
-  /// so they survive leaving the screen and app restarts.
-  final _prefs = AppPrefsController();
+  /// The app-wide controller, when one is in scope.
+  ///
+  /// This screen used to own a second [AppPrefsController] over the same
+  /// SharedPreferences keys. Writes persisted, so the value came back after a
+  /// restart — but the controller the rest of the app listens to never heard
+  /// about them, which is what made 隐私模式 look like it did nothing: the
+  /// home balances stayed masked (or unmasked) until the next cold start.
+  AppPrefsController? _shared;
+
+  /// Fallback for the design gallery and goldens, where no scope is mounted.
+  /// Owned here, unlike [_shared].
+  AppPrefsController? _fallback;
+
+  AppPrefsController get _prefs => _shared ?? _fallback!;
 
   @override
-  void initState() {
-    super.initState();
-    _prefs.addListener(_onPrefsChanged);
-    _prefs.load();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Registers the dependency too: a change from anywhere rebuilds this
+    // screen, so the switches stay in step without a listener of their own.
+    _shared = AppPrefsScope.maybeOf(context);
+    if (_shared == null && _fallback == null) {
+      _fallback = AppPrefsController()
+        ..addListener(_onPrefsChanged)
+        ..load();
+    }
   }
 
   @override
   void dispose() {
-    _prefs.removeListener(_onPrefsChanged);
-    _prefs.dispose();
+    _fallback?.removeListener(_onPrefsChanged);
+    _fallback?.dispose();
     super.dispose();
   }
 

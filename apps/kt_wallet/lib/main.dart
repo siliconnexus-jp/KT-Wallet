@@ -218,8 +218,15 @@ class _WalletBootstrap extends StatefulWidget {
 class _WalletBootstrapState extends State<_WalletBootstrap> {
   late Future<WalletController> _controller = widget.bootstrap();
 
+  /// One preferences object for the whole wallet mode. [AppLockGate] sits
+  /// above [KtWalletApp] — outside [AppPrefsScope] — so the two used to hold
+  /// separate controllers over the same SharedPreferences keys, and a toggle
+  /// in 安全设置 only reached the other side on the next cold start.
+  final AppPrefsController _prefs = AppPrefsController();
+
   @override
   void dispose() {
+    _prefs.dispose();
     // Release the DB connection when this mode subtree is torn down (mode
     // switch back to the picker). A bootstrap that failed has nothing to close.
     _controller.then((c) => c.close()).ignore();
@@ -250,6 +257,7 @@ class _WalletBootstrapState extends State<_WalletBootstrap> {
         final walletApp = KtWalletApp(
           controller: controller,
           localeController: widget.localeController,
+          prefs: _prefs,
           initialLocation: controller.current == null ? '/add-wallet' : '/home',
         );
         // There is nothing sensitive to unlock before the first wallet is
@@ -258,6 +266,7 @@ class _WalletBootstrapState extends State<_WalletBootstrap> {
         if (controller.current == null) return walletApp;
         return AppLockGate(
           localeController: widget.localeController,
+          prefs: _prefs,
           child: walletApp,
         );
       },
@@ -583,14 +592,22 @@ class KtWalletApp extends StatefulWidget {
     WalletController? controller,
     LocaleController? localeController,
     NetworkController? networkController,
+    AppPrefsController? prefs,
     this.initialLocation = '/',
   }) : controller = controller ?? _seedController(),
        localeController = localeController ?? LocaleController(),
-       networkController = networkController ?? NetworkController();
+       networkController = networkController ?? NetworkController(),
+       prefs = prefs ?? AppPrefsController();
 
   final WalletController controller;
   final LocaleController localeController;
   final NetworkController networkController;
+
+  /// Preferences shared with [AppLockGate], which sits above this app and so
+  /// cannot reach [AppPrefsScope]. Passing one object is what lets a toggle in
+  /// 安全设置 reach the lock gate without a restart.
+  final AppPrefsController prefs;
+
   final String initialLocation;
 
   @override
@@ -606,7 +623,7 @@ class _KtWalletAppState extends State<KtWalletApp> {
 
   /// App-wide preferences (RPC endpoint overrides among them), shared between
   /// the settings screens and the market services via [AppPrefsScope].
-  final AppPrefsController _prefs = AppPrefsController();
+  AppPrefsController get _prefs => widget.prefs;
 
   /// Active-network state (mainnet/testnet environment, per-chain overrides,
   /// custom networks), shared app-wide via [NetworkScope].
@@ -622,6 +639,15 @@ class _KtWalletAppState extends State<KtWalletApp> {
     // guarantee in tests without the SharedPreferences plugin).
     _prefs.load();
     _networks.load();
+  }
+
+  @override
+  void didUpdateWidget(KtWalletApp oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A rebuilt app widget can carry a different preferences object (a fresh
+    // KtWalletApp in tests, a mode switch in the installer). initState has
+    // already run for this State, so nothing else would load it.
+    if (!identical(oldWidget.prefs, widget.prefs)) _prefs.load();
   }
 
   @override
