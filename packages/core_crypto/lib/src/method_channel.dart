@@ -49,10 +49,10 @@ class MethodChannelCoreCrypto implements CoreCrypto {
   @override
   Future<List<String>> suggestWords(String prefix, {int limit = 3}) async {
     if (prefix.trim().isEmpty) return const [];
-    final words = await _invoke<List<Object?>>(
-      'suggestWords',
-      {'prefix': prefix, 'limit': limit},
-    );
+    final words = await _invoke<List<Object?>>('suggestWords', {
+      'prefix': prefix,
+      'limit': limit,
+    });
     return words.cast<String>();
   }
 
@@ -76,20 +76,18 @@ class MethodChannelCoreCrypto implements CoreCrypto {
   @override
   Future<ChainAddresses> deriveAddresses(String walletId) async {
     CoreCryptoValidation.checkWalletId(walletId);
-    final map = await _invoke<Map<Object?, Object?>>(
-      'deriveAddresses',
-      {'walletId': walletId},
-    );
+    final map = await _invoke<Map<Object?, Object?>>('deriveAddresses', {
+      'walletId': walletId,
+    });
     return ChainAddresses.fromMap(map);
   }
 
   @override
   Future<ChainPublicKeys> derivePublicKeys(String walletId) async {
     CoreCryptoValidation.checkWalletId(walletId);
-    final map = await _invoke<Map<Object?, Object?>>(
-      'derivePublicKeys',
-      {'walletId': walletId},
-    );
+    final map = await _invoke<Map<Object?, Object?>>('derivePublicKeys', {
+      'walletId': walletId,
+    });
     return ChainPublicKeys.fromMap(map);
   }
 
@@ -116,6 +114,31 @@ class MethodChannelCoreCrypto implements CoreCrypto {
   Future<String> exportMnemonic(String walletId) {
     CoreCryptoValidation.checkWalletId(walletId);
     return _invoke<String>('exportMnemonic', {'walletId': walletId});
+  }
+
+  @override
+  Future<Uint8List> createBackup({
+    required String walletId,
+    required String password,
+  }) {
+    CoreCryptoValidation.checkWalletId(walletId);
+    CoreCryptoValidation.checkBackupPassword(password);
+    return _invoke<Uint8List>('createBackup', {
+      'walletId': walletId,
+      'password': password,
+    });
+  }
+
+  @override
+  Future<String> readBackup({
+    required Uint8List blob,
+    required String password,
+  }) {
+    CoreCryptoValidation.checkBackupBlobNotEmpty(blob);
+    // Not checkBackupPassword: an old backup may predate the floor, and
+    // refusing to even try would strand it.
+    if (password.isEmpty) throw ArgumentError('password must not be empty');
+    return _invoke<String>('readBackup', {'blob': blob, 'password': password});
   }
 
   @override

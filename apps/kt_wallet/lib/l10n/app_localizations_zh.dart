@@ -1028,4 +1028,83 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fiatHiddenTestnet => '测试网资产无市场价格';
+
+  @override
+  String get backupEncryptedTitle => '加密备份';
+
+  @override
+  String get backupEncryptedRow => '加密备份';
+
+  @override
+  String get backupEncryptedRowDesc => '把加密副本保存到 iCloud Drive 或文件';
+
+  @override
+  String get backupIntro => '备份文件用你设置的密码加密。同时拿到文件和密码的人，就掌握了这个钱包。';
+
+  @override
+  String get backupPasswordLabel => '备份密码';
+
+  @override
+  String get backupPasswordConfirm => '再次输入密码';
+
+  @override
+  String get backupPasswordTooShort => '至少 8 位';
+
+  @override
+  String get backupPasswordMismatch => '两次输入的密码不一致';
+
+  @override
+  String get backupPasswordWarning => '这个密码无法找回。密码丢了备份就打不开了 —— 请同时保留手抄的助记词。';
+
+  @override
+  String get backupCreate => '生成备份';
+
+  @override
+  String get backupSaved => '备份已保存';
+
+  @override
+  String backupSavedTo(String location) {
+    return '备份已保存到 $location';
+  }
+
+  @override
+  String get backupCancelled => '已取消备份';
+
+  @override
+  String get backupFailed => '生成备份失败';
+
+  @override
+  String get backupUnsupported => '此设备无法保存文件';
+
+  @override
+  String get restoreFromBackup => '从备份恢复';
+
+  @override
+  String get restoreFromBackupDesc => '打开加密的 .ktbak 文件';
+
+  @override
+  String get restorePickFile => '选择备份文件';
+
+  @override
+  String get restoreEnterPassword => '输入备份密码';
+
+  @override
+  String get restoreWrongPassword => '密码错误，或文件已损坏';
+
+  @override
+  String get restoreNotABackup => '这不是 KT 钱包的备份文件';
+
+  @override
+  String get restoreTooNew => '此备份由更新版本的 App 生成';
+
+  @override
+  String get restoreRestored => '钱包已恢复';
+
+  @override
+  String get restoreAction => '恢复';
+
+  @override
+  String backupFileChosen(String name) {
+    return '已选择：$name';
+  }
 }

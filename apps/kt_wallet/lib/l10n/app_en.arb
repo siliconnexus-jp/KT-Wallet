@@ -357,5 +357,44 @@
   "airdropRequesting": "Requesting airdrop…",
   "airdropOk": "Airdrop sent — balance will refresh shortly",
   "airdropFailed": "Airdrop failed: {message}",
-  "fiatHiddenTestnet": "Testnet assets have no market price"
+  "fiatHiddenTestnet": "Testnet assets have no market price",
+  "backupEncryptedTitle": "Encrypted backup",
+  "backupEncryptedRow": "Encrypted backup",
+  "backupEncryptedRowDesc": "Save an encrypted copy to iCloud Drive or Files",
+  "backupIntro": "The file is encrypted with a password you choose. Anyone who has both the file and the password controls this wallet.",
+  "backupPasswordLabel": "Backup password",
+  "backupPasswordConfirm": "Repeat the password",
+  "backupPasswordTooShort": "At least 8 characters",
+  "backupPasswordMismatch": "The two passwords do not match",
+  "backupPasswordWarning": "There is no way to recover this password. Lose it and the backup is unopenable — keep your written recovery phrase as well.",
+  "backupCreate": "Create backup",
+  "backupSaved": "Backup saved",
+  "backupSavedTo": "Backup saved to {location}",
+  "@backupSavedTo": {
+    "placeholders": {
+      "location": {
+        "type": "String"
+      }
+    }
+  },
+  "backupCancelled": "Backup cancelled",
+  "backupFailed": "Could not create the backup",
+  "backupUnsupported": "This device cannot save files",
+  "restoreFromBackup": "Restore from backup",
+  "restoreFromBackupDesc": "Open an encrypted .ktbak file",
+  "restorePickFile": "Choose backup file",
+  "restoreEnterPassword": "Enter the backup password",
+  "restoreWrongPassword": "Wrong password, or the file is damaged",
+  "restoreNotABackup": "That is not a KT Wallet backup file",
+  "restoreTooNew": "This backup was written by a newer version of the app",
+  "restoreRestored": "Wallet restored",
+  "restoreAction": "Restore",
+  "backupFileChosen": "Selected: {name}",
+  "@backupFileChosen": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }

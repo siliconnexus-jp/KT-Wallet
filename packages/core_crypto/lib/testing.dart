@@ -5,6 +5,7 @@
 /// the native instrumented tests (todolist.md P1-2/P1-3).
 library;
 
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'core_crypto.dart';
@@ -12,15 +13,70 @@ import 'core_crypto.dart';
 /// Small embedded BIP-39-style wordlist (first 64 real BIP-39 words) used for
 /// deterministic generation and word validation in tests.
 const mockWordlist = [
-  'abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb',
-  'abstract', 'absurd', 'abuse', 'access', 'accident', 'account', 'accuse',
-  'achieve', 'acid', 'acoustic', 'acquire', 'across', 'act', 'action',
-  'actor', 'actress', 'actual', 'adapt', 'add', 'addict', 'address',
-  'adjust', 'admit', 'adult', 'advance', 'advice', 'aerobic', 'affair',
-  'afford', 'afraid', 'again', 'age', 'agent', 'agree', 'ahead', 'aim',
-  'air', 'airport', 'aisle', 'alarm', 'album', 'alcohol', 'alert', 'alien',
-  'all', 'alley', 'allow', 'almost', 'alone', 'alpha', 'already', 'also',
-  'alter', 'always', 'amateur', 'amazing', 'among',
+  'abandon',
+  'ability',
+  'able',
+  'about',
+  'above',
+  'absent',
+  'absorb',
+  'abstract',
+  'absurd',
+  'abuse',
+  'access',
+  'accident',
+  'account',
+  'accuse',
+  'achieve',
+  'acid',
+  'acoustic',
+  'acquire',
+  'across',
+  'act',
+  'action',
+  'actor',
+  'actress',
+  'actual',
+  'adapt',
+  'add',
+  'addict',
+  'address',
+  'adjust',
+  'admit',
+  'adult',
+  'advance',
+  'advice',
+  'aerobic',
+  'affair',
+  'afford',
+  'afraid',
+  'again',
+  'age',
+  'agent',
+  'agree',
+  'ahead',
+  'aim',
+  'air',
+  'airport',
+  'aisle',
+  'alarm',
+  'album',
+  'alcohol',
+  'alert',
+  'alien',
+  'all',
+  'alley',
+  'allow',
+  'almost',
+  'alone',
+  'alpha',
+  'already',
+  'also',
+  'alter',
+  'always',
+  'amateur',
+  'amazing',
+  'among',
 ];
 
 class _StoredWallet {
@@ -37,8 +93,8 @@ class MockCoreCrypto implements CoreCrypto {
   MockCoreCrypto({
     Future<bool> Function()? authenticator,
     DateTime Function()? clock,
-  })  : _authenticate = authenticator ?? (() async => true),
-        _now = clock ?? DateTime.now;
+  }) : _authenticate = authenticator ?? (() async => true),
+       _now = clock ?? DateTime.now;
 
   final Future<bool> Function() _authenticate;
   final DateTime Function() _now;
@@ -242,6 +298,53 @@ class MockCoreCrypto implements CoreCrypto {
     final wallet = _walletOrThrow(walletId);
     await _requireAuth();
     return wallet.mnemonic;
+  }
+
+  @override
+  Future<Uint8List> createBackup({
+    required String walletId,
+    required String password,
+  }) async {
+    CoreCryptoValidation.checkWalletId(walletId);
+    CoreCryptoValidation.checkBackupPassword(password);
+    final wallet = _walletOrThrow(walletId);
+    await _requireAuth();
+    // Deterministic test envelope only. Native implementations perform the
+    // real PBKDF2 + AES-GCM operation; this mock exists to exercise app flow
+    // and failure behavior without pretending to provide cryptography.
+    return Uint8List.fromList(
+      utf8.encode(
+        jsonEncode({
+          'v': 1,
+          'passwordTag': _hexStream('backup:$password', 32),
+          'mnemonic': wallet.mnemonic,
+        }),
+      ),
+    );
+  }
+
+  @override
+  Future<String> readBackup({
+    required Uint8List blob,
+    required String password,
+  }) async {
+    CoreCryptoValidation.checkBackupBlobNotEmpty(blob);
+    // Not checkBackupPassword: an old backup may predate the length floor,
+    // and refusing to even try would strand it. Matches the channel.
+    if (password.isEmpty) throw ArgumentError('password must not be empty');
+    try {
+      final decoded = jsonDecode(utf8.decode(blob));
+      if (decoded is! Map ||
+          decoded['v'] != 1 ||
+          decoded['passwordTag'] != _hexStream('backup:$password', 32) ||
+          decoded['mnemonic'] is! String) {
+        throw const StoreCorruptedException();
+      }
+      return decoded['mnemonic'] as String;
+    } catch (error) {
+      if (error is StoreCorruptedException) rethrow;
+      throw const StoreCorruptedException();
+    }
   }
 
   @override

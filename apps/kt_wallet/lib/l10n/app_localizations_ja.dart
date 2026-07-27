@@ -1040,4 +1040,85 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get fiatHiddenTestnet => 'テストネット資産には市場価格がありません';
+
+  @override
+  String get backupEncryptedTitle => '暗号化バックアップ';
+
+  @override
+  String get backupEncryptedRow => '暗号化バックアップ';
+
+  @override
+  String get backupEncryptedRowDesc => '暗号化したコピーを iCloud Drive やファイルに保存';
+
+  @override
+  String get backupIntro =>
+      'バックアップは設定したパスワードで暗号化されます。ファイルとパスワードの両方を持つ人はこのウォレットを操作できます。';
+
+  @override
+  String get backupPasswordLabel => 'バックアップパスワード';
+
+  @override
+  String get backupPasswordConfirm => 'パスワードを再入力';
+
+  @override
+  String get backupPasswordTooShort => '8 文字以上';
+
+  @override
+  String get backupPasswordMismatch => 'パスワードが一致しません';
+
+  @override
+  String get backupPasswordWarning =>
+      'このパスワードは復元できません。失うとバックアップは開けません。手書きのリカバリーフレーズも保管してください。';
+
+  @override
+  String get backupCreate => 'バックアップを作成';
+
+  @override
+  String get backupSaved => 'バックアップを保存しました';
+
+  @override
+  String backupSavedTo(String location) {
+    return '$location に保存しました';
+  }
+
+  @override
+  String get backupCancelled => 'バックアップをキャンセルしました';
+
+  @override
+  String get backupFailed => 'バックアップを作成できませんでした';
+
+  @override
+  String get backupUnsupported => 'この端末ではファイルを保存できません';
+
+  @override
+  String get restoreFromBackup => 'バックアップから復元';
+
+  @override
+  String get restoreFromBackupDesc => '暗号化された .ktbak ファイルを開く';
+
+  @override
+  String get restorePickFile => 'バックアップファイルを選択';
+
+  @override
+  String get restoreEnterPassword => 'バックアップパスワードを入力';
+
+  @override
+  String get restoreWrongPassword => 'パスワードが違うか、ファイルが壊れています';
+
+  @override
+  String get restoreNotABackup => 'KT ウォレットのバックアップファイルではありません';
+
+  @override
+  String get restoreTooNew => 'このバックアップは新しいバージョンで作成されています';
+
+  @override
+  String get restoreRestored => 'ウォレットを復元しました';
+
+  @override
+  String get restoreAction => '復元';
+
+  @override
+  String backupFileChosen(String name) {
+    return '選択済み：$name';
+  }
 }

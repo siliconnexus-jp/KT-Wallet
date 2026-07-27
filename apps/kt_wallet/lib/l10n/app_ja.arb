@@ -357,5 +357,44 @@
   "airdropRequesting": "エアドロップを要求中…",
   "airdropOk": "エアドロップ完了 — まもなく残高が更新されます",
   "airdropFailed": "エアドロップ失敗:{message}",
-  "fiatHiddenTestnet": "テストネット資産には市場価格がありません"
+  "fiatHiddenTestnet": "テストネット資産には市場価格がありません",
+  "backupEncryptedTitle": "暗号化バックアップ",
+  "backupEncryptedRow": "暗号化バックアップ",
+  "backupEncryptedRowDesc": "暗号化したコピーを iCloud Drive やファイルに保存",
+  "backupIntro": "バックアップは設定したパスワードで暗号化されます。ファイルとパスワードの両方を持つ人はこのウォレットを操作できます。",
+  "backupPasswordLabel": "バックアップパスワード",
+  "backupPasswordConfirm": "パスワードを再入力",
+  "backupPasswordTooShort": "8 文字以上",
+  "backupPasswordMismatch": "パスワードが一致しません",
+  "backupPasswordWarning": "このパスワードは復元できません。失うとバックアップは開けません。手書きのリカバリーフレーズも保管してください。",
+  "backupCreate": "バックアップを作成",
+  "backupSaved": "バックアップを保存しました",
+  "backupSavedTo": "{location} に保存しました",
+  "@backupSavedTo": {
+    "placeholders": {
+      "location": {
+        "type": "String"
+      }
+    }
+  },
+  "backupCancelled": "バックアップをキャンセルしました",
+  "backupFailed": "バックアップを作成できませんでした",
+  "backupUnsupported": "この端末ではファイルを保存できません",
+  "restoreFromBackup": "バックアップから復元",
+  "restoreFromBackupDesc": "暗号化された .ktbak ファイルを開く",
+  "restorePickFile": "バックアップファイルを選択",
+  "restoreEnterPassword": "バックアップパスワードを入力",
+  "restoreWrongPassword": "パスワードが違うか、ファイルが壊れています",
+  "restoreNotABackup": "KT ウォレットのバックアップファイルではありません",
+  "restoreTooNew": "このバックアップは新しいバージョンで作成されています",
+  "restoreRestored": "ウォレットを復元しました",
+  "restoreAction": "復元",
+  "backupFileChosen": "選択済み：{name}",
+  "@backupFileChosen": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }

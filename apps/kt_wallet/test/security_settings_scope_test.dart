@@ -20,10 +20,8 @@ Widget _app(Widget home) => MaterialApp(
 
 /// The 隐私模式 / App 锁 switches carry no text, so they are found by the
 /// tappable box next to their label.
-Finder _switchFor(String label) => find.ancestor(
-  of: find.text(label),
-  matching: find.byType(Row),
-);
+Finder _switchFor(String label) =>
+    find.ancestor(of: find.text(label), matching: find.byType(Row));
 
 Future<void> _tapSwitchIn(WidgetTester tester, String label) async {
   final row = _switchFor(label).last;
@@ -43,10 +41,7 @@ void main() {
 
     await tester.pumpWidget(
       _app(
-        AppPrefsScope(
-          controller: prefs,
-          child: const SecuritySettingsScreen(),
-        ),
+        AppPrefsScope(controller: prefs, child: const SecuritySettingsScreen()),
       ),
     );
     await tester.pumpAndSettle();
@@ -67,10 +62,7 @@ void main() {
 
     await tester.pumpWidget(
       _app(
-        AppPrefsScope(
-          controller: prefs,
-          child: const SecuritySettingsScreen(),
-        ),
+        AppPrefsScope(controller: prefs, child: const SecuritySettingsScreen()),
       ),
     );
     await tester.pumpAndSettle();

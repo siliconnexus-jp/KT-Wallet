@@ -62,6 +62,14 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
       case "exportMnemonic":
         result(try await exportMnemonic(a))
 
+      // Same secret as exportMnemonic, same auth. The difference is only where
+      // it goes — a file the user carries off the device instead of the screen.
+      case "createBackup":
+        result(FlutterStandardTypedData(bytes: try await createBackup(a)))
+
+      case "readBackup":
+        result(try readBackup(a))
+
       case "deleteWallet":
         try await deleteWallet(a)
         result(true)
@@ -177,6 +185,32 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
       }
       return wallet.mnemonic
     }
+  }
+
+  /// Seals the stored entropy under the user's backup password. Note this
+  /// re-seals rather than copying the Keychain blob: that blob may carry the
+  /// KDF layer under a *different* password, and a backup nobody can open is
+  /// worse than no backup.
+  private func createBackup(_ a: [String: Any]) async throws -> Data {
+    let context = try await AuthGate.shared.authenticate(reason: "Create an encrypted backup")
+    let password = a["password"] as! String
+    return try withEntropy(a, context: context) { entropy in
+      try EntropyCipher.seal(entropy: entropy, password: password)
+    }
+  }
+
+  /// Opens a backup blob. No AuthGate: the file already left the device, so
+  /// the password is the whole gate, and a device prompt here would only
+  /// inconvenience the owner restoring onto a phone they just set up.
+  private func readBackup(_ a: [String: Any]) throws -> String {
+    let blob = (a["blob"] as! FlutterStandardTypedData).data
+    let password = a["password"] as! String
+    var entropy = try EntropyCipher.open(sealed: blob, password: password)
+    defer { entropy.resetBytes(in: 0..<entropy.count) }
+    guard let wallet = HDWallet(entropy: entropy, passphrase: "") else {
+      throw WalletCoreBridge.BridgeError.invalidMnemonic
+    }
+    return wallet.mnemonic
   }
 
   private func deleteWallet(_ a: [String: Any]) async throws {

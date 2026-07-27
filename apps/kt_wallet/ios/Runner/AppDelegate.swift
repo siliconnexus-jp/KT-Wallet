@@ -3,6 +3,7 @@ import LocalAuthentication
 import Network
 import Photos
 import UIKit
+import UniformTypeIdentifiers
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -121,7 +122,112 @@ import UIKit
         }
         self?.saveToPhotoLibrary(image, result: result)
       }
+
+      // Encrypted wallet backups in and out via the system document picker —
+      // which is how the user reaches iCloud Drive without this app holding an
+      // iCloud entitlement or a CloudKit container.
+      let filesChannel = FlutterMethodChannel(
+        name: "kt/files",
+        binaryMessenger: registrar.messenger()
+      )
+      filesChannel.setMethodCallHandler { [weak self] call, result in
+        let args = call.arguments as? [String: Any] ?? [:]
+        switch call.method {
+        case "saveFile":
+          guard
+            let name = args["name"] as? String,
+            let data = (args["bytes"] as? FlutterStandardTypedData)?.data
+          else {
+            result(FlutterError(code: "INVALID", message: "No file bytes", details: nil))
+            return
+          }
+          self?.presentSavePicker(name: name, data: data, result: result)
+        case "pickFile":
+          let extensions = args["extensions"] as? [String] ?? []
+          self?.presentOpenPicker(extensions: extensions, result: result)
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
     }
+  }
+
+  // MARK: - document picker
+
+  /// Held for the lifetime of a presented picker: UIDocumentPickerViewController
+  /// keeps only a weak delegate, so without this the coordinator deallocates
+  /// the moment this method returns and the callback never fires.
+  private var documentCoordinator: DocumentPickerCoordinator?
+
+  private func topViewController() -> UIViewController? {
+    var top = window?.rootViewController
+    while let presented = top?.presentedViewController { top = presented }
+    return top
+  }
+
+  private func presentSavePicker(name: String, data: Data, result: @escaping FlutterResult) {
+    guard let host = topViewController() else {
+      result(FlutterError(code: "FAILED", message: "No window", details: nil))
+      return
+    }
+    // The picker exports an existing file, so stage it in tmp first. It is
+    // already encrypted, and it is removed once the picker is done with it.
+    let staged = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+    do {
+      try data.write(to: staged, options: .atomic)
+    } catch {
+      result(FlutterError(code: "FAILED", message: error.localizedDescription, details: nil))
+      return
+    }
+    let picker = UIDocumentPickerViewController(forExporting: [staged], asCopy: true)
+    let coordinator = DocumentPickerCoordinator { [weak self] urls in
+      try? FileManager.default.removeItem(at: staged)
+      self?.documentCoordinator = nil
+      guard let saved = urls.first else {
+        result(["cancelled": true])
+        return
+      }
+      // Two path components ("iCloud Drive/KT Wallet") read as a place; the
+      // full sandbox path does not.
+      let location = saved.deletingLastPathComponent().pathComponents.suffix(2).joined(
+        separator: "/")
+      result(["cancelled": false, "location": location])
+    }
+    picker.delegate = coordinator
+    documentCoordinator = coordinator
+    host.present(picker, animated: true)
+  }
+
+  private func presentOpenPicker(extensions: [String], result: @escaping FlutterResult) {
+    guard let host = topViewController() else {
+      result(FlutterError(code: "FAILED", message: "No window", details: nil))
+      return
+    }
+    // A backup carries a private extension, so there is no system UTType for
+    // it; `.data` keeps every file selectable and the format check happens in
+    // Dart, which can explain the mismatch far better than a greyed-out row.
+    let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.data], asCopy: true)
+    let coordinator = DocumentPickerCoordinator { [weak self] urls in
+      self?.documentCoordinator = nil
+      guard let picked = urls.first else {
+        result(["cancelled": true])
+        return
+      }
+      // asCopy: true hands us a tmp copy we already own, so no security-scoped
+      // access dance is needed.
+      guard let data = try? Data(contentsOf: picked) else {
+        result(FlutterError(code: "FAILED", message: "Could not read the file", details: nil))
+        return
+      }
+      result([
+        "cancelled": false,
+        "name": picked.lastPathComponent,
+        "bytes": FlutterStandardTypedData(bytes: data),
+      ])
+    }
+    picker.delegate = coordinator
+    documentCoordinator = coordinator
+    host.present(picker, animated: true)
   }
 
   /// Asks for add-only access where iOS offers it (14+), which is the
@@ -379,5 +485,32 @@ import UIKit
         return false
       }
     #endif
+  }
+}
+
+/// Bridges `UIDocumentPickerViewController`'s delegate callbacks to one
+/// closure. Both "picked" and "cancelled" must land exactly once, or the Dart
+/// future hangs forever behind a dismissed sheet.
+final class DocumentPickerCoordinator: NSObject, UIDocumentPickerDelegate {
+  private var finish: (([URL]) -> Void)?
+
+  init(onFinish: @escaping ([URL]) -> Void) {
+    self.finish = onFinish
+  }
+
+  private func complete(_ urls: [URL]) {
+    let callback = finish
+    finish = nil
+    callback?(urls)
+  }
+
+  func documentPicker(
+    _ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]
+  ) {
+    complete(urls)
+  }
+
+  func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+    complete([])
   }
 }

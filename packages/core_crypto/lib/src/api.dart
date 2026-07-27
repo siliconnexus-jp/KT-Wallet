@@ -45,6 +45,31 @@ abstract class CoreCrypto {
   /// Returns the mnemonic for backup review. Strong auth enforced natively.
   Future<String> exportMnemonic(String walletId);
 
+  /// Seals the wallet's entropy under [password] for off-device backup.
+  ///
+  /// Strong auth is enforced natively, exactly as for [exportMnemonic] — the
+  /// two disclose the same secret, one to the screen and one to a file. The
+  /// plaintext entropy never crosses this boundary: the returned bytes are
+  /// `salt(16) || nonce || ciphertext || tag`, PBKDF2-HMAC-SHA256 (210k) into
+  /// AES-256-GCM. Losing [password] loses the backup; there is no recovery
+  /// path, by construction.
+  Future<Uint8List> createBackup({
+    required String walletId,
+    required String password,
+  });
+
+  /// Opens a blob from [createBackup] and returns the mnemonic, for the normal
+  /// import path to store as a wallet.
+  ///
+  /// No biometric prompt: the file is already off-device, so [password] is the
+  /// only thing standing between the holder and the secret. A wrong password
+  /// is indistinguishable from a corrupt file (GCM tells you no more than
+  /// "this did not authenticate") and surfaces as [StoreCorruptedException].
+  Future<String> readBackup({
+    required Uint8List blob,
+    required String password,
+  });
+
   /// Removes the wallet and securely erases its key material.
   Future<void> deleteWallet(String walletId);
 
@@ -76,6 +101,29 @@ abstract final class CoreCryptoValidation {
     if (mnemonic.trim().isEmpty) {
       throw ArgumentError('mnemonic must not be empty');
     }
+  }
+
+  /// Shortest password the backup KDF is allowed to stretch.
+  ///
+  /// A backup file is offline and unthrottled: an attacker who takes it can
+  /// grind guesses at whatever rate their hardware allows, and 210k PBKDF2
+  /// rounds buy roughly a millisecond each. The floor is a blunt instrument —
+  /// it stops "1234", not a determined bad choice — so the UI states the
+  /// stakes rather than relying on this alone.
+  static const minBackupPasswordLength = 8;
+
+  static void checkBackupPassword(String password) {
+    if (password.length < minBackupPasswordLength) {
+      throw ArgumentError.value(
+        '<redacted>',
+        'password',
+        'must be at least $minBackupPasswordLength characters',
+      );
+    }
+  }
+
+  static void checkBackupBlobNotEmpty(Uint8List blob) {
+    if (blob.isEmpty) throw ArgumentError('backup blob must not be empty');
   }
 
   static void checkSigningInput(Uint8List input) {

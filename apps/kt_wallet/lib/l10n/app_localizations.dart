@@ -2037,6 +2037,156 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'测试网资产无市场价格'**
   String get fiatHiddenTestnet;
+
+  /// No description provided for @backupEncryptedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'加密备份'**
+  String get backupEncryptedTitle;
+
+  /// No description provided for @backupEncryptedRow.
+  ///
+  /// In zh, this message translates to:
+  /// **'加密备份'**
+  String get backupEncryptedRow;
+
+  /// No description provided for @backupEncryptedRowDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'把加密副本保存到 iCloud Drive 或文件'**
+  String get backupEncryptedRowDesc;
+
+  /// No description provided for @backupIntro.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份文件用你设置的密码加密。同时拿到文件和密码的人，就掌握了这个钱包。'**
+  String get backupIntro;
+
+  /// No description provided for @backupPasswordLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份密码'**
+  String get backupPasswordLabel;
+
+  /// No description provided for @backupPasswordConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'再次输入密码'**
+  String get backupPasswordConfirm;
+
+  /// No description provided for @backupPasswordTooShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'至少 8 位'**
+  String get backupPasswordTooShort;
+
+  /// No description provided for @backupPasswordMismatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'两次输入的密码不一致'**
+  String get backupPasswordMismatch;
+
+  /// No description provided for @backupPasswordWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个密码无法找回。密码丢了备份就打不开了 —— 请同时保留手抄的助记词。'**
+  String get backupPasswordWarning;
+
+  /// No description provided for @backupCreate.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成备份'**
+  String get backupCreate;
+
+  /// No description provided for @backupSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份已保存'**
+  String get backupSaved;
+
+  /// No description provided for @backupSavedTo.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份已保存到 {location}'**
+  String backupSavedTo(String location);
+
+  /// No description provided for @backupCancelled.
+  ///
+  /// In zh, this message translates to:
+  /// **'已取消备份'**
+  String get backupCancelled;
+
+  /// No description provided for @backupFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成备份失败'**
+  String get backupFailed;
+
+  /// No description provided for @backupUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'此设备无法保存文件'**
+  String get backupUnsupported;
+
+  /// No description provided for @restoreFromBackup.
+  ///
+  /// In zh, this message translates to:
+  /// **'从备份恢复'**
+  String get restoreFromBackup;
+
+  /// No description provided for @restoreFromBackupDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开加密的 .ktbak 文件'**
+  String get restoreFromBackupDesc;
+
+  /// No description provided for @restorePickFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择备份文件'**
+  String get restorePickFile;
+
+  /// No description provided for @restoreEnterPassword.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入备份密码'**
+  String get restoreEnterPassword;
+
+  /// No description provided for @restoreWrongPassword.
+  ///
+  /// In zh, this message translates to:
+  /// **'密码错误，或文件已损坏'**
+  String get restoreWrongPassword;
+
+  /// No description provided for @restoreNotABackup.
+  ///
+  /// In zh, this message translates to:
+  /// **'这不是 KT 钱包的备份文件'**
+  String get restoreNotABackup;
+
+  /// No description provided for @restoreTooNew.
+  ///
+  /// In zh, this message translates to:
+  /// **'此备份由更新版本的 App 生成'**
+  String get restoreTooNew;
+
+  /// No description provided for @restoreRestored.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包已恢复'**
+  String get restoreRestored;
+
+  /// No description provided for @restoreAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复'**
+  String get restoreAction;
+
+  /// No description provided for @backupFileChosen.
+  ///
+  /// In zh, this message translates to:
+  /// **'已选择：{name}'**
+  String backupFileChosen(String name);
 }
 
 class _AppLocalizationsDelegate

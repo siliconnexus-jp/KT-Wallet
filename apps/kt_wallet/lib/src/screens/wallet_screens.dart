@@ -321,6 +321,12 @@ class AddWalletScreen extends StatelessWidget {
           l10n.importMnemonicDesc,
           onTap: () => context.push('/mnemonic-import'),
         ),
+        entry(
+          Icons.restore_page_outlined,
+          l10n.restoreFromBackup,
+          l10n.restoreFromBackupDesc,
+          onTap: () => context.push('/restore'),
+        ),
         Text(
           l10n.coldWalletSection,
           style: const TextStyle(

@@ -2,6 +2,7 @@ import 'package:chains/chains.dart';
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:ui_kit/ui_kit.dart';
 import 'package:wallet_data/wallet_data.dart' show Contact, CustomToken;
@@ -2338,6 +2339,25 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                   onTap: () => _prefs.setPrivacyMode(!_prefs.privacyMode),
                 ),
               ),
+              // Watch wallets hold no key material, so there is nothing to
+              // seal — offering the row would only lead to a dead end.
+              if (WalletScope.of(context).current is HotWallet) ...[
+                const SizedBox(height: 16),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => context.push('/backup'),
+                  child: _row(
+                    Icons.cloud_upload_outlined,
+                    l10n.backupEncryptedRow,
+                    l10n.backupEncryptedRowDesc,
+                    const Icon(
+                      Icons.chevron_right,
+                      size: 16,
+                      color: WalletColors.text3,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

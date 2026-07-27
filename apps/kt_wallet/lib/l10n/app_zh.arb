@@ -336,7 +336,11 @@
   "chooseNetwork": "选择网络",
   "assetOnChains": "{count} 条链",
   "@assetOnChains": {
-    "placeholders": { "count": { "type": "int" } }
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "receiveCardTitle": "收款地址",
   "receiveCardNetwork": "网络",
@@ -502,6 +506,45 @@
   "@airdropFailed": {
     "placeholders": {
       "message": {}
+    }
+  },
+  "backupEncryptedTitle": "加密备份",
+  "backupEncryptedRow": "加密备份",
+  "backupEncryptedRowDesc": "把加密副本保存到 iCloud Drive 或文件",
+  "backupIntro": "备份文件用你设置的密码加密。同时拿到文件和密码的人，就掌握了这个钱包。",
+  "backupPasswordLabel": "备份密码",
+  "backupPasswordConfirm": "再次输入密码",
+  "backupPasswordTooShort": "至少 8 位",
+  "backupPasswordMismatch": "两次输入的密码不一致",
+  "backupPasswordWarning": "这个密码无法找回。密码丢了备份就打不开了 —— 请同时保留手抄的助记词。",
+  "backupCreate": "生成备份",
+  "backupSaved": "备份已保存",
+  "backupSavedTo": "备份已保存到 {location}",
+  "@backupSavedTo": {
+    "placeholders": {
+      "location": {
+        "type": "String"
+      }
+    }
+  },
+  "backupCancelled": "已取消备份",
+  "backupFailed": "生成备份失败",
+  "backupUnsupported": "此设备无法保存文件",
+  "restoreFromBackup": "从备份恢复",
+  "restoreFromBackupDesc": "打开加密的 .ktbak 文件",
+  "restorePickFile": "选择备份文件",
+  "restoreEnterPassword": "输入备份密码",
+  "restoreWrongPassword": "密码错误，或文件已损坏",
+  "restoreNotABackup": "这不是 KT 钱包的备份文件",
+  "restoreTooNew": "此备份由更新版本的 App 生成",
+  "restoreRestored": "钱包已恢复",
+  "restoreAction": "恢复",
+  "backupFileChosen": "已选择：{name}",
+  "@backupFileChosen": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
     }
   }
 }

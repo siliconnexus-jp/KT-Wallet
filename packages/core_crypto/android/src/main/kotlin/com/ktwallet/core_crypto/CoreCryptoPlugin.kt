@@ -84,6 +84,11 @@ class CoreCryptoPlugin :
                 "derivePublicKeys" -> result.success(derivePublicKeys(call))
                 "signTransaction" -> signTransaction(call, result)
                 "exportMnemonic" -> exportMnemonic(call, result)
+                // Same secret as exportMnemonic, same prompt. The difference is
+                // only where it goes: a file the user carries off the device
+                // rather than the screen.
+                "createBackup" -> createBackup(call, result)
+                "readBackup" -> result.success(readBackup(call))
                 "deleteWallet" -> deleteWallet(call, result)
                 "getAuthState" -> result.success(authGate.state())
                 else -> result.notImplemented()
@@ -170,6 +175,33 @@ class CoreCryptoPlugin :
             var mnemonic = ""
             withEntropy(call) { mnemonic = WalletCoreBridge.exportMnemonic(it) }
             mnemonic
+        }
+    }
+
+    /** Re-seals the stored entropy under the user's backup password. Note this
+     *  re-seals rather than copying the stored blob: that blob is wrapped in a
+     *  Keystore key that never leaves this device, and its optional KDF layer
+     *  may use a different password. */
+    private fun createBackup(call: MethodCall, result: Result) {
+        promptThen(result, "Create an encrypted backup") {
+            val password = call.arg<String>("password", "")
+            var sealed = ByteArray(0)
+            withEntropy(call) { sealed = cipher.seal(it, password) }
+            sealed
+        }
+    }
+
+    /** Opens a backup blob. No BiometricPrompt: the file already left the
+     *  device, so the password is the whole gate, and a device prompt would
+     *  only inconvenience the owner restoring onto a phone they just set up. */
+    private fun readBackup(call: MethodCall): String {
+        val blob = call.arg<ByteArray>("blob", ByteArray(0))
+        val password = call.arg<String>("password", "")
+        val entropy = cipher.open(blob, password)
+        try {
+            return WalletCoreBridge.exportMnemonic(entropy)
+        } finally {
+            entropy.fill(0)
         }
     }
 

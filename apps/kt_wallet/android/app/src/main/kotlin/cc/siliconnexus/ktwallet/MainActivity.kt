@@ -120,6 +120,25 @@ class MainActivity : FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
+        // Encrypted wallet backups in and out through the Storage Access
+        // Framework, so the destination is whatever provider the user has —
+        // Drive, Files, an SD card — and this app needs no storage permission.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kt/files")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "saveFile" -> {
+                        val bytes = call.argument<ByteArray>("bytes")
+                        val name = call.argument<String>("name") ?: "backup"
+                        if (bytes == null || bytes.isEmpty()) {
+                            result.error("INVALID", "No file bytes", null)
+                            return@setMethodCallHandler
+                        }
+                        startSaveFile(name, bytes, result)
+                    }
+                    "pickFile" -> startPickFile(result)
+                    else -> result.notImplemented()
+                }
+            }
         securityChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "kt/screen_security"
@@ -245,6 +264,99 @@ class MainActivity : FlutterFragmentActivity() {
      * the row until the bytes are flushed, so a crash mid-write cannot leave a
      * truncated image in the user's gallery.
      */
+    // ---- backup file exchange (SAF) ----------------------------------------
+
+    private companion object {
+        const val REQUEST_SAVE_FILE = 0x4B54  // 'KT'
+        const val REQUEST_PICK_FILE = 0x4B55
+    }
+
+    private var pendingFileResult: MethodChannel.Result? = null
+    private var pendingFileBytes: ByteArray? = null
+
+    /** Answers a pending kt/files call exactly once; a second reply would
+     *  crash the engine, and none at all would hang the Dart future. */
+    private fun finishFileCall(value: Any?, error: Triple<String, String?, Any?>? = null) {
+        val result = pendingFileResult ?: return
+        pendingFileResult = null
+        pendingFileBytes = null
+        if (error != null) result.error(error.first, error.second, error.third)
+        else result.success(value)
+    }
+
+    private fun startSaveFile(name: String, bytes: ByteArray, result: MethodChannel.Result) {
+        if (pendingFileResult != null) {
+            result.error("FAILED", "Another file operation is in progress", null)
+            return
+        }
+        pendingFileResult = result
+        pendingFileBytes = bytes
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            // A private extension has no registered MIME type; octet-stream
+            // keeps every provider willing to accept the file.
+            type = "application/octet-stream"
+            putExtra(Intent.EXTRA_TITLE, name)
+        }
+        try {
+            startActivityForResult(intent, REQUEST_SAVE_FILE)
+        } catch (e: Exception) {
+            finishFileCall(null, Triple("FAILED", e.message, null))
+        }
+    }
+
+    private fun startPickFile(result: MethodChannel.Result) {
+        if (pendingFileResult != null) {
+            result.error("FAILED", "Another file operation is in progress", null)
+            return
+        }
+        pendingFileResult = result
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            // Everything selectable: the format check lives in Dart, which can
+            // explain a mismatch far better than a greyed-out row can.
+            type = "*/*"
+        }
+        try {
+            startActivityForResult(intent, REQUEST_PICK_FILE)
+        } catch (e: Exception) {
+            finishFileCall(null, Triple("FAILED", e.message, null))
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_SAVE_FILE && requestCode != REQUEST_PICK_FILE) return
+        val uri = data?.data
+        if (resultCode != Activity.RESULT_OK || uri == null) {
+            finishFileCall(mapOf("cancelled" to true))
+            return
+        }
+        try {
+            if (requestCode == REQUEST_SAVE_FILE) {
+                val bytes = pendingFileBytes
+                    ?: throw IllegalStateException("no bytes staged")
+                contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                    ?: throw IllegalStateException("provider refused the write")
+                finishFileCall(
+                    mapOf("cancelled" to false, "location" to (uri.lastPathSegment ?: ""))
+                )
+            } else {
+                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: throw IllegalStateException("provider refused the read")
+                finishFileCall(
+                    mapOf(
+                        "cancelled" to false,
+                        "name" to (uri.lastPathSegment ?: ""),
+                        "bytes" to bytes
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            finishFileCall(null, Triple("FAILED", e.message, null))
+        }
+    }
+
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun saveToPictures(bytes: ByteArray, name: String): Boolean {
         val values = ContentValues().apply {

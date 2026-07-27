@@ -7,6 +7,7 @@ import 'package:ui_kit/ui_kit.dart';
 import 'market/asset_ref.dart';
 import 'market/history_service.dart' show ChainTxRecord;
 import 'screens/assets_screens.dart';
+import 'screens/backup_screens.dart';
 import 'screens/camera_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/settings_screens.dart';
@@ -52,6 +53,8 @@ final screenRegistry = <String, (String, WidgetBuilder)>{
   'W17 Token 管理': ('/token-manage', (c) => const TokenManageScreen()),
   'W18 网络设置': ('/network', (c) => const NetworkSettingsScreen()),
   'W19 安全设置': ('/security', (c) => const SecuritySettingsScreen()),
+  'W32 加密备份': ('/backup', (c) => const BackupExportScreen()),
+  'W33 从备份恢复': ('/restore', (c) => const BackupRestoreScreen()),
 };
 
 /// Sheet-style screens (translucent scrim over the previous screen). Pushed as

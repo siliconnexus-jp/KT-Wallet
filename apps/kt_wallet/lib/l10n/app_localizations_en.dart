@@ -1085,4 +1085,87 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fiatHiddenTestnet => 'Testnet assets have no market price';
+
+  @override
+  String get backupEncryptedTitle => 'Encrypted backup';
+
+  @override
+  String get backupEncryptedRow => 'Encrypted backup';
+
+  @override
+  String get backupEncryptedRowDesc =>
+      'Save an encrypted copy to iCloud Drive or Files';
+
+  @override
+  String get backupIntro =>
+      'The file is encrypted with a password you choose. Anyone who has both the file and the password controls this wallet.';
+
+  @override
+  String get backupPasswordLabel => 'Backup password';
+
+  @override
+  String get backupPasswordConfirm => 'Repeat the password';
+
+  @override
+  String get backupPasswordTooShort => 'At least 8 characters';
+
+  @override
+  String get backupPasswordMismatch => 'The two passwords do not match';
+
+  @override
+  String get backupPasswordWarning =>
+      'There is no way to recover this password. Lose it and the backup is unopenable — keep your written recovery phrase as well.';
+
+  @override
+  String get backupCreate => 'Create backup';
+
+  @override
+  String get backupSaved => 'Backup saved';
+
+  @override
+  String backupSavedTo(String location) {
+    return 'Backup saved to $location';
+  }
+
+  @override
+  String get backupCancelled => 'Backup cancelled';
+
+  @override
+  String get backupFailed => 'Could not create the backup';
+
+  @override
+  String get backupUnsupported => 'This device cannot save files';
+
+  @override
+  String get restoreFromBackup => 'Restore from backup';
+
+  @override
+  String get restoreFromBackupDesc => 'Open an encrypted .ktbak file';
+
+  @override
+  String get restorePickFile => 'Choose backup file';
+
+  @override
+  String get restoreEnterPassword => 'Enter the backup password';
+
+  @override
+  String get restoreWrongPassword => 'Wrong password, or the file is damaged';
+
+  @override
+  String get restoreNotABackup => 'That is not a KT Wallet backup file';
+
+  @override
+  String get restoreTooNew =>
+      'This backup was written by a newer version of the app';
+
+  @override
+  String get restoreRestored => 'Wallet restored';
+
+  @override
+  String get restoreAction => 'Restore';
+
+  @override
+  String backupFileChosen(String name) {
+    return 'Selected: $name';
+  }
 }
