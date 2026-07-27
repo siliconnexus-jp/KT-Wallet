@@ -37,13 +37,21 @@ class _FakePriceService extends PriceService {
   _FakePriceService(
     this.prices, {
     this.tokenPrices = const {'USDT': 0.99, 'USDC': 1.01},
+    this.changes = const {},
+    this.tokenChanges = const {},
   });
   final Map<Coin, double>? prices;
   final Map<String, double> tokenPrices;
+  final Map<Coin, double> changes;
+  final Map<String, double> tokenChanges;
   @override
   Future<Map<Coin, double>?> fetchUsdPrices() async => prices;
   @override
   double? tokenPriceUsd(String symbol) => tokenPrices[symbol];
+  @override
+  double? change24hPercent(Coin coin) => changes[coin];
+  @override
+  double? tokenChange24hPercent(String symbol) => tokenChanges[symbol];
 }
 
 class _FakeTokenBalanceService extends TokenBalanceService {
@@ -97,12 +105,16 @@ MarketController _liveController() => MarketController(
       Amount(raw: BigInt.from(500000000), decimals: 9, symbol: 'SOL'),
     ),
   }),
-  prices: _FakePriceService({
-    Coin.eth: 2000.0,
-    Coin.polygon: 0.5,
-    Coin.tron: 0.1,
-    Coin.solana: 100.0,
-  }),
+  prices: _FakePriceService(
+    {Coin.eth: 2000.0, Coin.polygon: 0.5, Coin.tron: 0.1, Coin.solana: 100.0},
+    changes: const {
+      Coin.eth: 10,
+      Coin.polygon: 10,
+      Coin.tron: 10,
+      Coin.solana: 10,
+    },
+    tokenChanges: const {'USDT': 10, 'USDC': 10},
+  ),
   tokens: _FakeTokenBalanceService({
     'usdt-eth': BalanceResult.ok(
       Amount(raw: BigInt.from(25000000), decimals: 6, symbol: 'USDT'),
@@ -150,6 +162,8 @@ void main() {
     // Live total: 1 ETH*2000 + 2 POL*0.5 + 5 TRX*0.1 + 0.5 SOL*100 = 2051.50,
     // plus live-priced tokens: 25*0.99 + 10*1.01 = 2086.35.
     expect(find.text(r'$2,086.35'), findsOneWidget);
+    expect(find.text(r'+$189.67 (+10.00%) 过去24小时'), findsOneWidget);
+    expect(find.text('+10.00%'), findsWidgets);
     // Live rows (home tab card; the assets tab inside the IndexedStack builds
     // them too, hence findsWidgets).
     expect(find.text('1 ETH'), findsWidgets);
@@ -161,7 +175,7 @@ void main() {
     // TronGrid rejected the demo address, so that leg is excluded from the
     // sum and shows '--' in the detail breakdown — the row still reports the
     // 25 that did load.
-    expect(find.text('25 USDT · 2 条链'), findsWidgets);
+    expect(find.text('25 USDT · 4 条链'), findsWidgets);
     expect(find.text('10 USDC · Polygon'), findsWidgets);
     expect(find.text(r'$24.75'), findsWidgets);
     expect(find.text(r'$10.10'), findsWidgets);
@@ -219,7 +233,7 @@ void main() {
     expect(find.text('5 TRX'), findsOneWidget);
     expect(find.text(r'$0.50'), findsOneWidget); // 5 TRX * $0.10
     // Token rows appended under the natives.
-    expect(find.text('25 USDT · 2 条链'), findsOneWidget);
+    expect(find.text('25 USDT · 4 条链'), findsOneWidget);
     expect(find.text('10 USDC · Polygon'), findsOneWidget);
     expect(find.text('-- USDT · TRON'), findsNothing);
     expect(find.text('2.4805 ETH'), findsNothing); // demo row absent
@@ -240,7 +254,7 @@ void main() {
       await tester.tap(find.text('Polygon').first);
       await tester.pumpAndSettle();
       expect(find.text('10 USDC · Polygon'), findsOneWidget);
-      expect(find.text('25 USDT · 2 条链'), findsNothing);
+      expect(find.text('25 USDT · 4 条链'), findsNothing);
       expect(find.text('1 ETH'), findsNothing);
       controller.dispose();
     },

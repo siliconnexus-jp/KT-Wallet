@@ -1,3 +1,4 @@
+import 'package:chains/chains.dart' show Chain;
 import 'package:flutter/material.dart';
 import 'package:ui_kit/ui_kit.dart';
 
@@ -55,6 +56,50 @@ class TokenIcon extends StatelessWidget {
         fit: BoxFit.cover,
         filterQuality: FilterQuality.medium,
       ),
+    );
+  }
+}
+
+/// Circular network logo, for anywhere the user picks a chain.
+///
+/// Chains the bundled icon set covers (Ethereum, Polygon, TRON, Solana) get
+/// their real logo; the L2s it does not (Base, Arbitrum, Avalanche) fall back
+/// to a brand-coloured initial — the same treatment the home asset rows
+/// already give them, so a chain looks identical everywhere it appears.
+class ChainIcon extends StatelessWidget {
+  const ChainIcon({super.key, required this.chain, this.size = 28});
+
+  final Chain chain;
+  final double size;
+
+  static const _name = {
+    Chain.ethereum: 'Ethereum',
+    Chain.polygon: 'Polygon',
+    Chain.base: 'Base',
+    Chain.arbitrum: 'Arbitrum',
+    Chain.avalanche: 'Avalanche',
+    Chain.tron: 'TRON',
+    Chain.solana: 'Solana',
+  };
+
+  static const _color = {
+    Chain.ethereum: ChainColors.ethereum,
+    Chain.polygon: ChainColors.polygon,
+    Chain.base: ChainColors.base,
+    Chain.arbitrum: ChainColors.arbitrum,
+    Chain.avalanche: ChainColors.avalanche,
+    Chain.tron: ChainColors.tron,
+    Chain.solana: ChainColors.solana,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final name = _name[chain]!;
+    return TokenIcon(
+      symbol: name,
+      size: size,
+      fallbackColor: _color[chain]!,
+      fallbackInitial: name[0],
     );
   }
 }

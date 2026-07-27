@@ -152,6 +152,30 @@ const usdtTronNileToken = TokenInfo(
   network: 'Nile',
 );
 
+// USDT on Avalanche C-Chain. Tether issues natively here — it is on their own
+// supported-protocols list — and the on-chain symbol really is "USDt", not
+// "USDT"; the registry keeps the display symbol so it aggregates with the
+// other deployments. Address and decimals read back from the C-Chain RPC.
+const usdtAvalancheToken = TokenInfo(
+  id: 'usdt-avalanche',
+  symbol: 'USDT',
+  chain: Coin.avalanche,
+  contract: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7',
+  decimals: 6,
+  network: 'Avalanche',
+);
+
+// USDT on Solana — Tether's native SPL mint, likewise from their own list,
+// verified against the mainnet RPC (6 decimals, mint authority live).
+const usdtSolanaToken = TokenInfo(
+  id: 'usdt-solana',
+  symbol: 'USDT',
+  chain: Coin.solana,
+  contract: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+  decimals: 6,
+  network: 'Solana',
+);
+
 /// Circle's canonical USDC mint on Solana mainnet.
 const usdcSolanaToken = TokenInfo(
   id: 'usdc-solana',
@@ -172,9 +196,21 @@ const usdcSolanaDevnetToken = TokenInfo(
   network: 'Devnet',
 );
 
-/// Built-in token registry (V1: the three canonical stablecoin deployments;
+/// Built-in token registry (the canonical stablecoin deployments;
 /// user-added tokens stay display-only in the token-manage directory).
-const builtinTokens = [usdtEthToken, usdcPolygonToken, usdtTronToken];
+///
+/// USDT shipped on two chains while USDC had five, which read as an oversight
+/// and was one. It is not simply "every chain USDT exists on": the Polygon and
+/// Arbitrum USDT are bridged rather than Tether-issued, and this list only
+/// carries deployments on Tether's own supported-protocols list, each address
+/// and decimal read back from that chain before landing here.
+const builtinTokens = [
+  usdtEthToken,
+  usdcPolygonToken,
+  usdtTronToken,
+  usdtAvalancheToken,
+  usdtSolanaToken,
+];
 
 /// The built-in registry keyed by NETWORK id: these are MAINNET contract
 /// deployments, so only the mainnet instances carry them — a testnet (or
@@ -190,11 +226,11 @@ const builtinTokensByNetworkId = <String, List<TokenInfo>>{
   'base-sepolia': [usdcBaseSepoliaToken],
   'arbitrum-mainnet': [usdcArbitrumToken],
   'arbitrum-sepolia': [usdcArbitrumSepoliaToken],
-  'avalanche-mainnet': [usdcAvalancheToken],
+  'avalanche-mainnet': [usdcAvalancheToken, usdtAvalancheToken],
   'avalanche-fuji': [usdcAvalancheFujiToken],
   'tron-mainnet': [usdtTronToken],
   'tron-nile': [usdtTronNileToken],
-  'sol-mainnet': [usdcSolanaToken],
+  'sol-mainnet': [usdcSolanaToken, usdtSolanaToken],
   'sol-devnet': [usdcSolanaDevnetToken],
 };
 

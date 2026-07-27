@@ -127,8 +127,8 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
 
   /// Live rows in the same tuple shape as the demo list: the four native
   /// coins, then the built-in registry tokens. Loading and errored items show
-  /// '--' — never an invented number; the change column is empty because
-  /// there is no 24h-change feed yet.
+  /// '--' — never an invented number; 24h change stays empty when its market
+  /// quote is unavailable.
   List<
     (Color, String, String, String, String, String, Color, String, AssetRef?)
   >
@@ -162,14 +162,15 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
           final amount = result.amount;
           final ok = result.status == BalanceStatus.ok && amount != null;
           final fiat = market.fiatValueUsd(coin);
+          final change = market.change24hPercent(coin);
           return (
             color,
             glyph,
             name,
             ok ? '${amount.format(maxFraction: 6)} $symbol' : '-- $symbol',
             fiat == null ? '--' : formatUsd(fiat),
-            '',
-            WalletColors.text3,
+            formatChange24h(change),
+            (change ?? 0) < 0 ? WalletColors.red : WalletColors.green,
             network,
             AssetRef.native(coin: coin, name: name, symbol: symbol),
           );
@@ -496,6 +497,9 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
     final price = ref.isToken
         ? market.tokenPriceUsd(ref.symbol)
         : market.priceUsd(ref.coin);
+    final change24h = ref.isToken
+        ? market.tokenChange24hPercent(ref.symbol)
+        : market.change24hPercent(ref.coin);
 
     final contract = selected?.contract ?? ref.contract;
     final wallet = WalletScope.of(context).current;
@@ -547,12 +551,16 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
               style: const TextStyle(fontSize: 15, color: WalletColors.text2),
             ),
             const SizedBox(height: 10),
-            NetworkBadge(
-              label: ref.isMultiChain
-                  ? l10n.assetOnChains(ref.group.length)
-                  : (ref.network ?? network.name),
-              dotColor: _chainDot[chainOf(actionCoin)]!,
-            ),
+            // Multi-chain assets get a tappable chip naming the chain the
+            // page is currently showing; single-chain assets keep the plain
+            // badge, because there is nothing to pick.
+            if (ref.isMultiChain)
+              _networkChip(context, market, ref)
+            else
+              NetworkBadge(
+                label: ref.network ?? network.name,
+                dotColor: _chainDot[chainOf(actionCoin)]!,
+              ),
           ],
         ),
         Row(
@@ -597,7 +605,6 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
             ),
           ],
         ),
-        if (ref.isMultiChain) _chainPicker(context, market, ref),
         KtCard(
           child: Column(
             children: [
@@ -606,8 +613,13 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
                 value: price == null ? '--' : formatUsd(price),
               ),
               const SizedBox(height: 14),
-              // There is no 24h-change feed yet; '--' is the honest value.
-              KtDetailRow(label: l10n.change24h, value: '--'),
+              KtDetailRow(
+                label: l10n.change24h,
+                value: change24h == null ? '--' : formatChange24h(change24h),
+                valueColor: change24h == null
+                    ? WalletColors.text
+                    : (change24h < 0 ? WalletColors.red : WalletColors.green),
+              ),
               if (contract != null) ...[
                 const SizedBox(height: 14),
                 KtDetailRow(
@@ -623,75 +635,135 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
     );
   }
 
-  /// Per-chain breakdown for a symbol deployed on several chains. Selecting a
-  /// row re-points Send / Receive / the explorer at that chain.
-  Widget _chainPicker(
+  /// The chain this page is currently showing, as a chip that opens the
+  /// picker.
+  ///
+  /// This used to be a permanently expanded card of radio buttons listing
+  /// every deployment. It pushed the price and contract rows off the fold and
+  /// made a five-chain asset look like a settings form; the chip states the
+  /// answer and asks for a tap only when the user wants to change it.
+  Widget _networkChip(
     BuildContext context,
     MarketController market,
     AssetRef ref,
   ) {
-    final l10n = AppLocalizations.of(context);
-    return KtCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            l10n.chooseNetwork,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+    final token = ref.group[_chainIndex];
+    return GestureDetector(
+      key: const ValueKey('chain-chip'),
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _pickChain(context, market, ref),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(6, 4, 10, 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEEF1F6),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ChainIcon(chain: chainOf(token.chain), size: 18),
+            const SizedBox(width: 6),
+            Text(
+              token.network,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: WalletColors.text2,
+              ),
+            ),
+            const SizedBox(width: 2),
+            const Icon(
+              Icons.keyboard_arrow_down,
+              size: 16,
               color: WalletColors.text2,
             ),
-          ),
-          for (final (i, token) in ref.group.indexed) ...[
-            const SizedBox(height: 12),
-            GestureDetector(
-              key: ValueKey('chain-option-${token.id}'),
-              behavior: HitTestBehavior.opaque,
-              onTap: () => setState(() => _chainIndex = i),
-              child: Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: _chainDot[chainOf(token.chain)]!,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      token.network,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: WalletColors.text,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    _amountTextFor(market, token),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Per-chain breakdown for a symbol deployed on several chains. Picking a
+  /// row re-points Send / Receive / the explorer at that chain.
+  Future<void> _pickChain(
+    BuildContext context,
+    MarketController market,
+    AssetRef ref,
+  ) async {
+    final l10n = AppLocalizations.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: WalletColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: WalletColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Text(
+                    l10n.chooseNetwork,
                     style: const TextStyle(
-                      fontSize: 14,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: WalletColors.text,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (final (i, token) in ref.group.indexed)
+                ListTile(
+                  key: ValueKey('chain-option-${token.id}'),
+                  leading: ChainIcon(chain: chainOf(token.chain)),
+                  title: Text(
+                    token.network,
+                    style: const TextStyle(
+                      fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: WalletColors.text,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    i == _chainIndex
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                    size: 18,
-                    color: i == _chainIndex
-                        ? WalletColors.accent
-                        : WalletColors.text3,
+                  // The holding on that chain is the whole reason to pick one,
+                  // so it stays on the row rather than hiding behind the tap.
+                  subtitle: Text(
+                    '${_amountTextFor(market, token)} ${ref.symbol}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: WalletColors.text2,
+                    ),
                   ),
-                ],
-              ),
-            ),
-          ],
-        ],
+                  trailing: i == _chainIndex
+                      ? const Icon(
+                          Icons.check,
+                          size: 20,
+                          color: WalletColors.accent,
+                        )
+                      : null,
+                  onTap: () {
+                    setState(() => _chainIndex = i);
+                    Navigator.of(ctx).pop();
+                  },
+                ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1176,14 +1248,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
               const SizedBox(height: 8),
               for (var i = 0; i < chains.length; i++)
                 ListTile(
-                  leading: Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: chains[i].dotColor,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
+                  leading: ChainIcon(chain: _familyOf(chains[i].coin)),
                   title: Text(
                     chains[i].network,
                     style: const TextStyle(

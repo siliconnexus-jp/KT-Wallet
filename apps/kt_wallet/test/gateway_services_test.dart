@@ -270,12 +270,13 @@ void main() {
         // The gateway's per-token error degrades ONLY that token.
         expect(results['usdt-tron']!.status, BalanceStatus.error);
 
-        // One kt_getBalances per chain that has registry tokens (eth, polygon,
-        // tron — no solana entries), each carrying that chain's token list.
+        // One kt_getBalances per chain that has registry tokens, each
+        // carrying that chain's token list. Avalanche and Solana joined when
+        // USDT gained its deployments there.
         final params = gateway.paramsOf('kt_getBalances');
         expect(
           {for (final p in params) p['chain']},
-          {'eth', 'polygon', 'tron'},
+          {'eth', 'polygon', 'tron', 'avalanche', 'solana'},
         );
         final ethCall = params.firstWhere((p) => p['chain'] == 'eth');
         expect(ethCall['tokens'], [
@@ -316,7 +317,9 @@ void main() {
         expect(results['usdt-eth']!.status, BalanceStatus.ok);
         expect(results['usdt-tron']!.status, BalanceStatus.ok);
         expect(results['usdt-tron']!.amount!.format(), '5');
-        expect(direct.calls, hasLength(2)); // eth + polygon erc20 balanceOf
+        // erc20 balanceOf on eth + polygon + avalanche, and the Solana
+        // token-account query; TRON goes over REST.
+        expect(direct.calls, hasLength(4));
         expect(rest.gets, hasLength(1)); // tron account
       },
     );
@@ -333,7 +336,7 @@ void main() {
       );
       final results = await service.fetchAll(_addresses);
       expect(results['usdt-eth']!.status, BalanceStatus.ok);
-      expect(direct.calls, hasLength(2));
+      expect(direct.calls, hasLength(4));
     });
   });
 
@@ -345,12 +348,12 @@ void main() {
           results: {
             'kt_getPrices': {
               'prices': {
-                'ETH': {'usd': 2500.0},
-                'POL': {'usd': 0.4},
+                'ETH': {'usd': 2500.0, 'change24h': 2.5},
+                'POL': {'usd': 0.4, 'change24h': -3.0},
                 'TRX': {'usd': 0.12},
-                'SOL': {'usd': 150},
-                'USDT': {'usd': 0.998},
-                'USDC': {'usd': 1.001},
+                'SOL': {'usd': 150, 'change24h': 1.0},
+                'USDT': {'usd': 0.998, 'change24h': -0.1},
+                'USDC': {'usd': 1.001, 'change24h': 0.05},
               },
               'cachedAtMs': 1753000000000,
             },
@@ -374,6 +377,11 @@ void main() {
         expect(service.lastGoodUsd, prices);
         expect(service.tokenPriceUsd('USDT'), 0.998);
         expect(service.tokenPriceUsd('USDC'), 1.001);
+        expect(service.change24hPercent(Coin.eth), 2.5);
+        expect(service.change24hPercent(Coin.polygon), -3.0);
+        expect(service.change24hPercent(Coin.tron), isNull);
+        expect(service.tokenChange24hPercent('USDT'), -0.1);
+        expect(service.tokenChange24hPercent('USDC'), 0.05);
         expect(gateway.paramsOf('kt_getPrices').single, {
           'symbols': [
             'ETH',

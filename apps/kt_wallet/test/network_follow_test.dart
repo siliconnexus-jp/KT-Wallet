@@ -306,8 +306,11 @@ void main() {
         usdcBaseToken,
         usdcArbitrumToken,
         usdcAvalancheToken,
+        // Avalanche 和 Solana 各带两枚:Circle 的 USDC 与 Tether 原生发行的 USDT。
+        usdtAvalancheToken,
         usdtTronToken,
         usdcSolanaToken,
+        usdtSolanaToken,
       ]);
       // 无网络来源(旧接线)也解析为完整主网注册表。
       expect(networkTokenRegistry(null)(), builtinTokens);

@@ -50,6 +50,10 @@ void main() {
       'usdt-eth',
       'usdc-polygon',
       'usdt-tron',
+      // Tether issues natively on these two as well; the bridged Polygon and
+      // Arbitrum USDT are deliberately absent.
+      'usdt-avalanche',
+      'usdt-solana',
     });
     for (final token in builtinTokens) {
       expect(token.decimals, 6, reason: token.id);

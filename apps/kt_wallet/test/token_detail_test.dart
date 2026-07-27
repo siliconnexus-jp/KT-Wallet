@@ -235,12 +235,17 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 7.5 on Ethereum + 2.5 on TRON.
+    // 7.5 on Ethereum + 2.5 on TRON. The total is on the page; the split is
+    // one tap away rather than permanently expanded.
     expect(find.text('10 USDT'), findsOneWidget);
+    expect(find.text('选择网络'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('chain-chip')));
+    await tester.pumpAndSettle();
     expect(find.text('选择网络'), findsOneWidget);
     // Every deployment is listed with its own balance.
-    expect(find.text('7.5'), findsOneWidget);
-    expect(find.text('2.5'), findsOneWidget);
+    expect(find.text('7.5 USDT'), findsOneWidget);
+    expect(find.text('2.5 USDT'), findsOneWidget);
   });
 
   testWidgets('a chain that failed is excluded from the sum and shows --', (
@@ -271,7 +276,12 @@ void main() {
     // The loaded leg is reported; the failed one is visibly '--' rather than
     // being folded into the total as a zero.
     expect(find.text('7.5 USDT'), findsOneWidget);
-    expect(find.text('--'), findsWidgets);
+    await tester.tap(find.byKey(const ValueKey('chain-chip')));
+    await tester.pumpAndSettle();
+    expect(find.text('7.5 USDT'), findsWidgets);
+    // TRON errored; Avalanche and Solana never loaded in this fixture. All of
+    // them read '--' rather than being folded in as zeroes.
+    expect(find.text('-- USDT'), findsWidgets);
   });
 
   testWidgets('picking a chain re-points the actions at it', (tester) async {
@@ -285,8 +295,20 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Defaults to the chain holding the most (Ethereum, 7.5).
+    // Defaults to the chain holding the most (Ethereum, 7.5), named on a
+    // chip; the full list lives behind it, OKX-style, rather than as a
+    // permanently expanded radio card.
+    expect(find.text('Ethereum'), findsWidgets);
+    expect(find.byKey(const ValueKey('chain-chip')), findsOneWidget);
+
     final second = usdt[1];
+    expect(
+      find.byKey(ValueKey('chain-option-${second.id}')),
+      findsNothing,
+      reason: 'options appear only once the chip is tapped',
+    );
+    await tester.tap(find.byKey(const ValueKey('chain-chip')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(ValueKey('chain-option-${second.id}')));
     await tester.pumpAndSettle();
 

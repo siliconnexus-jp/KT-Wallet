@@ -74,16 +74,24 @@ class FakePriceService extends PriceService {
     this.prices, {
     this.cached,
     this.tokenPrices = const {'USDT': 0.99, 'USDC': 1.01, 'BUSD': 0.98},
+    this.changes = const {},
+    this.tokenChanges = const {},
   });
   Map<Coin, double>? prices;
   Map<Coin, double>? cached;
   final Map<String, double> tokenPrices;
+  final Map<Coin, double> changes;
+  final Map<String, double> tokenChanges;
   @override
   Future<Map<Coin, double>?> fetchUsdPrices() async => prices;
   @override
   Map<Coin, double>? get lastGoodUsd => cached;
   @override
   double? tokenPriceUsd(String symbol) => tokenPrices[symbol];
+  @override
+  double? change24hPercent(Coin coin) => changes[coin];
+  @override
+  double? tokenChange24hPercent(String symbol) => tokenChanges[symbol];
 }
 
 ChainAddresses _addr(String seed) => ChainAddresses(
@@ -266,6 +274,29 @@ void main() {
     expect(controller.isOffline, isFalse);
   });
 
+  test(
+    '24h portfolio movement is reconstructed from covered holdings',
+    () async {
+      final controller = MarketController(
+        wallets: _wallets(),
+        balances: FakeBalanceService(_okResults()),
+        prices: FakePriceService(
+          _prices,
+          changes: {for (final coin in _prices.keys) coin: 10},
+        ),
+      );
+      await controller.refresh();
+
+      expect(controller.change24hPercent(Coin.eth), 10);
+      final change = controller.portfolioChange24h;
+      expect(change, isNotNull);
+      // Current $2,051.50 is 110% of the reconstructed $1,865.00.
+      expect(change!.deltaUsd, closeTo(186.5, 1e-9));
+      expect(change.percent, closeTo(10, 1e-9));
+      expect(change.coveredAssetCount, 4);
+    },
+  );
+
   test('wallet switch auto-refreshes with the new wallet addresses', () async {
     final wallets = _wallets();
     final balances = FakeBalanceService(_okResults());
@@ -307,6 +338,8 @@ void main() {
         'usdt-eth',
         'usdc-polygon',
         'usdt-tron',
+        'usdt-avalanche',
+        'usdt-solana',
       ]);
       expect(
         controller.tokenBalanceFor('usdt-eth').status,
@@ -359,6 +392,14 @@ void main() {
     expect(formatUsd(862.4), r'$862.40');
     expect(formatUsd(1234.5), r'$1,234.50');
     expect(formatUsd(1234567.891), r'$1,234,567.89');
+  });
+
+  test('market change formatters preserve sign and precision', () {
+    expect(formatChange24h(1.234), '+1.23%');
+    expect(formatChange24h(-1.234), '-1.23%');
+    expect(formatChange24h(null), '');
+    expect(formatSignedUsd(12.345), r'+$12.35');
+    expect(formatSignedUsd(-12.345), r'-$12.35');
   });
 
   test(
