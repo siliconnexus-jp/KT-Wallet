@@ -186,12 +186,17 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
     );
   }
 
-  /// "+" bottom sheet: name + address; the address must validate against one
-  /// of the supported chains, whose tag/color the new row inherits.
-  Future<void> _addContact() async {
+  Future<void> _addContact() => _contactSheet();
+
+  /// "+" / edit bottom sheet: name + address; the address must validate
+  /// against one of the supported chains, whose tag/color the row inherits.
+  ///
+  /// With [existing] the sheet edits that contact in place instead of adding
+  /// one — a typo in a name or address used to mean delete and re-enter.
+  Future<void> _contactSheet({Contact? existing}) async {
     final l10n = AppLocalizations.of(context);
-    final nameController = TextEditingController();
-    final addrController = TextEditingController();
+    final nameController = TextEditingController(text: existing?.name ?? '');
+    final addrController = TextEditingController(text: existing?.address ?? '');
     String? error;
     await showModalBottomSheet<void>(
       context: context,
@@ -224,7 +229,9 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    l10n.addContactTitle,
+                    existing == null
+                        ? l10n.addContactTitle
+                        : l10n.editContactTitle,
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -289,11 +296,20 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                             }
                             final controller = _controller!;
                             final navigator = Navigator.of(ctx);
-                            await controller.addContact(
-                              name: name,
-                              address: addr,
-                              chain: match.$1.name,
-                            );
+                            if (existing == null) {
+                              await controller.addContact(
+                                name: name,
+                                address: addr,
+                                chain: match.$1.name,
+                              );
+                            } else {
+                              await controller.updateContact(
+                                existing.id,
+                                name: name,
+                                address: addr,
+                                chain: match.$1.name,
+                              );
+                            }
                             if (mounted) {
                               setState(() => _contacts = controller.contacts);
                             }
@@ -310,8 +326,8 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
     // Not disposed here: the sheet's exit animation still holds the fields.
   }
 
-  /// "⋮" menu on a contact row: copy the contact's address, or delete the
-  /// contact (with confirmation).
+  /// "⋮" menu on a contact row: copy the address, edit the contact, or delete
+  /// it (with confirmation).
   Future<void> _contactMenu(Contact contact) async {
     final l10n = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context);
@@ -367,6 +383,21 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                 messenger
                   ..clearSnackBars()
                   ..showSnackBar(SnackBar(content: Text(l10n.addressCopied)));
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.edit_outlined,
+                size: 20,
+                color: WalletColors.accent,
+              ),
+              title: Text(
+                l10n.actionEdit,
+                style: const TextStyle(fontSize: 15, color: WalletColors.text),
+              ),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _contactSheet(existing: contact);
               },
             ),
             ListTile(
@@ -1449,6 +1480,10 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                       ),
                       const SizedBox(height: 8),
                       KtSegmented(
+                        // Seven chain names do not fit an even split; they
+                        // wrapped mid-word ("Ethere/um"). Natural width in a
+                        // horizontal scroll instead.
+                        scrollable: true,
                         options: [for (final t in _chainTags) t.$2],
                         selected: family,
                         onChanged: probing

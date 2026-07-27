@@ -644,6 +644,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get contactColdBackup => 'コールドウォレットのバックアップ';
 
   @override
+  String get editContactTitle => '連絡先を編集';
+
+  @override
+  String get actionEdit => '編集';
+
+  @override
   String get addContactTitle => '連絡先を追加';
 
   @override

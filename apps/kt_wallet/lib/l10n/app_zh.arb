@@ -337,6 +337,8 @@
   "tokensEmpty": "还没有自定义代币,点右上角 + 添加",
   "contactBobExchange": "Bob 交易所",
   "contactColdBackup": "冷钱包备份",
+  "editContactTitle": "编辑联系人",
+  "actionEdit": "编辑",
   "addContactTitle": "添加联系人",
   "nameLabel": "名称",
   "addressLabel": "地址",

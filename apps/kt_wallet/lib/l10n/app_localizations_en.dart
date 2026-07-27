@@ -671,6 +671,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get contactColdBackup => 'Cold wallet backup';
 
   @override
+  String get editContactTitle => 'Edit contact';
+
+  @override
+  String get actionEdit => 'Edit';
+
+  @override
   String get addContactTitle => 'Add contact';
 
   @override

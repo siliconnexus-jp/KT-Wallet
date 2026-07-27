@@ -44,12 +44,12 @@ class _KtQrCodePainter extends CustomPainter {
   // redoing it for repaints of the same payload.
   static final _cache = <String, QrImage>{};
   static QrImage _encode(String data) => _cache.putIfAbsent(data, () {
-        final code = QrCode(
-          payload: QrPayload.fromString(data),
-          errorCorrectLevel: QrErrorCorrectLevel.medium,
-        );
-        return QrImage(code);
-      });
+    final code = QrCode(
+      payload: QrPayload.fromString(data),
+      errorCorrectLevel: QrErrorCorrectLevel.medium,
+    );
+    return QrImage(code);
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -63,7 +63,12 @@ class _KtQrCodePainter extends CustomPainter {
       for (var x = 0; x < modules; x++) {
         if (_image.isDark(y, x)) {
           canvas.drawRect(
-            Rect.fromLTWH(origin + x * cell, origin + y * cell, cell + 0.5, cell + 0.5),
+            Rect.fromLTWH(
+              origin + x * cell,
+              origin + y * cell,
+              cell + 0.5,
+              cell + 0.5,
+            ),
             p,
           );
         }

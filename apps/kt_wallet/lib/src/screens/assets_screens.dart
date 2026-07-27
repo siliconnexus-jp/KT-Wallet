@@ -260,6 +260,10 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
           ),
         ),
         KtSegmented(
+          // Same reason as the add-network family picker: under a NetworkScope
+          // this is "All" plus seven network names, and an even split shreds
+          // "Avalanche C-Chain" across lines.
+          scrollable: true,
           options: [l10n.viewAll, ...networks],
           selected: _net,
           onChanged: (i) => setState(() => _net = i),

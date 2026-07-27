@@ -9,7 +9,12 @@ enum WalletKind { hot, watch }
 /// (localized); when omitted it falls back to the design's Chinese labels so the
 /// component stays self-contained for ui_kit's own gallery/goldens.
 class WalletTypeBadge extends StatelessWidget {
-  const WalletTypeBadge({super.key, required this.kind, this.label, this.dark = false});
+  const WalletTypeBadge({
+    super.key,
+    required this.kind,
+    this.label,
+    this.dark = false,
+  });
 
   final WalletKind kind;
 
@@ -23,7 +28,10 @@ class WalletTypeBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final (fallbackLabel, color) = switch (kind) {
       WalletKind.hot => ('普通', dark ? SignerColors.ok : WalletColors.green),
-      WalletKind.watch => ('观察', dark ? SignerColors.blue : WalletColors.accent),
+      WalletKind.watch => (
+        '观察',
+        dark ? SignerColors.blue : WalletColors.accent,
+      ),
     };
     final label = this.label ?? fallbackLabel;
     return Container(
@@ -46,7 +54,12 @@ class WalletTypeBadge extends StatelessWidget {
 
 /// Network chip with brand dot + name (Pencil `Network Chip` component).
 class NetworkBadge extends StatelessWidget {
-  const NetworkBadge({super.key, required this.label, required this.dotColor, this.dark = false});
+  const NetworkBadge({
+    super.key,
+    required this.label,
+    required this.dotColor,
+    this.dark = false,
+  });
 
   final String label;
   final Color dotColor;

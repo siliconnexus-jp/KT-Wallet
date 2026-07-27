@@ -204,6 +204,8 @@
   "tokensEmpty": "No custom tokens yet — tap + to add one",
   "contactBobExchange": "Bob Exchange",
   "contactColdBackup": "Cold wallet backup",
+  "editContactTitle": "Edit contact",
+  "actionEdit": "Edit",
   "addContactTitle": "Add contact",
   "nameLabel": "Name",
   "addressLabel": "Address",

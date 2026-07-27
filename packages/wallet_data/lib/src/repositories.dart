@@ -97,7 +97,10 @@ class WalletRepository {
   /// result to rows recorded on those network instances (the caller passes the
   /// currently ACTIVE ids) — pending/history surfaces must never mix a
   /// testnet row into a mainnet list. Passing null keeps every network.
-  Future<List<Transaction>> transactions({int? limit, Set<String>? networkIds}) {
+  Future<List<Transaction>> transactions({
+    int? limit,
+    Set<String>? networkIds,
+  }) {
     final q = _db.select(_db.transactions)
       ..where((t) => t.walletId.equals(walletId))
       ..orderBy([
@@ -294,6 +297,21 @@ class ContactsRepository {
 
   Future<void> insert(Insertable<Contact> contact) =>
       _db.into(_db.contacts).insert(contact);
+
+  /// Edits a contact in place. `createdAt` is deliberately untouched so the
+  /// row keeps its position in the list after a rename.
+  Future<void> update(
+    String id, {
+    required String name,
+    required String address,
+    required String chain,
+  }) => (_db.update(_db.contacts)..where((c) => c.id.equals(id))).write(
+    ContactsCompanion(
+      name: Value(name),
+      address: Value(address),
+      chain: Value(chain),
+    ),
+  );
 
   Future<void> delete(String id) =>
       (_db.delete(_db.contacts)..where((c) => c.id.equals(id))).go();

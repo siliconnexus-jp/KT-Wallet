@@ -204,6 +204,8 @@
   "tokensEmpty": "カスタムトークンがまだありません。右上の + から追加できます",
   "contactBobExchange": "Bob 取引所",
   "contactColdBackup": "コールドウォレットのバックアップ",
+  "editContactTitle": "連絡先を編集",
+  "actionEdit": "編集",
   "addContactTitle": "連絡先を追加",
   "nameLabel": "名前",
   "addressLabel": "アドレス",

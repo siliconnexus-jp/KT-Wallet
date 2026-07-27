@@ -35,7 +35,11 @@ class KtPrimaryButton extends StatelessWidget {
     final (background, foreground, radius) = switch (style) {
       KtButtonStyle.wallet => (WalletColors.accent, Colors.white, 14.0),
       KtButtonStyle.signer => (SignerColors.blue, SignerColors.bg, 12.0),
-      KtButtonStyle.signerContrast => (SignerColors.text, SignerColors.bg, 12.0),
+      KtButtonStyle.signerContrast => (
+        SignerColors.text,
+        SignerColors.bg,
+        12.0,
+      ),
     };
     return SizedBox(
       height: KtDimens.buttonHeight,

@@ -8,7 +8,11 @@ import 'package:flutter/widgets.dart';
 /// cold_signer build, or screens pumped directly in tests/goldens), UI that
 /// depends on it — such as the "device mode" settings row — hides itself.
 class DeviceModeScope extends InheritedWidget {
-  const DeviceModeScope({super.key, required this.exitMode, required super.child});
+  const DeviceModeScope({
+    super.key,
+    required this.exitMode,
+    required super.child,
+  });
 
   /// Leaves the current mode and returns to the device-mode picker.
   final VoidCallback exitMode;
@@ -18,5 +22,6 @@ class DeviceModeScope extends InheritedWidget {
       context.dependOnInheritedWidgetOfExactType<DeviceModeScope>();
 
   @override
-  bool updateShouldNotify(DeviceModeScope oldWidget) => exitMode != oldWidget.exitMode;
+  bool updateShouldNotify(DeviceModeScope oldWidget) =>
+      exitMode != oldWidget.exitMode;
 }

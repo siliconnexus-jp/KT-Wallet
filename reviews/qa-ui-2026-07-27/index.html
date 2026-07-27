@@ -78,18 +78,17 @@
 </header>
 
 <div class="kpis">
-  <div class="kpi"><div class="n">41</div><div class="l">界面截图</div></div>
+  <div class="kpi"><div class="n">46</div><div class="l">界面截图</div></div>
   <div class="kpi"><div class="n">2</div><div class="l">平台全流程遍历</div></div>
-  <div class="kpi"><div class="n bad">18</div><div class="l">发现问题</div></div>
-  <div class="kpi"><div class="n ok">16</div><div class="l">已修复并真机复验</div></div>
-  <div class="kpi"><div class="n ok">820</div><div class="l">自动化测试通过</div></div>
+  <div class="kpi"><div class="n">18</div><div class="l">发现问题</div></div>
+  <div class="kpi"><div class="n ok">18 / 18</div><div class="l">已修复并真机复验</div></div>
+  <div class="kpi"><div class="n ok">822</div><div class="l">自动化测试通过</div></div>
 </div>
 
 <h2>一、结论</h2>
 <div class="card">
 <p>两个平台的全部主要流程都能走通,<strong>没有崩溃、没有卡死、没有死路</strong>。
-共发现 18 个问题,已修 16 个并逐项真机复验;剩余 2 个是新功能与共享组件改动,
-不影响可用性,单独排期更合适。</p>
+共发现 18 个问题,<strong>全部修复并逐项真机复验</strong>。</p>
 <p>其中最要紧的三个,都是"界面在说谎"这一类:钱包展示<strong>用户并不持有的
 3,120 USDT 余额</strong>;网络设置展示<strong>从未测量过的 RPC 延迟</strong>,
 且 Solana 恒显故障而该节点实测健康;助记词界面在 Android 上<strong>可被完整截图</strong>,
@@ -127,7 +126,7 @@
 <tr><td>收款(QR / 切链 / 复制 / 分享)</td><td class="c">✅</td><td class="c">✅</td><td>iOS 用 <code>simctl pbpaste</code> 逐字校验剪贴板</td></tr>
 <tr><td>转账表单(跨链校验 / 余额 / 手续费档)</td><td class="c">✅</td><td class="c">✅</td><td>Next 正确禁用</td></tr>
 <tr><td>扫码(权限申请 / 拒绝降级 / 相机预览)</td><td class="c">✅</td><td class="c">⚠️</td><td>iOS 模拟器无相机,走的正是降级分支</td></tr>
-<tr><td>通讯录(新增 / 自动识别链 / 复制 / 删除)</td><td class="c">✅</td><td class="c">✅</td><td>从地址格式自动判链</td></tr>
+<tr><td>通讯录(新增 / 编辑 / 自动识别链 / 复制 / 删除)</td><td class="c">✅</td><td class="c">✅</td><td>从地址格式自动判链;编辑保留列表顺序</td></tr>
 <tr><td>设置(安全 / 货币 / 语言 / 设备模式)</td><td class="c">✅</td><td class="c">✅</td><td>iOS 验证方式显示 "Face ID / Biometrics"</td></tr>
 <tr><td>网络设置(主网/测试网 / 逐链 / 自定义 / 网关)</td><td class="c">✅</td><td class="c">✅</td><td>自定义网络保存前真实探测 RPC 并校验 chainId</td></tr>
 <tr><td>代币管理</td><td class="c">✅</td><td class="c">✅</td><td>空状态</td></tr>
@@ -175,9 +174,9 @@
 <tr><td>F-7</td><td>相机不可用文案未本地化且没说原因</td>
   <td><span class="pill p-p3">P3</span></td><td>两平台</td><td><span class="pill p-ok">已修</span></td></tr>
 <tr><td>F-9</td><td>通讯录联系人不能编辑</td>
-  <td><span class="pill p-p3">P3</span></td><td>两平台</td><td><span class="pill p-warn">未做 · 属新功能</span></td></tr>
+  <td><span class="pill p-p3">P3</span></td><td>两平台</td><td><span class="pill p-ok">已修 · 真机复验</span></td></tr>
 <tr><td>F-11</td><td>添加网络表单的链系列 chip 文字换行截断</td>
-  <td><span class="pill p-p3">P3</span></td><td>两平台</td><td><span class="pill p-warn">未做 · 动共享组件会牵动 golden</span></td></tr>
+  <td><span class="pill p-p3">P3</span></td><td>两平台</td><td><span class="pill p-ok">已修 · 真机复验</span></td></tr>
 </tbody>
 </table>
 </div>
@@ -228,6 +227,23 @@ Solana 恒为红色 Timeout,而同一轮测试中该 Devnet 节点刚跑通 4 �
 <figure><img src="shots/i11_signer.png" alt="iOS 可截图"><figcaption><strong>iOS 平台限制</strong> ·
   同一类界面可被完整截图。已改为:录屏/投屏时遮蔽内容(可真正拦住),
   截图后弹红色告警提示立即转移资产</figcaption></figure>
+</div>
+
+<h3>F-11 链系列 chip 换行 / F-9 联系人编辑</h3>
+<p>F-11 的根因是 <code>KtSegmented</code> 给每个选项套了 <code>Expanded</code> —— 七个链名平分宽度必然换行。
+新增一个横向滚动变体,选项按自然宽度排列;<strong>默认的均分行为不变</strong>,其余用到该组件的界面
+(助记词词数、主网/测试网切换等)一字未动。资产列表的网络筛选行有同一个隐患
+(有 NetworkScope 时是「全部」+ 7 个网络名),一并改为滚动。</p>
+<p>F-9 之前只能删掉重建。现在新增/编辑复用同一个弹层,编辑时按现有值预填;
+持久层补了 <code>ContactsRepository.update</code>,<strong>刻意不动 <code>createdAt</code></strong>,
+所以改名不会打乱列表顺序。改地址会重新识别链。</p>
+<div class="shots">
+<figure><img src="shots/a29_chips_fixed.png" alt=""><figcaption><strong>F-11 修复后</strong> ·
+  完整单词单行显示,不再是 "Ethere/um"</figcaption></figure>
+<figure><img src="shots/a30_chips_scrolled.png" alt=""><figcaption>横向滑动可见其余四条链</figcaption></figure>
+<figure><img src="shots/a31_contact_menu.png" alt=""><figcaption><strong>F-9</strong> · ⋮ 菜单新增 Edit</figcaption></figure>
+<figure><img src="shots/a32_contact_edit.png" alt=""><figcaption>编辑弹层按现有值预填</figcaption></figure>
+<figure><img src="shots/a33_contact_edited.png" alt=""><figcaption>原地改为 Carol · 没有新增第二行</figcaption></figure>
 </div>
 
 <h2>五、界面截图</h2>
@@ -318,9 +334,6 @@ Solana 恒为红色 Timeout,而同一轮测试中该 Devnet 节点刚跑通 4 �
 <h2>七、待办</h2>
 <div class="card">
 <ul>
-<li><strong>F-9 联系人编辑</strong> —— 新功能而非缺陷修复,建议走产品排期。</li>
-<li><strong>F-11 chip 文字换行</strong> —— 要改共享 <code>ui_kit</code> 组件或 Add network 布局,
-    会牵动其他界面 golden,单独提交更干净。</li>
 <li><strong>测试文档</strong> —— F-18 的处置写进了 <code>docs/TESTING.md</code> §6.0
     (签名类 E2E 必须先让设备能应答生物识别,附 Android/iOS 自动应答命令;
     以及集成测试跑完会卸载 App、Solana <code>confirmed</code>/<code>finalized</code> 竞态)。

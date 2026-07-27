@@ -636,6 +636,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get contactColdBackup => '冷钱包备份';
 
   @override
+  String get editContactTitle => '编辑联系人';
+
+  @override
+  String get actionEdit => '编辑';
+
+  @override
   String get addContactTitle => '添加联系人';
 
   @override

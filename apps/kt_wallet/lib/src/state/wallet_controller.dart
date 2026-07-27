@@ -377,6 +377,25 @@ class WalletController extends ChangeNotifier {
     return contact;
   }
 
+  /// Edits an existing contact. Keeps its `createdAt`, so a rename does not
+  /// reshuffle the address book.
+  Future<void> updateContact(
+    String id, {
+    required String name,
+    required String address,
+    required String chain,
+  }) async {
+    final index = _contacts.indexWhere((c) => c.id == id);
+    if (index < 0) return;
+    await _store?.updateContact(id, name: name, address: address, chain: chain);
+    _contacts[index] = _contacts[index].copyWith(
+      name: name,
+      address: address,
+      chain: chain,
+    );
+    notifyListeners();
+  }
+
   Future<void> removeContact(String id) async {
     await _store?.deleteContact(id);
     _contacts.removeWhere((c) => c.id == id);

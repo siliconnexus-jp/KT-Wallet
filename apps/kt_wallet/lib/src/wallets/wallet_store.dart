@@ -200,6 +200,13 @@ class WalletStore {
   Future<void> addContact(db.Contact contact) =>
       _contacts.insert(contact.toCompanion(false));
 
+  Future<void> updateContact(
+    String id, {
+    required String name,
+    required String address,
+    required String chain,
+  }) => _contacts.update(id, name: name, address: address, chain: chain);
+
   Future<void> deleteContact(String id) => _contacts.delete(id);
 
   // ---- global custom-token list (Settings → Token 管理) -------------------

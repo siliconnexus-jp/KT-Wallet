@@ -45,7 +45,8 @@ class KtDetailRow extends StatelessWidget {
               fontSize: mono ? 13 : 14,
               fontWeight: FontWeight.w500,
               fontFamily: mono ? KtFonts.mono : KtFonts.ui,
-              color: valueColor ?? (dark ? SignerColors.text : WalletColors.text),
+              color:
+                  valueColor ?? (dark ? SignerColors.text : WalletColors.text),
             ),
           ),
         ),

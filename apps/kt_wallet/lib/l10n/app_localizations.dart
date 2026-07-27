@@ -1282,6 +1282,18 @@ abstract class AppLocalizations {
   /// **'冷钱包备份'**
   String get contactColdBackup;
 
+  /// No description provided for @editContactTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑联系人'**
+  String get editContactTitle;
+
+  /// No description provided for @actionEdit.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑'**
+  String get actionEdit;
+
   /// No description provided for @addContactTitle.
   ///
   /// In zh, this message translates to:
