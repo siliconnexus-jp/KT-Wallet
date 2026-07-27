@@ -1234,6 +1234,54 @@ abstract class AppLocalizations {
   /// **'地址已复制'**
   String get addressCopied;
 
+  /// No description provided for @saveReceiveImage.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存收款图片'**
+  String get saveReceiveImage;
+
+  /// No description provided for @receiveCardTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'收款地址'**
+  String get receiveCardTitle;
+
+  /// No description provided for @receiveCardNetwork.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络'**
+  String get receiveCardNetwork;
+
+  /// No description provided for @receiveCardGenerated.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成时间'**
+  String get receiveCardGenerated;
+
+  /// No description provided for @receiveImageSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存到相册'**
+  String get receiveImageSaved;
+
+  /// No description provided for @receiveImageDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'未获得相册权限,无法保存'**
+  String get receiveImageDenied;
+
+  /// No description provided for @receiveImageUseShare.
+  ///
+  /// In zh, this message translates to:
+  /// **'此系统版本无法直接保存,请使用右上角分享'**
+  String get receiveImageUseShare;
+
+  /// No description provided for @receiveImageFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成收款图片失败'**
+  String get receiveImageFailed;
+
   /// No description provided for @actionCopy.
   ///
   /// In zh, this message translates to:

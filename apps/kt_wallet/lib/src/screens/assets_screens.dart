@@ -1,9 +1,12 @@
 import 'package:chains/chains.dart' show Chain;
 import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter/material.dart';
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
@@ -12,9 +15,11 @@ import '../market/asset_ref.dart';
 import '../market/balance_service.dart';
 import '../market/explorer_links.dart';
 import '../market/price_service.dart';
+import '../market/receive_card.dart';
 import '../market/market_controller.dart';
 import '../market/market_scope.dart';
 import '../platform/external_actions.dart';
+import '../platform/media_gallery.dart';
 import '../transfer/airgap_codec.dart' show truncateMiddle;
 import 'home_screen.dart' show tokenRowMeta;
 import '../widgets/market_offline_banner.dart';
@@ -709,11 +714,31 @@ class _ReceiveChain {
 /// chain picker; the displayed address (and what copy/share puts on the
 /// clipboard) is the current wallet's address for the selected chain.
 class ReceiveScreen extends StatefulWidget {
-  const ReceiveScreen({super.key, this.airdropClient});
+  const ReceiveScreen({
+    super.key,
+    this.airdropClient,
+    this.clock,
+    this.tempDirectory,
+    this.cardRenderer,
+  });
 
   /// Injectable http client for the devnet airdrop faucet (tests); null in
   /// production (the [AirdropService] creates and closes its own).
   final http.Client? airdropClient;
+
+  /// Stamp printed on the saved receive card; injectable so tests are not
+  /// wall-clock dependent.
+  final DateTime Function()? clock;
+
+  /// Where the shared card is staged before the share sheet picks it up;
+  /// injectable because path_provider has no implementation in widget tests.
+  final Future<Directory> Function()? tempDirectory;
+
+  /// Renders the card. Injectable because the real one goes through
+  /// `Picture.toImage`, which cannot complete inside a widget test's fake
+  /// async zone; [renderReceiveCardPng] is covered directly as a pure
+  /// function instead, and widget tests stub this to check the wiring.
+  final Future<Uint8List> Function(ReceiveCardData)? cardRenderer;
 
   @override
   State<ReceiveScreen> createState() => _ReceiveScreenState();
@@ -784,6 +809,10 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
 
   /// True while a devnet airdrop request is in flight (guards double-taps).
   bool _airdropping = false;
+
+  /// True while the receive card is being rendered (guards double-taps).
+  bool _savingImage = false;
+  bool _sharing = false;
 
   List<_ReceiveChain> get _availableChains {
     final expanded =
@@ -1008,20 +1037,110 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     messenger.showSnackBar(SnackBar(content: Text(l10n.addressCopied)));
   }
 
-  Future<void> _shareAddress() async {
+  /// Renders the receive card once, for both actions below.
+  Future<Uint8List?> _renderCard() async {
     final l10n = AppLocalizations.of(context);
+    final chain = _chain;
     final address = _address(context);
-    if (address.isEmpty) return;
+    if (address.isEmpty) return null;
+    final network = NetworkScope.of(context).activeFor(_familyOf(chain.coin));
+    final data = ReceiveCardData(
+      address: address,
+      assetLabel: chain.pillLabel,
+      networkName: network.name,
+      generatedAt: widget.clock?.call() ?? DateTime.now(),
+      isTestnet: network.isTestnet,
+      title: l10n.receiveCardTitle,
+      networkLabel: l10n.receiveCardNetwork,
+      generatedLabel: l10n.receiveCardGenerated,
+      warning: chain.coin == Coin.tron
+          ? l10n.receiveWarning
+          : l10n.receiveWarningFor(chain.network),
+      testnetLabel: l10n.testnetBadge,
+    );
+    return (widget.cardRenderer ?? renderReceiveCardPng)(data);
+  }
+
+  /// Writes the receive card straight into the photo library. Where the
+  /// platform cannot do that without a heavyweight permission (Android below
+  /// 10), it says so and points at the share action instead of silently
+  /// doing something else.
+  Future<void> _saveReceiveImage() async {
+    final l10n = AppLocalizations.of(context);
+    if (_savingImage) return;
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    setState(() => _savingImage = true);
     try {
-      await ExternalActions.instance.share(
-        text: '${_chain.network}\n$address',
-        subject: l10n.shareAddressSubject(_chain.network),
+      final png = await _renderCard();
+      if (png == null) return;
+      final outcome = await MediaGallery.instance.saveImage(
+        png,
+        name: 'kt-wallet-receive',
+      );
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(switch (outcome) {
+            SaveImageOutcome.saved => l10n.receiveImageSaved,
+            SaveImageOutcome.denied => l10n.receiveImageDenied,
+            SaveImageOutcome.unsupported => l10n.receiveImageUseShare,
+            SaveImageOutcome.failed => l10n.receiveImageFailed,
+          }),
+        ),
       );
     } on Object {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..clearSnackBars()
-        ..showSnackBar(SnackBar(content: Text(l10n.externalActionFailed)));
+      messenger.showSnackBar(SnackBar(content: Text(l10n.receiveImageFailed)));
+    } finally {
+      if (mounted) setState(() => _savingImage = false);
+    }
+  }
+
+  /// Shares the receive CARD, not just the address string: the recipient gets
+  /// a scannable QR that also states the network, which is what stops a
+  /// wrong-chain transfer. The address still travels as the text body so it
+  /// stays copy-pasteable.
+  Future<void> _shareAddress() async {
+    final l10n = AppLocalizations.of(context);
+    final chain = _chain;
+    final address = _address(context);
+    if (address.isEmpty || _sharing) return;
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    setState(() => _sharing = true);
+    final subject = l10n.shareAddressSubject(chain.network);
+    final text = '${chain.network}\n$address';
+    try {
+      final png = await _renderCard();
+      if (png != null) {
+        try {
+          final dir =
+              await (widget.tempDirectory?.call() ?? getTemporaryDirectory());
+          final file = File('${dir.path}/kt-wallet-receive.png');
+          // Synchronous on purpose: ~150 KB is sub-millisecond, and an async
+          // write cannot complete inside a widget test's fake async zone,
+          // which would leave this whole path untestable.
+          file.writeAsBytesSync(png, flush: true);
+          await ExternalActions.instance.shareFile(
+            path: file.path,
+            mimeType: 'image/png',
+            text: text,
+            subject: subject,
+          );
+          return;
+        } on Object {
+          // Could not stage the image (no temp dir, disk full): the address
+          // itself is still worth sharing, so fall through rather than
+          // failing the whole action.
+        }
+      }
+      await ExternalActions.instance.share(text: text, subject: subject);
+    } on Object {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.externalActionFailed)),
+      );
+    } finally {
+      if (mounted) setState(() => _sharing = false);
     }
   }
 
@@ -1144,6 +1263,48 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
             ],
           ),
         ),
+        if (address.isNotEmpty)
+          GestureDetector(
+            key: const ValueKey('receive-save-image'),
+            behavior: HitTestBehavior.opaque,
+            onTap: _savingImage ? null : _saveReceiveImage,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: WalletColors.surface,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (_savingImage)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: WalletColors.accent,
+                      ),
+                    )
+                  else
+                    const Icon(
+                      Icons.image_outlined,
+                      size: 18,
+                      color: WalletColors.accent,
+                    ),
+                  const SizedBox(width: 8),
+                  Text(
+                    l10n.saveReceiveImage,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: WalletColors.accent,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         // Testnet-only: one-tap Solana airdrop, or copy-faucet-URL where the
         // network declares one. Mainnet (and testnets without either) render
         // nothing here.

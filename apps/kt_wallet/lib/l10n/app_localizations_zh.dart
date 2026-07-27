@@ -612,6 +612,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get addressCopied => '地址已复制';
 
   @override
+  String get saveReceiveImage => '保存收款图片';
+
+  @override
+  String get receiveCardTitle => '收款地址';
+
+  @override
+  String get receiveCardNetwork => '网络';
+
+  @override
+  String get receiveCardGenerated => '生成时间';
+
+  @override
+  String get receiveImageSaved => '已保存到相册';
+
+  @override
+  String get receiveImageDenied => '未获得相册权限,无法保存';
+
+  @override
+  String get receiveImageUseShare => '此系统版本无法直接保存,请使用右上角分享';
+
+  @override
+  String get receiveImageFailed => '生成收款图片失败';
+
+  @override
   String get actionCopy => '复制地址';
 
   @override

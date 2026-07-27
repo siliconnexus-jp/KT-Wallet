@@ -1,6 +1,7 @@
 import Flutter
 import LocalAuthentication
 import Network
+import Photos
 import UIKit
 
 @main
@@ -60,6 +61,70 @@ import UIKit
           return
         }
         self?.deviceSecurityState(result)
+      }
+
+      // Saves a generated image (the receive card) to the photo library.
+      let mediaChannel = FlutterMethodChannel(
+        name: "kt/media",
+        binaryMessenger: registrar.messenger()
+      )
+      mediaChannel.setMethodCallHandler { [weak self] call, result in
+        guard call.method == "saveImage" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        guard
+          let args = call.arguments as? [String: Any],
+          let data = (args["bytes"] as? FlutterStandardTypedData)?.data,
+          let image = UIImage(data: data)
+        else {
+          result(FlutterError(code: "INVALID", message: "No image bytes", details: nil))
+          return
+        }
+        self?.saveToPhotoLibrary(image, result: result)
+      }
+    }
+  }
+
+  /// Asks for add-only access where iOS offers it (14+), which is the
+  /// narrowest scope for an app that never reads the user's library.
+  private func saveToPhotoLibrary(_ image: UIImage, result: @escaping FlutterResult) {
+    let granted: (PHAuthorizationStatus) -> Void = { [weak self] status in
+      // `.limited` only exists on iOS 14+, where it also counts as granted for
+      // an add-only request.
+      var allowed = status == .authorized
+      if #available(iOS 14, *) { allowed = allowed || status == .limited }
+      guard allowed else {
+        DispatchQueue.main.async {
+          result(
+            FlutterError(
+              code: "PERMISSION_DENIED",
+              message: "Photo library access was declined",
+              details: nil))
+        }
+        return
+      }
+      self?.writeAsset(image, result: result)
+    }
+    if #available(iOS 14, *) {
+      PHPhotoLibrary.requestAuthorization(for: .addOnly, handler: granted)
+    } else {
+      PHPhotoLibrary.requestAuthorization(granted)
+    }
+  }
+
+  private func writeAsset(_ image: UIImage, result: @escaping FlutterResult) {
+    PHPhotoLibrary.shared().performChanges {
+      PHAssetChangeRequest.creationRequestForAsset(from: image)
+    } completionHandler: { saved, error in
+      DispatchQueue.main.async {
+        if saved {
+          result(true)
+        } else {
+          result(
+            FlutterError(
+              code: "FAILED", message: error?.localizedDescription, details: nil))
+        }
       }
     }
   }

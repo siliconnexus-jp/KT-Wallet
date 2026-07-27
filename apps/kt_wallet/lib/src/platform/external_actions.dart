@@ -12,6 +12,16 @@ abstract class ExternalActions {
   Future<bool> open(Uri uri);
 
   Future<void> share({required String text, String? subject});
+
+  /// Hands a generated file to the system share sheet, which is where both
+  /// platforms offer "save to Photos" / "save to Files". Going through the
+  /// share sheet keeps this out of the photo-library permission business.
+  Future<void> shareFile({
+    required String path,
+    required String mimeType,
+    String? text,
+    String? subject,
+  });
 }
 
 class PlatformExternalActions extends ExternalActions {
@@ -25,6 +35,22 @@ class PlatformExternalActions extends ExternalActions {
   Future<void> share({required String text, String? subject}) async {
     await SharePlus.instance.share(ShareParams(text: text, subject: subject));
   }
+
+  @override
+  Future<void> shareFile({
+    required String path,
+    required String mimeType,
+    String? text,
+    String? subject,
+  }) async {
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(path, mimeType: mimeType)],
+        text: text,
+        subject: subject,
+      ),
+    );
+  }
 }
 
 class FakeExternalActions extends ExternalActions {
@@ -33,6 +59,8 @@ class FakeExternalActions extends ExternalActions {
   final bool openResult;
   final List<Uri> opened = [];
   final List<({String text, String? subject})> shared = [];
+  final List<({String path, String mimeType, String? text, String? subject})>
+  sharedFiles = [];
 
   @override
   Future<bool> open(Uri uri) async {
@@ -43,5 +71,20 @@ class FakeExternalActions extends ExternalActions {
   @override
   Future<void> share({required String text, String? subject}) async {
     shared.add((text: text, subject: subject));
+  }
+
+  @override
+  Future<void> shareFile({
+    required String path,
+    required String mimeType,
+    String? text,
+    String? subject,
+  }) async {
+    sharedFiles.add((
+      path: path,
+      mimeType: mimeType,
+      text: text,
+      subject: subject,
+    ));
   }
 }

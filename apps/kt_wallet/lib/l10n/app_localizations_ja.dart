@@ -620,6 +620,30 @@ class AppLocalizationsJa extends AppLocalizations {
   String get addressCopied => 'アドレスをコピーしました';
 
   @override
+  String get saveReceiveImage => '受取画像を保存';
+
+  @override
+  String get receiveCardTitle => '受取アドレス';
+
+  @override
+  String get receiveCardNetwork => 'ネットワーク';
+
+  @override
+  String get receiveCardGenerated => '生成日時';
+
+  @override
+  String get receiveImageSaved => '写真に保存しました';
+
+  @override
+  String get receiveImageDenied => '写真ライブラリへのアクセスが拒否されました';
+
+  @override
+  String get receiveImageUseShare => 'このOSでは直接保存できません。共有をご利用ください';
+
+  @override
+  String get receiveImageFailed => '受取画像を作成できませんでした';
+
+  @override
   String get actionCopy => 'アドレスをコピー';
 
   @override

@@ -111,6 +111,7 @@ flutter:
   # BUSD mark), bundled so asset rows render real logos offline.
   assets:
     - assets/tokens/
+    - assets/brand/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

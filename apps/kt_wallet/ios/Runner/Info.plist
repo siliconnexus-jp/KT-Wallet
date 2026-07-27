@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Saving a receive card writes the QR image to your photo library. KT Wallet never reads your existing photos.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>The camera scans the offline signer's QR codes (account exports and signed transactions) and recipient address QR codes.</string>
 	<key>NSFaceIDUsageDescription</key>

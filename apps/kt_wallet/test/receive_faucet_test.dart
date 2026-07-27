@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:core_crypto/core_crypto.dart' show ChainAddresses;
 import 'package:core_crypto/testing.dart';
@@ -8,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/src/platform/external_actions.dart';
+import 'package:kt_wallet/src/market/receive_card.dart';
 import 'package:kt_wallet/src/screens/assets_screens.dart';
 import 'package:kt_wallet/src/state/networks.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
@@ -48,6 +51,8 @@ void main() {
     WalletController wallets,
     NetworkController net, {
     http.Client? airdropClient,
+    Future<Directory> Function()? tempDirectory,
+    Future<Uint8List> Function(ReceiveCardData)? cardRenderer,
   }) => MaterialApp(
     debugShowCheckedModeBanner: false,
     locale: const Locale('zh'),
@@ -57,7 +62,11 @@ void main() {
       controller: wallets,
       child: NetworkScope(
         controller: net,
-        child: ReceiveScreen(airdropClient: airdropClient),
+        child: ReceiveScreen(
+          airdropClient: airdropClient,
+          tempDirectory: tempDirectory,
+          cardRenderer: cardRenderer,
+        ),
       ),
     ),
   );
@@ -95,6 +104,8 @@ void main() {
     expect(find.text('领取测试币'), findsOneWidget);
     expect(find.text('Devnet'), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const ValueKey('faucet-action')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('faucet-action')));
     await tester.pumpAndSettle();
 
@@ -125,6 +136,8 @@ void main() {
     await tester.pumpAndSettle();
     await switchToSolana(tester);
 
+    await tester.ensureVisible(find.byKey(const ValueKey('faucet-action')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('faucet-action')));
     await tester.pumpAndSettle();
 
@@ -158,6 +171,8 @@ void main() {
     expect(find.text('领取测试币'), findsOneWidget);
     expect(find.text('Nile'), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const ValueKey('faucet-action')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('faucet-action')));
     await tester.pumpAndSettle();
 
@@ -167,21 +182,53 @@ void main() {
     expect(find.text('已打开测试币水龙头'), findsOneWidget);
   });
 
-  testWidgets('share action invokes the native share contract with address', (
+  // Share hands over the rendered receive CARD — a scannable QR that also
+  // states the network — with the address still in the text body so it stays
+  // copy-pasteable.
+  testWidgets('share action sends the receive card image plus the address', (
     tester,
   ) async {
     final (wallets, addresses) = await makeWallet();
     final actions = FakeExternalActions();
     ExternalActions.instance = actions;
+    addTearDown(
+      () => ExternalActions.instance = const PlatformExternalActions(),
+    );
 
-    await tester.pumpWidget(app(wallets, NetworkController()));
+    // Sync: real async I/O never completes inside fake async.
+    final tmp = Directory.systemTemp.createTempSync('kt-receive-test');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+
+    // The real renderer goes through Picture.toImage, which cannot complete
+    // in a widget test's fake async zone; it is covered directly in
+    // receive_card_test.dart. Here we check the wiring.
+    late ReceiveCardData rendered;
+    await tester.pumpWidget(
+      app(
+        wallets,
+        NetworkController(),
+        tempDirectory: () async => tmp,
+        cardRenderer: (data) async {
+          rendered = data;
+          return Uint8List.fromList(const [1, 2, 3, 4]);
+        },
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.ios_share));
     await tester.pumpAndSettle();
 
-    expect(actions.shared, hasLength(1));
-    expect(actions.shared.single.text, contains(addresses.tron));
-    expect(actions.shared.single.subject, 'TRON 收款地址');
+    expect(actions.sharedFiles, hasLength(1));
+    final shared = actions.sharedFiles.single;
+    expect(shared.mimeType, 'image/png');
+    expect(shared.path, endsWith('.png'));
+    expect(shared.text, contains(addresses.tron));
+    expect(shared.subject, 'TRON 收款地址');
+    // The image replaces the text-only share, it does not sit alongside it.
+    expect(actions.shared, isEmpty);
+    // And the card was asked to describe THIS address on THIS network.
+    expect(rendered.address, addresses.tron);
+    expect(rendered.networkName, 'TRON');
   });
 
   testWidgets('mainnet: no faucet affordance renders', (tester) async {

@@ -647,6 +647,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addressCopied => 'Address copied';
 
   @override
+  String get saveReceiveImage => 'Save receive image';
+
+  @override
+  String get receiveCardTitle => 'Receiving address';
+
+  @override
+  String get receiveCardNetwork => 'Network';
+
+  @override
+  String get receiveCardGenerated => 'Generated';
+
+  @override
+  String get receiveImageSaved => 'Saved to your photos';
+
+  @override
+  String get receiveImageDenied => 'Photo library access was declined';
+
+  @override
+  String get receiveImageUseShare =>
+      'This OS version cannot save directly — use share instead';
+
+  @override
+  String get receiveImageFailed => 'Could not create the receive image';
+
+  @override
   String get actionCopy => 'Copy address';
 
   @override

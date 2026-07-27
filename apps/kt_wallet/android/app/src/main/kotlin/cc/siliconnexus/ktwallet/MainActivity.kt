@@ -3,6 +3,7 @@ package cc.siliconnexus.ktwallet
 import android.app.Activity
 import android.app.KeyguardManager
 import android.bluetooth.BluetoothAdapter
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -11,6 +12,8 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
@@ -18,6 +21,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.LinearLayout
+import androidx.annotation.RequiresApi
 import android.widget.TextView
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -59,6 +63,33 @@ class MainActivity : FlutterFragmentActivity() {
                             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
                         }
                         result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        // Saves a generated image (the receive card) into the photo library.
+        // MediaStore on API 29+ needs no permission at all; older releases
+        // would need WRITE_EXTERNAL_STORAGE, which is not worth requesting for
+        // this — Dart falls back to the share sheet on UNSUPPORTED.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kt/media")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "saveImage" -> {
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                            result.error("UNSUPPORTED", "Requires Android 10+", null)
+                            return@setMethodCallHandler
+                        }
+                        val bytes = call.argument<ByteArray>("bytes")
+                        val name = call.argument<String>("name") ?: "kt-wallet"
+                        if (bytes == null || bytes.isEmpty()) {
+                            result.error("INVALID", "No image bytes", null)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            result.success(saveToPictures(bytes, name))
+                        } catch (e: Exception) {
+                            result.error("FAILED", e.message, null)
+                        }
                     }
                     else -> result.notImplemented()
                 }
@@ -164,6 +195,38 @@ class MainActivity : FlutterFragmentActivity() {
             )
         )
         content.bringToFront()
+    }
+
+    /**
+     * Inserts a PNG into Pictures/KT Wallet via MediaStore. IS_PENDING hides
+     * the row until the bytes are flushed, so a crash mid-write cannot leave a
+     * truncated image in the user's gallery.
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun saveToPictures(bytes: ByteArray, name: String): Boolean {
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, "$name.png")
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            put(
+                MediaStore.Images.Media.RELATIVE_PATH,
+                Environment.DIRECTORY_PICTURES + "/KT Wallet"
+            )
+            put(MediaStore.Images.Media.IS_PENDING, 1)
+        }
+        val resolver = contentResolver
+        val uri = resolver.insert(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values
+        ) ?: return false
+        try {
+            resolver.openOutputStream(uri)?.use { it.write(bytes) } ?: return false
+        } catch (e: Exception) {
+            resolver.delete(uri, null, null)
+            throw e
+        }
+        values.clear()
+        values.put(MediaStore.Images.Media.IS_PENDING, 0)
+        resolver.update(uri, values, null, null)
+        return true
     }
 
     private fun privacyText(value: String, size: Float, bold: Boolean) =
