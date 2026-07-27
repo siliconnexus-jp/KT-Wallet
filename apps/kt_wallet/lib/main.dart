@@ -215,7 +215,7 @@ class _WalletBootstrapState extends State<_WalletBootstrap> {
         if (controller == null) return const ColoredBox(color: SignerColors.bg);
         // App lock: with the security-settings 应用锁 preference on, the
         // wallet stays behind a biometric lock screen (see AppLockGate for
-        // the no-biometrics passthrough rationale).
+        // the no-biometrics / no-PIN enrollment fallback).
         final walletApp = KtWalletApp(
           controller: controller,
           localeController: widget.localeController,
@@ -253,7 +253,7 @@ class _BootstrapErrorApp extends StatelessWidget {
     return ListenableBuilder(
       listenable: localeController,
       builder: (context, _) => MaterialApp(
-        title: 'KT Wallet',
+        onGenerateTitle: (context) => AppLocalizations.of(context).appName,
         debugShowCheckedModeBanner: false,
         locale: localeController.locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -345,7 +345,7 @@ class ModeSelectApp extends StatelessWidget {
       child: ListenableBuilder(
         listenable: localeController,
         builder: (context, _) => MaterialApp(
-          title: 'KT Wallet',
+          onGenerateTitle: (context) => AppLocalizations.of(context).appName,
           debugShowCheckedModeBanner: false,
           locale: localeController.locale,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -600,7 +600,7 @@ class _KtWalletAppState extends State<KtWalletApp> {
       child: ListenableBuilder(
         listenable: widget.localeController,
         builder: (context, _) => MaterialApp.router(
-          title: 'KT Wallet',
+          onGenerateTitle: (context) => AppLocalizations.of(context).appName,
           debugShowCheckedModeBanner: false,
           locale: widget.localeController.locale,
           localizationsDelegates: AppLocalizations.localizationsDelegates,

@@ -100,6 +100,12 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @appName.
+  ///
+  /// In zh, this message translates to:
+  /// **'KT冷钱包'**
+  String get appName;
+
   /// No description provided for @actionConfirm.
   ///
   /// In zh, this message translates to:
@@ -679,7 +685,7 @@ abstract class AppLocalizations {
   /// No description provided for @signingBlockedDesc.
   ///
   /// In zh, this message translates to:
-  /// **'该交易包含无法安全解析的内容，KT Wallet Cold Signer 已拒绝签名以保护你的资产。'**
+  /// **'该交易包含无法安全解析的内容，KT Cold Signer 已拒绝签名以保护你的资产。'**
   String get signingBlockedDesc;
 
   /// No description provided for @unknownContractCallDetected.

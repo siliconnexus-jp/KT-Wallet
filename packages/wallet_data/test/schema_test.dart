@@ -6,7 +6,7 @@ import 'package:test/test.dart';
 import 'package:wallet_data/wallet_data.dart';
 
 void main() {
-  test('schemaVersion is 3 and all tables are created', () async {
+  test('schemaVersion is 4 and all tables are created', () async {
     final db = WalletDatabase(NativeDatabase.memory());
     addTearDown(db.close);
 
@@ -21,7 +21,7 @@ void main() {
             .map((r) => r.data['name'] as String)
             .toSet();
 
-    expect(db.schemaVersion, 3);
+    expect(db.schemaVersion, 4);
     for (final expected in [
       'wallets',
       'accounts',
@@ -39,7 +39,7 @@ void main() {
     }
   });
 
-  test('v1 → v3 migration keeps data and adds replacement metadata', () async {
+  test('v1 → v4 migration keeps data and adds replacement metadata', () async {
     // Build the two v1 tables touched by later migrations. The old
     // transactions schema deliberately has none of the EVM replacement
     // columns introduced in v3.
@@ -140,12 +140,130 @@ void main() {
     expect(legacy.replacesId, isNull);
     expect(legacy.replacedById, isNull);
     expect(legacy.replacementKind, isNull);
+    // v4 backfill: an un-attributed row lands on its chain's mainnet id.
+    expect(legacy.networkId, 'eth-mainnet');
 
     final version = (await db.customSelect('PRAGMA user_version').getSingle())
         .data
         .values
         .first;
-    expect(version, 3);
+    expect(version, 4);
+  });
+
+  test('v3 → v4 adds network_id and backfills per chain', () async {
+    final dir = await Directory.systemTemp.createTemp('wallet_data_v3');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/v3.sqlite');
+
+    // Exact v3 transactions schema: everything except network_id.
+    final raw = sqlite3.sqlite3.open(file.path);
+    raw
+      ..execute('''
+        CREATE TABLE wallets (
+          id TEXT NOT NULL PRIMARY KEY,
+          name TEXT NOT NULL,
+          type INTEGER NOT NULL,
+          avatar_color INTEGER NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          backed_up INTEGER NOT NULL DEFAULT 0,
+          cold_wallet_id TEXT,
+          protocol_ver INTEGER,
+          created_at INTEGER NOT NULL
+        );
+      ''')
+      ..execute('''
+        CREATE TABLE transactions (
+          id TEXT NOT NULL PRIMARY KEY,
+          wallet_id TEXT NOT NULL,
+          req_id TEXT,
+          coin TEXT NOT NULL,
+          contract TEXT,
+          direction INTEGER NOT NULL,
+          from_addr TEXT NOT NULL,
+          to_addr TEXT NOT NULL,
+          amount_raw TEXT NOT NULL,
+          fee_raw TEXT,
+          hash TEXT,
+          status INTEGER NOT NULL,
+          sign_mode INTEGER NOT NULL,
+          memo TEXT,
+          created_at INTEGER NOT NULL,
+          broadcast_at INTEGER,
+          nonce TEXT,
+          max_priority_fee_raw TEXT,
+          max_fee_raw TEXT,
+          gas_limit_raw TEXT,
+          replaces_id TEXT,
+          replaced_by_id TEXT,
+          replacement_kind INTEGER
+        );
+      ''')
+      ..execute('''
+        CREATE TABLE contacts (
+          id TEXT NOT NULL PRIMARY KEY,
+          name TEXT NOT NULL,
+          address TEXT NOT NULL,
+          chain TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+      ''')
+      ..execute('''
+        CREATE TABLE custom_tokens (
+          id TEXT NOT NULL PRIMARY KEY,
+          symbol TEXT NOT NULL,
+          name TEXT NOT NULL,
+          contract TEXT,
+          network TEXT NOT NULL,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL
+        );
+      ''')
+      ..execute(
+        "INSERT INTO wallets VALUES ('A', 'v3', 0, 1, 0, 1, NULL, NULL, 7)",
+      );
+    for (final (id, coin, ts) in [
+      ('evm', 'eth', 30),
+      ('trx', 'tron', 20),
+      ('unknown', 'dogecoin', 10),
+    ]) {
+      raw.execute(
+        "INSERT INTO transactions (id, wallet_id, coin, direction, from_addr, "
+        "to_addr, amount_raw, status, sign_mode, created_at, nonce) "
+        "VALUES ('$id', 'A', '$coin', 1, '0xfrom', '0xto', '100', 8, 0, $ts, '7')",
+      );
+    }
+    raw
+      ..execute('PRAGMA user_version = 3')
+      ..dispose();
+
+    final db = WalletDatabase(NativeDatabase(file));
+    addTearDown(db.close);
+    final repo = WalletsRepository(db).scoped('A');
+
+    final rows = {for (final t in await repo.transactions()) t.id: t};
+    expect(rows, hasLength(3));
+    // Every v3 row survives with its payload intact...
+    expect(rows['evm']!.amountRaw, '100');
+    expect(rows['evm']!.nonce, '7');
+    // ...and gains the chain's mainnet id.
+    expect(rows['evm']!.networkId, 'eth-mainnet');
+    expect(rows['trx']!.networkId, 'tron-mainnet');
+    // An unrecognized coin stays unattributed rather than being guessed.
+    expect(rows['unknown']!.networkId, isNull);
+
+    // A filtered read sees only the requested network, and the unattributed
+    // row is excluded from every network-scoped list.
+    expect(
+      (await repo.transactions(networkIds: {'eth-mainnet'})).single.id,
+      'evm',
+    );
+
+    final version = (await db.customSelect('PRAGMA user_version').getSingle())
+        .data
+        .values
+        .first;
+    expect(version, 4);
   });
 
   test('concurrent transactions on separate wallets do not corrupt', () async {

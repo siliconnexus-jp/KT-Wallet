@@ -1917,6 +1917,17 @@ class $TransactionsTable extends Transactions
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _networkIdMeta = const VerificationMeta(
+    'networkId',
+  );
+  @override
+  late final GeneratedColumn<String> networkId = GeneratedColumn<String>(
+    'network_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _contractMeta = const VerificationMeta(
     'contract',
   );
@@ -2118,6 +2129,7 @@ class $TransactionsTable extends Transactions
     walletId,
     reqId,
     coin,
+    networkId,
     contract,
     direction,
     fromAddr,
@@ -2176,6 +2188,12 @@ class $TransactionsTable extends Transactions
       );
     } else if (isInserting) {
       context.missing(_coinMeta);
+    }
+    if (data.containsKey('network_id')) {
+      context.handle(
+        _networkIdMeta,
+        networkId.isAcceptableOrUnknown(data['network_id']!, _networkIdMeta),
+      );
     }
     if (data.containsKey('contract')) {
       context.handle(
@@ -2312,6 +2330,10 @@ class $TransactionsTable extends Transactions
         DriftSqlType.string,
         data['${effectivePrefix}coin'],
       )!,
+      networkId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}network_id'],
+      ),
       contract: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}contract'],
@@ -2425,6 +2447,22 @@ class Transaction extends DataClass implements Insertable<Transaction> {
   final String walletId;
   final String? reqId;
   final String coin;
+
+  /// NETWORK DIMENSION (schema v4). The app-level network id
+  /// ('eth-mainnet', 'eth-sepolia', 'tron-nile', 'custom-1712…'), NOT the EVM
+  /// chain id, because:
+  ///
+  /// * a chain id is null for TRON and Solana, whose testnets (Nile, Devnet)
+  ///   are just as selectable and just as dangerous to confuse;
+  /// * user-added custom networks may reuse or omit a chain id, so it is not
+  ///   a unique key, while the network id is the app's stable identity and
+  ///   maps 1:1 onto `NetworkController.byId` / `activeFor(chain).id`.
+  ///
+  /// [coin] stays the protocol family; this column says WHICH instance of it.
+  /// Nullable only for rows the v4 backfill could not attribute; every write
+  /// since v4 sets it. A null here is treated as "unknown network", which
+  /// disables replacement rather than guessing.
+  final String? networkId;
   final String? contract;
   final TxDirection direction;
   final String fromAddr;
@@ -2455,6 +2493,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     required this.walletId,
     this.reqId,
     required this.coin,
+    this.networkId,
     this.contract,
     required this.direction,
     required this.fromAddr,
@@ -2484,6 +2523,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       map['req_id'] = Variable<String>(reqId);
     }
     map['coin'] = Variable<String>(coin);
+    if (!nullToAbsent || networkId != null) {
+      map['network_id'] = Variable<String>(networkId);
+    }
     if (!nullToAbsent || contract != null) {
       map['contract'] = Variable<String>(contract);
     }
@@ -2552,6 +2594,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ? const Value.absent()
           : Value(reqId),
       coin: Value(coin),
+      networkId: networkId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(networkId),
       contract: contract == null && nullToAbsent
           ? const Value.absent()
           : Value(contract),
@@ -2604,6 +2649,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       walletId: serializer.fromJson<String>(json['walletId']),
       reqId: serializer.fromJson<String?>(json['reqId']),
       coin: serializer.fromJson<String>(json['coin']),
+      networkId: serializer.fromJson<String?>(json['networkId']),
       contract: serializer.fromJson<String?>(json['contract']),
       direction: $TransactionsTable.$converterdirection.fromJson(
         serializer.fromJson<int>(json['direction']),
@@ -2643,6 +2689,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       'walletId': serializer.toJson<String>(walletId),
       'reqId': serializer.toJson<String?>(reqId),
       'coin': serializer.toJson<String>(coin),
+      'networkId': serializer.toJson<String?>(networkId),
       'contract': serializer.toJson<String?>(contract),
       'direction': serializer.toJson<int>(
         $TransactionsTable.$converterdirection.toJson(direction),
@@ -2678,6 +2725,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     String? walletId,
     Value<String?> reqId = const Value.absent(),
     String? coin,
+    Value<String?> networkId = const Value.absent(),
     Value<String?> contract = const Value.absent(),
     TxDirection? direction,
     String? fromAddr,
@@ -2702,6 +2750,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     walletId: walletId ?? this.walletId,
     reqId: reqId.present ? reqId.value : this.reqId,
     coin: coin ?? this.coin,
+    networkId: networkId.present ? networkId.value : this.networkId,
     contract: contract.present ? contract.value : this.contract,
     direction: direction ?? this.direction,
     fromAddr: fromAddr ?? this.fromAddr,
@@ -2732,6 +2781,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       walletId: data.walletId.present ? data.walletId.value : this.walletId,
       reqId: data.reqId.present ? data.reqId.value : this.reqId,
       coin: data.coin.present ? data.coin.value : this.coin,
+      networkId: data.networkId.present ? data.networkId.value : this.networkId,
       contract: data.contract.present ? data.contract.value : this.contract,
       direction: data.direction.present ? data.direction.value : this.direction,
       fromAddr: data.fromAddr.present ? data.fromAddr.value : this.fromAddr,
@@ -2773,6 +2823,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ..write('walletId: $walletId, ')
           ..write('reqId: $reqId, ')
           ..write('coin: $coin, ')
+          ..write('networkId: $networkId, ')
           ..write('contract: $contract, ')
           ..write('direction: $direction, ')
           ..write('fromAddr: $fromAddr, ')
@@ -2802,6 +2853,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     walletId,
     reqId,
     coin,
+    networkId,
     contract,
     direction,
     fromAddr,
@@ -2830,6 +2882,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           other.walletId == this.walletId &&
           other.reqId == this.reqId &&
           other.coin == this.coin &&
+          other.networkId == this.networkId &&
           other.contract == this.contract &&
           other.direction == this.direction &&
           other.fromAddr == this.fromAddr &&
@@ -2856,6 +2909,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
   final Value<String> walletId;
   final Value<String?> reqId;
   final Value<String> coin;
+  final Value<String?> networkId;
   final Value<String?> contract;
   final Value<TxDirection> direction;
   final Value<String> fromAddr;
@@ -2881,6 +2935,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.walletId = const Value.absent(),
     this.reqId = const Value.absent(),
     this.coin = const Value.absent(),
+    this.networkId = const Value.absent(),
     this.contract = const Value.absent(),
     this.direction = const Value.absent(),
     this.fromAddr = const Value.absent(),
@@ -2907,6 +2962,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     required String walletId,
     this.reqId = const Value.absent(),
     required String coin,
+    this.networkId = const Value.absent(),
     this.contract = const Value.absent(),
     required TxDirection direction,
     required String fromAddr,
@@ -2942,6 +2998,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Expression<String>? walletId,
     Expression<String>? reqId,
     Expression<String>? coin,
+    Expression<String>? networkId,
     Expression<String>? contract,
     Expression<int>? direction,
     Expression<String>? fromAddr,
@@ -2968,6 +3025,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       if (walletId != null) 'wallet_id': walletId,
       if (reqId != null) 'req_id': reqId,
       if (coin != null) 'coin': coin,
+      if (networkId != null) 'network_id': networkId,
       if (contract != null) 'contract': contract,
       if (direction != null) 'direction': direction,
       if (fromAddr != null) 'from_addr': fromAddr,
@@ -2996,6 +3054,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Value<String>? walletId,
     Value<String?>? reqId,
     Value<String>? coin,
+    Value<String?>? networkId,
     Value<String?>? contract,
     Value<TxDirection>? direction,
     Value<String>? fromAddr,
@@ -3022,6 +3081,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       walletId: walletId ?? this.walletId,
       reqId: reqId ?? this.reqId,
       coin: coin ?? this.coin,
+      networkId: networkId ?? this.networkId,
       contract: contract ?? this.contract,
       direction: direction ?? this.direction,
       fromAddr: fromAddr ?? this.fromAddr,
@@ -3059,6 +3119,9 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     }
     if (coin.present) {
       map['coin'] = Variable<String>(coin.value);
+    }
+    if (networkId.present) {
+      map['network_id'] = Variable<String>(networkId.value);
     }
     if (contract.present) {
       map['contract'] = Variable<String>(contract.value);
@@ -3140,6 +3203,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
           ..write('walletId: $walletId, ')
           ..write('reqId: $reqId, ')
           ..write('coin: $coin, ')
+          ..write('networkId: $networkId, ')
           ..write('contract: $contract, ')
           ..write('direction: $direction, ')
           ..write('fromAddr: $fromAddr, ')
@@ -6296,6 +6360,7 @@ typedef $$TransactionsTableCreateCompanionBuilder =
       required String walletId,
       Value<String?> reqId,
       required String coin,
+      Value<String?> networkId,
       Value<String?> contract,
       required TxDirection direction,
       required String fromAddr,
@@ -6323,6 +6388,7 @@ typedef $$TransactionsTableUpdateCompanionBuilder =
       Value<String> walletId,
       Value<String?> reqId,
       Value<String> coin,
+      Value<String?> networkId,
       Value<String?> contract,
       Value<TxDirection> direction,
       Value<String> fromAddr,
@@ -6371,6 +6437,11 @@ class $$TransactionsTableFilterComposer
 
   ColumnFilters<String> get coin => $composableBuilder(
     column: $table.coin,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get networkId => $composableBuilder(
+    column: $table.networkId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6503,6 +6574,11 @@ class $$TransactionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get networkId => $composableBuilder(
+    column: $table.networkId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get contract => $composableBuilder(
     column: $table.contract,
     builder: (column) => ColumnOrderings(column),
@@ -6620,6 +6696,9 @@ class $$TransactionsTableAnnotationComposer
   GeneratedColumn<String> get coin =>
       $composableBuilder(column: $table.coin, builder: (column) => column);
 
+  GeneratedColumn<String> get networkId =>
+      $composableBuilder(column: $table.networkId, builder: (column) => column);
+
   GeneratedColumn<String> get contract =>
       $composableBuilder(column: $table.contract, builder: (column) => column);
 
@@ -6726,6 +6805,7 @@ class $$TransactionsTableTableManager
                 Value<String> walletId = const Value.absent(),
                 Value<String?> reqId = const Value.absent(),
                 Value<String> coin = const Value.absent(),
+                Value<String?> networkId = const Value.absent(),
                 Value<String?> contract = const Value.absent(),
                 Value<TxDirection> direction = const Value.absent(),
                 Value<String> fromAddr = const Value.absent(),
@@ -6752,6 +6832,7 @@ class $$TransactionsTableTableManager
                 walletId: walletId,
                 reqId: reqId,
                 coin: coin,
+                networkId: networkId,
                 contract: contract,
                 direction: direction,
                 fromAddr: fromAddr,
@@ -6779,6 +6860,7 @@ class $$TransactionsTableTableManager
                 required String walletId,
                 Value<String?> reqId = const Value.absent(),
                 required String coin,
+                Value<String?> networkId = const Value.absent(),
                 Value<String?> contract = const Value.absent(),
                 required TxDirection direction,
                 required String fromAddr,
@@ -6805,6 +6887,7 @@ class $$TransactionsTableTableManager
                 walletId: walletId,
                 reqId: reqId,
                 coin: coin,
+                networkId: networkId,
                 contract: contract,
                 direction: direction,
                 fromAddr: fromAddr,

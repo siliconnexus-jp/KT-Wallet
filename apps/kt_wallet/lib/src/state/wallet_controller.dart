@@ -58,10 +58,15 @@ class WalletController extends ChangeNotifier {
   int get count => _manager.count;
   bool get canAddMore => _manager.canAddMore;
 
-  Future<List<Transaction>> localTransactions() async {
+  /// Locally recorded transactions for the current wallet. [networkIds] keeps
+  /// only rows recorded on those network instances (callers pass the ACTIVE
+  /// ids so a testnet row never shows up in a mainnet list); null keeps all.
+  Future<List<Transaction>> localTransactions({
+    Set<String>? networkIds,
+  }) async {
     final walletId = current?.id;
     if (walletId == null || _store == null) return const [];
-    return _store.transactions(walletId);
+    return _store.transactions(walletId, networkIds: networkIds);
   }
 
   Future<Transaction?> localTransactionById(String id) async {
@@ -74,6 +79,9 @@ class WalletController extends ChangeNotifier {
     required String id,
     String? reqId,
     required Coin coin,
+
+    /// Active network instance the transaction belongs to (`Network.id`).
+    required String networkId,
     String? contract,
     required String from,
     required String to,
@@ -99,6 +107,7 @@ class WalletController extends ChangeNotifier {
       walletId: walletId,
       reqId: reqId,
       coin: coin,
+      networkId: networkId,
       contract: contract,
       from: from,
       to: to,
@@ -123,6 +132,10 @@ class WalletController extends ChangeNotifier {
   Future<void> reserveOutgoingEvmTransaction({
     required String id,
     required Coin coin,
+
+    /// Active network instance the transaction belongs to (`Network.id`); part
+    /// of the nonce-reservation key, so networks cannot block one another.
+    required String networkId,
     String? contract,
     required String from,
     required String to,
@@ -145,6 +158,7 @@ class WalletController extends ChangeNotifier {
       id: id,
       walletId: walletId,
       coin: coin,
+      networkId: networkId,
       contract: contract,
       from: from,
       to: to,

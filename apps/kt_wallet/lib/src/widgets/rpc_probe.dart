@@ -116,7 +116,7 @@ class RpcProbe {
           'jsonrpc': '2.0',
           'id': 1,
           'method': method,
-          'params': [],
+          'params': const <Object?>[],
         }),
       )
       .timeout(timeout);

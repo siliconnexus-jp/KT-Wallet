@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:convert';
 
 import 'package:airgap_protocol/airgap_protocol.dart';
@@ -147,7 +149,14 @@ void main() {
 
       expect(find.text('-88.5 USDT'), findsOneWidget);
       expect(find.text('TWd4qCEU…nMxR38uQz'), findsOneWidget); // draft recipient, truncated
-      expect(find.text('≈ 27.4 TRX'), findsOneWidget); // fast tier on TRON
+      // A LIVE draft never shows the demo fee schedule: TRON has no real fee
+      // source on this screen yet, so the honest '--' renders instead of the
+      // invented "≈ 27.4 TRX" this used to display.
+      expect(find.text('≈ 27.4 TRX'), findsNothing);
+      expect(find.text('--'), findsWidgets);
+      // Fiat likewise: no price source in this bare harness → '--', never a
+      // 1:1 "≈ \$88.5" peg.
+      expect(find.text('≈ \$88.5'), findsNothing);
       expect(find.text('88.5 USDT'), findsOneWidget); // token transfer: total = token amount
       expect(find.text('TRON · TRC-20'), findsOneWidget);
       // From = fallback demo wallet name + its TRON address, truncated.
@@ -185,7 +194,7 @@ void main() {
 
       // Navigate to W7 and trigger the simulated scan.
       final router = GoRouter.of(tester.element(find.byType(SignRequestQrScreen)));
-      router.push('/scan-result');
+      unawaited(router.push('/scan-result'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.text('扫描签名结果'), findsOneWidget);

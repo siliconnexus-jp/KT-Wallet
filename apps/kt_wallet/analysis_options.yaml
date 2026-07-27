@@ -7,7 +7,14 @@
 
 # The following line activates a set of recommended lints for Flutter apps,
 # packages, and plugins designed to encourage good coding practices.
-include: package:flutter_lints/flutter.yaml
+# Wallet-wide analyzer contract (strict-casts, avoid_dynamic_calls,
+# unawaited_futures …) lives in the repo root. Every package MUST include it:
+# the analyzer picks the NEAREST options file and does not merge, so a package
+# that only lists flutter_lints silently opts out of the rules that guard
+# amount/address type confusion.
+include:
+  - package:flutter_lints/flutter.yaml
+  - ../../analysis_options.yaml
 
 linter:
   # The lint rules applied to this project can be customized in the

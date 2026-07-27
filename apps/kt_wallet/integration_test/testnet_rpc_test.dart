@@ -49,7 +49,7 @@ Future<Object?> _jsonRpc(String endpoint, String method) async {
           'jsonrpc': '2.0',
           'id': 1,
           'method': method,
-          'params': const [],
+          'params': const <Object?>[],
         }),
       )
       .timeout(const Duration(seconds: 20));

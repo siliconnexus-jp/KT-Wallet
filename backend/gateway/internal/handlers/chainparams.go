@@ -45,7 +45,7 @@ func (g *Gateway) GetChainParams(ctx context.Context, params json.RawMessage) (a
 	}
 	if !meta.EVM {
 		return nil, rpc.Errorf(rpc.CodeInvalidParams,
-			`invalid params: "chain" must be an EVM chain ("eth" or "polygon") for kt_getChainParams`)
+			`invalid params: "chain" must be an EVM chain (%s) for kt_getChainParams`, quotedList(evmChainOrder))
 	}
 	network, rpcErr := resolveNetwork(p.Chain, p.Network)
 	if rpcErr != nil {

@@ -9,6 +9,9 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get appName => 'KT Cold Signer';
+
+  @override
   String get actionConfirm => '確認';
 
   @override
@@ -312,7 +315,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get signingBlockedDesc =>
-      'この取引には安全に解析できない内容が含まれます。KT Wallet Cold Signerは資産保護のため署名を拒否しました。';
+      'この取引には安全に解析できない内容が含まれます。KT Cold Signerは資産保護のため署名を拒否しました。';
 
   @override
   String unknownContractCallDetected(String method) {

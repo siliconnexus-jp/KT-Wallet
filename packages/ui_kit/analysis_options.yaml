@@ -1,4 +1,11 @@
-include: package:flutter_lints/flutter.yaml
+# Wallet-wide analyzer contract (strict-casts, avoid_dynamic_calls,
+# unawaited_futures …) lives in the repo root. Every package MUST include it:
+# the analyzer picks the NEAREST options file and does not merge, so a package
+# that only lists flutter_lints silently opts out of the rules that guard
+# amount/address type confusion.
+include:
+  - package:flutter_lints/flutter.yaml
+  - ../../analysis_options.yaml
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

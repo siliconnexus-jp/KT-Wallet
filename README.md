@@ -23,7 +23,7 @@ KT Wallet can be used in two complementary roles:
 - **Online Wallet** — manages hot wallets and watch-only accounts, reads live
   balances and history, builds transactions, broadcasts them, and follows their
   confirmation state.
-- **KT Wallet Cold Signer** — keeps recovery phrases and signing keys on an
+- **KT Cold Signer** — keeps recovery phrases and signing keys on an
   offline device. Transaction requests and signed responses move between
   devices through QR codes.
 
@@ -36,7 +36,7 @@ The interface is localized in **简体中文**, **English**, and **日本語**.
 ## Air-gapped signing
 
 ```text
-Online Wallet                         KT Wallet Cold Signer
+Online Wallet                         KT Cold Signer
 
 build unsigned transaction
 show request QR          ── camera ──▶ parse raw transaction
@@ -194,14 +194,18 @@ Recent device and simulator evidence is available in:
 | Application | Android application ID | iOS bundle ID |
 |---|---|---|
 | KT Wallet | `cc.siliconnexus.ktwallet` | `cc.siliconnexus.ktwallet` |
-| KT Wallet Cold Signer | `cc.siliconnexus.ktwallet.coldsigner` | `cc.siliconnexus.ktwallet.coldsigner` |
+| KT Cold Signer | `cc.siliconnexus.ktwallet.coldsigner` | `cc.siliconnexus.ktwallet.coldsigner` |
+
+Launcher names follow the device language: Chinese displays **KT钱包** and
+**KT冷钱包**; English, Japanese, and other languages display **KT Wallet** and
+**KT Cold Signer**.
 
 ## Repository layout
 
 | Path | Purpose |
 |---|---|
 | `apps/kt_wallet` | Online wallet and embedded Cold Signer |
-| `apps/cold_signer` | Independently installable KT Wallet Cold Signer |
+| `apps/cold_signer` | Independently installable KT Cold Signer |
 | `packages/core_crypto` | Native mnemonic, derivation, vault, and signing bridge |
 | `packages/wallet_data` | Drift/SQLite wallets, transactions, and pending state |
 | `packages/airgap_protocol` | Versioned QR request and response protocol |

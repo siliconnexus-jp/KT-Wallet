@@ -291,8 +291,14 @@ class _RecordsTabState extends State<_RecordsTab> {
     if (_owned == null &&
         HistoryScope.maybeOf(context) == null &&
         MarketScope.maybeOf(context) != null) {
+      final networks = NetworkScope.maybeOf(context);
       final controller = HistoryController(
         wallets: WalletScope.of(context),
+        // Locally recorded rows are filtered to the ACTIVE network instances,
+        // re-read on every refresh so an environment switch applies at once.
+        activeNetworkIds: networks == null
+            ? null
+            : () => {for (final c in Chain.values) networks.activeFor(c).id},
         // TronGrid endpoint: persisted RPC override → ACTIVE tron network's
         // rpcUrl (Nile is TronGrid-compatible, same paths) → builtin default;
         // a configured gateway unlocks eth/polygon/solana history too.

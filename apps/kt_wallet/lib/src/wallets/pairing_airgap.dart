@@ -63,20 +63,30 @@ List<AirgapFrame> demoAccountExportFrames() => Fragmenter(
   chunkSize: pairingChunkSize,
 ).fragment(demoAccountExport.encode(), reqId: demoPairingReqId);
 
-/// Maps the export's SLIP-44 records onto the app's fixed four-chain address
-/// set. Missing coins fall back to empty strings (the payload validator
-/// guarantees 1..8 accounts but not which coins; the demo always carries all
-/// four).
+/// Maps the export's SLIP-44 records onto the app's chain address set.
+///
+/// Base / Arbitrum / Avalanche are populated whenever the export carries them
+/// ([validateAccountExport] requires them from a production signer and
+/// enforces that they equal the eth address). Passing them explicitly is what
+/// makes [ChainAddresses.hasExpandedEvm] true for a paired watch wallet —
+/// without it the app treated every paired wallet as a legacy four-chain
+/// fixture and kept demo affordances alive on live screens. Legacy four-record
+/// fixtures still omit them and keep the eth fallback.
+///
+/// Missing coins fall back to empty strings (the payload validator guarantees
+/// 1..8 accounts but not which coins).
 ChainAddresses addressesFromExport(AccountExport export) {
-  String addr(int coin) =>
-      export.accounts
-          .where((a) => a.coin == coin)
-          .map((a) => a.address)
-          .firstOrNull ??
-      '';
+  String? maybeAddr(int coin) => export.accounts
+      .where((a) => a.coin == coin)
+      .map((a) => a.address)
+      .firstOrNull;
+  String addr(int coin) => maybeAddr(coin) ?? '';
   return ChainAddresses(
     eth: addr(60),
     polygon: addr(966),
+    base: maybeAddr(8453),
+    arbitrum: maybeAddr(42161),
+    avalanche: maybeAddr(9000),
     tron: addr(195),
     solana: addr(501),
   );

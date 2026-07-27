@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"math/big"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"ktwallet/gateway/internal/rpc"
@@ -16,11 +17,40 @@ type chainMeta struct {
 	EVM      bool
 }
 
+// chainOrder is the canonical listing order of the chain families, matching
+// the app's Coin enum (which is what the wire `chain` value comes from).
+var chainOrder = []string{"eth", "polygon", "base", "arbitrum", "avalanche", "tron", "solana"}
+
 var chains = map[string]chainMeta{
-	"eth":     {Symbol: "ETH", Decimals: 18, EVM: true},
-	"polygon": {Symbol: "POL", Decimals: 18, EVM: true},
-	"tron":    {Symbol: "TRX", Decimals: 6},
-	"solana":  {Symbol: "SOL", Decimals: 9},
+	"eth":       {Symbol: "ETH", Decimals: 18, EVM: true},
+	"polygon":   {Symbol: "POL", Decimals: 18, EVM: true},
+	"base":      {Symbol: "ETH", Decimals: 18, EVM: true},
+	"arbitrum":  {Symbol: "ETH", Decimals: 18, EVM: true},
+	"avalanche": {Symbol: "AVAX", Decimals: 18, EVM: true},
+	"tron":      {Symbol: "TRX", Decimals: 6},
+	"solana":    {Symbol: "SOL", Decimals: 9},
+}
+
+// evmChainOrder lists the EVM families in canonical order (kt_getChainParams
+// error message).
+var evmChainOrder = func() []string {
+	out := make([]string, 0, len(chainOrder))
+	for _, c := range chainOrder {
+		if chains[c].EVM {
+			out = append(out, c)
+		}
+	}
+	return out
+}()
+
+// quotedList renders `"a", "b", "c"` for error messages, so the accepted-value
+// lists can never drift from the registries above.
+func quotedList(items []string) string {
+	q := make([]string, len(items))
+	for i, s := range items {
+		q[i] = strconv.Quote(s)
+	}
+	return strings.Join(q, ", ")
 }
 
 var evmAddressRe = regexp.MustCompile(`^0x[0-9a-fA-F]{40}$`)
@@ -30,7 +60,7 @@ func validateChain(chain string) (chainMeta, *rpc.Error) {
 	m, ok := chains[chain]
 	if !ok {
 		return chainMeta{}, rpc.Errorf(rpc.CodeInvalidParams,
-			`invalid params: "chain" must be one of "eth", "polygon", "tron", "solana"`)
+			`invalid params: "chain" must be one of %s`, quotedList(chainOrder))
 	}
 	return m, nil
 }

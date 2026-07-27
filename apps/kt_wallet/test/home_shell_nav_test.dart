@@ -2,9 +2,10 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/main.dart';
 
-/// Proves the bottom tab bar switches top-level tabs and that the backup
-/// verification quiz gates on the correct word before marking the wallet
-/// backed up.
+/// Proves the bottom tab bar switches top-level tabs and that the home backup
+/// banner cannot walk an existing wallet through a fake backup. (The quiz
+/// itself is exercised on the create-onboarding path, the only flow that has a
+/// real phrase in hand — see mnemonic_backup_safety_test.dart.)
 Future<void> _openHome(WidgetTester tester) async {
   tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
   addTearDown(tester.platformDispatcher.clearLocalesTestValue);
@@ -37,37 +38,23 @@ void main() {
     expect(find.text('立即备份'), findsOneWidget); // home backup banner
   });
 
-  testWidgets('backup flow: banner → warn → show → verify wrong then right → home',
+  testWidgets(
+      'backup flow: banner → warn → show refuses for an existing wallet',
       (tester) async {
+    // This path has no pending mnemonic (the wallet already exists), so there
+    // is no phrase to display. It used to render the design-gallery constant
+    // and walk the user through "verifying" it, then mark the wallet backed
+    // up — recording a phrase that unlocks nothing.
     await _openHome(tester);
 
     await tester.tap(find.text('立即备份'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('显示助记词'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('我已手写备份，开始校验'));
-    await tester.pumpAndSettle();
-    expect(find.text('第 4 个单词是？'), findsOneWidget);
 
-    // Wrong answer keeps us on the quiz.
-    await tester.tap(find.text('fossil'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('确认'));
-    await tester.pumpAndSettle();
-    expect(find.text('第 4 个单词是？'), findsOneWidget);
-
-    // Let the feedback SnackBar clear so it no longer overlays the button.
-    await tester.pump(const Duration(seconds: 5));
-    await tester.pumpAndSettle();
-
-    // Correct answer (4th word of the demo mnemonic) returns home.
-    await tester.tap(find.text('stadium'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('确认'));
-    await tester.pumpAndSettle();
-
-    // Banner is gone because the wallet is now backed up.
-    expect(find.text('日常钱包'), findsOneWidget);
-    expect(find.text('立即备份'), findsNothing);
+    expect(find.text('无法显示助记词'), findsOneWidget);
+    expect(find.text('stadium'), findsNothing); // demo phrase not rendered
+    // No route onward to the quiz, so markBackedUp cannot be reached.
+    expect(find.text('我已手写备份，开始校验'), findsNothing);
   });
 }

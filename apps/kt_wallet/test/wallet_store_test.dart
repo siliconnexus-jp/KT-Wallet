@@ -96,4 +96,64 @@ void main() {
     final tron = accounts.firstWhere((a) => a.coin == 'tron');
     expect(tron.derivationPath, "m/44'/195'/0'/0/0");
   });
+
+  group('transactions carry their network', () {
+    Future<void> reserve(
+      String id, {
+      required String networkId,
+      String nonce = '7',
+    }) => store.reserveEvmTransaction(
+          id: id,
+          walletId: 'A',
+          coin: Coin.eth,
+          networkId: networkId,
+          from: '0xfrom',
+          to: '0xto',
+          amountRaw: '1000',
+          feeRaw: '4200',
+          signMode: SignMode.local,
+          createdAt: 1000,
+          nonce: nonce,
+          maxPriorityFeeRaw: '10',
+          maxFeeRaw: '20',
+          gasLimitRaw: '21000',
+        );
+
+    setUp(() => store.save(_hot('A')));
+
+    test('the recorded network id survives the round-trip', () async {
+      await reserve('sepolia-tx', networkId: 'eth-sepolia');
+      final row = (await store.transactions('A')).single;
+      expect(row.networkId, 'eth-sepolia');
+      expect(row.coin, 'eth'); // the chain family alone is not enough
+    });
+
+    test('history reads are filtered to the active networks', () async {
+      await reserve('sepolia-tx', networkId: 'eth-sepolia');
+      await reserve('mainnet-tx', networkId: 'eth-mainnet', nonce: '9');
+
+      expect(await store.transactions('A'), hasLength(2));
+      expect(
+        (await store.transactions('A', networkIds: {'eth-mainnet'})).single.id,
+        'mainnet-tx',
+      );
+      expect(
+        (await store.transactions('A', networkIds: {'eth-sepolia'})).single.id,
+        'sepolia-tx',
+      );
+    });
+
+    test('a testnet nonce never blocks the same nonce on mainnet', () async {
+      await reserve('sepolia-tx', networkId: 'eth-sepolia');
+      // Same wallet/sender/chain family/nonce, different network instance.
+      await reserve('mainnet-tx', networkId: 'eth-mainnet');
+      expect(await store.transactions('A'), hasLength(2));
+
+      // Within one network the reservation still conflicts.
+      await expectLater(
+        reserve('mainnet-racing', networkId: 'eth-mainnet'),
+        throwsA(isA<EvmNonceConflict>()),
+      );
+    });
+  });
 }

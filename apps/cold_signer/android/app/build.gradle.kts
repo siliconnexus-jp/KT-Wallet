@@ -4,6 +4,21 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Release signing material comes from the environment only — never the repo.
+// The signer holds the seed, so shipping it under Android's shared debug key
+// (whose password is the public string "android") would let anyone sign a
+// look-alike "update". Same contract as kt_wallet; see BUILDING.md.
+val releaseStoreFile = System.getenv("KT_SIGNER_RELEASE_STORE_FILE")
+val releaseStorePassword = System.getenv("KT_SIGNER_RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = System.getenv("KT_SIGNER_RELEASE_KEY_ALIAS")
+val releaseKeyPassword = System.getenv("KT_SIGNER_RELEASE_KEY_PASSWORD")
+val hasReleaseSigning = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "cc.siliconnexus.ktwallet.coldsigner"
     compileSdk = flutter.compileSdkVersion
@@ -25,11 +40,27 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Fail closed: without the four env vars there is no signing config,
+            // so the build produces an unsigned artifact instead of one signed
+            // with the shared debug key.
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                null
+            }
         }
     }
 }

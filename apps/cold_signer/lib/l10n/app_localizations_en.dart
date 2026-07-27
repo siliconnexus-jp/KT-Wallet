@@ -9,6 +9,9 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get appName => 'KT Cold Signer';
+
+  @override
   String get actionConfirm => 'Confirm';
 
   @override
@@ -323,7 +326,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get signingBlockedDesc =>
-      'This transaction contains content that can\'t be safely parsed. KT Wallet Cold Signer refused to sign to protect your assets.';
+      'This transaction contains content that can\'t be safely parsed. KT Cold Signer refused to sign to protect your assets.';
 
   @override
   String unknownContractCallDetected(String method) {

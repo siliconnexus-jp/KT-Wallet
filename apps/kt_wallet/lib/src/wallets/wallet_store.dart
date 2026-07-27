@@ -51,8 +51,12 @@ class WalletStore {
 
   // ---- locally submitted transactions -----------------------------------
 
-  Future<List<db.Transaction>> transactions(String walletId) =>
-      _wallets.scoped(walletId).transactions();
+  /// [networkIds] restricts the result to the ACTIVE network instances (see
+  /// `WalletRepository.transactions`); null keeps every network.
+  Future<List<db.Transaction>> transactions(
+    String walletId, {
+    Set<String>? networkIds,
+  }) => _wallets.scoped(walletId).transactions(networkIds: networkIds);
 
   Future<db.Transaction?> transactionById(String walletId, String id) =>
       _wallets.scoped(walletId).transactionById(id);
@@ -62,6 +66,7 @@ class WalletStore {
     required String walletId,
     String? reqId,
     required Coin coin,
+    required String networkId,
     String? contract,
     required String from,
     required String to,
@@ -87,6 +92,7 @@ class WalletStore {
           walletId: walletId,
           reqId: Value(reqId),
           coin: coin.name,
+          networkId: Value(networkId),
           contract: Value(contract),
           direction: db.TxDirection.outgoing,
           fromAddr: from,
@@ -112,6 +118,7 @@ class WalletStore {
     required String id,
     required String walletId,
     required Coin coin,
+    required String networkId,
     String? contract,
     required String from,
     required String to,
@@ -132,6 +139,7 @@ class WalletStore {
           id: id,
           walletId: walletId,
           coin: coin.name,
+          networkId: Value(networkId),
           contract: Value(contract),
           direction: db.TxDirection.outgoing,
           fromAddr: from,
@@ -149,6 +157,7 @@ class WalletStore {
           replacementKind: Value(replacementKind),
         ),
         coin: coin.name,
+        networkId: networkId,
         from: from,
         nonce: nonce,
         replacesId: replacesId,

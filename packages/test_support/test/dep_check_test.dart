@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:test/test.dart';
 import 'package:test_support/dep_check.dart';
 
@@ -111,6 +113,52 @@ import 'package:flutter/material.dart';
 </manifest>
 ''';
       expect(manifestDeclaresInternet(manifest), isFalse);
+    });
+  });
+
+  group('socket-symbol firewall', () {
+    test('flags dart:io network types even when the import is legitimate', () {
+      const source = """
+import 'dart:io';
+Future<void> leak() async => HttpClient().getUrl(Uri.parse('https://x'));
+""";
+      expect(findBannedSymbols(source), contains('HttpClient'));
+    });
+
+    test('ignores prose in comments about the ban', () {
+      const source = """
+// Never use HttpClient or WebSocket here — this app is air-gapped.
+import 'dart:io' show Platform;
+bool get isIos => Platform.isIOS;
+""";
+      expect(findBannedSymbols(source), isEmpty);
+    });
+  });
+
+  group('whitelist drift', () {
+    test('reports entries the pubspec no longer declares', () {
+      const pubspec = """
+dependencies:
+  flutter:
+    sdk: flutter
+  chains:
+    path: ../../packages/chains
+""";
+      final stale = findStaleWhitelistEntries(
+        pubspec,
+        whitelist: {'flutter', 'chains', 'ghost_package'},
+      );
+      expect(stale, ['ghost_package']);
+    });
+
+    test('the real cold_signer whitelist is neither stale nor short', () {
+      final pubspec = File('../../apps/cold_signer/pubspec.yaml');
+      if (!pubspec.existsSync()) return; // path differs under some runners
+      final yaml = pubspec.readAsStringSync();
+      expect(findWhitelistViolations(yaml), isEmpty,
+          reason: 'a new dependency must be reviewed for network capability');
+      expect(findStaleWhitelistEntries(yaml), isEmpty,
+          reason: 'stale entries are how this firewall rotted before');
     });
   });
 }

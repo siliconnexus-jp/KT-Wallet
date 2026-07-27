@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/src/screens/transfer_screens.dart';
+import 'package:kt_wallet/src/state/networks.dart';
 import 'package:wallet_data/wallet_data.dart';
 
 Transaction _transaction({
   TxStatus status = TxStatus.pending,
+  String? networkId = 'eth-mainnet',
   String? nonce = '7',
   String? maxPriorityFeeRaw = '100',
   String? maxFeeRaw = '200',
@@ -16,6 +18,7 @@ Transaction _transaction({
   id: 'tx-local-1',
   walletId: 'wallet-1',
   coin: 'eth',
+  networkId: networkId,
   direction: TxDirection.outgoing,
   fromAddr: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
   toAddr: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
@@ -33,11 +36,19 @@ Transaction _transaction({
   replacedById: replacedById,
 );
 
-Widget _app(Transaction transaction) => MaterialApp(
+/// [environment] selects which network is ACTIVE while the row is displayed;
+/// replacement is only offered while the ROW's own network is the active one.
+Widget _app(
+  Transaction transaction, {
+  NetworkEnvironment environment = NetworkEnvironment.mainnet,
+}) => MaterialApp(
   locale: const Locale('zh'),
   localizationsDelegates: AppLocalizations.localizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,
-  home: TxDetailScreen(transaction: transaction),
+  home: NetworkScope(
+    controller: NetworkController(initialEnvironment: environment),
+    child: TxDetailScreen(transaction: transaction),
+  ),
 );
 
 void main() {
@@ -83,6 +94,47 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(_app(_transaction(gasLimitRaw: null)));
+
+    expect(find.text('确认中'), findsOneWidget);
+    expect(find.text('加速交易'), findsNothing);
+    expect(find.text('取消交易'), findsNothing);
+  });
+
+  testWidgets(
+    'a row from another network never offers speed-up or cancel',
+    (tester) async {
+      // A Sepolia row while Ethereum MAINNET is the active network: rebuilding
+      // it against the active network would sign a real chainId-1 transaction
+      // carrying the Sepolia recipient. The actions must not be offered, and
+      // the row keeps its own network's name.
+      await tester.pumpWidget(_app(_transaction(networkId: 'eth-sepolia')));
+
+      expect(find.text('确认中'), findsOneWidget);
+      expect(find.text('Sepolia'), findsOneWidget);
+      expect(find.text('Ethereum'), findsNothing);
+      expect(find.text('加速交易'), findsNothing);
+      expect(find.text('取消交易'), findsNothing);
+
+      // Switching the environment to testnet makes the row's own network
+      // active again and the actions come back.
+      await tester.pumpWidget(
+        _app(
+          _transaction(networkId: 'eth-sepolia'),
+          environment: NetworkEnvironment.testnet,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('加速交易'), findsOneWidget);
+      expect(find.text('取消交易'), findsOneWidget);
+    },
+  );
+
+  testWidgets('a legacy row with no recorded network cannot be replaced', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(_transaction(networkId: null)),
+    );
 
     expect(find.text('确认中'), findsOneWidget);
     expect(find.text('加速交易'), findsNothing);

@@ -759,7 +759,7 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
       final payload = AirgapPayload.decode(_aggregator.payload!);
       if (payload is! SignRequest) {
         // Account exports / results are not signable input.
-        context.push('/risk');
+        unawaited(context.push('/risk'));
         return;
       }
       request = payload;
@@ -768,7 +768,7 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
       // package supplies the real parser.
       final localWalletId = controller?.localWalletId;
       if (controller?.hasWallet == true && localWalletId == null) {
-        context.push('/risk');
+        unawaited(context.push('/risk'));
         return;
       }
       verdict = SignRequestValidator(
@@ -777,14 +777,14 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
         transactionAllowed: _isStructurallySupported,
       ).validate(request);
     } on PayloadError {
-      context.push('/risk');
+      unawaited(context.push('/risk'));
       return;
     }
     if (!verdict.isOk) {
-      context.push('/risk');
+      unawaited(context.push('/risk'));
       return;
     }
-    context.push('/parse', extra: request);
+    unawaited(context.push('/parse', extra: request));
   }
 
   @override
@@ -859,7 +859,7 @@ class SignerParseScreen extends StatelessWidget {
     final req = request;
     final parsed = _parsedRequest(req);
     final controller = SignerWalletScope.maybeOf(context);
-    final testSummary = kDebugMode ? req?.summary ?? const {} : const {};
+    final testSummary = kDebugMode ? req?.summary ?? const <int, Object?>{} : const <int, Object?>{};
     final headline = req == null
         ? 'TRON · Token Transfer（TRC-20）'
         : parsed == null && kDebugMode
@@ -1303,7 +1303,7 @@ class SignerAuthScreen extends StatelessWidget {
       }
     }
     if (context.mounted) {
-      context.push('/result-qr', extra: result ?? req);
+      unawaited(context.push('/result-qr', extra: result ?? req));
     }
   }
 
@@ -1355,7 +1355,7 @@ class SignerAuthScreen extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final req = request;
     final parsed = _parsedRequest(req);
-    final testSummary = kDebugMode ? req?.summary ?? const {} : const {};
+    final testSummary = kDebugMode ? req?.summary ?? const <int, Object?>{} : const <int, Object?>{};
     final amount = req == null
         ? '120.00 USDT'
         : parsed == null

@@ -36,6 +36,15 @@ func main() {
 	if v := envList("POLYGON_RPC_URLS"); len(v) > 0 {
 		cfg.PolygonURLs = v
 	}
+	if v := envList("BASE_RPC_URLS"); len(v) > 0 {
+		cfg.BaseURLs = v
+	}
+	if v := envList("ARBITRUM_RPC_URLS"); len(v) > 0 {
+		cfg.ArbitrumURLs = v
+	}
+	if v := envList("AVALANCHE_RPC_URLS"); len(v) > 0 {
+		cfg.AvalancheURLs = v
+	}
 	if v := envList("SOLANA_RPC_URLS"); len(v) > 0 {
 		cfg.SolanaURLs = v
 	}
@@ -47,6 +56,15 @@ func main() {
 	}
 	if v := envList("POLYGON_AMOY_RPC_URLS"); len(v) > 0 {
 		cfg.PolygonAmoyURLs = v
+	}
+	if v := envList("BASE_SEPOLIA_RPC_URLS"); len(v) > 0 {
+		cfg.BaseSepoliaURLs = v
+	}
+	if v := envList("ARBITRUM_SEPOLIA_RPC_URLS"); len(v) > 0 {
+		cfg.ArbitrumSepoliaURLs = v
+	}
+	if v := envList("AVALANCHE_FUJI_RPC_URLS"); len(v) > 0 {
+		cfg.AvalancheFujiURLs = v
 	}
 	if v := envList("SOLANA_DEVNET_RPC_URLS"); len(v) > 0 {
 		cfg.SolanaDevnetURLs = v

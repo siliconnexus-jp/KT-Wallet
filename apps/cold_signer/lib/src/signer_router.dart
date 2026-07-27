@@ -94,7 +94,7 @@ class _Gallery extends StatelessWidget {
     backgroundColor: SignerColors.bg,
     appBar: AppBar(
       title: const Text(
-        'KT Wallet Cold Signer — 屏幕库',
+        'KT Cold Signer — 屏幕库',
         style: TextStyle(color: SignerColors.text),
       ),
       backgroundColor: SignerColors.surface,

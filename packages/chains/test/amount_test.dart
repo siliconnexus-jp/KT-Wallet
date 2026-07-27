@@ -10,9 +10,18 @@ void main() {
       expect(Amount.parse('0', 6).raw, BigInt.zero);
     });
 
-    test('strips separators', () {
-      expect(Amount.parse('1,000.5', 2).raw, BigInt.from(100050));
+    test('strips underscore and whitespace grouping', () {
       expect(Amount.parse('1_000', 0).raw, BigInt.from(1000));
+      expect(Amount.parse('1 000.5', 2).raw, BigInt.from(100050));
+    });
+
+    // Regression: a comma used to be stripped as a thousands separator, so on
+    // comma-decimal locales (de/fr/es/pt…) the keypad's decimal key turned
+    // "1,5" into "15" — a 10x overpayment that passed every balance check.
+    test('rejects commas as ambiguous instead of guessing', () {
+      expect(() => Amount.parse('1,5', 18), throwsA(isA<AmountError>()));
+      expect(() => Amount.parse('1,000.5', 2), throwsA(isA<AmountError>()));
+      expect(() => Amount.parse('1，5', 18), throwsA(isA<AmountError>()));
     });
 
     test('rejects more fractional digits than decimals (no truncation)', () {

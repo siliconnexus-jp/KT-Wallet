@@ -111,4 +111,38 @@ void main() {
       );
     });
   });
+
+  group('Erc20.transferCalldata recipient validation', () {
+    // Regression: token transfers used to skip Addresses.validate entirely
+    // (only the byte length was checked), so a mistyped mixed-case address
+    // sailed through and the tokens landed somewhere unspendable. Native
+    // transfers were always validated — these lock the parity.
+    const valid = '0x925fEA1c0dbf3B011391bbed682E32861BE73213';
+
+    test('accepts an EIP-55 correct address', () {
+      expect(
+        Erc20.transferCalldata(to: valid, amount: BigInt.from(1000000)).length,
+        68,
+      );
+    });
+
+    test('rejects a broken EIP-55 checksum', () {
+      final flipped = '${valid.substring(0, valid.length - 1)}D';
+      expect(Addresses.validate(Chain.ethereum, flipped).isValid, isFalse);
+      expect(
+        () => Erc20.transferCalldata(to: flipped, amount: BigInt.from(1)),
+        throwsArgumentError,
+      );
+    });
+
+    test('rejects a non-EVM address', () {
+      expect(
+        () => Erc20.transferCalldata(
+          to: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+          amount: BigInt.from(1),
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
 }

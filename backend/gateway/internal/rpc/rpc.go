@@ -144,12 +144,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// payloads are never logged.
 	var meta struct {
 		Chain   string `json:"chain"`
+		Network string `json:"network"`
 		Address string `json:"address"`
 	}
 	_ = json.Unmarshal(req.Params, &meta)
 	s.log.Info("rpc",
 		"method", req.Method,
 		"chain", meta.Chain,
+		// Empty means the client sent no network (the chain's mainnet is used);
+		// operators can use this to spot clients that predate the param.
+		"network", meta.Network,
 		"address", TruncateAddress(meta.Address),
 		"durationMs", time.Since(start).Milliseconds(),
 		"outcome", outcome,

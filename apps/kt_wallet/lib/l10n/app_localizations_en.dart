@@ -9,6 +9,9 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get appName => 'KT Wallet';
+
+  @override
   String get appTagline => 'Dual-device cold wallet · online watch client';
 
   @override
@@ -203,6 +206,21 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get mnemonicShowWarning =>
       'Copy it by hand in order. Don\'t screenshot or photograph it. Anyone with the phrase controls your assets.';
+
+  @override
+  String get mnemonicUnavailableTitle => 'Recovery phrase unavailable';
+
+  @override
+  String get mnemonicUnavailableBackup =>
+      'This backup flow only applies to a newly created wallet. To back up this wallet, open Wallet details → View recovery phrase.';
+
+  @override
+  String get mnemonicAuthRequired =>
+      'Authentication is required to show the recovery phrase. Please try again.';
+
+  @override
+  String get mnemonicNoKeyMaterial =>
+      'No recovery phrase for this wallet is stored on this device.';
 
   @override
   String get verifyBackupTitle => 'Verify backup';
@@ -533,6 +551,21 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get txReplacementUnavailable =>
       'This transaction is missing the chain parameters required for speed-up or cancellation.';
+
+  @override
+  String txReplacementWrongNetwork(String network) {
+    return 'This transaction belongs to $network. Switch back to that network before speeding it up or cancelling.';
+  }
+
+  @override
+  String get feeEstimating => 'Estimating…';
+
+  @override
+  String get feeUnavailable => 'Network fee unavailable';
+
+  @override
+  String get feeUnavailableHint =>
+      'The network fee could not be estimated, so sending is disabled.';
 
   @override
   String get txNonceLabel => 'Nonce';

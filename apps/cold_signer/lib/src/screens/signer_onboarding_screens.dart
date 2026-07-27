@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -117,14 +119,14 @@ class SignerSplashScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
-                  'KT Wallet Cold Signer',
+                  l10n.appName,
                   maxLines: 1,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 26,
                     fontWeight: FontWeight.w700,
                     color: SignerColors.text,
@@ -214,7 +216,7 @@ class SignerWelcomeScreen extends StatelessWidget {
               // back up and verify. Absent scope (goldens) nothing changes.
               await SignerWalletScope.maybeOf(context)?.beginCreate();
               if (!context.mounted) return;
-              context.push('/mnemonic-warn');
+              unawaited(context.push('/mnemonic-warn'));
             },
           ),
           const SizedBox(height: 12),
@@ -253,14 +255,14 @@ class SignerWelcomeScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
-                  'KT Wallet Cold Signer',
+                  l10n.appName,
                   maxLines: 1,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w700,
                     color: SignerColors.text,
@@ -638,7 +640,7 @@ class _SignerMnemonicImportScreenState
     if (_busy) return;
     final controller = SignerWalletScope.maybeOf(context);
     if (controller == null) {
-      context.push('/set-password');
+      unawaited(context.push('/set-password'));
       return;
     }
     final phrase = _fields.take(_wordCount).map((e) => e.text.trim()).join(' ');
@@ -653,7 +655,7 @@ class _SignerMnemonicImportScreenState
       setState(() => _error = '助记词无效，请检查单词、数量与 BIP-39 校验和');
       return;
     }
-    context.push('/set-password');
+    unawaited(context.push('/set-password'));
   }
 
   @override
@@ -938,7 +940,7 @@ class _SignerSetPasswordScreenState extends State<SignerSetPasswordScreen> {
       // the screen behaves exactly like the design snapshot.
       if (controller != null) await controller.setPin(_entry);
       if (!mounted) return;
-      context.push('/biometric');
+      unawaited(context.push('/biometric'));
     } else {
       messenger.showSnackBar(SnackBar(content: Text(l10n.passwordMismatch)));
       setState(() {
@@ -1084,7 +1086,7 @@ class SignerBiometricScreen extends StatelessWidget {
       if (biometric) {
         await controller?.setBiometricEnabled(true);
       }
-      if (context.mounted) context.push('/created');
+      if (context.mounted) unawaited(context.push('/created'));
     } catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)

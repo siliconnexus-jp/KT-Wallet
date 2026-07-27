@@ -35,12 +35,14 @@ TransactionsCompanion _evmTx(
   String id,
   String walletId, {
   String nonce = '7',
+  String networkId = 'eth-mainnet',
   String? replacesId,
   TxReplacementKind? replacementKind,
 }) => TransactionsCompanion.insert(
   id: id,
   walletId: walletId,
   coin: 'eth',
+  networkId: Value(networkId),
   direction: TxDirection.outgoing,
   fromAddr: '0xfrom',
   toAddr: '0xto',
@@ -189,6 +191,7 @@ void main() {
         await repo.reserveEvmTransaction(
           _evmTx('original', 'A'),
           coin: 'eth',
+          networkId: 'eth-mainnet',
           from: '0xfrom',
           nonce: '7',
         );
@@ -197,6 +200,7 @@ void main() {
           repo.reserveEvmTransaction(
             _evmTx('racing', 'A'),
             coin: 'eth',
+            networkId: 'eth-mainnet',
             from: '0xfrom',
             nonce: '7',
           ),
@@ -217,6 +221,7 @@ void main() {
       await repo.reserveEvmTransaction(
         _evmTx('original', 'A'),
         coin: 'eth',
+        networkId: 'eth-mainnet',
         from: '0xfrom',
         nonce: '7',
       );
@@ -230,6 +235,7 @@ void main() {
           replacementKind: TxReplacementKind.speedUp,
         ),
         coin: 'eth',
+        networkId: 'eth-mainnet',
         from: '0xfrom',
         nonce: '7',
         replacesId: 'original',
@@ -244,6 +250,7 @@ void main() {
             replacementKind: TxReplacementKind.cancel,
           ),
           coin: 'eth',
+          networkId: 'eth-mainnet',
           from: '0xfrom',
           nonce: '7',
           replacesId: 'original',
@@ -257,6 +264,7 @@ void main() {
       await repo.reserveEvmTransaction(
         _evmTx('original', 'A'),
         coin: 'eth',
+        networkId: 'eth-mainnet',
         from: '0xfrom',
         nonce: '7',
       );
@@ -269,6 +277,7 @@ void main() {
           replacementKind: TxReplacementKind.cancel,
         ),
         coin: 'eth',
+        networkId: 'eth-mainnet',
         from: '0xfrom',
         nonce: '7',
         replacesId: 'original',
@@ -291,6 +300,67 @@ void main() {
       expect(replacement!.status, TxStatus.pending);
       expect(replacement.hash, '0xnew');
       expect(replacement.broadcastAt, 2000);
+    });
+
+    test('the nonce conflict key is scoped per network', () async {
+      final repo = wallets.scoped('A');
+      await repo.reserveEvmTransaction(
+        _evmTx('sepolia', 'A', networkId: 'eth-sepolia'),
+        coin: 'eth',
+        networkId: 'eth-sepolia',
+        from: '0xfrom',
+        nonce: '7',
+      );
+
+      // Same wallet, same chain family, same sender, same nonce — but a
+      // different network instance, so it is NOT a conflict.
+      await repo.reserveEvmTransaction(
+        _evmTx('mainnet', 'A', networkId: 'eth-mainnet'),
+        coin: 'eth',
+        networkId: 'eth-mainnet',
+        from: '0xfrom',
+        nonce: '7',
+      );
+      expect(await repo.transactions(), hasLength(2));
+
+      // Within one network the conflict still fires.
+      await expectLater(
+        repo.reserveEvmTransaction(
+          _evmTx('mainnet-racing', 'A', networkId: 'eth-mainnet'),
+          coin: 'eth',
+          networkId: 'eth-mainnet',
+          from: '0xfrom',
+          nonce: '7',
+        ),
+        throwsA(
+          isA<EvmNonceConflict>().having(
+            (error) => error.existing.id,
+            'existing.id',
+            'mainnet',
+          ),
+        ),
+      );
+    });
+
+    test('transactions can be filtered to the active networks', () async {
+      final repo = wallets.scoped('A');
+      await repo.upsertTransaction(
+        _evmTx('sepolia', 'A', networkId: 'eth-sepolia'),
+      );
+      await repo.upsertTransaction(
+        _evmTx('mainnet', 'A', nonce: '8', networkId: 'eth-mainnet'),
+      );
+
+      expect(await repo.transactions(), hasLength(2));
+      expect(
+        (await repo.transactions(networkIds: {'eth-mainnet'})).single.id,
+        'mainnet',
+      );
+      expect(
+        (await repo.transactions(networkIds: {'eth-sepolia'})).single.id,
+        'sepolia',
+      );
+      expect(await repo.transactions(networkIds: {'tron-nile'}), isEmpty);
     });
   });
 }

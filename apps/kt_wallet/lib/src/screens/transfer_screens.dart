@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:chains/chains.dart';
@@ -24,6 +25,7 @@ import '../market/balance_service.dart' show BalanceStatus;
 import '../market/explorer_links.dart' show explorerTxUrl;
 import '../market/market_scope.dart'
     show MarketScope, effectiveRpcEndpoints, prefsGatewayResolver;
+import '../market/price_service.dart' show PriceService;
 import '../market/token_balance_service.dart' show usdcSolanaDevnetToken;
 import '../platform/external_actions.dart';
 import '../rpc/http_transport.dart';
@@ -59,6 +61,9 @@ Future<void> _persistAirgapTransaction(
     id: id,
     reqId: request.reqIdHex,
     coin: rpcCoinForChain(draft.chain),
+    // The network instance this request was built for — the row must record
+    // WHICH chain instance it belongs to, not just the protocol family.
+    networkId: NetworkScope.of(context).activeFor(draft.chain).id,
     contract: draft.tokenContract,
     from: addressForChain(wallet.addresses, draft.chain),
     to: draft.recipient,
@@ -98,6 +103,37 @@ Color _chainDot(Chain chain) => switch (chain) {
   Chain.tron => ChainColors.tron,
   Chain.solana => ChainColors.solana,
 };
+
+/// Spot USD price of ONE unit of the transferred asset, or null when it is
+/// genuinely unavailable: no market scope, no successful price fetch yet, an
+/// unpegged token with no feed, or a testnet (amounts there are real, market
+/// prices are not). Callers render the codebase's honest `--` for null — a
+/// price is never invented, and there is no 1:1 USD peg anywhere.
+double? _unitPriceUsd(
+  BuildContext context, {
+  required Chain chain,
+  required String symbol,
+  required String? tokenContract,
+}) {
+  if (NetworkScope.maybeOf(context)?.activeFor(chain).isTestnet ?? false) {
+    return null;
+  }
+  if (tokenContract != null) return PriceService.peggedUsdBySymbol[symbol];
+  return MarketScope.maybeOf(context)?.priceUsd(rpcCoinForChain(chain));
+}
+
+/// `$12.34`, or `--` when [value] is null.
+String _fiatText(double? value) =>
+    value == null ? '--' : '\$${value.toStringAsFixed(2)}';
+
+/// The fiat value of [amount] at [unitPrice], or null when either is unknown.
+/// Display-only double math (the same convention as [MarketController]).
+double? _fiatValue(Amount? amount, double? unitPrice) {
+  if (amount == null || unitPrice == null) return null;
+  return amount.raw.toDouble() /
+      math.pow(10, amount.decimals).toDouble() *
+      unitPrice;
+}
 
 Widget _amberWarn(String text) => Container(
   padding: const EdgeInsets.all(12),
@@ -426,25 +462,39 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     return _assetAt(_assetIndex);
   }
 
-  final _addrController = TextEditingController(
-    text: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
-  );
-  final _amountController = TextEditingController(text: '120.00');
+  /// The recipient and amount fields start EMPTY. They are only seeded with
+  /// the Pencil design literals when the screen renders with NO market scope
+  /// — the standalone design-gallery / golden capture — so those recordings
+  /// stay byte-identical.
+  ///
+  /// This used to be the other way round (seeded by default, cleared only for
+  /// wallets with expanded EVM addresses), which meant a paired watch wallet
+  /// never cleared them and the user was shown a pre-filled, `Addresses
+  /// .validate`-passing recipient that is actually the mainnet USDT CONTRACT,
+  /// plus an amount of 120.00. Funds sent there are unrecoverable. Never
+  /// pre-fill a recipient the user did not type.
+  final _addrController = TextEditingController();
+  final _amountController = TextEditingController();
   int _fee = 1;
+
+  /// True in the real app (any live surface mounts a [MarketScope]); false
+  /// only for the standalone gallery/golden rendering of this screen.
+  bool get _isLiveContext => MarketScope.maybeOf(context) != null;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_liveInputInitialized) return;
-    final wallet = WalletScope.of(context).current;
-    if (MarketScope.maybeOf(context) != null &&
-        wallet != null &&
-        wallet.addresses.hasExpandedEvm) {
-      _addrController.clear();
-      _amountController.clear();
-      _liveInputInitialized = true;
+    _liveInputInitialized = true;
+    if (!_isLiveContext) {
+      _addrController.text = _demoRecipient;
+      _amountController.text = _demoAmount;
     }
   }
+
+  /// Design-demo literals — gallery/goldens ONLY (see [_addrController]).
+  static const _demoRecipient = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+  static const _demoAmount = '120.00';
 
   @override
   void dispose() {
@@ -482,6 +532,36 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     }
   }
 
+  /// The `≈ …` line under the amount. Live: the entered amount valued at the
+  /// asset's REAL spot price, or `--` when no price is available — never the
+  /// old 1:1 `$<amount>` peg, which made 0.5 ETH read as "$0.5". Without a
+  /// market scope (gallery/goldens) the design literal renders unchanged.
+  String _amountFiatText() {
+    final text = _amountController.text.trim();
+    if (!_isLiveContext) return '\$${text.isEmpty ? '0.00' : text}';
+    Amount? parsed;
+    if (text.isNotEmpty) {
+      try {
+        parsed = Amount.parse(text, _asset.decimals, symbol: _asset.symbol);
+      } on AmountError {
+        parsed = null;
+      }
+    } else {
+      parsed = Amount(raw: BigInt.zero, decimals: _asset.decimals);
+    }
+    return _fiatText(
+      _fiatValue(
+        parsed,
+        _unitPriceUsd(
+          context,
+          chain: _asset.chain,
+          symbol: _asset.symbol,
+          tokenContract: _asset.contract,
+        ),
+      ),
+    );
+  }
+
   Future<void> _paste() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = (data?.text ?? '').trim();
@@ -497,7 +577,8 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
   }
 
   /// Opens the custom fee screen and maps its result back onto the segmented
-  /// tier selection.
+  /// tier selection. Reachable ONLY from the standalone gallery rendering —
+  /// see the entry point in [build] and [FeeSelectScreen]'s own doc.
   Future<void> _customFee() async {
     final tier = await context.push<int>('/fee');
     if (tier != null && mounted) setState(() => _fee = tier);
@@ -871,8 +952,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                     builder: (_) {
                       final amountError = _amountErrorFor(l10n);
                       return Text(
-                        amountError ??
-                            '≈ \$${_amountController.text.trim().isEmpty ? '0.00' : _amountController.text.trim()}',
+                        amountError ?? '≈ ${_amountFiatText()}',
                         style: TextStyle(
                           fontSize: 12,
                           color: amountError == null
@@ -910,16 +990,24 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                       color: WalletColors.text2,
                     ),
                   ),
-                  GestureDetector(
-                    onTap: _customFee,
-                    child: Text(
-                      l10n.feeCustom,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: WalletColors.accent,
+                  // W31 serves a hardcoded TRON tier list with invented fiat
+                  // to every chain. Rather than lie about the fee a live
+                  // transfer will pay, it is unreachable outside the gallery:
+                  // the segmented control below selects the same tier index,
+                  // and that index resolves to the chain's REAL fee tier
+                  // (ChainParamsService.tierFor) on the confirm screen and in
+                  // the signed transaction.
+                  if (!_isLiveContext)
+                    GestureDetector(
+                      onTap: _customFee,
+                      child: Text(
+                        l10n.feeCustom,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: WalletColors.accent,
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -936,7 +1024,16 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
   }
 }
 
-/// W31 手续费选择.
+/// W31 手续费选择 — DESIGN / GALLERY ONLY.
+///
+/// The tier list below is a hardcoded TRON schedule with invented fiat. It is
+/// deliberately NOT reachable from a live transfer (the 自定义 entry point on
+/// the send screen is hidden whenever a market scope is mounted): showing a
+/// TRON tier list to someone sending ETH, with a fee they will not pay, is
+/// worse than not offering the screen. Live tier selection happens on the
+/// segmented slow/standard/fast control, whose index resolves to the chain's
+/// REAL fee tier via [EvmChainParams.tierFor]. Wiring per-chain live tiers
+/// here is deferred; until then this screen only backs the gallery/goldens.
 class FeeSelectScreen extends StatefulWidget {
   const FeeSelectScreen({super.key});
   @override
@@ -1070,15 +1167,145 @@ class _FeeSelectScreenState extends State<FeeSelectScreen> {
   }
 }
 
-/// Shared confirm layout for W5 (watch) / W29 (hot). With a live
-/// [TransferDraft] in scope, every displayed field is derived from the draft
-/// through the chains [TxPreview]; without one (gallery / goldens) the design
-/// demo values render unchanged.
-class TransferConfirmScreen extends StatelessWidget {
-  const TransferConfirmScreen({super.key, required this.isHot});
+/// How far the live network-fee estimate for the confirm screen has got.
+enum _FeeEstimate {
+  /// No live draft: the design's demo schedule backs the gallery/goldens.
+  demo,
+
+  /// Live EVM draft, chain-state fetch in flight.
+  estimating,
+
+  /// Live EVM draft, real gasLimit x maxFeePerGas available.
+  ready,
+
+  /// Live EVM draft, the fee could NOT be fetched — sending is blocked
+  /// rather than showing a number the user would not actually pay.
+  failed,
+
+  /// Live non-EVM draft: this screen has no real fee source for TRON/Solana
+  /// yet, so the fee renders '--' instead of an invented figure. The real
+  /// cost is still enforced downstream (TRON energy estimate / Solana
+  /// getFeeForMessage + balance check) before anything is signed.
+  unavailable,
+}
+
+/// Shared confirm layout for W5 (watch) / W29 (hot).
+///
+/// With a live [TransferDraft] in scope every displayed field is derived from
+/// the draft, and the network fee is the REAL one: `gasLimit x maxFeePerGas`
+/// for the selected tier, fetched through [ChainParamsService] exactly like
+/// the transaction that will actually be signed
+/// (`LocalTransferService.prepareEvm` / `_buildLiveEvm`). It is never the demo
+/// schedule, which used to be shown here while a completely different figure
+/// was signed. Fiat comes from the real spot price and renders `--` when
+/// unavailable. Without a draft (gallery / goldens) the design demo values
+/// render unchanged.
+class TransferConfirmScreen extends StatefulWidget {
+  const TransferConfirmScreen({super.key, required this.isHot, this.paramsService});
+
   final bool isHot;
+
+  /// Injectable chain-params fetcher for tests; production resolves the
+  /// prefs/network-aware endpoints.
+  final ChainParamsService? paramsService;
+
+  @override
+  State<TransferConfirmScreen> createState() => _TransferConfirmScreenState();
+}
+
+class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
+  _FeeEstimate _state = _FeeEstimate.demo;
+  Amount? _networkFee;
+  bool _requested = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_requested) return;
+    _requested = true;
+    final draft = TransferSessionScope.maybeOf(context)?.draft;
+    if (draft == null) return; // gallery / goldens: demo rendering
+    final isEvm = switch (draft.chain) {
+      Chain.ethereum ||
+      Chain.polygon ||
+      Chain.base ||
+      Chain.arbitrum ||
+      Chain.avalanche => true,
+      Chain.tron || Chain.solana => false,
+    };
+    if (!isEvm) {
+      _state = _FeeEstimate.unavailable;
+      return;
+    }
+    final wallet = WalletScope.of(context).current;
+    final from = wallet == null
+        ? demoFromAddress
+        : addressForChain(wallet.addresses, draft.chain);
+    final service =
+        widget.paramsService ??
+        ChainParamsService(
+          endpoints: effectiveRpcEndpoints(
+            AppPrefsScope.maybeOf(context),
+            NetworkScope.maybeOf(context),
+          ),
+          gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
+        );
+    _state = _FeeEstimate.estimating;
+    unawaited(_estimate(service, draft, from: from, symbol: _nativeSymbol(draft.chain)));
+  }
+
+  /// Native symbol of the ACTIVE network for [chain] (POL on Polygon, AVAX on
+  /// Avalanche, ETH on the ETH-denominated L2s).
+  String _nativeSymbol(Chain chain) =>
+      NetworkScope.maybeOf(context)?.activeFor(chain).symbol ??
+      switch (chain) {
+        Chain.polygon => 'POL',
+        Chain.avalanche => 'AVAX',
+        Chain.tron => 'TRX',
+        Chain.solana => 'SOL',
+        _ => 'ETH',
+      };
+
+  /// The same two calls `prepareEvm` makes before signing, so the number shown
+  /// here is the number the signed envelope carries.
+  Future<void> _estimate(
+    ChainParamsService service,
+    TransferDraft draft, {
+    required String from,
+    required String symbol,
+  }) async {
+    try {
+      final params = await service.fetchEvmParams(draft.chain, from);
+      final tier = params.tierFor(draft.feeTier);
+      final tokenContract = draft.tokenContract;
+      final calldata = tokenContract == null
+          ? Uint8List(0)
+          : Erc20.transferCalldata(to: draft.recipient, amount: draft.amount.raw);
+      final gasLimit = await service.estimateEvmGas(
+        draft.chain,
+        from: from,
+        to: tokenContract ?? draft.recipient,
+        value: tokenContract == null ? draft.amount.raw : BigInt.zero,
+        data: '0x${hexEncode(calldata)}',
+      );
+      if (!mounted) return;
+      setState(() {
+        _networkFee = Amount(
+          raw: gasLimit * tier.maxFeePerGas,
+          decimals: 18,
+          symbol: symbol,
+        );
+        _state = _FeeEstimate.ready;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _state = _FeeEstimate.failed);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isHot = widget.isHot;
     final l10n = AppLocalizations.of(context);
     final draft = TransferSessionScope.maybeOf(context)?.draft;
     final wallet = WalletScope.of(context).current;
@@ -1097,20 +1324,40 @@ class TransferConfirmScreen extends StatelessWidget {
       final from = wallet == null
           ? demoFromAddress
           : addressForChain(wallet.addresses, draft.chain);
+      final fee = _networkFee;
+      // The chains preview type still frames the amount/addresses; the fee it
+      // carries is the demo schedule, so it is deliberately NOT displayed —
+      // `fee` above is the live one.
       final preview = previewForDraft(draft, from: from);
-      final total = preview.totalNativeSpend;
       headline = '-${draft.amountText}';
-      // Demo 1:1 USD peg, consistent with the input screen's ≈ display.
-      fiat = '≈ \$${preview.amount.format()}';
+      fiat =
+          '≈ ${_fiatText(_fiatValue(draft.amount, _unitPriceUsd(context, chain: draft.chain, symbol: draft.symbol, tokenContract: draft.tokenContract)))}';
       networkLabel = draft.networkLabel;
       dotColor = _chainDot(draft.chain);
       fromValue =
           '${wallet?.name ?? ''} ${truncateMiddle(preview.from, head: 4, tail: 4)}'
               .trim();
       toValue = truncateMiddle(preview.to, head: 8, tail: 9);
-      feeValue = '≈ ${preview.networkFee}';
+      feeValue = switch (_state) {
+        _FeeEstimate.estimating => l10n.feeEstimating,
+        _FeeEstimate.failed => l10n.feeUnavailable,
+        _ when fee == null => '--',
+        _ =>
+          '≈ $fee（${_fiatText(_fiatValue(fee, _unitPriceUsd(context, chain: draft.chain, symbol: fee.symbol, tokenContract: null)))}）',
+      };
+      // Total spend only adds the fee when it is a REAL one and the transfer
+      // actually spends the native coin; otherwise it is the amount alone.
+      final total =
+          fee != null &&
+              draft.operation == TxOperation.nativeTransfer &&
+              draft.amount.decimals == fee.decimals
+          ? draft.amount + fee
+          : null;
       totalValue = total == null ? draft.amountText : '$total';
     }
+    // A live EVM draft whose fee could not be estimated must not be signed:
+    // the user would be approving an unknown cost.
+    final blocked = _state == _FeeEstimate.failed;
 
     return KtScreen(
       gap: 16,
@@ -1122,13 +1369,19 @@ class TransferConfirmScreen extends StatelessWidget {
         children: [
           KtPrimaryButton(
             label: isHot ? l10n.confirmTransfer : l10n.generateSignQr,
-            onPressed: () =>
-                context.push(isHot ? '/transfer-auth' : '/sign-qr'),
+            onPressed: blocked
+                ? null
+                : () => context.push(isHot ? '/transfer-auth' : '/sign-qr'),
           ),
           const SizedBox(height: 10),
           Text(
-            isHot ? l10n.hotConfirmHint : l10n.watchConfirmHint,
-            style: const TextStyle(fontSize: 12, color: WalletColors.text3),
+            blocked
+                ? l10n.feeUnavailableHint
+                : (isHot ? l10n.hotConfirmHint : l10n.watchConfirmHint),
+            style: TextStyle(
+              fontSize: 12,
+              color: blocked ? WalletColors.red : WalletColors.text3,
+            ),
           ),
         ],
       ),
@@ -1747,7 +2000,7 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
     );
     if (!mounted) return;
     _navigated = true;
-    context.push('/broadcast-confirm');
+    unawaited(context.push('/broadcast-confirm'));
   }
 
   @override
@@ -2211,10 +2464,35 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
     return isEvm &&
         tx.signMode == SignMode.local &&
         (tx.status == TxStatus.submitted || tx.status == TxStatus.pending) &&
+        // A row with no recorded network (pre-v4 legacy) cannot be safely
+        // rebuilt: we do not know which chain instance it was broadcast on.
+        tx.networkId != null &&
         tx.nonce != null &&
         tx.maxPriorityFeeRaw != null &&
         tx.maxFeeRaw != null &&
         tx.gasLimitRaw != null;
+  }
+
+  /// The network instance the ROW was recorded on — never the currently
+  /// active one. A speed-up/cancel must rebuild the transaction for the very
+  /// network that carries the pending nonce; using `activeFor(chain)` meant a
+  /// Sepolia row could be re-signed and broadcast as a real mainnet
+  /// transaction (chainId 1) with the Sepolia recipient after an environment
+  /// switch. Returns null when the row's network is unknown to this build.
+  Network? _rowNetwork(Transaction tx) {
+    final id = tx.networkId;
+    if (id == null) return null;
+    return NetworkScope.maybeOf(context)?.byId(id);
+  }
+
+  /// Whether the row's own network is the one currently selected for its
+  /// chain. Replacement requires it: the RPC endpoints, nonce view and fee
+  /// oracle all follow the active network.
+  bool _rowNetworkIsActive(Transaction tx) {
+    final chain = _chainFor(tx);
+    final networks = NetworkScope.maybeOf(context);
+    if (chain == null || networks == null || tx.networkId == null) return false;
+    return networks.activeFor(chain).id == tx.networkId;
   }
 
   String _statusLabel(AppLocalizations l10n, TxStatus status) =>
@@ -2284,8 +2562,11 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
     final chain = _chainFor(tx);
     final hash = tx.hash;
     if (chain == null || hash == null || hash.isEmpty) return;
+    // The explorer of the network the transaction was actually broadcast on;
+    // the active one is only a fallback for legacy rows without a network.
+    final network = _rowNetwork(tx) ?? NetworkScope.of(context).activeFor(chain);
     final opened = await ExternalActions.instance.open(
-      Uri.parse(explorerTxUrl(NetworkScope.of(context).activeFor(chain), hash)),
+      Uri.parse(explorerTxUrl(network, hash)),
     );
     if (!opened && mounted) {
       ScaffoldMessenger.of(context)
@@ -2346,7 +2627,8 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
     final wallet = controller.current;
     final chain = _chainFor(original);
     final networkScope = NetworkScope.maybeOf(context);
-    final network = chain == null ? null : networkScope?.activeFor(chain);
+    // The ROW's network, not the active one (see [_rowNetwork]).
+    final network = _rowNetwork(original);
     final nonce = BigInt.tryParse(original.nonce ?? '');
     final priority = BigInt.tryParse(original.maxPriorityFeeRaw ?? '');
     final maxFee = BigInt.tryParse(original.maxFeeRaw ?? '');
@@ -2360,6 +2642,14 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
         maxFee == null ||
         gasLimit == null) {
       _showMessage(l10n.txReplacementUnavailable);
+      return;
+    }
+    // Refuse rather than silently rebuilding on whatever is selected now: the
+    // endpoints, nonce view and fee oracle all follow the ACTIVE network, so a
+    // replacement is only meaningful while the row's own network is active.
+    final rowNetwork = network!;
+    if (!_rowNetworkIsActive(original)) {
+      _showMessage(l10n.txReplacementWrongNetwork(rowNetwork.name));
       return;
     }
 
@@ -2378,7 +2668,7 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
     try {
       final prepared = await service.prepareEvmReplacement(
         chain: chain,
-        evmChainId: network!.evmChainId!,
+        evmChainId: rowNetwork.evmChainId!,
         from: original.fromAddr,
         recipient: original.toAddr,
         amountRaw: BigInt.parse(original.amountRaw),
@@ -2392,6 +2682,8 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
       await controller.reserveOutgoingEvmTransaction(
         id: replacementId,
         coin: prepared.coin,
+        // The replacement lives on the SAME network as the row it replaces.
+        networkId: rowNetwork.id,
         contract: prepared.tokenContract,
         from: prepared.from,
         to: prepared.recipient,
@@ -2490,10 +2782,15 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
     final l10n = AppLocalizations.of(context);
     final statusColor = _statusColor(tx.status);
     final chain = _chainFor(tx);
-    final networkName = chain == null
-        ? tx.coin
-        : NetworkScope.of(context).activeFor(chain).name;
-    final canReplace = _canReplace(tx);
+    // The row's own network (falling back to its recorded id, then to the
+    // active instance for legacy rows) — never relabel a Sepolia transfer
+    // "Ethereum" just because mainnet is selected now.
+    final networkName =
+        _rowNetwork(tx)?.name ??
+        tx.networkId ??
+        (chain == null ? tx.coin : NetworkScope.of(context).activeFor(chain).name);
+    // Replacement is offered only while the row's own network is active.
+    final canReplace = _canReplace(tx) && _rowNetworkIsActive(tx);
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(
@@ -2801,6 +3098,10 @@ class TransferAuthSheet extends StatelessWidget {
       Chain.avalanche => true,
       Chain.tron || Chain.solana => false,
     };
+    if (network == null) {
+      _showTransferError(context, 'No active network for ${draft.chain.name}');
+      return;
+    }
     if (isEvm && chainId == null) {
       _showTransferError(context, 'Missing EVM chain ID');
       return;
@@ -2826,6 +3127,7 @@ class TransferAuthSheet extends StatelessWidget {
         await controller.reserveOutgoingEvmTransaction(
           id: id,
           coin: prepared.coin,
+          networkId: network.id,
           contract: prepared.tokenContract,
           from: prepared.from,
           to: prepared.recipient,
@@ -2860,6 +3162,7 @@ class TransferAuthSheet extends StatelessWidget {
         await controller.saveOutgoingTransaction(
           id: id,
           coin: rpcCoinForChain(draft.chain),
+          networkId: network.id,
           contract: draft.tokenContract,
           from: addressForChain(wallet.addresses, draft.chain),
           to: draft.recipient,

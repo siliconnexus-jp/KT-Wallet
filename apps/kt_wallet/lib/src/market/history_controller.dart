@@ -15,14 +15,25 @@ class HistoryController extends ChangeNotifier {
   HistoryController({
     required WalletController wallets,
     HistoryService? service,
+    Set<String> Function()? activeNetworkIds,
   }) : _wallets = wallets,
-       _service = service ?? HistoryService() {
+       _service = service ?? HistoryService(),
+       _activeNetworkIds = activeNetworkIds {
     _walletId = _wallets.current?.id;
     _wallets.addListener(_onWalletsChanged);
   }
 
   final WalletController _wallets;
   final HistoryService _service;
+
+  /// The ACTIVE network ids, re-read on every refresh: locally recorded rows
+  /// from another network instance (a Sepolia transfer while mainnet is
+  /// selected) must not appear in this list. Null (older wiring, tests
+  /// injecting their own controller) keeps every network, as before.
+  final Set<String> Function()? _activeNetworkIds;
+
+  Future<List<db.Transaction>> _loadLocalTransactions() =>
+      _wallets.localTransactions(networkIds: _activeNetworkIds?.call());
 
   String? _walletId;
   int _generation = 0;
@@ -117,7 +128,7 @@ class HistoryController extends ChangeNotifier {
 
     if (generation != _generation) return; // superseded — drop stale results
     _results = {for (final (coin, result) in entries) coin: result};
-    _localTransactions = await _wallets.localTransactions();
+    _localTransactions = await _loadLocalTransactions();
     if (generation != _generation) return;
     final remoteByHash = {
       for (final result in _results.values)
@@ -148,7 +159,7 @@ class HistoryController extends ChangeNotifier {
         hash: hash,
       );
     }
-    _localTransactions = await _wallets.localTransactions();
+    _localTransactions = await _loadLocalTransactions();
     if (generation != _generation) return;
     _refreshing = false;
     _hasRefreshed = true;

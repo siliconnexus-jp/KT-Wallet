@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'address.dart';
 import 'keccak.dart';
 
 /// Minimal ABI encoding for the only EVM contract call V1 builds: ERC-20
@@ -14,9 +15,19 @@ abstract final class Erc20 {
   /// Builds the 68-byte calldata for an ERC-20 transfer.
   /// [to] is a 0x-prefixed 20-byte hex address; [amount] is the raw token
   /// amount in base units.
+  ///
+  /// The recipient goes through the same [Addresses.validate] gate as native
+  /// transfers: a mistyped mixed-case address fails EIP-55 here rather than
+  /// sending tokens to an address nobody holds the key for. (Native transfers
+  /// were already covered via `Eip1559Tx.addressBytes`; token transfers used
+  /// to bypass every check but the byte length.)
   static Uint8List transferCalldata({required String to, required BigInt amount}) {
     if (amount < BigInt.zero) {
       throw ArgumentError('amount must be non-negative');
+    }
+    final check = Addresses.validate(Chain.ethereum, to);
+    if (!check.isValid) {
+      throw ArgumentError('invalid recipient address: ${check.reason ?? to}');
     }
     final addr = _hexToBytes(to);
     if (addr.length != 20) {

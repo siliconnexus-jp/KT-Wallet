@@ -103,7 +103,8 @@ class _ColdSignerAppState extends State<ColdSignerApp> {
             builder: (context, _) => router == null
                 // One frame at most, while the vault decides home vs. welcome.
                 ? MaterialApp(
-                    title: 'KT Wallet Cold Signer',
+                    onGenerateTitle: (context) =>
+                        AppLocalizations.of(context).appName,
                     debugShowCheckedModeBanner: false,
                     locale: widget.localeController.locale,
                     localizationsDelegates:
@@ -115,7 +116,8 @@ class _ColdSignerAppState extends State<ColdSignerApp> {
                         KtDeviceChrome(mockStatusBar: false, child: child!),
                   )
                 : MaterialApp.router(
-                    title: 'KT Wallet Cold Signer',
+                    onGenerateTitle: (context) =>
+                        AppLocalizations.of(context).appName,
                     debugShowCheckedModeBanner: false,
                     locale: widget.localeController.locale,
                     localizationsDelegates:

@@ -93,12 +93,19 @@ class WalletRepository {
 
   // ---- transactions ------------------------------------------------------
 
-  Future<List<Transaction>> transactions({int? limit}) {
+  /// Wallet-scoped transaction list, newest first. [networkIds] restricts the
+  /// result to rows recorded on those network instances (the caller passes the
+  /// currently ACTIVE ids) — pending/history surfaces must never mix a
+  /// testnet row into a mainnet list. Passing null keeps every network.
+  Future<List<Transaction>> transactions({int? limit, Set<String>? networkIds}) {
     final q = _db.select(_db.transactions)
       ..where((t) => t.walletId.equals(walletId))
       ..orderBy([
         (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
       ]);
+    if (networkIds != null) {
+      q.where((t) => t.networkId.isIn(networkIds.toList()));
+    }
     if (limit != null) q.limit(limit);
     return q.get();
   }
@@ -119,9 +126,15 @@ class WalletRepository {
   /// a racing new transfer) is rejected. This closes the gap between fetching
   /// `pending` nonce and broadcasting where two UI actions could otherwise
   /// sign different transactions with the same nonce.
+  ///
+  /// The conflict key is scoped PER NETWORK ([networkId]): nonces are a
+  /// per-(account, chain-instance) sequence, so a pending Sepolia row must not
+  /// block a legitimate Ethereum-mainnet transfer that happens to reuse the
+  /// same number, and vice versa.
   Future<void> reserveEvmTransaction(
     TransactionsCompanion tx, {
     required String coin,
+    required String networkId,
     required String from,
     required String nonce,
     String? replacesId,
@@ -131,6 +144,7 @@ class WalletRepository {
         (t) =>
             t.walletId.equals(walletId) &
             t.coin.equals(coin) &
+            t.networkId.equals(networkId) &
             t.fromAddr.equals(from) &
             t.nonce.equals(nonce) &
             t.status.isIn([TxStatus.submitted.index, TxStatus.pending.index]),

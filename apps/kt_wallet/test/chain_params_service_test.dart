@@ -6,7 +6,15 @@ import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/l10n/app_localizations.dart';
+import 'package:core_crypto/core_crypto.dart' show ChainAddresses;
+import 'package:kt_wallet/src/market/balance_service.dart';
+import 'package:kt_wallet/src/market/market_controller.dart';
+import 'package:kt_wallet/src/market/market_scope.dart';
+import 'package:kt_wallet/src/market/price_service.dart';
 import 'package:kt_wallet/src/screens/transfer_screens.dart';
+import 'package:kt_wallet/src/state/wallet_controller.dart';
+import 'package:kt_wallet/src/wallets/wallet_manager.dart';
+import 'package:kt_wallet/src/wallets/wallet_model.dart';
 import 'package:kt_wallet/src/transfer/airgap_codec.dart';
 import 'package:kt_wallet/src/transfer/chain_params_service.dart';
 import 'package:kt_wallet/src/transfer/transfer_draft.dart';
@@ -86,6 +94,48 @@ class _FakeParamsService extends ChainParamsService {
     required BigInt value,
     required String data,
   }) async => BigInt.from(21000);
+}
+
+/// Prices only — balances are irrelevant to the confirm screen's fiat line.
+class _FakePriceService extends PriceService {
+  _FakePriceService(this.prices);
+  final Map<Coin, double>? prices;
+  @override
+  Future<Map<Coin, double>?> fetchUsdPrices() async => prices;
+}
+
+class _NoBalanceService extends BalanceService {
+  @override
+  Future<Map<Coin, BalanceResult>> fetchAll(
+    ChainAddresses addresses, {
+    BalanceResultCallback? onResult,
+  }) async => {for (final c in Coin.values) c: const BalanceResult.error()};
+}
+
+Future<MarketController> _pricedMarket(Map<Coin, double>? prices) async {
+  final controller = MarketController(
+    wallets: WalletController(
+      WalletManager(
+        initial: [
+          HotWallet(
+            id: 'w1',
+            name: '日常钱包',
+            avatarColor: 0xFFF59E0B,
+            addresses: const ChainAddresses(
+              eth: '0xa',
+              polygon: '0xa',
+              tron: 'Ta',
+              solana: 'Sa',
+            ),
+          ),
+        ],
+      ),
+    ),
+    balances: _NoBalanceService(),
+    prices: _FakePriceService(prices),
+  );
+  await controller.refresh();
+  return controller;
 }
 
 Widget _wrap(Widget child) => MaterialApp(
@@ -232,6 +282,106 @@ void main() {
       expect(service.callCount, 0);
       expect(find.byType(KtQrCode), findsOneWidget);
       expect(session.request, isNotNull);
+    });
+  });
+
+  group('W5/W29 confirm screen fee + fiat', () {
+    GasFeeEstimate estimate() => GasFeeEstimate(
+          slow: GasFeeEstimateTier(
+              maxPriorityFeePerGas: _gwei, maxFeePerGas: BigInt.from(31) * _gwei),
+          standard: GasFeeEstimateTier(
+              maxPriorityFeePerGas: BigInt.two * _gwei,
+              maxFeePerGas: BigInt.from(32) * _gwei),
+          fast: GasFeeEstimateTier(
+              maxPriorityFeePerGas: BigInt.from(3) * _gwei,
+              maxFeePerGas: BigInt.from(33) * _gwei),
+        );
+
+    testWidgets('a live draft shows the REAL fee, never the demo schedule',
+        (tester) async {
+      final completer = Completer<EvmChainParams>();
+      final service = _FakeParamsService((_, _) => completer.future);
+      final session = TransferSession()..draft = _evmDraft();
+      await tester.pumpWidget(_wrap(TransferSessionScope(
+          session: session,
+          child: TransferConfirmScreen(isHot: true, paramsService: service))));
+
+      // While the chain-state fetch is in flight the fee is honestly pending —
+      // not a number pulled from a static table.
+      expect(find.text('估算中…'), findsOneWidget);
+      expect(find.text('≈ 0.00042 ETH'), findsNothing); // demo standard tier
+
+      completer.complete(EvmChainParams(nonce: 42, fees: estimate()));
+      await tester.pump();
+
+      // gasLimit 21000 x standard maxFeePerGas 32 gwei = 0.000672 ETH — the
+      // very product LocalTransferService.prepareEvm signs.
+      expect(find.text('≈ 0.000672 ETH（--）'), findsOneWidget);
+      // Total spend adds the REAL fee to the native amount.
+      expect(find.text('0.500672 ETH'), findsOneWidget);
+      // No fiat source in this harness → '--', never the old 1:1 "≈ \$0.5".
+      expect(find.text('≈ --'), findsOneWidget);
+      expect(find.text('≈ \$0.5'), findsNothing);
+      // The action stays enabled once a real fee is known.
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, '确认转账'))
+            .onPressed,
+        isNotNull,
+      );
+    });
+
+    testWidgets('an unfetchable fee is stated and blocks sending',
+        (tester) async {
+      final service = _FakeParamsService((_, _) async => throw RpcException('boom'));
+      final session = TransferSession()..draft = _evmDraft();
+      await tester.pumpWidget(_wrap(TransferSessionScope(
+          session: session,
+          child: TransferConfirmScreen(isHot: false, paramsService: service))));
+      await tester.pump();
+
+      expect(find.text('无法获取网络费'), findsOneWidget);
+      expect(find.text('无法估算网络费，暂时无法发送'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(
+                find.widgetWithText(FilledButton, '生成待签名二维码'))
+            .onPressed,
+        isNull,
+      );
+    });
+
+    testWidgets('without a draft the demo schedule still backs the gallery',
+        (tester) async {
+      final service = _FakeParamsService((_, _) async => throw StateError('must not fetch'));
+      await tester.pumpWidget(
+          _wrap(TransferConfirmScreen(isHot: true, paramsService: service)));
+      await tester.pump();
+
+      expect(service.callCount, 0);
+      expect(find.text('≈ 13.7 TRX（\$1.90）'), findsOneWidget);
+      expect(find.text('≈ \$120.00'), findsOneWidget);
+    });
+
+    testWidgets('fiat comes from the REAL spot price, not a 1:1 peg',
+        (tester) async {
+      final market = await _pricedMarket({Coin.eth: 2000.0});
+      final service = _FakeParamsService(
+          (_, _) async => EvmChainParams(nonce: 1, fees: estimate()));
+      final session = TransferSession()..draft = _evmDraft();
+      await tester.pumpWidget(_wrap(MarketScope(
+        controller: market,
+        child: TransferSessionScope(
+          session: session,
+          child: TransferConfirmScreen(isHot: true, paramsService: service),
+        ),
+      )));
+      await tester.pump();
+
+      // 0.5 ETH at \$2000 = \$1000.00 (the old peg rendered "≈ \$0.5").
+      expect(find.text('≈ \$1000.00'), findsOneWidget);
+      // 0.000672 ETH of gas at the same price = \$1.34.
+      expect(find.text('≈ 0.000672 ETH（\$1.34）'), findsOneWidget);
     });
   });
 }

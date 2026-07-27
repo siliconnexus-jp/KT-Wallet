@@ -65,8 +65,14 @@ String addressForChain(ChainAddresses addresses, Chain chain) =>
 
 // ---- demo fee schedule ------------------------------------------------------
 
-/// Demo fee schedule per chain: (slow, standard, fast) in the native unit.
-/// Static tiers at current fidelity — a live fee oracle replaces this later.
+/// DEMO fee schedule per chain: (slow, standard, fast) in the native unit.
+///
+/// DO NOT SHOW THIS TO A USER WHO IS ABOUT TO SIGN. These are invented static
+/// tiers; the fee a live transaction actually pays comes from
+/// [ChainParamsService] (`gasLimit * maxFeePerGas` of the selected tier) and
+/// is what [Eip1559Tx] carries. This schedule may only back renderings with
+/// NO live draft — the design gallery and the goldens — and the placeholder
+/// raw-tx encoding for chains whose real serialization is not wired yet.
 Amount networkFeeFor(Chain chain, int feeTier) {
   final (tiers, decimals, symbol) = switch (chain) {
     Chain.tron => (('6.8', '13.7', '27.4'), 6, 'TRX'),
@@ -85,8 +91,12 @@ Amount networkFeeFor(Chain chain, int feeTier) {
   return Amount.parse(value, decimals, symbol: symbol);
 }
 
-/// Builds the confirm-screen preview from the draft via the chains types.
-/// maxFee == networkFee at current fidelity (static demo schedule).
+/// Builds a [TxPreview] from the draft via the chains types.
+///
+/// Its `networkFee` / `maxFee` (and therefore `totalNativeSpend`) come from
+/// the DEMO [networkFeeFor] schedule and must not be displayed for a live
+/// draft — the confirm screen derives those two rows from the fetched chain
+/// params instead and only uses this for the chain/from/to/amount framing.
 TxPreview previewForDraft(TransferDraft draft, {required String from}) {
   final fee = networkFeeFor(draft.chain, draft.feeTier);
   final intent = TransferIntent(

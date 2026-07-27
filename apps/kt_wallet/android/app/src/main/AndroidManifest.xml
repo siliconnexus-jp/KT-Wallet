@@ -4,8 +4,14 @@
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <uses-permission android:name="android.permission.DETECT_SCREEN_CAPTURE"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- The online wallet queries chain RPCs, prices and the gateway, so it
+         needs INTERNET in every build type. It used to live only in the
+         debug/profile manifests (Flutter's template default), which meant
+         release builds silently lost every network feature while development
+         builds looked fine. The offline signer must NEVER declare this. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="KT Wallet"
+        android:label="@string/app_name"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

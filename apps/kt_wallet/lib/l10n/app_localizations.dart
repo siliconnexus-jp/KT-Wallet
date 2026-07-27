@@ -100,6 +100,12 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @appName.
+  ///
+  /// In zh, this message translates to:
+  /// **'KT钱包'**
+  String get appName;
+
   /// No description provided for @appTagline.
   ///
   /// In zh, this message translates to:
@@ -465,6 +471,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'请按顺序手写抄录，请勿截图或拍照。任何人获得助记词即可控制资产。'**
   String get mnemonicShowWarning;
+
+  /// No description provided for @mnemonicUnavailableTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法显示助记词'**
+  String get mnemonicUnavailableTitle;
+
+  /// No description provided for @mnemonicUnavailableBackup.
+  ///
+  /// In zh, this message translates to:
+  /// **'此备份流程仅适用于新创建的钱包。要备份当前钱包，请打开「钱包详情 → 查看助记词」。'**
+  String get mnemonicUnavailableBackup;
+
+  /// No description provided for @mnemonicAuthRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要通过身份验证才能显示助记词，请重试。'**
+  String get mnemonicAuthRequired;
+
+  /// No description provided for @mnemonicNoKeyMaterial.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机未保存该钱包的助记词，无法显示。'**
+  String get mnemonicNoKeyMaterial;
 
   /// No description provided for @verifyBackupTitle.
   ///
@@ -1041,6 +1071,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'这笔交易缺少替换所需的链上参数，无法加速或取消'**
   String get txReplacementUnavailable;
+
+  /// No description provided for @txReplacementWrongNetwork.
+  ///
+  /// In zh, this message translates to:
+  /// **'这笔交易属于 {network}，请先切换回该网络再加速或取消'**
+  String txReplacementWrongNetwork(String network);
+
+  /// No description provided for @feeEstimating.
+  ///
+  /// In zh, this message translates to:
+  /// **'估算中…'**
+  String get feeEstimating;
+
+  /// No description provided for @feeUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法获取网络费'**
+  String get feeUnavailable;
+
+  /// No description provided for @feeUnavailableHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法估算网络费，暂时无法发送'**
+  String get feeUnavailableHint;
 
   /// No description provided for @txNonceLabel.
   ///

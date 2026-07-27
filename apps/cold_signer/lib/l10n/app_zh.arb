@@ -1,6 +1,7 @@
 {
   "@@locale": "zh",
 
+  "appName": "KT冷钱包",
   "actionConfirm": "确认",
   "actionCancel": "取消",
   "actionSave": "保存",
@@ -125,7 +126,7 @@
   "backToHome": "返回首页",
   "viewRawTxData": "查看原始交易数据",
   "signingBlocked": "已禁止签名",
-  "signingBlockedDesc": "该交易包含无法安全解析的内容，KT Wallet Cold Signer 已拒绝签名以保护你的资产。",
+  "signingBlockedDesc": "该交易包含无法安全解析的内容，KT Cold Signer 已拒绝签名以保护你的资产。",
   "unknownContractCallDetected": "检测到未知合约调用：{method}",
   "@unknownContractCallDetected": {
     "placeholders": { "method": { "type": "String" } }

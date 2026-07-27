@@ -3,7 +3,7 @@ package handlers
 import "ktwallet/gateway/internal/rpc"
 
 // networkMeta describes one supported network id. Every network belongs to
-// exactly one chain family ("eth", "polygon", "tron", "solana"); the family's
+// exactly one chain family (see chainOrder in validate.go); the family's
 // mainnet is what an omitted "network" param resolves to.
 type networkMeta struct {
 	Chain            string // owning chain family
@@ -12,22 +12,33 @@ type networkMeta struct {
 }
 
 // networkOrder is the canonical listing order (kt_health, error messages).
+// The ids are exactly the app's built-in Network.id values, so the client can
+// send NetworkController.activeFor(chain).id verbatim.
 var networkOrder = []string{
 	"eth-mainnet", "eth-sepolia",
 	"polygon-mainnet", "polygon-amoy",
+	"base-mainnet", "base-sepolia",
+	"arbitrum-mainnet", "arbitrum-sepolia",
+	"avalanche-mainnet", "avalanche-fuji",
 	"tron-mainnet", "tron-nile",
 	"sol-mainnet", "sol-devnet",
 }
 
 var networks = map[string]networkMeta{
-	"eth-mainnet":     {Chain: "eth", Mainnet: true, EtherscanChainID: 1},
-	"eth-sepolia":     {Chain: "eth", EtherscanChainID: 11155111},
-	"polygon-mainnet": {Chain: "polygon", Mainnet: true, EtherscanChainID: 137},
-	"polygon-amoy":    {Chain: "polygon", EtherscanChainID: 80002},
-	"tron-mainnet":    {Chain: "tron", Mainnet: true},
-	"tron-nile":       {Chain: "tron"},
-	"sol-mainnet":     {Chain: "solana", Mainnet: true},
-	"sol-devnet":      {Chain: "solana"},
+	"eth-mainnet":       {Chain: "eth", Mainnet: true, EtherscanChainID: 1},
+	"eth-sepolia":       {Chain: "eth", EtherscanChainID: 11155111},
+	"polygon-mainnet":   {Chain: "polygon", Mainnet: true, EtherscanChainID: 137},
+	"polygon-amoy":      {Chain: "polygon", EtherscanChainID: 80002},
+	"base-mainnet":      {Chain: "base", Mainnet: true, EtherscanChainID: 8453},
+	"base-sepolia":      {Chain: "base", EtherscanChainID: 84532},
+	"arbitrum-mainnet":  {Chain: "arbitrum", Mainnet: true, EtherscanChainID: 42161},
+	"arbitrum-sepolia":  {Chain: "arbitrum", EtherscanChainID: 421614},
+	"avalanche-mainnet": {Chain: "avalanche", Mainnet: true, EtherscanChainID: 43114},
+	"avalanche-fuji":    {Chain: "avalanche", EtherscanChainID: 43113},
+	"tron-mainnet":      {Chain: "tron", Mainnet: true},
+	"tron-nile":         {Chain: "tron"},
+	"sol-mainnet":       {Chain: "solana", Mainnet: true},
+	"sol-devnet":        {Chain: "solana"},
 }
 
 // mainnetOf maps a chain family to its default network id.
@@ -52,7 +63,7 @@ func resolveNetwork(chain, network string) (string, *rpc.Error) {
 	meta, ok := networks[network]
 	if !ok {
 		return "", rpc.Errorf(rpc.CodeInvalidParams,
-			`invalid params: "network" must be one of "eth-mainnet", "eth-sepolia", "polygon-mainnet", "polygon-amoy", "tron-mainnet", "tron-nile", "sol-mainnet", "sol-devnet"`)
+			`invalid params: "network" must be one of %s`, quotedList(networkOrder))
 	}
 	if meta.Chain != chain {
 		return "", rpc.Errorf(rpc.CodeInvalidParams,

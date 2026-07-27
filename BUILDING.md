@@ -78,20 +78,46 @@ The shipping app uses `cc.siliconnexus.ktwallet` on Android and iOS. Its
 launcher name is **KT Wallet** on both platforms. The independently installable
 Cold Signer uses `cc.siliconnexus.ktwallet.coldsigner`.
 
-Android release builds are deliberately **not** signed with the debug key.
-Provide the four values below only in the local shell or CI secret store:
+Android release builds of **both** apps are deliberately **not** signed with
+the debug key — whose password is the public string `android`, so anyone could
+otherwise sign a look-alike update of the app that holds the seed. Each app
+reads its own four values from the environment only:
 
 ```sh
+# apps/kt_wallet
 export KT_RELEASE_STORE_FILE=/absolute/path/to/kt-wallet-release.jks
 export KT_RELEASE_STORE_PASSWORD='...'
 export KT_RELEASE_KEY_ALIAS='...'
 export KT_RELEASE_KEY_PASSWORD='...'
+
+# apps/cold_signer (separate keystore — separate trust anchor)
+export KT_SIGNER_RELEASE_STORE_FILE=/absolute/path/to/kt-signer-release.jks
+export KT_SIGNER_RELEASE_STORE_PASSWORD='...'
+export KT_SIGNER_RELEASE_KEY_ALIAS='...'
+export KT_SIGNER_RELEASE_KEY_PASSWORD='...'
+
 flutter build appbundle --release
 ```
 
-Without all four values Gradle produces no falsely publishable debug-signed
-release. Do not commit the keystore or its passwords.
+Both builds fail closed: without all four values the release build type gets no
+signing config at all, so Gradle emits an unsigned artifact rather than a
+falsely publishable debug-signed one. Do not commit either keystore or its
+passwords.
 
 For iOS, select the SiliconNexus Apple team and the App Store provisioning
 profile in Xcode, then archive `apps/kt_wallet/ios/Runner.xcworkspace`.
 Signing identities and provisioning profiles remain local/CI secrets.
+
+## Apple export compliance
+
+Both iOS apps implement industry-standard cryptography outside Apple operating
+system APIs through Trust Wallet Core. Their `Info.plist` files therefore set
+`ITSAppUsesNonExemptEncryption` to `YES`; do not change this to `NO` merely to
+bypass App Store Connect's encryption questionnaire.
+
+Complete the App Encryption Documentation flow for each App Store Connect app.
+Distribution in France may require a French encryption declaration. If Apple
+approves the documentation and provides an export-compliance code, add that
+app-specific value as `ITSEncryptionExportComplianceCode` in the corresponding
+local release configuration. Do not commit or reuse a code before Apple issues
+it for the app.

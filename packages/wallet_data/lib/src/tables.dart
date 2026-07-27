@@ -102,6 +102,22 @@ class Transactions extends Table {
   TextColumn get walletId => text().references(Wallets, #id)();
   TextColumn get reqId => text().nullable()();
   TextColumn get coin => text()();
+
+  /// NETWORK DIMENSION (schema v4). The app-level network id
+  /// ('eth-mainnet', 'eth-sepolia', 'tron-nile', 'custom-1712…'), NOT the EVM
+  /// chain id, because:
+  ///
+  /// * a chain id is null for TRON and Solana, whose testnets (Nile, Devnet)
+  ///   are just as selectable and just as dangerous to confuse;
+  /// * user-added custom networks may reuse or omit a chain id, so it is not
+  ///   a unique key, while the network id is the app's stable identity and
+  ///   maps 1:1 onto `NetworkController.byId` / `activeFor(chain).id`.
+  ///
+  /// [coin] stays the protocol family; this column says WHICH instance of it.
+  /// Nullable only for rows the v4 backfill could not attribute; every write
+  /// since v4 sets it. A null here is treated as "unknown network", which
+  /// disables replacement rather than guessing.
+  TextColumn get networkId => text().nullable()();
   TextColumn get contract => text().nullable()();
   IntColumn get direction => intEnum<TxDirection>()();
   TextColumn get fromAddr => text()();

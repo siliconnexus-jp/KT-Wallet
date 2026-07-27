@@ -140,7 +140,7 @@ Future<void> _waitForConfirmation(HttpRestTransport rest, String hash) async {
       {'value': hash},
     );
     if (result is Map && result['id'] == hash) {
-      expect(result['result'], anyOf(isNull, isA<Map>()));
+      expect(result['result'], anyOf(isNull, isA<Map<String, Object?>>()));
       final receipt = result['receipt'];
       if (receipt is Map && receipt['result'] != null) {
         expect(receipt['result'], 'SUCCESS', reason: '$result');

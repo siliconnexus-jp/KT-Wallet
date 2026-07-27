@@ -21,12 +21,23 @@ class Amount {
   /// Display symbol (e.g. "USDT"); optional, not part of equality.
   final String symbol;
 
-  static final _sepReeger = RegExp(r'[_,\s]');
+  /// Grouping characters stripped before parsing. A comma is DELIBERATELY not
+  /// in this set: on comma-decimal locales (de/fr/es/pt…) the numeric keypad's
+  /// decimal key emits ',', so stripping it would silently turn "1,5" into
+  /// "15" — a 10x overpayment with every balance check still passing. Callers
+  /// that want locale input must convert the separator explicitly first.
+  static final _groupingChars = RegExp(r'[_\s]');
+  static final _commaChars = RegExp(r'[,，]');
 
   /// Parses a human-readable decimal string ("120.5") into base units.
   /// Rejects more fractional digits than [decimals] (no silent truncation).
   factory Amount.parse(String value, int decimals, {String symbol = ''}) {
-    final cleaned = value.replaceAll(_sepReeger, '');
+    if (_commaChars.hasMatch(value)) {
+      throw AmountError(
+        'comma is ambiguous (decimal separator vs grouping): $value',
+      );
+    }
+    final cleaned = value.replaceAll(_groupingChars, '');
     if (cleaned.isEmpty) throw AmountError('empty amount');
     if (cleaned.startsWith('-')) throw AmountError('negative amount');
     final parts = cleaned.split('.');

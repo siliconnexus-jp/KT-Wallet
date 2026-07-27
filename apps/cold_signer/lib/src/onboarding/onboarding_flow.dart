@@ -1,4 +1,4 @@
-/// Cold Signer onboarding flow state machines (detailed-design.md §7.1,
+/// KT Cold Signer onboarding flow state machines (detailed-design.md §7.1,
 /// ui-m.md §6.1/§6.2). Create and import share the credential-setup tail.
 library;
 

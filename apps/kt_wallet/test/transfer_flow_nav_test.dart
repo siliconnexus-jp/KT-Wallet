@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/main.dart';
 import 'package:kt_wallet/src/security/biometric_auth.dart';
@@ -17,6 +17,16 @@ Future<void> _open(WidgetTester tester, String galleryEntry) async {
 
 Future<void> _openHome(WidgetTester tester) => _open(tester, 'W1/W20 首页');
 
+/// The send screen no longer pre-fills anything on a live path, so every flow
+/// test types the transfer it wants to walk through. Address is a real,
+/// checksum-valid TRON account (NOT the USDT contract that used to be seeded).
+Future<void> _enterTransfer(WidgetTester tester) async {
+  final fields = find.byType(TextField);
+  await tester.enterText(fields.at(0), 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVbAgQs8D');
+  await tester.enterText(fields.at(1), '12.5');
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('hot wallet: home → transfer → confirm → auth → result → home', (
     tester,
@@ -29,6 +39,7 @@ void main() {
     await tester.tap(find.text('转账'));
     await tester.pumpAndSettle();
     expect(find.text('USDT'), findsWidgets); // transfer input
+    await _enterTransfer(tester);
 
     await tester.tap(find.text('下一步'));
     await tester.pumpAndSettle();
@@ -60,6 +71,7 @@ void main() {
 
     await tester.tap(find.text('转账'));
     await tester.pumpAndSettle();
+    await _enterTransfer(tester);
     await tester.tap(find.text('下一步'));
     await tester.pumpAndSettle();
     // Watch confirm shows the air-gap button, not local sign.

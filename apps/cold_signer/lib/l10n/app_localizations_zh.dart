@@ -9,6 +9,9 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get appName => 'KT冷钱包';
+
+  @override
   String get actionConfirm => '确认';
 
   @override
@@ -308,7 +311,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get signingBlockedDesc =>
-      '该交易包含无法安全解析的内容，KT Wallet Cold Signer 已拒绝签名以保护你的资产。';
+      '该交易包含无法安全解析的内容，KT Cold Signer 已拒绝签名以保护你的资产。';
 
   @override
   String unknownContractCallDetected(String method) {

@@ -35,16 +35,22 @@ type Config struct {
 	// AttemptTimeout bounds a single upstream attempt (default 10s).
 	AttemptTimeout time.Duration
 
-	EthURLs     []string
-	PolygonURLs []string
-	SolanaURLs  []string
-	TronURL     string
+	EthURLs       []string
+	PolygonURLs   []string
+	BaseURLs      []string
+	ArbitrumURLs  []string
+	AvalancheURLs []string
+	SolanaURLs    []string
+	TronURL       string
 
 	// Testnet upstreams (one per supported non-mainnet network).
-	EthSepoliaURLs   []string
-	PolygonAmoyURLs  []string
-	SolanaDevnetURLs []string
-	TronNileURL      string
+	EthSepoliaURLs      []string
+	PolygonAmoyURLs     []string
+	BaseSepoliaURLs     []string
+	ArbitrumSepoliaURLs []string
+	AvalancheFujiURLs   []string
+	SolanaDevnetURLs    []string
+	TronNileURL         string
 
 	CoinGeckoURL string
 	// CoinGeckoInterval spaces outbound CoinGecko calls (default 1s).
@@ -62,22 +68,31 @@ type Config struct {
 // Defaults returns the production upstream configuration.
 func Defaults() Config {
 	return Config{
-		Version:           "1.0.0",
-		Clock:             clock.Real{},
-		AttemptTimeout:    10 * time.Second,
-		EthURLs:           []string{"https://eth.llamarpc.com", "https://cloudflare-eth.com"},
-		PolygonURLs:       []string{"https://polygon-rpc.com", "https://polygon-bor-rpc.publicnode.com"},
-		SolanaURLs:        []string{"https://api.mainnet-beta.solana.com"},
-		TronURL:           "https://api.trongrid.io",
-		EthSepoliaURLs:    []string{"https://ethereum-sepolia-rpc.publicnode.com"},
-		PolygonAmoyURLs:   []string{"https://rpc-amoy.polygon.technology"},
-		SolanaDevnetURLs:  []string{"https://api.devnet.solana.com"},
-		TronNileURL:       "https://nile.trongrid.io",
-		CoinGeckoURL:      "https://api.coingecko.com",
-		CoinGeckoInterval: time.Second,
-		EtherscanURL:      "https://api.etherscan.io/v2/api",
-		HeliusURL:         "https://api.helius.xyz",
-		HeliusDevnetURL:   "https://api-devnet.helius.xyz",
+		Version:        "1.0.0",
+		Clock:          clock.Real{},
+		AttemptTimeout: 10 * time.Second,
+		EthURLs:        []string{"https://eth.llamarpc.com", "https://cloudflare-eth.com"},
+		PolygonURLs:    []string{"https://polygon-rpc.com", "https://polygon-bor-rpc.publicnode.com"},
+		// The newer EVM families default to the same public endpoints the app
+		// uses in direct mode (see builtinNetworks in the app's networks.dart),
+		// so gateway mode and direct mode read the same chains out of the box.
+		BaseURLs:            []string{"https://mainnet.base.org"},
+		ArbitrumURLs:        []string{"https://arb1.arbitrum.io/rpc"},
+		AvalancheURLs:       []string{"https://api.avax.network/ext/bc/C/rpc"},
+		SolanaURLs:          []string{"https://api.mainnet-beta.solana.com"},
+		TronURL:             "https://api.trongrid.io",
+		EthSepoliaURLs:      []string{"https://ethereum-sepolia-rpc.publicnode.com"},
+		PolygonAmoyURLs:     []string{"https://rpc-amoy.polygon.technology"},
+		BaseSepoliaURLs:     []string{"https://sepolia.base.org"},
+		ArbitrumSepoliaURLs: []string{"https://sepolia-rollup.arbitrum.io/rpc"},
+		AvalancheFujiURLs:   []string{"https://api.avax-test.network/ext/bc/C/rpc"},
+		SolanaDevnetURLs:    []string{"https://api.devnet.solana.com"},
+		TronNileURL:         "https://nile.trongrid.io",
+		CoinGeckoURL:        "https://api.coingecko.com",
+		CoinGeckoInterval:   time.Second,
+		EtherscanURL:        "https://api.etherscan.io/v2/api",
+		HeliusURL:           "https://api.helius.xyz",
+		HeliusDevnetURL:     "https://api-devnet.helius.xyz",
 	}
 }
 
@@ -87,7 +102,7 @@ func Defaults() Config {
 type Gateway struct {
 	cfg  Config
 	clk  clock.Clock
-	evm  map[string]*upstream.EVM    // eth-mainnet, eth-sepolia, polygon-mainnet, polygon-amoy
+	evm  map[string]*upstream.EVM    // one per EVM network id (eth/polygon/base/arbitrum/avalanche × mainnet/testnet)
 	tron map[string]*upstream.Tron   // tron-mainnet, tron-nile
 	sol  map[string]*upstream.Solana // sol-mainnet, sol-devnet
 	cg   *upstream.CoinGecko
@@ -121,6 +136,15 @@ func New(cfg Config) *Gateway {
 	if len(cfg.PolygonURLs) == 0 {
 		cfg.PolygonURLs = def.PolygonURLs
 	}
+	if len(cfg.BaseURLs) == 0 {
+		cfg.BaseURLs = def.BaseURLs
+	}
+	if len(cfg.ArbitrumURLs) == 0 {
+		cfg.ArbitrumURLs = def.ArbitrumURLs
+	}
+	if len(cfg.AvalancheURLs) == 0 {
+		cfg.AvalancheURLs = def.AvalancheURLs
+	}
 	if len(cfg.SolanaURLs) == 0 {
 		cfg.SolanaURLs = def.SolanaURLs
 	}
@@ -132,6 +156,15 @@ func New(cfg Config) *Gateway {
 	}
 	if len(cfg.PolygonAmoyURLs) == 0 {
 		cfg.PolygonAmoyURLs = def.PolygonAmoyURLs
+	}
+	if len(cfg.BaseSepoliaURLs) == 0 {
+		cfg.BaseSepoliaURLs = def.BaseSepoliaURLs
+	}
+	if len(cfg.ArbitrumSepoliaURLs) == 0 {
+		cfg.ArbitrumSepoliaURLs = def.ArbitrumSepoliaURLs
+	}
+	if len(cfg.AvalancheFujiURLs) == 0 {
+		cfg.AvalancheFujiURLs = def.AvalancheFujiURLs
 	}
 	if len(cfg.SolanaDevnetURLs) == 0 {
 		cfg.SolanaDevnetURLs = def.SolanaDevnetURLs
@@ -162,10 +195,16 @@ func New(cfg Config) *Gateway {
 		cfg: cfg,
 		clk: clk,
 		evm: map[string]*upstream.EVM{
-			"eth-mainnet":     upstream.NewEVM("eth-mainnet", cfg.EthURLs, clk, hc, at),
-			"eth-sepolia":     upstream.NewEVM("eth-sepolia", cfg.EthSepoliaURLs, clk, hc, at),
-			"polygon-mainnet": upstream.NewEVM("polygon-mainnet", cfg.PolygonURLs, clk, hc, at),
-			"polygon-amoy":    upstream.NewEVM("polygon-amoy", cfg.PolygonAmoyURLs, clk, hc, at),
+			"eth-mainnet":       upstream.NewEVM("eth-mainnet", cfg.EthURLs, clk, hc, at),
+			"eth-sepolia":       upstream.NewEVM("eth-sepolia", cfg.EthSepoliaURLs, clk, hc, at),
+			"polygon-mainnet":   upstream.NewEVM("polygon-mainnet", cfg.PolygonURLs, clk, hc, at),
+			"polygon-amoy":      upstream.NewEVM("polygon-amoy", cfg.PolygonAmoyURLs, clk, hc, at),
+			"base-mainnet":      upstream.NewEVM("base-mainnet", cfg.BaseURLs, clk, hc, at),
+			"base-sepolia":      upstream.NewEVM("base-sepolia", cfg.BaseSepoliaURLs, clk, hc, at),
+			"arbitrum-mainnet":  upstream.NewEVM("arbitrum-mainnet", cfg.ArbitrumURLs, clk, hc, at),
+			"arbitrum-sepolia":  upstream.NewEVM("arbitrum-sepolia", cfg.ArbitrumSepoliaURLs, clk, hc, at),
+			"avalanche-mainnet": upstream.NewEVM("avalanche-mainnet", cfg.AvalancheURLs, clk, hc, at),
+			"avalanche-fuji":    upstream.NewEVM("avalanche-fuji", cfg.AvalancheFujiURLs, clk, hc, at),
 		},
 		tron: map[string]*upstream.Tron{
 			"tron-mainnet": upstream.NewTron(cfg.TronURL, hc, at),

@@ -35,10 +35,10 @@ func unsupportedHistory() *historyResult {
 }
 
 // GetHistory implements kt_getHistory. TRON networks are always supported
-// through TronGrid (mainnet or nile base URL); eth/polygon networks need an
-// Etherscan-family key (Etherscan v2 covers testnets via chainid); solana
-// networks need a Helius key (sol-devnet uses the Helius devnet endpoint);
-// anything else reports {"status":"unsupported"}.
+// through TronGrid (mainnet or nile base URL); EVM networks need an
+// Etherscan-family key (Etherscan v2 covers every supported EVM network via
+// chainid); solana networks need a Helius key (sol-devnet uses the Helius
+// devnet endpoint); anything else reports {"status":"unsupported"}.
 func (g *Gateway) GetHistory(ctx context.Context, params json.RawMessage) (any, *rpc.Error) {
 	var p struct {
 		Chain   string `json:"chain"`
@@ -49,7 +49,8 @@ func (g *Gateway) GetHistory(ctx context.Context, params json.RawMessage) (any, 
 	if err := json.Unmarshal(params, &p); err != nil || len(params) == 0 {
 		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: expected {"chain", "network"?, "address", "limit"?}`)
 	}
-	if _, rpcErr := validateChain(p.Chain); rpcErr != nil {
+	meta, rpcErr := validateChain(p.Chain)
+	if rpcErr != nil {
 		return nil, rpcErr
 	}
 	network, rpcErr := resolveNetwork(p.Chain, p.Network)
@@ -73,16 +74,16 @@ func (g *Gateway) GetHistory(ctx context.Context, params json.RawMessage) (any, 
 	}
 
 	var res *historyResult
-	switch p.Chain {
-	case "tron":
+	switch {
+	case p.Chain == "tron":
 		res, rpcErr = g.tronHistory(ctx, network, p.Address, limit)
-	case "eth", "polygon":
+	case meta.EVM:
 		if g.cfg.EtherscanKey == "" {
 			res = unsupportedHistory()
 		} else {
 			res, rpcErr = g.evmHistory(ctx, p.Chain, network, p.Address, limit)
 		}
-	case "solana":
+	default: // solana
 		if g.cfg.HeliusKey == "" {
 			res = unsupportedHistory()
 		} else {
@@ -164,8 +165,9 @@ func (g *Gateway) tronHistory(ctx context.Context, network, address string, limi
 }
 
 func (g *Gateway) evmHistory(ctx context.Context, chain, network, address string, limit int) (*historyResult, *rpc.Error) {
-	// Etherscan v2 is multichain: the network picks the chainid
-	// (1 / 11155111 / 137 / 80002) against the same endpoint and key.
+	// Etherscan v2 is multichain: the network picks the chainid (1 / 11155111
+	// / 137 / 80002 / 8453 / 84532 / 42161 / 421614 / 43114 / 43113) against
+	// the same endpoint and key.
 	chainID := networks[network].EtherscanChainID
 	txs, err := g.scan.TxList(ctx, chainID, address, limit)
 	if err != nil {

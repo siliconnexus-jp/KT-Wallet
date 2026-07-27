@@ -9,6 +9,9 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get appName => 'KT钱包';
+
+  @override
   String get appTagline => '双机离线钱包 · 联网观察端';
 
   @override
@@ -196,6 +199,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mnemonicShowWarning => '请按顺序手写抄录，请勿截图或拍照。任何人获得助记词即可控制资产。';
+
+  @override
+  String get mnemonicUnavailableTitle => '无法显示助记词';
+
+  @override
+  String get mnemonicUnavailableBackup =>
+      '此备份流程仅适用于新创建的钱包。要备份当前钱包，请打开「钱包详情 → 查看助记词」。';
+
+  @override
+  String get mnemonicAuthRequired => '需要通过身份验证才能显示助记词，请重试。';
+
+  @override
+  String get mnemonicNoKeyMaterial => '本机未保存该钱包的助记词，无法显示。';
 
   @override
   String get verifyBackupTitle => '校验备份';
@@ -509,6 +525,20 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get txReplacementUnavailable => '这笔交易缺少替换所需的链上参数，无法加速或取消';
+
+  @override
+  String txReplacementWrongNetwork(String network) {
+    return '这笔交易属于 $network，请先切换回该网络再加速或取消';
+  }
+
+  @override
+  String get feeEstimating => '估算中…';
+
+  @override
+  String get feeUnavailable => '无法获取网络费';
+
+  @override
+  String get feeUnavailableHint => '无法估算网络费，暂时无法发送';
 
   @override
   String get txNonceLabel => 'Nonce';

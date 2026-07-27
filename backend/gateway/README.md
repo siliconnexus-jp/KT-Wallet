@@ -34,14 +34,20 @@ curl -s localhost:8080/rpc -d '{"jsonrpc":"2.0","id":1,"method":"kt_health"}'
 | `GATEWAY_ADDR` | `:8080` | Listen address |
 | `ETH_RPC_URLS` | `https://eth.llamarpc.com,https://cloudflare-eth.com` | `eth-mainnet` RPC endpoints, comma-separated, tried in order |
 | `POLYGON_RPC_URLS` | `https://polygon-rpc.com,https://polygon-bor-rpc.publicnode.com` | `polygon-mainnet` RPC endpoints |
+| `BASE_RPC_URLS` | `https://mainnet.base.org` | `base-mainnet` RPC endpoints |
+| `ARBITRUM_RPC_URLS` | `https://arb1.arbitrum.io/rpc` | `arbitrum-mainnet` RPC endpoints |
+| `AVALANCHE_RPC_URLS` | `https://api.avax.network/ext/bc/C/rpc` | `avalanche-mainnet` (C-Chain) RPC endpoints |
 | `SOLANA_RPC_URLS` | `https://api.mainnet-beta.solana.com` | `sol-mainnet` RPC endpoints |
 | `TRON_API_URL` | `https://api.trongrid.io` | `tron-mainnet` TronGrid base URL |
 | `ETH_SEPOLIA_RPC_URLS` | `https://ethereum-sepolia-rpc.publicnode.com` | `eth-sepolia` RPC endpoints, comma-separated, tried in order |
 | `POLYGON_AMOY_RPC_URLS` | `https://rpc-amoy.polygon.technology` | `polygon-amoy` RPC endpoints |
+| `BASE_SEPOLIA_RPC_URLS` | `https://sepolia.base.org` | `base-sepolia` RPC endpoints |
+| `ARBITRUM_SEPOLIA_RPC_URLS` | `https://sepolia-rollup.arbitrum.io/rpc` | `arbitrum-sepolia` RPC endpoints |
+| `AVALANCHE_FUJI_RPC_URLS` | `https://api.avax-test.network/ext/bc/C/rpc` | `avalanche-fuji` RPC endpoints |
 | `SOLANA_DEVNET_RPC_URLS` | `https://api.devnet.solana.com` | `sol-devnet` RPC endpoints |
 | `TRON_NILE_API_URL` | `https://nile.trongrid.io` | `tron-nile` TronGrid base URL |
 | `COINGECKO_API_URL` | `https://api.coingecko.com` | CoinGecko base URL (override for tests/proxies) |
-| `ETHERSCAN_API_KEY` | *(unset)* | Enables eth/polygon history via the Etherscan v2 multichain API (all four EVM networks) |
+| `ETHERSCAN_API_KEY` | *(unset)* | Enables EVM history via the Etherscan v2 multichain API (all ten EVM networks) |
 | `ETHERSCAN_API_URL` | `https://api.etherscan.io/v2/api` | Etherscan-family endpoint |
 | `HELIUS_API_KEY` | *(unset)* | Enables solana history via Helius (mainnet and devnet) |
 | `HELIUS_API_URL` | `https://api.helius.xyz` | Helius base URL (`sol-mainnet` history) |
@@ -55,7 +61,10 @@ Operational behavior (fixed by contract):
   5xx or 429 (never on a valid JSON-RPC error result). After 3 consecutive
   failures an endpoint is skipped for 30 s (per-endpoint circuit breaker).
   Every network has its own pool, so circuit state never bleeds between e.g.
-  `eth-mainnet` and `eth-sepolia`.
+  `eth-mainnet` and `eth-sepolia`. Networks whose default is a single URL
+  (base / arbitrum / avalanche / solana / the testnets) have no failover
+  partner out of the box — add more endpoints via that network's `*_RPC_URLS`
+  variable to get one.
 - **Caching** — prices 30 s; balances 10 s keyed (network, address,
   tokenset-hash); chain params 5 s; history 30 s. Broadcast is never cached.
   Cache keys include the network id: a testnet answer is never served for a
@@ -64,8 +73,9 @@ Operational behavior (fixed by contract):
   exhausted. Outbound: CoinGecko calls are serialized at 1 rps.
 - **Timeouts** — 10 s per upstream attempt, 25 s request budget.
 - **Logging** — one structured `slog` line per request: method, chain,
-  duration, outcome. Addresses are truncated (first 6 + last 4 characters);
-  payloads and full addresses are never logged.
+  network (empty = the client sent none, i.e. mainnet), duration, outcome.
+  Addresses are truncated (first 6 + last 4 characters); payloads and full
+  addresses are never logged.
 - The client IP for rate limiting is taken from the TCP peer address; when
   deploying behind a reverse proxy, terminate per-IP limits there or extend
   `clientIP` to honor your proxy header.
@@ -74,25 +84,35 @@ Operational behavior (fixed by contract):
 
 JSON-RPC 2.0 over `POST /rpc` (`Content-Type: application/json`). Batch
 requests are NOT supported (error `-32600`). `chain` ∈ `"eth" | "polygon" |
-"tron" | "solana"`. A request without an `id` (or with `"id": null`) is a
-notification: it executes but gets HTTP 204 and no body.
+"base" | "arbitrum" | "avalanche" | "tron" | "solana"` (the app's `Coin` enum
+names). A request without an `id` (or with `"id": null`) is a notification: it
+executes but gets HTTP 204 and no body.
 
 ### Networks
 
 Every chain-scoped method (`kt_getBalances`, `kt_getChainParams`,
 `kt_getHistory`, `kt_broadcast`) accepts an **optional** `network` string
-param selecting a specific network of the chain:
+param selecting a specific network of the chain. The ids are exactly the
+app's built-in `Network.id` values, so a client can forward
+`NetworkController.activeFor(chain).id` verbatim:
 
-| Chain | Networks |
-|---|---|
-| `eth` | `eth-mainnet`, `eth-sepolia` |
-| `polygon` | `polygon-mainnet`, `polygon-amoy` |
-| `tron` | `tron-mainnet`, `tron-nile` |
-| `solana` | `sol-mainnet`, `sol-devnet` |
+| Chain | Networks | Etherscan v2 chainid (mainnet / testnet) |
+|---|---|---|
+| `eth` | `eth-mainnet`, `eth-sepolia` | 1 / 11155111 |
+| `polygon` | `polygon-mainnet`, `polygon-amoy` | 137 / 80002 |
+| `base` | `base-mainnet`, `base-sepolia` | 8453 / 84532 |
+| `arbitrum` | `arbitrum-mainnet`, `arbitrum-sepolia` | 42161 / 421614 |
+| `avalanche` | `avalanche-mainnet`, `avalanche-fuji` | 43114 / 43113 |
+| `tron` | `tron-mainnet`, `tron-nile` | — |
+| `solana` | `sol-mainnet`, `sol-devnet` | — |
 
 - **Omitted `network`** → the chain's mainnet — exactly the pre-network
-  behavior, so existing clients are unaffected.
-- **Unknown network id** → `-32602` naming the `network` field.
+  behavior, so existing clients are unaffected. A client that talks to
+  testnets MUST send the param: an omitted `network` silently means mainnet,
+  and a testnet-signed transaction broadcast to a mainnet node is rejected.
+- **Unknown network id** → `-32602` naming the `network` field. The gateway
+  cannot serve an arbitrary user-added ("custom") network, so clients must
+  detect that case themselves — see the `networks` field of `kt_health`.
 - `chain` stays required and must agree with the network's family
   (`eth-sepolia` requires `chain: "eth"`, etc.); a mismatch → `-32602`.
 - **Prices are mainnet-only**: `kt_getPrices` takes no `network` param and
@@ -104,10 +124,14 @@ Supported network ids are discoverable via `kt_health`'s `networks` field.
 
 ### `kt_health` ()
 
-→ `{"ok": true, "version": "<semver>", "networks": ["eth-mainnet", "eth-sepolia", "polygon-mainnet", "polygon-amoy", "tron-mainnet", "tron-nile", "sol-mainnet", "sol-devnet"]}`
+→ `{"ok": true, "version": "<semver>", "networks": ["eth-mainnet", "eth-sepolia", "polygon-mainnet", "polygon-amoy", "base-mainnet", "base-sepolia", "arbitrum-mainnet", "arbitrum-sepolia", "avalanche-mainnet", "avalanche-fuji", "tron-mainnet", "tron-nile", "sol-mainnet", "sol-devnet"]}`
 
 `networks` lists every network id the chain-scoped methods accept (additive
-field — older clients can ignore it).
+field — older clients can ignore it). It is the discovery mechanism for
+clients that need to know whether their active network can be served at all:
+the KT-Wallet app probes it once per gateway URL and takes its direct path for
+any network the gateway does not advertise (custom networks, or families a
+newer app knows and an older gateway does not).
 
 ### `kt_getBalances` `{"chain": C, "network": N?, "address": A, "tokens": [{"contract": S, "decimals": N, "symbol": S}]?}`
 
@@ -134,7 +158,8 @@ mainnet-only and take no `network` param — testnet clients shouldn't ask
 
 → `{"nonce": "<decimal-string>", "fees": {"slow": {"maxPriorityFeePerGas": "<dec>", "maxFeePerGas": "<dec>"}, "standard": {...}, "fast": {...}}}`
 
-EVM chains only; tron/solana → error `-32602`. Nonce is
+EVM chains only (`eth`, `polygon`, `base`, `arbitrum`, `avalanche`);
+tron/solana → error `-32602`. Nonce is
 `eth_getTransactionCount(pending)`. Tiers come from `eth_feeHistory`
 (5 blocks, percentiles 10/50/90; priority = per-tier average, maxFee =
 2×next-base-fee + priority) with an `eth_gasPrice` fallback
@@ -149,9 +174,9 @@ monotonic: slow ≤ standard ≤ fast.
 - **tron** — always supported via TronGrid: TRC-20 transfers + native
   `TransferContract` transactions, merged newest-first, deduplicated by hash.
   `tron-nile` runs the same code against the nile TronGrid base URL.
-- **eth/polygon** — supported only when `ETHERSCAN_API_KEY` is configured
-  (Etherscan v2 multichain, `chainid` 1 / 11155111 / 137 / 80002 selected by
-  network); otherwise `{"status":"unsupported","records":[]}`.
+- **EVM families** — supported only when `ETHERSCAN_API_KEY` is configured
+  (Etherscan v2 multichain, `chainid` selected by network — see the table in
+  [Networks](#networks)); otherwise `{"status":"unsupported","records":[]}`.
 - **solana** — supported only when `HELIUS_API_KEY` is set (Helius parsed
   history, native transfers; `sol-devnet` uses the Helius devnet endpoint
   with the same key); otherwise unsupported.

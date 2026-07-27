@@ -7,7 +7,7 @@ import 'package:test/test.dart';
 /// parsing/fee logic is tested without a network (detailed-design.md §4.3, §8).
 class FakeJsonRpc implements JsonRpcTransport {
   FakeJsonRpc(this.responder);
-  final Object? Function(String method, List params) responder;
+  final Object? Function(String method, List<Object?> params) responder;
   final List<Map<String, Object?>> requests = [];
 
   @override
@@ -52,7 +52,7 @@ void main() {
     });
 
     test('erc20Balance builds balanceOf calldata and parses result', () async {
-      late List params;
+      late List<Object?> params;
       final rpc = EvmRpc(
         url: 'x',
         transport: FakeJsonRpc((m, p) {
@@ -184,7 +184,7 @@ void main() {
     test('getTrxBalance returns 0 for an unactivated account', () async {
       final rpc = TronRpc(
         baseUrl: 'https://api',
-        transport: FakeRest(onGet: (u) => {'data': []}),
+        transport: FakeRest(onGet: (u) => {'data': <Object?>[]}),
       );
       expect(await rpc.getTrxBalance('Tabc'), BigInt.zero);
     });

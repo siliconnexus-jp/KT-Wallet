@@ -87,20 +87,60 @@ TokenRegistryResolver networkTokenRegistry(NetworkController? networks) =>
               const <TokenInfo>[],
       ];
 
+/// Links an [AppPrefsController] to the app's active-network source.
+///
+/// WHY: the gateway's chain-scoped methods must carry the ACTIVE network id
+/// (an omitted one means MAINNET), but most call sites build their gateway
+/// resolver from prefs alone — `prefsGatewayResolver(AppPrefsScope.maybeOf(
+/// context))`. [MarketScopeHost], mounted app-wide directly under the
+/// [NetworkScope], publishes the live [NetworkController] here, so every
+/// resolver built from the same prefs controller scopes its calls to the same
+/// networks. Keyed by prefs instance rather than global, so tests that build
+/// their own controller are never affected by another test's wiring; an
+/// unlinked controller simply resolves to null (no `network` param, today's
+/// behavior).
+final Expando<NetworkController> _networkSourceFor = Expando(
+  'kt.activeNetworkSource',
+);
+
+/// The active network id of [coin]'s chain family for [prefs]-scoped callers,
+/// preferring an explicitly passed [networks] source over the linked one.
+String? _activeNetworkId(
+  AppPrefsController? prefs,
+  NetworkController? networks,
+  Coin coin,
+) {
+  final source = networks ?? (prefs == null ? null : _networkSourceFor[prefs]);
+  return source?.activeFor(chainForRpcCoin(coin)).id;
+}
+
 /// Builds the gateway resolver backing the OPTIONAL gateway mode: it returns
 /// a [GatewayClient] for the currently persisted `gateway.url`, or null when
 /// the preference is blank (direct mode — the default) or no [prefs] is
 /// wired. The client is cached per URL so repeated fetches reuse one
 /// http.Client; saving a new URL (or clearing it) applies from the very next
 /// call, same as the RPC override resolver.
-GatewayResolver prefsGatewayResolver(AppPrefsController? prefs) {
+///
+/// The client is network-scoped: every chain-scoped call carries the active
+/// network id from [networks] (or, when omitted, from the source linked to
+/// [prefs] by [MarketScopeHost]), and the gateway is bypassed entirely for a
+/// network it does not advertise. The lookup happens per call, so switching
+/// environment or pinning a network applies from the very next request
+/// without rebuilding the client.
+GatewayResolver prefsGatewayResolver(
+  AppPrefsController? prefs, [
+  NetworkController? networks,
+]) {
   GatewayClient? cached;
   String? cachedUrl;
   return () {
     final url = prefs?.gatewayUrl;
     if (url == null || url.isEmpty) return null;
     if (cached == null || cachedUrl != url) {
-      cached = GatewayClient(baseUrl: url);
+      cached = GatewayClient(
+        baseUrl: url,
+        networks: (coin) => _activeNetworkId(prefs, networks, coin),
+      );
       cachedUrl = url;
     }
     return cached;
@@ -210,6 +250,10 @@ class _MarketScopeHostState extends State<MarketScopeHost> {
       _networks = networks;
       _networks?.addListener(_onConfigChanged);
     }
+    // Publish the active-network source for every gateway resolver built from
+    // this prefs controller (see [_networkSourceFor]); null unlinks it.
+    final prefs = widget.prefs;
+    if (prefs != null) _networkSourceFor[prefs] = _networks;
     // (Re-)baseline against the current source so the next change notification
     // compares against reality, not a snapshot from another source.
     _lastEndpoints = _snapshotEndpoints();
@@ -229,6 +273,12 @@ class _MarketScopeHostState extends State<MarketScopeHost> {
   void dispose() {
     widget.prefs?.removeListener(_onConfigChanged);
     _networks?.removeListener(_onConfigChanged);
+    // Unlink only our own publication: a replacement host may already have
+    // linked the same prefs controller to its own source.
+    final prefs = widget.prefs;
+    if (prefs != null && identical(_networkSourceFor[prefs], _networks)) {
+      _networkSourceFor[prefs] = null;
+    }
     if (widget.controller == null) _controller.dispose();
     super.dispose();
   }

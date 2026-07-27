@@ -9,6 +9,9 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get appName => 'KT Wallet';
+
+  @override
   String get appTagline => '二台構成のコールドウォレット・オンライン監視端末';
 
   @override
@@ -199,6 +202,19 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get mnemonicShowWarning =>
       '順番通りに手書きしてください。スクリーンショットや撮影は禁止です。フレーズを得た者が資産を管理できます。';
+
+  @override
+  String get mnemonicUnavailableTitle => 'リカバリーフレーズを表示できません';
+
+  @override
+  String get mnemonicUnavailableBackup =>
+      'このバックアップ手順は新規作成したウォレット専用です。現在のウォレットをバックアップするには「ウォレット詳細 → リカバリーフレーズを表示」を開いてください。';
+
+  @override
+  String get mnemonicAuthRequired => 'リカバリーフレーズを表示するには認証が必要です。もう一度お試しください。';
+
+  @override
+  String get mnemonicNoKeyMaterial => 'この端末にはこのウォレットのリカバリーフレーズが保存されていません。';
 
   @override
   String get verifyBackupTitle => 'バックアップを確認';
@@ -516,6 +532,20 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get txReplacementUnavailable =>
       'この取引には高速化またはキャンセルに必要なチェーンパラメータがありません。';
+
+  @override
+  String txReplacementWrongNetwork(String network) {
+    return 'この取引は $network のものです。高速化やキャンセルの前に、そのネットワークに切り替えてください。';
+  }
+
+  @override
+  String get feeEstimating => '見積もり中…';
+
+  @override
+  String get feeUnavailable => 'ネットワーク手数料を取得できません';
+
+  @override
+  String get feeUnavailableHint => 'ネットワーク手数料を見積もれないため、送信できません。';
 
   @override
   String get txNonceLabel => 'Nonce';

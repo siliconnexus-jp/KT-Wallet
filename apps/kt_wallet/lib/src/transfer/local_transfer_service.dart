@@ -220,7 +220,7 @@ class LocalTransferService {
     }
     final live = await _params.fetchEvmParams(chain, from);
     final fast = live.fees.fast;
-    var priority = _maxBigInt(
+    final priority = _maxBigInt(
       _replacementBump(previousMaxPriorityFeePerGas),
       fast.maxPriorityFeePerGas,
     );

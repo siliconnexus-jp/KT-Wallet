@@ -15,10 +15,18 @@ import 'wallet_pin.dart';
 /// fail, until the enrolled app PIN ([WalletPin]) is entered on the numpad.
 ///
 /// Order: biometrics if available → on failure or unavailability → PIN numpad
-/// (with persisted-lockout messaging). The historical pass-through survives in
-/// exactly one legacy state: app-lock is on but no PIN was ever enrolled AND
-/// the device cannot show a biometric prompt — then a hard lock would brick
-/// the wallet rather than protect it, so the gate lets the user through.
+/// (with persisted-lockout messaging). There is NO pass-through: when the
+/// lock is on but the device can show no prompt AND no PIN was ever enrolled,
+/// the gate has nothing to verify against, so it stops on a PIN *enrollment*
+/// screen instead of letting the wallet through. A hard brick would be worse
+/// than useless (the wallet could never be opened again), but silently opening
+/// the wallet made the whole preference decorative — with the shipped defaults
+/// (app lock on, biometrics, fresh wallet with no PIN) anyone holding an
+/// unlocked phone walked straight in.
+///
+/// Note the enrollment screen is a last resort, not an authentication step: it
+/// can only ask the user to establish the secret this install never had. It is
+/// reachable exactly when no secret and no platform prompt exist.
 class AppLockGate extends StatefulWidget {
   const AppLockGate({
     super.key,
@@ -45,7 +53,7 @@ class AppLockGate extends StatefulWidget {
   State<AppLockGate> createState() => _AppLockGateState();
 }
 
-enum _LockState { resolving, lockedBio, lockedPin, unlocked }
+enum _LockState { resolving, lockedBio, lockedPin, enrollPin, unlocked }
 
 class _AppLockGateState extends State<AppLockGate> {
   late final AppPrefsController _prefs = widget.prefs ?? AppPrefsController();
@@ -85,11 +93,12 @@ class _AppLockGateState extends State<AppLockGate> {
       } else if (_pinSet) {
         _state = _LockState.lockedPin;
       } else {
-        // Legacy pass-through: app-lock was switched on before the PIN
-        // fallback existed (or biometrics vanished before a PIN was ever
-        // enrolled). With no way to prompt and nothing to verify against,
-        // a hard lock would brick the wallet — let the user through.
-        _state = _LockState.unlocked;
+        // Nothing to prompt with and nothing to verify against: app-lock was
+        // switched on before the PIN fallback existed, or biometrics vanished
+        // before a PIN was ever enrolled. This used to let the user straight
+        // through — which made the lock decorative. Stop here and require a
+        // PIN to be enrolled first; the wallet stays hidden until it is.
+        _state = _LockState.enrollPin;
       }
     });
   }
@@ -108,10 +117,12 @@ class _AppLockGateState extends State<AppLockGate> {
         setState(() => _state = _LockState.unlocked);
       case BiometricOutcome.unavailable:
         // Availability vanished mid-session (e.g. biometrics disabled in the
-        // system settings): fall back to the PIN when one exists; otherwise
-        // the same legacy pass-through reasoning as in [_resolve].
+        // system settings): fall back to the PIN when one exists, otherwise
+        // ask for one — same reasoning as in [_resolve]. Note "unavailable"
+        // now means only a capability problem: a cancelled or failed prompt
+        // is classified as [BiometricOutcome.failure] below.
         setState(
-          () => _state = _pinSet ? _LockState.lockedPin : _LockState.unlocked,
+          () => _state = _pinSet ? _LockState.lockedPin : _LockState.enrollPin,
         );
       case BiometricOutcome.failure:
         // A failed prompt falls back to the PIN numpad when one is enrolled;
@@ -122,6 +133,17 @@ class _AppLockGateState extends State<AppLockGate> {
 
   void _onPinVerified() {
     if (mounted) setState(() => _state = _LockState.unlocked);
+  }
+
+  /// The user just established the app PIN from the enrollment state. There is
+  /// now a secret to verify against, so subsequent launches take the numpad
+  /// path; this launch continues into the wallet.
+  void _onPinEnrolled() {
+    if (!mounted) return;
+    setState(() {
+      _pinSet = true;
+      _state = _LockState.unlocked;
+    });
   }
 
   @override
@@ -151,6 +173,15 @@ class _AppLockGateState extends State<AppLockGate> {
           body: (l10n) =>
               _PinLockBody(l10n: l10n, pin: _pin, onVerified: _onPinVerified),
         );
+      case _LockState.enrollPin:
+        return _LockScreenApp(
+          localeController: widget.localeController,
+          body: (l10n) => _PinEnrollBody(
+            l10n: l10n,
+            pin: _pin,
+            onEnrolled: _onPinEnrolled,
+          ),
+        );
     }
   }
 }
@@ -169,7 +200,7 @@ class _LockScreenApp extends StatelessWidget {
     return ListenableBuilder(
       listenable: localeController,
       builder: (context, _) => MaterialApp(
-        title: 'KT Wallet',
+        onGenerateTitle: (context) => AppLocalizations.of(context).appName,
         debugShowCheckedModeBanner: false,
         locale: localeController.locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -352,6 +383,129 @@ class _PinLockBodyState extends State<_PinLockBody> {
         PinDots(filled: _entry.length, colors: PinPadColors.signer),
         SizedBox(
           height: 36,
+          child: Center(
+            child: _error == null
+                ? null
+                : Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: SignerColors.danger,
+                    ),
+                  ),
+          ),
+        ),
+        PinPad(onKey: _onKey, colors: PinPadColors.signer),
+      ],
+    );
+  }
+}
+
+/// The enrollment face of the lock screen: shown when the app lock is on but
+/// this install has neither a usable platform prompt nor an enrolled PIN, so
+/// there is literally no secret to check. Rather than opening the wallet (the
+/// old pass-through) the gate stops here and asks for a PIN, two-phase like
+/// the settings sheet. All copy is the existing set-PIN vocabulary —
+/// [AppLocalizations.setPinDesc] already states exactly why this appears
+/// ("unlocks the app when biometrics are unavailable").
+class _PinEnrollBody extends StatefulWidget {
+  const _PinEnrollBody({
+    required this.l10n,
+    required this.pin,
+    required this.onEnrolled,
+  });
+
+  final AppLocalizations l10n;
+  final WalletPin pin;
+  final VoidCallback onEnrolled;
+
+  @override
+  State<_PinEnrollBody> createState() => _PinEnrollBodyState();
+}
+
+class _PinEnrollBodyState extends State<_PinEnrollBody> {
+  String _entry = '';
+  String? _first; // the first pass, once 6 digits are entered
+  String? _error;
+  bool _saving = false;
+
+  Future<void> _onKey(String k) async {
+    if (_saving) return;
+    if (k == 'del') {
+      if (_entry.isNotEmpty) {
+        setState(() => _entry = _entry.substring(0, _entry.length - 1));
+      }
+      return;
+    }
+    if (_entry.length >= 6) return;
+    setState(() {
+      _entry += k;
+      _error = null;
+    });
+    if (_entry.length < 6) return;
+
+    if (_first == null) {
+      setState(() {
+        _first = _entry;
+        _entry = '';
+      });
+      return;
+    }
+    if (_entry != _first) {
+      setState(() {
+        _first = null;
+        _entry = '';
+        _error = widget.l10n.pinMismatch;
+      });
+      return;
+    }
+    setState(() => _saving = true);
+    await widget.pin.setPin(_entry);
+    if (mounted) widget.onEnrolled();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final confirming = _first != null;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          widget.l10n.setPinTitle,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color: SignerColors.text,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          widget.l10n.setPinDesc,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 12,
+            height: 1.5,
+            color: SignerColors.text2,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          confirming
+              ? widget.l10n.setPinConfirmPrompt
+              : widget.l10n.setPinPrompt,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: SignerColors.text2,
+          ),
+        ),
+        const SizedBox(height: 14),
+        PinDots(filled: _entry.length, colors: PinPadColors.signer),
+        SizedBox(
+          height: 32,
           child: Center(
             child: _error == null
                 ? null

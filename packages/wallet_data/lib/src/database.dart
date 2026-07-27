@@ -25,8 +25,22 @@ class WalletDatabase extends _$WalletDatabase {
   /// v1: initial schema.
   /// v2: global `contacts` (address book) + `custom_tokens` tables.
   /// v3: EVM nonce/fee metadata and transaction-replacement lineage.
+  /// v4: per-transaction network id (mainnet/testnet/custom instance).
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
+
+  /// Backfill map for [Transactions.networkId]: the chain family's MAINNET
+  /// network id, keyed by the `coin` column. Kept as literals because
+  /// wallet_data must not depend on the app's network registry.
+  static const _mainnetNetworkIdByCoin = {
+    'eth': 'eth-mainnet',
+    'polygon': 'polygon-mainnet',
+    'base': 'base-mainnet',
+    'arbitrum': 'arbitrum-mainnet',
+    'avalanche': 'avalanche-mainnet',
+    'tron': 'tron-mainnet',
+    'solana': 'sol-mainnet',
+  };
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -44,6 +58,24 @@ class WalletDatabase extends _$WalletDatabase {
         await m.addColumn(transactions, transactions.replacesId);
         await m.addColumn(transactions, transactions.replacedById);
         await m.addColumn(transactions, transactions.replacementKind);
+      }
+      if (from < 4) {
+        await m.addColumn(transactions, transactions.networkId);
+        // BACKFILL: rows written before v4 carry no network dimension, so the
+        // instance they were actually broadcast on is not recoverable. They
+        // are attributed to their chain's MAINNET id — the app's default
+        // environment, and the safe direction: a testnet row mislabelled as
+        // mainnet is merely refused for speed-up/cancel while mainnet is
+        // active, whereas guessing a testnet would let a mainnet row be
+        // replaced on a testnet. Rows whose coin is unknown stay NULL and are
+        // likewise treated as "unknown network" (no replacement).
+        for (final entry in _mainnetNetworkIdByCoin.entries) {
+          await customStatement(
+            'UPDATE transactions SET network_id = ? '
+            'WHERE network_id IS NULL AND coin = ?',
+            [entry.value, entry.key],
+          );
+        }
       }
     },
     beforeOpen: (details) async {
