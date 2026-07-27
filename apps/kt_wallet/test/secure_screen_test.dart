@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/src/security/secure_screen.dart';
 
 /// FLAG_SECURE must be up on every screen that can put a recovery phrase — in
@@ -81,11 +82,9 @@ void main() {
 
     SecureScreen.retain();
     SecureScreen.release();
-    expect(
-      calls,
-      [true],
-      reason: 'a screen coming and going must not clear the mode latch',
-    );
+    expect(calls, [
+      true,
+    ], reason: 'a screen coming and going must not clear the mode latch');
 
     SecureScreen.modeSecure = false;
     expect(calls, [true, false]);
@@ -111,5 +110,74 @@ void main() {
     SecureScreen.retain();
     expect(SecureScreen.isSecure, isTrue);
     expect(calls, [true, false, true]);
+  });
+
+  group('iOS capture fallback (no FLAG_SECURE equivalent)', () {
+    const channel = MethodChannel('kt/screen_security');
+
+    setUp(ScreenCapture.resetForTest);
+    tearDown(ScreenCapture.resetForTest);
+
+    Future<void> send(String method, [Object? args]) async {
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+            channel.name,
+            const StandardMethodCodec().encodeMethodCall(
+              MethodCall(method, args),
+            ),
+            (_) {},
+          );
+    }
+
+    Widget app() => MaterialApp(
+      debugShowCheckedModeBanner: false,
+      locale: const Locale('zh'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const SecureContent(child: Text('phrase words here')),
+    );
+
+    testWidgets('a recording blanks the content and restores it after', (
+      tester,
+    ) async {
+      await tester.pumpWidget(app());
+      await tester.pump();
+      expect(find.text('phrase words here'), findsOneWidget);
+
+      await send('screenCaptureChanged', true);
+      await tester.pumpAndSettle();
+      expect(find.text('phrase words here'), findsNothing);
+      expect(find.text('检测到录屏或投屏'), findsOneWidget);
+
+      await send('screenCaptureChanged', false);
+      await tester.pumpAndSettle();
+      expect(find.text('phrase words here'), findsOneWidget);
+    });
+
+    testWidgets('a screenshot taken on this screen warns the user', (
+      tester,
+    ) async {
+      await tester.pumpWidget(app());
+      await tester.pump();
+      expect(find.textContaining('截图'), findsNothing);
+
+      await send('screenshotTaken');
+      await tester.pumpAndSettle();
+      // The phrase is already in the photo library; say so.
+      expect(find.textContaining('立刻把资产转移到新钱包'), findsOneWidget);
+    });
+
+    testWidgets('a screenshot taken BEFORE this screen does not warn', (
+      tester,
+    ) async {
+      // Something else was screenshotted earlier in the session.
+      ScreenCapture.install();
+      await send('screenshotTaken');
+
+      await tester.pumpWidget(app());
+      await tester.pumpAndSettle();
+      expect(find.textContaining('立刻把资产转移到新钱包'), findsNothing);
+      expect(find.text('phrase words here'), findsOneWidget);
+    });
   });
 }

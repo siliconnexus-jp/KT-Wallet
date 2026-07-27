@@ -37,7 +37,11 @@ class _FakeJsonRpc implements JsonRpcTransport {
     calls.add((url, method, (map['params'] as List?) ?? const []));
     final err = errors[method];
     if (err != null) {
-      return {'jsonrpc': '2.0', 'id': map['id'], 'error': {'message': err.$1, 'code': err.$2}};
+      return {
+        'jsonrpc': '2.0',
+        'id': map['id'],
+        'error': {'message': err.$1, 'code': err.$2},
+      };
     }
     return {'jsonrpc': '2.0', 'id': map['id'], 'result': results[method]};
   }
@@ -87,22 +91,28 @@ String _endpoint(Coin coin) => 'https://node.example/${coin.name}';
 
 void main() {
   group('BroadcastService', () {
-    test('GATE: demo SIGNED-V1 signature short-circuits, zero network calls', () async {
-      final jsonRpc = _NoNetworkJsonRpc();
-      final rest = _NoNetworkRest();
-      final service = BroadcastService(
-          jsonRpcTransport: jsonRpc, restTransport: rest, endpoints: _endpoint);
+    test(
+      'GATE: demo SIGNED-V1 signature short-circuits, zero network calls',
+      () async {
+        final jsonRpc = _NoNetworkJsonRpc();
+        final rest = _NoNetworkRest();
+        final service = BroadcastService(
+          jsonRpcTransport: jsonRpc,
+          restTransport: rest,
+          endpoints: _endpoint,
+        );
 
-      final signed = _demoSigned();
-      for (final chain in Chain.values) {
-        final outcome = await service.broadcast(chain, signed);
-        expect(outcome.status, BroadcastStatus.simulated);
-        // Same hash the simulated signer put in the SignResult.
-        expect(outcome.txHash, hexEncode(sha256(signed)));
-      }
-      expect(jsonRpc.calls, 0);
-      expect(rest.calls, 0);
-    });
+        final signed = _demoSigned();
+        for (final chain in Chain.values) {
+          final outcome = await service.broadcast(chain, signed);
+          expect(outcome.status, BroadcastStatus.simulated);
+          // Same hash the simulated signer put in the SignResult.
+          expect(outcome.txHash, hexEncode(sha256(signed)));
+        }
+        expect(jsonRpc.calls, 0);
+        expect(rest.calls, 0);
+      },
+    );
 
     test('GATE holds with a gateway configured: demo signature never reaches '
         'the gateway either', () async {
@@ -136,66 +146,108 @@ void main() {
       expect(rest.calls, 0);
     });
 
-    test('EVM success: hex-encoded bytes to eth_sendRawTransaction, node hash back', () async {
-      final transport = _FakeJsonRpc(results: {'eth_sendRawTransaction': '0xfeedbead'});
-      final service = BroadcastService(jsonRpcTransport: transport, endpoints: _endpoint);
+    test(
+      'EVM success: hex-encoded bytes to eth_sendRawTransaction, node hash back',
+      () async {
+        final transport = _FakeJsonRpc(
+          results: {'eth_sendRawTransaction': '0xfeedbead'},
+        );
+        final service = BroadcastService(
+          jsonRpcTransport: transport,
+          endpoints: _endpoint,
+        );
 
-      final outcome = await service.broadcast(
-          Chain.ethereum, Uint8List.fromList([0x02, 0xab, 0x01]));
-      expect(outcome.status, BroadcastStatus.ok);
-      expect(outcome.txHash, '0xfeedbead');
-      final (url, method, params) = transport.calls.single;
-      expect(url, 'https://node.example/eth'); // prefs-style resolver honored
-      expect(method, 'eth_sendRawTransaction');
-      expect(params.single, '0x02ab01');
-    });
+        final outcome = await service.broadcast(
+          Chain.ethereum,
+          Uint8List.fromList([0x02, 0xab, 0x01]),
+        );
+        expect(outcome.status, BroadcastStatus.ok);
+        expect(outcome.txHash, '0xfeedbead');
+        final (url, method, params) = transport.calls.single;
+        expect(url, 'https://node.example/eth'); // prefs-style resolver honored
+        expect(method, 'eth_sendRawTransaction');
+        expect(params.single, '0x02ab01');
+      },
+    );
 
     test('EVM node rejection maps to error with the node message', () async {
       final transport = _FakeJsonRpc(
-          errors: {'eth_sendRawTransaction': ('nonce too low', -32000)});
-      final service = BroadcastService(jsonRpcTransport: transport, endpoints: _endpoint);
+        errors: {'eth_sendRawTransaction': ('nonce too low', -32000)},
+      );
+      final service = BroadcastService(
+        jsonRpcTransport: transport,
+        endpoints: _endpoint,
+      );
 
-      final outcome =
-          await service.broadcast(Chain.polygon, Uint8List.fromList([0x02, 0x01]));
+      final outcome = await service.broadcast(
+        Chain.polygon,
+        Uint8List.fromList([0x02, 0x01]),
+      );
       expect(outcome.status, BroadcastStatus.error);
       expect(outcome.message, 'nonce too low');
       expect(outcome.txHash, isNull);
       expect(transport.calls.single.$1, 'https://node.example/polygon');
     });
 
-    test('Solana success: base64 bytes to sendTransaction, signature back', () async {
-      final transport = _FakeJsonRpc(results: {'sendTransaction': 'sig123'});
-      final service = BroadcastService(jsonRpcTransport: transport, endpoints: _endpoint);
+    test(
+      'Solana success: base64 bytes to sendTransaction, signature back',
+      () async {
+        final transport = _FakeJsonRpc(results: {'sendTransaction': 'sig123'});
+        final service = BroadcastService(
+          jsonRpcTransport: transport,
+          endpoints: _endpoint,
+        );
 
-      final bytes = Uint8List.fromList([9, 8, 7]);
-      final outcome = await service.broadcast(Chain.solana, bytes);
-      expect(outcome.status, BroadcastStatus.ok);
-      expect(outcome.txHash, 'sig123');
-      final (url, method, params) = transport.calls.single;
-      expect(url, 'https://node.example/solana');
-      expect(method, 'sendTransaction');
-      expect(params.first, base64Encode(bytes));
-    });
+        final bytes = Uint8List.fromList([9, 8, 7]);
+        final outcome = await service.broadcast(Chain.solana, bytes);
+        expect(outcome.status, BroadcastStatus.ok);
+        expect(outcome.txHash, 'sig123');
+        final (url, method, params) = transport.calls.single;
+        expect(url, 'https://node.example/solana');
+        expect(method, 'sendTransaction');
+        expect(params.first, base64Encode(bytes));
+      },
+    );
 
-    test('TRON success: TronGrid JSON payload posts to broadcasttransaction', () async {
-      final rest = _FakeRest({'result': true, 'txid': 'abc123'});
-      final service = BroadcastService(restTransport: rest, endpoints: _endpoint);
+    test(
+      'TRON success: TronGrid JSON payload posts to broadcasttransaction',
+      () async {
+        final rest = _FakeRest({'result': true, 'txid': 'abc123'});
+        final service = BroadcastService(
+          restTransport: rest,
+          endpoints: _endpoint,
+        );
 
-      final txJson = {'raw_data': {'ref_block_bytes': '1234'}, 'signature': ['aa']};
-      final outcome = await service.broadcast(
-          Chain.tron, Uint8List.fromList(utf8.encode(json.encode(txJson))));
-      expect(outcome.status, BroadcastStatus.ok);
-      expect(outcome.txHash, 'abc123');
-      final (url, body) = rest.posts.single;
-      expect(url, 'https://node.example/tron/wallet/broadcasttransaction');
-      expect(body, txJson);
-    });
+        final txJson = {
+          'raw_data': {'ref_block_bytes': '1234'},
+          'signature': ['aa'],
+        };
+        final outcome = await service.broadcast(
+          Chain.tron,
+          Uint8List.fromList(utf8.encode(json.encode(txJson))),
+        );
+        expect(outcome.status, BroadcastStatus.ok);
+        expect(outcome.txHash, 'abc123');
+        final (url, body) = rest.posts.single;
+        expect(url, 'https://node.example/tron/wallet/broadcasttransaction');
+        expect(body, txJson);
+      },
+    );
 
     test('TRON rejection surfaces the node message as error', () async {
-      final rest = _FakeRest({'result': false, 'code': 'SIGERROR', 'message': 'bad sig'});
-      final service = BroadcastService(restTransport: rest, endpoints: _endpoint);
+      final rest = _FakeRest({
+        'result': false,
+        'code': 'SIGERROR',
+        'message': 'bad sig',
+      });
+      final service = BroadcastService(
+        restTransport: rest,
+        endpoints: _endpoint,
+      );
       final outcome = await service.broadcast(
-          Chain.tron, Uint8List.fromList(utf8.encode('{"signature":["aa"]}')));
+        Chain.tron,
+        Uint8List.fromList(utf8.encode('{"signature":["aa"]}')),
+      );
       expect(outcome.status, BroadcastStatus.error);
       expect(outcome.message, contains('bad sig'));
     });
@@ -204,9 +256,14 @@ void main() {
       // TronRpc only posts the TronGrid JSON body; a raw (e.g. protobuf) blob
       // honestly cannot be submitted until real TRON signing produces JSON.
       final rest = _FakeRest();
-      final service = BroadcastService(restTransport: rest, endpoints: _endpoint);
+      final service = BroadcastService(
+        restTransport: rest,
+        endpoints: _endpoint,
+      );
       final outcome = await service.broadcast(
-          Chain.tron, Uint8List.fromList([0x0a, 0x02, 0xff]));
+        Chain.tron,
+        Uint8List.fromList([0x0a, 0x02, 0xff]),
+      );
       expect(outcome.status, BroadcastStatus.unsupported);
       expect(outcome.message, isNotNull);
       expect(rest.posts, isEmpty);
@@ -215,70 +272,100 @@ void main() {
 
   group('W8 broadcast wiring', () {
     Widget app(TransferSession session, BroadcastService service) {
-      final router = GoRouter(initialLocation: '/broadcast-confirm', routes: [
-        GoRoute(
+      final router = GoRouter(
+        initialLocation: '/broadcast-confirm',
+        routes: [
+          GoRoute(
             path: '/broadcast-confirm',
-            builder: (c, s) => BroadcastConfirmScreen(broadcaster: service)),
-        GoRoute(path: '/broadcast-result', builder: (c, s) => const BroadcastResultScreen()),
-      ]);
+            builder: (c, s) => BroadcastConfirmScreen(broadcaster: service),
+          ),
+          GoRoute(
+            path: '/broadcast-result',
+            builder: (c, s) => const BroadcastResultScreen(),
+          ),
+        ],
+      );
       return MaterialApp.router(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         theme: ThemeData(scaffoldBackgroundColor: WalletColors.bg),
         routerConfig: router,
-        builder: (c, child) => TransferSessionScope(session: session, child: child!),
+        builder: (c, child) =>
+            TransferSessionScope(session: session, child: child!),
       );
     }
 
-    testWidgets('demo result: simulated success path, no network, W9 shows the hash', (tester) async {
-      final jsonRpc = _NoNetworkJsonRpc();
-      final rest = _NoNetworkRest();
-      final service = BroadcastService(
-          jsonRpcTransport: jsonRpc, restTransport: rest, endpoints: _endpoint);
-      final request = buildSignRequest(walletId: 'w1', fromAddress: demoFromAddress);
-      final result = buildDemoSignResult(request, signer: demoFromAddress);
-      final session = TransferSession()
-        ..request = request
-        ..result = result;
-
-      await tester.pumpWidget(app(session, service));
-      await tester.pump();
-      await tester.tap(find.byType(KtPrimaryButton));
-      await tester.pumpAndSettle();
-
-      expect(find.text('交易已提交'), findsOneWidget); // W9
-      expect(session.broadcastTxHash, result.txHash);
-      expect(find.text(truncateMiddle(result.txHash, head: 6, tail: 6)), findsOneWidget);
-      expect(jsonRpc.calls, 0);
-      expect(rest.calls, 0);
-    });
-
-    testWidgets('real signature + node rejection: stays on W8, failed UI shows the node message', (tester) async {
-      final transport =
-          _FakeJsonRpc(errors: {'eth_sendRawTransaction': ('nonce too low', -32000)});
-      final service = BroadcastService(jsonRpcTransport: transport, endpoints: _endpoint);
-      // A non-demo signature (as the wallet-core integration will produce).
-      final session = TransferSession()
-        ..result = SignResult(
-          reqId: Uint8List.fromList(List.filled(AirgapLimits.reqIdLength, 7)),
-          walletId: 'w1',
-          coin: 60, // SLIP-44 ethereum
-          signedTx: Uint8List.fromList([0x02, 0x01, 0x02]),
-          signer: '0x925fEA1c0dbf3B011391bbed682E32861BE73213',
-          txHash: 'aabbcc',
+    testWidgets(
+      'demo result: simulated success path, no network, W9 shows the hash',
+      (tester) async {
+        final jsonRpc = _NoNetworkJsonRpc();
+        final rest = _NoNetworkRest();
+        final service = BroadcastService(
+          jsonRpcTransport: jsonRpc,
+          restTransport: rest,
+          endpoints: _endpoint,
         );
+        final request = buildSignRequest(
+          walletId: 'w1',
+          fromAddress: demoFromAddress,
+        );
+        final result = buildDemoSignResult(request, signer: demoFromAddress);
+        final session = TransferSession()
+          ..request = request
+          ..result = result;
 
-      await tester.pumpWidget(app(session, service));
-      await tester.pump();
-      await tester.tap(find.byType(KtPrimaryButton));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(app(session, service));
+        await tester.pump();
+        await tester.tap(find.byType(KtPrimaryButton));
+        await tester.pumpAndSettle();
 
-      // broadcastError → failed: no navigation, message surfaced, manual retry only.
-      expect(find.text('交易已提交'), findsNothing);
-      expect(find.text('广播失败：nonce too low'), findsOneWidget);
-      expect(transport.calls, hasLength(1)); // posted exactly once, no auto-retry
-      expect(session.broadcastTxHash, isNull);
-    });
+        expect(find.text('交易已提交'), findsOneWidget); // W9
+        expect(session.broadcastTxHash, result.txHash);
+        expect(
+          find.text(truncateMiddle(result.txHash, head: 6, tail: 6)),
+          findsOneWidget,
+        );
+        expect(jsonRpc.calls, 0);
+        expect(rest.calls, 0);
+      },
+    );
+
+    testWidgets(
+      'real signature + node rejection: stays on W8, failed UI shows the node message',
+      (tester) async {
+        final transport = _FakeJsonRpc(
+          errors: {'eth_sendRawTransaction': ('nonce too low', -32000)},
+        );
+        final service = BroadcastService(
+          jsonRpcTransport: transport,
+          endpoints: _endpoint,
+        );
+        // A non-demo signature (as the wallet-core integration will produce).
+        final session = TransferSession()
+          ..result = SignResult(
+            reqId: Uint8List.fromList(List.filled(AirgapLimits.reqIdLength, 7)),
+            walletId: 'w1',
+            coin: 60, // SLIP-44 ethereum
+            signedTx: Uint8List.fromList([0x02, 0x01, 0x02]),
+            signer: '0x925fEA1c0dbf3B011391bbed682E32861BE73213',
+            txHash: 'aabbcc',
+          );
+
+        await tester.pumpWidget(app(session, service));
+        await tester.pump();
+        await tester.tap(find.byType(KtPrimaryButton));
+        await tester.pumpAndSettle();
+
+        // broadcastError → failed: no navigation, message surfaced, manual retry only.
+        expect(find.text('交易已提交'), findsNothing);
+        expect(find.text('广播失败：nonce too low'), findsOneWidget);
+        expect(
+          transport.calls,
+          hasLength(1),
+        ); // posted exactly once, no auto-retry
+        expect(session.broadcastTxHash, isNull);
+      },
+    );
   });
 }

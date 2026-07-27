@@ -7,15 +7,17 @@ import 'package:kt_wallet/src/transfer/frame_scan.dart';
 /// plugin): every QR string a camera would hand over is one base64url
 /// AIRGAP-V1 frame, and feeding them advances the real aggregator.
 void main() {
-  SignRequest request() => buildSignRequest(
-        walletId: demoWalletId,
-        fromAddress: demoFromAddress,
-      );
+  SignRequest request() =>
+      buildSignRequest(walletId: demoWalletId, fromAddress: demoFromAddress);
 
   test('feeding valid frame strings advances the aggregator to done', () {
     final req = request();
     final frames = encodeQrFrames(req, reqId: req.reqId);
-    expect(frames.length, greaterThan(1), reason: 'demo payload must span frames');
+    expect(
+      frames.length,
+      greaterThan(1),
+      reason: 'demo payload must span frames',
+    );
 
     final session = QrFrameScanSession();
     for (final (i, frame) in frames.indexed) {
@@ -75,9 +77,14 @@ void main() {
 
     // A result answering a different request is rejected.
     final other = buildSignRequest(
-        walletId: demoWalletId, fromAddress: demoFromAddress, reqId: randomReqId());
-    expect(() => verifySignResultPayload(session.payload!, expected: other),
-        throwsStateError);
+      walletId: demoWalletId,
+      fromAddress: demoFromAddress,
+      reqId: randomReqId(),
+    );
+    expect(
+      () => verifySignResultPayload(session.payload!, expected: other),
+      throwsStateError,
+    );
   });
 
   test('reset starts a fresh session', () {

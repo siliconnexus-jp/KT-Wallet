@@ -1246,6 +1246,12 @@ abstract class AppLocalizations {
   /// **'搜索名称或地址'**
   String get searchNameOrAddress;
 
+  /// No description provided for @assetUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'该资产已不可用'**
+  String get assetUnavailable;
+
   /// No description provided for @noMatchingContacts.
   ///
   /// In zh, this message translates to:
@@ -1329,6 +1335,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'网络设置'**
   String get networkSettingsTitle;
+
+  /// No description provided for @screenCaptureBlocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'检测到录屏或投屏'**
+  String get screenCaptureBlocked;
+
+  /// No description provided for @screenCaptureBlockedHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'为保护助记词,内容已隐藏。停止录屏或断开投屏后会自动恢复。'**
+  String get screenCaptureBlockedHint;
+
+  /// No description provided for @screenshotWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'你刚刚截图了助记词。它已存入相册,任何能看到相册的人都能取走你的资产 —— 请立刻把资产转移到新钱包。'**
+  String get screenshotWarning;
+
+  /// No description provided for @rpcMeasuring.
+  ///
+  /// In zh, this message translates to:
+  /// **'测量中…'**
+  String get rpcMeasuring;
+
+  /// No description provided for @rpcUnreachable.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法连接'**
+  String get rpcUnreachable;
+
+  /// No description provided for @rpcNotMeasured.
+  ///
+  /// In zh, this message translates to:
+  /// **'—'**
+  String get rpcNotMeasured;
 
   /// No description provided for @rpcTimeout.
   ///

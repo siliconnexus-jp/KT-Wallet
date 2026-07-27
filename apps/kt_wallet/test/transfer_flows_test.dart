@@ -36,24 +36,28 @@ void main() {
       expect(f.state, LocalState.confirming);
     });
 
-    test('broadcast error → failed; only explicit retry rebuilds (no auto-retry)',
-        () {
-      final f = LocalSignFlow();
-      f.dispatch(LocalEvent.reviewed);
-      f.dispatch(LocalEvent.confirm);
-      f.dispatch(LocalEvent.authOk);
-      f.dispatch(LocalEvent.signOk);
-      f.dispatch(LocalEvent.broadcastError);
-      expect(f.state, LocalState.failed);
-      // There is no broadcasting→broadcasting or auto-loop; retry is manual.
-      f.dispatch(LocalEvent.retry);
-      expect(f.state, LocalState.confirming);
-    });
+    test(
+      'broadcast error → failed; only explicit retry rebuilds (no auto-retry)',
+      () {
+        final f = LocalSignFlow();
+        f.dispatch(LocalEvent.reviewed);
+        f.dispatch(LocalEvent.confirm);
+        f.dispatch(LocalEvent.authOk);
+        f.dispatch(LocalEvent.signOk);
+        f.dispatch(LocalEvent.broadcastError);
+        expect(f.state, LocalState.failed);
+        // There is no broadcasting→broadcasting or auto-loop; retry is manual.
+        f.dispatch(LocalEvent.retry);
+        expect(f.state, LocalState.confirming);
+      },
+    );
 
     test('cannot sign without confirming (illegal jump throws)', () {
       final f = LocalSignFlow();
-      expect(() => f.dispatch(LocalEvent.authOk),
-          throwsA(isA<IllegalLocalTransition>()));
+      expect(
+        () => f.dispatch(LocalEvent.authOk),
+        throwsA(isA<IllegalLocalTransition>()),
+      );
     });
   });
 

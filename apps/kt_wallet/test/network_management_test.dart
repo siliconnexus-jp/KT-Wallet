@@ -14,28 +14,31 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// per-chain picker, probed add-network form, custom-network deletion — all
 /// NetworkScope-only (the scope-absent rendering stays the pre-feature one).
 Widget _app(NetworkController net, {http.Client? probeClient}) => MaterialApp(
-      debugShowCheckedModeBanner: false,
-      locale: const Locale('zh'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: NetworkScope(
-        controller: net,
-        child: NetworkSettingsScreen(probeClient: probeClient),
-      ),
-    );
+  debugShowCheckedModeBanner: false,
+  locale: const Locale('zh'),
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: NetworkScope(
+    controller: net,
+    child: NetworkSettingsScreen(probeClient: probeClient),
+  ),
+);
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('scope-absent: no environment or per-chain cards render',
-      (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      debugShowCheckedModeBanner: false,
-      locale: const Locale('zh'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: const NetworkSettingsScreen(),
-    ));
+  testWidgets('scope-absent: no environment or per-chain cards render', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const NetworkSettingsScreen(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     // Today's screen exactly: demo hostnames, none of the new affordances.
@@ -45,8 +48,9 @@ void main() {
     expect(find.byKey(const ValueKey('add-network')), findsNothing);
   });
 
-  testWidgets('environment segmented switches the environment and persists',
-      (tester) async {
+  testWidgets('environment segmented switches the environment and persists', (
+    tester,
+  ) async {
     final net = NetworkController();
     await net.load();
     await tester.pumpWidget(_app(net));
@@ -80,43 +84,44 @@ void main() {
   });
 
   testWidgets(
-      'per-chain picker lists built-ins and sets an override; re-picking the '
-      'profile default clears it', (tester) async {
-    final net = NetworkController();
-    await net.load();
-    await tester.pumpWidget(_app(net));
-    await tester.pumpAndSettle();
+    'per-chain picker lists built-ins and sets an override; re-picking the '
+    'profile default clears it',
+    (tester) async {
+      final net = NetworkController();
+      await net.load();
+      await tester.pumpWidget(_app(net));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('net-row-ethereum')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('net-row-ethereum')));
+      await tester.pumpAndSettle();
 
-    // Both built-ins listed, the active (mainnet) one checked.
-    expect(find.byKey(const ValueKey('net-opt-eth-mainnet')), findsOneWidget);
-    expect(find.byKey(const ValueKey('net-opt-eth-sepolia')), findsOneWidget);
-    expect(find.byIcon(Icons.check), findsOneWidget);
+      // Both built-ins listed, the active (mainnet) one checked.
+      expect(find.byKey(const ValueKey('net-opt-eth-mainnet')), findsOneWidget);
+      expect(find.byKey(const ValueKey('net-opt-eth-sepolia')), findsOneWidget);
+      expect(find.byIcon(Icons.check), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('net-opt-eth-sepolia')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('net-opt-eth-sepolia')));
+      await tester.pumpAndSettle();
 
-    expect(net.activeFor(Chain.ethereum).id, 'eth-sepolia');
-    // The row now shows the testnet name; the environment stays mainnet.
-    expect(net.environment, NetworkEnvironment.mainnet);
-    expect(find.text('Sepolia'), findsOneWidget);
+      expect(net.activeFor(Chain.ethereum).id, 'eth-sepolia');
+      // The row now shows the testnet name; the environment stays mainnet.
+      expect(net.environment, NetworkEnvironment.mainnet);
+      expect(find.text('Sepolia'), findsOneWidget);
 
-    // Picking what the mainnet profile already dictates clears the override
-    // (observable via the persisted overrides map going empty).
-    await tester.tap(find.byKey(const ValueKey('net-row-ethereum')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('net-opt-eth-mainnet')));
-    await tester.pumpAndSettle();
+      // Picking what the mainnet profile already dictates clears the override
+      // (observable via the persisted overrides map going empty).
+      await tester.tap(find.byKey(const ValueKey('net-row-ethereum')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('net-opt-eth-mainnet')));
+      await tester.pumpAndSettle();
 
-    expect(net.activeFor(Chain.ethereum).id, 'eth-mainnet');
-    final store = await SharedPreferences.getInstance();
-    expect(store.getString('network.overrides'), '{}');
-  });
+      expect(net.activeFor(Chain.ethereum).id, 'eth-mainnet');
+      final store = await SharedPreferences.getInstance();
+      expect(store.getString('network.overrides'), '{}');
+    },
+  );
 
-  testWidgets(
-      'add network: probe success adds the custom network (eth_chainId '
+  testWidgets('add network: probe success adds the custom network (eth_chainId '
       'request asserted)', (tester) async {
     final net = NetworkController();
     await net.load();
@@ -126,8 +131,9 @@ void main() {
       final body = jsonDecode(request.body) as Map<String, Object?>;
       expect(body['method'], 'eth_chainId');
       return http.Response(
-          jsonEncode({'jsonrpc': '2.0', 'id': body['id'], 'result': '0x7a69'}),
-          200);
+        jsonEncode({'jsonrpc': '2.0', 'id': body['id'], 'result': '0x7a69'}),
+        200,
+      );
     });
     await tester.pumpWidget(_app(net, probeClient: client));
     await tester.pumpAndSettle();
@@ -138,10 +144,11 @@ void main() {
 
     // Family default is Ethereum → the Chain ID field is present.
     expect(find.text('Chain ID'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).at(0), 'Local Anvil'); // 网络名称
     await tester.enterText(
-        find.byType(TextField).at(0), 'Local Anvil'); // 网络名称
-    await tester.enterText(
-        find.byType(TextField).at(1), 'http://127.0.0.1:8545'); // RPC
+      find.byType(TextField).at(1),
+      'http://127.0.0.1:8545',
+    ); // RPC
     await tester.enterText(find.byType(TextField).at(2), 'eth'); // 符号
     await tester.enterText(find.byType(TextField).at(3), '31337'); // Chain ID
     await tester.pump();
@@ -167,46 +174,60 @@ void main() {
   });
 
   testWidgets(
-      'add network: chain id mismatch shows the node\'s actual id inline and '
-      'does NOT persist', (tester) async {
+    'add network: chain id mismatch shows the node\'s actual id inline and '
+    'does NOT persist',
+    (tester) async {
+      final net = NetworkController();
+      await net.load();
+      final client = MockClient(
+        (request) async => http.Response(
+          jsonEncode({'jsonrpc': '2.0', 'id': 1, 'result': '0x1'}),
+          200,
+        ),
+      );
+      await tester.pumpWidget(_app(net, probeClient: client));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('add-network')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'Wrong Net');
+      await tester.enterText(
+        find.byType(TextField).at(1),
+        'https://rpc.example',
+      );
+      await tester.enterText(find.byType(TextField).at(2), 'ETH');
+      await tester.enterText(find.byType(TextField).at(3), '31337');
+      await tester.pump();
+      await tester.ensureVisible(find.text('保存'));
+      await tester.pump();
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      // Inline error with the node's ACTUAL id (decimal); sheet stays open.
+      expect(find.text('Chain ID 不匹配:节点返回 1'), findsOneWidget);
+      expect(find.text('添加网络'), findsOneWidget);
+      expect(net.customNetworks, isEmpty);
+    },
+  );
+
+  testWidgets('add network: probe failure shows rpcProbeFailed, sheet stays', (
+    tester,
+  ) async {
     final net = NetworkController();
     await net.load();
-    final client = MockClient((request) async => http.Response(
-        jsonEncode({'jsonrpc': '2.0', 'id': 1, 'result': '0x1'}), 200));
-    await tester.pumpWidget(_app(net, probeClient: client));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey('add-network')));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).at(0), 'Wrong Net');
-    await tester.enterText(find.byType(TextField).at(1), 'https://rpc.example');
-    await tester.enterText(find.byType(TextField).at(2), 'ETH');
-    await tester.enterText(find.byType(TextField).at(3), '31337');
-    await tester.pump();
-    await tester.ensureVisible(find.text('保存'));
-    await tester.pump();
-    await tester.tap(find.text('保存'));
-    await tester.pumpAndSettle();
-
-    // Inline error with the node's ACTUAL id (decimal); sheet stays open.
-    expect(find.text('Chain ID 不匹配:节点返回 1'), findsOneWidget);
-    expect(find.text('添加网络'), findsOneWidget);
-    expect(net.customNetworks, isEmpty);
-  });
-
-  testWidgets('add network: probe failure shows rpcProbeFailed, sheet stays',
-      (tester) async {
-    final net = NetworkController();
-    await net.load();
-    final client =
-        MockClient((request) async => http.Response('unavailable', 503));
+    final client = MockClient(
+      (request) async => http.Response('unavailable', 503),
+    );
     await tester.pumpWidget(_app(net, probeClient: client));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('add-network')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), 'Dead Net');
-    await tester.enterText(find.byType(TextField).at(1), 'https://down.example');
+    await tester.enterText(
+      find.byType(TextField).at(1),
+      'https://down.example',
+    );
     await tester.enterText(find.byType(TextField).at(2), 'ETH');
     await tester.enterText(find.byType(TextField).at(3), '1');
     await tester.pump();
@@ -221,41 +242,43 @@ void main() {
   });
 
   testWidgets(
-      'delete custom network: in-use warning shown, deletion falls back to '
-      'the profile network', (tester) async {
-    final net = NetworkController();
-    await net.load();
-    final custom = await net.addCustom(
-      chain: Chain.solana,
-      name: 'My Localnet',
-      rpcUrl: 'http://127.0.0.1:8899',
-      symbol: 'SOL',
-    );
-    await net.setOverride(Chain.solana, custom.id);
-    expect(net.activeFor(Chain.solana).id, custom.id);
+    'delete custom network: in-use warning shown, deletion falls back to '
+    'the profile network',
+    (tester) async {
+      final net = NetworkController();
+      await net.load();
+      final custom = await net.addCustom(
+        chain: Chain.solana,
+        name: 'My Localnet',
+        rpcUrl: 'http://127.0.0.1:8899',
+        symbol: 'SOL',
+      );
+      await net.setOverride(Chain.solana, custom.id);
+      expect(net.activeFor(Chain.solana).id, custom.id);
 
-    await tester.pumpWidget(_app(net));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(_app(net));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('net-row-solana')));
-    await tester.pumpAndSettle();
-    // Built-ins carry no delete affordance; the custom row does.
-    expect(find.byKey(const ValueKey('net-del-sol-mainnet')), findsNothing);
-    expect(find.byKey(const ValueKey('net-del-sol-devnet')), findsNothing);
-    await tester.tap(find.byKey(ValueKey('net-del-${custom.id}')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('net-row-solana')));
+      await tester.pumpAndSettle();
+      // Built-ins carry no delete affordance; the custom row does.
+      expect(find.byKey(const ValueKey('net-del-sol-mainnet')), findsNothing);
+      expect(find.byKey(const ValueKey('net-del-sol-devnet')), findsNothing);
+      await tester.tap(find.byKey(ValueKey('net-del-${custom.id}')));
+      await tester.pumpAndSettle();
 
-    // Confirm dialog names the network and flags that it is in use.
-    expect(find.text('删除网络'), findsOneWidget);
-    expect(find.textContaining('该网络正在使用中'), findsOneWidget);
-    await tester.tap(find.text('删除'));
-    await tester.pumpAndSettle();
+      // Confirm dialog names the network and flags that it is in use.
+      expect(find.text('删除网络'), findsOneWidget);
+      expect(find.textContaining('该网络正在使用中'), findsOneWidget);
+      await tester.tap(find.text('删除'));
+      await tester.pumpAndSettle();
 
-    // Gone from the controller and the picker; the active network fell back
-    // to the environment profile (mainnet).
-    expect(net.customNetworks, isEmpty);
-    expect(net.activeFor(Chain.solana).id, 'sol-mainnet');
-    expect(find.byKey(ValueKey('net-opt-${custom.id}')), findsNothing);
-    expect(find.byKey(const ValueKey('net-opt-sol-mainnet')), findsOneWidget);
-  });
+      // Gone from the controller and the picker; the active network fell back
+      // to the environment profile (mainnet).
+      expect(net.customNetworks, isEmpty);
+      expect(net.activeFor(Chain.solana).id, 'sol-mainnet');
+      expect(find.byKey(ValueKey('net-opt-${custom.id}')), findsNothing);
+      expect(find.byKey(const ValueKey('net-opt-sol-mainnet')), findsOneWidget);
+    },
+  );
 }

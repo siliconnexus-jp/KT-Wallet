@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import 'market/asset_ref.dart';
 import 'screens/assets_screens.dart';
 import 'screens/camera_screen.dart';
 import 'screens/home_screen.dart';
@@ -97,6 +98,12 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
             ),
             '/tx-detail' => (c, s) => TxDetailScreen(
               transactionId: s.uri.queryParameters['id'],
+            ),
+            // The tapped asset rides in `extra`. Without it the screen used to
+            // render one hardcoded token for every row; now a live scope with
+            // no asset says so instead.
+            '/token' => (c, s) => TokenDetailScreen(
+              asset: s.extra is AssetRef ? s.extra as AssetRef : null,
             ),
             // Live W12: the registry (gallery + goldens) keeps the
             // design-snapshot ScanAccountScreen; actual navigation gets

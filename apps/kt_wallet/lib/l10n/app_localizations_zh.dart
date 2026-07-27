@@ -618,6 +618,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchNameOrAddress => '搜索名称或地址';
 
   @override
+  String get assetUnavailable => '该资产已不可用';
+
+  @override
   String get noMatchingContacts => '没有匹配的联系人';
 
   @override
@@ -658,6 +661,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get networkSettingsTitle => '网络设置';
+
+  @override
+  String get screenCaptureBlocked => '检测到录屏或投屏';
+
+  @override
+  String get screenCaptureBlockedHint => '为保护助记词,内容已隐藏。停止录屏或断开投屏后会自动恢复。';
+
+  @override
+  String get screenshotWarning =>
+      '你刚刚截图了助记词。它已存入相册,任何能看到相册的人都能取走你的资产 —— 请立刻把资产转移到新钱包。';
+
+  @override
+  String get rpcMeasuring => '测量中…';
+
+  @override
+  String get rpcUnreachable => '无法连接';
+
+  @override
+  String get rpcNotMeasured => '—';
 
   @override
   String get rpcTimeout => '超时';

@@ -6,6 +6,7 @@ import 'package:ui_kit/ui_kit.dart';
 import 'package:wallet_data/wallet_data.dart' show TxStatus;
 
 import '../../l10n/app_localizations.dart';
+import '../market/asset_ref.dart';
 import '../market/balance_service.dart';
 import '../market/history_controller.dart';
 import '../market/history_service.dart';
@@ -771,6 +772,11 @@ List<_SettingsItem> _settingsItems(AppLocalizations l10n) => [
   _SettingsItem(Icons.toll_outlined, l10n.settingsTokenManage, '/token-manage'),
 ];
 
+/// Demo rows for the design gallery, the goldens, and the offline fallback.
+///
+/// The numbers are illustrative, but each row still names the chain it stands
+/// for so tapping it opens THAT asset's detail — which then shows '--' for
+/// anything it could not fetch, rather than a made-up holding.
 const demoAssets = [
   AssetRow(
     Color(0xFF26A17B),
@@ -780,6 +786,7 @@ const demoAssets = [
     r'$500.00',
     '0.0%',
     WalletColors.text3,
+    ref: AssetRef.native(coin: Coin.tron, name: 'TRON', symbol: 'TRX'),
   ),
   AssetRow(
     Color(0xFF627EEA),
@@ -789,6 +796,7 @@ const demoAssets = [
     r'$279.80',
     '+2.4%',
     WalletColors.green,
+    ref: AssetRef.native(coin: Coin.eth, name: 'Ethereum', symbol: 'ETH'),
   ),
   AssetRow(
     Color(0xFF9945FF),
@@ -798,6 +806,7 @@ const demoAssets = [
     r'$82.60',
     '+5.1%',
     WalletColors.green,
+    ref: AssetRef.native(coin: Coin.solana, name: 'Solana', symbol: 'SOL'),
   ),
 ];
 
@@ -839,6 +848,7 @@ AssetRow liveTokenRow(MarketController market, TokenInfo token) {
     fiat == null ? '--' : formatUsd(fiat),
     '',
     WalletColors.text3,
+    ref: AssetRef.token(token),
   );
 }
 
@@ -861,6 +871,7 @@ List<AssetRow> liveAssetRows(MarketController market) => [
         fiat == null ? '--' : formatUsd(fiat),
         '',
         WalletColors.text3,
+        ref: AssetRef.native(coin: coin, name: name, symbol: symbol),
       );
     }(),
   for (final token in market.tokens) liveTokenRow(market, token),
@@ -874,11 +885,17 @@ class AssetRow {
     this.sub,
     this.value,
     this.change,
-    this.changeColor,
-  );
+    this.changeColor, {
+    this.ref,
+  });
   final Color color;
   final String letter, name, sub, value, change;
   final Color changeColor;
+
+  /// Which asset this row stands for, so tapping it opens THAT asset's detail
+  /// screen. Null on the demo rows (gallery / goldens), which have no real
+  /// asset behind them.
+  final AssetRef? ref;
 }
 
 class _Header extends StatelessWidget {
@@ -1316,7 +1333,9 @@ class _AssetsCard extends StatelessWidget {
             if (i > 0) const SizedBox(height: 18),
             GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () => context.push('/token'),
+              // The row's own asset rides along as `extra`; without it the
+              // detail route rendered one fixed token for every row.
+              onTap: () => context.push('/token', extra: assets[i].ref),
               child: _AssetTile(assets[i]),
             ),
           ],

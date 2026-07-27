@@ -18,6 +18,15 @@ import UIKit
       name: UIApplication.userDidTakeScreenshotNotification,
       object: nil
     )
+    // iOS cannot block a screenshot, but it CAN tell us the screen is being
+    // recorded or mirrored — and that one IS preventable: Dart obscures the
+    // sensitive screen for as long as the capture lasts.
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(screenCaptureChanged),
+      name: UIScreen.capturedDidChangeNotification,
+      object: nil
+    )
     NotificationCenter.default.addObserver(
       self,
       selector: #selector(willResignActive),
@@ -40,6 +49,7 @@ import UIKit
         name: "kt/screen_security",
         binaryMessenger: registrar.messenger()
       )
+      screenCaptureChanged()
       let deviceSecurityChannel = FlutterMethodChannel(
         name: "kt/device_security",
         binaryMessenger: registrar.messenger()
@@ -66,6 +76,13 @@ import UIKit
 
   @objc private func screenshotTaken() {
     screenSecurityChannel?.invokeMethod("screenshotTaken", arguments: nil)
+  }
+
+  @objc private func screenCaptureChanged() {
+    screenSecurityChannel?.invokeMethod(
+      "screenCaptureChanged",
+      arguments: UIScreen.main.isCaptured
+    )
   }
 
   @objc private func willResignActive() {

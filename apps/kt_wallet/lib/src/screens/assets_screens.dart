@@ -8,10 +8,14 @@ import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../market/airdrop_service.dart';
+import '../market/asset_ref.dart';
 import '../market/balance_service.dart';
+import '../market/explorer_links.dart';
+import '../market/price_service.dart';
 import '../market/market_controller.dart';
 import '../market/market_scope.dart';
 import '../platform/external_actions.dart';
+import '../transfer/airgap_codec.dart' show truncateMiddle;
 import 'home_screen.dart' show tokenRowMeta;
 import '../widgets/market_offline_banner.dart';
 import '../widgets/token_icon.dart';
@@ -28,7 +32,9 @@ class AssetsListScreen extends StatefulWidget {
 }
 
 class _AssetsListScreenState extends State<AssetsListScreen> {
-  // (color, symbol glyph, name, holdings, value, change, change color, network)
+  // (color, symbol glyph, name, holdings, value, change, change color,
+  //  network, assetRef) — assetRef is null on the demo rows, which stand
+  //  for no real asset.
   static const _assets = [
     (
       Color(0xFF627EEA),
@@ -39,6 +45,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
       '+2.4%',
       WalletColors.green,
       'Ethereum',
+      null,
     ),
     (
       Color(0xFF26A17B),
@@ -49,6 +56,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
       '0.0%',
       WalletColors.text3,
       'TRON',
+      null,
     ),
     (
       Color(0xFF8247E5),
@@ -59,6 +67,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
       '-1.2%',
       WalletColors.red,
       'Polygon',
+      null,
     ),
     (
       Color(0xFF9945FF),
@@ -69,6 +78,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
       '+5.1%',
       WalletColors.green,
       'Solana',
+      null,
     ),
     (
       Color(0xFF2775CA),
@@ -79,6 +89,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
       '0.0%',
       WalletColors.text3,
       'Solana',
+      null,
     ),
   ];
   static const _networks = [
@@ -109,7 +120,9 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
   /// coins, then the built-in registry tokens. Loading and errored items show
   /// '--' — never an invented number; the change column is empty because
   /// there is no 24h-change feed yet.
-  List<(Color, String, String, String, String, String, Color, String)>
+  List<
+    (Color, String, String, String, String, String, Color, String, AssetRef?)
+  >
   _liveRows(MarketController market) {
     return [
       for (final (coin, name, symbol, color, glyph, network) in const [
@@ -149,6 +162,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
             '',
             WalletColors.text3,
             network,
+            AssetRef.native(coin: coin, name: name, symbol: symbol),
           );
         }(),
       for (final token in market.tokens)
@@ -169,6 +183,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
             '',
             WalletColors.text3,
             token.network,
+            AssetRef.token(token),
           );
         }(),
     ];
@@ -268,7 +283,9 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
                   if (i > 0) const SizedBox(height: 18),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () => context.push('/token'),
+                    // The row's own asset rides along as `extra`; without it
+                    // the detail route rendered one fixed token for every row.
+                    onTap: () => context.push('/token', extra: results[i].$9),
                     child: _AssetTile(results[i]),
                   ),
                 ],
@@ -282,7 +299,18 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
 
 class _AssetTile extends StatelessWidget {
   const _AssetTile(this.a);
-  final (Color, String, String, String, String, String, Color, String) a;
+  final (
+    Color,
+    String,
+    String,
+    String,
+    String,
+    String,
+    Color,
+    String,
+    AssetRef?,
+  )
+  a;
   @override
   Widget build(BuildContext context) => Row(
     children: [
@@ -339,15 +367,220 @@ class _AssetTile extends StatelessWidget {
   );
 }
 
-/// W3 Token 详情 — hero balance + info card + recent tx.
-class TokenDetailScreen extends StatelessWidget {
-  const TokenDetailScreen({super.key});
+/// Brand dot per protocol family, for the network badge on the detail screen.
+const _chainDot = {
+  Chain.ethereum: ChainColors.ethereum,
+  Chain.polygon: ChainColors.polygon,
+  Chain.base: ChainColors.base,
+  Chain.arbitrum: ChainColors.arbitrum,
+  Chain.avalanche: ChainColors.avalanche,
+  Chain.tron: ChainColors.tron,
+  Chain.solana: ChainColors.solana,
+};
 
-  /// Demo USDT TRC-20 contract address shown on the info card.
+/// W3 Token 详情 — hero balance + info card.
+///
+/// [asset] says WHICH asset to render; it arrives as the route's `extra` from
+/// the tapped row. Before it existed this screen took no arguments at all and
+/// hardcoded one token's balance, so every row in the home list and the assets
+/// tab opened the same "3,120.00 USDT" page — a balance the user did not hold.
+///
+/// The design gallery and the goldens have no [MarketScope] and no asset; they
+/// keep rendering the original demo snapshot so those references stay
+/// comparable.
+class TokenDetailScreen extends StatelessWidget {
+  const TokenDetailScreen({super.key, this.asset});
+
+  final AssetRef? asset;
+
+  /// Demo USDT TRC-20 contract, shown only in the scope-absent snapshot.
   static const _contract = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 
   @override
   Widget build(BuildContext context) {
+    final market = MarketScope.maybeOf(context);
+    if (market == null) return _demoSnapshot(context);
+    final ref = asset;
+    // Live, but nothing to show: a deep link straight to /token, or a row
+    // whose asset went away. Say so instead of inventing a holding.
+    if (ref == null) return _unavailable(context);
+    return _live(context, market, ref);
+  }
+
+  Widget _unavailable(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return KtScreen(
+      navBar: KtNavBar(
+        title: l10n.tabAssets,
+        onBack: () => Navigator.of(context).maybePop(),
+      ),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 48),
+          child: Center(
+            child: Text(
+              l10n.assetUnavailable,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, color: WalletColors.text3),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _live(BuildContext context, MarketController market, AssetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final network = NetworkScope.of(context).activeFor(chainOf(ref.coin));
+
+    final result = ref.isToken
+        ? market.tokenBalanceFor(ref.tokenId!)
+        : market.balanceFor(ref.coin);
+    final amount = result.amount;
+    final ok = result.status == BalanceStatus.ok && amount != null;
+    // A balance that has not loaded, or failed, renders '--'. It must never
+    // fall back to a number.
+    final balance = ok
+        ? '${amount.format(maxFraction: 6)} ${ref.symbol}'
+        : '-- ${ref.symbol}';
+
+    final fiat = ref.isToken
+        ? _tokenFiat(market, ref)
+        : market.fiatValueUsd(ref.coin);
+    final price = ref.isToken
+        ? PriceService.peggedUsdBySymbol[ref.symbol]
+        : market.priceUsd(ref.coin);
+
+    final contract = ref.contract;
+    final wallet = WalletScope.of(context).current;
+    final address = wallet?.addresses.forCoin(ref.coin);
+    // Tokens link to the contract, native coins to this wallet's account.
+    final explorer = contract != null
+        ? explorerTokenUrl(network, contract)
+        : (address == null || address.isEmpty
+              ? null
+              : explorerAddressUrl(network, address));
+
+    return KtScreen(
+      navBar: KtNavBar(
+        title: ref.name,
+        onBack: () => Navigator.of(context).maybePop(),
+        trailing: explorer == null ? null : Icons.open_in_new,
+        onTrailing: explorer == null
+            ? null
+            : () async {
+                final opened = await ExternalActions.instance.open(
+                  Uri.parse(explorer),
+                );
+                if (!opened && context.mounted) {
+                  ScaffoldMessenger.of(context)
+                    ..clearSnackBars()
+                    ..showSnackBar(
+                      SnackBar(content: Text(l10n.externalActionFailed)),
+                    );
+                }
+              },
+      ),
+      children: [
+        Column(
+          children: [
+            TokenIcon(symbol: ref.symbol, size: 56),
+            const SizedBox(height: 10),
+            Text(
+              balance,
+              style: const TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.5,
+                color: WalletColors.text,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              fiat == null ? '--' : '≈ ${formatUsd(fiat)}',
+              style: const TextStyle(fontSize: 15, color: WalletColors.text2),
+            ),
+            const SizedBox(height: 10),
+            NetworkBadge(
+              label: ref.network ?? network.name,
+              dotColor: _chainDot[chainOf(ref.coin)]!,
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: KtPrimaryButton(
+                label: l10n.actionSend,
+                icon: Icons.north_east,
+                onPressed: () => context.push('/transfer'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SizedBox(
+                height: 48,
+                child: OutlinedButton.icon(
+                  onPressed: () => context.push('/receive'),
+                  icon: const Icon(
+                    Icons.qr_code,
+                    size: 18,
+                    color: WalletColors.accent,
+                  ),
+                  label: Text(
+                    l10n.actionReceive,
+                    style: const TextStyle(
+                      color: WalletColors.accent,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: WalletColors.surface,
+                    side: BorderSide.none,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        KtCard(
+          child: Column(
+            children: [
+              KtDetailRow(
+                label: l10n.price,
+                value: price == null ? '--' : formatUsd(price),
+              ),
+              const SizedBox(height: 14),
+              // There is no 24h-change feed yet; '--' is the honest value.
+              KtDetailRow(label: l10n.change24h, value: '--'),
+              if (contract != null) ...[
+                const SizedBox(height: 14),
+                KtDetailRow(
+                  label: l10n.contractAddress,
+                  value: truncateMiddle(contract),
+                  mono: true,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// USD value of a token holding, keyed off the registry entry the ref came
+  /// from (the controller needs the [TokenInfo], not just the symbol).
+  double? _tokenFiat(MarketController market, AssetRef ref) {
+    for (final token in market.tokens) {
+      if (token.id == ref.tokenId) return market.tokenFiatValueUsd(token);
+    }
+    return null;
+  }
+
+  Widget _demoSnapshot(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return KtScreen(
       navBar: KtNavBar(

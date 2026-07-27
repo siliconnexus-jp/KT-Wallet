@@ -73,17 +73,20 @@ void main() {
       expect(r.problem, TransferProblem.insufficientBalance);
     });
 
-    test('native: amount fits but amount+fee does not → insufficientForFee', () {
-      final r = TransferValidation.validate(
-        chain: Chain.ethereum,
-        to: _evm,
-        amount: _eth('10'),
-        isTokenTransfer: false,
-        nativeBalance: _eth('10'),
-        maxFee: _eth('0.01'),
-      );
-      expect(r.problem, TransferProblem.insufficientForFee);
-    });
+    test(
+      'native: amount fits but amount+fee does not → insufficientForFee',
+      () {
+        final r = TransferValidation.validate(
+          chain: Chain.ethereum,
+          to: _evm,
+          amount: _eth('10'),
+          isTokenTransfer: false,
+          nativeBalance: _eth('10'),
+          maxFee: _eth('0.01'),
+        );
+        expect(r.problem, TransferProblem.insufficientForFee);
+      },
+    );
 
     test('token: amount over token balance → insufficientBalance', () {
       final r = TransferValidation.validate(
@@ -128,14 +131,14 @@ void main() {
   group('dust threshold', () {
     test('below threshold is dust, exactly at threshold is allowed', () {
       TransferCheck check(String amt) => TransferValidation.validate(
-            chain: Chain.ethereum,
-            to: _evm,
-            amount: _eth(amt),
-            isTokenTransfer: false,
-            nativeBalance: _eth('10'),
-            maxFee: _eth('0.001'),
-            dustThreshold: _eth('0.0001'),
-          );
+        chain: Chain.ethereum,
+        to: _evm,
+        amount: _eth(amt),
+        isTokenTransfer: false,
+        nativeBalance: _eth('10'),
+        maxFee: _eth('0.001'),
+        dustThreshold: _eth('0.0001'),
+      );
       expect(check('0.00005').problem, TransferProblem.dust);
       expect(check('0.0001').ok, isTrue); // exactly at threshold: allowed
       expect(check('0.0002').ok, isTrue);

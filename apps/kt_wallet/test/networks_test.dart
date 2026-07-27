@@ -13,12 +13,21 @@ void main() {
   test('registry covers every chain in both environments', () {
     for (final chain in Chain.values) {
       final all = builtinNetworks.where((n) => n.chain == chain);
-      expect(all.where((n) => !n.isTestnet), hasLength(1), reason: '$chain mainnet');
-      expect(all.where((n) => n.isTestnet), hasLength(1), reason: '$chain testnet');
+      expect(
+        all.where((n) => !n.isTestnet),
+        hasLength(1),
+        reason: '$chain mainnet',
+      );
+      expect(
+        all.where((n) => n.isTestnet),
+        hasLength(1),
+        reason: '$chain testnet',
+      );
     }
     // EVM instances must carry a chain id (signing-domain isolation).
-    for (final n in builtinNetworks
-        .where((n) => n.chain == Chain.ethereum || n.chain == Chain.polygon)) {
+    for (final n in builtinNetworks.where(
+      (n) => n.chain == Chain.ethereum || n.chain == Chain.polygon,
+    )) {
       expect(n.evmChainId, isNotNull, reason: n.id);
     }
     expect(ethSepolia.evmChainId, 11155111);
@@ -74,7 +83,11 @@ void main() {
     expect(c.activeFor(Chain.tron).name, 'Shasta');
 
     await c.removeCustom(added.id);
-    expect(c.activeFor(Chain.tron).id, 'tron-mainnet', reason: 'fallback to profile');
+    expect(
+      c.activeFor(Chain.tron).id,
+      'tron-mainnet',
+      reason: 'fallback to profile',
+    );
   });
 
   test('corrupt persisted JSON is ignored', () async {

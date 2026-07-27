@@ -85,17 +85,32 @@ void main() {
     expect(find.text('待签名交易'), findsOneWidget); // W6 QR screen
   });
 
+  // These used to open /token straight from the design gallery, which worked
+  // only because the screen ignored its arguments and rendered one fixed
+  // token. Go in the way a user does — through an asset row — so the route
+  // actually carries an asset.
+  Future<void> openEthDetail(WidgetTester tester) async {
+    await _openHome(tester);
+    // The asset row, not the network chip above it — both read 'Ethereum',
+    // and the chips are rendered first.
+    final row = find.text('Ethereum').last;
+    await tester.ensureVisible(row);
+    await tester.pumpAndSettle();
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('token detail: send opens the transfer input screen', (
     tester,
   ) async {
-    await _open(tester, 'W3 Token 详情');
+    await openEthDetail(tester);
     await tester.tap(find.text('转账'));
     await tester.pumpAndSettle();
     expect(find.text('收款地址'), findsOneWidget); // W4 transfer input
   });
 
   testWidgets('token detail: receive opens the receive screen', (tester) async {
-    await _open(tester, 'W3 Token 详情');
+    await openEthDetail(tester);
     await tester.tap(find.text('收款'));
     await tester.pumpAndSettle();
     // W14 receive, live: shows the current wallet's TRON address (default

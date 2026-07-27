@@ -14,14 +14,16 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
-      await tester.pumpWidget(MaterialApp(
-        debugShowCheckedModeBanner: false,
-        locale: const Locale('zh'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        theme: ThemeData(scaffoldBackgroundColor: WalletColors.bg),
-        home: Builder(builder: entry.value.$2),
-      ));
+      await tester.pumpWidget(
+        MaterialApp(
+          debugShowCheckedModeBanner: false,
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: ThemeData(scaffoldBackgroundColor: WalletColors.bg),
+          home: Builder(builder: entry.value.$2),
+        ),
+      );
       await tester.pump();
 
       // Asset images (token icons) decode asynchronously; precache them so
@@ -33,7 +35,10 @@ void main() {
       });
       await tester.pump();
 
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/screens/$slug.png'));
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile('goldens/screens/$slug.png'),
+      );
     });
   }
 }

@@ -43,71 +43,75 @@ void main() {
     expect(reloaded.fiat, 'JPY');
   });
 
-  test('rpc overrides: null by default, round-trip through storage, reset',
-      () async {
-    SharedPreferences.setMockInitialValues({});
+  test(
+    'rpc overrides: null by default, round-trip through storage, reset',
+    () async {
+      SharedPreferences.setMockInitialValues({});
 
-    final prefs = AppPrefsController();
-    for (final coin in Coin.values) {
-      expect(prefs.rpcOverride(coin), isNull, reason: '$coin');
-    }
+      final prefs = AppPrefsController();
+      for (final coin in Coin.values) {
+        expect(prefs.rpcOverride(coin), isNull, reason: '$coin');
+      }
 
-    await prefs.setRpcOverride(Coin.eth, 'https://my-eth-node.example');
-    await prefs.setRpcOverride(Coin.tron, '  https://my-tron.example  ');
+      await prefs.setRpcOverride(Coin.eth, 'https://my-eth-node.example');
+      await prefs.setRpcOverride(Coin.tron, '  https://my-tron.example  ');
 
-    // Persists under the documented keys (trimmed).
-    final store = await SharedPreferences.getInstance();
-    expect(store.getString('rpc.eth'), 'https://my-eth-node.example');
-    expect(store.getString('rpc.tron'), 'https://my-tron.example');
-    expect(store.getString('rpc.polygon'), isNull);
+      // Persists under the documented keys (trimmed).
+      final store = await SharedPreferences.getInstance();
+      expect(store.getString('rpc.eth'), 'https://my-eth-node.example');
+      expect(store.getString('rpc.tron'), 'https://my-tron.example');
+      expect(store.getString('rpc.polygon'), isNull);
 
-    // A fresh controller loads them back; untouched chains stay default.
-    final reloaded = AppPrefsController();
-    await reloaded.load();
-    expect(reloaded.rpcOverride(Coin.eth), 'https://my-eth-node.example');
-    expect(reloaded.rpcOverride(Coin.tron), 'https://my-tron.example');
-    expect(reloaded.rpcOverride(Coin.polygon), isNull);
-    expect(reloaded.rpcOverride(Coin.solana), isNull);
+      // A fresh controller loads them back; untouched chains stay default.
+      final reloaded = AppPrefsController();
+      await reloaded.load();
+      expect(reloaded.rpcOverride(Coin.eth), 'https://my-eth-node.example');
+      expect(reloaded.rpcOverride(Coin.tron), 'https://my-tron.example');
+      expect(reloaded.rpcOverride(Coin.polygon), isNull);
+      expect(reloaded.rpcOverride(Coin.solana), isNull);
 
-    // Reset: null clears the override and removes the stored key; a blank
-    // string means the same thing.
-    await prefs.setRpcOverride(Coin.eth, null);
-    await prefs.setRpcOverride(Coin.tron, '   ');
-    expect(prefs.rpcOverride(Coin.eth), isNull);
-    expect(prefs.rpcOverride(Coin.tron), isNull);
-    expect(store.getString('rpc.eth'), isNull);
-    expect(store.getString('rpc.tron'), isNull);
+      // Reset: null clears the override and removes the stored key; a blank
+      // string means the same thing.
+      await prefs.setRpcOverride(Coin.eth, null);
+      await prefs.setRpcOverride(Coin.tron, '   ');
+      expect(prefs.rpcOverride(Coin.eth), isNull);
+      expect(prefs.rpcOverride(Coin.tron), isNull);
+      expect(store.getString('rpc.eth'), isNull);
+      expect(store.getString('rpc.tron'), isNull);
 
-    // load() drops overrides that were removed from storage.
-    await reloaded.load();
-    expect(reloaded.rpcOverride(Coin.eth), isNull);
-    expect(reloaded.rpcOverride(Coin.tron), isNull);
-  });
+      // load() drops overrides that were removed from storage.
+      await reloaded.load();
+      expect(reloaded.rpcOverride(Coin.eth), isNull);
+      expect(reloaded.rpcOverride(Coin.tron), isNull);
+    },
+  );
 
-  test('gateway url: null by default, round-trip, blank clears to direct',
-      () async {
-    SharedPreferences.setMockInitialValues({});
+  test(
+    'gateway url: null by default, round-trip, blank clears to direct',
+    () async {
+      SharedPreferences.setMockInitialValues({});
 
-    final prefs = AppPrefsController();
-    expect(prefs.gatewayUrl, isNull); // direct mode is the default
+      final prefs = AppPrefsController();
+      expect(prefs.gatewayUrl, isNull); // direct mode is the default
 
-    await prefs.setGatewayUrl('  https://gw.example  ');
-    expect(prefs.gatewayUrl, 'https://gw.example'); // trimmed
+      await prefs.setGatewayUrl('  https://gw.example  ');
+      expect(prefs.gatewayUrl, 'https://gw.example'); // trimmed
 
-    // Persists under the documented key and survives a fresh controller.
-    final store = await SharedPreferences.getInstance();
-    expect(store.getString('gateway.url'), 'https://gw.example');
-    final reloaded = AppPrefsController();
-    await reloaded.load();
-    expect(reloaded.gatewayUrl, 'https://gw.example');
+      // Persists under the documented key and survives a fresh controller.
+      final store = await SharedPreferences.getInstance();
+      expect(store.getString('gateway.url'), 'https://gw.example');
+      final reloaded = AppPrefsController();
+      await reloaded.load();
+      expect(reloaded.gatewayUrl, 'https://gw.example');
 
-    // Blank (or null) clears back to direct mode and removes the stored key.
-    await prefs.setGatewayUrl('   ');
-    expect(prefs.gatewayUrl, isNull);
-    expect(store.getString('gateway.url'), isNull);
-    await reloaded.load();
-    expect(reloaded.gatewayUrl, isNull);
-  });
+      // Blank (or null) clears back to direct mode and removes the stored key.
+      await prefs.setGatewayUrl('   ');
+      expect(prefs.gatewayUrl, isNull);
+      expect(store.getString('gateway.url'), isNull);
+      await reloaded.load();
+      expect(reloaded.gatewayUrl, isNull);
+    },
+  );
 
   test('setGatewayUrl notifies once per actual change', () async {
     SharedPreferences.setMockInitialValues({});

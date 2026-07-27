@@ -55,7 +55,10 @@ void main() {
           }
           if (url == defaultSolanaRpcUrl) {
             expect(method, 'getBalance');
-            return _rpcResult({'context': <String, Object?>{}, 'value': 500000000}); // 0.5 SOL
+            return _rpcResult({
+              'context': <String, Object?>{},
+              'value': 500000000,
+            }); // 0.5 SOL
           }
           fail('unexpected url $url');
         }),

@@ -39,6 +39,13 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
       case "suggestWords":
         result(WalletCoreBridge.suggest(a["prefix"] as? String ?? ""))
 
+      // No AuthGate here, and Android has one — a platform requirement, not a
+      // policy difference, so do NOT "align" them. The Keychain access control
+      // set by storeWallet gates READS; writing a freshly generated secret in
+      // a flow the user is already driving needs no separate prompt. Android's
+      // Keystore key is auth-bound at USE time, so its encrypt-on-store must
+      // authenticate. What matters is identical on both: exportMnemonic /
+      // signTransaction / deleteWallet always authenticate.
       case "storeWallet":
         try storeWallet(a)
         result(true)

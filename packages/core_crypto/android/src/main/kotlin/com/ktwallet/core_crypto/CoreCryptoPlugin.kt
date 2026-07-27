@@ -60,6 +60,15 @@ class CoreCryptoPlugin :
                     result.success(WalletCoreBridge.isValidWord(call.arg("word", "")))
                 "suggestWords" ->
                     result.success(WalletCoreBridge.suggest(call.arg("prefix", "")))
+                // Prompts before writing, and iOS does not — a platform
+                // requirement, not a policy difference, so do NOT "align" them.
+                // The Keystore key is created with
+                // setUserAuthenticationRequired(true), so the ENCRYPT operation
+                // at store time already needs a fresh authentication. iOS's
+                // Keychain applies its access control to reads only, so writing
+                // there is silent. What matters is identical on both:
+                // exportMnemonic / signTransaction / deleteWallet always
+                // authenticate.
                 "storeWallet" -> {
                     if (call.arg("requireAuth", true)) {
                         promptThen(result, "Protect wallet") {

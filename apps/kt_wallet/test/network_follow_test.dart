@@ -465,9 +465,7 @@ void main() {
 
       expect(session.request, isNull);
       expect(
-        find.text(
-          'Unable to estimate the network fee. Sending is disabled.',
-        ),
+        find.text('Unable to estimate the network fee. Sending is disabled.'),
         findsOneWidget,
       );
     });

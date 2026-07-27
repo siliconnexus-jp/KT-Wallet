@@ -100,41 +100,38 @@ void main() {
     expect(find.text('取消交易'), findsNothing);
   });
 
-  testWidgets(
-    'a row from another network never offers speed-up or cancel',
-    (tester) async {
-      // A Sepolia row while Ethereum MAINNET is the active network: rebuilding
-      // it against the active network would sign a real chainId-1 transaction
-      // carrying the Sepolia recipient. The actions must not be offered, and
-      // the row keeps its own network's name.
-      await tester.pumpWidget(_app(_transaction(networkId: 'eth-sepolia')));
+  testWidgets('a row from another network never offers speed-up or cancel', (
+    tester,
+  ) async {
+    // A Sepolia row while Ethereum MAINNET is the active network: rebuilding
+    // it against the active network would sign a real chainId-1 transaction
+    // carrying the Sepolia recipient. The actions must not be offered, and
+    // the row keeps its own network's name.
+    await tester.pumpWidget(_app(_transaction(networkId: 'eth-sepolia')));
 
-      expect(find.text('确认中'), findsOneWidget);
-      expect(find.text('Sepolia'), findsOneWidget);
-      expect(find.text('Ethereum'), findsNothing);
-      expect(find.text('加速交易'), findsNothing);
-      expect(find.text('取消交易'), findsNothing);
+    expect(find.text('确认中'), findsOneWidget);
+    expect(find.text('Sepolia'), findsOneWidget);
+    expect(find.text('Ethereum'), findsNothing);
+    expect(find.text('加速交易'), findsNothing);
+    expect(find.text('取消交易'), findsNothing);
 
-      // Switching the environment to testnet makes the row's own network
-      // active again and the actions come back.
-      await tester.pumpWidget(
-        _app(
-          _transaction(networkId: 'eth-sepolia'),
-          environment: NetworkEnvironment.testnet,
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('加速交易'), findsOneWidget);
-      expect(find.text('取消交易'), findsOneWidget);
-    },
-  );
+    // Switching the environment to testnet makes the row's own network
+    // active again and the actions come back.
+    await tester.pumpWidget(
+      _app(
+        _transaction(networkId: 'eth-sepolia'),
+        environment: NetworkEnvironment.testnet,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('加速交易'), findsOneWidget);
+    expect(find.text('取消交易'), findsOneWidget);
+  });
 
   testWidgets('a legacy row with no recorded network cannot be replaced', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      _app(_transaction(networkId: null)),
-    );
+    await tester.pumpWidget(_app(_transaction(networkId: null)));
 
     expect(find.text('确认中'), findsOneWidget);
     expect(find.text('加速交易'), findsNothing);

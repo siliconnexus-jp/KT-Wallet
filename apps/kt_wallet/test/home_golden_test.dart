@@ -10,13 +10,15 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
 
     // Reads the fallback WalletScope controller (日常钱包, not backed up).
-    await tester.pumpWidget(MaterialApp(
-      debugShowCheckedModeBanner: false,
-      locale: const Locale('zh'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: const HomeScreen(),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const HomeScreen(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     // Precache async-decoding asset images (token icons) so the golden

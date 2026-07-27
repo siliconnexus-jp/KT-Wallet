@@ -13,8 +13,9 @@ Future<void> _open(WidgetTester tester, String galleryEntry) async {
 }
 
 void main() {
-  testWidgets('mnemonic import: 导入 enables once all 12 words are typed',
-      (tester) async {
+  testWidgets('mnemonic import: 导入 enables once all 12 words are typed', (
+    tester,
+  ) async {
     await _open(tester, 'W26 助记词输入');
 
     final fields = find.byType(TextField);
@@ -22,8 +23,18 @@ void main() {
 
     // A valid 12-word mnemonic (words the deterministic backend accepts).
     const words = [
-      'abandon', 'ability', 'able', 'about', 'above', 'absent',
-      'absorb', 'abstract', 'absurd', 'abuse', 'access', 'accident',
+      'abandon',
+      'ability',
+      'able',
+      'about',
+      'above',
+      'absent',
+      'absorb',
+      'abstract',
+      'absurd',
+      'abuse',
+      'access',
+      'accident',
     ];
 
     // Fill the first 11 — button still disabled.
@@ -31,7 +42,12 @@ void main() {
       await tester.enterText(fields.at(i), words[i]);
     }
     await tester.pumpAndSettle();
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '导入')).onPressed, isNull);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '导入'))
+          .onPressed,
+      isNull,
+    );
 
     // Fill the last one — now enabled — and import.
     await tester.enterText(fields.at(11), words[11]);

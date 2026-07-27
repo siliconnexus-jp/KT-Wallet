@@ -37,8 +37,16 @@ void main() {
 
   test('removed contact stays gone after a restart', () async {
     final before = restart();
-    final keep = await before.addContact(name: 'Keep', address: '0xkeep', chain: 'ethereum');
-    final drop = await before.addContact(name: 'Drop', address: '0xdrop', chain: 'ethereum');
+    final keep = await before.addContact(
+      name: 'Keep',
+      address: '0xkeep',
+      chain: 'ethereum',
+    );
+    final drop = await before.addContact(
+      name: 'Drop',
+      address: '0xdrop',
+      chain: 'ethereum',
+    );
     await before.removeContact(drop.id);
     expect(before.contacts.map((c) => c.id), [keep.id]);
 
@@ -47,31 +55,43 @@ void main() {
     expect(contacts.map((c) => c.id), [keep.id]);
   });
 
-  test('custom token and its enabled toggle persist across a restart', () async {
-    final before = restart();
-    await before.loadTokens();
-    final link = await before.addToken(
-      symbol: 'LINK',
-      name: 'Chainlink',
-      contract: '0x514910771AF9Ca656af840dff83E8264EcF986CA',
-      network: 'Chainlink · 0x514910…F986CA',
-    );
-    await before.addToken(symbol: 'ARB', name: 'Arbitrum', network: 'Arbitrum');
-    await before.setTokenEnabled(link.id, false);
+  test(
+    'custom token and its enabled toggle persist across a restart',
+    () async {
+      final before = restart();
+      await before.loadTokens();
+      final link = await before.addToken(
+        symbol: 'LINK',
+        name: 'Chainlink',
+        contract: '0x514910771AF9Ca656af840dff83E8264EcF986CA',
+        network: 'Chainlink · 0x514910…F986CA',
+      );
+      await before.addToken(
+        symbol: 'ARB',
+        name: 'Arbitrum',
+        network: 'Arbitrum',
+      );
+      await before.setTokenEnabled(link.id, false);
 
-    final after = restart();
-    final tokens = await after.loadTokens();
-    expect(tokens, hasLength(2));
-    final restored = tokens.firstWhere((t) => t.id == link.id);
-    expect(restored.symbol, 'LINK');
-    expect(restored.contract, '0x514910771AF9Ca656af840dff83E8264EcF986CA');
-    expect(restored.enabled, isFalse);
-    expect(tokens.firstWhere((t) => t.symbol == 'ARB').enabled, isTrue);
-  });
+      final after = restart();
+      final tokens = await after.loadTokens();
+      expect(tokens, hasLength(2));
+      final restored = tokens.firstWhere((t) => t.id == link.id);
+      expect(restored.symbol, 'LINK');
+      expect(restored.contract, '0x514910771AF9Ca656af840dff83E8264EcF986CA');
+      expect(restored.enabled, isFalse);
+      expect(tokens.firstWhere((t) => t.symbol == 'ARB').enabled, isTrue);
+    },
+  );
 
   test('re-enabling a token persists too', () async {
     final before = restart();
-    final t = await before.addToken(symbol: 'UNI', name: 'Uniswap', network: 'Ethereum · ERC-20', enabled: false);
+    final t = await before.addToken(
+      symbol: 'UNI',
+      name: 'Uniswap',
+      network: 'Ethereum · ERC-20',
+      enabled: false,
+    );
     await before.setTokenEnabled(t.id, true);
 
     final after = restart();
@@ -82,8 +102,16 @@ void main() {
     final memory = WalletController(WalletManager());
     expect(memory.hasStore, isFalse);
 
-    await memory.addContact(name: 'Ghost', address: '0xghost', chain: 'ethereum');
-    final token = await memory.addToken(symbol: 'GHO', name: 'Ghost', network: 'Ethereum');
+    await memory.addContact(
+      name: 'Ghost',
+      address: '0xghost',
+      chain: 'ethereum',
+    );
+    final token = await memory.addToken(
+      symbol: 'GHO',
+      name: 'Ghost',
+      network: 'Ethereum',
+    );
     await memory.setTokenEnabled(token.id, false);
     expect((await memory.loadContacts()).single.name, 'Ghost');
     expect((await memory.loadTokens()).single.enabled, isFalse);

@@ -15,15 +15,25 @@ import 'package:kt_wallet/src/wallets/wallet_model.dart';
 /// a persisted choice skips the picker, and the settings "device mode" row
 /// returns to the picker.
 ChainAddresses _addr(String seed) => ChainAddresses(
-      eth: '0x${seed}71c8B29b3d4b79E19bE1',
-      polygon: '0x${seed}71c8B29b3d4b79E19bE1',
-      tron: 'T${seed}Pa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
-      solana: '${seed}yKpXwMWd4qmDqVr2W',
-    );
+  eth: '0x${seed}71c8B29b3d4b79E19bE1',
+  polygon: '0x${seed}71c8B29b3d4b79E19bE1',
+  tron: 'T${seed}Pa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
+  solana: '${seed}yKpXwMWd4qmDqVr2W',
+);
 
-WalletController _testWalletController() => WalletController(WalletManager(initial: [
-      HotWallet(id: 'daily', name: '日常钱包', avatarColor: 0xFFF59E0B, addresses: _addr('a'), backedUp: true),
-    ]));
+WalletController _testWalletController() => WalletController(
+  WalletManager(
+    initial: [
+      HotWallet(
+        id: 'daily',
+        name: '日常钱包',
+        avatarColor: 0xFFF59E0B,
+        addresses: _addr('a'),
+        backedUp: true,
+      ),
+    ],
+  ),
+);
 
 /// Wallet mode boots behind [AppLockGate], which — with the shipped default of
 /// app-lock ON — will not let anything through unless it can actually verify
@@ -42,24 +52,31 @@ Future<void> _passAppLock(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-Future<DeviceModeController> _pumpRoot(WidgetTester tester, {DeviceMode? initialMode}) async {
+Future<DeviceModeController> _pumpRoot(
+  WidgetTester tester, {
+  DeviceMode? initialMode,
+}) async {
   // Run under zh, like the rest of the suite.
   tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
   addTearDown(tester.platformDispatcher.clearLocalesTestValue);
   _useScriptedBiometrics();
 
   final modeController = DeviceModeController(initial: initialMode);
-  await tester.pumpWidget(RootApp(
-    modeController: modeController,
-    walletBootstrap: () async => _testWalletController(),
-  ));
+  await tester.pumpWidget(
+    RootApp(
+      modeController: modeController,
+      walletBootstrap: () async => _testWalletController(),
+    ),
+  );
   await tester.pumpAndSettle();
   await _passAppLock(tester);
   return modeController;
 }
 
 void main() {
-  testWidgets('fresh start (no mode) shows the device-mode picker', (tester) async {
+  testWidgets('fresh start (no mode) shows the device-mode picker', (
+    tester,
+  ) async {
     await _pumpRoot(tester);
 
     expect(find.text('选择设备模式'), findsOneWidget);
@@ -79,7 +96,9 @@ void main() {
     expect(find.text('日常钱包'), findsOneWidget); // wallet home header
   });
 
-  testWidgets('tapping 离线签名器 requires confirmation, then boots the signer', (tester) async {
+  testWidgets('tapping 离线签名器 requires confirmation, then boots the signer', (
+    tester,
+  ) async {
     final mode = await _pumpRoot(tester);
 
     await tester.tap(find.text('离线签名器'));
@@ -106,14 +125,18 @@ void main() {
     expect(find.text('创建新钱包'), findsOneWidget);
   });
 
-  testWidgets('an injected signer mode skips the picker entirely', (tester) async {
+  testWidgets('an injected signer mode skips the picker entirely', (
+    tester,
+  ) async {
     await _pumpRoot(tester, initialMode: DeviceMode.signer);
 
     expect(find.text('选择设备模式'), findsNothing);
     expect(find.text('创建新钱包'), findsOneWidget);
   });
 
-  testWidgets('settings 设备模式 row exits wallet mode back to the picker', (tester) async {
+  testWidgets('settings 设备模式 row exits wallet mode back to the picker', (
+    tester,
+  ) async {
     final mode = await _pumpRoot(tester, initialMode: DeviceMode.wallet);
     expect(find.text('日常钱包'), findsOneWidget);
 
@@ -146,20 +169,24 @@ void main() {
     expect(find.text('选择设备模式'), findsOneWidget);
   });
 
-  testWidgets('a failed wallet bootstrap shows a retryable error, not a hang', (tester) async {
+  testWidgets('a failed wallet bootstrap shows a retryable error, not a hang', (
+    tester,
+  ) async {
     tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
     addTearDown(tester.platformDispatcher.clearLocalesTestValue);
     _useScriptedBiometrics();
 
     var calls = 0;
-    await tester.pumpWidget(RootApp(
-      modeController: DeviceModeController(initial: DeviceMode.wallet),
-      walletBootstrap: () async {
-        calls++;
-        if (calls == 1) throw StateError('corrupt database');
-        return _testWalletController();
-      },
-    ));
+    await tester.pumpWidget(
+      RootApp(
+        modeController: DeviceModeController(initial: DeviceMode.wallet),
+        walletBootstrap: () async {
+          calls++;
+          if (calls == 1) throw StateError('corrupt database');
+          return _testWalletController();
+        },
+      ),
+    );
     await tester.pumpAndSettle();
 
     // First attempt fails → error screen with a retry button.
@@ -174,7 +201,9 @@ void main() {
     expect(find.text('日常钱包'), findsOneWidget);
   });
 
-  testWidgets('signer welcome offers an escape hatch back to the picker', (tester) async {
+  testWidgets('signer welcome offers an escape hatch back to the picker', (
+    tester,
+  ) async {
     final mode = await _pumpRoot(tester, initialMode: DeviceMode.signer);
 
     // The scope-gated link is on the welcome screen (before any onboarding).
@@ -185,17 +214,18 @@ void main() {
     expect(find.text('选择设备模式'), findsOneWidget);
   });
 
-  testWidgets('leaving wallet mode closes the wallet controller (database)', (tester) async {
+  testWidgets('leaving wallet mode closes the wallet controller (database)', (
+    tester,
+  ) async {
     tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
     addTearDown(tester.platformDispatcher.clearLocalesTestValue);
     _useScriptedBiometrics();
 
     final controller = _ClosableController();
     final mode = DeviceModeController(initial: DeviceMode.wallet);
-    await tester.pumpWidget(RootApp(
-      modeController: mode,
-      walletBootstrap: () async => controller,
-    ));
+    await tester.pumpWidget(
+      RootApp(modeController: mode, walletBootstrap: () async => controller),
+    );
     await tester.pumpAndSettle();
     await _passAppLock(tester);
     expect(find.text('日常钱包'), findsOneWidget);
@@ -210,9 +240,20 @@ void main() {
 }
 
 class _ClosableController extends WalletController {
-  _ClosableController() : super(WalletManager(initial: [
-          HotWallet(id: 'daily', name: '日常钱包', avatarColor: 0xFFF59E0B, addresses: _addr('a'), backedUp: true),
-        ]));
+  _ClosableController()
+    : super(
+        WalletManager(
+          initial: [
+            HotWallet(
+              id: 'daily',
+              name: '日常钱包',
+              avatarColor: 0xFFF59E0B,
+              addresses: _addr('a'),
+              backedUp: true,
+            ),
+          ],
+        ),
+      );
 
   bool closed = false;
 

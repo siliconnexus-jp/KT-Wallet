@@ -310,28 +310,36 @@ void main() {
     // still carries the active network (so the operator can see WHICH chain
     // failed), and the typed error reaches the caller instead of a silent
     // mainnet answer. Exercises the fake's error-injection path.
-    test('a gateway error still carries the network and surfaces typed',
-        () async {
-      final gateway = _FakeGateway(
-        errors: {
-          'kt_getBalances': {
-            'code': -32000,
-            'message': 'upstream_error',
-            'data': {'upstream': 'eth-sepolia', 'message': 'node down'},
+    test(
+      'a gateway error still carries the network and surfaces typed',
+      () async {
+        final gateway = _FakeGateway(
+          errors: {
+            'kt_getBalances': {
+              'code': -32000,
+              'message': 'upstream_error',
+              'data': {'upstream': 'eth-sepolia', 'message': 'node down'},
+            },
           },
-        },
-      )..networkOf[Coin.eth] = 'eth-sepolia';
-      await expectLater(
-        gateway.client.getBalances(chain: Coin.eth, address: '0xA'),
-        throwsA(
-          isA<GatewayException>()
-              .having((e) => e.code, 'code', -32000)
-              .having((e) => e.upstreamMessage, 'upstreamMessage', 'node down'),
-        ),
-      );
-      expect(gateway.paramsOf('kt_getBalances').single['network'],
-          'eth-sepolia');
-    });
+        )..networkOf[Coin.eth] = 'eth-sepolia';
+        await expectLater(
+          gateway.client.getBalances(chain: Coin.eth, address: '0xA'),
+          throwsA(
+            isA<GatewayException>()
+                .having((e) => e.code, 'code', -32000)
+                .having(
+                  (e) => e.upstreamMessage,
+                  'upstreamMessage',
+                  'node down',
+                ),
+          ),
+        );
+        expect(
+          gateway.paramsOf('kt_getBalances').single['network'],
+          'eth-sepolia',
+        );
+      },
+    );
 
     test('CUSTOM network: bypassed, never sent, never mainnet', () async {
       final gateway = _FakeGateway(

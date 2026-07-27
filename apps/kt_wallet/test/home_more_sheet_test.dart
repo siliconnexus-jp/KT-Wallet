@@ -12,23 +12,25 @@ Future<void> _openHome(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('more sheet lists the three shortcuts and opens the address book',
-      (tester) async {
-    await _openHome(tester);
+  testWidgets(
+    'more sheet lists the three shortcuts and opens the address book',
+    (tester) async {
+      await _openHome(tester);
 
-    await tester.tap(find.text('更多'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('更多'));
+      await tester.pumpAndSettle();
 
-    // The sheet lists 连接离线钱包 / 地址簿 / 钱包管理. (钱包管理 and 地址簿 also
-    // exist offstage in the settings tab, hence `findsWidgets` + `.last`.)
-    expect(find.text('连接离线钱包'), findsOneWidget);
-    expect(find.text('地址簿'), findsWidgets);
-    expect(find.text('钱包管理'), findsWidgets);
+      // The sheet lists 连接离线钱包 / 地址簿 / 钱包管理. (钱包管理 and 地址簿 also
+      // exist offstage in the settings tab, hence `findsWidgets` + `.last`.)
+      expect(find.text('连接离线钱包'), findsOneWidget);
+      expect(find.text('地址簿'), findsWidgets);
+      expect(find.text('钱包管理'), findsWidgets);
 
-    await tester.tap(find.text('地址簿').last);
-    await tester.pumpAndSettle();
-    expect(find.text('地址管理'), findsOneWidget); // W16 address book
-  });
+      await tester.tap(find.text('地址簿').last);
+      await tester.pumpAndSettle();
+      expect(find.text('地址管理'), findsOneWidget); // W16 address book
+    },
+  );
 
   testWidgets('more sheet opens the connect-cold flow', (tester) async {
     await _openHome(tester);

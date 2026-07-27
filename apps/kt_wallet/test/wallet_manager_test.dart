@@ -4,30 +4,30 @@ import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
 
 ChainAddresses _addr(String seed) => ChainAddresses(
-      eth: '0x$seed',
-      polygon: '0x$seed',
-      tron: 'T$seed',
-      solana: seed,
-    );
+  eth: '0x$seed',
+  polygon: '0x$seed',
+  tron: 'T$seed',
+  solana: seed,
+);
 
 HotWallet _hot(String id, {int sort = 0, bool backedUp = false}) => HotWallet(
-      id: id,
-      name: 'hot-$id',
-      avatarColor: 0xF59E0B,
-      addresses: _addr(id),
-      sortOrder: sort,
-      backedUp: backedUp,
-    );
+  id: id,
+  name: 'hot-$id',
+  avatarColor: 0xF59E0B,
+  addresses: _addr(id),
+  sortOrder: sort,
+  backedUp: backedUp,
+);
 
 WatchWallet _watch(String id, {int sort = 0}) => WatchWallet(
-      id: id,
-      name: 'watch-$id',
-      avatarColor: 0x0C1220,
-      addresses: _addr(id),
-      sortOrder: sort,
-      coldWalletId: 'COLD-$id',
-      protocolVersion: 1,
-    );
+  id: id,
+  name: 'watch-$id',
+  avatarColor: 0x0C1220,
+  addresses: _addr(id),
+  sortOrder: sort,
+  coldWalletId: 'COLD-$id',
+  protocolVersion: 1,
+);
 
 void main() {
   group('WalletManager', () {

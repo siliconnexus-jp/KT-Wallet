@@ -626,6 +626,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get searchNameOrAddress => '名称またはアドレスを検索';
 
   @override
+  String get assetUnavailable => 'この資産は利用できません';
+
+  @override
   String get noMatchingContacts => '一致する連絡先がありません';
 
   @override
@@ -666,6 +669,26 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get networkSettingsTitle => 'ネットワーク設定';
+
+  @override
+  String get screenCaptureBlocked => '画面収録・ミラーリングを検出しました';
+
+  @override
+  String get screenCaptureBlockedHint =>
+      'リカバリーフレーズを保護するため内容を隠しています。収録・ミラーリングを停止すると復帰します。';
+
+  @override
+  String get screenshotWarning =>
+      'リカバリーフレーズのスクリーンショットが撮影されました。写真ライブラリに保存されており、閲覧できる人は誰でも資産を移動できます。直ちに新しいウォレットへ資産を移してください。';
+
+  @override
+  String get rpcMeasuring => '測定中…';
+
+  @override
+  String get rpcUnreachable => '接続できません';
+
+  @override
+  String get rpcNotMeasured => '—';
 
   @override
   String get rpcTimeout => 'タイムアウト';

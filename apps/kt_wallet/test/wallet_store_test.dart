@@ -6,28 +6,28 @@ import 'package:kt_wallet/src/wallets/wallet_store.dart';
 import 'package:wallet_data/wallet_data.dart';
 
 ChainAddresses _addr(String seed) => ChainAddresses(
-      eth: '0x${seed}eth',
-      polygon: '0x${seed}eth', // eth == polygon
-      tron: 'T${seed}tron',
-      solana: '${seed}sol',
-    );
+  eth: '0x${seed}eth',
+  polygon: '0x${seed}eth', // eth == polygon
+  tron: 'T${seed}tron',
+  solana: '${seed}sol',
+);
 
 HotWallet _hot(String id) => HotWallet(
-      id: id,
-      name: 'hot-$id',
-      avatarColor: 0xF59E0B,
-      addresses: _addr(id),
-      backedUp: true,
-    );
+  id: id,
+  name: 'hot-$id',
+  avatarColor: 0xF59E0B,
+  addresses: _addr(id),
+  backedUp: true,
+);
 
 WatchWallet _watch(String id) => WatchWallet(
-      id: id,
-      name: 'watch-$id',
-      avatarColor: 0x0C1220,
-      addresses: _addr(id),
-      coldWalletId: 'COLD-$id',
-      protocolVersion: 1,
-    );
+  id: id,
+  name: 'watch-$id',
+  avatarColor: 0x0C1220,
+  addresses: _addr(id),
+  coldWalletId: 'COLD-$id',
+  protocolVersion: 1,
+);
 
 void main() {
   late WalletDatabase db;
@@ -39,19 +39,21 @@ void main() {
   });
   tearDown(() => db.close());
 
-  test('save then load round-trips a hot wallet with all four addresses',
-      () async {
-    await store.save(_hot('A'));
-    final manager = await store.load();
-    final w = manager.current!;
-    expect(w, isA<HotWallet>());
-    expect(w.id, 'A');
-    expect((w as HotWallet).backedUp, isTrue);
-    expect(w.addresses.eth, '0xAeth');
-    expect(w.addresses.polygon, w.addresses.eth);
-    expect(w.addresses.tron, 'TAtron');
-    expect(w.addresses.solana, 'Asol');
-  });
+  test(
+    'save then load round-trips a hot wallet with all four addresses',
+    () async {
+      await store.save(_hot('A'));
+      final manager = await store.load();
+      final w = manager.current!;
+      expect(w, isA<HotWallet>());
+      expect(w.id, 'A');
+      expect((w as HotWallet).backedUp, isTrue);
+      expect(w.addresses.eth, '0xAeth');
+      expect(w.addresses.polygon, w.addresses.eth);
+      expect(w.addresses.tron, 'TAtron');
+      expect(w.addresses.solana, 'Asol');
+    },
+  );
 
   test('watch wallet round-trips with cold pairing info', () async {
     await store.save(_watch('B'));
@@ -92,7 +94,12 @@ void main() {
   test('four account rows are written per wallet', () async {
     await store.save(_hot('A'));
     final accounts = await WalletsRepository(db).scoped('A').accounts();
-    expect(accounts.map((a) => a.coin).toSet(), {'eth', 'polygon', 'tron', 'solana'});
+    expect(accounts.map((a) => a.coin).toSet(), {
+      'eth',
+      'polygon',
+      'tron',
+      'solana',
+    });
     final tron = accounts.firstWhere((a) => a.coin == 'tron');
     expect(tron.derivationPath, "m/44'/195'/0'/0/0");
   });
@@ -103,21 +110,21 @@ void main() {
       required String networkId,
       String nonce = '7',
     }) => store.reserveEvmTransaction(
-          id: id,
-          walletId: 'A',
-          coin: Coin.eth,
-          networkId: networkId,
-          from: '0xfrom',
-          to: '0xto',
-          amountRaw: '1000',
-          feeRaw: '4200',
-          signMode: SignMode.local,
-          createdAt: 1000,
-          nonce: nonce,
-          maxPriorityFeeRaw: '10',
-          maxFeeRaw: '20',
-          gasLimitRaw: '21000',
-        );
+      id: id,
+      walletId: 'A',
+      coin: Coin.eth,
+      networkId: networkId,
+      from: '0xfrom',
+      to: '0xto',
+      amountRaw: '1000',
+      feeRaw: '4200',
+      signMode: SignMode.local,
+      createdAt: 1000,
+      nonce: nonce,
+      maxPriorityFeeRaw: '10',
+      maxFeeRaw: '20',
+      gasLimitRaw: '21000',
+    );
 
     setUp(() => store.save(_hot('A')));
 

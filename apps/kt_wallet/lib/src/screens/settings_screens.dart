@@ -9,6 +9,7 @@ import 'package:wallet_data/wallet_data.dart' show Contact, CustomToken;
 import '../../l10n/app_localizations.dart';
 import '../market/balance_service.dart' show defaultRpcEndpointFor;
 import '../market/gateway_client.dart' show GatewayClient;
+import '../market/rpc_health.dart';
 import '../security/biometric_auth.dart';
 import '../security/wallet_pin.dart';
 import '../widgets/pin_pad.dart';
@@ -817,6 +818,7 @@ class NetworkSettingsScreen extends StatefulWidget {
     super.key,
     this.gatewayTestClient,
     this.probeClient,
+    this.healthClient,
   });
 
   /// Injectable http client for the gateway test-connection call (tests);
@@ -826,6 +828,11 @@ class NetworkSettingsScreen extends StatefulWidget {
   /// Injectable http client for the add-network RPC probe (tests); null in
   /// production (the [RpcProbe] creates and closes its own).
   final http.Client? probeClient;
+
+  /// Injectable http client for the per-row RPC health probes. Separate from
+  /// [probeClient] on purpose: the add-network form's tests assert the exact
+  /// requests IT makes, and the health badges must not show up in that count.
+  final http.Client? healthClient;
 
   @override
   State<NetworkSettingsScreen> createState() => _NetworkSettingsScreenState();
@@ -838,6 +845,78 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
 
   /// True while a gateway test-connection call is in flight.
   bool _testingGateway = false;
+
+  /// Measured RPC round-trip per active network. Only built under a
+  /// [NetworkScope] — the gallery / goldens have no networks to probe and must
+  /// stay deterministic, so they render '—' instead of a made-up figure.
+  RpcHealthController? _health;
+
+  @override
+  void dispose() {
+    _health?.dispose();
+    super.dispose();
+  }
+
+  RpcHealthController _healthController() => _health ??= RpcHealthController(
+    probe: widget.healthClient == null
+        ? null
+        : RpcProbe(client: widget.healthClient),
+  )..addListener(_onHealthChanged);
+
+  void _onHealthChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// The badge on an RPC row: measured latency, or an honest unknown.
+  ///
+  /// Kicks the measurement off from the build (post-frame — the controller
+  /// notifies synchronously) and de-duplicates per network id, so a rebuild
+  /// storm cannot turn into a probe storm.
+  Widget _healthBadge(
+    AppLocalizations l10n,
+    NetworkController? net,
+    Coin coin,
+    String rpcUrl,
+  ) {
+    if (net == null) return _badge(l10n.rpcNotMeasured, WalletColors.text3);
+    final network = net.activeFor(_chainOfCoin(coin));
+    final health = _healthController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      health.measure(
+        networkId: network.id,
+        chain: network.chain,
+        rpcUrl: rpcUrl,
+      );
+    });
+    return switch (health.healthOf(network.id)) {
+      RpcHealthProbing() => _badge(l10n.rpcMeasuring, WalletColors.text3),
+      RpcHealthOk(:final millis) => _badge('$millis ms', WalletColors.green),
+      RpcHealthDown() => _badge(l10n.rpcUnreachable, WalletColors.red),
+    };
+  }
+
+  Widget _badge(String text, Color color) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Text(
+      text,
+      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: color),
+    ),
+  );
+
+  static Chain _chainOfCoin(Coin coin) => switch (coin) {
+    Coin.eth => Chain.ethereum,
+    Coin.polygon => Chain.polygon,
+    Coin.base => Chain.base,
+    Coin.arbitrum => Chain.arbitrum,
+    Coin.avalanche => Chain.avalanche,
+    Coin.tron => Chain.tron,
+    Coin.solana => Chain.solana,
+  };
 
   /// Edit sheet for the gateway URL, mirroring the RPC row sheet. Saving a
   /// blank value (or tapping reset) clears back to direct mode.
@@ -1606,50 +1685,33 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
     // rebuild dependency); scope-absent (gallery / goldens) renders exactly
     // the pre-feature screen.
     final net = NetworkScope.maybeOf(context);
-    final nets = <(Color, Coin, String, String, String, bool)>[
-      (
-        ChainColors.ethereum,
-        Coin.eth,
-        'Ethereum',
-        'eth-mainnet.g.alchemy.com',
-        '86 ms',
-        true,
-      ),
-      (
-        ChainColors.polygon,
-        Coin.polygon,
-        'Polygon',
-        'polygon-rpc.com',
-        '112 ms',
-        true,
-      ),
+    // Rows carry identity only. Latency/health used to be string literals
+    // here ('86 ms', '112 ms', '64 ms', and a permanent Timeout for Solana) —
+    // numbers the app had never measured. They now come from _health.
+    final nets = <(Color, Coin, String, String)>[
+      (ChainColors.ethereum, Coin.eth, 'Ethereum', 'eth-mainnet.g.alchemy.com'),
+      (ChainColors.polygon, Coin.polygon, 'Polygon', 'polygon-rpc.com'),
       if (net != null) ...[
-        (ChainColors.base, Coin.base, 'Base', 'mainnet.base.org', '—', true),
+        (ChainColors.base, Coin.base, 'Base', 'mainnet.base.org'),
         (
           ChainColors.arbitrum,
           Coin.arbitrum,
           'Arbitrum',
           'arb1.arbitrum.io/rpc',
-          '—',
-          true,
         ),
         (
           ChainColors.avalanche,
           Coin.avalanche,
           'Avalanche',
           'api.avax.network/ext/bc/C/rpc',
-          '—',
-          true,
         ),
       ],
-      (ChainColors.tron, Coin.tron, 'TRON', 'api.trongrid.io', '64 ms', true),
+      (ChainColors.tron, Coin.tron, 'TRON', 'api.trongrid.io'),
       (
         ChainColors.solana,
         Coin.solana,
         'Solana',
         'api.mainnet-beta.solana.com',
-        l10n.rpcTimeout,
-        false,
       ),
     ];
     // The URL shown and edited per row: the persisted effective endpoint in
@@ -1683,7 +1745,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
         // Environment switch + per-family active-network picker, under the
         // gateway card and above the RPC latency rows (NetworkScope-only).
         if (net != null) ...[_envCard(l10n, net), _perChainCard(l10n, net)],
-        for (final (color, coin, name, rpc, ms, ok) in nets)
+        for (final (color, coin, name, rpc) in nets)
           KtCard(
             padding: const EdgeInsets.all(14),
             child: Column(
@@ -1710,24 +1772,11 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                         ),
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: (ok ? WalletColors.green : WalletColors.red)
-                            .withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        ms,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: ok ? WalletColors.green : WalletColors.red,
-                        ),
-                      ),
+                    _healthBadge(
+                      l10n,
+                      net,
+                      coin,
+                      effectiveRpc(coin, name, rpc),
                     ),
                   ],
                 ),

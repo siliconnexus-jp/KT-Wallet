@@ -68,19 +68,20 @@ void expectNoDemoWords() {
 
 void main() {
   group('/mnemonic-show', () {
-    testWidgets('existing wallet, no pending mnemonic: refuses, no demo words', (
-      tester,
-    ) async {
-      // Exactly the backup-banner path: home → /create-warn → /mnemonic-show
-      // for a wallet that already exists, so pendingMnemonic is null.
-      final controller = await _controller();
-      await _pump(tester, controller, '/mnemonic-show');
+    testWidgets(
+      'existing wallet, no pending mnemonic: refuses, no demo words',
+      (tester) async {
+        // Exactly the backup-banner path: home → /create-warn → /mnemonic-show
+        // for a wallet that already exists, so pendingMnemonic is null.
+        final controller = await _controller();
+        await _pump(tester, controller, '/mnemonic-show');
 
-      expectNoDemoWords();
-      expect(find.text('无法显示助记词'), findsOneWidget);
-      // No way onward to the verify step (and therefore to markBackedUp).
-      expect(find.text('我已抄写，去校验'), findsNothing);
-    });
+        expectNoDemoWords();
+        expect(find.text('无法显示助记词'), findsOneWidget);
+        // No way onward to the verify step (and therefore to markBackedUp).
+        expect(find.text('我已抄写，去校验'), findsNothing);
+      },
+    );
 
     testWidgets('create-onboarding shows the freshly generated phrase', (
       tester,
@@ -166,26 +167,29 @@ void main() {
       expect((controller.wallets.single as HotWallet).backedUp, isFalse);
     });
 
-    testWidgets('retry after a recovered authentication shows the real phrase', (
-      tester,
-    ) async {
-      var attempts = 0;
-      final crypto = MockCoreCrypto(authenticator: () async => attempts++ > 0);
-      final controller = await _controller(crypto: crypto);
-      await _pump(tester, controller, '/wallet-detail?id=w1');
+    testWidgets(
+      'retry after a recovered authentication shows the real phrase',
+      (tester) async {
+        var attempts = 0;
+        final crypto = MockCoreCrypto(
+          authenticator: () async => attempts++ > 0,
+        );
+        final controller = await _controller(crypto: crypto);
+        await _pump(tester, controller, '/wallet-detail?id=w1');
 
-      await tester.tap(find.text('立即备份'));
-      await tester.pumpAndSettle();
-      expect(find.text('无法显示助记词'), findsOneWidget);
+        await tester.tap(find.text('立即备份'));
+        await tester.pumpAndSettle();
+        expect(find.text('无法显示助记词'), findsOneWidget);
 
-      await tester.tap(find.text('重试'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('重试'));
+        await tester.pumpAndSettle();
 
-      expect(find.text('无法显示助记词'), findsNothing);
-      expect(find.text('abandon'), findsOneWidget); // the wallet's own phrase
-      expect(find.text('accident'), findsOneWidget);
-      expect(find.text('我已抄写'), findsOneWidget);
-    });
+        expect(find.text('无法显示助记词'), findsNothing);
+        expect(find.text('abandon'), findsOneWidget); // the wallet's own phrase
+        expect(find.text('accident'), findsOneWidget);
+        expect(find.text('我已抄写'), findsOneWidget);
+      },
+    );
 
     testWidgets('no stored key material: honest error, no retry, no confirm', (
       tester,

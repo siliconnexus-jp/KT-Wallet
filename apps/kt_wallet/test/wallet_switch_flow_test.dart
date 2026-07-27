@@ -5,8 +5,9 @@ import 'package:kt_wallet/main.dart';
 /// Proves the UI and logic are connected: switching wallets in the sheet drives
 /// the WalletController and rebuilds the home screen.
 void main() {
-  testWidgets('wallet switcher changes the current wallet on the home screen',
-      (tester) async {
+  testWidgets('wallet switcher changes the current wallet on the home screen', (
+    tester,
+  ) async {
     tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
     addTearDown(tester.platformDispatcher.clearLocalesTestValue);
     await tester.pumpWidget(KtWalletApp());
@@ -38,8 +39,9 @@ void main() {
     expect(find.text('扫签名'), findsOneWidget);
   });
 
-  testWidgets('switching to the backed-up hot wallet hides the backup banner',
-      (tester) async {
+  testWidgets('switching to the backed-up hot wallet hides the backup banner', (
+    tester,
+  ) async {
     tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
     addTearDown(tester.platformDispatcher.clearLocalesTestValue);
     await tester.pumpWidget(KtWalletApp());
@@ -59,7 +61,9 @@ void main() {
     expect(find.text('更多'), findsOneWidget);
   });
 
-  testWidgets('tapping the dimmed scrim closes the wallet switcher', (tester) async {
+  testWidgets('tapping the dimmed scrim closes the wallet switcher', (
+    tester,
+  ) async {
     tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
     addTearDown(tester.platformDispatcher.clearLocalesTestValue);
     await tester.pumpWidget(KtWalletApp(initialLocation: '/home'));
@@ -74,7 +78,11 @@ void main() {
     await tester.tapAt(const Offset(200, 80));
     await tester.pumpAndSettle();
 
-    expect(find.text('添加钱包'), findsNothing, reason: 'scrim tap must dismiss the sheet');
+    expect(
+      find.text('添加钱包'),
+      findsNothing,
+      reason: 'scrim tap must dismiss the sheet',
+    );
     expect(find.text('总资产估值 (USD)'), findsOneWidget); // back on home
   });
 }

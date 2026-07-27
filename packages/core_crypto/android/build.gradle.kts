@@ -112,7 +112,7 @@ dependencies {
     //     credentials { username = <gh-user>; password = <gh-token:read:packages> }
     //   }
     if (useWalletCore) {
-        implementation("com.trustwallet:wallet-core:4.6.13")
+        implementation("com.trustwallet:wallet-core:4.7.0")
     }
     // Biometric prompt for the AuthGate.
     implementation("androidx.biometric:biometric:1.1.0")

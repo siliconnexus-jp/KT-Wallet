@@ -653,6 +653,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchNameOrAddress => 'Search name or address';
 
   @override
+  String get assetUnavailable => 'This asset is no longer available';
+
+  @override
   String get noMatchingContacts => 'No matching contacts';
 
   @override
@@ -693,6 +696,26 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get networkSettingsTitle => 'Network settings';
+
+  @override
+  String get screenCaptureBlocked => 'Screen recording detected';
+
+  @override
+  String get screenCaptureBlockedHint =>
+      'Content is hidden to protect your recovery phrase. It returns when the recording or mirroring stops.';
+
+  @override
+  String get screenshotWarning =>
+      'You just screenshotted your recovery phrase. It is now in your photo library, and anyone who can see that library can take your assets — move them to a new wallet now.';
+
+  @override
+  String get rpcMeasuring => 'Measuring…';
+
+  @override
+  String get rpcUnreachable => 'Unreachable';
+
+  @override
+  String get rpcNotMeasured => '—';
 
   @override
   String get rpcTimeout => 'Timeout';

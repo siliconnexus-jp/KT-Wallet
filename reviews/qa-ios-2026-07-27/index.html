@@ -84,8 +84,8 @@
 <div class="kpis">
   <div class="kpi"><div class="n">18</div><div class="l">界面截图</div></div>
   <div class="kpi"><div class="n ok">12 / 12</div><div class="l">Android 修复项在 iOS 复验通过</div></div>
-  <div class="kpi"><div class="n bad">2</div><div class="l">新发现 P1</div></div>
-  <div class="kpi"><div class="n warn">3</div><div class="l">平台差异</div></div>
+  <div class="kpi"><div class="n ok">6 / 6</div><div class="l">发现项已修复</div></div>
+  <div class="kpi"><div class="n ok">19</div><div class="l">链上/真机复验截图</div></div>
 </div>
 
 <h2>结论摘要</h2>
@@ -290,15 +290,57 @@ Keychain 访问控制是生效的;而给用户刚生成的新密钥做写入鉴�
 </div>
 
 <h2>本次落地的修改</h2>
+<p>报告发出后全部修完,并在 iPhone 17 Pro 模拟器上逐项复验。</p>
+<div class="tbl">
+<table>
+<thead><tr><th>#</th><th>修复</th><th>做法</th><th>复验</th></tr></thead>
+<tbody>
+<tr><td>F-15</td><td>代币详情页接真实数据</td>
+  <td>新增 <code>AssetRef</code> 随路由 <code>extra</code> 传入;详情页按资产渲染真实余额/价格/合约,
+      未加载渲染 <code>--</code>;无资产时明说不可用;gallery/goldens 保留原快照</td>
+  <td><span class="pill p-ok">Ethereum 行 → 0 ETH / $1,955.87</span></td></tr>
+<tr><td>F-16</td><td>RPC 延迟改真实探测</td>
+  <td>新增 <code>RpcHealthController</code> 复用既有 <code>RpcProbe</code> 计时;
+      measuring / ok(ms) / unreachable 三态;scope 缺失渲染 <code>—</code> 而非编造</td>
+  <td><span class="pill p-ok">7 条链各自实测,Solana 147 ms 绿色</span></td></tr>
+<tr><td>D-1</td><td>iOS 截图/录屏缓解</td>
+  <td>iOS 补 <code>UIScreen.capturedDidChangeNotification</code>;Dart 侧接住既有但<strong>此前无人监听</strong>的
+      <code>kt/screen_security</code> 通道 —— 录屏/投屏时遮蔽敏感内容(可真正拦住),
+      截图后弹红色警告提示立即转移资产</td>
+  <td><span class="pill p-ok">3 个 widget 测试</span></td></tr>
+<tr><td>D-2</td><td>鉴权时机差异</td>
+  <td><strong>不是缺陷</strong>,见下方说明;两端各加注释防止被错误"对齐"</td>
+  <td><span class="pill p-ok">已说明</span></td></tr>
+<tr><td>D-3</td><td>Wallet Core 版本</td>
+  <td>Android 4.6.13 → <strong>4.7.0</strong>,与 iOS 一致</td>
+  <td><span class="pill p-ok">解析并构建通过</span></td></tr>
+<tr><td>F-17</td><td>⚖ 天平字形</td>
+  <td>4 处移除(两个 app × iOS + Android)</td>
+  <td><span class="pill p-ok">已复验</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note">
+<strong>D-2 更正:不是缺陷。</strong>Android 的 Keystore 密钥用
+<code>setUserAuthenticationRequired(true)</code> 创建,<strong>加密操作本身</strong>就要求
+一次新鲜鉴权,所以 <code>storeWallet</code> 必须弹框;iOS Keychain 的访问控制只作用于<strong>读取</strong>,
+写入一个用户刚刚生成的密钥无需额外提示。这是平台强制差异,不该强行统一。
+真正要紧的不变量两端一致且已实测:<code>exportMnemonic</code> /
+<code>signTransaction</code> / <code>deleteWallet</code> 永远鉴权。已在两端源码加注释,
+避免后人"对齐"错方向。
+</div>
+
+<h3>修复后的界面</h3>
+<div class="shots">
+<figure><img src="shots/22_real_latency.png" alt="真实延迟"><figcaption><strong>F-16</strong>:7 条链各自实测(159/158/303/312/149/551/147 ms),Solana 不再恒显 Timeout</figcaption></figure>
+</div>
+
 <div class="card">
-<ul>
-<li><strong>F-17</strong> —— 移除 4 处 ⚖ 天平字形
-  (两个 app × iOS <code>AppDelegate.swift</code> + Android <code>MainActivity.kt</code>)。
-  iOS 重建后复验,Android <code>flutter build apk --debug</code> 通过。</li>
-</ul>
 <p style="font-size:13px;color:var(--text2)">
-F-15 与 F-16 只做了定位与取证,未改代码 —— 两处都需要产品决定:
-详情页要接哪些真实数据、延迟徽章是真做探测还是直接去掉。等你定。</p>
+另:<code>docs/TESTING.md</code> 新增 §6.0 —— 签名类 E2E 必须先让设备能应答生物识别
+(附 Android/iOS 的自动应答命令),以及"集成测试跑完会卸载 App"和
+Solana <code>confirmed</code>/<code>finalized</code> 竞态的说明。</p>
 </div>
 
 <footer>

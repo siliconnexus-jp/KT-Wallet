@@ -68,21 +68,24 @@ void main() {
     });
   });
 
-  test('FakeBiometricAuth.throwing routes through the real classifier', () async {
-    const cancelled = FakeBiometricAuth.throwing(
-      LocalAuthException(code: LocalAuthExceptionCode.userCanceled),
-    );
-    expect(
-      await cancelled.authenticate(reason: 'x'),
-      BiometricOutcome.failure,
-    );
+  test(
+    'FakeBiometricAuth.throwing routes through the real classifier',
+    () async {
+      const cancelled = FakeBiometricAuth.throwing(
+        LocalAuthException(code: LocalAuthExceptionCode.userCanceled),
+      );
+      expect(
+        await cancelled.authenticate(reason: 'x'),
+        BiometricOutcome.failure,
+      );
 
-    const noHardware = FakeBiometricAuth.throwing(
-      LocalAuthException(code: LocalAuthExceptionCode.noBiometricHardware),
-    );
-    expect(
-      await noHardware.authenticate(reason: 'x'),
-      BiometricOutcome.unavailable,
-    );
-  });
+      const noHardware = FakeBiometricAuth.throwing(
+        LocalAuthException(code: LocalAuthExceptionCode.noBiometricHardware),
+      );
+      expect(
+        await noHardware.authenticate(reason: 'x'),
+        BiometricOutcome.unavailable,
+      );
+    },
+  );
 }

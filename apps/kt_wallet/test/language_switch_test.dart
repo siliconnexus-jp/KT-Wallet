@@ -5,7 +5,9 @@ import 'package:kt_wallet/main.dart';
 /// Proves the Settings language picker re-localizes the whole app live, and that
 /// English and Japanese actually render (the other tests pin zh).
 void main() {
-  testWidgets('language picker switches zh → English → 日本語 live', (tester) async {
+  testWidgets('language picker switches zh → English → 日本語 live', (
+    tester,
+  ) async {
     // Start on a Chinese device.
     tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
     addTearDown(tester.platformDispatcher.clearLocalesTestValue);
