@@ -2255,13 +2255,19 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        _prefs.authMethod == AuthMethod.biometrics
-                            ? l10n.authBiometrics
-                            : l10n.authPassword,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: WalletColors.text2,
+                      // Shrinkable: a long localized value (Japanese runs
+                      // longest) must ellipsize rather than overflow the row.
+                      Flexible(
+                        child: Text(
+                          _prefs.authMethod == AuthMethod.biometrics
+                              ? l10n.authBiometrics
+                              : l10n.authPassword,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: WalletColors.text2,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 4),
@@ -2285,11 +2291,15 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        _autoLockLabel(l10n, _prefs.autoLockMinutes),
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: WalletColors.text2,
+                      Flexible(
+                        child: Text(
+                          _autoLockLabel(l10n, _prefs.autoLockMinutes),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: WalletColors.text2,
+                          ),
                         ),
                       ),
                       const Icon(
@@ -2408,7 +2418,11 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
           ],
         ),
       ),
-      trailing,
+      // Without this the description ran straight into the trailing value.
+      // Latin copy happened to be short enough to hide it; the Japanese
+      // strings fill the line and the two collide.
+      const SizedBox(width: 12),
+      Flexible(child: trailing),
     ],
   );
 }
