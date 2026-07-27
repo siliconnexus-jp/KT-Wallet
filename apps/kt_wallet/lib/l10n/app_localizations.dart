@@ -1240,6 +1240,18 @@ abstract class AppLocalizations {
   /// **'保存收款图片'**
   String get saveReceiveImage;
 
+  /// No description provided for @chooseNetwork.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择网络'**
+  String get chooseNetwork;
+
+  /// No description provided for @assetOnChains.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 条链'**
+  String assetOnChains(int count);
+
   /// No description provided for @receiveCardTitle.
   ///
   /// In zh, this message translates to:

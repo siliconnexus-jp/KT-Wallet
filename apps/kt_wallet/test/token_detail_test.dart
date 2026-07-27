@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/src/market/asset_ref.dart';
+import 'package:kt_wallet/src/transfer/airgap_codec.dart' show truncateMiddle;
 import 'package:kt_wallet/src/market/balance_service.dart';
 import 'package:kt_wallet/src/market/explorer_links.dart';
 import 'package:kt_wallet/src/market/market_controller.dart';
@@ -87,6 +88,10 @@ MarketController _controller() => MarketController(
   tokens: _FakeTokens({
     'usdt-eth': BalanceResult.ok(
       Amount(raw: BigInt.from(7500000), decimals: 6, symbol: 'USDT'),
+    ),
+    // Second USDT deployment: the group must sum both.
+    'usdt-tron': BalanceResult.ok(
+      Amount(raw: BigInt.from(2500000), decimals: 6, symbol: 'USDT'),
     ),
   }),
 );
@@ -208,6 +213,81 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('3,120.00 USDT'), findsOneWidget);
+  });
+
+  // The registry lists a TokenInfo per network, so USDC/USDT appeared once
+  // per chain in the asset list. One row per symbol now, broken down here.
+  testWidgets('a multi-chain group sums its deployments and lists them', (
+    tester,
+  ) async {
+    final market = _controller();
+    addTearDown(market.dispose);
+    await market.refresh();
+    final usdt = market.tokens.where((t) => t.symbol == 'USDT').toList();
+    expect(usdt.length, greaterThan(1), reason: 'need a multi-chain fixture');
+
+    await tester.pumpWidget(
+      _app(market, TokenDetailScreen(asset: AssetRef.tokenGroup(usdt))),
+    );
+    await tester.pumpAndSettle();
+
+    // 7.5 on Ethereum + 2.5 on TRON.
+    expect(find.text('10 USDT'), findsOneWidget);
+    expect(find.text('选择网络'), findsOneWidget);
+    // Every deployment is listed with its own balance.
+    expect(find.text('7.5'), findsOneWidget);
+    expect(find.text('2.5'), findsOneWidget);
+  });
+
+  testWidgets('a chain that failed is excluded from the sum and shows --', (
+    tester,
+  ) async {
+    final wallets = _wallets();
+    final market = MarketController(
+      wallets: wallets,
+      balances: _FakeBalances({}),
+      prices: _FakePrices({}),
+      tokens: _FakeTokens({
+        'usdt-eth': BalanceResult.ok(
+          Amount(raw: BigInt.from(7500000), decimals: 6, symbol: 'USDT'),
+        ),
+        'usdt-tron': const BalanceResult.error(),
+      }),
+    );
+    _walletController = wallets;
+    addTearDown(market.dispose);
+    await market.refresh();
+    final usdt = market.tokens.where((t) => t.symbol == 'USDT').toList();
+
+    await tester.pumpWidget(
+      _app(market, TokenDetailScreen(asset: AssetRef.tokenGroup(usdt))),
+    );
+    await tester.pumpAndSettle();
+
+    // The loaded leg is reported; the failed one is visibly '--' rather than
+    // being folded into the total as a zero.
+    expect(find.text('7.5 USDT'), findsOneWidget);
+    expect(find.text('--'), findsWidgets);
+  });
+
+  testWidgets('picking a chain re-points the actions at it', (tester) async {
+    final market = _controller();
+    addTearDown(market.dispose);
+    await market.refresh();
+    final usdt = market.tokens.where((t) => t.symbol == 'USDT').toList();
+
+    await tester.pumpWidget(
+      _app(market, TokenDetailScreen(asset: AssetRef.tokenGroup(usdt))),
+    );
+    await tester.pumpAndSettle();
+
+    // Defaults to the chain holding the most (Ethereum, 7.5).
+    final second = usdt[1];
+    await tester.tap(find.byKey(ValueKey('chain-option-${second.id}')));
+    await tester.pumpAndSettle();
+
+    // The contract row follows the selection.
+    expect(find.text(truncateMiddle(second.contract)), findsOneWidget);
   });
 
   group('explorer links', () {

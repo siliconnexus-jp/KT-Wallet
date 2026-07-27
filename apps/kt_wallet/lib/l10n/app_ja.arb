@@ -197,6 +197,8 @@
   "explorerLinkCopied": "ブロックエクスプローラーのリンクをコピーしました",
   "addressCopied": "アドレスをコピーしました",
   "saveReceiveImage": "受取画像を保存",
+  "chooseNetwork": "ネットワークを選択",
+  "assetOnChains": "{count} チェーン",
   "receiveCardTitle": "受取アドレス",
   "receiveCardNetwork": "ネットワーク",
   "receiveCardGenerated": "生成日時",

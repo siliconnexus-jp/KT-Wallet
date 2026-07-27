@@ -148,11 +148,15 @@ void main() {
     expect(find.text(r'$2,000.00'), findsWidgets);
     // Token rows render under the native rows, fiat via the USD peg; the
     // errored TRON USDT stays an honest '--'.
-    expect(find.text('25 USDT · Ethereum'), findsWidgets);
+    // USDT is deployed on Ethereum and TRON, so it is ONE row now, not two.
+    // TronGrid rejected the demo address, so that leg is excluded from the
+    // sum and shows '--' in the detail breakdown — the row still reports the
+    // 25 that did load.
+    expect(find.text('25 USDT · 2 条链'), findsWidgets);
     expect(find.text('10 USDC · Polygon'), findsWidgets);
     expect(find.text(r'$25.00'), findsWidgets);
     expect(find.text(r'$10.00'), findsWidgets);
-    expect(find.text('-- USDT · TRON'), findsWidgets);
+    expect(find.text('-- USDT · TRON'), findsNothing);
     // The demo constants must NOT render as if they were live.
     expect(find.text(r'$862.40'), findsNothing);
     expect(find.text('0.0842 ETH'), findsNothing);
@@ -206,9 +210,9 @@ void main() {
     expect(find.text('5 TRX'), findsOneWidget);
     expect(find.text(r'$0.50'), findsOneWidget); // 5 TRX * $0.10
     // Token rows appended under the natives.
-    expect(find.text('25 USDT · Ethereum'), findsOneWidget);
+    expect(find.text('25 USDT · 2 条链'), findsOneWidget);
     expect(find.text('10 USDC · Polygon'), findsOneWidget);
-    expect(find.text('-- USDT · TRON'), findsOneWidget);
+    expect(find.text('-- USDT · TRON'), findsNothing);
     expect(find.text('2.4805 ETH'), findsNothing); // demo row absent
     controller.dispose();
   });
@@ -227,7 +231,7 @@ void main() {
       await tester.tap(find.text('Polygon').first);
       await tester.pumpAndSettle();
       expect(find.text('10 USDC · Polygon'), findsOneWidget);
-      expect(find.text('25 USDT · Ethereum'), findsNothing);
+      expect(find.text('25 USDT · 2 条链'), findsNothing);
       expect(find.text('1 ETH'), findsNothing);
       controller.dispose();
     },

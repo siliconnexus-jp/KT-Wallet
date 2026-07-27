@@ -197,6 +197,8 @@
   "explorerLinkCopied": "Block explorer link copied",
   "addressCopied": "Address copied",
   "saveReceiveImage": "Save receive image",
+  "chooseNetwork": "Choose a network",
+  "assetOnChains": "{count, plural, =1{{count} chain} other{{count} chains}}",
   "receiveCardTitle": "Receiving address",
   "receiveCardNetwork": "Network",
   "receiveCardGenerated": "Generated",

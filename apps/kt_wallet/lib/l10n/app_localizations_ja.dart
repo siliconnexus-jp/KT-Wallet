@@ -623,6 +623,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String get saveReceiveImage => '受取画像を保存';
 
   @override
+  String get chooseNetwork => 'ネットワークを選択';
+
+  @override
+  String assetOnChains(int count) {
+    return '$count チェーン';
+  }
+
+  @override
   String get receiveCardTitle => '受取アドレス';
 
   @override

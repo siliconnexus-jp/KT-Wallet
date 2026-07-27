@@ -1,4 +1,4 @@
-import 'package:chains/chains.dart' show Chain;
+import 'package:chains/chains.dart' show Amount, Chain;
 import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
@@ -18,10 +18,11 @@ import '../market/price_service.dart';
 import '../market/receive_card.dart';
 import '../market/market_controller.dart';
 import '../market/market_scope.dart';
+import '../market/token_balance_service.dart' show TokenInfo;
 import '../platform/external_actions.dart';
 import '../platform/media_gallery.dart';
 import '../transfer/airgap_codec.dart' show truncateMiddle;
-import 'home_screen.dart' show tokenRowMeta;
+import 'home_screen.dart' show liveTokenGroupRow, tokensBySymbol;
 import '../widgets/market_offline_banner.dart';
 import '../widgets/token_icon.dart';
 import '../state/networks.dart';
@@ -108,6 +109,10 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
   ];
   static const _legacyNetworks = ['Ethereum', 'Polygon', 'TRON', 'Solana'];
 
+  /// Sentinel network for a row that spans several chains, so the per-network
+  /// filter never hides it.
+  static const _allNetworks = '*';
+
   String _query = '';
   int _net = 0; // 0 = all
 
@@ -128,7 +133,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
   List<
     (Color, String, String, String, String, String, Color, String, AssetRef?)
   >
-  _liveRows(MarketController market) {
+  _liveRows(MarketController market, AppLocalizations l10n) {
     return [
       for (final (coin, name, symbol, color, glyph, network) in const [
         (Coin.eth, 'Ethereum', 'ETH', Color(0xFF627EEA), 'Ξ', 'Ethereum'),
@@ -170,25 +175,28 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
             AssetRef.native(coin: coin, name: name, symbol: symbol),
           );
         }(),
-      for (final token in market.tokens)
+      // One row per SYMBOL, not per deployment: the registry lists USDC on
+      // five chains and this list showed it five times. Reuses the home
+      // aggregation so both surfaces agree.
+      for (final group in tokensBySymbol(market.tokens).values)
         () {
-          final result = market.tokenBalanceFor(token.id);
-          final amount = result.amount;
-          final ok = result.status == BalanceStatus.ok && amount != null;
-          final fiat = market.tokenFiatValueUsd(token);
-          final (color, glyph) =
-              tokenRowMeta[token.symbol] ??
-              (WalletColors.accent, token.symbol.substring(0, 1));
+          final row = liveTokenGroupRow(
+            market,
+            group,
+            chainsLabel: l10n.assetOnChains,
+          );
           return (
-            color,
-            glyph,
-            token.symbol,
-            '${ok ? amount.format(maxFraction: 6) : '--'} ${token.symbol} · ${token.network}',
-            fiat == null ? '--' : formatUsd(fiat),
-            '',
-            WalletColors.text3,
-            token.network,
-            AssetRef.token(token),
+            row.color,
+            row.letter,
+            row.name,
+            row.sub,
+            row.value,
+            row.change,
+            row.changeColor,
+            // Network filter: a multi-chain row belongs to every network it is
+            // deployed on, so it survives any of their filters.
+            group.length == 1 ? group.first.network : _allNetworks,
+            row.ref,
           );
         }(),
     ];
@@ -202,7 +210,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
     final market = MarketScope.maybeOf(context);
     final offline = market?.isOffline ?? false;
     final live = market != null && !offline;
-    final rows = live ? _liveRows(market) : _assets;
+    final rows = live ? _liveRows(market, l10n) : _assets;
     final networks = market == null ? _legacyNetworks : _networks;
     final q = _query.trim().toLowerCase();
     final results = [
@@ -397,13 +405,42 @@ const _chainDot = {
 /// The design gallery and the goldens have no [MarketScope] and no asset; they
 /// keep rendering the original demo snapshot so those references stay
 /// comparable.
-class TokenDetailScreen extends StatelessWidget {
+class TokenDetailScreen extends StatefulWidget {
   const TokenDetailScreen({super.key, this.asset});
 
   final AssetRef? asset;
 
   /// Demo USDT TRC-20 contract, shown only in the scope-absent snapshot.
   static const _contract = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+
+  @override
+  State<TokenDetailScreen> createState() => _TokenDetailScreenState();
+}
+
+class _TokenDetailScreenState extends State<TokenDetailScreen> {
+  /// Which deployment of a multi-chain token the actions apply to. Defaults
+  /// to the chain holding the most, which is what the user usually means.
+  int _chainIndex = 0;
+  bool _pickedDefault = false;
+
+  AssetRef? get asset => widget.asset;
+
+  void _pickDefaultChain(MarketController market, AssetRef ref) {
+    if (_pickedDefault || !ref.isMultiChain) return;
+    _pickedDefault = true;
+    var best = 0;
+    BigInt bestRaw = BigInt.zero;
+    for (final (i, token) in ref.group.indexed) {
+      final result = market.tokenBalanceFor(token.id);
+      final amount = result.amount;
+      if (result.status != BalanceStatus.ok || amount == null) continue;
+      if (amount.raw > bestRaw) {
+        bestRaw = amount.raw;
+        best = i;
+      }
+    }
+    _chainIndex = best;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -413,6 +450,7 @@ class TokenDetailScreen extends StatelessWidget {
     // Live, but nothing to show: a deep link straight to /token, or a row
     // whose asset went away. Say so instead of inventing a holding.
     if (ref == null) return _unavailable(context);
+    _pickDefaultChain(market, ref);
     return _live(context, market, ref);
   }
 
@@ -440,18 +478,18 @@ class TokenDetailScreen extends StatelessWidget {
 
   Widget _live(BuildContext context, MarketController market, AssetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final network = NetworkScope.of(context).activeFor(chainOf(ref.coin));
+    // For a multi-chain token every action applies to the SELECTED chain;
+    // the hero above them still shows the combined holding.
+    final selected = ref.isMultiChain ? ref.group[_chainIndex] : null;
+    final actionCoin = selected?.chain ?? ref.coin;
+    final network = NetworkScope.of(context).activeFor(chainOf(actionCoin));
 
-    final result = ref.isToken
-        ? market.tokenBalanceFor(ref.tokenId!)
-        : market.balanceFor(ref.coin);
-    final amount = result.amount;
-    final ok = result.status == BalanceStatus.ok && amount != null;
+    final (total, loadedAll) = _totalFor(market, ref);
     // A balance that has not loaded, or failed, renders '--'. It must never
     // fall back to a number.
-    final balance = ok
-        ? '${amount.format(maxFraction: 6)} ${ref.symbol}'
-        : '-- ${ref.symbol}';
+    final balance = total == null
+        ? '-- ${ref.symbol}'
+        : '${total.format(maxFraction: 6)} ${ref.symbol}';
 
     final fiat = ref.isToken
         ? _tokenFiat(market, ref)
@@ -460,9 +498,9 @@ class TokenDetailScreen extends StatelessWidget {
         ? PriceService.peggedUsdBySymbol[ref.symbol]
         : market.priceUsd(ref.coin);
 
-    final contract = ref.contract;
+    final contract = selected?.contract ?? ref.contract;
     final wallet = WalletScope.of(context).current;
-    final address = wallet?.addresses.forCoin(ref.coin);
+    final address = wallet?.addresses.forCoin(actionCoin);
     // Tokens link to the contract, native coins to this wallet's account.
     final explorer = contract != null
         ? explorerTokenUrl(network, contract)
@@ -511,8 +549,10 @@ class TokenDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             NetworkBadge(
-              label: ref.network ?? network.name,
-              dotColor: _chainDot[chainOf(ref.coin)]!,
+              label: ref.isMultiChain
+                  ? l10n.assetOnChains(ref.group.length)
+                  : (ref.network ?? network.name),
+              dotColor: _chainDot[chainOf(actionCoin)]!,
             ),
           ],
         ),
@@ -530,7 +570,10 @@ class TokenDetailScreen extends StatelessWidget {
               child: SizedBox(
                 height: 48,
                 child: OutlinedButton.icon(
-                  onPressed: () => context.push('/receive'),
+                  // Carries the chain the user is looking at; without it the
+                  // receive screen always opened on its own default (USDT on
+                  // TRON), whatever asset you came from.
+                  onPressed: () => context.push('/receive', extra: actionCoin),
                   icon: const Icon(
                     Icons.qr_code,
                     size: 18,
@@ -555,6 +598,7 @@ class TokenDetailScreen extends StatelessWidget {
             ),
           ],
         ),
+        if (ref.isMultiChain) _chainPicker(context, market, ref),
         KtCard(
           child: Column(
             children: [
@@ -580,9 +624,130 @@ class TokenDetailScreen extends StatelessWidget {
     );
   }
 
+  /// Per-chain breakdown for a symbol deployed on several chains. Selecting a
+  /// row re-points Send / Receive / the explorer at that chain.
+  Widget _chainPicker(
+    BuildContext context,
+    MarketController market,
+    AssetRef ref,
+  ) {
+    final l10n = AppLocalizations.of(context);
+    return KtCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l10n.chooseNetwork,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: WalletColors.text2,
+            ),
+          ),
+          for (final (i, token) in ref.group.indexed) ...[
+            const SizedBox(height: 12),
+            GestureDetector(
+              key: ValueKey('chain-option-${token.id}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setState(() => _chainIndex = i),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: _chainDot[chainOf(token.chain)]!,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      token.network,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: WalletColors.text,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    _amountTextFor(market, token),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: WalletColors.text,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    i == _chainIndex
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked,
+                    size: 18,
+                    color: i == _chainIndex
+                        ? WalletColors.accent
+                        : WalletColors.text3,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// A deployment's balance, or '--' when that chain has not loaded.
+  String _amountTextFor(MarketController market, TokenInfo token) {
+    final result = market.tokenBalanceFor(token.id);
+    final amount = result.amount;
+    return result.status == BalanceStatus.ok && amount != null
+        ? amount.format(maxFraction: 6)
+        : '--';
+  }
+
+  /// Combined holding across every deployment, plus whether they all loaded.
+  /// A chain that failed is excluded from the sum and shows '--' in the
+  /// breakdown, so a partial total is visible rather than silently wrong.
+  (Amount?, bool) _totalFor(MarketController market, AssetRef ref) {
+    if (!ref.isToken) {
+      final result = market.balanceFor(ref.coin);
+      final amount = result.amount;
+      final ok = result.status == BalanceStatus.ok && amount != null;
+      return (ok ? amount : null, ok);
+    }
+    final tokens = ref.group.isEmpty ? const <TokenInfo>[] : ref.group;
+    if (tokens.isEmpty) {
+      final result = market.tokenBalanceFor(ref.tokenId!);
+      final amount = result.amount;
+      final ok = result.status == BalanceStatus.ok && amount != null;
+      return (ok ? amount : null, ok);
+    }
+    Amount? total;
+    var all = true;
+    for (final token in tokens) {
+      final result = market.tokenBalanceFor(token.id);
+      final amount = result.amount;
+      if (result.status == BalanceStatus.ok && amount != null) {
+        total = total == null ? amount : total + amount;
+      } else {
+        all = false;
+      }
+    }
+    return (total, all);
+  }
+
   /// USD value of a token holding, keyed off the registry entry the ref came
   /// from (the controller needs the [TokenInfo], not just the symbol).
   double? _tokenFiat(MarketController market, AssetRef ref) {
+    if (ref.group.isNotEmpty) {
+      double? total;
+      for (final token in ref.group) {
+        final value = market.tokenFiatValueUsd(token);
+        if (value != null) total = (total ?? 0) + value;
+      }
+      return total;
+    }
     for (final token in market.tokens) {
       if (token.id == ref.tokenId) return market.tokenFiatValueUsd(token);
     }
@@ -598,7 +763,10 @@ class TokenDetailScreen extends StatelessWidget {
         trailing: Icons.open_in_new,
         onTrailing: () async {
           final opened = await ExternalActions.instance.open(
-            Uri.parse('https://tronscan.org/#/token20/$_contract'),
+            Uri.parse(
+              'https://tronscan.org/#/token20/'
+              '${TokenDetailScreen._contract}',
+            ),
           );
           if (!opened && context.mounted) {
             ScaffoldMessenger.of(context)
@@ -720,7 +888,13 @@ class ReceiveScreen extends StatefulWidget {
     this.clock,
     this.tempDirectory,
     this.cardRenderer,
+    this.initialCoin,
   });
+
+  /// Chain to open on, passed by whatever the user tapped "receive" from.
+  /// Without it this screen always opened on its own default (USDT on TRON)
+  /// no matter which asset you arrived from.
+  final Coin? initialCoin;
 
   /// Injectable http client for the devnet airdrop faucet (tests); null in
   /// production (the [AirdropService] creates and closes its own).
@@ -804,8 +978,23 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     ),
   ];
 
-  // Default TRON, matching the design.
+  // Default TRON, matching the design; overridden by [widget.initialCoin].
   int _selected = 2;
+
+  /// The caller's chain is applied once, after the first dependency
+  /// resolution (the available list needs a WalletScope).
+  bool _appliedInitial = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_appliedInitial) return;
+    _appliedInitial = true;
+    final wanted = widget.initialCoin;
+    if (wanted == null) return;
+    final index = _availableChains.indexWhere((c) => c.coin == wanted);
+    if (index >= 0) _selected = index;
+  }
 
   /// True while a devnet airdrop request is in flight (guards double-taps).
   bool _airdropping = false;

@@ -615,6 +615,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get saveReceiveImage => '保存收款图片';
 
   @override
+  String get chooseNetwork => '选择网络';
+
+  @override
+  String assetOnChains(int count) {
+    return '$count 条链';
+  }
+
+  @override
   String get receiveCardTitle => '收款地址';
 
   @override

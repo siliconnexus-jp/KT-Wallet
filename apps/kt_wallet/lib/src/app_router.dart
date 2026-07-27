@@ -1,4 +1,5 @@
 import 'package:airgap_protocol/airgap_protocol.dart' show AccountExport;
+import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -103,6 +104,10 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
               chainRecord: s.extra is ChainTxRecord
                   ? s.extra as ChainTxRecord
                   : null,
+            ),
+            // Receive opens on the chain the caller was looking at.
+            '/receive' => (c, s) => ReceiveScreen(
+              initialCoin: s.extra is Coin ? s.extra as Coin : null,
             ),
             // The tapped asset rides in `extra`. Without it the screen used to
             // render one hardcoded token for every row; now a live scope with

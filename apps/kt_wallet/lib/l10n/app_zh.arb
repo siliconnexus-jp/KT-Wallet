@@ -330,6 +330,11 @@
   "explorerLinkCopied": "区块浏览器链接已复制",
   "addressCopied": "地址已复制",
   "saveReceiveImage": "保存收款图片",
+  "chooseNetwork": "选择网络",
+  "assetOnChains": "{count} 条链",
+  "@assetOnChains": {
+    "placeholders": { "count": { "type": "int" } }
+  },
   "receiveCardTitle": "收款地址",
   "receiveCardNetwork": "网络",
   "receiveCardGenerated": "生成时间",

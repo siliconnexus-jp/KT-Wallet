@@ -650,6 +650,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get saveReceiveImage => 'Save receive image';
 
   @override
+  String get chooseNetwork => 'Choose a network';
+
+  @override
+  String assetOnChains(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count chains',
+      one: '$count chain',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get receiveCardTitle => 'Receiving address';
 
   @override

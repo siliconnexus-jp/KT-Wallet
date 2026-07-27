@@ -29,7 +29,8 @@ class AssetRef {
     required this.symbol,
   }) : tokenId = null,
        contract = null,
-       network = null;
+       network = null,
+       group = const [];
 
   /// A registry token (USDT on TRON, USDC on Solana …).
   AssetRef.token(TokenInfo token)
@@ -38,7 +39,22 @@ class AssetRef {
       symbol = token.symbol,
       tokenId = token.id,
       contract = token.contract,
-      network = token.network;
+      network = token.network,
+      group = const [];
+
+  /// One symbol deployed on several chains (USDC on Polygon, Base, Arbitrum,
+  /// Avalanche, Solana …). The list used to be flattened into one row per
+  /// chain, so the same coin appeared five times in a row; it is one row now,
+  /// and the detail screen breaks it down per chain.
+  AssetRef.tokenGroup(List<TokenInfo> tokens)
+    : assert(tokens.length > 0, 'a group needs at least one deployment'),
+      coin = tokens.first.chain,
+      name = tokens.first.symbol,
+      symbol = tokens.first.symbol,
+      tokenId = tokens.length == 1 ? tokens.first.id : null,
+      contract = tokens.length == 1 ? tokens.first.contract : null,
+      network = tokens.length == 1 ? tokens.first.network : null,
+      group = tokens;
 
   /// The chain the asset lives on — also picks the active [Network], and with
   /// it the RPC and explorer the detail screen links to.
@@ -58,5 +74,13 @@ class AssetRef {
   /// Human network label carried by the token registry ('TRON · TRC-20').
   final String? network;
 
-  bool get isToken => tokenId != null;
+  /// Every deployment behind this row. Empty for a native coin and for a
+  /// single-chain token; two or more entries mean the detail screen shows a
+  /// chain picker.
+  final List<TokenInfo> group;
+
+  bool get isToken => tokenId != null || group.isNotEmpty;
+
+  /// True when the same symbol lives on more than one chain.
+  bool get isMultiChain => group.length > 1;
 }

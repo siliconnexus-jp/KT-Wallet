@@ -113,9 +113,11 @@ void main() {
     await openEthDetail(tester);
     await tester.tap(find.text('收款'));
     await tester.pumpAndSettle();
-    // W14 receive, live: shows the current wallet's TRON address (default
-    // chain) — the demo seed wallet 日常钱包.
-    expect(find.text('USDT · TRON'), findsOneWidget);
-    expect(find.text('TaPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa'), findsOneWidget);
+    // Receive opens on the chain the user came from. It used to ignore that
+    // and always show its own default (USDT on TRON), so arriving from an
+    // Ethereum asset offered a TRON address.
+    expect(find.text('ETH · Ethereum'), findsOneWidget);
+    expect(find.text('USDT · TRON'), findsNothing);
+    expect(find.text('0xa71c8B29b3d4b79E19bE1'), findsOneWidget);
   });
 }

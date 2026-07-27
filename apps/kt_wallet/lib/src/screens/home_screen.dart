@@ -1,4 +1,4 @@
-import 'package:chains/chains.dart' show Chain;
+import 'package:chains/chains.dart' show Amount, Chain;
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -260,7 +260,9 @@ class _HomeTab extends StatelessWidget {
         const _NetworkChips(),
         const SizedBox(height: 24),
         _AssetsCard(
-          assets: live ? liveAssetRows(market) : assets,
+          assets: live
+              ? liveAssetRows(market, chainsLabel: l10n.assetOnChains)
+              : assets,
           onViewAll: onViewAll,
         ),
       ],
@@ -309,7 +311,11 @@ class _AssetsTab extends StatelessWidget {
           const MarketOfflineBanner(),
           const SizedBox(height: 12),
         ],
-        _AssetsCard(assets: live ? liveAssetRows(market) : demoAssets),
+        _AssetsCard(
+          assets: live
+              ? liveAssetRows(market, chainsLabel: l10n.assetOnChains)
+              : demoAssets,
+        ),
       ],
     );
   }
@@ -835,31 +841,83 @@ const tokenRowMeta = {
 /// One live asset row for a registry token, in the demo rows' visual shape
 /// ('500.00 USDT · TRON'). Loading/errored tokens render '--' — never a
 /// fabricated number.
-AssetRow liveTokenRow(MarketController market, TokenInfo token) {
-  final result = market.tokenBalanceFor(token.id);
-  final amount = result.amount;
-  final ok = result.status == BalanceStatus.ok && amount != null;
-  final fiat = market.tokenFiatValueUsd(token);
+AssetRow liveTokenRow(MarketController market, TokenInfo token) =>
+    liveTokenGroupRow(market, [token]);
+
+/// One row for a symbol, however many chains it is deployed on.
+///
+/// The registry lists a separate [TokenInfo] per network, and rendering them
+/// one-per-row put USDC on screen five times. The row now carries the whole
+/// group; the detail screen breaks it down and lets the user pick a chain.
+///
+/// The amount is the sum of the deployments that LOADED. A chain that failed
+/// is left out of the sum and shows as '--' in the per-chain breakdown, so an
+/// incomplete total is inspectable rather than silently wrong; when nothing
+/// loaded the row itself is '--'.
+AssetRow liveTokenGroupRow(
+  MarketController market,
+  List<TokenInfo> tokens, {
+
+  /// Localized "N chains" label; the plain count is a fallback for callers
+  /// without an l10n handy (demo/gallery paths).
+  String Function(int)? chainsLabel,
+}) {
+  final first = tokens.first;
+  Amount? total;
+  var loaded = 0;
+  var fiat = 0.0;
+  var anyFiat = false;
+  for (final token in tokens) {
+    final result = market.tokenBalanceFor(token.id);
+    final amount = result.amount;
+    if (result.status == BalanceStatus.ok && amount != null) {
+      loaded++;
+      total = total == null ? amount : total + amount;
+    }
+    final value = market.tokenFiatValueUsd(token);
+    if (value != null) {
+      anyFiat = true;
+      fiat += value;
+    }
+  }
   final (color, glyph) =
-      tokenRowMeta[token.symbol] ??
-      (WalletColors.accent, token.symbol.substring(0, 1));
+      tokenRowMeta[first.symbol] ??
+      (WalletColors.accent, first.symbol.substring(0, 1));
+  // Sub-label: the single network for a one-chain token, the chain count when
+  // the same symbol spans several.
+  final where = tokens.length == 1
+      ? first.network
+      : (chainsLabel?.call(tokens.length) ?? '${tokens.length}');
   return AssetRow(
     color,
     glyph,
-    token.symbol,
-    '${ok ? amount.format(maxFraction: 6) : '--'} ${token.symbol} · ${token.network}',
-    fiat == null ? '--' : formatUsd(fiat),
+    first.symbol,
+    '${loaded == 0 || total == null ? '--' : total.format(maxFraction: 6)} '
+        '${first.symbol} · $where',
+    anyFiat ? formatUsd(fiat) : '--',
     '',
     WalletColors.text3,
-    ref: AssetRef.token(token),
+    ref: AssetRef.tokenGroup(tokens),
   );
+}
+
+/// Groups the registry by symbol, preserving first-seen order.
+Map<String, List<TokenInfo>> tokensBySymbol(List<TokenInfo> tokens) {
+  final grouped = <String, List<TokenInfo>>{};
+  for (final token in tokens) {
+    (grouped[token.symbol] ??= []).add(token);
+  }
+  return grouped;
 }
 
 /// Builds the asset rows from live market data: the four native rows, then
 /// the registry tokens. Loading and errored chains render '--' (never a
 /// fabricated number); no 24h-change feed exists yet, so the change column
 /// stays empty in live mode.
-List<AssetRow> liveAssetRows(MarketController market) => [
+List<AssetRow> liveAssetRows(
+  MarketController market, {
+  String Function(int)? chainsLabel,
+}) => [
   for (final (coin, name, symbol, color, glyph) in liveChainRows)
     () {
       final result = market.balanceFor(coin);
@@ -877,7 +935,8 @@ List<AssetRow> liveAssetRows(MarketController market) => [
         ref: AssetRef.native(coin: coin, name: name, symbol: symbol),
       );
     }(),
-  for (final token in market.tokens) liveTokenRow(market, token),
+  for (final group in tokensBySymbol(market.tokens).values)
+    liveTokenGroupRow(market, group, chainsLabel: chainsLabel),
 ];
 
 class AssetRow {
