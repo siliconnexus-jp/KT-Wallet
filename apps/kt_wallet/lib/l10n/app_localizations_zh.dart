@@ -606,6 +606,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unverifiedToken => '未经验证的代币，请核对合约地址';
 
   @override
+  String tokenImpersonationWarning(String symbol) {
+    return '⚠️ 名称显示为 $symbol，但此合约不在 KT Wallet 验证的官方 $symbol 地址列表中。它可能是同名或桥接资产，请勿仅凭名称转账。';
+  }
+
+  @override
   String get receiveWarning => '仅支持接收 TRON 网络（TRC-20）资产。从其他网络转入将导致资产丢失。';
 
   @override

@@ -395,6 +395,7 @@ class _RecordsTabState extends State<_RecordsTab> {
             NetworkScope.maybeOf(context),
           ),
           gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
+          tokenRegistry: networkTokenRegistry(networks),
         ),
       );
       _owned = controller..addListener(_onHistoryChanged);

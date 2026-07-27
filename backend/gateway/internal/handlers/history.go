@@ -25,6 +25,7 @@ type tokenMeta struct {
 var solanaTokensByNetwork = map[string]map[string]tokenMeta{
 	"sol-mainnet": {
 		"EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v": {Symbol: "USDC", Decimals: 6},
+		"Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB":       {Symbol: "USDT", Decimals: 6},
 	},
 	"sol-devnet": {
 		"4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU": {Symbol: "USDC", Decimals: 6},
@@ -34,30 +35,36 @@ var solanaTokensByNetwork = map[string]map[string]tokenMeta{
 var evmTokensByNetwork = map[string]map[string]tokenMeta{
 	"eth-mainnet": {
 		"0xdac17f958d2ee523a2206206994597c13d831ec7": {Symbol: "USDT", Decimals: 6},
+		"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {Symbol: "USDC", Decimals: 6},
+		"0x4fabb145d64652a948d72533023f6e7a623c7c53": {Symbol: "BUSD", Decimals: 18},
 	},
 	"eth-sepolia": {
 		"0xc4dcc311c028e341fd8602d8eb89c5de94625927": {Symbol: "USDT", Decimals: 18},
 	},
 	"polygon-mainnet": {
 		"0x3c499c542cef5e3811e1192ce70d8cc03d5c3359": {Symbol: "USDC", Decimals: 6},
+		"0xc2132d05d31c914a87c6611c10748aeb04b58e8f": {Symbol: "USDT", Decimals: 6},
 	},
 	"polygon-amoy": {
 		"0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582": {Symbol: "USDC", Decimals: 6},
 	},
 	"base-mainnet": {
 		"0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": {Symbol: "USDC", Decimals: 6},
+		"0xfde4c96c8593536e31f229ea8f37b2ada2699bb2": {Symbol: "USDT", Decimals: 6},
 	},
 	"base-sepolia": {
 		"0x036cbd53842c5426634e7929541ec2318f3dcf7e": {Symbol: "USDC", Decimals: 6},
 	},
 	"arbitrum-mainnet": {
 		"0xaf88d065e77c8cc2239327c5edb3a432268e5831": {Symbol: "USDC", Decimals: 6},
+		"0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9": {Symbol: "USDT", Decimals: 6},
 	},
 	"arbitrum-sepolia": {
 		"0x75faf114eafb1bdbe2f0316df893fd58ce46aa4d": {Symbol: "USDC", Decimals: 6},
 	},
 	"avalanche-mainnet": {
 		"0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e": {Symbol: "USDC", Decimals: 6},
+		"0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7": {Symbol: "USDT", Decimals: 6},
 	},
 	"avalanche-fuji": {
 		"0x5425890298aed601595a70ab815c96711a31bc65": {Symbol: "USDC", Decimals: 6},

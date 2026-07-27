@@ -45,13 +45,28 @@ Map<String, Object?> _rpcResult(Object? result) => {
 String _hex(int value) => '0x${BigInt.from(value).toRadixString(16)}';
 
 void main() {
+  test('protected symbols require a known official contract identity', () {
+    expect(isProtectedTokenSymbol('usdt'), isTrue);
+    expect(isKnownOfficialTokenIdentity('USDT', usdtEthToken.contract), isTrue);
+    expect(
+      isKnownOfficialTokenIdentity('USDT', usdtTronToken.contract),
+      isTrue,
+    );
+    expect(isKnownOfficialTokenIdentity('USDT', '0x${'a' * 40}'), isFalse);
+    expect(
+      isKnownOfficialTokenIdentity('BUSD', officialBusdEthereumContract),
+      isTrue,
+    );
+  });
+
   test('the default static registry carries canonical stablecoins', () {
     expect(builtinTokens.map((t) => t.id).toSet(), {
       'usdt-eth',
       'usdc-polygon',
       'usdt-tron',
-      // Tether issues natively on these two as well; the bridged Polygon and
-      // Arbitrum USDT are deliberately absent.
+      'usdt-polygon',
+      'usdt-base',
+      'usdt-arbitrum',
       'usdt-avalanche',
       'usdt-solana',
     });

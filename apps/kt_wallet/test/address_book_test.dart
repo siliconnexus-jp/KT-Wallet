@@ -133,4 +133,33 @@ void main() {
     expect(find.text('LINK'), findsOneWidget);
     expect(find.text('Chainlink'), findsOneWidget);
   });
+
+  testWidgets('token manage warns when a custom contract claims USDT', (
+    tester,
+  ) async {
+    await _open(tester, 'W17 Token 管理');
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(_sheetField(0), 'USDT');
+    await tester.enterText(_sheetField(1), 'Cheap Tether');
+    await tester.enterText(
+      _sheetField(2),
+      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('此合约不在 KT Wallet 验证的官方 USDT 地址列表中'),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('此合约不在 KT Wallet 验证的官方 USDT 地址列表中'),
+      findsOneWidget,
+    );
+  });
 }

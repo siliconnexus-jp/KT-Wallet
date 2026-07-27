@@ -337,6 +337,9 @@ void main() {
       expect(controller.tokens.map((t) => t.id), [
         'usdt-eth',
         'usdc-polygon',
+        'usdt-polygon',
+        'usdt-base',
+        'usdt-arbitrum',
         'usdt-tron',
         'usdt-avalanche',
         'usdt-solana',

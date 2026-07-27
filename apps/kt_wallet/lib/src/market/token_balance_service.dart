@@ -152,6 +152,47 @@ const usdtTronNileToken = TokenInfo(
   network: 'Nile',
 );
 
+// The USDT people actually hold on Polygon and Arbitrum. Neither is on
+// Tether's own supported-protocols list, because neither is issued by Tether:
+// both were bridged, and both have since migrated to the LayerZero omnichain
+// standard, which is why the on-chain symbols now read USDT0 / USD₮0 rather
+// than USDT. They are nonetheless *the* USDT on those chains — 865M and 888M
+// supply respectively — so leaving them out showed the user a zero for money
+// they hold. The registry keeps 'USDT' as the display symbol so all the
+// deployments aggregate into one row.
+//
+// Addresses come from Uniswap's default token list and were then read back
+// from each chain (symbol, decimals, total supply) before landing here.
+const usdtPolygonToken = TokenInfo(
+  id: 'usdt-polygon',
+  symbol: 'USDT',
+  chain: Coin.polygon,
+  contract: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
+  decimals: 6,
+  network: 'Polygon',
+);
+
+const usdtArbitrumToken = TokenInfo(
+  id: 'usdt-arbitrum',
+  symbol: 'USDT',
+  chain: Coin.arbitrum,
+  contract: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
+  decimals: 6,
+  network: 'Arbitrum One',
+);
+
+// Base's L2 standard bridged USDT. Far smaller than the others (~24M against
+// Polygon's 865M) and there is a second, near-empty Stargate USD₮0 on Base;
+// this is the one holding the balances.
+const usdtBaseToken = TokenInfo(
+  id: 'usdt-base',
+  symbol: 'USDT',
+  chain: Coin.base,
+  contract: '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2',
+  decimals: 6,
+  network: 'Base',
+);
+
 // USDT on Avalanche C-Chain. Tether issues natively here — it is on their own
 // supported-protocols list — and the on-chain symbol really is "USDt", not
 // "USDT"; the registry keeps the display symbol so it aggregates with the
@@ -200,13 +241,17 @@ const usdcSolanaDevnetToken = TokenInfo(
 /// user-added tokens stay display-only in the token-manage directory).
 ///
 /// USDT shipped on two chains while USDC had five, which read as an oversight
-/// and was one. It is not simply "every chain USDT exists on": the Polygon and
-/// Arbitrum USDT are bridged rather than Tether-issued, and this list only
-/// carries deployments on Tether's own supported-protocols list, each address
-/// and decimal read back from that chain before landing here.
+/// and was one. Tether-issued or bridged is not the test — what matters is
+/// whether a user can hold it there, and on Polygon, Base and Arbitrum they
+/// very much can. Every address here comes from a vetted token list and was
+/// then read back from its own chain (symbol, decimals, total supply) before
+/// landing.
 const builtinTokens = [
   usdtEthToken,
   usdcPolygonToken,
+  usdtPolygonToken,
+  usdtBaseToken,
+  usdtArbitrumToken,
   usdtTronToken,
   usdtAvalancheToken,
   usdtSolanaToken,
@@ -220,11 +265,11 @@ const builtinTokens = [
 const builtinTokensByNetworkId = <String, List<TokenInfo>>{
   'eth-mainnet': [usdtEthToken],
   'eth-sepolia': [usdtSepoliaToken],
-  'polygon-mainnet': [usdcPolygonToken],
+  'polygon-mainnet': [usdcPolygonToken, usdtPolygonToken],
   'polygon-amoy': [usdcPolygonAmoyToken],
-  'base-mainnet': [usdcBaseToken],
+  'base-mainnet': [usdcBaseToken, usdtBaseToken],
   'base-sepolia': [usdcBaseSepoliaToken],
-  'arbitrum-mainnet': [usdcArbitrumToken],
+  'arbitrum-mainnet': [usdcArbitrumToken, usdtArbitrumToken],
   'arbitrum-sepolia': [usdcArbitrumSepoliaToken],
   'avalanche-mainnet': [usdcAvalancheToken, usdtAvalancheToken],
   'avalanche-fuji': [usdcAvalancheFujiToken],
@@ -233,6 +278,45 @@ const builtinTokensByNetworkId = <String, List<TokenInfo>>{
   'sol-mainnet': [usdcSolanaToken, usdtSolanaToken],
   'sol-devnet': [usdcSolanaDevnetToken],
 };
+
+/// Symbols whose brand identity is security-sensitive. Anyone can deploy a
+/// token contract and claim one of these symbols; the symbol alone is never
+/// proof that the asset is issued by the expected organization.
+const protectedTokenSymbols = {'USDT', 'USDC', 'BUSD'};
+
+/// Paxos-issued BUSD on Ethereum. It is retained for identity checks and
+/// history warnings even though it is not enabled in the built-in balance
+/// registry.
+const officialBusdEthereumContract =
+    '0x4fabb145d64652a948d72533023f6e7a623c7c53';
+
+String _normalizedTokenContract(String contract) =>
+    contract.toLowerCase().startsWith('0x') ? contract.toLowerCase() : contract;
+
+bool isProtectedTokenSymbol(String? symbol) =>
+    symbol != null && protectedTokenSymbols.contains(symbol.toUpperCase());
+
+/// Whether [contract] is an official identity known anywhere in the built-in
+/// registry. Used by the custom-token directory, whose current form does not
+/// select a canonical network id.
+bool isKnownOfficialTokenIdentity(String symbol, String? contract) {
+  if (contract == null || contract.trim().isEmpty) return false;
+  final normalizedSymbol = symbol.toUpperCase();
+  final normalizedContract = _normalizedTokenContract(contract.trim());
+  if (normalizedSymbol == 'BUSD' &&
+      normalizedContract == officialBusdEthereumContract) {
+    return true;
+  }
+  for (final tokens in builtinTokensByNetworkId.values) {
+    for (final token in tokens) {
+      if (token.symbol.toUpperCase() == normalizedSymbol &&
+          _normalizedTokenContract(token.contract) == normalizedContract) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 /// Resolves the token registry to fetch, re-evaluated on every fetch so a
 /// network switch applies from the very next refresh.

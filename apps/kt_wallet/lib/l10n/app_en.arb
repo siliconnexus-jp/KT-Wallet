@@ -194,6 +194,14 @@
   "change24h": "24h change",
   "contractAddress": "Contract",
   "unverifiedToken": "Unverified token — check the contract address",
+  "tokenImpersonationWarning": "⚠️ This asset is named {symbol}, but its contract is not in KT Wallet's verified official {symbol} address list. It may be a lookalike or bridged asset; never transfer based on the name alone.",
+  "@tokenImpersonationWarning": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
   "receiveWarning": "Only TRON network (TRC-20) assets are supported. Sending from other networks will lose funds.",
   "explorerLinkCopied": "Block explorer link copied",
   "addressCopied": "Address copied",

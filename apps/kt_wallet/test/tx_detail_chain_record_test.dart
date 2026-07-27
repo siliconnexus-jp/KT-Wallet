@@ -74,6 +74,7 @@ void main() {
             outgoing: false,
             amountText: '10 USDT',
             assetContract: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            assetSymbol: 'USDT',
             assetVerified: false,
             timestamp: DateTime(2026, 3, 9),
             confirmed: true,
@@ -83,7 +84,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('未经验证的代币，请核对合约地址'), findsOneWidget);
+    expect(
+      find.text(
+        '⚠️ 名称显示为 USDT，但此合约不在 KT Wallet 验证的官方 USDT '
+        '地址列表中。它可能是同名或桥接资产，请勿仅凭名称转账。',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
     expect(
       find.text('0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
       findsOneWidget,

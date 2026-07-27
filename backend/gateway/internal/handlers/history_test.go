@@ -407,8 +407,13 @@ func TestSolanaHistoryWithHeliusKey(t *testing.T) {
 		 "fromUserAccount":%q,"toUserAccount":%q,
 		 "mint":"So11111111111111111111111111111111111111111",
 		 "amount":"123","decimals":9,"confirmationStatus":"finalized",
-		 "transactionIdx":2,"instructionIdx":3}
-	]}}`, solSelf, solOther, solOther, solSelf))
+		 "transactionIdx":2,"instructionIdx":3},
+		{"signature":"sig3","blockTime":1700000050,"type":"transfer",
+		 "fromUserAccount":%q,"toUserAccount":%q,
+		 "mint":"Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+		 "amount":"42000000","decimals":6,"confirmationStatus":"finalized",
+		 "transactionIdx":3,"instructionIdx":4}
+	]}}`, solSelf, solOther, solOther, solSelf, solOther, solSelf))
 	e := newEnv(t, func(cfg *handlers.Config) {
 		cfg.HeliusURL = hel.srv.URL
 		cfg.HeliusKey = "helius-key"
@@ -420,7 +425,8 @@ func TestSolanaHistoryWithHeliusKey(t *testing.T) {
 	}
 	assertJSONEq(t, `[
 		{"id":"sig1:1:2:0","hash":"sig1","direction":"out","amountRaw":"2500000","decimals":6,"symbol":"USDC","contract":"EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v","verified":true,"timestampMs":1700000200000,"status":"ok"},
-		{"id":"sig2:2:3:-1","hash":"sig2","direction":"in","amountRaw":"123","decimals":9,"symbol":"SOL","verified":true,"timestampMs":1700000100000,"status":"ok"}
+		{"id":"sig2:2:3:-1","hash":"sig2","direction":"in","amountRaw":"123","decimals":9,"symbol":"SOL","verified":true,"timestampMs":1700000100000,"status":"ok"},
+		{"id":"sig3:3:4:-1","hash":"sig3","direction":"in","amountRaw":"42000000","decimals":6,"symbol":"USDT","contract":"Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB","verified":true,"timestampMs":1700000050000,"status":"ok"}
 	]`, res["records"])
 
 	u, _ := url.Parse(hel.hitsFor("/")[0].Path)

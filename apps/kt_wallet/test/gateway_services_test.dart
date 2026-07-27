@@ -276,7 +276,7 @@ void main() {
         final params = gateway.paramsOf('kt_getBalances');
         expect(
           {for (final p in params) p['chain']},
-          {'eth', 'polygon', 'tron', 'avalanche', 'solana'},
+          {'eth', 'polygon', 'base', 'arbitrum', 'tron', 'avalanche', 'solana'},
         );
         final ethCall = params.firstWhere((p) => p['chain'] == 'eth');
         expect(ethCall['tokens'], [
@@ -317,9 +317,9 @@ void main() {
         expect(results['usdt-eth']!.status, BalanceStatus.ok);
         expect(results['usdt-tron']!.status, BalanceStatus.ok);
         expect(results['usdt-tron']!.amount!.format(), '5');
-        // erc20 balanceOf on eth + polygon + avalanche, and the Solana
-        // token-account query; TRON goes over REST.
-        expect(direct.calls, hasLength(4));
+        // erc20 balanceOf on eth, polygon (x2), base, arbitrum, avalanche,
+        // and the Solana token-account query; TRON goes over REST.
+        expect(direct.calls, hasLength(7));
         expect(rest.gets, hasLength(1)); // tron account
       },
     );
@@ -336,7 +336,7 @@ void main() {
       );
       final results = await service.fetchAll(_addresses);
       expect(results['usdt-eth']!.status, BalanceStatus.ok);
-      expect(direct.calls, hasLength(4));
+      expect(direct.calls, hasLength(7));
     });
   });
 

@@ -24,11 +24,12 @@ Map<String, Object?> _trc20Item({
   String value = '120500000',
   String symbol = 'USDT',
   int decimals = 6,
+  String contract = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
 }) => {
   'transaction_id': hash,
   'token_info': {
     'symbol': symbol,
-    'address': 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+    'address': contract,
     'decimals': decimals,
     'name': 'Tether USD',
   },
@@ -202,6 +203,10 @@ void main() {
       final outUsdt = result.records[0];
       expect(outUsdt.outgoing, isTrue);
       expect(outUsdt.amountText, '120.5 USDT');
+      expect(outUsdt.assetSymbol, 'USDT');
+      expect(outUsdt.assetContract, _me);
+      expect(outUsdt.assetVerified, isTrue);
+      expect(outUsdt.impersonatesProtectedSymbol, isFalse);
       expect(outUsdt.confirmed, isTrue);
       expect(outUsdt.timestamp, DateTime.fromMillisecondsSinceEpoch(3000));
 
@@ -218,6 +223,37 @@ void main() {
       expect(inTrx.outgoing, isFalse); // someone else's owner_address
       expect(inTrx.amountText, '1 TRX');
       expect(inTrx.confirmed, isFalse); // contractRet REVERT
+    },
+  );
+
+  test(
+    'TRON direct fallback flags a lookalike contract claiming USDT',
+    () async {
+      final service = _service(
+        body: (request) {
+          if (request.url.path.endsWith('/trc20')) {
+            return {
+              'data': [
+                _trc20Item(
+                  hash: 'spoof-usdt',
+                  from: _other,
+                  to: _me,
+                  ts: 100,
+                  contract: 'TFakeUSDTContract1111111111111111111',
+                ),
+              ],
+            };
+          }
+          return {'data': <Object?>[]};
+        },
+      );
+
+      final record = (await service.fetch(Coin.tron, _me)).records.single;
+      expect(record.amountText, '120.5 USDT');
+      expect(record.assetSymbol, 'USDT');
+      expect(record.assetContract, 'TFakeUSDTContract1111111111111111111');
+      expect(record.assetVerified, isFalse);
+      expect(record.impersonatesProtectedSymbol, isTrue);
     },
   );
 

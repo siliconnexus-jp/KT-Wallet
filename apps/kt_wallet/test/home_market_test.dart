@@ -175,7 +175,7 @@ void main() {
     // TronGrid rejected the demo address, so that leg is excluded from the
     // sum and shows '--' in the detail breakdown — the row still reports the
     // 25 that did load.
-    expect(find.text('25 USDT · 4 条链'), findsWidgets);
+    expect(find.text('25 USDT · 7 条链'), findsWidgets);
     expect(find.text('10 USDC · Polygon'), findsWidgets);
     expect(find.text(r'$24.75'), findsWidgets);
     expect(find.text(r'$10.10'), findsWidgets);
@@ -233,7 +233,7 @@ void main() {
     expect(find.text('5 TRX'), findsOneWidget);
     expect(find.text(r'$0.50'), findsOneWidget); // 5 TRX * $0.10
     // Token rows appended under the natives.
-    expect(find.text('25 USDT · 4 条链'), findsOneWidget);
+    expect(find.text('25 USDT · 7 条链'), findsOneWidget);
     expect(find.text('10 USDC · Polygon'), findsOneWidget);
     expect(find.text('-- USDT · TRON'), findsNothing);
     expect(find.text('2.4805 ETH'), findsNothing); // demo row absent
@@ -254,7 +254,7 @@ void main() {
       await tester.tap(find.text('Polygon').first);
       await tester.pumpAndSettle();
       expect(find.text('10 USDC · Polygon'), findsOneWidget);
-      expect(find.text('25 USDT · 4 条链'), findsNothing);
+      expect(find.text('25 USDT · 7 条链'), findsNothing);
       expect(find.text('1 ETH'), findsNothing);
       controller.dispose();
     },

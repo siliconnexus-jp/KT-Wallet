@@ -1222,6 +1222,12 @@ abstract class AppLocalizations {
   /// **'未经验证的代币，请核对合约地址'**
   String get unverifiedToken;
 
+  /// No description provided for @tokenImpersonationWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'⚠️ 名称显示为 {symbol}，但此合约不在 KT Wallet 验证的官方 {symbol} 地址列表中。它可能是同名或桥接资产，请勿仅凭名称转账。'**
+  String tokenImpersonationWarning(String symbol);
+
   /// No description provided for @receiveWarning.
   ///
   /// In zh, this message translates to:

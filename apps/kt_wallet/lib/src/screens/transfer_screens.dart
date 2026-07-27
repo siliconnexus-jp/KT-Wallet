@@ -3020,12 +3020,41 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
             ),
             if (!record.assetVerified) ...[
               const SizedBox(height: 8),
-              Text(
-                l10n.unverifiedToken,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: WalletColors.amber,
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: WalletColors.amber.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: WalletColors.amber.withValues(alpha: 0.32),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.warning_amber_rounded,
+                      size: 20,
+                      color: WalletColors.amber,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        record.impersonatesProtectedSymbol
+                            ? l10n.tokenImpersonationWarning(
+                                record.assetSymbol!,
+                              )
+                            : l10n.unverifiedToken,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          fontWeight: FontWeight.w600,
+                          color: WalletColors.amber,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

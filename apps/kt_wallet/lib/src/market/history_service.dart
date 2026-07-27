@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import 'balance_service.dart' show RpcEndpointResolver, defaultRpcEndpointFor;
 import 'gateway_client.dart';
+import 'token_balance_service.dart';
 
 /// Default TronGrid REST base URL.
 const String defaultTronHistoryApiUrl = 'https://api.trongrid.io';
@@ -22,6 +23,7 @@ class ChainTxRecord {
     this.id,
     this.amountText,
     this.assetContract,
+    this.assetSymbol,
     this.assetVerified = true,
     required this.timestamp,
     required this.confirmed,
@@ -48,8 +50,14 @@ class ChainTxRecord {
   /// Token contract/mint when this is a token transfer.
   final String? assetContract;
 
+  /// Claimed/verified token symbol without the formatted amount.
+  final String? assetSymbol;
+
   /// False for a token not present in KT Wallet's per-network registry.
   final bool assetVerified;
+
+  bool get impersonatesProtectedSymbol =>
+      !assetVerified && isProtectedTokenSymbol(assetSymbol);
 
   final DateTime timestamp;
 
@@ -82,10 +90,12 @@ class HistoryService {
     http.Client? client,
     RpcEndpointResolver? endpoints,
     GatewayResolver? gateway,
+    TokenRegistryResolver? tokenRegistry,
     this.timeout = const Duration(seconds: 10),
   }) : _client = client ?? http.Client(),
        _endpoints = endpoints ?? defaultRpcEndpointFor,
-       _gateway = gateway ?? _noGateway;
+       _gateway = gateway ?? _noGateway,
+       _tokenRegistry = tokenRegistry ?? _mainnetTokenRegistry;
 
   static GatewayClient? _noGateway() => null;
 
@@ -97,10 +107,13 @@ class HistoryService {
 
   /// Optional gateway (null in direct mode), resolved on every fetch.
   final GatewayResolver _gateway;
+  final TokenRegistryResolver _tokenRegistry;
   final Duration timeout;
 
   /// The TronGrid base URL in effect for the next fetch.
   String get tronApiUrl => _endpoints(Coin.tron);
+
+  static List<TokenInfo> _mainnetTokenRegistry() => builtinTokens;
 
   /// Max records requested per endpoint and returned after the merge.
   static const int pageSize = 20;
@@ -334,6 +347,7 @@ class HistoryService {
           ? _formatAmount(raw, decimals, symbol)
           : null,
       assetContract: record.contract,
+      assetSymbol: symbol,
       assetVerified: record.verified,
       timestamp: DateTime.fromMillisecondsSinceEpoch(record.timestampMs),
       confirmed: !record.failed,
@@ -397,13 +411,32 @@ class HistoryService {
     final ts = item['block_timestamp'];
     if (hash is! String || ts is! int) return null;
     String? amountText;
+    String? assetSymbol;
+    String? assetContract;
+    var assetVerified = false;
     final info = item['token_info'];
     final value = item['value'];
     if (info is Map && value is String) {
-      final decimals = info['decimals'];
-      final symbol = info['symbol'];
+      var decimals = info['decimals'];
+      var symbol = info['symbol'];
+      final contract = info['address'];
+      if (contract is String && contract.trim().isNotEmpty) {
+        assetContract = contract.trim();
+        for (final token in _tokenRegistry()) {
+          final sameContract = token.contract.toLowerCase().startsWith('0x')
+              ? token.contract.toLowerCase() == assetContract.toLowerCase()
+              : token.contract == assetContract;
+          if (sameContract) {
+            symbol = token.symbol;
+            decimals = token.decimals;
+            assetVerified = true;
+            break;
+          }
+        }
+      }
       final raw = BigInt.tryParse(value);
       if (decimals is int && symbol is String && raw != null) {
+        assetSymbol = symbol.toUpperCase();
         amountText = _formatAmount(raw, decimals, symbol);
       }
     }
@@ -412,6 +445,9 @@ class HistoryService {
       hash: hash,
       outgoing: item['from'] == address,
       amountText: amountText,
+      assetContract: assetContract,
+      assetSymbol: assetSymbol,
+      assetVerified: assetVerified,
       timestamp: DateTime.fromMillisecondsSinceEpoch(ts),
       // The trc20 endpoint serves confirmed transfer events.
       confirmed: true,

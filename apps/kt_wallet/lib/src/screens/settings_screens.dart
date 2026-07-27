@@ -11,6 +11,14 @@ import '../../l10n/app_localizations.dart';
 import '../market/balance_service.dart' show defaultRpcEndpointFor;
 import '../market/gateway_client.dart' show GatewayClient;
 import '../market/rpc_health.dart';
+import '../market/token_balance_service.dart'
+    show
+        isKnownOfficialTokenIdentity,
+        isProtectedTokenSymbol,
+        officialBusdEthereumContract,
+        usdcSolanaToken,
+        usdtEthToken,
+        usdtTronToken;
 import '../security/biometric_auth.dart';
 import '../security/wallet_pin.dart';
 import '../widgets/pin_pad.dart';
@@ -619,16 +627,29 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
       // No-store fallback (gallery/goldens/tests): seed the classic demo rows
       // in-memory. The real app persists these same rows on first run (see
       // main._seedFirstRun).
-      for (final (symbol, name, network, enabled) in [
-        ('USDT', 'Tether USD', 'TRON · TRC-20', true),
-        ('USDT', 'Tether USD', 'Ethereum · ERC-20', true),
-        ('USDC', 'USD Coin', 'Solana · SPL', true),
-        ('BUSD', 'Binance USD', 'Ethereum · ERC-20', false),
-        ('UNI', 'Uniswap', 'Ethereum · ERC-20', false),
+      for (final (symbol, name, network, contract, enabled) in [
+        ('USDT', 'Tether USD', 'TRON · TRC-20', usdtTronToken.contract, true),
+        (
+          'USDT',
+          'Tether USD',
+          'Ethereum · ERC-20',
+          usdtEthToken.contract,
+          true,
+        ),
+        ('USDC', 'USD Coin', 'Solana · SPL', usdcSolanaToken.contract, true),
+        (
+          'BUSD',
+          'Binance USD',
+          'Ethereum · ERC-20',
+          officialBusdEthereumContract,
+          false,
+        ),
+        ('UNI', 'Uniswap', 'Ethereum · ERC-20', null, false),
       ]) {
         await controller.addToken(
           symbol: symbol,
           name: name,
+          contract: contract,
           network: network,
           enabled: enabled,
         );
@@ -708,6 +729,48 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
                     mono: true,
                     onChanged: () => setSheetState(() {}),
                   ),
+                  if (isProtectedTokenSymbol(symbolController.text.trim()) &&
+                      !isKnownOfficialTokenIdentity(
+                        symbolController.text.trim(),
+                        contractController.text.trim(),
+                      )) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: WalletColors.amber.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: WalletColors.amber.withValues(alpha: 0.32),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.warning_amber_rounded,
+                            size: 20,
+                            color: WalletColors.amber,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              l10n.tokenImpersonationWarning(
+                                symbolController.text.trim().toUpperCase(),
+                              ),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                height: 1.4,
+                                fontWeight: FontWeight.w600,
+                                color: WalletColors.amber,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 18),
                   KtPrimaryButton(
                     label: l10n.actionSave,
@@ -782,6 +845,12 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
                   Builder(
                     builder: (context) {
                       final token = _tokens[i];
+                      final identityWarning =
+                          isProtectedTokenSymbol(token.symbol) &&
+                          !isKnownOfficialTokenIdentity(
+                            token.symbol,
+                            token.contract,
+                          );
                       final (color, initial) =
                           _brand[token.symbol] ??
                           (
@@ -817,6 +886,20 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
                                     color: WalletColors.text3,
                                   ),
                                 ),
+                                if (identityWarning) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    l10n.tokenImpersonationWarning(
+                                      token.symbol,
+                                    ),
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      height: 1.35,
+                                      fontWeight: FontWeight.w600,
+                                      color: WalletColors.amber,
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),

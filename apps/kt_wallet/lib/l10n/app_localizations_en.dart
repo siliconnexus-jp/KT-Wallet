@@ -640,6 +640,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unverifiedToken => 'Unverified token — check the contract address';
 
   @override
+  String tokenImpersonationWarning(String symbol) {
+    return '⚠️ This asset is named $symbol, but its contract is not in KT Wallet\'s verified official $symbol address list. It may be a lookalike or bridged asset; never transfer based on the name alone.';
+  }
+
+  @override
   String get receiveWarning =>
       'Only TRON network (TRC-20) assets are supported. Sending from other networks will lose funds.';
 

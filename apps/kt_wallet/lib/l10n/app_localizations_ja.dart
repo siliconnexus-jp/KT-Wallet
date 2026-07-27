@@ -613,6 +613,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get unverifiedToken => '未確認トークン — コントラクトアドレスを確認してください';
 
   @override
+  String tokenImpersonationWarning(String symbol) {
+    return '⚠️ この資産は $symbol と表示されていますが、コントラクトは KT Wallet が検証した公式 $symbol アドレス一覧にありません。同名またはブリッジ資産の可能性があるため、名前だけで送金しないでください。';
+  }
+
+  @override
   String get receiveWarning =>
       'TRONネットワーク（TRC-20）資産のみ対応。他のネットワークからの送金は資産の損失につながります。';
 

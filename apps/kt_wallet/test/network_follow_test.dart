@@ -303,10 +303,13 @@ void main() {
       expect(networkTokenRegistry(networks)(), [
         usdtEthToken,
         usdcPolygonToken,
+        // 除以太坊外,每条 EVM 主网都同时带 USDC 与 USDT。
+        usdtPolygonToken,
         usdcBaseToken,
+        usdtBaseToken,
         usdcArbitrumToken,
+        usdtArbitrumToken,
         usdcAvalancheToken,
-        // Avalanche 和 Solana 各带两枚:Circle 的 USDC 与 Tether 原生发行的 USDT。
         usdtAvalancheToken,
         usdtTronToken,
         usdcSolanaToken,
