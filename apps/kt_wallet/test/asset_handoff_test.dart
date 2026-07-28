@@ -5,6 +5,7 @@ import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/src/market/asset_ref.dart';
 import 'package:kt_wallet/src/market/token_balance_service.dart';
 import 'package:kt_wallet/src/screens/assets_screens.dart';
+import 'package:kt_wallet/src/screens/home_screen.dart' show nativesBySymbol;
 import 'package:kt_wallet/src/screens/transfer_screens.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
 import 'package:kt_wallet/src/state/wallet_scope.dart';
@@ -47,6 +48,8 @@ Widget _app(Widget home, WalletController wallets) => MaterialApp(
 );
 
 void main() {
+  _nativeGrouping();
+
   group('AssetRef.selecting', () {
     test('narrows to one deployment but keeps the group', () {
       final ref = AssetRef.tokenGroup(_usdtGroup);
@@ -58,7 +61,7 @@ void main() {
       expect(onTron.tokenId, usdtTronToken.id);
       // The group survives, so the destination screen can still offer the
       // network picker.
-      expect(onTron.group, _usdtGroup);
+      expect(onTron.group.map((d) => d.tokenId), _usdtGroup.map((t) => t.id));
       expect(onTron.chainIndex, 1);
     });
 
@@ -69,12 +72,16 @@ void main() {
     });
 
     test('a native coin is returned untouched', () {
-      const ref = AssetRef.native(
+      final ref = AssetRef.native(
         coin: Coin.eth,
         name: 'Ethereum',
         symbol: 'ETH',
       );
-      expect(identical(ref.selecting(3), ref), isTrue);
+      // A single-chain asset has exactly one deployment, so narrowing to any
+      // index lands back on it.
+      expect(ref.selecting(3).coin, Coin.eth);
+      expect(ref.selecting(3).symbol, 'ETH');
+      expect(ref.group, hasLength(1));
     });
   });
 
@@ -203,5 +210,61 @@ void main() {
       expect(find.textContaining(' · '), findsWidgets);
       expect(find.text('USDT · Ethereum'), findsNothing);
     });
+  });
+}
+
+/// ETH is the gas coin of Ethereum, Base and Arbitrum. Giving each its own row
+/// put "Ethereum 0 ETH", "Base 0 ETH" and "Arbitrum 0 ETH" on the home list as
+/// though they were three different holdings — the same mistake the registry
+/// made with USDC before it was grouped by symbol.
+void _nativeGrouping() {
+  test('ETH is one asset across Ethereum and its L2s', () {
+    final groups = nativesBySymbol();
+
+    expect(groups['ETH']!.map((d) => d.coin), [
+      Coin.eth,
+      Coin.base,
+      Coin.arbitrum,
+    ]);
+    // The chains that mint their own coin stay single.
+    expect(groups['POL'], hasLength(1));
+    expect(groups['AVAX'], hasLength(1));
+    expect(groups['TRX'], hasLength(1));
+    expect(groups['SOL'], hasLength(1));
+    // Every supported chain is accounted for exactly once.
+    expect(
+      groups.values.expand((g) => g).map((d) => d.coin).toSet(),
+      Coin.values.toSet(),
+    );
+  });
+
+  test('a native deployment carries its chain decimals and no contract', () {
+    final eth = nativesBySymbol()['ETH']!;
+    for (final at in eth) {
+      expect(at.decimals, 18, reason: at.network);
+      expect(at.contract, isNull);
+      expect(at.tokenId, isNull);
+      expect(at.isToken, isFalse);
+    }
+    expect(nativesBySymbol()['TRX']!.single.decimals, 6);
+    expect(nativesBySymbol()['SOL']!.single.decimals, 9);
+  });
+
+  test('selecting a native chain re-points without changing the symbol', () {
+    final ref = AssetRef.group(
+      name: 'ETH',
+      symbol: 'ETH',
+      group: nativesBySymbol()['ETH']!,
+    );
+    expect(ref.isMultiChain, isTrue);
+    // Not a token: nothing here has a contract to send to.
+    expect(ref.isToken, isFalse);
+
+    final onBase = ref.selecting(1);
+    expect(onBase.symbol, 'ETH');
+    expect(onBase.coin, Coin.base);
+    expect(onBase.network, 'Base');
+    expect(onBase.chainIndex, 1);
+    expect(onBase.group, hasLength(3));
   });
 }

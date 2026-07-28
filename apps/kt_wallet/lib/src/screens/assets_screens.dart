@@ -21,7 +21,8 @@ import '../market/token_balance_service.dart' show TokenInfo;
 import '../platform/external_actions.dart';
 import '../platform/media_gallery.dart';
 import '../transfer/airgap_codec.dart' show truncateMiddle;
-import 'home_screen.dart' show liveTokenGroupRow, tokensBySymbol;
+import 'home_screen.dart'
+    show liveAssetGroupRow, liveTokenGroupRow, nativesBySymbol, tokensBySymbol;
 import '../widgets/market_offline_banner.dart';
 import '../widgets/token_icon.dart';
 import '../state/networks.dart';
@@ -140,45 +141,30 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
   >
   _liveRows(MarketController market, AppLocalizations l10n) {
     return [
-      for (final (coin, name, symbol, color, glyph, network) in const [
-        (Coin.eth, 'Ethereum', 'ETH', Color(0xFF627EEA), 'Ξ', 'Ethereum'),
-        (Coin.polygon, 'POL', 'POL', Color(0xFF8247E5), '⬡', 'Polygon'),
-        (Coin.base, 'Base', 'ETH', Color(0xFF0052FF), 'B', 'Base'),
-        (
-          Coin.arbitrum,
-          'Arbitrum',
-          'ETH',
-          Color(0xFF28A0F0),
-          'A',
-          'Arbitrum One',
-        ),
-        (
-          Coin.avalanche,
-          'Avalanche',
-          'AVAX',
-          Color(0xFFE84142),
-          'A',
-          'Avalanche C-Chain',
-        ),
-        (Coin.tron, 'TRON', 'TRX', Color(0xFF26A17B), '₮', 'TRON'),
-        (Coin.solana, 'Solana', 'SOL', Color(0xFF9945FF), '◎', 'Solana'),
-      ])
+      // Native coins group by SYMBOL too: ETH is the gas coin of Ethereum,
+      // Base and Arbitrum, and one row each made them look like three
+      // different holdings of the same thing.
+      for (final entry in nativesBySymbol().entries)
         () {
-          final result = market.balanceFor(coin);
-          final amount = result.amount;
-          final ok = result.status == BalanceStatus.ok && amount != null;
-          final fiat = market.fiatValueUsd(coin);
-          final change = market.change24hPercent(coin);
+          final row = liveAssetGroupRow(
+            market,
+            AssetRef.group(
+              name: entry.key,
+              symbol: entry.key,
+              group: entry.value,
+            ),
+            chainsLabel: l10n.assetOnChains,
+          );
           return (
-            color,
-            glyph,
-            name,
-            ok ? '${amount.format(maxFraction: 6)} $symbol' : '-- $symbol',
-            fiat == null ? '--' : formatUsd(fiat),
-            formatChange24h(change),
-            (change ?? 0) < 0 ? WalletColors.red : WalletColors.green,
-            network,
-            AssetRef.native(coin: coin, name: name, symbol: symbol),
+            row.color,
+            row.letter,
+            row.name,
+            row.sub,
+            row.value,
+            row.change,
+            row.changeColor,
+            entry.value.map((d) => d.network).join(_networkSep),
+            row.ref,
           );
         }(),
       // One row per SYMBOL, not per deployment: the registry lists USDC on
@@ -436,8 +422,8 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
     _pickedDefault = true;
     var best = 0;
     BigInt bestRaw = BigInt.zero;
-    for (final (i, token) in ref.group.indexed) {
-      final result = market.tokenBalanceFor(token.id);
+    for (final (i, at) in ref.group.indexed) {
+      final result = market.resultFor(at);
       final amount = result.amount;
       if (result.status != BalanceStatus.ok || amount == null) continue;
       if (amount.raw > bestRaw) {
@@ -487,7 +473,7 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
     // For a multi-chain token every action applies to the SELECTED chain;
     // the hero above them still shows the combined holding.
     final selected = ref.isMultiChain ? ref.group[_chainIndex] : null;
-    final actionCoin = selected?.chain ?? ref.coin;
+    final actionCoin = selected?.coin ?? ref.coin;
     final network = NetworkScope.of(context).activeFor(chainOf(actionCoin));
 
     final (total, loadedAll) = _totalFor(market, ref);
@@ -663,7 +649,7 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
     MarketController market,
     AssetRef ref,
   ) {
-    final token = ref.group[_chainIndex];
+    final at = ref.group[_chainIndex];
     return GestureDetector(
       key: const ValueKey('chain-chip'),
       behavior: HitTestBehavior.opaque,
@@ -677,10 +663,10 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ChainIcon(chain: chainOf(token.chain), size: 18),
+            ChainIcon(chain: chainOf(at.coin), size: 18),
             const SizedBox(width: 6),
             Text(
-              token.network,
+              at.network,
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
@@ -743,12 +729,12 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              for (final (i, token) in ref.group.indexed)
+              for (final (i, at) in ref.group.indexed)
                 ListTile(
-                  key: ValueKey('chain-option-${token.id}'),
-                  leading: ChainIcon(chain: chainOf(token.chain)),
+                  key: ValueKey('chain-option-${at.tokenId ?? at.coin.name}'),
+                  leading: ChainIcon(chain: chainOf(at.coin)),
                   title: Text(
-                    token.network,
+                    at.network,
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -758,7 +744,7 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
                   // The holding on that chain is the whole reason to pick one,
                   // so it stays on the row rather than hiding behind the tap.
                   subtitle: Text(
-                    '${_amountTextFor(market, token)} ${ref.symbol}',
+                    '${_amountTextFor(market, at)} ${ref.symbol}',
                     style: const TextStyle(
                       fontSize: 13,
                       color: WalletColors.text2,
@@ -785,8 +771,8 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
   }
 
   /// A deployment's balance, or '--' when that chain has not loaded.
-  String _amountTextFor(MarketController market, TokenInfo token) {
-    final result = market.tokenBalanceFor(token.id);
+  String _amountTextFor(MarketController market, AssetDeployment at) {
+    final result = market.resultFor(at);
     final amount = result.amount;
     return result.status == BalanceStatus.ok && amount != null
         ? amount.format(maxFraction: 6)
@@ -803,17 +789,10 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
       final ok = result.status == BalanceStatus.ok && amount != null;
       return (ok ? amount : null, ok);
     }
-    final tokens = ref.group.isEmpty ? const <TokenInfo>[] : ref.group;
-    if (tokens.isEmpty) {
-      final result = market.tokenBalanceFor(ref.tokenId!);
-      final amount = result.amount;
-      final ok = result.status == BalanceStatus.ok && amount != null;
-      return (ok ? amount : null, ok);
-    }
     Amount? total;
     var all = true;
-    for (final token in tokens) {
-      final result = market.tokenBalanceFor(token.id);
+    for (final at in ref.group) {
+      final result = market.resultFor(at);
       final amount = result.amount;
       if (result.status == BalanceStatus.ok && amount != null) {
         total = total == null ? amount : total + amount;
@@ -827,18 +806,12 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
   /// USD value of a token holding, keyed off the registry entry the ref came
   /// from (the controller needs the [TokenInfo], not just the symbol).
   double? _tokenFiat(MarketController market, AssetRef ref) {
-    if (ref.group.isNotEmpty) {
-      double? total;
-      for (final token in ref.group) {
-        final value = market.tokenFiatValueUsd(token);
-        if (value != null) total = (total ?? 0) + value;
-      }
-      return total;
+    double? total;
+    for (final at in ref.group) {
+      final value = market.fiatFor(at, ref.symbol);
+      if (value != null) total = (total ?? 0) + value;
     }
-    for (final token in market.tokens) {
-      if (token.id == ref.tokenId) return market.tokenFiatValueUsd(token);
-    }
-    return null;
+    return total;
   }
 
   Widget _demoSnapshot(BuildContext context) {
@@ -1107,8 +1080,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     final group = widget.asset?.group ?? const [];
     if (group.isNotEmpty) {
       return [
-        for (final token in group)
-          ..._chains.where((c) => c.coin == token.chain),
+        for (final at in group) ..._chains.where((c) => c.coin == at.coin),
       ];
     }
     final expanded =

@@ -27,8 +27,11 @@ import 'wallet_screens.dart' show AddWalletScreen;
 /// Stateful shell: the bottom tab bar switches between the four top-level tabs
 /// (home / assets / records / settings) via an IndexedStack.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.assets = demoAssets});
-  final List<AssetRow> assets;
+  const HomeScreen({super.key, this.assets});
+
+  /// Demo rows for the gallery and goldens; null uses [demoAssets], which is
+  /// no longer const now that an AssetRef carries its deployment list.
+  final List<AssetRow>? assets;
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -126,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 index: _tab,
                 children: [
                   _HomeTab(
-                    assets: widget.assets,
+                    assets: widget.assets ?? demoAssets,
                     onViewAll: () => setState(() => _tab = 1),
                     onOpenSettings: () => setState(() => _tab = 3),
                   ),
@@ -827,7 +830,7 @@ List<_SettingsItem> _settingsItems(AppLocalizations l10n) => [
 /// The numbers are illustrative, but each row still names the chain it stands
 /// for so tapping it opens THAT asset's detail — which then shows '--' for
 /// anything it could not fetch, rather than a made-up holding.
-const demoAssets = [
+final demoAssets = [
   AssetRow(
     Color(0xFF26A17B),
     '₮',
@@ -898,49 +901,92 @@ AssetRow liveTokenRow(MarketController market, TokenInfo token) =>
 AssetRow liveTokenGroupRow(
   MarketController market,
   List<TokenInfo> tokens, {
+  String Function(int)? chainsLabel,
+}) => liveAssetGroupRow(
+  market,
+  AssetRef.tokenGroup(tokens),
+  chainsLabel: chainsLabel,
+);
+
+/// One row for a symbol, however many chains it is deployed on.
+///
+/// Native coins go through here too. ETH is native on Ethereum, Base and
+/// Arbitrum — one asset in three places, exactly as USDT is in seven — and
+/// giving each its own row put "Ethereum 0 ETH", "Base 0 ETH" and "Arbitrum
+/// 0 ETH" on screen as if they were different holdings.
+///
+/// The amount is the sum of the deployments that LOADED. A chain that failed
+/// is left out of the sum and shows as '--' in the per-chain breakdown, so an
+/// incomplete total is inspectable rather than silently wrong; when nothing
+/// loaded the row itself is '--'.
+AssetRow liveAssetGroupRow(
+  MarketController market,
+  AssetRef ref, {
 
   /// Localized "N chains" label; the plain count is a fallback for callers
   /// without an l10n handy (demo/gallery paths).
   String Function(int)? chainsLabel,
 }) {
-  final first = tokens.first;
   Amount? total;
   var loaded = 0;
   var fiat = 0.0;
   var anyFiat = false;
-  for (final token in tokens) {
-    final result = market.tokenBalanceFor(token.id);
+  for (final at in ref.group) {
+    final result = market.resultFor(at);
     final amount = result.amount;
     if (result.status == BalanceStatus.ok && amount != null) {
       loaded++;
       total = total == null ? amount : total + amount;
     }
-    final value = market.tokenFiatValueUsd(token);
+    final value = market.fiatFor(at, ref.symbol);
     if (value != null) {
       anyFiat = true;
       fiat += value;
     }
   }
   final (color, glyph) =
-      tokenRowMeta[first.symbol] ??
-      (WalletColors.accent, first.symbol.substring(0, 1));
-  // Sub-label: the single network for a one-chain token, the chain count when
+      tokenRowMeta[ref.symbol] ??
+      (WalletColors.accent, ref.symbol.substring(0, 1));
+  // Sub-label: the single network for a one-chain asset, the chain count when
   // the same symbol spans several.
-  final where = tokens.length == 1
-      ? first.network
-      : (chainsLabel?.call(tokens.length) ?? '${tokens.length}');
-  final change = anyFiat ? market.tokenChange24hPercent(first.symbol) : null;
+  final where = ref.group.length == 1
+      ? ref.group.first.network
+      : (chainsLabel?.call(ref.group.length) ?? '${ref.group.length}');
+  final change = anyFiat ? market.changeFor(ref.group.first, ref.symbol) : null;
   return AssetRow(
     color,
     glyph,
-    first.symbol,
+    ref.name,
     '${loaded == 0 || total == null ? '--' : total.format(maxFraction: 6)} '
-    '${first.symbol} · $where',
+    '${ref.symbol} · $where',
     anyFiat ? formatUsd(fiat) : '--',
     formatChange24h(change),
     (change ?? 0) < 0 ? WalletColors.red : WalletColors.green,
-    ref: AssetRef.tokenGroup(tokens),
+    ref: ref,
   );
+}
+
+/// The native coin of every supported chain, in list order.
+///
+/// Several chains share one: ETH is the gas coin of Ethereum and of its L2s,
+/// which is why these are grouped by symbol rather than listed per chain.
+final nativeChains = [
+  (Coin.eth, 'ETH', 'Ethereum'),
+  (Coin.polygon, 'POL', 'Polygon'),
+  (Coin.base, 'ETH', 'Base'),
+  (Coin.arbitrum, 'ETH', 'Arbitrum One'),
+  (Coin.avalanche, 'AVAX', 'Avalanche C-Chain'),
+  (Coin.tron, 'TRX', 'TRON'),
+  (Coin.solana, 'SOL', 'Solana'),
+];
+
+/// Native coins grouped by symbol, preserving first-seen order.
+Map<String, List<AssetDeployment>> nativesBySymbol() {
+  final grouped = <String, List<AssetDeployment>>{};
+  for (final (coin, symbol, network) in nativeChains) {
+    (grouped[symbol] ??= []).add(AssetDeployment.native(coin, network));
+  }
+  return grouped;
 }
 
 /// Groups the registry by symbol, preserving first-seen order.
@@ -960,24 +1006,12 @@ List<AssetRow> liveAssetRows(
   MarketController market, {
   String Function(int)? chainsLabel,
 }) => [
-  for (final (coin, name, symbol, color, glyph) in liveChainRows)
-    () {
-      final result = market.balanceFor(coin);
-      final amount = result.amount;
-      final ok = result.status == BalanceStatus.ok && amount != null;
-      final fiat = market.fiatValueUsd(coin);
-      final change = market.change24hPercent(coin);
-      return AssetRow(
-        color,
-        glyph,
-        name,
-        ok ? '${amount.format(maxFraction: 6)} $symbol' : '-- $symbol',
-        fiat == null ? '--' : formatUsd(fiat),
-        formatChange24h(change),
-        (change ?? 0) < 0 ? WalletColors.red : WalletColors.green,
-        ref: AssetRef.native(coin: coin, name: name, symbol: symbol),
-      );
-    }(),
+  for (final entry in nativesBySymbol().entries)
+    liveAssetGroupRow(
+      market,
+      AssetRef.group(name: entry.key, symbol: entry.key, group: entry.value),
+      chainsLabel: chainsLabel,
+    ),
   for (final group in tokensBySymbol(market.tokens).values)
     liveTokenGroupRow(market, group, chainsLabel: chainsLabel),
 ];

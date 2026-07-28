@@ -6,6 +6,7 @@ import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/foundation.dart';
 
 import '../state/wallet_controller.dart';
+import 'asset_ref.dart' show AssetDeployment;
 import 'balance_service.dart';
 import 'price_service.dart';
 import 'token_balance_service.dart';
@@ -136,6 +137,32 @@ class MarketController extends ChangeNotifier {
         math.pow(10, amount.decimals).toDouble() *
         price;
   }
+
+  /// Balance of one [AssetDeployment], whichever kind it is. Native coins and
+  /// registry tokens read through separate maps; a caller that renders a
+  /// mixed group (ETH spans Ethereum and its L2s) should not have to branch.
+  BalanceResult resultFor(AssetDeployment at) =>
+      at.tokenId == null ? balanceFor(at.coin) : tokenBalanceFor(at.tokenId!);
+
+  /// USD value of one deployment, or null when unavailable.
+  double? fiatFor(AssetDeployment at, String symbol) {
+    if (at.tokenId == null) return fiatValueUsd(at.coin);
+    if (_isTestnet(at.coin)) return null;
+    final result = tokenBalanceFor(at.tokenId!);
+    final amount = result.amount;
+    if (result.status != BalanceStatus.ok || amount == null) return null;
+    final price = tokenPriceUsd(symbol);
+    if (price == null) return null;
+    return amount.raw.toDouble() /
+        math.pow(10, amount.decimals).toDouble() *
+        price;
+  }
+
+  /// 24h change for a deployment's asset. Native coins are quoted per chain
+  /// (an L2's ETH is the same quote as Ethereum's), tokens per symbol.
+  double? changeFor(AssetDeployment at, String symbol) => at.tokenId == null
+      ? change24hPercent(at.coin)
+      : tokenChange24hPercent(symbol);
 
   /// Sum of the computable per-chain and per-token fiat values, or null when
   /// none is computable (a partially failed refresh totals only what's known).

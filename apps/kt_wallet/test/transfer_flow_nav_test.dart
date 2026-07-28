@@ -91,9 +91,9 @@ void main() {
   // actually carries an asset.
   Future<void> openEthDetail(WidgetTester tester) async {
     await _openHome(tester);
-    // The asset row, not the network chip above it — both read 'Ethereum',
-    // and the chips are rendered first.
-    final row = find.text('Ethereum').last;
+    // ETH is one row across Ethereum, Base and Arbitrum, so the row is named
+    // by the SYMBOL. 'Ethereum' now only names the network chip above it.
+    final row = find.text('ETH').last;
     await tester.ensureVisible(row);
     await tester.pumpAndSettle();
     await tester.tap(row);

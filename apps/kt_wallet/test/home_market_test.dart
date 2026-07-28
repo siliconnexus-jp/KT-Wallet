@@ -166,8 +166,10 @@ void main() {
     expect(find.text('+10.00%'), findsWidgets);
     // Live rows (home tab card; the assets tab inside the IndexedStack builds
     // them too, hence findsWidgets).
-    expect(find.text('1 ETH'), findsWidgets);
-    expect(find.text('0.5 SOL'), findsWidgets);
+    // ETH is native on Ethereum, Base and Arbitrum, so it is ONE row across
+    // three chains — not three rows that each say "0 ETH".
+    expect(find.text('1 ETH · 3 条链'), findsWidgets);
+    expect(find.text('0.5 SOL · Solana'), findsWidgets);
     expect(find.text(r'$2,000.00'), findsWidgets);
     // Token rows render under the native rows using live market quotes; the
     // errored TRON USDT stays an honest '--'.
@@ -229,8 +231,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('1 ETH'), findsOneWidget);
-    expect(find.text('5 TRX'), findsOneWidget);
+    expect(find.text('1 ETH · 3 条链'), findsOneWidget);
+    expect(find.text('5 TRX · TRON'), findsOneWidget);
     expect(find.text(r'$0.50'), findsOneWidget); // 5 TRX * $0.10
     // Token rows appended under the natives.
     expect(find.text('25 USDT · 7 条链'), findsOneWidget);
@@ -259,7 +261,7 @@ void main() {
       expect(find.text('10 USDC · 6 条链'), findsOneWidget);
       expect(find.text('25 USDT · 7 条链'), findsOneWidget);
       // Native rows still filter to their own chain.
-      expect(find.text('1 ETH'), findsNothing);
+      expect(find.text('1 ETH · 3 条链'), findsNothing);
       controller.dispose();
     },
   );

@@ -122,7 +122,7 @@ void main() {
     await tester.pumpWidget(
       _app(
         market,
-        const TokenDetailScreen(
+        TokenDetailScreen(
           asset: AssetRef.native(
             coin: Coin.eth,
             name: 'Ethereum',
@@ -173,7 +173,7 @@ void main() {
     await tester.pumpWidget(
       _app(
         market,
-        const TokenDetailScreen(
+        TokenDetailScreen(
           asset: AssetRef.native(
             coin: Coin.solana,
             name: 'Solana',

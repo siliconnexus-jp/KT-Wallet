@@ -22,14 +22,13 @@ import 'package:wallet_data/wallet_data.dart'
 
 import '../../l10n/app_localizations.dart';
 import 'home_screen.dart' show tokenRowMeta;
-import '../market/balance_service.dart' show BalanceService, BalanceStatus;
-import '../market/asset_ref.dart' show AssetRef, chainOf;
+import '../market/balance_service.dart' show BalanceStatus;
+import '../market/asset_ref.dart' show AssetDeployment, AssetRef, chainOf;
 import '../market/explorer_links.dart' show explorerTxUrl;
 import '../market/history_service.dart' show ChainTxRecord;
 import '../market/market_scope.dart'
     show MarketScope, effectiveRpcEndpoints, prefsGatewayResolver;
-import '../market/token_balance_service.dart'
-    show TokenInfo, usdcSolanaDevnetToken;
+import '../market/token_balance_service.dart' show usdcSolanaDevnetToken;
 import '../platform/external_actions.dart';
 import '../rpc/http_transport.dart';
 import '../security/biometric_auth.dart';
@@ -344,7 +343,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
       '100.00',
       Color(0xFF2775CA),
       r'$',
-      contract: 'EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v',
+      contract: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
     ),
     _TransferAsset(
       'ETH',
@@ -429,42 +428,27 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
   List<_TransferAsset> get _options {
     final asset = widget.asset;
     if (asset == null) return _assets;
-    if (asset.group.isEmpty) return [_refAsset(asset, null)];
-    return [for (final token in asset.group) _refAsset(asset, token)];
+    return [for (final at in asset.group) _refAsset(asset, at)];
   }
 
   /// A transfer row for one deployment of the incoming asset. Balance is left
   /// at zero here; [_assetAt] fills in the live figure the same way it does
   /// for the built-in list.
-  static _TransferAsset _refAsset(AssetRef ref, TokenInfo? token) {
+  static _TransferAsset _refAsset(AssetRef ref, AssetDeployment at) {
     final (color, glyph) =
         tokenRowMeta[ref.symbol] ??
         (WalletColors.accent, ref.symbol.substring(0, 1));
-    if (token == null) {
-      // Native coin: no contract, and decimals come from the chain.
-      return _TransferAsset(
-        ref.symbol,
-        ref.network ?? chainOf(ref.coin).name,
-        ref.network ?? chainOf(ref.coin).name,
-        chainOf(ref.coin),
-        BalanceService.decimalsFor[ref.coin]!,
-        '0',
-        '0',
-        color,
-        glyph,
-      );
-    }
     return _TransferAsset(
       ref.symbol,
-      token.network,
-      token.network,
-      chainOf(token.chain),
-      token.decimals,
+      at.network,
+      at.network,
+      chainOf(at.coin),
+      at.decimals,
       '0',
       '0',
       color,
       glyph,
-      contract: token.contract,
+      contract: at.contract,
     );
   }
 
