@@ -351,6 +351,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pasteOrEnterAddress => 'Paste or enter address';
 
   @override
+  String compatibleContactsHint(String network) {
+    return 'Only contacts compatible with $network are shown';
+  }
+
+  @override
+  String noCompatibleContacts(String network) {
+    return 'No contacts are compatible with $network';
+  }
+
+  @override
   String enterChainAddress(String network) {
     return 'Enter a $network network recipient address';
   }

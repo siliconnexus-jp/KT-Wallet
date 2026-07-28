@@ -334,6 +334,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get pasteOrEnterAddress => 'アドレスを貼り付けまたは入力';
 
   @override
+  String compatibleContactsHint(String network) {
+    return '$networkで使用できる連絡先のみ表示しています';
+  }
+
+  @override
+  String noCompatibleContacts(String network) {
+    return '$networkで使用できる連絡先はありません';
+  }
+
+  @override
   String enterChainAddress(String network) {
     return '$networkネットワークの受取アドレスを入力してください';
   }

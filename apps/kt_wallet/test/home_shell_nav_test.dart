@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/main.dart';
 
@@ -18,15 +18,19 @@ Future<void> _openHome(WidgetTester tester) async {
 
 void main() {
   testWidgets(
-    'bottom tab bar switches between home / assets / records / settings',
+    'bottom tab bar has home/assets/settings and records opens as a page',
     (tester) async {
       await _openHome(tester);
 
-      // Records tab (tab-bar label is the last '记录' match; the home action row
-      // also has one).
-      await tester.tap(find.text('记录').last);
+      // "记录" exists once as a home action, not as a duplicate bottom tab.
+      expect(find.text('记录'), findsOneWidget);
+      await tester.tap(find.text('记录'));
       await tester.pumpAndSettle();
       expect(find.text('交易记录'), findsOneWidget);
+      expect(find.text('-120.00 USDT'), findsNothing);
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
 
       // Settings tab.
       await tester.tap(find.text('设置'));

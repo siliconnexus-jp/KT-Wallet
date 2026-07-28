@@ -75,6 +75,7 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
       path: '/scan-address',
       builder: (c, s) => const ScanAddressScreen(),
     ),
+    GoRoute(path: '/records', builder: (c, s) => const RecordsScreen()),
     for (final entry in screenRegistry.entries)
       if (_sheetRoutes.contains(entry.value.$1))
         GoRoute(

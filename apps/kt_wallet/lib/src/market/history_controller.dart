@@ -9,8 +9,9 @@ import 'history_service.dart';
 
 /// Live transaction history for the current wallet, per chain. Mirrors the
 /// [MarketController] lifecycle patterns (generation-guarded refresh, wallet
-/// switch listener) but is owned by the records tab, not `main.dart` — it is
-/// mounted lazily the first time the tab builds under a live market context.
+/// switch listener) but is owned by the history surface, not `main.dart` — it
+/// is mounted lazily when the full history page or an asset history section
+/// builds under a live market context.
 class HistoryController extends ChangeNotifier {
   HistoryController({
     required WalletController wallets,
@@ -45,7 +46,8 @@ class HistoryController extends ChangeNotifier {
     for (final coin in Coin.values) coin: const HistoryResult.loading(),
   };
 
-  HistoryResult resultFor(Coin coin) => _results[coin]!;
+  HistoryResult resultFor(Coin coin) =>
+      _results[coin] ?? const HistoryResult.unsupported();
 
   /// True until the first refresh completes (rows render '--' placeholders).
   bool get isLoading => !_hasRefreshed || _refreshing;
@@ -54,14 +56,12 @@ class HistoryController extends ChangeNotifier {
   bool get hasLiveRecords =>
       _results.values.any((r) => r.status == HistoryStatus.ok);
 
-  /// Every chain reported "no keyless history API" — the tab shows the
-  /// unsupported empty-state line instead of demo rows.
+  /// Every chain reported "no keyless history API".
   bool get allUnsupported =>
       !isLoading &&
       _results.values.every((r) => r.status == HistoryStatus.unsupported);
 
-  /// Every supported chain errored (e.g. the demo mock address was rejected):
-  /// the tab falls back to demo rows behind the offline banner.
+  /// Every supported chain errored (for example, the RPC is unavailable).
   bool get isError => !isLoading && !hasLiveRecords && !allUnsupported;
 
   db.Transaction? localTransactionForHash(String hash) {
@@ -97,6 +97,7 @@ class HistoryController extends ChangeNotifier {
           hash: hash,
           outgoing: true,
           amountText: null,
+          assetContract: transaction.contract,
           timestamp: DateTime.fromMillisecondsSinceEpoch(transaction.createdAt),
           confirmed: transaction.status == db.TxStatus.confirmed,
         ),
@@ -185,11 +186,10 @@ class HistoryController extends ChangeNotifier {
   }
 }
 
-/// Provides a [HistoryController] to the records tab and rebuilds dependents
-/// when it notifies. Like [MarketScope] there is NO fallback: without a scope
-/// (and without a live market context to lazily mount one) the tab renders
-/// the demo records byte-for-byte. Tests inject a controller through this
-/// scope; production mounts one lazily inside the records tab itself.
+/// Provides a [HistoryController] to history surfaces and rebuilds dependents
+/// when it notifies. Like [MarketScope] there is no implicit controller:
+/// tests may inject one through this scope; production history surfaces mount
+/// one lazily when a live market context exists.
 class HistoryScope extends InheritedNotifier<HistoryController> {
   const HistoryScope({
     super.key,

@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="data:,">
+  <title>KT Wallet · 交易记录 UI 双端测试报告</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #080b12;
+      --panel: #121824;
+      --panel-2: #171f2e;
+      --line: #283348;
+      --text: #f5f7ff;
+      --muted: #9ca8bd;
+      --blue: #6682ff;
+      --cyan: #45d4ce;
+      --green: #4fd39a;
+      --amber: #f4bd4f;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 10% -10%, rgba(102,130,255,.23), transparent 35rem),
+        radial-gradient(circle at 100% 10%, rgba(69,212,206,.11), transparent 30rem),
+        var(--bg);
+      color: var(--text);
+      font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { width: min(1200px, calc(100% - 32px)); margin: 0 auto; padding: 52px 0 80px; }
+    header { padding: 20px 0 34px; }
+    .eyebrow { color: var(--cyan); font-size: 12px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
+    h1 { margin: 10px 0 14px; font-size: clamp(36px, 6vw, 68px); line-height: 1.02; letter-spacing: -.045em; }
+    h2 { margin: 0 0 18px; font-size: 24px; letter-spacing: -.025em; }
+    h3 { margin: 0 0 6px; font-size: 17px; }
+    p { margin: 6px 0; color: var(--muted); }
+    code { color: #cbd5ff; font: .88em ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+    .meta, .grid, .pair { display: grid; gap: 16px; }
+    .meta { grid-template-columns: repeat(4, 1fr); margin-top: 28px; }
+    .grid, .pair { grid-template-columns: repeat(2, 1fr); }
+    section { margin-top: 24px; }
+    .card {
+      background: linear-gradient(145deg, rgba(23,31,46,.97), rgba(14,19,29,.97));
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 22px;
+      box-shadow: 0 18px 55px rgba(0,0,0,.18);
+    }
+    .metric { font-size: 28px; font-weight: 820; letter-spacing: -.035em; }
+    .label { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border-radius: 999px;
+      padding: 5px 10px;
+      color: var(--green);
+      background: rgba(79,211,154,.12);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 13px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; }
+    tr:last-child td { border-bottom: 0; }
+    ul { margin: 10px 0 0; padding-left: 20px; color: var(--muted); }
+    .note { border-color: rgba(244,189,79,.4); background: rgba(244,189,79,.07); }
+    .step { margin-top: 28px; }
+    .step-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+    .step-no { color: var(--blue); font: 800 12px/1 ui-monospace, monospace; letter-spacing: .1em; }
+    figure { margin: 0; overflow: hidden; padding: 0 !important; }
+    figure img { display: block; width: 100%; height: 650px; object-fit: contain; background: #05070b; }
+    figcaption { padding: 14px 17px 17px; }
+    figcaption strong { display: block; margin-bottom: 2px; }
+    footer { margin-top: 38px; color: #6e7a91; font-size: 12px; }
+    @media (max-width: 820px) {
+      .meta, .grid, .pair { grid-template-columns: 1fr; }
+      figure img { height: 560px; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Mobile UI acceptance · 2026-07-28 JST</div>
+    <h1>交易记录<br>双端 UI 验收</h1>
+    <p>验证 KT Wallet 移除底部“记录”Tab 后的信息架构、真实空状态、全钱包聚合记录，以及同名 Token 按网络和合约隔离展示。</p>
+    <div class="meta">
+      <div class="card"><div class="label">平台</div><div class="metric">2</div><p>iOS 26.2 / Android 15</p></div>
+      <div class="card"><div class="label">UI 场景</div><div class="metric">7 × 2</div><p>两端相同步骤</p></div>
+      <div class="card"><div class="label">截图</div><div class="metric">14</div><p>模拟器实际渲染 PNG</p></div>
+      <div class="card"><div class="label">结论</div><div class="metric" style="color:var(--green)">PASS</div><p>全部断言通过</p></div>
+    </div>
+  </header>
+
+  <section class="card">
+    <h2>结论</h2>
+    <table>
+      <thead><tr><th>验收点</th><th>iOS</th><th>Android</th><th>结果</th></tr></thead>
+      <tbody>
+        <tr><td>底部导航仅：首页 / 资产 / 设置</td><td>通过</td><td>通过</td><td><span class="status">PASS</span></td></tr>
+        <tr><td>首页“记录”作为独立入口，不再占用 Tab</td><td>通过</td><td>通过</td><td><span class="status">PASS</span></td></tr>
+        <tr><td>没有真实记录时展示“暂无交易记录”</td><td>通过</td><td>通过</td><td><span class="status">PASS</span></td></tr>
+        <tr><td>全钱包记录合并不同币种与网络</td><td>通过</td><td>通过</td><td><span class="status">PASS</span></td></tr>
+        <tr><td>Ethereum USDT 仅显示对应合约记录</td><td>通过</td><td>通过</td><td><span class="status">PASS</span></td></tr>
+        <tr><td>切换 Polygon 后仅显示 Polygon USDT</td><td>通过</td><td>通过</td><td><span class="status">PASS</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="grid">
+    <article class="card">
+      <h2>自动化结果</h2>
+      <ul>
+        <li><code>flutter analyze integration_test/records_ui_capture_test.dart</code>：无问题。</li>
+        <li>相关 Widget 回归：<strong>27 / 27</strong> 通过。</li>
+        <li>iPhone 17 Pro · iOS 26.2 Simulator：<strong>1 / 1</strong> 集成测试通过。</li>
+        <li>Android Emulator · Android 15 / API 35：<strong>1 / 1</strong> 集成测试通过。</li>
+        <li>14 张截图经人工复核：无黑屏、裁切、错误网络串页。</li>
+      </ul>
+    </article>
+    <article class="card note">
+      <h2>证据边界</h2>
+      <p>本报告验证的是移动端 UI 与过滤逻辑。为稳定复现，交易记录由测试专用 <code>HistoryService</code> 注入三条确定性记录；生产路由没有使用这些夹具。</p>
+      <p>夹具为 Ethereum USDT <code>+2</code>、Ethereum 原生 ETH <code>-0.2</code>、Polygon USDT <code>-9</code>。报告不将它们宣称为真实链上交易。</p>
+      <p>空状态同样通过成功但为空的历史结果触发，并明确断言旧模拟金额 <code>-120.00 USDT</code> 与 <code>+0.05 ETH</code> 不存在。</p>
+    </article>
+  </section>
+
+  <section class="step">
+    <div class="step-head"><div><div class="step-no">STEP 01</div><h2>首页信息架构</h2><p>“记录”仅保留在快捷操作；底部导航为首页、资产、设置。</p></div><span class="status">PASS</span></div>
+    <div class="pair">
+      <figure class="card"><img src="screenshots/ios-01-home-three-tabs.png" alt="iOS 首页三栏导航"><figcaption><strong>iOS · 首页</strong><p>无底部“记录”Tab。</p></figcaption></figure>
+      <figure class="card"><img src="screenshots/android-01-home-three-tabs.png" alt="Android 首页三栏导航"><figcaption><strong>Android · 首页</strong><p>无底部“记录”Tab。</p></figcaption></figure>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-head"><div><div class="step-no">STEP 02</div><h2>真实空状态</h2><p>历史查询成功但结果为空时，不注入任何演示交易。</p></div><span class="status">PASS</span></div>
+    <div class="pair">
+      <figure class="card"><img src="screenshots/ios-02-wallet-empty-history.png" alt="iOS 空交易记录"><figcaption><strong>iOS · 暂无交易记录</strong><p>页面保持清晰的单一空状态。</p></figcaption></figure>
+      <figure class="card"><img src="screenshots/android-02-wallet-empty-history.png" alt="Android 空交易记录"><figcaption><strong>Android · 暂无交易记录</strong><p>未出现旧模拟金额。</p></figcaption></figure>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-head"><div><div class="step-no">STEP 03</div><h2>全钱包聚合</h2><p>首页入口展示所有资产和网络的记录，按时间倒序合并。</p></div><span class="status">PASS</span></div>
+    <div class="pair">
+      <figure class="card"><img src="screenshots/ios-03-wallet-all-history.png" alt="iOS 全钱包交易记录"><figcaption><strong>iOS · 全钱包记录</strong><p>同时显示 ETH、Ethereum USDT、Polygon USDT。</p></figcaption></figure>
+      <figure class="card"><img src="screenshots/android-03-wallet-all-history.png" alt="Android 全钱包交易记录"><figcaption><strong>Android · 全钱包记录</strong><p>币种与网络记录合并正确。</p></figcaption></figure>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-head"><div><div class="step-no">STEP 04</div><h2>Ethereum USDT 详情</h2><p>资产详情页保留价格、合约与操作区，记录作为下方内容段落。</p></div><span class="status">PASS</span></div>
+    <div class="pair">
+      <figure class="card"><img src="screenshots/ios-04-usdt-ethereum-detail.png" alt="iOS Ethereum USDT 详情"><figcaption><strong>iOS · Ethereum</strong><p>网络芯片与合约地址同步。</p></figcaption></figure>
+      <figure class="card"><img src="screenshots/android-04-usdt-ethereum-detail.png" alt="Android Ethereum USDT 详情"><figcaption><strong>Android · Ethereum</strong><p>详情层级与记录段落连贯。</p></figcaption></figure>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-head"><div><div class="step-no">STEP 05</div><h2>Ethereum 记录过滤</h2><p>仅显示 Ethereum 上该 USDT 合约的 <code>+2 USDT</code>；排除原生 ETH 和 Polygon USDT。</p></div><span class="status">PASS</span></div>
+    <div class="pair">
+      <figure class="card"><img src="screenshots/ios-05-usdt-ethereum-history.png" alt="iOS Ethereum USDT 记录"><figcaption><strong>iOS · +2 USDT</strong><p>同链原生币记录未混入。</p></figcaption></figure>
+      <figure class="card"><img src="screenshots/android-05-usdt-ethereum-history.png" alt="Android Ethereum USDT 记录"><figcaption><strong>Android · +2 USDT</strong><p>Polygon 同名 Token 未混入。</p></figcaption></figure>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-head"><div><div class="step-no">STEP 06</div><h2>网络选择器</h2><p>同名 Token 的不同部署从底部网络选择器切换。</p></div><span class="status">PASS</span></div>
+    <div class="pair">
+      <figure class="card"><img src="screenshots/ios-06-usdt-network-picker.png" alt="iOS USDT 网络选择器"><figcaption><strong>iOS · 网络选择</strong><p>Ethereum 与 Polygon 独立展示。</p></figcaption></figure>
+      <figure class="card"><img src="screenshots/android-06-usdt-network-picker.png" alt="Android USDT 网络选择器"><figcaption><strong>Android · 网络选择</strong><p>选中态和网络图标清晰。</p></figcaption></figure>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-head"><div><div class="step-no">STEP 07</div><h2>Polygon 记录过滤</h2><p>切换后合约、网络芯片和记录一起更新，仅保留 <code>-9 USDT</code>。</p></div><span class="status">PASS</span></div>
+    <div class="pair">
+      <figure class="card"><img src="screenshots/ios-07-usdt-polygon-history.png" alt="iOS Polygon USDT 记录"><figcaption><strong>iOS · Polygon</strong><p>Ethereum USDT 与 ETH 记录均被排除。</p></figcaption></figure>
+      <figure class="card"><img src="screenshots/android-07-usdt-polygon-history.png" alt="Android Polygon USDT 记录"><figcaption><strong>Android · Polygon</strong><p>合约和记录同步切换。</p></figcaption></figure>
+    </div>
+  </section>
+
+  <footer>
+    KT Wallet UI acceptance · Generated locally from simulator evidence · Report assets are self-contained and require no network connection.
+  </footer>
+</main>
+</body>
+</html>

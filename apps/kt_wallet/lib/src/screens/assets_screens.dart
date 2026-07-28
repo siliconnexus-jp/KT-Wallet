@@ -22,7 +22,12 @@ import '../platform/external_actions.dart';
 import '../platform/media_gallery.dart';
 import '../transfer/airgap_codec.dart' show truncateMiddle;
 import 'home_screen.dart'
-    show liveAssetGroupRow, liveTokenGroupRow, nativesBySymbol, tokensBySymbol;
+    show
+        RecordsScreen,
+        liveAssetGroupRow,
+        liveTokenGroupRow,
+        nativesBySymbol,
+        tokensBySymbol;
 import '../widgets/market_offline_banner.dart';
 import '../widgets/token_icon.dart';
 import '../state/networks.dart';
@@ -634,6 +639,13 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
             ],
           ),
         ),
+        RecordsScreen(
+          key: ValueKey(
+            'asset-history-${actionCoin.name}-${contract ?? 'native'}',
+          ),
+          asset: ref.selecting(_chainIndex),
+          embedded: true,
+        ),
       ],
     );
   }
@@ -1032,6 +1044,14 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       Color(0xFFE84142),
     ),
     _ReceiveChain(
+      Coin.bnb,
+      'BNB Smart Chain',
+      'BNB · BNB Smart Chain',
+      'B',
+      Color(0xFFF3BA2F),
+      Color(0xFFF3BA2F),
+    ),
+    _ReceiveChain(
       Coin.tron,
       'TRON',
       'USDT · TRON',
@@ -1086,17 +1106,22 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     }
     final expanded =
         WalletScope.of(context).current?.addresses.hasExpandedEvm ?? false;
-    return expanded
-        ? [
-            _chains[0],
-            _chains[1],
-            _chains[5],
-            _chains[6],
-            _chains[2],
-            _chains[3],
-            _chains[4],
+    final order = expanded
+        ? const [
+            Coin.eth,
+            Coin.polygon,
+            Coin.tron,
+            Coin.solana,
+            Coin.bnb,
+            Coin.base,
+            Coin.arbitrum,
+            Coin.avalanche,
           ]
-        : [_chains[0], _chains[1], _chains[5], _chains[6]];
+        : const [Coin.eth, Coin.polygon, Coin.tron, Coin.solana];
+    return [
+      for (final coin in order)
+        _chains.firstWhere((chain) => chain.coin == coin),
+    ];
   }
 
   _ReceiveChain get _chain =>
@@ -1113,6 +1138,57 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   /// Symbol the pill's icon stands for — the token when there is one.
   String get _iconSymbol =>
       widget.asset?.symbol ?? _chain.pillLabel.split(' ').first;
+
+  /// Asset artwork for the receive pill.
+  ///
+  /// A token and its network are two separate pieces of safety information:
+  /// "USDT on Ethereum" must show both the USDT mark and the Ethereum mark.
+  /// Native coins only need the chain mark once.
+  Widget _receiveAssetIcon(_ReceiveChain chain) {
+    final family = _familyOf(chain.coin);
+    if (widget.asset?.isToken != true) {
+      return ChainIcon(
+        key: const ValueKey('receive-network-icon'),
+        chain: family,
+        size: 24,
+      );
+    }
+    return SizedBox(
+      width: 28,
+      height: 28,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: 0,
+            top: 0,
+            child: TokenIcon(
+              key: const ValueKey('receive-token-icon'),
+              symbol: _iconSymbol,
+              size: 24,
+              fallbackColor: chain.tokenColor,
+              fallbackInitial: chain.glyph,
+            ),
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: DecoratedBox(
+              key: const ValueKey('receive-network-icon'),
+              decoration: const BoxDecoration(
+                color: WalletColors.surface,
+                shape: BoxShape.circle,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(1.5),
+                child: ChainIcon(chain: family, size: 12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   /// Protocol family of the selected coin (Coin is the derivation-level enum,
   /// Chain the network-level one; they map 1:1).
@@ -1454,12 +1530,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TokenIcon(
-                    symbol: _iconSymbol,
-                    size: 24,
-                    fallbackColor: chain.tokenColor,
-                    fallbackInitial: chain.glyph,
-                  ),
+                  _receiveAssetIcon(chain),
                   const SizedBox(width: 8),
                   Text(
                     _assetLabel,

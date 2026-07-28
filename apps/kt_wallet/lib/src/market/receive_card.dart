@@ -127,6 +127,10 @@ Future<Uint8List> renderReceiveCardPng(
     color: WalletColors.text,
     mono: true,
     align: TextAlign.center,
+    // Keep the painter at the width of its longest rendered line, then place
+    // that block from the card centre below. This makes both short EVM
+    // addresses and wrapped, longer formats visibly centred.
+    widthBasis: TextWidthBasis.longestLine,
   )..layout(maxWidth: width - margin * 2);
   final network = _painter(
     '${data.networkLabel}  ${data.networkName}'
@@ -241,7 +245,7 @@ Future<Uint8List> renderReceiveCardPng(
   _paintQr(canvas, data.address, ui.Offset((width - qrSize) / 2, y), qrSize);
   y += qrSize + 26;
 
-  address.paint(canvas, ui.Offset(margin, y));
+  address.paint(canvas, ui.Offset((width - address.width) / 2, y));
   y += address.height + 24;
 
   final netRowHeight = math.max(
@@ -327,6 +331,7 @@ TextPainter _painter(
   FontWeight weight = FontWeight.w400,
   bool mono = false,
   TextAlign align = TextAlign.left,
+  TextWidthBasis widthBasis = TextWidthBasis.parent,
 }) => TextPainter(
   text: TextSpan(
     text: text,
@@ -340,6 +345,7 @@ TextPainter _painter(
   ),
   textAlign: align,
   textDirection: TextDirection.ltr,
+  textWidthBasis: widthBasis,
 );
 
 /// `YYYY-MM-DD HH:MM` in the device's own time zone — no seconds, no locale

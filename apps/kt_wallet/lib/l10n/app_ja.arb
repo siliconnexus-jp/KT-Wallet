@@ -101,6 +101,8 @@
   "amountFormatInvalid": "金額の形式が正しくありません",
   "recipientAddress": "受取アドレス",
   "pasteOrEnterAddress": "アドレスを貼り付けまたは入力",
+  "compatibleContactsHint": "{network}で使用できる連絡先のみ表示しています",
+  "noCompatibleContacts": "{network}で使用できる連絡先はありません",
   "enterChainAddress": "{network}ネットワークの受取アドレスを入力してください",
   "addressValidOn": "アドレス形式は正しい · {network}ネットワーク",
   "addressInvalid": "無効なアドレス",

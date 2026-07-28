@@ -101,6 +101,8 @@
   "amountFormatInvalid": "Invalid amount format",
   "recipientAddress": "Recipient address",
   "pasteOrEnterAddress": "Paste or enter address",
+  "compatibleContactsHint": "Only contacts compatible with {network} are shown",
+  "noCompatibleContacts": "No contacts are compatible with {network}",
   "enterChainAddress": "Enter a {network} network recipient address",
   "addressValidOn": "Valid address · {network} network",
   "addressInvalid": "Invalid address",

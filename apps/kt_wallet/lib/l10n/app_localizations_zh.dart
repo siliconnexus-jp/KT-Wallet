@@ -331,6 +331,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pasteOrEnterAddress => '粘贴或输入地址';
 
   @override
+  String compatibleContactsHint(String network) {
+    return '仅显示可用于 $network 的联系人';
+  }
+
+  @override
+  String noCompatibleContacts(String network) {
+    return '没有可用于 $network 的联系人';
+  }
+
+  @override
   String enterChainAddress(String network) {
     return '请输入 $network 网络收款地址';
   }

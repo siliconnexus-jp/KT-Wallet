@@ -706,6 +706,18 @@ abstract class AppLocalizations {
   /// **'粘贴或输入地址'**
   String get pasteOrEnterAddress;
 
+  /// No description provided for @compatibleContactsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅显示可用于 {network} 的联系人'**
+  String compatibleContactsHint(String network);
+
+  /// No description provided for @noCompatibleContacts.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有可用于 {network} 的联系人'**
+  String noCompatibleContacts(String network);
+
   /// No description provided for @enterChainAddress.
   ///
   /// In zh, this message translates to:

@@ -173,6 +173,22 @@
   "amountFormatInvalid": "金额格式不正确",
   "recipientAddress": "收款地址",
   "pasteOrEnterAddress": "粘贴或输入地址",
+  "compatibleContactsHint": "仅显示可用于 {network} 的联系人",
+  "@compatibleContactsHint": {
+    "placeholders": {
+      "network": {
+        "type": "String"
+      }
+    }
+  },
+  "noCompatibleContacts": "没有可用于 {network} 的联系人",
+  "@noCompatibleContacts": {
+    "placeholders": {
+      "network": {
+        "type": "String"
+      }
+    }
+  },
   "enterChainAddress": "请输入 {network} 网络收款地址",
   "@enterChainAddress": {
     "placeholders": {

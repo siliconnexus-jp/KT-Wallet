@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 import 'package:wallet_data/wallet_data.dart'
     show
+        Contact,
         EvmNonceConflict,
         SignMode,
         Transaction,
@@ -539,6 +540,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
   /// pre-fill a recipient the user did not type.
   final _addrController = TextEditingController();
   final _amountController = TextEditingController();
+  Contact? _selectedContact;
   int _fee = 1;
 
   /// True in the real app (any live surface mounts a [MarketScope]); false
@@ -569,6 +571,20 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
 
   AddressValidation get _addrCheck =>
       Addresses.validate(_asset.chain, _addrController.text.trim());
+
+  /// The identity badge is shown only while the field still contains exactly
+  /// the address chosen from the book and that address remains compatible
+  /// with the active chain. A manual edit can never leave a stale name beside
+  /// a different recipient.
+  Contact? get _visibleContact {
+    final contact = _selectedContact;
+    if (contact == null ||
+        _addrController.text.trim() != contact.address ||
+        !_addrCheck.isValid) {
+      return null;
+    }
+    return contact;
+  }
 
   /// Returns the parsed amount if it is valid and within balance, else null.
   Amount? get _amount {
@@ -650,14 +666,171 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
   Future<void> _paste() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = (data?.text ?? '').trim();
-    if (text.isNotEmpty) setState(() => _addrController.text = text);
+    if (text.isNotEmpty) {
+      setState(() {
+        _selectedContact = null;
+        _addrController.text = text;
+      });
+    }
   }
 
   /// Opens the mock address scanner; a simulated scan pops with the address.
   Future<void> _scanAddress() async {
     final scanned = await context.push<String>('/scan-address');
     if (scanned != null && mounted) {
-      setState(() => _addrController.text = scanned);
+      setState(() {
+        _selectedContact = null;
+        _addrController.text = scanned;
+      });
+    }
+  }
+
+  /// Opens the address book with only recipients whose address format is
+  /// valid on the active chain. Compatibility is intentionally based on the
+  /// address family rather than the contact's saved label: one EVM address is
+  /// usable on Ethereum, Arbitrum, Base, Polygon, Avalanche and BNB, while
+  /// TRON and Solana remain isolated.
+  Future<void> _pickContact() async {
+    final controller = WalletScope.of(context);
+    final contacts = await controller.loadContacts();
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(context);
+    final compatible = contacts
+        .where(
+          (contact) =>
+              Addresses.validate(_asset.chain, contact.address).isValid,
+        )
+        .toList();
+
+    final selected = await showModalBottomSheet<Contact>(
+      context: context,
+      backgroundColor: WalletColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: WalletColors.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Text(
+                      l10n.addressBookTitle,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: WalletColors.text,
+                      ),
+                    ),
+                    const Spacer(),
+                    ChainIcon(chain: _asset.chain, size: 20),
+                    const SizedBox(width: 7),
+                    Text(
+                      _asset.networkName,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: WalletColors.text2,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  l10n.compatibleContactsHint(_asset.networkName),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: WalletColors.text3,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                if (compatible.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 28),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          const Icon(
+                            Icons.contact_page_outlined,
+                            size: 30,
+                            color: WalletColors.text3,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            l10n.noCompatibleContacts(_asset.networkName),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: WalletColors.text3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  for (var i = 0; i < compatible.length; i++) ...[
+                    if (i > 0)
+                      const Divider(height: 1, color: WalletColors.border),
+                    ListTile(
+                      key: ValueKey('transfer-contact-${compatible[i].id}'),
+                      contentPadding: EdgeInsets.zero,
+                      leading: KtAvatar(
+                        color: const Color(0xFFF2F4F7),
+                        initial: compatible[i].name.characters.first
+                            .toUpperCase(),
+                        size: 38,
+                      ),
+                      title: Text(
+                        compatible[i].name,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: WalletColors.text,
+                        ),
+                      ),
+                      subtitle: Text(
+                        truncateMiddle(compatible[i].address, head: 9, tail: 9),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontFamily: KtFonts.mono,
+                          color: WalletColors.text3,
+                        ),
+                      ),
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        size: 18,
+                        color: WalletColors.text3,
+                      ),
+                      onTap: () => Navigator.of(ctx).pop(compatible[i]),
+                    ),
+                  ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (selected != null && mounted) {
+      setState(() {
+        _selectedContact = selected;
+        _addrController.text = selected.address;
+      });
     }
   }
 
@@ -777,6 +950,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     final l10n = AppLocalizations.of(context);
     final isHot = WalletScope.of(context).current is HotWallet;
     final addrCheck = _addrCheck;
+    final selectedContact = _visibleContact;
     final canProceed = addrCheck.isValid && _amount != null;
     return KtScreen(
       gap: 16,
@@ -883,7 +1057,11 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                   Expanded(
                     child: TextField(
                       controller: _addrController,
-                      onChanged: (_) => setState(() {}),
+                      onChanged: (value) => setState(() {
+                        if (_selectedContact?.address != value.trim()) {
+                          _selectedContact = null;
+                        }
+                      }),
                       autocorrect: false,
                       enableSuggestions: false,
                       maxLines: null,
@@ -897,6 +1075,20 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                         border: InputBorder.none,
                         hintText: l10n.pasteOrEnterAddress,
                         hintStyle: const TextStyle(color: WalletColors.text3),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    key: const ValueKey('transfer-address-book'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _pickContact,
+                    child: Tooltip(
+                      message: l10n.addressBookTitle,
+                      child: const Icon(
+                        Icons.contacts_outlined,
+                        size: 18,
+                        color: WalletColors.accent,
                       ),
                     ),
                   ),
@@ -921,6 +1113,50 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                 ],
               ),
               const SizedBox(height: 12),
+              if (selectedContact != null) ...[
+                Semantics(
+                  label: '${l10n.addressBookTitle}: ${selectedContact.name}',
+                  child: Container(
+                    key: const ValueKey('transfer-selected-contact'),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: WalletColors.accent.withValues(alpha: 0.07),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.person_outline_rounded,
+                          size: 16,
+                          color: WalletColors.accent,
+                        ),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            selectedContact.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: WalletColors.text,
+                            ),
+                          ),
+                        ),
+                        const Icon(
+                          Icons.check_circle,
+                          size: 15,
+                          color: WalletColors.green,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
               if (_addrController.text.trim().isEmpty)
                 Text(
                   l10n.enterChainAddress(_asset.networkName),

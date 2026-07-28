@@ -1,3 +1,4 @@
+import 'package:chains/chains.dart' show Chain;
 import 'package:core_crypto/core_crypto.dart' show ChainAddresses, Coin;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -150,6 +151,56 @@ void main() {
       expect(find.byIcon(Icons.keyboard_arrow_down), findsNothing);
     });
 
+    testWidgets('Arbitrum address book accepts Ethereum contacts only', (
+      tester,
+    ) async {
+      final wallets = _wallets();
+      const evmAddress = '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed';
+      await wallets.addContact(
+        name: 'Ethereum Alice',
+        address: evmAddress,
+        chain: Chain.ethereum.name,
+      );
+      await wallets.addContact(
+        name: 'TRON Bob',
+        address: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+        chain: Chain.tron.name,
+      );
+      final asset = AssetRef.native(
+        coin: Coin.arbitrum,
+        name: 'Arbitrum One',
+        symbol: 'ETH',
+      );
+
+      await tester.pumpWidget(_app(TransferInputScreen(asset: asset), wallets));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('transfer-address-book')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ethereum Alice'), findsOneWidget);
+      expect(find.text('TRON Bob'), findsNothing);
+      expect(find.textContaining('仅显示可用于 Arbitrum One'), findsOneWidget);
+
+      await tester.tap(find.text('Ethereum Alice'));
+      await tester.pumpAndSettle();
+      final recipient = tester.widget<TextField>(find.byType(TextField).first);
+      expect(recipient.controller!.text, evmAddress);
+      expect(
+        find.byKey(const ValueKey('transfer-selected-contact')),
+        findsOneWidget,
+      );
+      expect(find.text('Ethereum Alice'), findsOneWidget);
+      expect(find.text('地址格式正确 · Arbitrum One 网络'), findsOneWidget);
+
+      // Editing the recipient must clear the stale identity immediately.
+      await tester.enterText(find.byType(TextField).first, '${evmAddress}0');
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('transfer-selected-contact')),
+        findsNothing,
+      );
+    });
+
     testWidgets('without an asset the full list is still offered', (
       tester,
     ) async {
@@ -178,6 +229,92 @@ void main() {
 
       expect(find.text('USDT · Ethereum'), findsOneWidget);
       expect(find.text('ETH · Ethereum'), findsNothing);
+    });
+
+    testWidgets('shows both the token and Ethereum network artwork', (
+      tester,
+    ) async {
+      final wallets = _wallets();
+      final asset = AssetRef.tokenGroup(_usdtGroup).selecting(0);
+
+      await tester.pumpWidget(_app(ReceiveScreen(asset: asset), wallets));
+      await tester.pumpAndSettle();
+
+      final tokenImage = tester.widget<Image>(
+        find.descendant(
+          of: find.byKey(const ValueKey('receive-token-icon')),
+          matching: find.byType(Image),
+        ),
+      );
+      final networkImage = tester.widget<Image>(
+        find.descendant(
+          of: find.byKey(const ValueKey('receive-network-icon')),
+          matching: find.byType(Image),
+        ),
+      );
+      expect(
+        (tokenImage.image as AssetImage).assetName,
+        'assets/tokens/usdt.png',
+      );
+      expect(
+        (networkImage.image as AssetImage).assetName,
+        'assets/tokens/eth.png',
+      );
+    });
+
+    testWidgets('uses the Ethereum artwork for native ETH', (tester) async {
+      final wallets = _wallets();
+      final asset = AssetRef.native(
+        coin: Coin.eth,
+        name: 'Ethereum',
+        symbol: 'ETH',
+      );
+
+      await tester.pumpWidget(_app(ReceiveScreen(asset: asset), wallets));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('receive-token-icon')), findsNothing);
+      final networkImage = tester.widget<Image>(
+        find.descendant(
+          of: find.byKey(const ValueKey('receive-network-icon')),
+          matching: find.byType(Image),
+        ),
+      );
+      expect(
+        (networkImage.image as AssetImage).assetName,
+        'assets/tokens/eth.png',
+      );
+    });
+
+    testWidgets('opens BNB receive with its address and network artwork', (
+      tester,
+    ) async {
+      final wallets = _wallets();
+      final asset = AssetRef.native(
+        coin: Coin.bnb,
+        name: 'BNB Smart Chain',
+        symbol: 'BNB',
+      );
+
+      await tester.pumpWidget(_app(ReceiveScreen(asset: asset), wallets));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('BNB · BNB Smart Chain'), findsOneWidget);
+      expect(
+        find.text('0x1111111111111111111111111111111111111111'),
+        findsOneWidget,
+      );
+      final networkImage = tester.widget<Image>(
+        find.descendant(
+          of: find.byKey(const ValueKey('receive-network-icon')),
+          matching: find.byType(Image),
+        ),
+      );
+      expect(
+        (networkImage.image as AssetImage).assetName,
+        'assets/tokens/bnb.png',
+      );
     });
 
     testWidgets('the chain picker is narrowed to that token', (tester) async {

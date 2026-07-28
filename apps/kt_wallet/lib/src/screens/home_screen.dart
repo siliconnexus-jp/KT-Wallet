@@ -24,8 +24,10 @@ import 'wallet_screens.dart' show AddWalletScreen;
 /// KT Wallet home screen (Pencil W1/W20). Reads the current wallet from
 /// [WalletScope], so switching wallets rebuilds it live; hot vs watch wallets
 /// change the action row and the backup banner (ui-m.md §8.1).
-/// Stateful shell: the bottom tab bar switches between the four top-level tabs
-/// (home / assets / records / settings) via an IndexedStack.
+/// Stateful shell: the bottom tab bar switches between the three top-level
+/// tabs (home / assets / settings) via an IndexedStack. Transaction history
+/// remains a first-class page reached from the home action instead of taking
+/// permanent tab-bar space.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.assets});
 
@@ -131,10 +133,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   _HomeTab(
                     assets: widget.assets ?? demoAssets,
                     onViewAll: () => setState(() => _tab = 1),
-                    onOpenSettings: () => setState(() => _tab = 3),
+                    onOpenSettings: () => setState(() => _tab = 2),
                   ),
                   const _AssetsTab(),
-                  const _RecordsTab(),
                   const _SettingsTab(),
                 ],
               ),
@@ -363,13 +364,23 @@ class _AssetsTab extends StatelessWidget {
   }
 }
 
-class _RecordsTab extends StatefulWidget {
-  const _RecordsTab();
+/// Real transaction history. With no [asset], this is the wallet-wide merged
+/// list used by the home action. With an [asset], records are restricted to
+/// its currently selected deployment (symbol + chain/network).
+class RecordsScreen extends StatefulWidget {
+  const RecordsScreen({super.key, this.asset, this.embedded = false});
+
+  final AssetRef? asset;
+
+  /// Asset detail pages embed only the section; the home action opens the
+  /// standalone page with its own navigation bar.
+  final bool embedded;
+
   @override
-  State<_RecordsTab> createState() => _RecordsTabState();
+  State<RecordsScreen> createState() => _RecordsScreenState();
 }
 
-class _RecordsTabState extends State<_RecordsTab> {
+class _RecordsScreenState extends State<RecordsScreen> {
   /// Lazily-owned [HistoryController], mounted the first time this tab builds
   /// under a live market context (no `main.dart` wiring). Tests inject their
   /// own controller via [HistoryScope], which always wins over the lazy one.
@@ -418,20 +429,15 @@ class _RecordsTabState extends State<_RecordsTab> {
     super.dispose();
   }
 
-  /// Demo rows exactly as before live wiring existed (gallery/goldens, and
-  /// the labeled offline fallback).
-  Widget _demoCard(BuildContext context, AppLocalizations l10n) => KtCard(
-    child: Column(
-      children: [
-        for (final (i, r) in _demoRecords(l10n).indexed) ...[
-          if (i > 0)
-            Divider(
-              height: 1,
-              color: WalletColors.text.withValues(alpha: 0.06),
-            ),
-          _RecordRow(record: r, onTap: () => context.push('/tx-detail')),
-        ],
-      ],
+  Widget _emptyCard(AppLocalizations l10n) => KtCard(
+    child: Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        child: Text(
+          l10n.historyEmpty,
+          style: const TextStyle(fontSize: 13, color: WalletColors.text3),
+        ),
+      ),
     ),
   );
 
@@ -502,19 +508,9 @@ class _RecordsTabState extends State<_RecordsTab> {
     AppLocalizations l10n,
     HistoryController history,
   ) {
-    final records = history.records;
+    final records = _visibleRecords(history);
     if (records.isEmpty) {
-      return KtCard(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 18),
-            child: Text(
-              l10n.historyEmpty,
-              style: const TextStyle(fontSize: 13, color: WalletColors.text3),
-            ),
-          ),
-        ),
-      );
+      return _emptyCard(l10n);
     }
     return KtCard(
       child: Column(
@@ -552,15 +548,49 @@ class _RecordsTabState extends State<_RecordsTab> {
     );
   }
 
+  /// The home history is the merged list. An asset detail page passes a
+  /// narrowed [AssetRef], so both the chain and the contract/mint must match.
+  /// This keeps, for example, Ethereum USDT out of Arbitrum USDT and native
+  /// ETH out of token history on the same network.
+  List<ChainTxRecord> _visibleRecords(HistoryController history) {
+    final asset = widget.asset;
+    if (asset == null) return history.records;
+    final deployment = asset.group[asset.chainIndex];
+    return history.records.where((record) {
+      if (record.coin != deployment.coin) return false;
+      if (!deployment.isToken) return record.assetContract == null;
+      final expected = deployment.contract;
+      final actual = record.assetContract;
+      if (expected == null || actual == null) return false;
+      return switch (deployment.coin) {
+        Coin.eth ||
+        Coin.polygon ||
+        Coin.base ||
+        Coin.arbitrum ||
+        Coin.avalanche ||
+        Coin.bnb => expected.toLowerCase() == actual.toLowerCase(),
+        Coin.tron || Coin.solana => expected == actual,
+      };
+    }).toList();
+  }
+
+  HistoryStatus? _assetStatus(HistoryController history) {
+    final asset = widget.asset;
+    return asset == null ? null : history.resultFor(asset.coin).status;
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final history = HistoryScope.maybeOf(context) ?? _owned;
+    final assetStatus = history == null ? null : _assetStatus(history);
     final Widget body;
     if (history == null) {
-      // No live context (gallery/goldens): demo rows, byte-for-byte.
-      body = _demoCard(context, l10n);
-    } else if (history.allUnsupported) {
+      // No trustworthy history source means no records. Never substitute
+      // design fixtures on a wallet-facing surface.
+      body = _emptyCard(l10n);
+    } else if (assetStatus == HistoryStatus.unsupported ||
+        (assetStatus == null && history.allUnsupported)) {
       // No chain in this context has a keyless history API — say so instead
       // of showing demo rows that could pass for live data.
       body = Padding(
@@ -572,9 +602,10 @@ class _RecordsTabState extends State<_RecordsTab> {
           ),
         ),
       );
-    } else if (history.isLoading) {
+    } else if (history.isLoading || assetStatus == HistoryStatus.loading) {
       body = _loadingCard();
-    } else if (history.isError) {
+    } else if (assetStatus == HistoryStatus.error ||
+        (assetStatus == null && history.isError)) {
       body = Column(
         children: [
           const MarketOfflineBanner(),
@@ -590,24 +621,35 @@ class _RecordsTabState extends State<_RecordsTab> {
     } else {
       body = _liveCard(context, l10n, history);
     }
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24 + kTabBarInset),
-      children: [
-        const SizedBox(height: 8),
-        Row(
+    if (widget.embedded) {
+      return Material(
+        color: Colors.transparent,
+        child: Column(
+          key: const ValueKey('asset-history'),
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               l10n.recordsTitle,
               style: const TextStyle(
-                fontSize: 22,
+                fontSize: 17,
                 fontWeight: FontWeight.w700,
                 color: WalletColors.text,
               ),
             ),
-            const TestnetBadge(),
+            const SizedBox(height: 12),
+            body,
           ],
         ),
-        const SizedBox(height: 20),
+      );
+    }
+    return KtScreen(
+      navBar: KtNavBar(
+        title: l10n.recordsTitle,
+        onBack: () => Navigator.of(context).maybePop(),
+      ),
+      children: [
+        const Align(alignment: Alignment.centerLeft, child: TestnetBadge()),
         body,
       ],
     );
@@ -683,8 +725,7 @@ class _RecordRow extends StatelessWidget {
                 ],
               ),
             ),
-            // Unparseable live amounts render as a plain '--' (no sign);
-            // demo rows always carry an amount, so their output is unchanged.
+            // Unparseable live amounts render as a plain '--' (no sign).
             Text(
               record.amount == '--'
                   ? '--'
@@ -719,13 +760,6 @@ String _txStatusLabel(AppLocalizations l10n, TxStatus status) =>
       TxStatus.replaced => l10n.txStatusReplaced,
       _ => status.name,
     };
-
-List<_TxRecord> _demoRecords(AppLocalizations l10n) => [
-  _TxRecord(true, '120.00 USDT', '${l10n.dateToday} 14:32'),
-  _TxRecord(false, '0.05 ETH', '${l10n.dateYesterday} 09:11'),
-  _TxRecord(true, '1.2 SOL', '${l10n.monthDay(7, 17)} 20:04'),
-  _TxRecord(false, '300.00 USDT', '${l10n.monthDay(7, 15)} 11:47'),
-];
 
 class _SettingsTab extends StatelessWidget {
   const _SettingsTab();
@@ -1351,14 +1385,14 @@ class _ActionRow extends StatelessWidget {
         ? <(String, IconData, bool, String?)>[
             (l10n.actionReceive, Icons.qr_code, false, '/receive'),
             (l10n.actionSend, Icons.north_east, true, '/transfer'),
-            (l10n.tabRecords, Icons.history, false, '/tx-detail'),
+            (l10n.tabRecords, Icons.history, false, '/records'),
             (l10n.actionMore, Icons.more_horiz, false, null),
           ]
         : <(String, IconData, bool, String?)>[
             (l10n.actionReceive, Icons.qr_code, false, '/receive'),
             (l10n.actionSend, Icons.north_east, true, '/transfer'),
             (l10n.actionScanSign, Icons.qr_code_scanner, false, '/scan-result'),
-            (l10n.tabRecords, Icons.history, false, '/tx-detail'),
+            (l10n.tabRecords, Icons.history, false, '/records'),
           ];
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1585,7 +1619,6 @@ class _TabBar extends StatelessWidget {
     final tabs = <(String, IconData)>[
       (l10n.tabHome, Icons.home_filled),
       (l10n.tabAssets, Icons.pie_chart),
-      (l10n.tabRecords, Icons.history),
       (l10n.tabSettings, Icons.settings),
     ];
     return Padding(
