@@ -1,0 +1,369 @@
+---
+import '../styles/global.css';
+import { localePaths, translations, type Locale } from '../i18n';
+
+const repo = 'https://github.com/siliconnexus-jp/KT-Wallet';
+const { locale } = Astro.props as { locale: Locale };
+const copy = translations[locale];
+const walletVisual =
+  locale === 'zh'
+    ? { src: '/assets/wallet-home.png', width: 1206, height: 2622 }
+    : { src: '/assets/wallet-home-en.png', width: 331, height: 736 };
+
+const chains = [
+  { name: 'Ethereum', icon: '/tokens/eth.png' },
+  { name: 'BNB Chain', icon: '/tokens/bnb.png' },
+  { name: 'Polygon', icon: '/tokens/matic.png' },
+  { name: 'Base', icon: '/tokens/base.png' },
+  { name: 'Arbitrum', icon: '/tokens/arb.png' },
+  { name: 'Avalanche', icon: '/tokens/avax.png' },
+  { name: 'TRON', icon: '/tokens/trx.png' },
+  { name: 'Solana', icon: '/tokens/sol.png' },
+];
+
+const featureClasses = ['feature-wide', 'feature-tall', '', '', 'feature-wide'];
+---
+
+<!doctype html>
+<html lang={copy.htmlLang}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content={copy.meta.description}
+    />
+    <meta name="theme-color" content="#080b12" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={copy.meta.title} />
+    <meta
+      property="og:description"
+      content={copy.meta.social}
+    />
+    <meta property="og:image" content="/assets/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={copy.meta.title} />
+    <meta
+      name="twitter:description"
+      content={copy.meta.social}
+    />
+    <meta name="twitter:image" content="/assets/og.png" />
+    <link rel="alternate" hreflang="x-default" href="/" />
+    <link rel="alternate" hreflang="en" href="/" />
+    <link rel="alternate" hreflang="zh-CN" href="/zh/" />
+    <link rel="alternate" hreflang="ja" href="/ja/" />
+    <link rel="icon" type="image/png" href="/assets/kt-wallet-logo.png" />
+    <title>{copy.meta.title}</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#content">{copy.skip}</a>
+
+    <header class="site-header" data-reveal>
+      <div class="shell nav-shell">
+        <a class="brand" href="#top" aria-label={copy.nav.brandAria}>
+          <img src="/assets/kt-wallet-logo.png" alt="" width="40" height="40" />
+          <span>KT Wallet</span>
+        </a>
+        <nav aria-label={copy.nav.aria}>
+          <a href="#roles">{copy.nav.roles}</a>
+          <a href="#features">{copy.nav.features}</a>
+          <a href="#download">{copy.nav.download}</a>
+        </nav>
+        <div class="nav-actions">
+          <label class="language-switch">
+            <span aria-hidden="true">◎</span>
+            <select aria-label={copy.nav.language} data-language-switch>
+              <option value={localePaths.en} selected={locale === 'en'}>EN</option>
+              <option value={localePaths.zh} selected={locale === 'zh'}>中文</option>
+              <option value={localePaths.ja} selected={locale === 'ja'}>日本語</option>
+            </select>
+          </label>
+          <a class="nav-github" href={repo} target="_blank" rel="noreferrer">
+            <span class="github-mark" aria-hidden="true">⌘</span>
+            <span>GitHub</span>
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main id="content">
+      <section class="hero shell" id="top">
+        <div class="hero-copy">
+          <div class="eyebrow" data-reveal style="--delay: 60ms">
+            <span class="live-dot"></span>
+            Open source · MPL-2.0
+          </div>
+          <h1 data-reveal style="--delay: 110ms">
+            {copy.hero.firstLine}<br />
+            <span>{copy.hero.secondLine}</span>
+          </h1>
+          <p class="hero-lede" data-reveal style="--delay: 160ms">
+            {copy.hero.lede}
+          </p>
+          <div class="hero-actions" data-reveal style="--delay: 210ms">
+            <a class="button button-primary" href="#download">
+              {copy.hero.get}
+              <span aria-hidden="true">↓</span>
+            </a>
+            <a class="button button-secondary" href={repo} target="_blank" rel="noreferrer">
+              {copy.hero.source}
+              <span aria-hidden="true">↗</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="device-stage" aria-label={copy.hero.devicesAria}>
+          <div class="stage-halo"></div>
+          <div class="signal-line signal-line-one"></div>
+          <div class="signal-line signal-line-two"></div>
+
+          <figure class="phone phone-wallet" data-reveal style="--delay: 160ms">
+            <div class="phone-sensor"></div>
+            <img
+              src={walletVisual.src}
+              alt={copy.hero.walletAlt}
+              width={walletVisual.width}
+              height={walletVisual.height}
+            />
+          </figure>
+
+          <div class="airgap-chip" data-reveal style="--delay: 300ms">
+            <span class="qr-mini" aria-hidden="true">
+              <i></i><i></i><i></i><i></i><i></i>
+            </span>
+            QR AIR-GAP
+          </div>
+
+          <figure class="phone phone-signer" data-reveal style="--delay: 240ms">
+            <div class="phone-sensor"></div>
+            <img
+              src="/assets/cold-signer.png"
+              alt={copy.hero.signerAlt}
+              width="942"
+              height="2048"
+            />
+          </figure>
+        </div>
+      </section>
+
+      <section class="chain-strip" aria-label={copy.chainsAria}>
+        <div class="shell chain-list">
+          {chains.map((chain) => (
+            <div class="chain-item">
+              <img src={chain.icon} alt="" width="24" height="24" loading="lazy" />
+              <span>{chain.name}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section class="section shell roles" id="roles">
+        <div class="section-heading" data-reveal>
+          <p class="section-kicker">ONE SYSTEM · TWO ROLES</p>
+          <h2>{copy.roles.title}</h2>
+          <p>{copy.roles.intro}</p>
+        </div>
+
+        <div class="role-grid">
+          <article class="role-card role-online" data-reveal>
+            <div class="role-topline">
+              <span class="role-number">01</span>
+              <span class="role-state"><i></i> ONLINE</span>
+            </div>
+            <div class="role-icon role-icon-online" aria-hidden="true">K</div>
+            <h3>KT Wallet</h3>
+            <p>{copy.roles.walletSubtitle}</p>
+            <ul>
+              {copy.roles.walletItems.map((item) => <li>{item}</li>)}
+            </ul>
+          </article>
+
+          <div class="role-bridge" data-reveal aria-label={copy.roles.bridgeAria}>
+            <div class="bridge-line">
+              <span></span>
+              <i>REQUEST</i>
+              <b>→</b>
+            </div>
+            <div class="bridge-qr" aria-hidden="true">
+              <span></span><span></span><span></span><span></span><span></span>
+              <span></span><span></span><span></span><span></span>
+            </div>
+            <div class="bridge-line bridge-line-back">
+              <b>←</b>
+              <i>SIGNED</i>
+              <span></span>
+            </div>
+          </div>
+
+          <article class="role-card role-offline" data-reveal style="--delay: 90ms">
+            <div class="role-topline">
+              <span class="role-number">02</span>
+              <span class="role-state role-state-offline"><i></i> AIR-GAPPED</span>
+            </div>
+            <div class="role-icon role-icon-offline" aria-hidden="true">✓</div>
+            <h3>KT Cold Signer</h3>
+            <p>{copy.roles.signerSubtitle}</p>
+            <ul>
+              {copy.roles.signerItems.map((item) => <li>{item}</li>)}
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="section shell" id="features">
+        <div class="section-heading section-heading-split" data-reveal>
+          <div>
+            <p class="section-kicker">BUILT FOR REAL TRANSACTIONS</p>
+            <h2>{copy.features.title}</h2>
+          </div>
+          <p>{copy.features.intro}</p>
+        </div>
+
+        <div class="feature-grid">
+          {copy.features.items.map((feature, index) => (
+            <article class:list={['feature-card', featureClasses[index]]} data-reveal>
+              <div class="feature-index">{String(index + 1).padStart(2, '0')}</div>
+              <div>
+                <h3>{feature.title}</h3>
+                <p>{feature.body}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section class="section security-section">
+        <div class="shell security-grid">
+          <div class="security-copy" data-reveal>
+            <p class="section-kicker">SECURITY IS A SYSTEM</p>
+            <h2>{copy.security.titleFirst}<br />{copy.security.titleSecond}</h2>
+            <p>{copy.security.body}</p>
+            <a class="text-link" href={`${repo}/blob/main/SECURITY_AND_RISK.md`} target="_blank" rel="noreferrer">
+              {copy.security.link} <span aria-hidden="true">↗</span>
+            </a>
+          </div>
+
+          <div class="security-console" data-reveal style="--delay: 100ms">
+            <div class="console-head">
+              <span>PRE-SIGN CHECK</span>
+              <div><i></i><i></i><i></i></div>
+            </div>
+            <div class="console-row">
+              <span>NETWORK</span>
+              <strong class="ok">OFFLINE</strong>
+            </div>
+            <div class="console-row">
+              <span>SCREEN CAPTURE</span>
+              <strong class="ok">BLOCKED</strong>
+            </div>
+            <div class="console-row">
+              <span>DEVICE INTEGRITY</span>
+              <strong class="ok">SAFE</strong>
+            </div>
+            <div class="console-row">
+              <span>AUTHENTICATION</span>
+              <strong>PIN / BIOMETRIC</strong>
+            </div>
+            <div class="console-result">
+              <span class="result-check">✓</span>
+              <div>
+                <strong>READY TO SIGN</strong>
+                <small>All required checks passed</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section shell download-section" id="download">
+        <div class="download-panel" data-reveal>
+          <div class="download-copy">
+            <p class="section-kicker">GET KT WALLET</p>
+            <h2>{copy.download.titleFirst}<br />{copy.download.titleSecond}</h2>
+            <p>{copy.download.body}</p>
+          </div>
+
+          <div class="download-options">
+            <div class="download-card is-pending">
+              <div class="platform-icon" aria-hidden="true">iOS</div>
+              <div>
+                <strong>App Store / TestFlight</strong>
+                <span>{copy.download.iosBody}</span>
+              </div>
+              <span class="pending-pill">{copy.download.pending}</span>
+            </div>
+
+            <div class="download-card is-pending">
+              <div class="platform-icon platform-android" aria-hidden="true">A</div>
+              <div>
+                <strong>Android APK</strong>
+                <span>{copy.download.androidBody}</span>
+              </div>
+              <span class="pending-pill">{copy.download.pending}</span>
+            </div>
+
+            <a class="download-card download-card-live" href={repo} target="_blank" rel="noreferrer">
+              <div class="platform-icon platform-source" aria-hidden="true">&lt;/&gt;</div>
+              <div>
+                <strong>{copy.download.sourceTitle}</strong>
+                <span>{copy.download.sourceBody}</span>
+              </div>
+              <span class="download-arrow" aria-hidden="true">↗</span>
+            </a>
+          </div>
+
+          <div class="download-footnote">
+            <span class="shield-mark" aria-hidden="true">✓</span>
+            {copy.download.repository}<a href={repo} target="_blank" rel="noreferrer">siliconnexus-jp/KT-Wallet</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell footer-grid">
+        <div class="footer-brand">
+          <img src="/assets/kt-wallet-logo.png" alt="" width="46" height="46" loading="lazy" />
+          <div>
+            <strong>KT Wallet</strong>
+            <span>{copy.footer.tagline}</span>
+          </div>
+        </div>
+        <div class="footer-links">
+          <a href={`${repo}/blob/main/PRIVACY_POLICY.md`} target="_blank" rel="noreferrer">{copy.footer.privacy}</a>
+          <a href={`${repo}/blob/main/SECURITY_AND_RISK.md`} target="_blank" rel="noreferrer">{copy.footer.security}</a>
+          <a href={`${repo}/blob/main/THIRD_PARTY_NOTICES.md`} target="_blank" rel="noreferrer">{copy.footer.notices}</a>
+          <a href={repo} target="_blank" rel="noreferrer">GitHub</a>
+        </div>
+        <p>© 2026 Silicon Nexus. MPL-2.0.</p>
+      </div>
+    </footer>
+
+    <script>
+      document.querySelector('[data-language-switch]')?.addEventListener('change', (event) => {
+        const select = event.currentTarget;
+        if (select instanceof HTMLSelectElement) window.location.assign(select.value);
+      });
+
+      const revealNodes = document.querySelectorAll('[data-reveal]');
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      if (reducedMotion || !('IntersectionObserver' in window)) {
+        revealNodes.forEach((node) => node.classList.add('is-visible'));
+      } else {
+        const observer = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (!entry.isIntersecting) return;
+              entry.target.classList.add('is-visible');
+              observer.unobserve(entry.target);
+            });
+          },
+          { threshold: 0.12, rootMargin: '0px 0px -6% 0px' },
+        );
+
+        revealNodes.forEach((node) => observer.observe(node));
+      }
+    </script>
+  </body>
+</html>
