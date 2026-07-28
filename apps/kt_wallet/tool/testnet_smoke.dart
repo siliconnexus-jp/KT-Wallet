@@ -43,8 +43,10 @@ Future<void> main() async {
   });
   await _run('feeHistory 3-tier estimate', () async {
     final fees = await sepolia.estimateFees();
-    print('        slow/std/fast maxFee = '
-        '${fees.slow.maxFeePerGas}/${fees.standard.maxFeePerGas}/${fees.fast.maxFeePerGas}');
+    print(
+      '        slow/std/fast maxFee = '
+      '${fees.slow.maxFeePerGas}/${fees.standard.maxFeePerGas}/${fees.fast.maxFeePerGas}',
+    );
   });
 
   print('EVM (Polygon Amoy)');

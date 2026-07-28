@@ -52,11 +52,11 @@ void main() {
 
       // Public evidence only; no mnemonic or private key is logged.
       // ignore: avoid_print
-    print('MOBILE_BALANCE_ADDRESS=${addresses.eth}');
-    // ignore: avoid_print
-    print('MOBILE_TRON_ADDRESS=${addresses.tron}');
-    // ignore: avoid_print
-    print('MOBILE_SOLANA_ADDRESS=${addresses.solana}');
+      print('MOBILE_BALANCE_ADDRESS=${addresses.eth}');
+      // ignore: avoid_print
+      print('MOBILE_TRON_ADDRESS=${addresses.tron}');
+      // ignore: avoid_print
+      print('MOBILE_SOLANA_ADDRESS=${addresses.solana}');
       // ignore: avoid_print
       print('MOBILE_BALANCE_ETH=${eth.amount!.format(maxFraction: 8)}');
       // ignore: avoid_print

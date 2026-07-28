@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chains/chains.dart';
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
@@ -9,12 +11,14 @@ import 'package:wallet_data/wallet_data.dart' show Contact, CustomToken;
 
 import '../../l10n/app_localizations.dart';
 import '../market/balance_service.dart' show defaultRpcEndpointFor;
-import '../market/gateway_client.dart' show GatewayClient;
+import '../market/gateway_client.dart';
+import '../market/market_scope.dart' show prefsGatewayResolver;
 import '../market/rpc_health.dart';
 import '../market/token_balance_service.dart'
     show
         isKnownOfficialTokenIdentity,
         isProtectedTokenSymbol,
+        builtinTokensByNetworkId,
         officialBusdEthereumContract,
         usdcSolanaToken,
         usdtEthToken,
@@ -591,7 +595,12 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
 
 /// W17 Token 管理.
 class TokenManageScreen extends StatefulWidget {
-  const TokenManageScreen({super.key});
+  const TokenManageScreen({super.key, this.catalogClient});
+
+  /// Test injection. Production resolves the currently configured Gateway
+  /// from [AppPrefsScope].
+  final GatewayClient? catalogClient;
+
   @override
   State<TokenManageScreen> createState() => _TokenManageScreenState();
 }
@@ -610,15 +619,42 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
   /// [WalletController]: drift-persisted in the real app, in-memory in the
   /// gallery/goldens (no store).
   List<CustomToken> _tokens = const [];
+  List<GatewayOfficialToken> _catalog = const [];
+  List<GatewayOfficialToken> _searchResults = const [];
   WalletController? _controller;
+  GatewayResolver? _catalogResolver;
+  String? _catalogGatewayUrl;
+  final _searchController = TextEditingController();
+  Timer? _searchDebounce;
+  String _query = '';
+  bool _catalogLoading = false;
+  bool _searching = false;
+  int _catalogRequest = 0;
+  int _searchRequest = 0;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final controller = WalletScope.of(context);
-    if (identical(controller, _controller)) return;
-    _controller = controller;
-    _load(controller);
+    if (!identical(controller, _controller)) {
+      _controller = controller;
+      _load(controller);
+    }
+
+    final prefs = AppPrefsScope.maybeOf(context);
+    final gatewayUrl = prefs?.gatewayUrl;
+    if (_catalogResolver == null || gatewayUrl != _catalogGatewayUrl) {
+      _catalogGatewayUrl = gatewayUrl;
+      _catalogResolver = prefsGatewayResolver(prefs);
+      _loadOfficialCatalog();
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _load(WalletController controller) async {
@@ -657,6 +693,181 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
       tokens = controller.tokens;
     }
     if (mounted) setState(() => _tokens = tokens);
+  }
+
+  static String _normalizedContract(String contract) =>
+      contract.startsWith('0x') ? contract.toLowerCase() : contract;
+
+  static String _identityKey(String symbol, String contract) =>
+      '${symbol.toUpperCase()}|${_normalizedContract(contract.trim())}';
+
+  bool _isOfficial(String symbol, String? contract) {
+    if (contract == null || contract.trim().isEmpty) return false;
+    final key = _identityKey(symbol, contract);
+    return _catalog.any(
+          (token) => _identityKey(token.symbol, token.contract) == key,
+        ) ||
+        isKnownOfficialTokenIdentity(symbol, contract);
+  }
+
+  static String _officialName(String symbol) => switch (symbol) {
+    'USDT' => 'Tether USD',
+    'USDC' => 'USD Coin',
+    'BUSD' => 'Binance USD',
+    _ => symbol,
+  };
+
+  static List<GatewayOfficialToken> _localCatalog() => [
+    for (final entry in builtinTokensByNetworkId.entries)
+      for (final token in entry.value)
+        GatewayOfficialToken(
+          network: entry.key,
+          symbol: token.symbol,
+          name: _officialName(token.symbol),
+          contract: token.contract,
+          decimals: token.decimals,
+          popular: entry.key.endsWith('mainnet'),
+        ),
+  ];
+
+  GatewayClient? get _gatewayClient =>
+      widget.catalogClient ?? _catalogResolver?.call();
+
+  Future<void> _loadOfficialCatalog() async {
+    final request = ++_catalogRequest;
+    if (mounted) setState(() => _catalogLoading = true);
+    List<GatewayOfficialToken> tokens;
+    try {
+      tokens =
+          await _gatewayClient?.searchOfficialTokens(limit: 100) ??
+          _localCatalog();
+    } catch (_) {
+      tokens = _localCatalog();
+    }
+    if (!mounted || request != _catalogRequest) return;
+    setState(() {
+      _catalog = tokens;
+      _catalogLoading = false;
+    });
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    final query = value.trim();
+    setState(() {
+      _query = query;
+      if (query.isEmpty) {
+        _searchResults = const [];
+        _searching = false;
+      }
+    });
+    if (query.isEmpty) return;
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 250),
+      () => _searchOfficialCatalog(query),
+    );
+  }
+
+  Future<void> _searchOfficialCatalog(String query) async {
+    final request = ++_searchRequest;
+    if (mounted) setState(() => _searching = true);
+    List<GatewayOfficialToken> tokens;
+    try {
+      tokens =
+          await _gatewayClient?.searchOfficialTokens(
+            query: query,
+            limit: 100,
+          ) ??
+          _filterOfficial(_catalog, query);
+    } catch (_) {
+      tokens = _filterOfficial(_catalog, query);
+    }
+    if (!mounted || request != _searchRequest || query != _query) return;
+    setState(() {
+      _searchResults = tokens;
+      _searching = false;
+      // A search may surface an operator-added identity beyond the initial
+      // popular page. Keep it verified for the rest of this screen session.
+      final known = {
+        for (final token in _catalog)
+          _identityKey(token.symbol, token.contract): token,
+      };
+      for (final token in tokens) {
+        known[_identityKey(token.symbol, token.contract)] = token;
+      }
+      _catalog = List.unmodifiable(known.values);
+    });
+  }
+
+  static List<GatewayOfficialToken> _filterOfficial(
+    List<GatewayOfficialToken> source,
+    String query,
+  ) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return source;
+    return [
+      for (final token in source)
+        if (token.symbol.toLowerCase().contains(q) ||
+            token.name.toLowerCase().contains(q) ||
+            token.contract.toLowerCase().contains(q) ||
+            token.network.toLowerCase().contains(q))
+          token,
+    ];
+  }
+
+  CustomToken? _storedToken(GatewayOfficialToken official) {
+    final key = _identityKey(official.symbol, official.contract);
+    return _tokens
+        .where(
+          (token) =>
+              token.contract != null &&
+              _identityKey(token.symbol, token.contract!) == key,
+        )
+        .firstOrNull;
+  }
+
+  static String _networkLabel(String network) => switch (network) {
+    'eth-mainnet' => 'Ethereum · ERC-20',
+    'eth-sepolia' => 'Ethereum Sepolia · ERC-20',
+    'polygon-mainnet' => 'Polygon · ERC-20',
+    'polygon-amoy' => 'Polygon Amoy · ERC-20',
+    'base-mainnet' => 'Base · ERC-20',
+    'base-sepolia' => 'Base Sepolia · ERC-20',
+    'arbitrum-mainnet' => 'Arbitrum · ERC-20',
+    'arbitrum-sepolia' => 'Arbitrum Sepolia · ERC-20',
+    'avalanche-mainnet' => 'Avalanche · ERC-20',
+    'avalanche-fuji' => 'Avalanche Fuji · ERC-20',
+    'tron-mainnet' => 'TRON · TRC-20',
+    'tron-nile' => 'TRON Nile · TRC-20',
+    'sol-mainnet' => 'Solana · SPL',
+    'sol-devnet' => 'Solana Devnet · SPL',
+    _ => network,
+  };
+
+  Future<void> _addOfficialToken(GatewayOfficialToken official) async {
+    final controller = _controller!;
+    final existing = _storedToken(official);
+    if (existing != null) {
+      if (!existing.enabled) {
+        await controller.setTokenEnabled(existing.id, true);
+      }
+    } else {
+      await controller.addToken(
+        symbol: official.symbol,
+        name: official.name,
+        contract: official.contract,
+        network: _networkLabel(official.network),
+      );
+    }
+    if (!mounted) return;
+    setState(() => _tokens = controller.tokens);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          AppLocalizations.of(context).officialTokenAdded(official.symbol),
+        ),
+      ),
+    );
   }
 
   Future<void> _toggle(CustomToken token) async {
@@ -730,7 +941,7 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
                     onChanged: () => setSheetState(() {}),
                   ),
                   if (isProtectedTokenSymbol(symbolController.text.trim()) &&
-                      !isKnownOfficialTokenIdentity(
+                      !_isOfficial(
                         symbolController.text.trim(),
                         contractController.text.trim(),
                       )) ...[
@@ -811,9 +1022,266 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
     // Not disposed here: the sheet's exit animation still holds the fields.
   }
 
+  Widget _verifiedSymbol(
+    String symbol,
+    AppLocalizations l10n, {
+    required bool verified,
+  }) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Flexible(
+        child: Text(
+          symbol,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: WalletColors.text,
+          ),
+        ),
+      ),
+      if (verified) ...[
+        const SizedBox(width: 4),
+        Tooltip(
+          message: l10n.officialTokenVerified,
+          child: const Icon(
+            Icons.verified_rounded,
+            size: 17,
+            color: WalletColors.accent,
+          ),
+        ),
+      ],
+    ],
+  );
+
+  Widget _sectionLabel(String label) => Padding(
+    padding: const EdgeInsets.only(left: 2),
+    child: Text(
+      label,
+      style: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: WalletColors.text2,
+      ),
+    ),
+  );
+
+  Widget _storedTokenRow(CustomToken token, AppLocalizations l10n) {
+    final verified = _isOfficial(token.symbol, token.contract);
+    final identityWarning = isProtectedTokenSymbol(token.symbol) && !verified;
+    final (color, initial) =
+        _brand[token.symbol] ??
+        (const Color(0xFF64748B), token.symbol.characters.first);
+    return Row(
+      children: [
+        TokenIcon(
+          symbol: token.symbol,
+          size: 36,
+          fallbackColor: color,
+          fallbackInitial: initial,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _verifiedSymbol(token.symbol, l10n, verified: verified),
+              const SizedBox(height: 3),
+              Text(
+                token.network,
+                style: const TextStyle(fontSize: 12, color: WalletColors.text3),
+              ),
+              if (token.contract case final contract?) ...[
+                const SizedBox(height: 2),
+                Text(
+                  _abbrevAddress(contract),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontFamily: KtFonts.mono,
+                    color: WalletColors.text3,
+                  ),
+                ),
+              ],
+              if (identityWarning) ...[
+                const SizedBox(height: 4),
+                Text(
+                  l10n.tokenImpersonationWarning(token.symbol),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
+                    color: WalletColors.amber,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        _switch(token.enabled, onTap: () => _toggle(token)),
+      ],
+    );
+  }
+
+  Widget _officialTokenRow(GatewayOfficialToken token, AppLocalizations l10n) {
+    final (color, initial) =
+        _brand[token.symbol] ??
+        (const Color(0xFF64748B), token.symbol.characters.first);
+    return Row(
+      children: [
+        TokenIcon(
+          symbol: token.symbol,
+          size: 36,
+          fallbackColor: color,
+          fallbackInitial: initial,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _verifiedSymbol(token.symbol, l10n, verified: true),
+              const SizedBox(height: 3),
+              Text(
+                '${token.name} · ${_networkLabel(token.network)}',
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, color: WalletColors.text2),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                _abbrevAddress(token.contract),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontFamily: KtFonts.mono,
+                  color: WalletColors.text3,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Semantics(
+          button: true,
+          label: l10n.addOfficialToken(token.symbol),
+          child: Material(
+            color: WalletColors.accent.withValues(alpha: 0.10),
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: () => _addOfficialToken(token),
+              child: const SizedBox(
+                width: 36,
+                height: 36,
+                child: Icon(
+                  Icons.add_rounded,
+                  size: 21,
+                  color: WalletColors.accent,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _tokenCard(List<Widget> rows) => KtCard(
+    child: Column(
+      children: [
+        for (var i = 0; i < rows.length; i++) ...[
+          if (i > 0) ...[
+            const SizedBox(height: 14),
+            const Divider(height: 1, color: WalletColors.border),
+            const SizedBox(height: 14),
+          ],
+          rows[i],
+        ],
+      ],
+    ),
+  );
+
+  Widget _searchField(AppLocalizations l10n) => Container(
+    height: 46,
+    padding: const EdgeInsets.symmetric(horizontal: 14),
+    decoration: BoxDecoration(
+      color: WalletColors.surface,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: WalletColors.border),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.search_rounded, size: 19, color: WalletColors.text3),
+        const SizedBox(width: 9),
+        Expanded(
+          child: TextField(
+            controller: _searchController,
+            onChanged: _onSearchChanged,
+            textInputAction: TextInputAction.search,
+            autocorrect: false,
+            enableSuggestions: false,
+            style: const TextStyle(fontSize: 14, color: WalletColors.text),
+            decoration: InputDecoration(
+              isCollapsed: true,
+              border: InputBorder.none,
+              hintText: l10n.searchTokenHint,
+              hintStyle: const TextStyle(
+                fontSize: 14,
+                color: WalletColors.text3,
+              ),
+            ),
+          ),
+        ),
+        if (_catalogLoading || _searching) ...[
+          const SizedBox(width: 8),
+          const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.8,
+              color: WalletColors.accent,
+            ),
+          ),
+        ],
+        if (_query.isNotEmpty) ...[
+          const SizedBox(width: 8),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              _searchRequest++;
+              _searchController.clear();
+              _onSearchChanged('');
+            },
+            child: const Icon(
+              Icons.cancel_rounded,
+              size: 18,
+              color: WalletColors.text3,
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final q = _query.toLowerCase();
+    final stored = q.isEmpty
+        ? _tokens
+        : _tokens.where((token) {
+            return token.symbol.toLowerCase().contains(q) ||
+                token.name.toLowerCase().contains(q) ||
+                token.network.toLowerCase().contains(q) ||
+                (token.contract?.toLowerCase().contains(q) ?? false);
+          }).toList();
+    final directorySource = q.isEmpty
+        ? _catalog.where((token) => token.popular)
+        : _searchResults;
+    final directory = [
+      for (final token in directorySource)
+        if (_storedToken(token) == null) token,
+    ];
+
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(
@@ -823,11 +1291,17 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
         onTrailing: _addToken,
       ),
       children: [
-        // With no tokens the card used to render as a bare empty pill that
-        // read like a broken search field. Say what the screen is instead.
-        if (_tokens.isEmpty)
+        _searchField(l10n),
+        if (stored.isNotEmpty) ...[
+          _sectionLabel(
+            q.isEmpty ? l10n.myTokens : l10n.addedTokenSearchResults,
+          ),
+          _tokenCard([
+            for (final token in stored) _storedTokenRow(token, l10n),
+          ]),
+        ] else if (q.isEmpty && !_catalogLoading)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 32),
+            padding: const EdgeInsets.symmetric(vertical: 16),
             child: Center(
               child: Text(
                 l10n.tokensEmpty,
@@ -835,81 +1309,26 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
                 style: const TextStyle(fontSize: 14, color: WalletColors.text3),
               ),
             ),
-          )
-        else
-          KtCard(
-            child: Column(
-              children: [
-                for (var i = 0; i < _tokens.length; i++) ...[
-                  if (i > 0) const SizedBox(height: 14),
-                  Builder(
-                    builder: (context) {
-                      final token = _tokens[i];
-                      final identityWarning =
-                          isProtectedTokenSymbol(token.symbol) &&
-                          !isKnownOfficialTokenIdentity(
-                            token.symbol,
-                            token.contract,
-                          );
-                      final (color, initial) =
-                          _brand[token.symbol] ??
-                          (
-                            const Color(0xFF64748B),
-                            token.symbol.characters.first,
-                          );
-                      return Row(
-                        children: [
-                          TokenIcon(
-                            symbol: token.symbol,
-                            size: 36,
-                            fallbackColor: color,
-                            fallbackInitial: initial,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  token.symbol,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: WalletColors.text,
-                                  ),
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  token.network,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: WalletColors.text3,
-                                  ),
-                                ),
-                                if (identityWarning) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    l10n.tokenImpersonationWarning(
-                                      token.symbol,
-                                    ),
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      height: 1.35,
-                                      fontWeight: FontWeight.w600,
-                                      color: WalletColors.amber,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          _switch(token.enabled, onTap: () => _toggle(token)),
-                        ],
-                      );
-                    },
-                  ),
-                ],
-              ],
+          ),
+        if (directory.isNotEmpty) ...[
+          _sectionLabel(
+            q.isEmpty
+                ? l10n.popularOfficialTokens
+                : l10n.officialTokenSearchResults,
+          ),
+          _tokenCard([
+            for (final token in directory) _officialTokenRow(token, l10n),
+          ]),
+        ],
+        if (q.isNotEmpty && stored.isEmpty && directory.isEmpty && !_searching)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 32),
+            child: Center(
+              child: Text(
+                l10n.noMatchingTokens,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14, color: WalletColors.text3),
+              ),
             ),
           ),
       ],

@@ -127,8 +127,7 @@ Future<void> _submitTransfer(
   await tester.pumpAndSettle();
   final networkChoice = find.byWidgetPredicate(
     (widget) =>
-        widget is Text &&
-        (widget.data ?? '').startsWith('$assetSubtitle · 可用'),
+        widget is Text && (widget.data ?? '').startsWith('$assetSubtitle · 可用'),
     description: 'asset subtitle starting with "$assetSubtitle · 可用"',
   );
   expect(networkChoice, findsOneWidget);

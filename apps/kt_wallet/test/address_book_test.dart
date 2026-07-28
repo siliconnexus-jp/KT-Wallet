@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/main.dart';
+import 'package:kt_wallet/src/market/token_balance_service.dart'
+    show usdtEthToken;
 
 Future<void> _open(WidgetTester tester, String galleryEntry) async {
   tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
@@ -120,6 +122,9 @@ void main() {
 
   testWidgets('token manage: "+" appends an enabled token row', (tester) async {
     await _open(tester, 'W17 Token 管理');
+    expect(find.text('搜索币种名称、符号或合约地址'), findsOneWidget);
+    expect(find.byIcon(Icons.verified_rounded), findsWidgets);
+
     await tester.tap(find.byIcon(Icons.add));
     await tester.pumpAndSettle();
     expect(find.text('添加代币'), findsOneWidget);
@@ -132,6 +137,25 @@ void main() {
     expect(find.text('添加代币'), findsNothing); // sheet closed
     expect(find.text('LINK'), findsOneWidget);
     expect(find.text('Chainlink'), findsOneWidget);
+  });
+
+  testWidgets('token manage search filters by symbol, name, and contract', (
+    tester,
+  ) async {
+    await _open(tester, 'W17 Token 管理');
+    final search = find.widgetWithText(TextField, '搜索币种名称、符号或合约地址');
+
+    await tester.enterText(search, 'UNI');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(find.text('UNI'), findsWidgets);
+    expect(find.text('USDT'), findsNothing);
+
+    await tester.enterText(search, usdtEthToken.contract);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(find.text('USDT'), findsWidgets);
+    expect(find.byIcon(Icons.verified_rounded), findsWidgets);
   });
 
   testWidgets('token manage warns when a custom contract claims USDT', (

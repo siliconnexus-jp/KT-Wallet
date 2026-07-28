@@ -52,6 +52,7 @@ curl -s localhost:8080/rpc -d '{"jsonrpc":"2.0","id":1,"method":"kt_health"}'
 | `HELIUS_API_KEY` | *(unset)* | Optional Solana parsed-history enrichment (exact native transfer); standard RPC remains available without it |
 | `HELIUS_API_URL` | `https://mainnet.helius-rpc.com` | Helius RPC base URL (`sol-mainnet` transfer history) |
 | `HELIUS_DEVNET_API_URL` | `https://devnet.helius-rpc.com` | Helius RPC base URL (`sol-devnet` transfer history) |
+| `OFFICIAL_TOKENS_FILE` | *(built-in catalog)* | Optional absolute path to the operator-managed verified-token JSON array |
 | `RATE_LIMIT_RPS` | `10` | Inbound token-bucket refill per client IP |
 | `RATE_LIMIT_BURST` | `20` | Inbound token-bucket burst per client IP |
 
@@ -121,6 +122,19 @@ app's built-in `Network.id` values, so a client can forward
   already suppresses fiat display there).
 
 Supported network ids are discoverable via `kt_health`'s `networks` field.
+
+### Official token catalog
+
+The blue verification mark is controlled by `network + contract/mint`, never
+by symbol alone. Set `OFFICIAL_TOKENS_FILE` to an operator-managed copy of
+[`config/official-tokens.json`](config/official-tokens.json) and restart the
+Gateway after editing it. The file replaces the built-in catalog.
+
+Every entry requires `network`, `symbol`, `name`, `contract`, and `decimals`;
+`popular` is optional. Startup fails if the JSON is malformed, a network is
+unknown, an address has the wrong shape, or a network/contract identity is
+duplicated. This fail-closed behavior prevents an incomplete parse from
+accidentally verifying the wrong asset.
 
 ### `kt_health` ()
 
@@ -203,6 +217,17 @@ KT Wallet's active-network registry; clients must not render it as a canonical
 asset based on symbol alone.
 
 `limit` defaults to 20 and is capped at 100; `limit <= 0` → `-32602`.
+
+### `kt_searchTokens` `{"query": S?, "networks": [N]?, "limit": N?}`
+
+→ `{"tokens": [{"network": S, "symbol": S, "name": S, "contract": S,
+"decimals": N, "popular": B?, "verified": true}]}`
+
+Searches the configured official catalog by token name, symbol, contract, or
+mint. Contract/mint exact matches rank first, followed by exact symbols,
+prefixes, then substring matches. An empty query returns popular entries
+first. `networks` optionally limits results to known network ids. `limit`
+defaults to 50 and must be between 1 and 100.
 
 ### `kt_broadcast` `{"chain": C, "network": N?, "payload": S}`
 

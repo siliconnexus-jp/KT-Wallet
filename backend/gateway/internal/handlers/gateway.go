@@ -70,12 +70,17 @@ type Config struct {
 	// deployments). Polygon Amoy intentionally has no default because its
 	// official explorer requires an API key.
 	EVMHistoryFallbackURLs map[string]string
+
+	// OfficialTokens is the operator-controlled verified token catalog. Nil
+	// uses the built-in production list; an explicit empty slice disables all
+	// verification marks. Production may replace it via OFFICIAL_TOKENS_FILE.
+	OfficialTokens []OfficialToken
 }
 
 // Defaults returns the production upstream configuration.
 func Defaults() Config {
 	return Config{
-		Version:        "1.5.0",
+		Version:        "1.6.0",
 		Clock:          clock.Real{},
 		AttemptTimeout: 10 * time.Second,
 		EthURLs:        []string{"https://eth.llamarpc.com", "https://cloudflare-eth.com"},
@@ -100,6 +105,7 @@ func Defaults() Config {
 		EtherscanURL:        "https://api.etherscan.io/v2/api",
 		HeliusURL:           "https://mainnet.helius-rpc.com",
 		HeliusDevnetURL:     "https://devnet.helius-rpc.com",
+		OfficialTokens:      defaultOfficialTokens(),
 		EVMHistoryFallbackURLs: map[string]string{
 			"eth-mainnet":       "https://eth.blockscout.com/api",
 			"eth-sepolia":       "https://eth-sepolia.blockscout.com/api",
@@ -135,6 +141,9 @@ type Gateway struct {
 	balanceCache *cache.Cache
 	paramsCache  *cache.Cache
 	historyCache *cache.Cache
+
+	officialTokens    []OfficialToken
+	officialByNetwork map[string]map[string]tokenMeta
 }
 
 // New builds a Gateway from cfg, filling unset fields from Defaults.
@@ -212,6 +221,16 @@ func New(cfg Config) *Gateway {
 	if cfg.EVMHistoryFallbackURLs == nil {
 		cfg.EVMHistoryFallbackURLs = def.EVMHistoryFallbackURLs
 	}
+	if cfg.OfficialTokens == nil {
+		cfg.OfficialTokens = def.OfficialTokens
+	}
+	officialTokens, err := normalizeOfficialTokens(cfg.OfficialTokens)
+	if err != nil {
+		// Fail closed: invalid programmatic configuration yields no blue
+		// verification marks. The command validates external files before New.
+		cfg.Log.Error("invalid official token catalog", "err", err)
+		officialTokens = []OfficialToken{}
+	}
 
 	clk := cfg.Clock
 	hc := cfg.HTTPClient
@@ -252,10 +271,12 @@ func New(cfg Config) *Gateway {
 			"sol-mainnet": upstream.NewHelius(cfg.HeliusURL, cfg.HeliusKey, hc, at),
 			"sol-devnet":  upstream.NewHelius(cfg.HeliusDevnetURL, cfg.HeliusKey, hc, at),
 		},
-		priceCache:   cache.New(clk, pricesTTL),
-		balanceCache: cache.New(clk, balancesTTL),
-		paramsCache:  cache.New(clk, chainParamsTTL),
-		historyCache: cache.New(clk, historyTTL),
+		priceCache:        cache.New(clk, pricesTTL),
+		balanceCache:      cache.New(clk, balancesTTL),
+		paramsCache:       cache.New(clk, chainParamsTTL),
+		historyCache:      cache.New(clk, historyTTL),
+		officialTokens:    officialTokens,
+		officialByNetwork: officialTokenIndex(officialTokens),
 	}
 	return g
 }
@@ -267,6 +288,7 @@ func (g *Gateway) Register(s *rpc.Server) {
 	s.Register("kt_getPrices", g.GetPrices)
 	s.Register("kt_getChainParams", g.GetChainParams)
 	s.Register("kt_getHistory", g.GetHistory)
+	s.Register("kt_searchTokens", g.SearchOfficialTokens)
 	s.Register("kt_broadcast", g.Broadcast)
 }
 

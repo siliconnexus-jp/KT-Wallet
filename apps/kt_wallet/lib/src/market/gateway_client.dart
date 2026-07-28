@@ -19,6 +19,7 @@ import 'package:http/http.dart' as http;
 /// - `kt_getChainParams` `{chain, network?, address}` → decimal nonce +
 ///   3-tier fees
 /// - `kt_getHistory` `{chain, network?, address, limit?}` → `{status, records}`
+/// - `kt_searchTokens` `{query?, networks?, limit?}` → verified token catalog
 /// - `kt_broadcast` `{chain, network?, payload}` → `{txHash}`
 /// Errors: -32700/-32600/-32601/-32602 protocol, -32000 upstream_error
 /// (data.upstream / data.message carry the node's reason), -32001
@@ -372,6 +373,56 @@ class GatewayClient {
     return GatewayHistory.ok(List.unmodifiable(records));
   }
 
+  /// `kt_searchTokens` — searches the operator-configured verified token
+  /// catalog by name, symbol, or contract/mint. An empty query returns the
+  /// popular catalog first. Only rows carrying `verified: true` are accepted;
+  /// malformed/unverified rows are skipped rather than elevated in the UI.
+  Future<List<GatewayOfficialToken>> searchOfficialTokens({
+    String query = '',
+    List<String> networks = const [],
+    int limit = 50,
+  }) async {
+    final result = await _call('kt_searchTokens', {
+      'query': query,
+      if (networks.isNotEmpty) 'networks': networks,
+      'limit': limit,
+    });
+    if (result is! Map) {
+      throw const FormatException('bad token search result');
+    }
+    final rows = result['tokens'];
+    if (rows is! List) {
+      throw const FormatException('missing token search rows');
+    }
+    final tokens = <GatewayOfficialToken>[];
+    for (final row in rows) {
+      if (row is! Map || row['verified'] != true) continue;
+      final network = row['network'];
+      final symbol = row['symbol'];
+      final name = row['name'];
+      final contract = row['contract'];
+      final decimals = row['decimals'];
+      if (network is! String ||
+          symbol is! String ||
+          name is! String ||
+          contract is! String ||
+          decimals is! int) {
+        continue;
+      }
+      tokens.add(
+        GatewayOfficialToken(
+          network: network,
+          symbol: symbol,
+          name: name,
+          contract: contract,
+          decimals: decimals,
+          popular: row['popular'] == true,
+        ),
+      );
+    }
+    return List.unmodifiable(tokens);
+  }
+
   /// `kt_broadcast` — pushes an encoded signed payload (hex for EVM, base64
   /// for Solana, the TronGrid JSON string for TRON) to the active network of
   /// [chain] and returns the node's transaction hash. A node rejection
@@ -585,4 +636,27 @@ class GatewayHistory {
   /// True when the gateway itself reports no history source for the chain.
   final bool unsupported;
   final List<GatewayHistoryRecord> records;
+}
+
+/// One operator-verified token identity. The blue check is tied to
+/// [network] + [contract], never to [symbol] alone.
+class GatewayOfficialToken {
+  const GatewayOfficialToken({
+    required this.network,
+    required this.symbol,
+    required this.name,
+    required this.contract,
+    required this.decimals,
+    this.popular = false,
+  });
+
+  final String network;
+  final String symbol;
+  final String name;
+  final String contract;
+  final int decimals;
+  final bool popular;
+
+  String get identityKey =>
+      '$network|${contract.startsWith('0x') ? contract.toLowerCase() : contract}';
 }

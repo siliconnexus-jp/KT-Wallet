@@ -1,0 +1,108 @@
+package handlers_test
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"ktwallet/gateway/internal/handlers"
+	"ktwallet/gateway/internal/rpc"
+)
+
+func TestSearchOfficialTokensBySymbolAndContract(t *testing.T) {
+	e := newEnv(t, nil)
+
+	bySymbol := result(t, e.rpc("kt_searchTokens", `{"query":"usdt","limit":100}`))
+	rows := bySymbol["tokens"].([]any)
+	if len(rows) < 5 {
+		t.Fatalf("USDT search should cover its configured networks: %v", rows)
+	}
+	for _, raw := range rows {
+		row := raw.(map[string]any)
+		if row["symbol"] != "USDT" || row["verified"] != true {
+			t.Fatalf("search returned a non-verified/non-USDT row: %v", row)
+		}
+	}
+
+	const contract = "0xdac17f958d2ee523a2206206994597c13d831ec7"
+	byContract := result(t, e.rpc("kt_searchTokens", map[string]any{
+		"query": contract,
+	}))
+	exact := byContract["tokens"].([]any)
+	if len(exact) != 1 {
+		t.Fatalf("exact contract search = %v, want one result", exact)
+	}
+	row := exact[0].(map[string]any)
+	if row["network"] != "eth-mainnet" || row["contract"] != contract {
+		t.Fatalf("wrong exact match: %v", row)
+	}
+}
+
+func TestSearchOfficialTokensUsesOperatorCatalog(t *testing.T) {
+	const contract = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.OfficialTokens = []handlers.OfficialToken{{
+			Network:  "eth-mainnet",
+			Symbol:   "KTT",
+			Name:     "KT Test Token",
+			Contract: contract,
+			Decimals: 8,
+			Popular:  true,
+		}}
+	})
+
+	res := result(t, e.rpc("kt_searchTokens", `{"query":"KT Test"}`))
+	rows := res["tokens"].([]any)
+	if len(rows) != 1 {
+		t.Fatalf("custom catalog search = %v", rows)
+	}
+	row := rows[0].(map[string]any)
+	if row["symbol"] != "KTT" || row["verified"] != true {
+		t.Fatalf("custom catalog row = %v", row)
+	}
+
+	noBuiltins := result(t, e.rpc("kt_searchTokens", `{"query":"USDT"}`))
+	if len(noBuiltins["tokens"].([]any)) != 0 {
+		t.Fatal("operator catalog must replace, not append to, the defaults")
+	}
+}
+
+func TestLoadOfficialTokensFileRejectsDuplicateIdentity(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "official-tokens.json")
+	const body = `[
+		{"network":"eth-mainnet","symbol":"AAA","name":"A","contract":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","decimals":6},
+		{"network":"eth-mainnet","symbol":"BBB","name":"B","contract":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","decimals":6}
+	]`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handlers.LoadOfficialTokensFile(path); err == nil {
+		t.Fatal("duplicate network + contract must fail closed")
+	}
+}
+
+func TestCheckedInOfficialTokenCatalogLoads(t *testing.T) {
+	tokens, err := handlers.LoadOfficialTokensFile(
+		filepath.Join("..", "..", "config", "official-tokens.json"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) < 20 {
+		t.Fatalf("checked-in catalog is unexpectedly small: %d", len(tokens))
+	}
+}
+
+func TestSearchOfficialTokensValidatesFilters(t *testing.T) {
+	e := newEnv(t, nil)
+	assertErrCode(
+		t,
+		e.rpc("kt_searchTokens", `{"networks":["not-a-network"]}`),
+		rpc.CodeInvalidParams,
+	)
+	assertErrCode(
+		t,
+		e.rpc("kt_searchTokens", `{"limit":101}`),
+		rpc.CodeInvalidParams,
+	)
+}

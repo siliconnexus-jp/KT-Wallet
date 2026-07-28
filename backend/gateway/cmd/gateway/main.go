@@ -86,6 +86,20 @@ func main() {
 		cfg.HeliusDevnetURL = v
 	}
 	cfg.HeliusKey = os.Getenv("HELIUS_API_KEY")
+	if path := strings.TrimSpace(os.Getenv("OFFICIAL_TOKENS_FILE")); path != "" {
+		tokens, err := handlers.LoadOfficialTokensFile(path)
+		if err != nil {
+			log.Error(
+				"failed to load official token catalog",
+				"path",
+				path,
+				"err",
+				err,
+			)
+			os.Exit(1)
+		}
+		cfg.OfficialTokens = tokens
+	}
 
 	rate := envFloat("RATE_LIMIT_RPS", 10)
 	burst := envFloat("RATE_LIMIT_BURST", 20)

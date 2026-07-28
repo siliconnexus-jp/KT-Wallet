@@ -222,6 +222,50 @@ func TestEthHistoryKeepsMultipleLogsAndMarksUnknownToken(t *testing.T) {
 	}
 }
 
+func TestOperatorCatalogControlsHistoryVerification(t *testing.T) {
+	const contract = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	scan := newRESTFake(t)
+	scan.route("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("action") == "tokentx" {
+			_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[
+				{"hash":"0xconfigured","logIndex":"1","from":%q,
+				 "to":"0x2222222222222222222222222222222222222222",
+				 "value":"123","timeStamp":"1700000100","tokenDecimal":"18",
+				 "tokenSymbol":"LOOKALIKE","contractAddress":%q}
+			]}`, evmSelf, contract)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"status":"1","message":"OK","result":[]}`)
+	})
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.EtherscanURL = scan.srv.URL
+		cfg.EtherscanKey = "test-key"
+		cfg.OfficialTokens = []handlers.OfficialToken{{
+			Network:  "eth-mainnet",
+			Symbol:   "KTT",
+			Name:     "KT Test Token",
+			Contract: contract,
+			Decimals: 8,
+		}}
+	})
+
+	res := result(t, e.rpc(
+		"kt_getHistory",
+		fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf),
+	))
+	records := res["records"].([]any)
+	if len(records) != 1 {
+		t.Fatalf("records = %v", records)
+	}
+	record := records[0].(map[string]any)
+	if record["verified"] != true ||
+		record["symbol"] != "KTT" ||
+		record["decimals"] != float64(8) {
+		t.Fatalf("configured identity must override claimed metadata: %v", record)
+	}
+}
+
 func TestPolygonHistoryUsesChainID137(t *testing.T) {
 	scan := newRESTFake(t)
 	scan.routeJSON("/", `{"status":"1","message":"OK","result":[]}`)
@@ -295,14 +339,14 @@ func TestSolanaHistoryWithoutKeyUsesRPC(t *testing.T) {
 			"postBalances": []any{3000000, 2000100},
 			"preTokenBalances": []any{
 				map[string]any{
-					"mint":          "EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v",
+					"mint":          "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
 					"owner":         solSelf,
 					"uiTokenAmount": map[string]any{"amount": "3000000", "decimals": 6},
 				},
 			},
 			"postTokenBalances": []any{
 				map[string]any{
-					"mint":          "EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v",
+					"mint":          "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
 					"owner":         solSelf,
 					"uiTokenAmount": map[string]any{"amount": "1000000", "decimals": 6},
 				},
@@ -325,7 +369,7 @@ func TestSolanaHistoryWithoutKeyUsesRPC(t *testing.T) {
 		t.Fatalf("status = %v", res["status"])
 	}
 	assertJSONEq(t, `[
-		{"id":"rpc-sig-1:spl:EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v","hash":"rpc-sig-1","direction":"out","amountRaw":"2000000","decimals":6,"symbol":"USDC","contract":"EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v","verified":true,"timestampMs":1700000400000,"status":"ok"}
+		{"id":"rpc-sig-1:spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","hash":"rpc-sig-1","direction":"out","amountRaw":"2000000","decimals":6,"symbol":"USDC","contract":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","verified":true,"timestampMs":1700000400000,"status":"ok"}
 	]`, res["records"])
 	if node.count("getSignaturesForAddress") != 1 || node.count("getTransaction") != 1 {
 		t.Fatalf("expected signature + transaction RPC calls, got %d/%d",
@@ -400,7 +444,7 @@ func TestSolanaHistoryWithHeliusKey(t *testing.T) {
 	hel.routeJSON("/", fmt.Sprintf(`{"jsonrpc":"2.0","id":"kt-wallet","result":{"data":[
 		{"signature":"sig1","blockTime":1700000200,"type":"transfer",
 		 "fromUserAccount":%q,"toUserAccount":%q,
-		 "mint":"EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v",
+		 "mint":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
 		 "amount":"2500000","decimals":6,"confirmationStatus":"finalized",
 		 "transactionIdx":1,"instructionIdx":2,"innerInstructionIdx":0},
 		{"signature":"sig2","blockTime":1700000100,"type":"transfer",
@@ -424,7 +468,7 @@ func TestSolanaHistoryWithHeliusKey(t *testing.T) {
 		t.Fatalf("status = %v", res["status"])
 	}
 	assertJSONEq(t, `[
-		{"id":"sig1:1:2:0","hash":"sig1","direction":"out","amountRaw":"2500000","decimals":6,"symbol":"USDC","contract":"EPjFWdd5AufqSSqeM2q8puxyy5xY6Nn7C9nG4wEGGkZwyTDt1v","verified":true,"timestampMs":1700000200000,"status":"ok"},
+		{"id":"sig1:1:2:0","hash":"sig1","direction":"out","amountRaw":"2500000","decimals":6,"symbol":"USDC","contract":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","verified":true,"timestampMs":1700000200000,"status":"ok"},
 		{"id":"sig2:2:3:-1","hash":"sig2","direction":"in","amountRaw":"123","decimals":9,"symbol":"SOL","verified":true,"timestampMs":1700000100000,"status":"ok"},
 		{"id":"sig3:3:4:-1","hash":"sig3","direction":"in","amountRaw":"42000000","decimals":6,"symbol":"USDT","contract":"Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB","verified":true,"timestampMs":1700000050000,"status":"ok"}
 	]`, res["records"])

@@ -15,7 +15,9 @@ const _mnemonic = String.fromEnvironment('SEPOLIA_E2E_MNEMONIC');
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('capture live balance and populated ETH send form', (tester) async {
+  testWidgets('capture live balance and populated ETH send form', (
+    tester,
+  ) async {
     final crypto = MethodChannelCoreCrypto();
     const walletId = 'sepolia-ui-balance-input-v1';
     await crypto.storeWallet(
@@ -65,8 +67,7 @@ void main() {
     await tester.pumpAndSettle();
     final eth = find.byWidgetPredicate(
       (widget) =>
-          widget is Text &&
-          (widget.data ?? '').startsWith('Sepolia · 可用'),
+          widget is Text && (widget.data ?? '').startsWith('Sepolia · 可用'),
     );
     expect(eth, findsOneWidget);
     await tester.tap(eth);
