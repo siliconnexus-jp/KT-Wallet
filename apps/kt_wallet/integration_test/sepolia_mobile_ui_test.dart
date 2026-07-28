@@ -63,10 +63,24 @@ void main() {
     }
 
     expect(find.text('Sepolia 测试钱包'), findsOneWidget);
-    expect(find.textContaining('0.082'), findsOneWidget);
-    expect(find.textContaining('198 USDT · Sepolia'), findsOneWidget);
+    _expectFundedAsset(tester, 'ETH');
+    _expectFundedAsset(tester, 'USDT');
 
     await tester.pumpAndSettle();
     await binding.takeScreenshot('sepolia-live-balances');
   });
+}
+
+void _expectFundedAsset(WidgetTester tester, String symbol) {
+  final labelPattern = RegExp(
+    '^([0-9]+(?:\\.[0-9]+)?) ${RegExp.escape(symbol)} · ',
+  );
+  final finder = find.textContaining(labelPattern);
+  expect(finder, findsOneWidget);
+
+  final label = tester.widget<Text>(finder).data;
+  final match = label == null ? null : labelPattern.firstMatch(label);
+  final amount = match == null ? null : double.tryParse(match.group(1)!);
+  expect(amount, isNotNull);
+  expect(amount!, greaterThan(0));
 }
