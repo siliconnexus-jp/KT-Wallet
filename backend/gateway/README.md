@@ -37,6 +37,7 @@ curl -s localhost:8080/rpc -d '{"jsonrpc":"2.0","id":1,"method":"kt_health"}'
 | `BASE_RPC_URLS` | `https://mainnet.base.org` | `base-mainnet` RPC endpoints |
 | `ARBITRUM_RPC_URLS` | `https://arb1.arbitrum.io/rpc` | `arbitrum-mainnet` RPC endpoints |
 | `AVALANCHE_RPC_URLS` | `https://api.avax.network/ext/bc/C/rpc` | `avalanche-mainnet` (C-Chain) RPC endpoints |
+| `BNB_RPC_URLS` | `https://bsc-dataseed.bnbchain.org` | `bnb-mainnet` RPC endpoints |
 | `SOLANA_RPC_URLS` | `https://api.mainnet-beta.solana.com` | `sol-mainnet` RPC endpoints |
 | `TRON_API_URL` | `https://api.trongrid.io` | `tron-mainnet` TronGrid base URL |
 | `ETH_SEPOLIA_RPC_URLS` | `https://ethereum-sepolia-rpc.publicnode.com` | `eth-sepolia` RPC endpoints, comma-separated, tried in order |
@@ -44,10 +45,11 @@ curl -s localhost:8080/rpc -d '{"jsonrpc":"2.0","id":1,"method":"kt_health"}'
 | `BASE_SEPOLIA_RPC_URLS` | `https://sepolia.base.org` | `base-sepolia` RPC endpoints |
 | `ARBITRUM_SEPOLIA_RPC_URLS` | `https://sepolia-rollup.arbitrum.io/rpc` | `arbitrum-sepolia` RPC endpoints |
 | `AVALANCHE_FUJI_RPC_URLS` | `https://api.avax-test.network/ext/bc/C/rpc` | `avalanche-fuji` RPC endpoints |
+| `BNB_TESTNET_RPC_URLS` | `https://bsc-testnet-dataseed.bnbchain.org` | `bnb-testnet` RPC endpoints |
 | `SOLANA_DEVNET_RPC_URLS` | `https://api.devnet.solana.com` | `sol-devnet` RPC endpoints |
 | `TRON_NILE_API_URL` | `https://nile.trongrid.io` | `tron-nile` TronGrid base URL |
 | `COINGECKO_API_URL` | `https://api.coingecko.com` | CoinGecko base URL (override for tests/proxies) |
-| `ETHERSCAN_API_KEY` | *(unset)* | Optional EVM history enrichment/fallback for all ten EVM networks; required only for Polygon Amoy |
+| `ETHERSCAN_API_KEY` | *(unset)* | Optional EVM history enrichment/fallback for all twelve EVM networks; required only for Polygon Amoy |
 | `ETHERSCAN_API_URL` | `https://api.etherscan.io/v2/api` | Etherscan-family endpoint |
 | `HELIUS_API_KEY` | *(unset)* | Optional Solana parsed-history enrichment (exact native transfer); standard RPC remains available without it |
 | `HELIUS_API_URL` | `https://mainnet.helius-rpc.com` | Helius RPC base URL (`sol-mainnet` transfer history) |
@@ -63,7 +65,7 @@ Operational behavior (fixed by contract):
   failures an endpoint is skipped for 30 s (per-endpoint circuit breaker).
   Every network has its own pool, so circuit state never bleeds between e.g.
   `eth-mainnet` and `eth-sepolia`. Networks whose default is a single URL
-  (base / arbitrum / avalanche / solana / the testnets) have no failover
+  (base / arbitrum / avalanche / BNB / solana / the testnets) have no failover
   partner out of the box — add more endpoints via that network's `*_RPC_URLS`
   variable to get one.
 - **Caching** — prices 30 s; balances 10 s keyed (network, address,
@@ -85,9 +87,9 @@ Operational behavior (fixed by contract):
 
 JSON-RPC 2.0 over `POST /rpc` (`Content-Type: application/json`). Batch
 requests are NOT supported (error `-32600`). `chain` ∈ `"eth" | "polygon" |
-"base" | "arbitrum" | "avalanche" | "tron" | "solana"` (the app's `Coin` enum
-names). A request without an `id` (or with `"id": null`) is a notification: it
-executes but gets HTTP 204 and no body.
+"base" | "arbitrum" | "avalanche" | "bnb" | "tron" | "solana"` (the app's
+`Coin` enum names). A request without an `id` (or with `"id": null`) is a
+notification: it executes but gets HTTP 204 and no body.
 
 ### Networks
 
@@ -104,6 +106,7 @@ app's built-in `Network.id` values, so a client can forward
 | `base` | `base-mainnet`, `base-sepolia` | 8453 / 84532 |
 | `arbitrum` | `arbitrum-mainnet`, `arbitrum-sepolia` | 42161 / 421614 |
 | `avalanche` | `avalanche-mainnet`, `avalanche-fuji` | 43114 / 43113 |
+| `bnb` | `bnb-mainnet`, `bnb-testnet` | 56 / 97 |
 | `tron` | `tron-mainnet`, `tron-nile` | — |
 | `solana` | `sol-mainnet`, `sol-devnet` | — |
 
@@ -176,7 +179,7 @@ and take no `network` param — testnet clients shouldn't ask (see
 
 → `{"nonce": "<decimal-string>", "fees": {"slow": {"maxPriorityFeePerGas": "<dec>", "maxFeePerGas": "<dec>"}, "standard": {...}, "fast": {...}}}`
 
-EVM chains only (`eth`, `polygon`, `base`, `arbitrum`, `avalanche`);
+EVM chains only (`eth`, `polygon`, `base`, `arbitrum`, `avalanche`, `bnb`);
 tron/solana → error `-32602`. Nonce is
 `eth_getTransactionCount(pending)`. Tiers come from `eth_feeHistory`
 (5 blocks, percentiles 10/50/90; priority = per-tier average, maxFee =
@@ -197,7 +200,7 @@ monotonic: slow ≤ standard ≤ fast.
   `tron-nile` runs the same code against the nile TronGrid base URL.
 - **EVM families** — Etherscan v2 is preferred when `ETHERSCAN_API_KEY` is
   configured. Without a key (or when Etherscan is temporarily unavailable),
-  Ethereum, Polygon mainnet, Base, Arbitrum and Avalanche use keyless
+  Ethereum, Polygon mainnet, Base, Arbitrum, Avalanche and BNB use keyless
   Blockscout/Routescan explorers. Polygon Amoy is the sole exception: its
   official explorer requires an API key, so it reports `unsupported` when no
   Etherscan key is configured. Normal transactions and ERC-20 transfers are

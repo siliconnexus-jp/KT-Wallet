@@ -249,7 +249,7 @@ void main() {
   });
 
   group('测试网代币注册表', () {
-    test('测试网环境查询七条链各自的测试稳定币', () async {
+    test('测试网环境查询每条已配置的测试 Token', () async {
       final networks = NetworkController(
         initialEnvironment: NetworkEnvironment.testnet,
       );
@@ -280,6 +280,7 @@ void main() {
         usdcAvalancheFujiToken,
         usdtTronNileToken,
         usdcSolanaDevnetToken,
+        pyusdSolanaDevnetToken,
       ]);
       final results = await service.fetchAll(_addresses);
       for (final token in service.tokens) {
@@ -292,31 +293,21 @@ void main() {
         arbitrumSepolia.rpcUrl,
         avalancheFuji.rpcUrl,
         solanaDevnet.rpcUrl,
+        solanaDevnet.rpcUrl,
       ]);
       expect(rest.seenUrls, [
         '${tronNile.rpcUrl}/v1/accounts/${_addresses.tron}',
       ]);
     });
 
-    test('主网环境注册表包含七条链的内置稳定币', () {
+    test('主网环境注册表包含全部内置资产', () {
       final networks = NetworkController();
       // 每条主网都同时带 USDT 与 USDC,TRON 除外 —— Circle 已停用 TRON 上的
       // USDC,那份合约现在链上自称 USDCOLD / "USD Coin Old"。
-      expect(networkTokenRegistry(networks)(), [
-        usdtEthToken,
-        usdcEthToken,
-        usdcPolygonToken,
-        usdtPolygonToken,
-        usdcBaseToken,
-        usdtBaseToken,
-        usdcArbitrumToken,
-        usdtArbitrumToken,
-        usdcAvalancheToken,
-        usdtAvalancheToken,
-        usdtTronToken,
-        usdcSolanaToken,
-        usdtSolanaToken,
-      ]);
+      expect(
+        networkTokenRegistry(networks)().map((token) => token.id).toSet(),
+        builtinTokens.map((token) => token.id).toSet(),
+      );
       // 无网络来源(旧接线)也解析为完整主网注册表。
       expect(networkTokenRegistry(null)(), builtinTokens);
     });

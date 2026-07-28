@@ -217,6 +217,30 @@ const avalancheFuji = Network(
   builtin: true,
 );
 
+const bnbMainnet = Network(
+  id: 'bnb-mainnet',
+  chain: Chain.bnb,
+  name: 'BNB Smart Chain',
+  rpcUrl: 'https://bsc-dataseed.bnbchain.org',
+  symbol: 'BNB',
+  evmChainId: 56,
+  explorerUrl: 'https://bscscan.com',
+  builtin: true,
+);
+
+const bnbTestnet = Network(
+  id: 'bnb-testnet',
+  chain: Chain.bnb,
+  name: 'BNB Smart Chain Testnet',
+  rpcUrl: 'https://bsc-testnet-dataseed.bnbchain.org',
+  symbol: 'BNB',
+  evmChainId: 97,
+  explorerUrl: 'https://testnet.bscscan.com',
+  faucetUrl: 'https://www.bnbchain.org/en/testnet-faucet',
+  isTestnet: true,
+  builtin: true,
+);
+
 const tronMainnet = Network(
   id: 'tron-mainnet',
   chain: Chain.tron,
@@ -272,6 +296,8 @@ const builtinNetworks = [
   arbitrumSepolia,
   avalancheMainnet,
   avalancheFuji,
+  bnbMainnet,
+  bnbTestnet,
   tronMainnet,
   tronNile,
   solanaMainnet,
@@ -284,6 +310,7 @@ const _mainnetProfile = {
   Chain.base: 'base-mainnet',
   Chain.arbitrum: 'arbitrum-mainnet',
   Chain.avalanche: 'avalanche-mainnet',
+  Chain.bnb: 'bnb-mainnet',
   Chain.tron: 'tron-mainnet',
   Chain.solana: 'sol-mainnet',
 };
@@ -294,6 +321,7 @@ const _testnetProfile = {
   Chain.base: 'base-sepolia',
   Chain.arbitrum: 'arbitrum-sepolia',
   Chain.avalanche: 'avalanche-fuji',
+  Chain.bnb: 'bnb-testnet',
   Chain.tron: 'tron-nile',
   Chain.solana: 'sol-devnet',
 };

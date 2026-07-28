@@ -32,6 +32,7 @@ void main() {
       final a2 = await mock.deriveAddresses('w2');
       expect(a1.toMap(), a2.toMap());
       expect(a1.eth, a1.polygon);
+      expect(a1.eth, a1.bnb);
       expect(a1.eth, startsWith('0x'));
       expect(a1.eth.length, 42);
       expect(a1.tron, startsWith('T'));

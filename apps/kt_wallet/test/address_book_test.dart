@@ -129,14 +129,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('添加代币'), findsOneWidget);
 
-    await tester.enterText(_sheetField(0), 'LINK');
-    await tester.enterText(_sheetField(1), 'Chainlink');
+    await tester.enterText(_sheetField(0), 'KTT');
+    await tester.enterText(_sheetField(1), 'KT Test Token');
     await tester.pumpAndSettle();
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
     expect(find.text('添加代币'), findsNothing); // sheet closed
-    expect(find.text('LINK'), findsOneWidget);
-    expect(find.text('Chainlink'), findsOneWidget);
+    expect(find.text('KTT'), findsOneWidget);
+    expect(find.text('KT Test Token'), findsOneWidget);
   });
 
   testWidgets('token manage search filters by symbol, name, and contract', (

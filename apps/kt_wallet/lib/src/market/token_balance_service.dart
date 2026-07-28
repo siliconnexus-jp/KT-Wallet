@@ -1,4 +1,4 @@
-import 'package:chains/chains.dart' show Amount;
+import 'package:chains/chains.dart' show Amount, solanaToken2022Program;
 import 'package:chains/rpc.dart';
 import 'package:core_crypto/core_crypto.dart' show ChainAddresses, Coin;
 
@@ -17,6 +17,7 @@ class TokenInfo {
     required this.contract,
     required this.decimals,
     required this.network,
+    this.tokenProgram,
   });
 
   /// Stable registry id, used as the per-token result key.
@@ -30,6 +31,10 @@ class TokenInfo {
 
   /// Display/filter label matching the network chips ('Ethereum', 'TRON', …).
   final String network;
+
+  /// Solana program id for transfers. Null means the legacy SPL Token
+  /// Program; PYUSD sets Token-2022 explicitly.
+  final String? tokenProgram;
 }
 
 // USDT on Ethereum mainnet — Tether's canonical ERC-20 contract, 6 decimals
@@ -260,6 +265,134 @@ const usdcSolanaDevnetToken = TokenInfo(
   network: 'Devnet',
 );
 
+const daiEthToken = TokenInfo(
+  id: 'dai-eth',
+  symbol: 'DAI',
+  chain: Coin.eth,
+  contract: '0x6B175474E89094C44Da98b954EedeAC495271d0F',
+  decimals: 18,
+  network: 'Ethereum',
+);
+
+const wethEthToken = TokenInfo(
+  id: 'weth-eth',
+  symbol: 'WETH',
+  chain: Coin.eth,
+  contract: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+  decimals: 18,
+  network: 'Ethereum',
+);
+
+const wbtcEthToken = TokenInfo(
+  id: 'wbtc-eth',
+  symbol: 'WBTC',
+  chain: Coin.eth,
+  contract: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
+  decimals: 8,
+  network: 'Ethereum',
+);
+
+const linkEthToken = TokenInfo(
+  id: 'link-eth',
+  symbol: 'LINK',
+  chain: Coin.eth,
+  contract: '0x514910771AF9Ca656af840dff83E8264EcF986CA',
+  decimals: 18,
+  network: 'Ethereum',
+);
+
+const uniEthToken = TokenInfo(
+  id: 'uni-eth',
+  symbol: 'UNI',
+  chain: Coin.eth,
+  contract: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984',
+  decimals: 18,
+  network: 'Ethereum',
+);
+
+const shibEthToken = TokenInfo(
+  id: 'shib-eth',
+  symbol: 'SHIB',
+  chain: Coin.eth,
+  contract: '0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE',
+  decimals: 18,
+  network: 'Ethereum',
+);
+
+const pepeEthToken = TokenInfo(
+  id: 'pepe-eth',
+  symbol: 'PEPE',
+  chain: Coin.eth,
+  contract: '0x6982508145454Ce325dDbE47a25d4ec3d2311933',
+  decimals: 18,
+  network: 'Ethereum',
+);
+
+const busdEthToken = TokenInfo(
+  id: 'busd-eth',
+  symbol: 'BUSD',
+  chain: Coin.eth,
+  contract: '0x4fabb145d64652a948d72533023f6e7a623c7c53',
+  decimals: 18,
+  network: 'Ethereum',
+);
+
+const busdBnbToken = TokenInfo(
+  id: 'busd-bnb',
+  symbol: 'BUSD',
+  chain: Coin.bnb,
+  contract: '0xe9e7cea3dedca5984780bafc599bd69add087d56',
+  decimals: 18,
+  network: 'BNB Smart Chain',
+);
+
+const pyusdEthToken = TokenInfo(
+  id: 'pyusd-eth',
+  symbol: 'PYUSD',
+  chain: Coin.eth,
+  contract: '0x6c3ea9036406852006290770BEdFcAbA0e23A0e8',
+  decimals: 6,
+  network: 'Ethereum',
+);
+
+const jupSolanaToken = TokenInfo(
+  id: 'jup-solana',
+  symbol: 'JUP',
+  chain: Coin.solana,
+  contract: 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN',
+  decimals: 6,
+  network: 'Solana',
+);
+
+const bonkSolanaToken = TokenInfo(
+  id: 'bonk-solana',
+  symbol: 'BONK',
+  chain: Coin.solana,
+  contract: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+  decimals: 5,
+  network: 'Solana',
+);
+
+const pyusdSolanaToken = TokenInfo(
+  id: 'pyusd-solana',
+  symbol: 'PYUSD',
+  chain: Coin.solana,
+  contract: '2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo',
+  decimals: 6,
+  network: 'Solana',
+  tokenProgram: solanaToken2022Program,
+);
+
+const pyusdSolanaDevnetToken = TokenInfo(
+  id: 'pyusd-solana-devnet',
+  symbol: 'PYUSD',
+  chain: Coin.solana,
+  contract: 'CXk2AMBfi3TwaEL2468s6zP8xq9NxTXjp9gjMgzeUynM',
+  decimals: 6,
+  network: 'Devnet',
+  tokenProgram: solanaToken2022Program,
+);
+
 /// Built-in token registry (the canonical stablecoin deployments;
 /// user-added tokens stay display-only in the token-manage directory).
 ///
@@ -281,6 +414,15 @@ const usdcSolanaDevnetToken = TokenInfo(
 const builtinTokens = [
   usdtEthToken,
   usdcEthToken,
+  daiEthToken,
+  wethEthToken,
+  wbtcEthToken,
+  linkEthToken,
+  uniEthToken,
+  shibEthToken,
+  pepeEthToken,
+  busdEthToken,
+  pyusdEthToken,
   usdtPolygonToken,
   usdcPolygonToken,
   usdtBaseToken,
@@ -289,9 +431,13 @@ const builtinTokens = [
   usdcArbitrumToken,
   usdtAvalancheToken,
   usdcAvalancheToken,
+  busdBnbToken,
   usdtTronToken,
   usdtSolanaToken,
   usdcSolanaToken,
+  jupSolanaToken,
+  bonkSolanaToken,
+  pyusdSolanaToken,
 ];
 
 /// The built-in registry keyed by NETWORK id: these are MAINNET contract
@@ -300,7 +446,19 @@ const builtinTokens = [
 /// contracts (same addresses on a testnet are a different, untrusted token
 /// at best).
 const builtinTokensByNetworkId = <String, List<TokenInfo>>{
-  'eth-mainnet': [usdtEthToken, usdcEthToken],
+  'eth-mainnet': [
+    usdtEthToken,
+    usdcEthToken,
+    daiEthToken,
+    wethEthToken,
+    wbtcEthToken,
+    linkEthToken,
+    uniEthToken,
+    shibEthToken,
+    pepeEthToken,
+    busdEthToken,
+    pyusdEthToken,
+  ],
   'eth-sepolia': [usdtSepoliaToken],
   'polygon-mainnet': [usdcPolygonToken, usdtPolygonToken],
   'polygon-amoy': [usdcPolygonAmoyToken],
@@ -310,16 +468,38 @@ const builtinTokensByNetworkId = <String, List<TokenInfo>>{
   'arbitrum-sepolia': [usdcArbitrumSepoliaToken],
   'avalanche-mainnet': [usdcAvalancheToken, usdtAvalancheToken],
   'avalanche-fuji': [usdcAvalancheFujiToken],
+  'bnb-mainnet': [busdBnbToken],
+  'bnb-testnet': [],
   'tron-mainnet': [usdtTronToken],
   'tron-nile': [usdtTronNileToken],
-  'sol-mainnet': [usdcSolanaToken, usdtSolanaToken],
-  'sol-devnet': [usdcSolanaDevnetToken],
+  'sol-mainnet': [
+    usdcSolanaToken,
+    usdtSolanaToken,
+    jupSolanaToken,
+    bonkSolanaToken,
+    pyusdSolanaToken,
+  ],
+  'sol-devnet': [usdcSolanaDevnetToken, pyusdSolanaDevnetToken],
 };
 
 /// Symbols whose brand identity is security-sensitive. Anyone can deploy a
 /// token contract and claim one of these symbols; the symbol alone is never
 /// proof that the asset is issued by the expected organization.
-const protectedTokenSymbols = {'USDT', 'USDC', 'BUSD'};
+const protectedTokenSymbols = {
+  'USDT',
+  'USDC',
+  'DAI',
+  'WETH',
+  'WBTC',
+  'LINK',
+  'UNI',
+  'SHIB',
+  'PEPE',
+  'BUSD',
+  'PYUSD',
+  'JUP',
+  'BONK',
+};
 
 /// Paxos-issued BUSD on Ethereum. It is retained for identity checks and
 /// history warnings even though it is not enabled in the built-in balance
@@ -518,6 +698,7 @@ class TokenBalanceService {
       case Coin.base:
       case Coin.arbitrum:
       case Coin.avalanche:
+      case Coin.bnb:
         final rpc = EvmRpc(url: _endpoints(token.chain), transport: _jsonRpc);
         return rpc.erc20Balance(token.contract, addresses.forCoin(token.chain));
       case Coin.tron:

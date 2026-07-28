@@ -20,6 +20,7 @@ var networkOrder = []string{
 	"base-mainnet", "base-sepolia",
 	"arbitrum-mainnet", "arbitrum-sepolia",
 	"avalanche-mainnet", "avalanche-fuji",
+	"bnb-mainnet", "bnb-testnet",
 	"tron-mainnet", "tron-nile",
 	"sol-mainnet", "sol-devnet",
 }
@@ -35,6 +36,8 @@ var networks = map[string]networkMeta{
 	"arbitrum-sepolia":  {Chain: "arbitrum", EtherscanChainID: 421614},
 	"avalanche-mainnet": {Chain: "avalanche", Mainnet: true, EtherscanChainID: 43114},
 	"avalanche-fuji":    {Chain: "avalanche", EtherscanChainID: 43113},
+	"bnb-mainnet":       {Chain: "bnb", Mainnet: true, EtherscanChainID: 56},
+	"bnb-testnet":       {Chain: "bnb", EtherscanChainID: 97},
 	"tron-mainnet":      {Chain: "tron", Mainnet: true},
 	"tron-nile":         {Chain: "tron"},
 	"sol-mainnet":       {Chain: "solana", Mainnet: true},

@@ -363,17 +363,26 @@ class LocalTransferService {
           'No SPL token account has enough balance',
         );
       }
-      if (destinations.isEmpty) {
-        throw const LocalTransferException(
-          'Recipient has no token account for this SPL mint',
-        );
-      }
-      message = SolanaMessage.splTransfer(
+      final tokenProgram = draft.tokenProgram ?? solanaTokenProgram;
+      final createDestination = destinations.isEmpty;
+      final destination = createDestination
+          ? SolanaMessage.associatedTokenAddress(
+              owner: draft.recipient,
+              mint: mint,
+              tokenProgram: tokenProgram,
+            )
+          : destinations.first.address;
+      message = SolanaMessage.splTransferChecked(
         source: source.address,
-        destination: destinations.first.address,
+        destination: destination,
         owner: from,
+        recipientOwner: draft.recipient,
+        mint: mint,
         amount: draft.amount.raw,
+        decimals: draft.decimals,
         recentBlockhash: blockhash,
+        tokenProgram: tokenProgram,
+        createDestination: createDestination,
       );
     }
     final serialized = message.serialize();

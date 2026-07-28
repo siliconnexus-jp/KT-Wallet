@@ -65,6 +65,47 @@ func (s *Solana) GetBalance(ctx context.Context, address string) (*big.Int, erro
 	return v, nil
 }
 
+// GetTokenBalance sums every parsed token account owned by address for mint.
+// The RPC's mint filter works for both the legacy SPL Token Program and
+// Token-2022, so PYUSD does not need a privileged/indexer-only path.
+func (s *Solana) GetTokenBalance(ctx context.Context, address, mint string) (*big.Int, error) {
+	raw, err := s.pool.Call(ctx, "getTokenAccountsByOwner", []any{
+		address,
+		map[string]string{"mint": mint},
+		map[string]string{"encoding": "jsonParsed", "commitment": "confirmed"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	var out struct {
+		Value []struct {
+			Account struct {
+				Data struct {
+					Parsed struct {
+						Info struct {
+							TokenAmount struct {
+								Amount string `json:"amount"`
+							} `json:"tokenAmount"`
+						} `json:"info"`
+					} `json:"parsed"`
+				} `json:"data"`
+			} `json:"account"`
+		} `json:"value"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, &Unavailable{Upstream: "solana", Message: "malformed token account result"}
+	}
+	total := new(big.Int)
+	for _, account := range out.Value {
+		value, ok := new(big.Int).SetString(account.Account.Data.Parsed.Info.TokenAmount.Amount, 10)
+		if !ok {
+			return nil, &Unavailable{Upstream: "solana", Message: "malformed token account amount"}
+		}
+		total.Add(total, value)
+	}
+	return total, nil
+}
+
 // GetSignaturesForAddress returns the newest transaction signatures touching
 // address. This is a standard Solana JSON-RPC method and needs no indexer key.
 func (s *Solana) GetSignaturesForAddress(ctx context.Context, address string, limit int) ([]SolanaSignature, error) {

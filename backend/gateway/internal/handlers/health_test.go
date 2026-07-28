@@ -9,6 +9,7 @@ func TestHealthGolden(t *testing.T) {
 		"networks":["eth-mainnet","eth-sepolia","polygon-mainnet","polygon-amoy",
 			"base-mainnet","base-sepolia","arbitrum-mainnet","arbitrum-sepolia",
 			"avalanche-mainnet","avalanche-fuji",
+			"bnb-mainnet","bnb-testnet",
 			"tron-mainnet","tron-nile","sol-mainnet","sol-devnet"]}`,
 		result(t, resp))
 }

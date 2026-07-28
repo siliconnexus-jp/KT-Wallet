@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'base58.dart';
+import 'sha256.dart';
 
 /// Solana LEGACY message serialization — the exact bytes an offline signer
 /// ed25519-signs, so the air-gap payload carries a genuine sign-ready
@@ -20,8 +21,15 @@ import 'base58.dart';
 const String solanaSystemProgram = '11111111111111111111111111111111';
 
 /// SPL Token Program id.
-const String solanaTokenProgram =
-    'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+const String solanaTokenProgram = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+
+/// Token Extensions (Token-2022) Program id.
+const String solanaToken2022Program =
+    'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
+
+/// Associated Token Account Program id.
+const String solanaAssociatedTokenProgram =
+    'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
 
 final BigInt _u64Max = (BigInt.one << 64) - BigInt.one;
 
@@ -32,8 +40,8 @@ class SolanaInstruction {
     required this.programIdIndex,
     required List<int> accountIndices,
     required Uint8List data,
-  })  : accountIndices = Uint8List.fromList(accountIndices),
-        data = Uint8List.fromList(data) {
+  }) : accountIndices = Uint8List.fromList(accountIndices),
+       data = Uint8List.fromList(data) {
     if (programIdIndex < 0 || programIdIndex > 0xff) {
       throw ArgumentError('programIdIndex must fit a u8: $programIdIndex');
     }
@@ -64,18 +72,22 @@ class SolanaMessage {
     required List<Uint8List> accountKeys,
     required Uint8List recentBlockhash,
     required List<SolanaInstruction> instructions,
-  })  : accountKeys = List.unmodifiable(
-            [for (final k in accountKeys) Uint8List.fromList(k)]),
-        recentBlockhash = Uint8List.fromList(recentBlockhash),
-        instructions = List.unmodifiable(instructions) {
+  }) : accountKeys = List.unmodifiable([
+         for (final k in accountKeys) Uint8List.fromList(k),
+       ]),
+       recentBlockhash = Uint8List.fromList(recentBlockhash),
+       instructions = List.unmodifiable(instructions) {
     if (numRequiredSignatures < 1 || numRequiredSignatures > 0xff) {
       throw ArgumentError(
-          'numRequiredSignatures out of range: $numRequiredSignatures');
+        'numRequiredSignatures out of range: $numRequiredSignatures',
+      );
     }
     if (numReadonlySignedAccounts < 0 ||
         numReadonlySignedAccounts >= numRequiredSignatures) {
-      throw ArgumentError('numReadonlySignedAccounts must be >= 0 and leave '
-          'at least one writable signer (the fee payer)');
+      throw ArgumentError(
+        'numReadonlySignedAccounts must be >= 0 and leave '
+        'at least one writable signer (the fee payer)',
+      );
     }
     if (numReadonlyUnsignedAccounts < 0 ||
         numRequiredSignatures + numReadonlyUnsignedAccounts >
@@ -89,12 +101,14 @@ class SolanaMessage {
     }
     if (recentBlockhash.length != 32) {
       throw ArgumentError(
-          'recentBlockhash must be 32 bytes, got ${recentBlockhash.length}');
+        'recentBlockhash must be 32 bytes, got ${recentBlockhash.length}',
+      );
     }
     for (final ix in instructions) {
       if (ix.programIdIndex >= accountKeys.length) {
         throw ArgumentError(
-            'programIdIndex ${ix.programIdIndex} out of key range');
+          'programIdIndex ${ix.programIdIndex} out of key range',
+        );
       }
       for (final i in ix.accountIndices) {
         if (i >= accountKeys.length) {
@@ -182,6 +196,111 @@ class SolanaMessage {
     );
   }
 
+  /// Builds a checked SPL/Token-2022 transfer and, when [createDestination]
+  /// is true, prepends the Associated Token Program's idempotent create
+  /// instruction. The destination ATA is derived from the recipient wallet,
+  /// mint and selected token program, so a first-time receiver can be paid
+  /// without preparing a token account manually.
+  factory SolanaMessage.splTransferChecked({
+    required String source,
+    required String destination,
+    required String owner,
+    required String recipientOwner,
+    required String mint,
+    required BigInt amount,
+    required int decimals,
+    required String recentBlockhash,
+    String tokenProgram = solanaTokenProgram,
+    bool createDestination = false,
+  }) {
+    if (decimals < 0 || decimals > 0xff) {
+      throw ArgumentError('decimals must fit a u8: $decimals');
+    }
+    final transferData = BytesBuilder()
+      ..addByte(12) // TokenInstruction::TransferChecked
+      ..add(_u64le(amount, 'amount'))
+      ..addByte(decimals);
+
+    if (!createDestination) {
+      return SolanaMessage(
+        numRequiredSignatures: 1,
+        numReadonlySignedAccounts: 0,
+        numReadonlyUnsignedAccounts: 2,
+        accountKeys: [
+          pubkeyBytes(owner),
+          pubkeyBytes(source),
+          pubkeyBytes(destination),
+          pubkeyBytes(mint),
+          pubkeyBytes(tokenProgram),
+        ],
+        recentBlockhash: pubkeyBytes(recentBlockhash),
+        instructions: [
+          SolanaInstruction(
+            programIdIndex: 4,
+            accountIndices: const [1, 3, 2, 0],
+            data: transferData.toBytes(),
+          ),
+        ],
+      );
+    }
+
+    return SolanaMessage(
+      numRequiredSignatures: 1,
+      numReadonlySignedAccounts: 0,
+      numReadonlyUnsignedAccounts: 5,
+      accountKeys: [
+        pubkeyBytes(owner), // writable fee payer + token authority
+        pubkeyBytes(source),
+        pubkeyBytes(destination),
+        pubkeyBytes(recipientOwner),
+        pubkeyBytes(mint),
+        pubkeyBytes(solanaSystemProgram),
+        pubkeyBytes(tokenProgram),
+        pubkeyBytes(solanaAssociatedTokenProgram),
+      ],
+      recentBlockhash: pubkeyBytes(recentBlockhash),
+      instructions: [
+        SolanaInstruction(
+          programIdIndex: 7,
+          accountIndices: const [0, 2, 3, 4, 5, 6],
+          // CreateIdempotent: safe if the account appears between preparation
+          // and broadcast.
+          data: Uint8List.fromList(const [1]),
+        ),
+        SolanaInstruction(
+          programIdIndex: 6,
+          accountIndices: const [1, 4, 2, 0],
+          data: transferData.toBytes(),
+        ),
+      ],
+    );
+  }
+
+  /// Derives an Associated Token Account for [owner]. Token-2022 uses a
+  /// different seed and therefore a different ATA than the legacy program.
+  static String associatedTokenAddress({
+    required String owner,
+    required String mint,
+    String tokenProgram = solanaTokenProgram,
+  }) {
+    final program = pubkeyBytes(solanaAssociatedTokenProgram);
+    final seeds = [
+      pubkeyBytes(owner),
+      pubkeyBytes(tokenProgram),
+      pubkeyBytes(mint),
+    ];
+    for (var bump = 255; bump >= 0; bump--) {
+      final digest = sha256([
+        ...seeds.expand((seed) => seed),
+        bump,
+        ...program,
+        ...'ProgramDerivedAddress'.codeUnits,
+      ]);
+      if (!_isEd25519Point(digest)) return base58Encode(digest);
+    }
+    throw StateError('unable to derive associated token address');
+  }
+
   final int numRequiredSignatures;
   final int numReadonlySignedAccounts;
   final int numReadonlyUnsignedAccounts;
@@ -204,7 +323,8 @@ class SolanaMessage {
     }
     if (bytes.length != 32) {
       throw ArgumentError(
-          'pubkey must decode to 32 bytes, got ${bytes.length}: $base58');
+        'pubkey must decode to 32 bytes, got ${bytes.length}: $base58',
+      );
     }
     return bytes;
   }
@@ -276,4 +396,30 @@ class SolanaMessage {
     }
     return out;
   }
+
+  static bool _isEd25519Point(List<int> compressed) {
+    if (compressed.length != 32) return false;
+    final bytes = List<int>.from(compressed);
+    bytes[31] &= 0x7f;
+    var y = BigInt.zero;
+    for (var i = 31; i >= 0; i--) {
+      y = (y << 8) | BigInt.from(bytes[i]);
+    }
+    final p = (BigInt.one << 255) - BigInt.from(19);
+    if (y >= p) return false;
+    final y2 = y * y % p;
+    final d = (-BigInt.from(121665) * _modInverse(BigInt.from(121666), p)) % p;
+    final denominator = (d * y2 + BigInt.one) % p;
+    if (denominator == BigInt.zero) return false;
+    final x2 = ((y2 - BigInt.one) * _modInverse(denominator, p)) % p;
+    var x = x2.modPow((p + BigInt.from(3)) >> 3, p);
+    if (x * x % p != x2) {
+      final sqrtMinusOne = BigInt.two.modPow((p - BigInt.one) >> 2, p);
+      x = x * sqrtMinusOne % p;
+    }
+    return x * x % p == x2;
+  }
+
+  static BigInt _modInverse(BigInt value, BigInt modulus) =>
+      value.modPow(modulus - BigInt.two, modulus);
 }

@@ -12,14 +12,25 @@ import (
 
 // geckoIDs maps ticker symbols the wallet uses to CoinGecko coin ids.
 var geckoIDs = map[string]string{
-	"ETH":  "ethereum",
-	"POL":  "polygon-ecosystem-token",
-	"AVAX": "avalanche-2",
-	"TRX":  "tron",
-	"SOL":  "solana",
-	"USDT": "tether",
-	"USDC": "usd-coin",
-	"BUSD": "binance-usd",
+	"ETH":   "ethereum",
+	"POL":   "polygon-ecosystem-token",
+	"AVAX":  "avalanche-2",
+	"BNB":   "binancecoin",
+	"TRX":   "tron",
+	"SOL":   "solana",
+	"USDT":  "tether",
+	"USDC":  "usd-coin",
+	"BUSD":  "binance-usd",
+	"DAI":   "dai",
+	"WETH":  "weth",
+	"WBTC":  "wrapped-bitcoin",
+	"LINK":  "chainlink",
+	"UNI":   "uniswap",
+	"SHIB":  "shiba-inu",
+	"PEPE":  "pepe",
+	"JUP":   "jupiter-exchange-solana",
+	"BONK":  "bonk",
+	"PYUSD": "paypal-usd",
 }
 
 type usdPrice struct {

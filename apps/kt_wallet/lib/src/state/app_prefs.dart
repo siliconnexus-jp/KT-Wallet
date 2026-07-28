@@ -34,6 +34,7 @@ class AppPrefsController extends ChangeNotifier {
     Coin.base: 'rpc.base',
     Coin.arbitrum: 'rpc.arbitrum',
     Coin.avalanche: 'rpc.avalanche',
+    Coin.bnb: 'rpc.bnb',
     Coin.tron: 'rpc.tron',
     Coin.solana: 'rpc.solana',
   };

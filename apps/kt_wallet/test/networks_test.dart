@@ -26,12 +26,14 @@ void main() {
     }
     // EVM instances must carry a chain id (signing-domain isolation).
     for (final n in builtinNetworks.where(
-      (n) => n.chain == Chain.ethereum || n.chain == Chain.polygon,
+      (n) => n.chain != Chain.tron && n.chain != Chain.solana,
     )) {
       expect(n.evmChainId, isNotNull, reason: n.id);
     }
     expect(ethSepolia.evmChainId, 11155111);
     expect(polygonAmoy.evmChainId, 80002);
+    expect(bnbMainnet.evmChainId, 56);
+    expect(bnbTestnet.evmChainId, 97);
   });
 
   test('environment switch flips every chain and clears overrides', () async {

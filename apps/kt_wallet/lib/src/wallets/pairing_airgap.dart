@@ -87,6 +87,7 @@ ChainAddresses addressesFromExport(AccountExport export) {
     base: maybeAddr(8453),
     arbitrum: maybeAddr(42161),
     avalanche: maybeAddr(9000),
+    bnb: maybeAddr(714),
     tron: addr(195),
     solana: addr(501),
   );
@@ -105,6 +106,7 @@ void validateAccountExport(
     8453: "m/44'/60'/0'/0/0",
     42161: "m/44'/60'/0'/0/0",
     9000: "m/44'/60'/0'/0/0",
+    714: "m/44'/60'/0'/0/0",
     195: "m/44'/195'/0'/0/0",
     501: "m/44'/501'/0'",
   };
@@ -122,6 +124,7 @@ void validateAccountExport(
       8453 => Chain.base,
       42161 => Chain.arbitrum,
       9000 => Chain.avalanche,
+      714 => Chain.bnb,
       195 => Chain.tron,
       501 => Chain.solana,
       _ => throw PayloadError('unsupported account coin'),
@@ -146,7 +149,7 @@ void validateAccountExport(
     throw PayloadError('account export is missing supported chains');
   }
   final evm = records[60]?.address.toLowerCase();
-  for (final coin in const [966, 8453, 42161, 9000]) {
+  for (final coin in const [966, 8453, 42161, 9000, 714]) {
     final value = records[coin]?.address;
     if (value != null && value.toLowerCase() != evm) {
       throw PayloadError('EVM account records do not share one key');

@@ -150,6 +150,7 @@ class HistoryService {
       case Coin.base:
       case Coin.arbitrum:
       case Coin.avalanche:
+      case Coin.bnb:
         return _fetchEvm(coin, address);
       case Coin.solana:
         return _fetchSolana(address);
@@ -159,7 +160,22 @@ class HistoryService {
   Future<HistoryResult> _fetchEvm(Coin coin, String address) async {
     try {
       if (coin == Coin.avalanche) {
-        return _fetchAvalanche(address);
+        return _fetchRoutescan(
+          coin: coin,
+          address: address,
+          mainnetChainId: 43114,
+          testnetChainId: 43113,
+          symbol: 'AVAX',
+        );
+      }
+      if (coin == Coin.bnb) {
+        return _fetchRoutescan(
+          coin: coin,
+          address: address,
+          mainnetChainId: 56,
+          testnetChainId: 97,
+          symbol: 'BNB',
+        );
       }
       final base = _blockscoutApi(coin);
       final uri = Uri.parse(
@@ -201,11 +217,17 @@ class HistoryService {
     }
   }
 
-  Future<HistoryResult> _fetchAvalanche(String address) async {
-    final endpoint = _endpoints(Coin.avalanche).toLowerCase();
+  Future<HistoryResult> _fetchRoutescan({
+    required Coin coin,
+    required String address,
+    required int mainnetChainId,
+    required int testnetChainId,
+    required String symbol,
+  }) async {
+    final endpoint = _endpoints(coin).toLowerCase();
     final testnet = endpoint.contains('test') || endpoint.contains('fuji');
     final network = testnet ? 'testnet' : 'mainnet';
-    final chainId = testnet ? 43113 : 43114;
+    final chainId = testnet ? testnetChainId : mainnetChainId;
     try {
       final uri = Uri.parse(
         'https://api.routescan.io/v2/network/$network/evm/$chainId/etherscan/api'
@@ -228,10 +250,10 @@ class HistoryService {
         final value = BigInt.tryParse('${item['value']}');
         records.add(
           ChainTxRecord(
-            coin: Coin.avalanche,
+            coin: coin,
             hash: item['hash'] as String,
             outgoing: '${item['from']}'.toLowerCase() == lower,
-            amountText: value == null ? null : _formatAmount(value, 18, 'AVAX'),
+            amountText: value == null ? null : _formatAmount(value, 18, symbol),
             timestamp: DateTime.fromMillisecondsSinceEpoch(seconds * 1000),
             confirmed: item['isError'] != '1',
           ),
@@ -264,6 +286,7 @@ class HistoryService {
             ? 'https://arbitrum-sepolia.blockscout.com/api/v2'
             : 'https://arbitrum.blockscout.com/api/v2',
       Coin.avalanche => throw ArgumentError('Avalanche uses Routescan'),
+      Coin.bnb => throw ArgumentError('BNB Smart Chain uses Routescan'),
       _ => throw ArgumentError('not EVM: $coin'),
     };
   }
@@ -271,6 +294,7 @@ class HistoryService {
   String _nativeSymbol(Coin coin) => switch (coin) {
     Coin.polygon => 'POL',
     Coin.avalanche => 'AVAX',
+    Coin.bnb => 'BNB',
     _ => 'ETH',
   };
 

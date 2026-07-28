@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 /// Supported chains (SLIP-44 mapping happens on the native side).
-enum Coin { eth, polygon, base, arbitrum, avalanche, tron, solana }
+enum Coin { eth, polygon, base, arbitrum, avalanche, bnb, tron, solana }
 
 /// Public addresses derived for one wallet. ETH and Polygon share an address.
 class ChainAddresses {
@@ -11,18 +11,22 @@ class ChainAddresses {
     String? base,
     String? arbitrum,
     String? avalanche,
+    String? bnb,
     required this.tron,
     required this.solana,
-  }) : hasExpandedEvm = base != null || arbitrum != null || avalanche != null,
+  }) : hasExpandedEvm =
+           base != null || arbitrum != null || avalanche != null || bnb != null,
        base = base ?? eth,
        arbitrum = arbitrum ?? eth,
-       avalanche = avalanche ?? eth;
+       avalanche = avalanche ?? eth,
+       bnb = bnb ?? eth;
 
   final String eth;
   final String polygon;
   final String base;
   final String arbitrum;
   final String avalanche;
+  final String bnb;
   final String tron;
   final String solana;
   final bool hasExpandedEvm;
@@ -37,6 +41,7 @@ class ChainAddresses {
     Coin.base => base,
     Coin.arbitrum => arbitrum,
     Coin.avalanche => avalanche,
+    Coin.bnb => bnb,
     Coin.tron => tron,
     Coin.solana => solana,
   };
@@ -47,6 +52,7 @@ class ChainAddresses {
     'base': base,
     'arbitrum': arbitrum,
     'avalanche': avalanche,
+    'bnb': bnb,
     'tron': tron,
     'solana': solana,
   };
@@ -57,6 +63,7 @@ class ChainAddresses {
     base: (map['base'] ?? map['eth'])! as String,
     arbitrum: (map['arbitrum'] ?? map['eth'])! as String,
     avalanche: (map['avalanche'] ?? map['eth'])! as String,
+    bnb: (map['bnb'] ?? map['eth'])! as String,
     tron: map['tron']! as String,
     solana: map['solana']! as String,
   );
@@ -69,6 +76,7 @@ class ChainPublicKeys {
     Uint8List? base,
     Uint8List? arbitrum,
     Uint8List? avalanche,
+    Uint8List? bnb,
     required Uint8List tron,
     required Uint8List solana,
   }) : eth = Uint8List.fromList(eth),
@@ -76,6 +84,7 @@ class ChainPublicKeys {
        base = Uint8List.fromList(base ?? eth),
        arbitrum = Uint8List.fromList(arbitrum ?? eth),
        avalanche = Uint8List.fromList(avalanche ?? eth),
+       bnb = Uint8List.fromList(bnb ?? eth),
        tron = Uint8List.fromList(tron),
        solana = Uint8List.fromList(solana);
 
@@ -84,6 +93,7 @@ class ChainPublicKeys {
   final Uint8List base;
   final Uint8List arbitrum;
   final Uint8List avalanche;
+  final Uint8List bnb;
   final Uint8List tron;
   final Uint8List solana;
 
@@ -93,6 +103,7 @@ class ChainPublicKeys {
     Coin.base => base,
     Coin.arbitrum => arbitrum,
     Coin.avalanche => avalanche,
+    Coin.bnb => bnb,
     Coin.tron => tron,
     Coin.solana => solana,
   };
@@ -103,6 +114,7 @@ class ChainPublicKeys {
     'base': base,
     'arbitrum': arbitrum,
     'avalanche': avalanche,
+    'bnb': bnb,
     'tron': tron,
     'solana': solana,
   };
@@ -113,6 +125,7 @@ class ChainPublicKeys {
     base: (map['base'] ?? map['eth'])! as Uint8List,
     arbitrum: (map['arbitrum'] ?? map['eth'])! as Uint8List,
     avalanche: (map['avalanche'] ?? map['eth'])! as Uint8List,
+    bnb: (map['bnb'] ?? map['eth'])! as Uint8List,
     tron: map['tron']! as Uint8List,
     solana: map['solana']! as Uint8List,
   );

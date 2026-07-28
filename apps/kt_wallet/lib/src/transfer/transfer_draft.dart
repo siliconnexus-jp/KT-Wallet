@@ -15,6 +15,7 @@ class TransferDraft {
     required this.amount,
     required this.feeTier,
     this.tokenContract,
+    this.tokenProgram,
   });
 
   /// Asset symbol, e.g. `USDT`.
@@ -36,6 +37,7 @@ class TransferDraft {
 
   /// Token contract for token transfers; null for native transfers.
   final String? tokenContract;
+  final String? tokenProgram;
 
   TxOperation get operation => tokenContract == null
       ? TxOperation.nativeTransfer

@@ -20,6 +20,7 @@ import '../market/token_balance_service.dart'
         isProtectedTokenSymbol,
         builtinTokensByNetworkId,
         officialBusdEthereumContract,
+        uniEthToken,
         usdcSolanaToken,
         usdtEthToken,
         usdtTronToken;
@@ -42,6 +43,7 @@ const _chainTags = [
   (Chain.base, 'Base', ChainColors.base),
   (Chain.arbitrum, 'Arbitrum', ChainColors.arbitrum),
   (Chain.avalanche, 'Avalanche', ChainColors.avalanche),
+  (Chain.bnb, 'BNB Smart Chain', Color(0xFFF3BA2F)),
   (Chain.tron, 'TRON', ChainColors.tron),
   (Chain.solana, 'Solana', ChainColors.solana),
 ];
@@ -680,7 +682,7 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
           officialBusdEthereumContract,
           false,
         ),
-        ('UNI', 'Uniswap', 'Ethereum · ERC-20', null, false),
+        ('UNI', 'Uniswap', 'Ethereum · ERC-20', uniEthToken.contract, false),
       ]) {
         await controller.addToken(
           symbol: symbol,
@@ -713,7 +715,17 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
   static String _officialName(String symbol) => switch (symbol) {
     'USDT' => 'Tether USD',
     'USDC' => 'USD Coin',
+    'DAI' => 'Dai Stablecoin',
+    'WETH' => 'Wrapped Ether',
+    'WBTC' => 'Wrapped BTC',
+    'LINK' => 'Chainlink',
+    'UNI' => 'Uniswap',
+    'SHIB' => 'Shiba Inu',
+    'PEPE' => 'Pepe',
     'BUSD' => 'Binance USD',
+    'PYUSD' => 'PayPal USD',
+    'JUP' => 'Jupiter',
+    'BONK' => 'Bonk',
     _ => symbol,
   };
 
@@ -1079,6 +1091,7 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
           size: 36,
           fallbackColor: color,
           fallbackInitial: initial,
+          official: verified,
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -1449,6 +1462,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
     Coin.base => Chain.base,
     Coin.arbitrum => Chain.arbitrum,
     Coin.avalanche => Chain.avalanche,
+    Coin.bnb => Chain.bnb,
     Coin.tron => Chain.tron,
     Coin.solana => Chain.solana,
   };
@@ -2244,6 +2258,12 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
           'Avalanche',
           'api.avax.network/ext/bc/C/rpc',
         ),
+        (
+          const Color(0xFFF3BA2F),
+          Coin.bnb,
+          'BNB Smart Chain',
+          'bsc-dataseed.bnbchain.org',
+        ),
       ],
       (ChainColors.tron, Coin.tron, 'TRON', 'api.trongrid.io'),
       (
@@ -2265,6 +2285,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
         Coin.base => Chain.base,
         Coin.arbitrum => Chain.arbitrum,
         Coin.avalanche => Chain.avalanche,
+        Coin.bnb => Chain.bnb,
         Coin.tron => Chain.tron,
         Coin.solana => Chain.solana,
       };

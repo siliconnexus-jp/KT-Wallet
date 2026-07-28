@@ -3,7 +3,7 @@
 | File | Source | License |
 | --- | --- | --- |
 | `busd` `eth` `matic` `sol` `trx` `uni` `usdc` `usdt` `avax` | [spothq/cryptocurrency-icons](https://github.com/spothq/cryptocurrency-icons) | MIT |
-| `arb` | [trustwallet/assets](https://github.com/trustwallet/assets) | MIT |
+| `arb` `bnb` `bonk` `dai` `jup` `link` `pepe` `pyusd` `shib` `wbtc` `weth` | [trustwallet/assets](https://github.com/trustwallet/assets) | MIT |
 | `base` | drawn from Base's own brand kit geometry | see below |
 
 `base` is redrawn rather than copied. Base's brand kit

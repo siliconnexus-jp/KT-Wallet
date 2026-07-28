@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  Ethereum · Polygon · Base · Arbitrum · Avalanche · TRON · Solana
+  Ethereum · BNB Smart Chain · Polygon · Base · Arbitrum · Avalanche · TRON · Solana
 </p>
 
 Source code, issues, and releases:
@@ -61,6 +61,7 @@ signer, wrong network, or mismatched transaction is rejected.
 | Chain | Balance | Native transfer | Token transfer | History |
 |---|:---:|:---:|:---:|:---:|
 | Ethereum | ✅ | ETH | ERC-20 | Blockscout |
+| BNB Smart Chain | ✅ | BNB | BEP-20 | Routescan |
 | Polygon | ✅ | POL | ERC-20 | Blockscout |
 | Base | ✅ | ETH | ERC-20 | Blockscout |
 | Arbitrum | ✅ | ETH | ERC-20 | Blockscout |
@@ -70,6 +71,19 @@ signer, wrong network, or mismatched transaction is rejected.
 
 Hot wallets sign through the native Trust Wallet Core bridge. Watch-only
 wallets have no private-key signing capability and use the QR workflow.
+
+Built-in mainnet assets include:
+
+- Ethereum: USDT, USDC, DAI, WETH, WBTC, LINK, UNI, SHIB, PEPE, BUSD, and
+  PYUSD.
+- BNB Smart Chain: BNB and BUSD.
+- Solana: USDT, USDC, JUP, BONK, and Token-2022 PYUSD.
+- Existing Polygon, Base, Arbitrum, Avalanche, and TRON stablecoin
+  deployments remain supported.
+
+The built-in registry uses canonical contract or mint identities rather than
+trusting a token symbol. BUSD remains available for existing balances and
+transfers, but it is a legacy asset whose issuer has ended new issuance.
 
 The table describes implemented transaction families. Public RPC availability,
 faucet limits, and testnet token liquidity are external dependencies and are not
@@ -81,13 +95,15 @@ reported as successful when unavailable.
   EIP-1559 fee history.
 - TRON transactions query bandwidth, energy, and contract energy usage to
   derive `feeLimit`.
-- Solana transactions use a fresh blockhash, `getFeeForMessage`, and node
-  simulation.
+- Solana transactions use a fresh blockhash, `getFeeForMessage`, node
+  simulation, and automatically create a missing recipient associated token
+  account in the same signed transaction.
 - If a required fee or simulation call fails, sending is blocked instead of
   falling back to a demo fee.
 
-SPL transfers currently require the recipient's associated token account to
-already exist. Automatic ATA creation is not yet implemented.
+Both the legacy SPL Token Program and Token-2022 transfers are supported for
+built-in assets. The token program and mint are part of the parsed transaction
+and are checked before an air-gapped signature is accepted.
 
 ## Transaction lifecycle
 

@@ -12,6 +12,7 @@ const String defaultPolygonRpcUrl = 'https://polygon-bor-rpc.publicnode.com';
 const String defaultBaseRpcUrl = 'https://mainnet.base.org';
 const String defaultArbitrumRpcUrl = 'https://arb1.arbitrum.io/rpc';
 const String defaultAvalancheRpcUrl = 'https://api.avax.network/ext/bc/C/rpc';
+const String defaultBnbRpcUrl = 'https://bsc-dataseed.bnbchain.org';
 
 /// TronGrid REST base URL — the [TronRpc] client speaks TronGrid's REST API
 /// (`/v1/accounts/...`, `/wallet/...`), not JSON-RPC, so it takes the
@@ -36,6 +37,7 @@ String defaultRpcEndpointFor(Coin coin) => switch (coin) {
   Coin.base => defaultBaseRpcUrl,
   Coin.arbitrum => defaultArbitrumRpcUrl,
   Coin.avalanche => defaultAvalancheRpcUrl,
+  Coin.bnb => defaultBnbRpcUrl,
   Coin.tron => defaultTronApiUrl,
   Coin.solana => defaultSolanaRpcUrl,
 };
@@ -97,6 +99,7 @@ class BalanceService {
     Coin.base: 18,
     Coin.arbitrum: 18,
     Coin.avalanche: 18,
+    Coin.bnb: 18,
     Coin.tron: 6,
     Coin.solana: 9,
   };
@@ -108,6 +111,7 @@ class BalanceService {
     Coin.base: 'ETH',
     Coin.arbitrum: 'ETH',
     Coin.avalanche: 'AVAX',
+    Coin.bnb: 'BNB',
     Coin.tron: 'TRX',
     Coin.solana: 'SOL',
   };
@@ -137,6 +141,7 @@ class BalanceService {
       url: _endpoints(Coin.avalanche),
       transport: _jsonRpc,
     );
+    final bnb = EvmRpc(url: _endpoints(Coin.bnb), transport: _jsonRpc);
     final tron = TronRpc(baseUrl: _endpoints(Coin.tron), transport: _rest);
     final solana = SolanaRpc(url: _endpoints(Coin.solana), transport: _jsonRpc);
 
@@ -146,6 +151,7 @@ class BalanceService {
       Coin.base: () => base.getBalance(addresses.base),
       Coin.arbitrum: () => arbitrum.getBalance(addresses.arbitrum),
       Coin.avalanche: () => avalanche.getBalance(addresses.avalanche),
+      Coin.bnb: () => bnb.getBalance(addresses.bnb),
       Coin.tron: () => tron.getTrxBalance(addresses.tron),
       Coin.solana: () => solana.getBalance(addresses.solana),
     };

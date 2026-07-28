@@ -5,7 +5,7 @@ import 'keccak.dart';
 import 'sha256.dart';
 
 /// Supported chains for address validation (matches core_crypto Coin).
-enum Chain { ethereum, polygon, base, arbitrum, avalanche, tron, solana }
+enum Chain { ethereum, polygon, base, arbitrum, avalanche, bnb, tron, solana }
 
 /// Validates and normalizes destination addresses per chain, so a wrong-network
 /// paste (e.g. a TRON address in an EVM transfer) is caught before building a
@@ -31,7 +31,8 @@ abstract final class Addresses {
       Chain.polygon ||
       Chain.base ||
       Chain.arbitrum ||
-      Chain.avalanche => _validateEvm(a),
+      Chain.avalanche ||
+      Chain.bnb => _validateEvm(a),
       Chain.tron => _validateTron(a),
       Chain.solana => _validateSolana(a),
     };

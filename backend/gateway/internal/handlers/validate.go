@@ -19,7 +19,7 @@ type chainMeta struct {
 
 // chainOrder is the canonical listing order of the chain families, matching
 // the app's Coin enum (which is what the wire `chain` value comes from).
-var chainOrder = []string{"eth", "polygon", "base", "arbitrum", "avalanche", "tron", "solana"}
+var chainOrder = []string{"eth", "polygon", "base", "arbitrum", "avalanche", "bnb", "tron", "solana"}
 
 var chains = map[string]chainMeta{
 	"eth":       {Symbol: "ETH", Decimals: 18, EVM: true},
@@ -27,6 +27,7 @@ var chains = map[string]chainMeta{
 	"base":      {Symbol: "ETH", Decimals: 18, EVM: true},
 	"arbitrum":  {Symbol: "ETH", Decimals: 18, EVM: true},
 	"avalanche": {Symbol: "AVAX", Decimals: 18, EVM: true},
+	"bnb":       {Symbol: "BNB", Decimals: 18, EVM: true},
 	"tron":      {Symbol: "TRX", Decimals: 6},
 	"solana":    {Symbol: "SOL", Decimals: 9},
 }

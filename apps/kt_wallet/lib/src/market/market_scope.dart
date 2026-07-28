@@ -44,6 +44,7 @@ Chain chainForRpcCoin(Coin coin) => switch (coin) {
   Coin.base => Chain.base,
   Coin.arbitrum => Chain.arbitrum,
   Coin.avalanche => Chain.avalanche,
+  Coin.bnb => Chain.bnb,
   Coin.tron => Chain.tron,
   Coin.solana => Chain.solana,
 };

@@ -50,6 +50,7 @@ enum WalletCoreBridge {
       "base": evm,
       "arbitrum": evm,
       "avalanche": evm,
+      "bnb": evm,
       "tron": wallet.getAddressForCoin(coin: .tron),
       "solana": wallet.getAddressForCoin(coin: .solana),
     ]
@@ -69,6 +70,7 @@ enum WalletCoreBridge {
       "base": evm,
       "arbitrum": evm,
       "avalanche": evm,
+      "bnb": evm,
       "tron": tron,
       "solana": solana,
     ]
@@ -78,7 +80,7 @@ enum WalletCoreBridge {
     switch coin {
     case "eth": return .ethereum
     case "polygon": return .polygon
-    case "base", "arbitrum", "avalanche": return .ethereum
+    case "base", "arbitrum", "avalanche", "bnb": return .ethereum
     case "tron": return .tron
     case "solana": return .solana
     default: return nil

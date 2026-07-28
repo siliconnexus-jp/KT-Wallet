@@ -82,6 +82,20 @@ func TestPolygonNativeSymbol(t *testing.T) {
 	assertJSONEq(t, `{"native":{"raw":"5","decimals":18,"symbol":"POL"},"tokens":[]}`, result(t, resp))
 }
 
+func TestBNBBalancesUseDedicatedChain(t *testing.T) {
+	node := newRPCFake(t)
+	scriptEVMBalances(node, map[string]string{
+		"0xe9e7cea3dedca5984780bafc599bd69add087d56": "0x64",
+	})
+	e := newEnv(t, func(cfg *handlers.Config) { cfg.BNBURLs = []string{node.srv.URL} })
+	resp := e.rpc("kt_getBalances", balancesParams("bnb", evmSelf,
+		`[{"contract":"0xe9e7cea3dedca5984780bafc599bd69add087d56","decimals":18,"symbol":"BUSD"}]`))
+	assertJSONEq(t, `{
+		"native":{"raw":"1000000000000000000","decimals":18,"symbol":"BNB"},
+		"tokens":[{"contract":"0xe9e7cea3dedca5984780bafc599bd69add087d56","raw":"100","decimals":18,"symbol":"BUSD"}]
+	}`, result(t, resp))
+}
+
 func TestEVMPerTokenErrorIsolation(t *testing.T) {
 	node := newRPCFake(t)
 	// Token A resolves; token B (not scripted) reverts.
@@ -150,6 +164,13 @@ func TestTronBalancesUnknownAccount(t *testing.T) {
 func TestSolanaBalances(t *testing.T) {
 	node := newRPCFake(t)
 	node.result("getBalance", map[string]any{"context": map[string]any{"slot": 1}, "value": 2039280})
+	node.result("getTokenAccountsByOwner", map[string]any{
+		"context": map[string]any{"slot": 1},
+		"value": []any{
+			map[string]any{"account": map[string]any{"data": map[string]any{"parsed": map[string]any{"info": map[string]any{"tokenAmount": map[string]any{"amount": "1200000"}}}}}},
+			map[string]any{"account": map[string]any{"data": map[string]any{"parsed": map[string]any{"info": map[string]any{"tokenAmount": map[string]any{"amount": "300000"}}}}}},
+		},
+	})
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.SolanaURLs = []string{node.srv.URL} })
 
 	resp := e.rpc("kt_getBalances", balancesParams("solana", solSelf,
@@ -157,8 +178,16 @@ func TestSolanaBalances(t *testing.T) {
 
 	assertJSONEq(t, `{
 		"native":{"raw":"2039280","decimals":9,"symbol":"SOL"},
-		"tokens":[{"contract":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","raw":"0","decimals":6,"symbol":"USDC","error":"unsupported"}]
+		"tokens":[{"contract":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","raw":"1500000","decimals":6,"symbol":"USDC"}]
 	}`, result(t, resp))
+	params := node.params("getTokenAccountsByOwner")
+	var filter map[string]string
+	if err := json.Unmarshal(params[1], &filter); err != nil {
+		t.Fatal(err)
+	}
+	if filter["mint"] != "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" {
+		t.Fatalf("wrong mint filter: %v", filter)
+	}
 }
 
 func TestBalancesCacheHitAndKeying(t *testing.T) {

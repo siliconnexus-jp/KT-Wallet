@@ -17,6 +17,7 @@ Coin rpcCoinForChain(Chain chain) => switch (chain) {
   Chain.base => Coin.base,
   Chain.arbitrum => Coin.arbitrum,
   Chain.avalanche => Coin.avalanche,
+  Chain.bnb => Coin.bnb,
   Chain.tron => Coin.tron,
   Chain.solana => Coin.solana,
 };
@@ -89,7 +90,8 @@ class ChainParamsService {
         chain != Chain.polygon &&
         chain != Chain.base &&
         chain != Chain.arbitrum &&
-        chain != Chain.avalanche) {
+        chain != Chain.avalanche &&
+        chain != Chain.bnb) {
       throw ArgumentError('not an EVM chain: $chain');
     }
     final gateway = _gateway();
@@ -134,7 +136,8 @@ class ChainParamsService {
         chain != Chain.polygon &&
         chain != Chain.base &&
         chain != Chain.arbitrum &&
-        chain != Chain.avalanche) {
+        chain != Chain.avalanche &&
+        chain != Chain.bnb) {
       throw ArgumentError('not an EVM chain: $chain');
     }
     return EvmRpc(
@@ -154,7 +157,8 @@ class ChainParamsService {
         chain != Chain.polygon &&
         chain != Chain.base &&
         chain != Chain.arbitrum &&
-        chain != Chain.avalanche) {
+        chain != Chain.avalanche &&
+        chain != Chain.bnb) {
       throw ArgumentError('not an EVM chain: $chain');
     }
     final rpc = EvmRpc(
@@ -170,21 +174,30 @@ class ChainParamsService {
 }
 
 GasFeeEstimate _applyChainFeeFloor(Chain chain, GasFeeEstimate fees) {
-  if (chain != Chain.polygon && chain != Chain.arbitrum) return fees;
+  if (chain != Chain.polygon && chain != Chain.arbitrum && chain != Chain.bnb) {
+    return fees;
+  }
   // Polygon nodes require a 25 gwei priority floor. Arbitrum Sepolia can
   // return maxFee equal to the sampled base fee; a tiny next-block increase
   // then rejects an otherwise valid transaction, so retain a 0.05 gwei
-  // safety floor there.
-  final floor = chain == Chain.polygon
-      ? BigInt.from(25000000000)
-      : BigInt.from(50000000);
+  // safety floor there. BNB Chain validators enforce a 0.1 gwei minimum tip,
+  // while feeHistory can briefly report 0.08 gwei; normalize before signing
+  // so the exact same envelope is accepted across RPC nodes.
+  final floor = switch (chain) {
+    Chain.polygon => BigInt.from(25000000000),
+    Chain.bnb => BigInt.from(100000000),
+    _ => BigInt.from(50000000),
+  };
   GasFeeEstimateTier normalize(GasFeeEstimateTier tier) {
-    final tip = chain == Chain.polygon && tier.maxPriorityFeePerGas < floor
+    final enforceTip = chain == Chain.polygon || chain == Chain.bnb;
+    final tip = enforceTip && tier.maxPriorityFeePerGas < floor
         ? floor
         : tier.maxPriorityFeePerGas;
-    final minimumMaxFee = chain == Chain.polygon
-        ? tip + BigInt.from(5000000000)
-        : floor;
+    final minimumMaxFee = switch (chain) {
+      Chain.polygon => tip + BigInt.from(5000000000),
+      Chain.bnb => tip,
+      _ => floor,
+    };
     final maxFee = tier.maxFeePerGas < minimumMaxFee
         ? minimumMaxFee
         : tier.maxFeePerGas;

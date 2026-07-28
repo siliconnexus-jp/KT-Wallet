@@ -11,6 +11,7 @@ const _fallbackExplorerByChain = {
   Chain.base: 'https://basescan.org',
   Chain.arbitrum: 'https://arbiscan.io',
   Chain.avalanche: 'https://snowtrace.io',
+  Chain.bnb: 'https://bscscan.com',
   Chain.tron: 'https://tronscan.org',
   Chain.solana: 'https://explorer.solana.com',
 };

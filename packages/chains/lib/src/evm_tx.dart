@@ -56,7 +56,8 @@ class Eip1559Tx {
         intent.chain != Chain.polygon &&
         intent.chain != Chain.base &&
         intent.chain != Chain.arbitrum &&
-        intent.chain != Chain.avalanche) {
+        intent.chain != Chain.avalanche &&
+        intent.chain != Chain.bnb) {
       throw ArgumentError('not an EVM chain: ${intent.chain}');
     }
     return switch (intent.operation) {

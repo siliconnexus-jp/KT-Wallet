@@ -44,7 +44,7 @@ object WalletCoreBridge {
     private fun coinType(coin: String): CoinType = when (coin) {
         "eth" -> CoinType.ETHEREUM
         "polygon" -> CoinType.POLYGON
-        "base", "arbitrum", "avalanche" -> CoinType.ETHEREUM
+        "base", "arbitrum", "avalanche", "bnb" -> CoinType.ETHEREUM
         "tron" -> CoinType.TRON
         "solana" -> CoinType.SOLANA
         else -> throw InvalidInputException()
@@ -58,6 +58,7 @@ object WalletCoreBridge {
             "base" to wallet.getAddressForCoin(CoinType.ETHEREUM),
             "arbitrum" to wallet.getAddressForCoin(CoinType.ETHEREUM),
             "avalanche" to wallet.getAddressForCoin(CoinType.ETHEREUM),
+            "bnb" to wallet.getAddressForCoin(CoinType.ETHEREUM),
             "tron" to wallet.getAddressForCoin(CoinType.TRON),
             "solana" to wallet.getAddressForCoin(CoinType.SOLANA),
         )
@@ -77,6 +78,7 @@ object WalletCoreBridge {
             "base" to evm,
             "arbitrum" to evm,
             "avalanche" to evm,
+            "bnb" to evm,
             "tron" to tron,
             "solana" to solana,
         )

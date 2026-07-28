@@ -24,7 +24,10 @@ void main() {
 
     test('rejects values outside u16', () {
       expect(() => SolanaMessage.encodeCompactU16(-1), throwsArgumentError);
-      expect(() => SolanaMessage.encodeCompactU16(0x10000), throwsArgumentError);
+      expect(
+        () => SolanaMessage.encodeCompactU16(0x10000),
+        throwsArgumentError,
+      );
     });
   });
 
@@ -106,10 +109,14 @@ void main() {
       expect(message.accountKeys, hasLength(3));
       // from = fee-payer signer at 0, to = writable non-signer at 1,
       // System Program readonly at 2.
-      expect(base58Encode(message.accountKeys[0]),
-          '4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T');
-      expect(base58Encode(message.accountKeys[1]),
-          'FDQB1yWWkVeMTHXCVAK7UAGMDX6WUduBmVZLTmiHssbg');
+      expect(
+        base58Encode(message.accountKeys[0]),
+        '4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T',
+      );
+      expect(
+        base58Encode(message.accountKeys[1]),
+        'FDQB1yWWkVeMTHXCVAK7UAGMDX6WUduBmVZLTmiHssbg',
+      );
       expect(message.accountKeys[2], List.filled(32, 0)); // system program
       final ix = message.instructions.single;
       expect(ix.programIdIndex, 2);
@@ -157,12 +164,18 @@ void main() {
       expect(message.accountKeys, hasLength(4));
       // owner = fee-payer signer at 0, source/destination writable at 1/2,
       // Token Program readonly last.
-      expect(base58Encode(message.accountKeys[0]),
-          '4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T');
-      expect(base58Encode(message.accountKeys[1]),
-          'Bi9EDynRhtGiiG9wDCzhc5w2yGz8TSaamm9AUJhjZ2u5');
-      expect(base58Encode(message.accountKeys[2]),
-          '7VHUFJHWu2CuExkJcJrzhQPJ2oygupTWkL2A2For4BmE');
+      expect(
+        base58Encode(message.accountKeys[0]),
+        '4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T',
+      );
+      expect(
+        base58Encode(message.accountKeys[1]),
+        'Bi9EDynRhtGiiG9wDCzhc5w2yGz8TSaamm9AUJhjZ2u5',
+      );
+      expect(
+        base58Encode(message.accountKeys[2]),
+        '7VHUFJHWu2CuExkJcJrzhQPJ2oygupTWkL2A2For4BmE',
+      );
       expect(base58Encode(message.accountKeys[3]), solanaTokenProgram);
       final ix = message.instructions.single;
       expect(ix.programIdIndex, 3);
@@ -171,6 +184,53 @@ void main() {
       // u8 discriminant 3, then u64 LE amount.
       expect(_hex(ix.data), '030100000000000000');
     });
+  });
+
+  group('associated token accounts and Token-2022', () {
+    const owner = 'GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB';
+    const usdcMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+    const pyusdMint = '2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo';
+
+    test('ATA derivation matches independent @solana/spl-token vectors', () {
+      expect(
+        SolanaMessage.associatedTokenAddress(owner: owner, mint: usdcMint),
+        '7woc3ajaGMMXczFYjxon4aQoHH3j126fMUR9c58eHRsK',
+      );
+      expect(
+        SolanaMessage.associatedTokenAddress(
+          owner: owner,
+          mint: pyusdMint,
+          tokenProgram: solanaToken2022Program,
+        ),
+        'BiFmZc7zT2gJQkx8WMJEBURYRFngqo7sHZu6m4zrhhYv',
+      );
+    });
+
+    test(
+      'Token-2022 checked transfer creates destination ATA idempotently',
+      () {
+        final message = SolanaMessage.splTransferChecked(
+          source: 'Bi9EDynRhtGiiG9wDCzhc5w2yGz8TSaamm9AUJhjZ2u5',
+          destination: 'BiFmZc7zT2gJQkx8WMJEBURYRFngqo7sHZu6m4zrhhYv',
+          owner: '2KW2XRd9kwqet15Aha2oK3tYvd3nWbTFH1MBiRAv1BE1',
+          recipientOwner: owner,
+          mint: pyusdMint,
+          amount: BigInt.from(1250000),
+          decimals: 6,
+          recentBlockhash: 'DzfXchZJoLMG3cNftcf2sw7qatkkuwQf4xH15N5wkKAb',
+          tokenProgram: solanaToken2022Program,
+          createDestination: true,
+        );
+        expect(message.instructions, hasLength(2));
+        expect(message.instructions.first.programIdIndex, 7);
+        expect(message.instructions.first.accountIndices, [0, 2, 3, 4, 5, 6]);
+        expect(message.instructions.first.data, [1]);
+        expect(message.instructions.last.programIdIndex, 6);
+        expect(message.instructions.last.accountIndices, [1, 4, 2, 0]);
+        expect(_hex(message.instructions.last.data), '0cd01213000000000006');
+        expect(base58Encode(message.accountKeys[6]), solanaToken2022Program);
+      },
+    );
   });
 
   group('validation', () {

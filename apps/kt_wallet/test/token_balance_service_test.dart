@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:chains/chains.dart' show solanaToken2022Program;
 import 'package:chains/rpc.dart';
 import 'package:core_crypto/core_crypto.dart' show ChainAddresses, Coin;
 import 'package:flutter_test/flutter_test.dart';
@@ -47,6 +48,8 @@ String _hex(int value) => '0x${BigInt.from(value).toRadixString(16)}';
 void main() {
   test('protected symbols require a known official contract identity', () {
     expect(isProtectedTokenSymbol('usdt'), isTrue);
+    expect(isProtectedTokenSymbol('pyusd'), isTrue);
+    expect(isProtectedTokenSymbol('bonk'), isTrue);
     expect(isKnownOfficialTokenIdentity('USDT', usdtEthToken.contract), isTrue);
     expect(
       isKnownOfficialTokenIdentity('USDT', usdtTronToken.contract),
@@ -62,9 +65,16 @@ void main() {
   test('the default static registry carries canonical stablecoins', () {
     expect(builtinTokens.map((t) => t.id).toSet(), {
       'usdt-eth',
-      // Circle's original issuance, and the largest of the lot; the registry
-      // listed USDC on five chains and not the one it was born on.
       'usdc-eth',
+      'dai-eth',
+      'weth-eth',
+      'wbtc-eth',
+      'link-eth',
+      'uni-eth',
+      'shib-eth',
+      'pepe-eth',
+      'busd-eth',
+      'pyusd-eth',
       'usdc-polygon',
       'usdt-tron',
       'usdt-polygon',
@@ -74,13 +84,17 @@ void main() {
       'usdc-arbitrum',
       'usdt-avalanche',
       'usdc-avalanche',
+      'busd-bnb',
       'usdt-solana',
       'usdc-solana',
+      'jup-solana',
+      'bonk-solana',
+      'pyusd-solana',
     });
-    for (final token in builtinTokens) {
-      expect(token.decimals, 6, reason: token.id);
-    }
     final byId = {for (final t in builtinTokens) t.id: t};
+    expect(byId['wbtc-eth']!.decimals, 8);
+    expect(byId['bonk-solana']!.decimals, 5);
+    expect(byId['pyusd-solana']!.tokenProgram, solanaToken2022Program);
     expect(byId['usdt-eth']!.chain, Coin.eth);
     expect(byId['usdt-eth']!.contract, _usdtEth);
     expect(byId['usdc-polygon']!.chain, Coin.polygon);
@@ -93,6 +107,7 @@ void main() {
     'fetches ERC-20 (eth_call balanceOf) and TRC-20 balances (success)',
     () async {
       final service = TokenBalanceService(
+        tokens: const [usdtEthToken, usdcPolygonToken, usdtTronToken],
         jsonRpcTransport: _FakeJsonRpc((url, body) async {
           final map = body as Map;
           expect(map['method'], 'eth_call');
@@ -128,7 +143,7 @@ void main() {
       );
 
       final results = await service.fetchAll(_addresses);
-      expect(results.length, builtinTokens.length);
+      expect(results.length, 3);
       expect(results['usdt-eth']!.status, BalanceStatus.ok);
       expect(results['usdt-eth']!.amount!.format(), '25');
       expect(results['usdt-eth']!.amount!.symbol, 'USDT');
@@ -143,6 +158,7 @@ void main() {
 
   test('one failing endpoint degrades only that token', () async {
     final service = TokenBalanceService(
+      tokens: const [usdtEthToken, usdcPolygonToken, usdtTronToken],
       jsonRpcTransport: _FakeJsonRpc((url, body) async {
         if (url == defaultEthRpcUrl) {
           // Node rejects the call — must become error, not throw.
@@ -171,6 +187,7 @@ void main() {
     () async {
       Future<Map<String, BalanceResult>> fetchWith(Object? tronBody) {
         final service = TokenBalanceService(
+          tokens: const [usdtEthToken, usdtTronToken],
           jsonRpcTransport: _FakeJsonRpc(
             (url, body) async => _rpcResult('0x0'),
           ),
@@ -305,13 +322,13 @@ void _registryAddressShapes() {
             Coin.polygon ||
             Coin.base ||
             Coin.arbitrum ||
-            Coin.avalanche:
+            Coin.avalanche ||
+            Coin.bnb:
           expect(evm.hasMatch(token.contract), isTrue, reason: token.id);
       }
-      // Every stablecoin in this registry is 6-decimal; a stray 18 scales a
-      // balance by a trillion, which is how the Sepolia test USDT read wrong.
-      expect(token.decimals, 6, reason: token.id);
+      expect(token.decimals, inInclusiveRange(0, 18), reason: token.id);
     }
+    expect(usdtSepoliaToken.decimals, 6);
   });
 
   test('registry ids are unique', () {

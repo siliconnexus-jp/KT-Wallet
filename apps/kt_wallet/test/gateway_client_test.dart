@@ -253,6 +253,7 @@ void main() {
           'base',
           'arbitrum',
           'avalanche',
+          'bnb',
           'tron',
           'solana',
         ]);

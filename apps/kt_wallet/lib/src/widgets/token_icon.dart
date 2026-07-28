@@ -4,13 +4,13 @@ import 'package:ui_kit/ui_kit.dart';
 
 /// Circular token/brand icon. Renders the bundled logo PNG for known
 /// symbols/networks (assets/tokens/ — the MIT cryptocurrency-icons set, plus
-/// Arbitrum and Base from the MIT trustwallet/assets set, which the older
-/// icon set predates) and falls back to the classic letter [KtAvatar] for
-/// anything unknown (e.g. user-added custom tokens).
+/// current chain/token artwork from the MIT trustwallet/assets set) and falls
+/// back to the classic letter [KtAvatar] for anything unknown.
 ///
-/// Those three mattered: without artwork, Base fell back to "B" while
-/// Arbitrum and Avalanche BOTH fell back to "A", so two different chains were
-/// drawn as the same letter in every picker.
+/// [official] is a security boundary, not decoration. A custom contract may
+/// call itself USDT (or any other protected symbol), so callers that have not
+/// verified its network + contract identity must set [official] to false. In
+/// that case the official brand artwork is never rendered.
 class TokenIcon extends StatelessWidget {
   const TokenIcon({
     super.key,
@@ -18,6 +18,7 @@ class TokenIcon extends StatelessWidget {
     this.size = 40,
     this.fallbackColor,
     this.fallbackInitial,
+    this.official = true,
   });
 
   /// Token symbol or network name; matching is case-insensitive and accepts
@@ -26,14 +27,27 @@ class TokenIcon extends StatelessWidget {
   final double size;
   final Color? fallbackColor;
   final String? fallbackInitial;
+  final bool official;
 
   static const _assetBySymbol = {
     'usdt': 'usdt',
     'usdc': 'usdc',
     'busd': 'busd',
+    'dai': 'dai',
+    'weth': 'weth',
+    'wbtc': 'wbtc',
+    'link': 'link',
     'uni': 'uni',
+    'shib': 'shib',
+    'pepe': 'pepe',
+    'pyusd': 'pyusd',
+    'jup': 'jup',
+    'bonk': 'bonk',
     'eth': 'eth',
     'ethereum': 'eth',
+    'bnb': 'bnb',
+    'bnb smart chain': 'bnb',
+    'binance smart chain': 'bnb',
     'sol': 'sol',
     'solana': 'sol',
     'trx': 'trx',
@@ -54,12 +68,12 @@ class TokenIcon extends StatelessWidget {
   /// applies. Public so surfaces that draw outside the widget tree — the
   /// shared receive card, rendered straight onto a canvas — pick exactly the
   /// same image the on-screen icon shows.
-  static String? assetFor(String symbol) =>
-      _assetBySymbol[symbol.toLowerCase()];
+  static String? assetFor(String symbol, {bool official = true}) =>
+      official ? _assetBySymbol[symbol.toLowerCase()] : null;
 
   @override
   Widget build(BuildContext context) {
-    final asset = _assetBySymbol[symbol.toLowerCase()];
+    final asset = assetFor(symbol, official: official);
     if (asset == null) {
       return KtAvatar(
         color: fallbackColor ?? WalletColors.accent,
@@ -97,6 +111,7 @@ class ChainIcon extends StatelessWidget {
     Chain.base: 'Base',
     Chain.arbitrum: 'Arbitrum',
     Chain.avalanche: 'Avalanche',
+    Chain.bnb: 'BNB Smart Chain',
     Chain.tron: 'TRON',
     Chain.solana: 'Solana',
   };
@@ -107,6 +122,7 @@ class ChainIcon extends StatelessWidget {
     Chain.base: ChainColors.base,
     Chain.arbitrum: ChainColors.arbitrum,
     Chain.avalanche: ChainColors.avalanche,
+    Chain.bnb: Color(0xFFF3BA2F),
     Chain.tron: ChainColors.tron,
     Chain.solana: ChainColors.solana,
   };

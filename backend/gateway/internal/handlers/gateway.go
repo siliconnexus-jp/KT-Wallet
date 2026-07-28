@@ -40,6 +40,7 @@ type Config struct {
 	BaseURLs      []string
 	ArbitrumURLs  []string
 	AvalancheURLs []string
+	BNBURLs       []string
 	SolanaURLs    []string
 	TronURL       string
 
@@ -49,6 +50,7 @@ type Config struct {
 	BaseSepoliaURLs     []string
 	ArbitrumSepoliaURLs []string
 	AvalancheFujiURLs   []string
+	BNBTestnetURLs      []string
 	SolanaDevnetURLs    []string
 	TronNileURL         string
 
@@ -80,7 +82,7 @@ type Config struct {
 // Defaults returns the production upstream configuration.
 func Defaults() Config {
 	return Config{
-		Version:        "1.6.0",
+		Version:        "1.7.0",
 		Clock:          clock.Real{},
 		AttemptTimeout: 10 * time.Second,
 		EthURLs:        []string{"https://eth.llamarpc.com", "https://cloudflare-eth.com"},
@@ -91,6 +93,7 @@ func Defaults() Config {
 		BaseURLs:            []string{"https://mainnet.base.org"},
 		ArbitrumURLs:        []string{"https://arb1.arbitrum.io/rpc"},
 		AvalancheURLs:       []string{"https://api.avax.network/ext/bc/C/rpc"},
+		BNBURLs:             []string{"https://bsc-dataseed.bnbchain.org"},
 		SolanaURLs:          []string{"https://api.mainnet-beta.solana.com"},
 		TronURL:             "https://api.trongrid.io",
 		EthSepoliaURLs:      []string{"https://ethereum-sepolia-rpc.publicnode.com"},
@@ -98,6 +101,7 @@ func Defaults() Config {
 		BaseSepoliaURLs:     []string{"https://sepolia.base.org"},
 		ArbitrumSepoliaURLs: []string{"https://sepolia-rollup.arbitrum.io/rpc"},
 		AvalancheFujiURLs:   []string{"https://api.avax-test.network/ext/bc/C/rpc"},
+		BNBTestnetURLs:      []string{"https://bsc-testnet-dataseed.bnbchain.org"},
 		SolanaDevnetURLs:    []string{"https://api.devnet.solana.com"},
 		TronNileURL:         "https://nile.trongrid.io",
 		CoinGeckoURL:        "https://api.coingecko.com",
@@ -116,6 +120,8 @@ func Defaults() Config {
 			"arbitrum-sepolia":  "https://arbitrum-sepolia.blockscout.com/api",
 			"avalanche-mainnet": "https://api.routescan.io/v2/network/mainnet/evm/43114/etherscan/api",
 			"avalanche-fuji":    "https://api.routescan.io/v2/network/testnet/evm/43113/etherscan/api",
+			"bnb-mainnet":       "https://api.routescan.io/v2/network/mainnet/evm/56/etherscan/api",
+			"bnb-testnet":       "https://api.routescan.io/v2/network/testnet/evm/97/etherscan/api",
 		},
 	}
 }
@@ -176,6 +182,9 @@ func New(cfg Config) *Gateway {
 	if len(cfg.AvalancheURLs) == 0 {
 		cfg.AvalancheURLs = def.AvalancheURLs
 	}
+	if len(cfg.BNBURLs) == 0 {
+		cfg.BNBURLs = def.BNBURLs
+	}
 	if len(cfg.SolanaURLs) == 0 {
 		cfg.SolanaURLs = def.SolanaURLs
 	}
@@ -196,6 +205,9 @@ func New(cfg Config) *Gateway {
 	}
 	if len(cfg.AvalancheFujiURLs) == 0 {
 		cfg.AvalancheFujiURLs = def.AvalancheFujiURLs
+	}
+	if len(cfg.BNBTestnetURLs) == 0 {
+		cfg.BNBTestnetURLs = def.BNBTestnetURLs
 	}
 	if len(cfg.SolanaDevnetURLs) == 0 {
 		cfg.SolanaDevnetURLs = def.SolanaDevnetURLs
@@ -255,6 +267,8 @@ func New(cfg Config) *Gateway {
 			"arbitrum-sepolia":  upstream.NewEVM("arbitrum-sepolia", cfg.ArbitrumSepoliaURLs, clk, hc, at),
 			"avalanche-mainnet": upstream.NewEVM("avalanche-mainnet", cfg.AvalancheURLs, clk, hc, at),
 			"avalanche-fuji":    upstream.NewEVM("avalanche-fuji", cfg.AvalancheFujiURLs, clk, hc, at),
+			"bnb-mainnet":       upstream.NewEVM("bnb-mainnet", cfg.BNBURLs, clk, hc, at),
+			"bnb-testnet":       upstream.NewEVM("bnb-testnet", cfg.BNBTestnetURLs, clk, hc, at),
 		},
 		tron: map[string]*upstream.Tron{
 			"tron-mainnet": upstream.NewTron(cfg.TronURL, hc, at),

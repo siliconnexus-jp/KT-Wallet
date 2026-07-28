@@ -102,6 +102,7 @@ Color _chainDot(Chain chain) => switch (chain) {
   Chain.base => const Color(0xFF0052FF),
   Chain.arbitrum => const Color(0xFF28A0F0),
   Chain.avalanche => const Color(0xFFE84142),
+  Chain.bnb => const Color(0xFFF3BA2F),
   Chain.tron => ChainColors.tron,
   Chain.solana => ChainColors.solana,
 };
@@ -199,6 +200,7 @@ class _TransferAsset {
     this.color,
     this.initial, {
     this.contract,
+    this.tokenProgram,
   });
   final String symbol, network, networkName;
   final Chain chain;
@@ -209,6 +211,7 @@ class _TransferAsset {
 
   /// Token contract for token assets; null for native coins.
   final String? contract;
+  final String? tokenProgram;
   Amount get availableAmount =>
       Amount.parse(available, decimals, symbol: symbol);
 
@@ -223,6 +226,7 @@ class _TransferAsset {
     color,
     initial,
     contract: contract,
+    tokenProgram: tokenProgram,
   );
 
   _TransferAsset forNetwork(Network activeNetwork) {
@@ -277,6 +281,7 @@ class _TransferAsset {
         color,
         initial,
         contract: contract,
+        tokenProgram: tokenProgram,
       );
     }
     return this;
@@ -449,6 +454,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
       color,
       glyph,
       contract: at.contract,
+      tokenProgram: at.tokenProgram,
     );
   }
 
@@ -485,6 +491,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
             Chain.base => Coin.base,
             Chain.arbitrum => Coin.arbitrum,
             Chain.avalanche => Coin.avalanche,
+            Chain.bnb => Coin.bnb,
             Chain.tron => Coin.tron,
             Chain.solana => Coin.solana,
           })
@@ -498,6 +505,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                           Chain.base => Coin.base,
                           Chain.arbitrum => Coin.arbitrum,
                           Chain.avalanche => Coin.avalanche,
+                          Chain.bnb => Coin.bnb,
                           Chain.tron => Coin.tron,
                           Chain.solana => Coin.solana,
                         } &&
@@ -719,7 +727,10 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                     _assetLocked
                         ? _assetAt(i).networkName
                         : switch (_assetAt(i).chain) {
-                            Chain.base || Chain.arbitrum || Chain.avalanche =>
+                            Chain.base ||
+                            Chain.arbitrum ||
+                            Chain.avalanche ||
+                            Chain.bnb =>
                               '${_assetAt(i).symbol} · ${_assetAt(i).networkName}',
                             _ => _assetAt(i).symbol,
                           },
@@ -792,6 +803,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                     amount: _amount!,
                     feeTier: _fee,
                     tokenContract: _asset.contract,
+                    tokenProgram: _asset.tokenProgram,
                   )
                   ..request = null
                   ..result = null
@@ -1328,7 +1340,8 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
       Chain.polygon ||
       Chain.base ||
       Chain.arbitrum ||
-      Chain.avalanche => true,
+      Chain.avalanche ||
+      Chain.bnb => true,
       Chain.tron || Chain.solana => false,
     };
     if (!isEvm) {
@@ -1361,6 +1374,7 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
       switch (chain) {
         Chain.polygon => 'POL',
         Chain.avalanche => 'AVAX',
+        Chain.bnb => 'BNB',
         Chain.tron => 'TRX',
         Chain.solana => 'SOL',
         _ => 'ETH',
@@ -1833,15 +1847,26 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
         if (source == null) {
           throw StateError('insufficient SPL token balance');
         }
-        if (destinations.isEmpty) {
-          throw StateError('recipient SPL token account does not exist');
-        }
-        message = SolanaMessage.splTransfer(
+        final tokenProgram = draft.tokenProgram ?? solanaTokenProgram;
+        final createDestination = destinations.isEmpty;
+        final destination = createDestination
+            ? SolanaMessage.associatedTokenAddress(
+                owner: draft.recipient,
+                mint: mint,
+                tokenProgram: tokenProgram,
+              )
+            : destinations.first.address;
+        message = SolanaMessage.splTransferChecked(
           source: source.address,
-          destination: destinations.first.address,
+          destination: destination,
           owner: from,
+          recipientOwner: draft.recipient,
+          mint: mint,
           amount: draft.amount.raw,
+          decimals: draft.decimals,
           recentBlockhash: blockhash,
+          tokenProgram: tokenProgram,
+          createDestination: createDestination,
         );
       }
       final raw = message.serialize();
@@ -2557,6 +2582,7 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
     'base' => Chain.base,
     'arbitrum' => Chain.arbitrum,
     'avalanche' => Chain.avalanche,
+    'bnb' => Chain.bnb,
     'tron' => Chain.tron,
     'solana' => Chain.solana,
     _ => null,
@@ -2569,7 +2595,8 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
         chain == Chain.polygon ||
         chain == Chain.base ||
         chain == Chain.arbitrum ||
-        chain == Chain.avalanche;
+        chain == Chain.avalanche ||
+        chain == Chain.bnb;
     return isEvm &&
         tx.signMode == SignMode.local &&
         (tx.status == TxStatus.submitted || tx.status == TxStatus.pending) &&
@@ -3339,7 +3366,8 @@ class TransferAuthSheet extends StatelessWidget {
       Chain.polygon ||
       Chain.base ||
       Chain.arbitrum ||
-      Chain.avalanche => true,
+      Chain.avalanche ||
+      Chain.bnb => true,
       Chain.tron || Chain.solana => false,
     };
     if (network == null) {

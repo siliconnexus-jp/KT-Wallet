@@ -33,6 +33,7 @@ String _coinName(int coin) => switch (coin) {
   8453 => 'Base',
   42161 => 'Arbitrum',
   9000 => 'Avalanche',
+  714 => 'BNB Smart Chain',
   _ => 'SLIP-44 #$coin',
 };
 
@@ -42,6 +43,7 @@ Chain _chainForCoin(int coin) => switch (coin) {
   8453 => Chain.base,
   42161 => Chain.arbitrum,
   9000 => Chain.avalanche,
+  714 => Chain.bnb,
   195 => Chain.tron,
   501 => Chain.solana,
   _ => throw ArgumentError('unsupported coin $coin'),
@@ -53,6 +55,7 @@ String _addressKeyForCoin(int coin) => switch (coin) {
   8453 => 'base',
   42161 => 'arbitrum',
   9000 => 'avalanche',
+  714 => 'bnb',
   195 => 'tron',
   501 => 'solana',
   _ => '',
@@ -70,6 +73,7 @@ ParsedUnsignedTransfer? _parsedRequest(SignRequest? request) {
 Color _colorForCoin(int coin) => switch (coin) {
   60 => ChainColors.ethereum,
   966 => ChainColors.polygon,
+  714 => const Color(0xFFF3BA2F),
   195 => ChainColors.tron,
   501 => ChainColors.solana,
   _ => SignerColors.blue,
@@ -105,6 +109,7 @@ bool _isStructurallySupported(SignRequest request) {
     case 8453:
     case 42161:
     case 9000:
+    case 714:
       return request.chainId != null &&
           parsed.networkId == BigInt.from(request.chainId!);
     case 195:

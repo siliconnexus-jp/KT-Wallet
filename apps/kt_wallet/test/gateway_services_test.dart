@@ -276,21 +276,28 @@ void main() {
         final params = gateway.paramsOf('kt_getBalances');
         expect(
           {for (final p in params) p['chain']},
-          {'eth', 'polygon', 'base', 'arbitrum', 'tron', 'avalanche', 'solana'},
+          {
+            'eth',
+            'polygon',
+            'base',
+            'arbitrum',
+            'avalanche',
+            'bnb',
+            'tron',
+            'solana',
+          },
         );
         final ethCall = params.firstWhere((p) => p['chain'] == 'eth');
-        expect(ethCall['tokens'], [
-          {
-            'contract': '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-            'decimals': 6,
-            'symbol': 'USDT',
-          },
-          {
-            'contract': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-            'decimals': 6,
-            'symbol': 'USDC',
-          },
-        ]);
+        final ethTokens = ethCall['tokens'] as List<Object?>;
+        expect(ethTokens, hasLength(11));
+        final dai = ethTokens
+            .cast<Map<String, Object?>>()
+            .firstWhere((token) => token['symbol'] == 'DAI');
+        expect(
+          dai['contract'],
+          '0x6B175474E89094C44Da98b954EedeAC495271d0F',
+        );
+        expect(dai['decimals'], 18);
       },
     );
 
@@ -322,9 +329,12 @@ void main() {
         expect(results['usdt-eth']!.status, BalanceStatus.ok);
         expect(results['usdt-tron']!.status, BalanceStatus.ok);
         expect(results['usdt-tron']!.amount!.format(), '5');
-        // erc20 balanceOf on eth/polygon/base/arbitrum/avalanche (two tokens
-        // each) plus the two Solana token-account queries; TRON goes over REST.
-        expect(direct.calls, hasLength(12));
+        expect(
+          direct.calls,
+          hasLength(
+            builtinTokens.where((token) => token.chain != Coin.tron).length,
+          ),
+        );
         expect(rest.gets, hasLength(1)); // tron account
       },
     );
@@ -341,7 +351,12 @@ void main() {
       );
       final results = await service.fetchAll(_addresses);
       expect(results['usdt-eth']!.status, BalanceStatus.ok);
-      expect(direct.calls, hasLength(12));
+      expect(
+        direct.calls,
+        hasLength(
+          builtinTokens.where((token) => token.chain != Coin.tron).length,
+        ),
+      );
     });
   });
 
@@ -392,11 +407,22 @@ void main() {
             'ETH',
             'POL',
             'AVAX',
+            'BNB',
             'TRX',
             'SOL',
             'USDT',
             'USDC',
             'BUSD',
+            'DAI',
+            'WETH',
+            'WBTC',
+            'LINK',
+            'UNI',
+            'SHIB',
+            'PEPE',
+            'JUP',
+            'BONK',
+            'PYUSD',
           ],
         });
       },

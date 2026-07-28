@@ -24,6 +24,7 @@ int coinForChain(Chain chain) => switch (chain) {
   Chain.base => 8453,
   Chain.arbitrum => 42161,
   Chain.avalanche => 9000,
+  Chain.bnb => 714,
   Chain.tron => 195,
   Chain.solana => 501,
 };
@@ -34,6 +35,7 @@ Chain chainForCoin(int coin) => switch (coin) {
   8453 => Chain.base,
   42161 => Chain.arbitrum,
   9000 => Chain.avalanche,
+  714 => Chain.bnb,
   195 => Chain.tron,
   501 => Chain.solana,
   _ => throw ArgumentError('unsupported coin type $coin'),
@@ -49,6 +51,7 @@ int? chainIdForChain(Chain chain) => switch (chain) {
   Chain.base => 8453,
   Chain.arbitrum => 42161,
   Chain.avalanche => 43114,
+  Chain.bnb => 56,
   _ => null,
 };
 
@@ -59,6 +62,7 @@ String addressForChain(ChainAddresses addresses, Chain chain) =>
       Chain.base => addresses.base,
       Chain.arbitrum => addresses.arbitrum,
       Chain.avalanche => addresses.avalanche,
+      Chain.bnb => addresses.bnb,
       Chain.tron => addresses.tron,
       Chain.solana => addresses.solana,
     };
@@ -81,6 +85,7 @@ Amount networkFeeFor(Chain chain, int feeTier) {
     Chain.base => (('0.000001', '0.000002', '0.000004'), 18, 'ETH'),
     Chain.arbitrum => (('0.00001', '0.00002', '0.00004'), 18, 'ETH'),
     Chain.avalanche => (('0.0005', '0.001', '0.002'), 18, 'AVAX'),
+    Chain.bnb => (('0.0001', '0.0002', '0.0004'), 18, 'BNB'),
     Chain.solana => (('0.000005', '0.00001', '0.00002'), 9, 'SOL'),
   };
   final value = switch (feeTier) {
@@ -201,7 +206,8 @@ Uint8List rawTxFor(
       draft.chain == Chain.polygon ||
       draft.chain == Chain.base ||
       draft.chain == Chain.arbitrum ||
-      draft.chain == Chain.avalanche) {
+      draft.chain == Chain.avalanche ||
+      draft.chain == Chain.bnb) {
     final intent = TransferIntent(
       chain: draft.chain,
       operation: draft.operation,

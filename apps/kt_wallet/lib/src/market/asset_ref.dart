@@ -12,6 +12,7 @@ Chain chainOf(Coin coin) => switch (coin) {
   Coin.base => Chain.base,
   Coin.arbitrum => Chain.arbitrum,
   Coin.avalanche => Chain.avalanche,
+  Coin.bnb => Chain.bnb,
   Coin.tron => Chain.tron,
   Coin.solana => Chain.solana,
 };
@@ -31,20 +32,23 @@ class AssetDeployment {
     required this.decimals,
     this.tokenId,
     this.contract,
+    this.tokenProgram,
   });
 
   /// A chain's own coin: no contract, decimals fixed by the chain.
   AssetDeployment.native(this.coin, this.network)
     : decimals = BalanceService.decimalsFor[coin]!,
       tokenId = null,
-      contract = null;
+      contract = null,
+      tokenProgram = null;
 
   AssetDeployment.token(TokenInfo token)
     : coin = token.chain,
       network = token.network,
       decimals = token.decimals,
       tokenId = token.id,
-      contract = token.contract;
+      contract = token.contract,
+      tokenProgram = token.tokenProgram;
 
   final Coin coin;
 
@@ -58,6 +62,7 @@ class AssetDeployment {
 
   /// Token contract address; null for a native coin.
   final String? contract;
+  final String? tokenProgram;
 
   bool get isToken => tokenId != null;
 }
@@ -77,6 +82,7 @@ class AssetRef {
     String? network,
   }) : tokenId = null,
        contract = null,
+       tokenProgram = null,
        network = network,
        group = [AssetDeployment.native(coin, network ?? name)];
 
@@ -87,6 +93,7 @@ class AssetRef {
       symbol = token.symbol,
       tokenId = token.id,
       contract = token.contract,
+      tokenProgram = token.tokenProgram,
       network = token.network,
       group = [AssetDeployment.token(token)];
 
@@ -102,6 +109,7 @@ class AssetRef {
        coin = group.first.coin,
        tokenId = group.length == 1 ? group.first.tokenId : null,
        contract = group.length == 1 ? group.first.contract : null,
+       tokenProgram = group.length == 1 ? group.first.tokenProgram : null,
        network = group.length == 1 ? group.first.network : null;
 
   /// Convenience for the common token case.
@@ -112,6 +120,7 @@ class AssetRef {
       symbol = tokens.first.symbol,
       tokenId = tokens.length == 1 ? tokens.first.id : null,
       contract = tokens.length == 1 ? tokens.first.contract : null,
+      tokenProgram = tokens.length == 1 ? tokens.first.tokenProgram : null,
       network = tokens.length == 1 ? tokens.first.network : null,
       group = tokens.map(AssetDeployment.token).toList();
 
@@ -130,6 +139,7 @@ class AssetRef {
 
   /// Token contract address; null for a native coin.
   final String? contract;
+  final String? tokenProgram;
 
   /// Human network label ('Arbitrum One'); null while a group is unnarrowed.
   final String? network;
@@ -153,6 +163,7 @@ class AssetRef {
       symbol: symbol,
       tokenId: at.tokenId,
       contract: at.contract,
+      tokenProgram: at.tokenProgram,
       network: at.network,
       group: group,
     );
@@ -164,6 +175,7 @@ class AssetRef {
     required this.symbol,
     required this.tokenId,
     required this.contract,
+    required this.tokenProgram,
     required this.network,
     required this.group,
   });

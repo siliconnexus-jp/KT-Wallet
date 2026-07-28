@@ -68,6 +68,7 @@ class RpcProbe {
         case Chain.base:
         case Chain.arbitrum:
         case Chain.avalanche:
+        case Chain.bnb:
           final resp = await _jsonRpc(url, 'eth_chainId');
           if (resp.statusCode != 200) return const RpcProbeFailure();
           final decoded = jsonDecode(resp.body);

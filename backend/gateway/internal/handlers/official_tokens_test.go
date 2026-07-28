@@ -91,6 +91,28 @@ func TestCheckedInOfficialTokenCatalogLoads(t *testing.T) {
 	if len(tokens) < 20 {
 		t.Fatalf("checked-in catalog is unexpectedly small: %d", len(tokens))
 	}
+	wanted := map[string]bool{
+		"DAI": false, "WETH": false, "WBTC": false, "LINK": false,
+		"UNI": false, "SHIB": false, "PEPE": false, "JUP": false,
+		"BONK": false, "PYUSD": false, "BUSD": false,
+	}
+	hasBNB := false
+	for _, token := range tokens {
+		if _, ok := wanted[token.Symbol]; ok {
+			wanted[token.Symbol] = true
+		}
+		if token.Network == "bnb-mainnet" {
+			hasBNB = true
+		}
+	}
+	for symbol, found := range wanted {
+		if !found {
+			t.Errorf("checked-in catalog is missing %s", symbol)
+		}
+	}
+	if !hasBNB {
+		t.Error("checked-in catalog is missing BNB Smart Chain")
+	}
 }
 
 func TestSearchOfficialTokensValidatesFilters(t *testing.T) {

@@ -45,6 +45,13 @@ var newEVMFamilies = []evmFamily{
 			cfg.AvalancheURLs, cfg.AvalancheFujiURLs = []string{m}, []string{t}
 		},
 	},
+	{
+		chain: "bnb", mainnet: "bnb-mainnet", testnet: "bnb-testnet",
+		symbol: "BNB", mainID: "56", testID: "97",
+		setPools: func(cfg *handlers.Config, m, t string) {
+			cfg.BNBURLs, cfg.BNBTestnetURLs = []string{m}, []string{t}
+		},
+	},
 }
 
 // newFamilyEnv wires one fake node per network of fam so a test can prove

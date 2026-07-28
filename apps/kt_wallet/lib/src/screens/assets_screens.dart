@@ -383,6 +383,7 @@ const _chainDot = {
   Chain.base: ChainColors.base,
   Chain.arbitrum: ChainColors.arbitrum,
   Chain.avalanche: ChainColors.avalanche,
+  Chain.bnb: Color(0xFFF3BA2F),
   Chain.tron: ChainColors.tron,
   Chain.solana: ChainColors.solana,
 };
@@ -1121,6 +1122,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     Coin.base => Chain.base,
     Coin.arbitrum => Chain.arbitrum,
     Coin.avalanche => Chain.avalanche,
+    Coin.bnb => Chain.bnb,
     Coin.tron => Chain.tron,
     Coin.solana => Chain.solana,
   };

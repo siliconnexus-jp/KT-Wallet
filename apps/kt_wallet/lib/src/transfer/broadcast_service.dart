@@ -143,7 +143,8 @@ class BroadcastService {
             Chain.polygon ||
             Chain.base ||
             Chain.arbitrum ||
-            Chain.avalanche:
+            Chain.avalanche ||
+            Chain.bnb:
           final rpc = EvmRpc(
             url: _endpoints(rpcCoinForChain(chain)),
             transport: _jsonRpc,
@@ -202,7 +203,8 @@ class BroadcastService {
           Chain.polygon ||
           Chain.base ||
           Chain.arbitrum ||
-          Chain.avalanche:
+          Chain.avalanche ||
+          Chain.bnb:
         return '0x${hexEncode(signedTx)}';
       case Chain.solana:
         return base64Encode(signedTx);

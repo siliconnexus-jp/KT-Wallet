@@ -40,6 +40,7 @@ class PriceService {
     Coin.base: 'ethereum',
     Coin.arbitrum: 'ethereum',
     Coin.avalanche: 'avalanche-2',
+    Coin.bnb: 'binancecoin',
     Coin.tron: 'tron',
     Coin.solana: 'solana',
   };
@@ -49,6 +50,16 @@ class PriceService {
     'USDT': 'tether',
     'USDC': 'usd-coin',
     'BUSD': 'binance-usd',
+    'DAI': 'dai',
+    'WETH': 'weth',
+    'WBTC': 'wrapped-bitcoin',
+    'LINK': 'chainlink',
+    'UNI': 'uniswap',
+    'SHIB': 'shiba-inu',
+    'PEPE': 'pepe',
+    'JUP': 'jupiter-exchange-solana',
+    'BONK': 'bonk',
+    'PYUSD': 'paypal-usd',
   };
 
   Map<Coin, double>? _lastGood;

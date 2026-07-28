@@ -45,6 +45,9 @@ func main() {
 	if v := envList("AVALANCHE_RPC_URLS"); len(v) > 0 {
 		cfg.AvalancheURLs = v
 	}
+	if v := envList("BNB_RPC_URLS"); len(v) > 0 {
+		cfg.BNBURLs = v
+	}
 	if v := envList("SOLANA_RPC_URLS"); len(v) > 0 {
 		cfg.SolanaURLs = v
 	}
@@ -65,6 +68,9 @@ func main() {
 	}
 	if v := envList("AVALANCHE_FUJI_RPC_URLS"); len(v) > 0 {
 		cfg.AvalancheFujiURLs = v
+	}
+	if v := envList("BNB_TESTNET_RPC_URLS"); len(v) > 0 {
+		cfg.BNBTestnetURLs = v
 	}
 	if v := envList("SOLANA_DEVNET_RPC_URLS"); len(v) > 0 {
 		cfg.SolanaDevnetURLs = v

@@ -205,6 +205,34 @@ void main() {
       });
     });
 
+    test('BNB enforces the validator 0.1 gwei minimum tip', () async {
+      final belowFloor = BigInt.from(80000000);
+      final transport = _FakeJsonRpc({
+        'eth_getTransactionCount': (_) => '0x7',
+        'eth_feeHistory': (_) => {
+          'baseFeePerGas': ['0x0', '0x0'],
+          'reward': [
+            [_hex(belowFloor), _hex(belowFloor), _hex(belowFloor)],
+          ],
+        },
+      });
+      final service = ChainParamsService(
+        jsonRpcTransport: transport,
+        endpoints: (_) => 'https://bsc-testnet.example',
+      );
+
+      final params = await service.fetchEvmParams(Chain.bnb, '0xabc');
+      final floor = BigInt.from(100000000);
+      for (final tier in [
+        params.fees.slow,
+        params.fees.standard,
+        params.fees.fast,
+      ]) {
+        expect(tier.maxPriorityFeePerGas, floor);
+        expect(tier.maxFeePerGas, floor);
+      }
+    });
+
     test(
       'node error surfaces as a thrown RpcException (caller owns fallback)',
       () {

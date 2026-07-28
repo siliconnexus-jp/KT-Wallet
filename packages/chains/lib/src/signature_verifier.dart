@@ -40,9 +40,8 @@ Future<VerifiedTransaction> verifySignedTransaction({
   Chain.polygon ||
   Chain.base ||
   Chain.arbitrum ||
-  Chain.avalanche => Future.value(
-    _verifyEvm(unsignedTx, signedTx, claimedSigner),
-  ),
+  Chain.avalanche ||
+  Chain.bnb => Future.value(_verifyEvm(unsignedTx, signedTx, claimedSigner)),
   Chain.tron => Future.value(_verifyTron(unsignedTx, signedTx, claimedSigner)),
   Chain.solana => _verifySolana(unsignedTx, signedTx, claimedSigner),
 };

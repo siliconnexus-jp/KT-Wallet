@@ -58,12 +58,14 @@ void main() {
         (call) async => {
           'eth': '0xE',
           'polygon': '0xE',
+          'bnb': '0xB',
           'tron': 'T1',
           'solana': 'S1',
         },
       );
       final addrs = await api.deriveAddresses('w1');
       expect(addrs.forCoin(Coin.polygon), '0xE');
+      expect(addrs.forCoin(Coin.bnb), '0xB');
       expect(addrs.forCoin(Coin.tron), 'T1');
     });
 

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'address.dart';
 import 'base58.dart';
 import 'sha256.dart';
+import 'solana_tx.dart';
 import 'tx_preview.dart';
 
 class ParsedUnsignedTransfer {
@@ -44,7 +45,8 @@ ParsedUnsignedTransfer parseUnsignedTransfer(Chain chain, Uint8List rawTx) =>
       Chain.polygon ||
       Chain.base ||
       Chain.arbitrum ||
-      Chain.avalanche => _parseEvm(chain, rawTx),
+      Chain.avalanche ||
+      Chain.bnb => _parseEvm(chain, rawTx),
       Chain.tron => _parseTron(rawTx),
       Chain.solana => _parseSolana(rawTx),
     };
@@ -161,27 +163,52 @@ ParsedUnsignedTransfer _parseSolana(Uint8List raw) {
   cursor += 32; // recent blockhash
   final instructionCount = _shortVec(raw, cursor);
   cursor = instructionCount.next;
-  if (instructionCount.value != 1 || cursor >= raw.length) {
+  if (instructionCount.value < 1 ||
+      instructionCount.value > 2 ||
+      cursor >= raw.length) {
     throw const FormatException('unsupported Solana instruction count');
   }
-  final programIndex = raw[cursor++];
-  final accountCount = _shortVec(raw, cursor);
-  cursor = accountCount.next;
-  if (cursor + accountCount.value > raw.length) {
-    throw const FormatException('invalid Solana accounts');
+  final instructions =
+      <({String program, List<int> accounts, Uint8List data})>[];
+  for (var i = 0; i < instructionCount.value; i++) {
+    final programIndex = raw[cursor++];
+    final accountCount = _shortVec(raw, cursor);
+    cursor = accountCount.next;
+    if (cursor + accountCount.value > raw.length ||
+        programIndex >= keys.length) {
+      throw const FormatException('invalid Solana accounts');
+    }
+    final accounts = raw.sublist(cursor, cursor + accountCount.value);
+    if (accounts.any((index) => index >= keys.length)) {
+      throw const FormatException('Solana account index out of range');
+    }
+    cursor += accountCount.value;
+    final dataLength = _shortVec(raw, cursor);
+    cursor = dataLength.next;
+    if (cursor + dataLength.value > raw.length) {
+      throw const FormatException('invalid Solana instruction');
+    }
+    final data = Uint8List.sublistView(raw, cursor, cursor + dataLength.value);
+    cursor += dataLength.value;
+    instructions.add((
+      program: base58Encode(keys[programIndex]),
+      accounts: accounts,
+      data: data,
+    ));
   }
-  final accounts = raw.sublist(cursor, cursor + accountCount.value);
-  cursor += accountCount.value;
-  final dataLength = _shortVec(raw, cursor);
-  cursor = dataLength.next;
-  if (cursor + dataLength.value != raw.length || programIndex >= keys.length) {
-    throw const FormatException('invalid Solana instruction');
+  if (cursor != raw.length) {
+    throw const FormatException('trailing Solana instruction bytes');
   }
-  final data = raw.sublist(cursor);
-  final program = base58Encode(keys[programIndex]);
+  final transfer = instructions.last;
+  final program = transfer.program;
+  final accounts = transfer.accounts;
+  final data = transfer.data;
   final from = base58Encode(keys.first);
   if (program == '11111111111111111111111111111111') {
-    if (accounts.length != 2 || data.length != 12 || _u32le(data, 0) != 2) {
+    if (accounts.length != 2 ||
+        accounts.first != 0 ||
+        data.length != 12 ||
+        _u32le(data, 0) != 2) {
       throw const FormatException('unsupported System Program instruction');
     }
     return ParsedUnsignedTransfer(
@@ -192,19 +219,52 @@ ParsedUnsignedTransfer _parseSolana(Uint8List raw) {
       amountRaw: _u64le(data, 4),
     );
   }
-  if (program != 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' ||
-      accounts.length != 3 ||
-      data.length != 9 ||
-      data.first != 3) {
+  if (instructions.length == 2) {
+    final create = instructions.first;
+    if (create.program != solanaAssociatedTokenProgram ||
+        create.accounts.length != 6 ||
+        create.data.length != 1 ||
+        create.data.first != 1) {
+      throw const FormatException('unsupported ATA create instruction');
+    }
+  }
+  if ((program != solanaTokenProgram && program != solanaToken2022Program) ||
+      accounts.length != 4 ||
+      accounts.last != 0 ||
+      data.length != 10 ||
+      data.first != 12) {
     throw const FormatException('unsupported SPL Token instruction');
+  }
+  var recipient = base58Encode(keys[accounts[2]]);
+  if (instructions.length == 2) {
+    final create = instructions.first;
+    final mint = base58Encode(keys[accounts[1]]);
+    final recipientOwner = base58Encode(keys[create.accounts[2]]);
+    final destination = base58Encode(keys[accounts[2]]);
+    if (create.accounts[0] != 0 ||
+        create.accounts[1] != accounts[2] ||
+        create.accounts[3] != accounts[1] ||
+        base58Encode(keys[create.accounts[4]]) != solanaSystemProgram ||
+        base58Encode(keys[create.accounts[5]]) != program ||
+        SolanaMessage.associatedTokenAddress(
+              owner: recipientOwner,
+              mint: mint,
+              tokenProgram: program,
+            ) !=
+            destination) {
+      throw const FormatException(
+        'ATA create does not match the token transfer',
+      );
+    }
+    recipient = recipientOwner;
   }
   return ParsedUnsignedTransfer(
     chain: Chain.solana,
     operation: TxOperation.tokenTransfer,
     from: from,
-    to: base58Encode(keys[accounts[1]]),
+    to: recipient,
     amountRaw: _u64le(data, 1),
-    tokenContract: program,
+    tokenContract: base58Encode(keys[accounts[1]]),
   );
 }
 

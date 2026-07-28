@@ -147,12 +147,13 @@ func (g *Gateway) solanaBalances(ctx context.Context, network string, meta chain
 		Tokens: make([]tokenBalanceEntry, 0, len(tokens)),
 	}
 	for _, t := range tokens {
-		// SPL token balances are not implemented yet; per contract each
-		// requested token carries an explicit per-token error.
-		res.Tokens = append(res.Tokens, tokenBalanceEntry{
-			Contract: t.Contract, Raw: "0", Decimals: t.Decimals, Symbol: t.Symbol,
-			Error: "unsupported",
-		})
+		entry := tokenBalanceEntry{Contract: t.Contract, Raw: "0", Decimals: t.Decimals, Symbol: t.Symbol}
+		if bal, err := g.sol[network].GetTokenBalance(ctx, address, t.Contract); err != nil {
+			entry.Error = err.Error()
+		} else {
+			entry.Raw = bal.String()
+		}
+		res.Tokens = append(res.Tokens, entry)
 	}
 	return res, nil
 }

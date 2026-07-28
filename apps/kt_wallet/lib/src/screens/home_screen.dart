@@ -871,6 +871,7 @@ const liveChainRows = [
   (Coin.base, 'Base', 'ETH', Color(0xFF0052FF), 'B'),
   (Coin.arbitrum, 'Arbitrum', 'ETH', Color(0xFF28A0F0), 'A'),
   (Coin.avalanche, 'Avalanche', 'AVAX', Color(0xFFE84142), 'A'),
+  (Coin.bnb, 'BNB Smart Chain', 'BNB', Color(0xFFF3BA2F), 'B'),
   (Coin.tron, 'TRON', 'TRX', Color(0xFF26A17B), '₮'),
   (Coin.solana, 'Solana', 'SOL', Color(0xFF9945FF), '◎'),
 ];
@@ -880,6 +881,17 @@ const liveChainRows = [
 const tokenRowMeta = {
   'USDT': (Color(0xFF26A17B), '₮'),
   'USDC': (Color(0xFF2775CA), r'$'),
+  'BUSD': (Color(0xFFF0B90B), 'B'),
+  'DAI': (Color(0xFFF5AC37), 'D'),
+  'WETH': (Color(0xFF627EEA), 'W'),
+  'WBTC': (Color(0xFFF09242), 'W'),
+  'LINK': (Color(0xFF2A5ADA), 'L'),
+  'UNI': (Color(0xFFFF007A), 'U'),
+  'SHIB': (Color(0xFFF00500), 'S'),
+  'PEPE': (Color(0xFF4C9540), 'P'),
+  'JUP': (Color(0xFF00D18C), 'J'),
+  'BONK': (Color(0xFFF5A623), 'B'),
+  'PYUSD': (Color(0xFF0070E0), 'P'),
 };
 
 /// One live asset row for a registry token, in the demo rows' visual shape
@@ -976,6 +988,7 @@ final nativeChains = [
   (Coin.base, 'ETH', 'Base'),
   (Coin.arbitrum, 'ETH', 'Arbitrum One'),
   (Coin.avalanche, 'AVAX', 'Avalanche C-Chain'),
+  (Coin.bnb, 'BNB', 'BNB Smart Chain'),
   (Coin.tron, 'TRX', 'TRON'),
   (Coin.solana, 'SOL', 'Solana'),
 ];
@@ -1049,55 +1062,65 @@ class _Header extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            GestureDetector(
-              onTap: onTapPill,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
-                decoration: BoxDecoration(
-                  color: WalletColors.surface,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _Avatar(
-                      color: Color(wallet.avatarColor),
-                      initial: wallet.name.characters.first,
-                      size: 26,
+        Expanded(
+          child: Row(
+            children: [
+              Flexible(
+                child: GestureDetector(
+                  onTap: onTapPill,
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
+                    decoration: BoxDecoration(
+                      color: WalletColors.surface,
+                      borderRadius: BorderRadius.circular(999),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      wallet.name,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: WalletColors.text,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _Avatar(
+                          color: Color(wallet.avatarColor),
+                          initial: wallet.name.characters.first,
+                          size: 26,
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            wallet.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: WalletColors.text,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        WalletTypeBadge(
+                          kind: isHot ? WalletKind.hot : WalletKind.watch,
+                          label: isHot
+                              ? l10n.walletKindHot
+                              : l10n.walletKindWatch,
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(
+                          Icons.keyboard_arrow_down,
+                          size: 18,
+                          color: WalletColors.text2,
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    WalletTypeBadge(
-                      kind: isHot ? WalletKind.hot : WalletKind.watch,
-                      label: isHot ? l10n.walletKindHot : l10n.walletKindWatch,
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(
-                      Icons.keyboard_arrow_down,
-                      size: 18,
-                      color: WalletColors.text2,
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-            // Amber testnet pill next to the wallet pill whenever ANY active
-            // chain is a testnet; renders nothing (zero-size) on all-mainnet,
-            // keeping demo/golden layouts byte-identical.
-            const TestnetBadge(),
-          ],
+              // Amber testnet pill next to the wallet pill whenever ANY active
+              // chain is a testnet; renders nothing (zero-size) on all-mainnet,
+              // keeping demo/golden layouts byte-identical.
+              const TestnetBadge(),
+            ],
+          ),
         ),
+        const SizedBox(width: 8),
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTapSettings,
