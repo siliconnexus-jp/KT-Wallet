@@ -1,11 +1,13 @@
 import 'package:core_crypto/core_crypto.dart';
 import 'package:core_crypto/testing.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/main.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
 import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 /// The backup screens and the view-recovery-phrase sheet must never display a
 /// phrase that is not the wallet's own.
@@ -60,6 +62,15 @@ Future<void> _pump(
   await tester.pumpAndSettle();
 }
 
+Future<void> _sendScreenshotEvent(WidgetTester tester) async {
+  await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+    'kt/screen_security',
+    const StandardMethodCodec().encodeMethodCall(MethodCall('screenshotTaken')),
+    (_) {},
+  );
+  await tester.pump();
+}
+
 void expectNoDemoWords() {
   for (final word in _demoWords) {
     expect(find.text(word), findsNothing, reason: 'demo phrase leaked: $word');
@@ -96,6 +107,22 @@ void main() {
       expect(find.text(words.first), findsAtLeastNWidgets(1));
       expect(find.text(words.last), findsAtLeastNWidgets(1));
       expectNoDemoWords();
+    });
+
+    testWidgets('screenshot event conceals the recovery phrase words', (
+      tester,
+    ) async {
+      final controller = await _controller();
+      await controller.beginCreate();
+      await _pump(tester, controller, '/mnemonic-show');
+      final wordFinder = find.byKey(const Key('mnemonic-word-0'));
+
+      expect(tester.widget<Text>(wordFinder).style?.color, WalletColors.text);
+      await _sendScreenshotEvent(tester);
+      expect(
+        tester.widget<Text>(wordFinder).style?.color,
+        WalletColors.surface,
+      );
     });
   });
 

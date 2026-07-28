@@ -7,6 +7,46 @@ import 'package:ui_kit/ui_kit.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('sensitive content stays concealed after a screenshot event', (
+    tester,
+  ) async {
+    final events = StreamController<void>.broadcast();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ScreenshotSensitiveBuilder(
+          screenshotEvents: events.stream,
+          builder: (context, concealed) => Scaffold(
+            body: Container(
+              color: const Color(0xFF10131A),
+              child: Text(
+                'secret phrase',
+                key: const ValueKey('sensitive-text'),
+                style: TextStyle(
+                  color: concealed ? const Color(0xFF10131A) : Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Text text() => tester.widget(find.byKey(const ValueKey('sensitive-text')));
+    expect(text().style?.color, Colors.white);
+
+    events.add(null);
+    await tester.pump();
+    expect(text().style?.color, const Color(0xFF10131A));
+
+    // Ordinary rebuilds must not reveal the value again.
+    await tester.pump();
+    expect(text().style?.color, const Color(0xFF10131A));
+
+    await tester.pumpWidget(const SizedBox());
+    await events.close();
+  });
+
   Future<StreamController<void>> pumpGuard(
     WidgetTester tester, {
     Duration duration = const Duration(seconds: 6),
@@ -113,10 +153,7 @@ void main() {
     events.add(null);
     await tester.pump();
     expect(find.text('当前屏幕已被截图，请注意您的钱包安全'), findsOneWidget);
-    expect(
-      find.text('スクリーンショットが撮影されました。ウォレットの安全にご注意ください'),
-      findsNothing,
-    );
+    expect(find.text('スクリーンショットが撮影されました。ウォレットの安全にご注意ください'), findsNothing);
     await events.close();
     tester.binding.platformDispatcher.clearLocaleTestValue();
   });
@@ -126,10 +163,7 @@ void main() {
     final events = await pumpGuard(tester);
     events.add(null);
     await tester.pump();
-    expect(
-      find.text('スクリーンショットが撮影されました。ウォレットの安全にご注意ください'),
-      findsOneWidget,
-    );
+    expect(find.text('スクリーンショットが撮影されました。ウォレットの安全にご注意ください'), findsOneWidget);
     await events.close();
     tester.binding.platformDispatcher.clearLocaleTestValue();
   });

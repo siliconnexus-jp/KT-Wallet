@@ -27,6 +27,65 @@ class ScreenSecurity {
   }
 }
 
+/// Rebuilds sensitive content as concealed after the first screenshot event.
+///
+/// Screenshot callbacks are delivered after the OS has captured the screen,
+/// so this cannot redact the image that already exists. It does make the
+/// sensitive value disappear immediately and keeps it concealed for the
+/// remaining lifetime of this widget. Re-entering the page creates a new
+/// widget state and allows the user to review the value again.
+class ScreenshotSensitiveBuilder extends StatefulWidget {
+  const ScreenshotSensitiveBuilder({
+    required this.builder,
+    super.key,
+    this.screenshotEvents,
+  });
+
+  final Widget Function(BuildContext context, bool concealed) builder;
+  final Stream<void>? screenshotEvents;
+
+  @override
+  State<ScreenshotSensitiveBuilder> createState() =>
+      _ScreenshotSensitiveBuilderState();
+}
+
+class _ScreenshotSensitiveBuilderState
+    extends State<ScreenshotSensitiveBuilder> {
+  StreamSubscription<void>? _subscription;
+  bool _concealed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _listen();
+  }
+
+  void _listen() {
+    _subscription = (widget.screenshotEvents ?? ScreenSecurity.screenshots)
+        .listen((_) {
+          if (mounted && !_concealed) setState(() => _concealed = true);
+        });
+  }
+
+  @override
+  void didUpdateWidget(ScreenshotSensitiveBuilder oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.screenshotEvents != widget.screenshotEvents) {
+      _subscription?.cancel();
+      _listen();
+    }
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _concealed);
+}
+
 /// App-root security layer that shows a non-blocking screenshot warning.
 class ScreenSecurityGuard extends StatefulWidget {
   const ScreenSecurityGuard({
