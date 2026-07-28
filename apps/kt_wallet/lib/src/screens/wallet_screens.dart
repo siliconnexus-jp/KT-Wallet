@@ -225,6 +225,17 @@ class SplashScreen extends StatelessWidget {
 class AddWalletScreen extends StatelessWidget {
   const AddWalletScreen({super.key});
 
+  /// Returns to the route that opened this screen. On a fresh install this
+  /// screen is the router's initial location, so there is no route to pop;
+  /// leave wallet mode instead and reveal the enclosing device-mode picker.
+  void _goBack(BuildContext context) {
+    if (context.canPop()) {
+      context.pop();
+      return;
+    }
+    DeviceModeScope.maybeOf(context)?.exitMode();
+  }
+
   /// Starts the create-onboarding flow: generate a fresh mnemonic, then walk
   /// the backup show → verify screens before the wallet is committed.
   Future<void> _createHotWallet(BuildContext context) async {
@@ -305,7 +316,7 @@ class AddWalletScreen extends StatelessWidget {
       gap: 16,
       navBar: KtNavBar(
         title: l10n.addWalletTitle,
-        onBack: () => Navigator.of(context).maybePop(),
+        onBack: () => _goBack(context),
       ),
       children: [
         Text(

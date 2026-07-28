@@ -15,6 +15,25 @@ Future<void> _openHome(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('add-wallet back returns to wallet management', (tester) async {
+    await _openHome(tester);
+
+    await tester.tap(find.text('日常钱包'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('管理'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('添加钱包'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('创建新钱包'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pumpAndSettle();
+
+    expect(find.text('钱包管理'), findsOneWidget);
+    expect(find.text('共 3 个钱包 · 上限 20 个'), findsOneWidget);
+    expect(find.text('创建新钱包'), findsNothing);
+  });
+
   testWidgets('create new wallet from switcher adds a wallet and selects it', (
     tester,
   ) async {

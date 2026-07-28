@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:core_crypto/core_crypto.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/main.dart';
 import 'package:kt_wallet/src/security/biometric_auth.dart';
@@ -95,6 +95,31 @@ void main() {
     expect(find.text('选择设备模式'), findsNothing);
     expect(find.text('日常钱包'), findsOneWidget); // wallet home header
   });
+
+  testWidgets(
+    'fresh empty-wallet add screen back returns to the device-mode picker',
+    (tester) async {
+      tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+      addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+
+      final mode = DeviceModeController(initial: DeviceMode.wallet);
+      await tester.pumpWidget(
+        RootApp(
+          modeController: mode,
+          walletBootstrap: () async => WalletController(WalletManager()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('添加钱包'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      expect(mode.mode, isNull);
+      expect(find.text('选择设备模式'), findsOneWidget);
+      expect(find.text('添加钱包'), findsNothing);
+    },
+  );
 
   testWidgets('tapping 离线签名器 requires confirmation, then boots the signer', (
     tester,
