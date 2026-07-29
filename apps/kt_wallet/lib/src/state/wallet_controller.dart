@@ -62,9 +62,18 @@ class WalletController extends ChangeNotifier {
   /// only rows recorded on those network instances (callers pass the ACTIVE
   /// ids so a testnet row never shows up in a mainnet list); null keeps all.
   Future<List<Transaction>> localTransactions({Set<String>? networkIds}) async {
-    final walletId = current?.id;
-    if (walletId == null || _store == null) return const [];
-    return _store.transactions(walletId, networkIds: networkIds);
+    final wallet = current;
+    final store = _store;
+    if (wallet == null || store == null) return const [];
+    await store.mirrorIncomingTransactions(
+      targetWalletId: wallet.id,
+      addressesByCoin: {
+        for (final coin in Coin.values)
+          coin.name: wallet.addresses.forCoin(coin),
+      },
+      networkIds: networkIds,
+    );
+    return store.transactions(wallet.id, networkIds: networkIds);
   }
 
   Future<Transaction?> localTransactionById(String id) async {
@@ -125,6 +134,61 @@ class WalletController extends ChangeNotifier {
       replacementKind: replacementKind,
     );
     notifyListeners();
+  }
+
+  /// Mirrors a transfer into every other locally managed wallet whose address
+  /// matches [to]. This gives the receiving wallet an immediate pending row
+  /// while the external account-history indexer catches up. The row is later
+  /// reconciled by the same hash-based chain status/history refresh as any
+  /// other local transaction.
+  Future<void> saveIncomingForLocalWallets({
+    required Coin coin,
+    required String networkId,
+    String? contract,
+    required String from,
+    required String to,
+    required String amountRaw,
+    required String hash,
+    required int createdAt,
+    int? broadcastAt,
+  }) async {
+    final store = _store;
+    final senderWalletId = current?.id;
+    if (store == null || senderWalletId == null) return;
+    final evm = switch (coin) {
+      Coin.eth ||
+      Coin.polygon ||
+      Coin.base ||
+      Coin.arbitrum ||
+      Coin.avalanche ||
+      Coin.bnb => true,
+      Coin.tron || Coin.solana => false,
+    };
+    var saved = false;
+    for (final wallet in wallets) {
+      if (wallet.id == senderWalletId) continue;
+      final local = wallet.addresses.forCoin(coin);
+      final matches = evm
+          ? local.toLowerCase() == to.toLowerCase()
+          : local == to;
+      if (!matches) continue;
+      await store.upsertIncomingTransaction(
+        id: 'incoming_${wallet.id}_${hash}_${contract ?? 'native'}',
+        walletId: wallet.id,
+        coin: coin,
+        networkId: networkId,
+        contract: contract,
+        from: from,
+        to: to,
+        amountRaw: amountRaw,
+        hash: hash,
+        status: TxStatus.pending,
+        createdAt: createdAt,
+        broadcastAt: broadcastAt,
+      );
+      saved = true;
+    }
+    if (saved) notifyListeners();
   }
 
   Future<void> reserveOutgoingEvmTransaction({

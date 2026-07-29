@@ -102,6 +102,39 @@ func (t *Tron) GetAccount(ctx context.Context, addr string) (*Account, error) {
 	return acct, nil
 }
 
+// TransactionStatus queries the full-node receipt directly. TronGrid returns
+// an empty object while a tx is unknown/pending, and a receipt once included.
+// The returned status is one of "confirmed", "failed", "pending", "unknown".
+func (t *Tron) TransactionStatus(ctx context.Context, txID string) (string, error) {
+	body, err := json.Marshal(map[string]string{"value": txID})
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		ID      string `json:"id"`
+		Receipt struct {
+			Result string `json:"result"`
+		} `json:"receipt"`
+		Result string `json:"result"`
+	}
+	if err := t.do(ctx, http.MethodPost, "/wallet/gettransactioninfobyid", body, &out); err != nil {
+		return "", err
+	}
+	if out.ID == "" && out.Receipt.Result == "" && out.Result == "" {
+		return "unknown", nil
+	}
+	result := out.Receipt.Result
+	if result == "" {
+		result = out.Result
+	}
+	switch strings.ToUpper(result) {
+	case "", "SUCCESS":
+		return "confirmed", nil
+	default:
+		return "failed", nil
+	}
+}
+
 // TRC20Transfer is one row of GET /v1/accounts/{addr}/transactions/trc20.
 type TRC20Transfer struct {
 	TransactionID  string

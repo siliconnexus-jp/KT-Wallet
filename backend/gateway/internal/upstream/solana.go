@@ -167,6 +167,47 @@ func (s *Solana) GetSignaturesForAddress(ctx context.Context, address string, li
 	return out, nil
 }
 
+// SignatureStatus reads confirmation directly from the RPC rather than
+// waiting for Helius/history indexing. The returned status is one of
+// "confirmed", "failed", "pending", "unknown".
+func (s *Solana) SignatureStatus(ctx context.Context, signature string) (string, error) {
+	raw, err := s.pool.Call(ctx, "getSignatureStatuses", []any{
+		[]string{signature},
+		map[string]bool{"searchTransactionHistory": true},
+	})
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		Value []json.RawMessage `json:"value"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil || len(out.Value) == 0 {
+		return "", &Unavailable{Upstream: "solana", Message: "malformed signature status"}
+	}
+	entry := bytes.TrimSpace(out.Value[0])
+	if bytes.Equal(entry, []byte("null")) {
+		return "unknown", nil
+	}
+	var status struct {
+		Err                json.RawMessage `json:"err"`
+		ConfirmationStatus string          `json:"confirmationStatus"`
+	}
+	if err := json.Unmarshal(entry, &status); err != nil {
+		return "", &Unavailable{Upstream: "solana", Message: "malformed signature status entry"}
+	}
+	if trimmed := bytes.TrimSpace(status.Err); len(trimmed) != 0 && !bytes.Equal(trimmed, []byte("null")) {
+		return "failed", nil
+	}
+	switch status.ConfirmationStatus {
+	case "confirmed", "finalized":
+		return "confirmed", nil
+	case "processed":
+		return "pending", nil
+	default:
+		return "pending", nil
+	}
+}
+
 // Failed reports whether the signature status contains a non-null error.
 func (s SolanaSignature) Failed() bool {
 	trimmed := bytes.TrimSpace(s.Err)

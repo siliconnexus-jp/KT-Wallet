@@ -22,7 +22,9 @@ const (
 	pricesTTL      = 30 * time.Second
 	balancesTTL    = 10 * time.Second
 	chainParamsTTL = 5 * time.Second
-	historyTTL     = 30 * time.Second
+	// History must converge quickly after a broadcast. A 30-second empty-page
+	// cache made a recipient balance update while its record remained absent.
+	historyTTL = 5 * time.Second
 )
 
 // Config wires the gateway. Zero values fall back to production defaults.
@@ -60,7 +62,15 @@ type Config struct {
 
 	EtherscanURL string
 	EtherscanKey string
-	HeliusURL    string
+	// AlchemyKeys enable the Transfers API as the primary EVM history indexer.
+	// AlchemyURLs maps KT network ids to JSON-RPC endpoint pools; nil uses the
+	// production endpoints generated from AlchemyKeys. AlchemyRPCCount marks
+	// how many leading EVM URLs should be round-robin balanced before the
+	// remaining public fallbacks.
+	AlchemyKeys     []string
+	AlchemyURLs     map[string][]string
+	AlchemyRPCCount int
+	HeliusURL       string
 	// HeliusDevnetURL is the Helius endpoint serving sol-devnet history; it
 	// shares HeliusKey with the mainnet endpoint.
 	HeliusDevnetURL string
@@ -82,7 +92,7 @@ type Config struct {
 // Defaults returns the production upstream configuration.
 func Defaults() Config {
 	return Config{
-		Version:        "1.7.1",
+		Version:        "1.9.1",
 		Clock:          clock.Real{},
 		AttemptTimeout: 10 * time.Second,
 		EthURLs:        []string{"https://eth.llamarpc.com", "https://cloudflare-eth.com"},
@@ -150,6 +160,8 @@ type Gateway struct {
 	sol  map[string]*upstream.Solana // sol-mainnet, sol-devnet
 	cg   *upstream.CoinGecko
 	scan *upstream.Etherscan
+	// alchemy is the preferred indexed EVM history source when configured.
+	alchemy map[string]*upstream.Alchemy
 	// historyScan contains keyless public explorer clients keyed by network.
 	// The configured Etherscan v2 client above remains preferred when a key is
 	// available because it also covers Polygon Amoy.
@@ -249,6 +261,9 @@ func New(cfg Config) *Gateway {
 	if cfg.OfficialTokens == nil {
 		cfg.OfficialTokens = def.OfficialTokens
 	}
+	if cfg.AlchemyURLs == nil && len(cfg.AlchemyKeys) > 0 {
+		cfg.AlchemyURLs = AlchemyNetworkURLs(cfg.AlchemyKeys)
+	}
 	officialTokens, err := normalizeOfficialTokens(cfg.OfficialTokens)
 	if err != nil {
 		// Fail closed: invalid programmatic configuration yields no blue
@@ -266,22 +281,38 @@ func New(cfg Config) *Gateway {
 			historyScan[network] = upstream.NewEtherscan(baseURL, "", hc, at)
 		}
 	}
+	alchemy := make(map[string]*upstream.Alchemy, len(cfg.AlchemyURLs))
+	for network, endpoints := range cfg.AlchemyURLs {
+		if len(endpoints) > 0 {
+			alchemy[network] = upstream.NewAlchemy(endpoints, hc, at)
+		}
+	}
+	newEVM := func(name string, urls []string) *upstream.EVM {
+		return upstream.NewEVMRoundRobin(
+			name,
+			urls,
+			cfg.AlchemyRPCCount,
+			clk,
+			hc,
+			at,
+		)
+	}
 	g := &Gateway{
 		cfg: cfg,
 		clk: clk,
 		evm: map[string]*upstream.EVM{
-			"eth-mainnet":       upstream.NewEVM("eth-mainnet", cfg.EthURLs, clk, hc, at),
-			"eth-sepolia":       upstream.NewEVM("eth-sepolia", cfg.EthSepoliaURLs, clk, hc, at),
-			"polygon-mainnet":   upstream.NewEVM("polygon-mainnet", cfg.PolygonURLs, clk, hc, at),
-			"polygon-amoy":      upstream.NewEVM("polygon-amoy", cfg.PolygonAmoyURLs, clk, hc, at),
-			"base-mainnet":      upstream.NewEVM("base-mainnet", cfg.BaseURLs, clk, hc, at),
-			"base-sepolia":      upstream.NewEVM("base-sepolia", cfg.BaseSepoliaURLs, clk, hc, at),
-			"arbitrum-mainnet":  upstream.NewEVM("arbitrum-mainnet", cfg.ArbitrumURLs, clk, hc, at),
-			"arbitrum-sepolia":  upstream.NewEVM("arbitrum-sepolia", cfg.ArbitrumSepoliaURLs, clk, hc, at),
-			"avalanche-mainnet": upstream.NewEVM("avalanche-mainnet", cfg.AvalancheURLs, clk, hc, at),
-			"avalanche-fuji":    upstream.NewEVM("avalanche-fuji", cfg.AvalancheFujiURLs, clk, hc, at),
-			"bnb-mainnet":       upstream.NewEVM("bnb-mainnet", cfg.BNBURLs, clk, hc, at),
-			"bnb-testnet":       upstream.NewEVM("bnb-testnet", cfg.BNBTestnetURLs, clk, hc, at),
+			"eth-mainnet":       newEVM("eth-mainnet", cfg.EthURLs),
+			"eth-sepolia":       newEVM("eth-sepolia", cfg.EthSepoliaURLs),
+			"polygon-mainnet":   newEVM("polygon-mainnet", cfg.PolygonURLs),
+			"polygon-amoy":      newEVM("polygon-amoy", cfg.PolygonAmoyURLs),
+			"base-mainnet":      newEVM("base-mainnet", cfg.BaseURLs),
+			"base-sepolia":      newEVM("base-sepolia", cfg.BaseSepoliaURLs),
+			"arbitrum-mainnet":  newEVM("arbitrum-mainnet", cfg.ArbitrumURLs),
+			"arbitrum-sepolia":  newEVM("arbitrum-sepolia", cfg.ArbitrumSepoliaURLs),
+			"avalanche-mainnet": newEVM("avalanche-mainnet", cfg.AvalancheURLs),
+			"avalanche-fuji":    newEVM("avalanche-fuji", cfg.AvalancheFujiURLs),
+			"bnb-mainnet":       newEVM("bnb-mainnet", cfg.BNBURLs),
+			"bnb-testnet":       newEVM("bnb-testnet", cfg.BNBTestnetURLs),
 		},
 		tron: map[string]*upstream.Tron{
 			"tron-mainnet": upstream.NewTron(cfg.TronURL, hc, at),
@@ -293,6 +324,7 @@ func New(cfg Config) *Gateway {
 		},
 		cg:          upstream.NewCoinGecko(cfg.CoinGeckoURL, hc, ratelimit.NewInterval(cfg.CoinGeckoInterval), at),
 		scan:        upstream.NewEtherscan(cfg.EtherscanURL, cfg.EtherscanKey, hc, at),
+		alchemy:     alchemy,
 		historyScan: historyScan,
 		hel: map[string]*upstream.Helius{
 			"sol-mainnet": upstream.NewHelius(cfg.HeliusURL, cfg.HeliusKey, hc, at),
@@ -308,6 +340,36 @@ func New(cfg Config) *Gateway {
 	return g
 }
 
+// AlchemyNetworkURLs returns the official JSON-RPC endpoint for each EVM
+// network supported by KT Wallet. The returned values contain API keys
+// and must never be logged or returned to clients.
+func AlchemyNetworkURLs(keys []string) map[string][]string {
+	const suffix = ".g.alchemy.com/v2/"
+	slugs := map[string]string{
+		"eth-mainnet":       "eth-mainnet",
+		"eth-sepolia":       "eth-sepolia",
+		"polygon-mainnet":   "polygon-mainnet",
+		"polygon-amoy":      "polygon-amoy",
+		"base-mainnet":      "base-mainnet",
+		"base-sepolia":      "base-sepolia",
+		"arbitrum-mainnet":  "arb-mainnet",
+		"arbitrum-sepolia":  "arb-sepolia",
+		"avalanche-mainnet": "avax-mainnet",
+		"avalanche-fuji":    "avax-fuji",
+		"bnb-mainnet":       "bnb-mainnet",
+		"bnb-testnet":       "bnb-testnet",
+	}
+	urls := make(map[string][]string, len(slugs))
+	for network, slug := range slugs {
+		for _, key := range keys {
+			if key != "" {
+				urls[network] = append(urls[network], "https://"+slug+suffix+key)
+			}
+		}
+	}
+	return urls
+}
+
 // Register binds every kt_* method onto the JSON-RPC server.
 func (g *Gateway) Register(s *rpc.Server) {
 	s.Register("kt_health", g.Health)
@@ -315,6 +377,7 @@ func (g *Gateway) Register(s *rpc.Server) {
 	s.Register("kt_getPrices", g.GetPrices)
 	s.Register("kt_getChainParams", g.GetChainParams)
 	s.Register("kt_getHistory", g.GetHistory)
+	s.Register("kt_getTransactionStatus", g.GetTransactionStatus)
 	s.Register("kt_searchTokens", g.SearchOfficialTokens)
 	s.Register("kt_broadcast", g.Broadcast)
 }

@@ -135,8 +135,16 @@ class SolanaRpc {
 
   /// Confirmation status for a signature, or null if unknown.
   Future<String?> signatureStatus(String signature) async {
+    return (await signatureResult(signature))?.confirmationStatus;
+  }
+
+  /// Full confirmation result for a signature. [failed] is sourced from the
+  /// RPC's `err` field, so callers never mistake an included failed
+  /// transaction for a successful confirmation.
+  Future<SolanaSignatureStatus?> signatureResult(String signature) async {
     final result = await _call('getSignatureStatuses', [
       [signature],
+      {'searchTransactionHistory': true},
     ]);
     final value = result is Map ? result['value'] : null;
     if (value is! List || value.isEmpty) return null;
@@ -145,8 +153,21 @@ class SolanaRpc {
     final status = entry['confirmationStatus'];
     if (status == null) return null;
     if (status is! String) throw RpcException('bad confirmationStatus');
-    return status;
+    return SolanaSignatureStatus(
+      confirmationStatus: status,
+      failed: entry['err'] != null,
+    );
   }
+}
+
+class SolanaSignatureStatus {
+  const SolanaSignatureStatus({
+    required this.confirmationStatus,
+    required this.failed,
+  });
+
+  final String confirmationStatus;
+  final bool failed;
 }
 
 class SolanaTokenAccount {

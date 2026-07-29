@@ -164,6 +164,82 @@ func TestPolygonAmoyHistoryWithoutKeyUnsupported(t *testing.T) {
 	assertJSONEq(t, `{"status":"unsupported","records":[]}`, res)
 }
 
+func TestBNBHistoryUsesAlchemyBeforeEtherscan(t *testing.T) {
+	alchemy := newRESTFake(t)
+	alchemy.route("/", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Params []map[string]any `json:"params"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&request)
+		w.Header().Set("Content-Type", "application/json")
+		if request.Params[0]["toAddress"] != nil {
+			_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":1,"result":{"transfers":[{
+				"uniqueId":"0xbnbtoken:log:7","hash":"0xbnbtoken",
+				"from":"0x2222222222222222222222222222222222222222","to":%q,
+				"asset":"FAKE-BUSD","category":"erc20",
+				"rawContract":{"value":"0x2625a0","address":"0xed24fc36d5ee211ea25a80239fb8c4cfd80f12ee","decimal":"0x12"},
+				"metadata":{"blockTimestamp":"2026-07-29T01:02:03Z"}
+			}]}}`, evmSelf)
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":1,"result":{"transfers":[{
+			"uniqueId":"0xbnb:external","hash":"0xbnb",
+			"from":%q,"to":"0x2222222222222222222222222222222222222222",
+			"asset":"BNB","category":"external",
+			"rawContract":{"value":"0xde0b6b3a7640000","address":null,"decimal":"0x12"},
+			"metadata":{"blockTimestamp":"2026-07-29T01:01:00Z"}
+		}]}}`, evmSelf)
+	})
+	etherscan := newRESTFake(t)
+	etherscan.routeJSON("/", `{"status":"1","message":"OK","result":[]}`)
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.AlchemyKeys = []string{"server-only-key"}
+		cfg.AlchemyURLs = map[string][]string{"bnb-testnet": {alchemy.srv.URL}}
+		cfg.EtherscanKey = "fallback-key"
+		cfg.EtherscanURL = etherscan.srv.URL
+	})
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(
+		`{"chain":"bnb","network":"bnb-testnet","address":%q}`, evmSelf,
+	)))
+	assertJSONEq(t, `[
+		{"id":"0xbnbtoken:log:7","hash":"0xbnbtoken","direction":"in","from":"0x2222222222222222222222222222222222222222","to":"0x1111111111111111111111111111111111111111","amountRaw":"2500000","decimals":18,"symbol":"BUSD","contract":"0xed24fc36d5ee211ea25a80239fb8c4cfd80f12ee","verified":true,"timestampMs":1785286923000,"status":"ok"},
+		{"id":"0xbnb:external","hash":"0xbnb","direction":"out","from":"0x1111111111111111111111111111111111111111","to":"0x2222222222222222222222222222222222222222","amountRaw":"1000000000000000000","decimals":18,"symbol":"BNB","verified":true,"timestampMs":1785286860000,"status":"ok"}
+	]`, res["records"])
+	if alchemy.hitCount("/") != 2 {
+		t.Fatalf("Alchemy must query both directions, hits = %d", alchemy.hitCount("/"))
+	}
+	if etherscan.hitCount("/") != 0 {
+		t.Fatalf("healthy Alchemy must avoid fallback, Etherscan hits = %d", etherscan.hitCount("/"))
+	}
+}
+
+func TestAlchemyFailureFallsBackToEtherscan(t *testing.T) {
+	alchemy := newRESTFake(t)
+	alchemy.routeJSON("/", `{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"temporary outage"}}`)
+	scan := newRESTFake(t)
+	scan.routeJSON("/", `{"status":"1","message":"OK","result":[]}`)
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.AlchemyKeys = []string{"server-only-key"}
+		cfg.AlchemyURLs = map[string][]string{"eth-mainnet": {alchemy.srv.URL}}
+		cfg.EtherscanKey = "fallback-key"
+		cfg.EtherscanURL = scan.srv.URL
+	})
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(
+		`{"chain":"eth","address":%q}`, evmSelf,
+	)))
+	if res["status"] != "ok" {
+		t.Fatalf("fallback status = %v", res["status"])
+	}
+	if alchemy.hitCount("/") != 4 {
+		t.Fatalf("Alchemy includes category retries for both directions, hits = %d", alchemy.hitCount("/"))
+	}
+	if scan.hitCount("/") != 3 {
+		t.Fatalf("Etherscan fallback feeds = %d", scan.hitCount("/"))
+	}
+}
+
 func TestEthHistoryWithKey(t *testing.T) {
 	scan := newRESTFake(t)
 	scan.route("/", func(w http.ResponseWriter, r *http.Request) {
@@ -203,23 +279,24 @@ func TestEthHistoryWithKey(t *testing.T) {
 	if len(hits) != 3 {
 		t.Fatalf("expected normal + token + internal Etherscan calls, got %d", len(hits))
 	}
-	u, _ := url.Parse(hits[0].Path)
-	q := u.Query()
-	for k, want := range map[string]string{
-		"chainid": "1", "module": "account", "action": "txlist",
-		"address": evmSelf, "apikey": "test-key", "sort": "desc", "offset": "10",
-	} {
-		if q.Get(k) != want {
-			t.Fatalf("etherscan query %s = %q, want %q (full: %s)", k, q.Get(k), want, hits[0].Path)
+	actions := map[string]bool{}
+	for _, hit := range hits {
+		u, _ := url.Parse(hit.Path)
+		q := u.Query()
+		actions[q.Get("action")] = true
+		for k, want := range map[string]string{
+			"chainid": "1", "module": "account",
+			"address": evmSelf, "apikey": "test-key", "sort": "desc", "offset": "10",
+		} {
+			if q.Get(k) != want {
+				t.Fatalf("etherscan query %s = %q, want %q (full: %s)", k, q.Get(k), want, hit.Path)
+			}
 		}
 	}
-	tokenURL, _ := url.Parse(hits[1].Path)
-	if tokenURL.Query().Get("action") != "tokentx" {
-		t.Fatalf("second Etherscan call must query tokentx: %s", hits[1].Path)
-	}
-	internalURL, _ := url.Parse(hits[2].Path)
-	if internalURL.Query().Get("action") != "txlistinternal" {
-		t.Fatalf("third Etherscan call must query txlistinternal: %s", hits[2].Path)
+	for _, action := range []string{"txlist", "tokentx", "txlistinternal"} {
+		if !actions[action] {
+			t.Fatalf("missing concurrent Etherscan action %s: %v", action, actions)
+		}
 	}
 }
 
@@ -360,7 +437,9 @@ func TestEthHistoryEtherscanFailureFallsBackToPublicExplorer(t *testing.T) {
 	assertJSONEq(t, `[
 		{"id":"0xfallback","hash":"0xfallback","direction":"in","from":"0x2222222222222222222222222222222222222222","to":"0x1111111111111111111111111111111111111111","amountRaw":"9","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000500000,"status":"ok"}
 	]`, res["records"])
-	if scan.hitCount("/") != 1 || explorer.hitCount("/") != 3 {
+	// Normal, token and internal feeds are requested concurrently so one slow
+	// explorer does not serialize three full timeout windows.
+	if scan.hitCount("/") != 3 || explorer.hitCount("/") != 3 {
 		t.Fatalf("expected primary then fallback, got scan=%d explorer=%d",
 			scan.hitCount("/"), explorer.hitCount("/"))
 	}

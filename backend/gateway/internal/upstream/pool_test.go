@@ -84,6 +84,37 @@ func TestFailoverOn429(t *testing.T) {
 	}
 }
 
+func TestRoundRobinPrefixBalancesPrimariesBeforeFallback(t *testing.T) {
+	primaryA := newFakeNode(t, nil)
+	primaryB := newFakeNode(t, nil)
+	fallback := newFakeNode(t, nil)
+	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+	p := NewPoolRoundRobinPrefix(
+		"eth",
+		[]string{primaryA.srv.URL, primaryB.srv.URL, fallback.srv.URL},
+		2,
+		clk,
+		nil,
+		time.Second,
+	)
+
+	for range 6 {
+		if _, err := p.Call(context.Background(), "eth_blockNumber", nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if primaryA.hits.Load() != 3 || primaryB.hits.Load() != 3 {
+		t.Fatalf(
+			"primaries must be balanced evenly, hits = %d/%d",
+			primaryA.hits.Load(),
+			primaryB.hits.Load(),
+		)
+	}
+	if fallback.hits.Load() != 0 {
+		t.Fatalf("healthy primaries must not touch fallback, hits = %d", fallback.hits.Load())
+	}
+}
+
 func TestNoFailoverOnNodeError(t *testing.T) {
 	erroring := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -110,6 +141,33 @@ func TestNoFailoverOnNodeError(t *testing.T) {
 	}
 	if erroring.hits.Load() != 2 {
 		t.Fatalf("node-error endpoint should stay first in rotation, hits=%d", erroring.hits.Load())
+	}
+}
+
+func TestFailoverWhenProviderKeyHasNotEnabledNetwork(t *testing.T) {
+	disabled := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"error":{
+			"code":-32000,
+			"message":"BNB_TESTNET is not enabled for this app. Visit the dashboard to enable the network"
+		}}`))
+	})
+	enabled := newFakeNode(t, nil)
+	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+	p := NewPoolRoundRobinPrefix(
+		"bnb-testnet",
+		[]string{disabled.srv.URL, enabled.srv.URL},
+		2,
+		clk,
+		nil,
+		time.Second,
+	)
+
+	if _, err := p.Call(context.Background(), "eth_blockNumber", nil); err != nil {
+		t.Fatalf("disabled provider app must fail over to another key: %v", err)
+	}
+	if disabled.hits.Load() != 1 || enabled.hits.Load() != 1 {
+		t.Fatalf("want disabled/enabled hits 1/1, got %d/%d", disabled.hits.Load(), enabled.hits.Load())
 	}
 }
 

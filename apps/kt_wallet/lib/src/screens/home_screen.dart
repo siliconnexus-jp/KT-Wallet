@@ -10,6 +10,7 @@ import '../market/asset_ref.dart';
 import '../market/balance_service.dart';
 import '../market/history_controller.dart';
 import '../market/history_service.dart';
+import '../market/transaction_status_service.dart';
 import '../market/market_controller.dart';
 import '../market/market_scope.dart';
 import '../market/token_balance_service.dart';
@@ -412,6 +413,13 @@ class _RecordsScreenState extends State<RecordsScreen> {
           gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
           tokenRegistry: networkTokenRegistry(networks),
         ),
+        statusService: TransactionStatusService(
+          endpoints: effectiveRpcEndpoints(
+            AppPrefsScope.maybeOf(context),
+            NetworkScope.maybeOf(context),
+          ),
+          gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
+        ),
       );
       _owned = controller..addListener(_onHistoryChanged);
       // Post-frame: refresh() notifies synchronously, never mid-build.
@@ -560,7 +568,8 @@ class _RecordsScreenState extends State<RecordsScreen> {
           ),
         ),
       );
-    } else if (history.isLoading || assetStatus == HistoryStatus.loading) {
+    } else if ((history.isLoading || assetStatus == HistoryStatus.loading) &&
+        _visibleRecords(history).isEmpty) {
       body = _loadingCard();
     } else if (assetStatus == HistoryStatus.error ||
         (assetStatus == null && history.isError)) {

@@ -85,6 +85,28 @@ func main() {
 		cfg.EtherscanURL = v
 	}
 	cfg.EtherscanKey = os.Getenv("ETHERSCAN_API_KEY")
+	cfg.AlchemyKeys = envList("ALCHEMY_API_KEYS")
+	if len(cfg.AlchemyKeys) == 0 {
+		if legacy := strings.TrimSpace(os.Getenv("ALCHEMY_API_KEY")); legacy != "" {
+			cfg.AlchemyKeys = []string{legacy}
+		}
+	}
+	if len(cfg.AlchemyKeys) > 0 {
+		alchemy := handlers.AlchemyNetworkURLs(cfg.AlchemyKeys)
+		cfg.AlchemyRPCCount = len(cfg.AlchemyKeys)
+		cfg.EthURLs = prependURLs(alchemy["eth-mainnet"], cfg.EthURLs)
+		cfg.EthSepoliaURLs = prependURLs(alchemy["eth-sepolia"], cfg.EthSepoliaURLs)
+		cfg.PolygonURLs = prependURLs(alchemy["polygon-mainnet"], cfg.PolygonURLs)
+		cfg.PolygonAmoyURLs = prependURLs(alchemy["polygon-amoy"], cfg.PolygonAmoyURLs)
+		cfg.BaseURLs = prependURLs(alchemy["base-mainnet"], cfg.BaseURLs)
+		cfg.BaseSepoliaURLs = prependURLs(alchemy["base-sepolia"], cfg.BaseSepoliaURLs)
+		cfg.ArbitrumURLs = prependURLs(alchemy["arbitrum-mainnet"], cfg.ArbitrumURLs)
+		cfg.ArbitrumSepoliaURLs = prependURLs(alchemy["arbitrum-sepolia"], cfg.ArbitrumSepoliaURLs)
+		cfg.AvalancheURLs = prependURLs(alchemy["avalanche-mainnet"], cfg.AvalancheURLs)
+		cfg.AvalancheFujiURLs = prependURLs(alchemy["avalanche-fuji"], cfg.AvalancheFujiURLs)
+		cfg.BNBURLs = prependURLs(alchemy["bnb-mainnet"], cfg.BNBURLs)
+		cfg.BNBTestnetURLs = prependURLs(alchemy["bnb-testnet"], cfg.BNBTestnetURLs)
+	}
 	if v := os.Getenv("HELIUS_API_URL"); v != "" {
 		cfg.HeliusURL = v
 	}
@@ -181,4 +203,25 @@ func envFloat(key string, def float64) float64 {
 		return def
 	}
 	return v
+}
+
+func prependURLs(primaries, fallbacks []string) []string {
+	if len(primaries) == 0 {
+		return fallbacks
+	}
+	out := make([]string, 0, len(fallbacks)+len(primaries))
+	out = append(out, primaries...)
+	for _, fallback := range fallbacks {
+		duplicate := false
+		for _, primary := range primaries {
+			if fallback == primary {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			out = append(out, fallback)
+		}
+	}
+	return out
 }

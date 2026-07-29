@@ -451,6 +451,46 @@ void main() {
     });
   });
 
+  group('kt_getTransactionStatus', () {
+    test('maps chain-authoritative status and sends the exact hash', () async {
+      final recorder = _Recorder()
+        ..results = {
+          'kt_getTransactionStatus': {'status': 'confirmed'},
+        };
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: recorder.client,
+      );
+
+      final status = await client.getTransactionStatus(
+        chain: Coin.avalanche,
+        hash: '0xreceipt',
+      );
+
+      expect(status, GatewayTransactionStatus.confirmed);
+      expect(recorder.requests.single['params'], {
+        'chain': 'avalanche',
+        'hash': '0xreceipt',
+      });
+    });
+
+    test('rejects an unknown status instead of assuming pending', () async {
+      final recorder = _Recorder()
+        ..results = {
+          'kt_getTransactionStatus': {'status': 'indexed-later'},
+        };
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: recorder.client,
+      );
+
+      await expectLater(
+        client.getTransactionStatus(chain: Coin.eth, hash: '0xreceipt'),
+        throwsA(isA<FormatException>()),
+      );
+    });
+  });
+
   group('kt_broadcast and error mapping', () {
     test('payload passthrough and txHash back', () async {
       final recorder = _Recorder()

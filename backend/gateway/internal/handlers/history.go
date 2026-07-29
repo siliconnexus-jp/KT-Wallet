@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"ktwallet/gateway/internal/rpc"
 	"ktwallet/gateway/internal/upstream"
@@ -247,13 +249,29 @@ func (g *Gateway) evmHistory(ctx context.Context, chain, network, address string
 		internalTxs []upstream.EtherscanInternalTx
 		primaryErr  error
 	)
+	// Alchemy's indexed Transfers API is primary because it covers every EVM
+	// network used by KT Wallet, including BNB 56/97 and Polygon Amoy.
+	if source := g.alchemy[network]; source != nil {
+		transfers, err := source.Transfers(ctx, address, limit)
+		if err == nil {
+			return alchemyHistoryResult(
+				chain,
+				address,
+				limit,
+				transfers,
+				g.officialByNetwork[network],
+			), nil
+		}
+		primaryErr = err
+	}
 	// Etherscan v2 is multichain and covers every supported EVM network,
 	// including Polygon Amoy, when a key is configured.
 	if g.cfg.EtherscanKey != "" {
-		txs, tokenTxs, internalTxs, primaryErr = evmHistoryLists(
+		var etherscanErr error
+		txs, tokenTxs, internalTxs, etherscanErr = evmHistoryLists(
 			ctx, g.scan, chainID, address, limit, true,
 		)
-		if primaryErr == nil {
+		if etherscanErr == nil {
 			return evmHistoryResult(
 				chain,
 				address,
@@ -263,6 +281,9 @@ func (g *Gateway) evmHistory(ctx context.Context, chain, network, address string
 				internalTxs,
 				g.officialByNetwork[network],
 			), nil
+		}
+		if primaryErr == nil {
+			primaryErr = etherscanErr
 		}
 	}
 	// Blockscout and Routescan expose the same account/txlist response shape
@@ -294,6 +315,107 @@ func (g *Gateway) evmHistory(ctx context.Context, chain, network, address string
 	return unsupportedHistory(), nil
 }
 
+func alchemyHistoryResult(
+	chain, address string,
+	limit int,
+	transfers []upstream.AlchemyTransfer,
+	registry map[string]tokenMeta,
+) *historyResult {
+	self := strings.ToLower(address)
+	nativeSymbol := chains[chain].Symbol
+	records := make([]historyRecord, 0, len(transfers))
+	for i, transfer := range transfers {
+		from := strings.ToLower(transfer.From)
+		to := strings.ToLower(transfer.To)
+		if from != self && to != self {
+			continue
+		}
+		raw, ok := parseAlchemyHexInteger(transfer.Raw.Value)
+		if !ok || raw.Sign() == 0 || transfer.Hash == "" {
+			continue
+		}
+		decimals, ok := parseAlchemyHexInt(transfer.Raw.Decimal)
+		if !ok || decimals < 0 {
+			continue
+		}
+		timestamp, err := time.Parse(time.RFC3339Nano, transfer.BlockTime)
+		if err != nil {
+			continue
+		}
+
+		direction := "in"
+		if from == self {
+			direction = "out"
+		}
+		id := transfer.UniqueID
+		if id == "" {
+			id = fmt.Sprintf("%s:%s:%d", transfer.Hash, transfer.Category, i)
+		}
+		symbol := nativeSymbol
+		contract := ""
+		verified := true
+		if transfer.Category == "erc20" {
+			contract = strings.ToLower(transfer.Raw.Address)
+			if contract == "" {
+				continue
+			}
+			symbol, decimals, verified = historyTokenMeta(
+				registry, contract, transfer.Asset, decimals,
+			)
+		}
+		records = append(records, historyRecord{
+			ID:          id,
+			Hash:        transfer.Hash,
+			Direction:   direction,
+			From:        transfer.From,
+			To:          transfer.To,
+			AmountRaw:   raw.String(),
+			Decimals:    decimals,
+			Symbol:      symbol,
+			Contract:    contract,
+			Verified:    verified,
+			TimestampMs: timestamp.UnixMilli(),
+			Status:      "ok",
+		})
+	}
+	sort.SliceStable(records, func(i, j int) bool {
+		return records[i].TimestampMs > records[j].TimestampMs
+	})
+	seen := make(map[string]bool, len(records))
+	deduped := make([]historyRecord, 0, min(len(records), limit))
+	for _, record := range records {
+		if seen[record.ID] {
+			continue
+		}
+		seen[record.ID] = true
+		deduped = append(deduped, record)
+		if len(deduped) == limit {
+			break
+		}
+	}
+	return &historyResult{Status: "ok", Records: deduped}
+}
+
+func parseAlchemyHexInteger(value string) (*big.Int, bool) {
+	if len(value) < 3 || !strings.HasPrefix(value, "0x") {
+		return nil, false
+	}
+	n, ok := new(big.Int).SetString(value[2:], 16)
+	return n, ok
+}
+
+func parseAlchemyHexInt(value string) (int, bool) {
+	n, ok := parseAlchemyHexInteger(value)
+	if !ok || !n.IsInt64() {
+		return 0, false
+	}
+	v := n.Int64()
+	if v > int64(^uint(0)>>1) {
+		return 0, false
+	}
+	return int(v), true
+}
+
 func evmHistoryLists(
 	ctx context.Context,
 	source *upstream.Etherscan,
@@ -302,20 +424,39 @@ func evmHistoryLists(
 	limit int,
 	includeInternal bool,
 ) ([]upstream.EtherscanTx, []upstream.EtherscanTokenTx, []upstream.EtherscanInternalTx, error) {
-	txs, err := source.TxList(ctx, chainID, address, limit)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	tokenTxs, err := source.TokenTxList(ctx, chainID, address, limit)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	var internalTxs []upstream.EtherscanInternalTx
+	var (
+		txs         []upstream.EtherscanTx
+		tokenTxs    []upstream.EtherscanTokenTx
+		internalTxs []upstream.EtherscanInternalTx
+		txErr       error
+		tokenErr    error
+	)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		txs, txErr = source.TxList(ctx, chainID, address, limit)
+	}()
+	go func() {
+		defer wg.Done()
+		tokenTxs, tokenErr = source.TokenTxList(ctx, chainID, address, limit)
+	}()
 	if includeInternal {
 		// Internal traces are an enrichment layer. Some otherwise compatible
 		// explorers do not expose txlistinternal; that must not hide normal and
 		// token history which was already fetched successfully.
-		internalTxs, _ = source.InternalTxList(ctx, chainID, address, limit)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			internalTxs, _ = source.InternalTxList(ctx, chainID, address, limit)
+		}()
+	}
+	wg.Wait()
+	if txErr != nil {
+		return nil, nil, nil, txErr
+	}
+	if tokenErr != nil {
+		return nil, nil, nil, tokenErr
 	}
 	return txs, tokenTxs, internalTxs, nil
 }

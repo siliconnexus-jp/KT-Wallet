@@ -375,6 +375,31 @@ class GatewayClient {
     return GatewayHistory.ok(List.unmodifiable(records));
   }
 
+  /// `kt_getTransactionStatus` — direct chain confirmation by transaction
+  /// hash/signature. Unlike account history this does not wait for an
+  /// explorer/indexer to ingest the block.
+  Future<GatewayTransactionStatus> getTransactionStatus({
+    required Coin chain,
+    required String hash,
+  }) async {
+    final network = await _networkParam(chain);
+    final result = await _call('kt_getTransactionStatus', {
+      'chain': chainName(chain),
+      'network': ?network,
+      'hash': hash,
+    });
+    if (result is! Map || result['status'] is! String) {
+      throw const FormatException('bad transaction status result');
+    }
+    return switch (result['status']) {
+      'confirmed' => GatewayTransactionStatus.confirmed,
+      'failed' => GatewayTransactionStatus.failed,
+      'pending' => GatewayTransactionStatus.pending,
+      'unknown' => GatewayTransactionStatus.unknown,
+      _ => throw const FormatException('unknown transaction status'),
+    };
+  }
+
   /// `kt_searchTokens` — searches the operator-configured verified token
   /// catalog by name, symbol, or contract/mint. An empty query returns the
   /// popular catalog first. Only rows carrying `verified: true` are accepted;
@@ -643,6 +668,8 @@ class GatewayHistory {
   final bool unsupported;
   final List<GatewayHistoryRecord> records;
 }
+
+enum GatewayTransactionStatus { confirmed, failed, pending, unknown }
 
 /// One operator-verified token identity. The blue check is tied to
 /// [network] + [contract], never to [symbol] alone.

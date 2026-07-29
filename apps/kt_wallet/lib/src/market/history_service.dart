@@ -206,15 +206,16 @@ class HistoryService {
         throw const FormatException('missing transaction result');
       }
 
-      final normalItems = await fetchList('txlist');
-      final tokenItems = await fetchList('tokentx');
-      List<dynamic> internalItems = const [];
-      try {
-        internalItems = await fetchList('txlistinternal');
-      } catch (_) {
-        // Internal transfers are enrichment on explorers that implement it;
-        // a failure must not hide otherwise trustworthy native/token rows.
-      }
+      final results = await (
+        fetchList('txlist'),
+        fetchList('tokentx'),
+        fetchList('txlistinternal').catchError((_) => const <dynamic>[]),
+      ).wait;
+      final normalItems = results.$1;
+      final tokenItems = results.$2;
+      // Internal transfers are enrichment on explorers that implement it; a
+      // failure must not hide otherwise trustworthy native/token rows.
+      final internalItems = results.$3;
 
       final lower = address.toLowerCase();
       final registry = _tokenRegistry();

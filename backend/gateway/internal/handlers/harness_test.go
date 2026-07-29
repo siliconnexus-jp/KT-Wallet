@@ -153,6 +153,7 @@ func newRESTFake(t *testing.T) *restFake {
 	f := &restFake{routes: map[string]http.HandlerFunc{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		r.Body = io.NopCloser(strings.NewReader(string(body)))
 		f.mu.Lock()
 		f.hits = append(f.hits, restHit{Path: r.URL.RequestURI(), Body: string(body), At: time.Now()})
 		var best string

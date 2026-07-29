@@ -26,6 +26,25 @@ class TronRpc {
     return BigInt.from(balance);
   }
 
+  /// Full-node confirmation result for [txId], or null while the node does not
+  /// know it. This bypasses account-history indexing.
+  Future<bool?> transactionSucceeded(String txId) async {
+    final resp = await transport.postJson(
+      '$baseUrl/wallet/gettransactioninfobyid',
+      {'value': txId},
+    );
+    if (resp is! Map) throw RpcException('bad transaction info response');
+    if (resp.isEmpty) return null;
+    final receipt = resp['receipt'];
+    final result = receipt is Map ? receipt['result'] : resp['result'];
+    if (result == null || '$result'.isEmpty) {
+      // A non-empty info object without an error result is a successful
+      // included native transaction.
+      return resp['id'] is String && (resp['id'] as String).isNotEmpty;
+    }
+    return '$result'.toUpperCase() == 'SUCCESS';
+  }
+
   /// Latest block ref (refBlockBytes/refBlockHash) for transaction expiration.
   Future<TronBlockRef> getNowBlock() async {
     final resp = await transport.postJson('$baseUrl/wallet/getnowblock', {});

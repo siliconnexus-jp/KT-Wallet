@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -59,10 +60,37 @@ type Pool struct {
 
 	mu  sync.Mutex
 	eps []*endpoint
+
+	roundRobinPrefix int
+	nextPrimary      int
 }
 
 // NewPool builds a Pool over urls, tried in order.
 func NewPool(name string, urls []string, clk clock.Clock, client *http.Client, attemptTimeout time.Duration) *Pool {
+	return newPool(name, urls, 0, clk, client, attemptTimeout)
+}
+
+// NewPoolRoundRobinPrefix balances across the first prefixCount endpoints and
+// preserves the remaining endpoints as ordered failover targets.
+func NewPoolRoundRobinPrefix(
+	name string,
+	urls []string,
+	prefixCount int,
+	clk clock.Clock,
+	client *http.Client,
+	attemptTimeout time.Duration,
+) *Pool {
+	return newPool(name, urls, prefixCount, clk, client, attemptTimeout)
+}
+
+func newPool(
+	name string,
+	urls []string,
+	prefixCount int,
+	clk clock.Clock,
+	client *http.Client,
+	attemptTimeout time.Duration,
+) *Pool {
 	eps := make([]*endpoint, 0, len(urls))
 	for _, u := range urls {
 		if u != "" {
@@ -75,7 +103,15 @@ func NewPool(name string, urls []string, clk clock.Clock, client *http.Client, a
 	if attemptTimeout <= 0 {
 		attemptTimeout = 10 * time.Second
 	}
-	return &Pool{name: name, clk: clk, client: client, timeout: attemptTimeout, eps: eps}
+	prefixCount = min(max(prefixCount, 0), len(eps))
+	return &Pool{
+		name:             name,
+		clk:              clk,
+		client:           client,
+		timeout:          attemptTimeout,
+		eps:              eps,
+		roundRobinPrefix: prefixCount,
+	}
 }
 
 // Call performs one JSON-RPC call, failing over between endpoints. The
@@ -96,7 +132,7 @@ func (p *Pool) Call(ctx context.Context, method string, params any) (json.RawMes
 
 	var lastErr *Unavailable
 	attempted := false
-	for _, ep := range p.eps {
+	for _, ep := range p.endpointsForCall() {
 		if p.circuitOpen(ep) {
 			continue
 		}
@@ -113,6 +149,18 @@ func (p *Pool) Call(ctx context.Context, method string, params any) (json.RawMes
 		}
 		p.recordSuccess(ep)
 		if nodeErr != nil {
+			// Provider-account routing errors mean the request never reached
+			// the chain. They are safe to fail over even for broadcasts and
+			// commonly occur when one key in a multi-key pool has not enabled
+			// a particular network yet.
+			if providerRoutingError(nodeErr) {
+				p.recordFailure(ep)
+				lastErr = &Unavailable{
+					Upstream: hostOf(ep.url),
+					Message:  nodeErr.Message,
+				}
+				continue
+			}
 			return nil, nodeErr
 		}
 		return result, nil
@@ -121,6 +169,30 @@ func (p *Pool) Call(ctx context.Context, method string, params any) (json.RawMes
 		return nil, &Unavailable{Upstream: p.name, Message: "all upstreams temporarily unavailable (circuit open)"}
 	}
 	return nil, lastErr
+}
+
+func providerRoutingError(err *NodeError) bool {
+	message := strings.ToLower(err.Message)
+	return strings.Contains(message, "not enabled for this app") ||
+		strings.Contains(message, "api key is not valid") ||
+		strings.Contains(message, "invalid api key") ||
+		strings.Contains(message, "authentication failed")
+}
+
+func (p *Pool) endpointsForCall() []*endpoint {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.roundRobinPrefix <= 1 {
+		return append([]*endpoint(nil), p.eps...)
+	}
+	start := p.nextPrimary % p.roundRobinPrefix
+	p.nextPrimary = (p.nextPrimary + 1) % p.roundRobinPrefix
+	ordered := make([]*endpoint, 0, len(p.eps))
+	for offset := range p.roundRobinPrefix {
+		ordered = append(ordered, p.eps[(start+offset)%p.roundRobinPrefix])
+	}
+	ordered = append(ordered, p.eps[p.roundRobinPrefix:]...)
+	return ordered
 }
 
 // attempt runs a single HTTP exchange. failure != nil marks a failover-worthy

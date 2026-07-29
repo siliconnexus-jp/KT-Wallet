@@ -1,6 +1,8 @@
 import 'package:core_crypto/core_crypto.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kt_wallet/src/state/wallet_controller.dart';
+import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
 import 'package:kt_wallet/src/wallets/wallet_store.dart';
 import 'package:wallet_data/wallet_data.dart';
@@ -103,6 +105,77 @@ void main() {
     final tron = accounts.firstWhere((a) => a.coin == 'tron');
     expect(tron.derivationPath, "m/44'/195'/0'/0/0");
   });
+
+  test(
+    'a transfer to another local wallet creates an incoming history row',
+    () async {
+      final sender = _hot('A');
+      final recipient = _hot('B');
+      await store.save(sender);
+      await store.save(recipient);
+      final controller = WalletController(
+        WalletManager(initial: [sender, recipient]),
+        store: store,
+      );
+
+      await controller.saveIncomingForLocalWallets(
+        coin: Coin.eth,
+        networkId: 'eth-mainnet',
+        from: sender.addresses.eth,
+        to: recipient.addresses.eth,
+        amountRaw: '1200000000000000',
+        hash: '0xhash',
+        createdAt: 1000,
+        broadcastAt: 1001,
+      );
+
+      final rows = await store.transactions('B');
+      expect(rows, hasLength(1));
+      expect(rows.single.direction, TxDirection.incoming);
+      expect(rows.single.hash, '0xhash');
+      expect(rows.single.status, TxStatus.pending);
+      expect(rows.single.fromAddr, sender.addresses.eth);
+      expect(rows.single.toAddr, recipient.addresses.eth);
+    },
+  );
+
+  test(
+    'older local transfers are backfilled into the recipient history',
+    () async {
+      final sender = _hot('A');
+      final recipient = _hot('B');
+      await store.save(sender);
+      await store.save(recipient);
+      await store.upsertTransaction(
+        id: 'old-outgoing',
+        walletId: sender.id,
+        coin: Coin.bnb,
+        networkId: 'bnb-mainnet',
+        from: sender.addresses.eth,
+        to: recipient.addresses.eth,
+        amountRaw: '5000000000000000',
+        hash: '0xoldhash',
+        status: TxStatus.confirmed,
+        signMode: SignMode.local,
+        createdAt: 900,
+        broadcastAt: 901,
+      );
+      final controller = WalletController(
+        WalletManager(initial: [sender, recipient]),
+        store: store,
+      )..select(recipient.id);
+
+      final rows = await controller.localTransactions(
+        networkIds: {'bnb-mainnet'},
+      );
+
+      expect(rows, hasLength(1));
+      expect(rows.single.direction, TxDirection.incoming);
+      expect(rows.single.coin, Coin.bnb.name);
+      expect(rows.single.status, TxStatus.confirmed);
+      expect(rows.single.hash, '0xoldhash');
+    },
+  );
 
   group('transactions carry their network', () {
     Future<void> reserve(

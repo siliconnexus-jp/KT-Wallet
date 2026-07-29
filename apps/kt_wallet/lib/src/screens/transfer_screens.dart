@@ -33,6 +33,7 @@ import '../market/market_scope.dart'
 import '../market/token_balance_service.dart'
     show TokenInfo, builtinTokensByNetworkId, usdcSolanaDevnetToken;
 import '../market/transaction_card.dart';
+import '../market/transaction_status_service.dart';
 import '../platform/external_actions.dart';
 import '../platform/media_gallery.dart';
 import '../rpc/http_transport.dart';
@@ -2699,8 +2700,103 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
 }
 
 /// W9 广播结果.
-class BroadcastResultScreen extends StatelessWidget {
+class BroadcastResultScreen extends StatefulWidget {
   const BroadcastResultScreen({super.key});
+
+  @override
+  State<BroadcastResultScreen> createState() => _BroadcastResultScreenState();
+}
+
+class _BroadcastResultScreenState extends State<BroadcastResultScreen>
+    with WidgetsBindingObserver {
+  Transaction? _transaction;
+  TransactionStatusService? _statusService;
+  Timer? _timer;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _statusService ??= TransactionStatusService(
+      endpoints: effectiveRpcEndpoints(
+        AppPrefsScope.maybeOf(context),
+        NetworkScope.maybeOf(context),
+      ),
+      gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
+    );
+    if (!_loading && _transaction == null) _reload();
+  }
+
+  Future<void> _reload() async {
+    final id = TransferSessionScope.maybeOf(context)?.localTransactionId;
+    if (id == null) return;
+    _loading = true;
+    final transaction = await WalletScope.of(context).localTransactionById(id);
+    if (!mounted) return;
+    setState(() {
+      _transaction = transaction;
+      _loading = false;
+    });
+    if (transaction != null) _scheduleCheck(transaction, immediately: true);
+  }
+
+  bool _pending(Transaction tx) =>
+      tx.hash != null &&
+      (tx.status == TxStatus.submitted ||
+          tx.status == TxStatus.pending ||
+          tx.status == TxStatus.broadcast);
+
+  void _scheduleCheck(Transaction tx, {bool immediately = false}) {
+    _timer?.cancel();
+    if (!_pending(tx)) return;
+    _timer = Timer(
+      immediately ? Duration.zero : const Duration(seconds: 8),
+      () => _check(tx),
+    );
+  }
+
+  Future<void> _check(Transaction tx) async {
+    final service = _statusService;
+    if (!mounted || service == null || !_pending(tx)) return;
+    final status = await service.check(tx);
+    if (!mounted) return;
+    final next = switch (status) {
+      ChainTransactionStatus.confirmed => TxStatus.confirmed,
+      ChainTransactionStatus.failed => TxStatus.failed,
+      ChainTransactionStatus.pending || ChainTransactionStatus.unknown => null,
+    };
+    if (next != null && next != tx.status) {
+      await WalletScope.of(
+        context,
+      ).updateTransactionStatus(tx.id, next, hash: tx.hash);
+      if (mounted) await _reload();
+      return;
+    }
+    _scheduleCheck(tx);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _reload();
+    } else {
+      _timer?.cancel();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -2716,6 +2812,27 @@ class BroadcastResultScreen extends StatelessWidget {
     final hashValue = fullHash == null
         ? '8f6d2c…a94e07'
         : truncateMiddle(fullHash, head: 6, tail: 6);
+    final status = _transaction?.status ?? TxStatus.pending;
+    final failed =
+        status == TxStatus.failed ||
+        status == TxStatus.dropped ||
+        status == TxStatus.expired;
+    final confirmed = status == TxStatus.confirmed;
+    final color = failed
+        ? WalletColors.red
+        : confirmed
+        ? WalletColors.green
+        : WalletColors.accent;
+    final icon = failed
+        ? Icons.error_outline_rounded
+        : confirmed
+        ? Icons.check
+        : Icons.schedule_rounded;
+    final statusLabel = failed
+        ? l10n.txStatusFailed
+        : confirmed
+        ? l10n.txStatusConfirmed
+        : l10n.txStatusPending;
     return KtScreen(
       gap: 24,
       bottom: KtPrimaryButton(
@@ -2729,18 +2846,15 @@ class BroadcastResultScreen extends StatelessWidget {
             width: 88,
             height: 88,
             decoration: BoxDecoration(
-              color: WalletColors.green.withValues(alpha: 0.08),
+              color: color.withValues(alpha: 0.08),
               shape: BoxShape.circle,
             ),
             child: Center(
               child: Container(
                 width: 64,
                 height: 64,
-                decoration: const BoxDecoration(
-                  color: WalletColors.green,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.check, size: 32, color: Colors.white),
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                child: Icon(icon, size: 32, color: Colors.white),
               ),
             ),
           ),
@@ -2769,8 +2883,8 @@ class BroadcastResultScreen extends StatelessWidget {
               const SizedBox(height: 14),
               KtDetailRow(
                 label: l10n.statusLabel,
-                value: l10n.confirming(3, 19),
-                valueColor: WalletColors.accent,
+                value: statusLabel,
+                valueColor: color,
               ),
             ],
           ),
@@ -2819,33 +2933,115 @@ class TxDetailScreen extends StatefulWidget {
   State<TxDetailScreen> createState() => _TxDetailScreenState();
 }
 
-class _TxDetailScreenState extends State<TxDetailScreen> {
+class _TxDetailScreenState extends State<TxDetailScreen>
+    with WidgetsBindingObserver {
   Future<Transaction?>? _transaction;
   String? _activeId;
   bool _submitting = false;
   bool _exportingReceipt = false;
+  TransactionStatusService? _statusService;
+  Timer? _statusTimer;
 
   @override
   void initState() {
     super.initState();
     _activeId = widget.transactionId;
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _statusService ??= TransactionStatusService(
+      endpoints: effectiveRpcEndpoints(
+        AppPrefsScope.maybeOf(context),
+        NetworkScope.maybeOf(context),
+      ),
+      gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
+    );
     if (widget.transaction == null && _activeId != null) {
-      _transaction ??= WalletScope.of(context).localTransactionById(_activeId!);
+      _transaction ??= _loadTransaction();
     }
+  }
+
+  Future<Transaction?> _loadTransaction() async {
+    final id = _activeId;
+    if (id == null) return null;
+    final transaction = await WalletScope.of(context).localTransactionById(id);
+    if (transaction != null) {
+      _scheduleStatusCheck(transaction, immediately: true);
+    }
+    return transaction;
   }
 
   void _reload([String? id]) {
     if (id != null) _activeId = id;
     setState(() {
-      _transaction = _activeId == null
-          ? null
-          : WalletScope.of(context).localTransactionById(_activeId!);
+      _transaction = _activeId == null ? null : _loadTransaction();
     });
+  }
+
+  bool _awaitingConfirmation(Transaction transaction) =>
+      transaction.hash != null &&
+      (transaction.status == TxStatus.submitted ||
+          transaction.status == TxStatus.pending ||
+          transaction.status == TxStatus.broadcast);
+
+  void _scheduleStatusCheck(
+    Transaction transaction, {
+    bool immediately = false,
+  }) {
+    _statusTimer?.cancel();
+    if (!_awaitingConfirmation(transaction)) return;
+    _statusTimer = Timer(
+      immediately ? Duration.zero : const Duration(seconds: 8),
+      () {
+        _checkStatus(transaction);
+      },
+    );
+  }
+
+  Future<void> _checkStatus(Transaction transaction) async {
+    final service = _statusService;
+    if (!mounted || service == null || !_awaitingConfirmation(transaction)) {
+      return;
+    }
+    final status = await service.check(transaction);
+    if (!mounted) return;
+    final next = switch (status) {
+      ChainTransactionStatus.confirmed => TxStatus.confirmed,
+      ChainTransactionStatus.failed => TxStatus.failed,
+      ChainTransactionStatus.pending || ChainTransactionStatus.unknown => null,
+    };
+    if (next != null && next != transaction.status) {
+      await WalletScope.of(
+        context,
+      ).updateTransactionStatus(transaction.id, next, hash: transaction.hash);
+      if (mounted) _reload();
+      return;
+    }
+    _scheduleStatusCheck(transaction);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      _statusTimer?.cancel();
+      return;
+    }
+    final future = _transaction;
+    if (future != null) {
+      future.then((transaction) {
+        if (transaction != null) _checkStatus(transaction);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _statusTimer?.cancel();
+    super.dispose();
   }
 
   Chain? _chainFor(Transaction tx) => switch (tx.coin) {
@@ -4121,13 +4317,15 @@ class TransferAuthSheet extends StatelessWidget {
         );
     final createdAt = DateTime.now().millisecondsSinceEpoch;
     final id = session!.localTransactionId ??= 'local_$createdAt';
+    final coin = rpcCoinForChain(draft.chain);
+    final from = addressForChain(wallet.addresses, draft.chain);
     var reserved = false;
     try {
       final String hash;
       if (isEvm) {
         final prepared = await service.prepareEvm(
           draft: draft,
-          from: addressForChain(wallet.addresses, draft.chain),
+          from: from,
           evmChainId: chainId!,
         );
         await controller.reserveOutgoingEvmTransaction(
@@ -4167,10 +4365,10 @@ class TransferAuthSheet extends StatelessWidget {
         );
         await controller.saveOutgoingTransaction(
           id: id,
-          coin: rpcCoinForChain(draft.chain),
+          coin: coin,
           networkId: network.id,
           contract: draft.tokenContract,
-          from: addressForChain(wallet.addresses, draft.chain),
+          from: from,
           to: draft.recipient,
           amountRaw: draft.amount.raw.toString(),
           hash: hash,
@@ -4180,6 +4378,17 @@ class TransferAuthSheet extends StatelessWidget {
           broadcastAt: createdAt,
         );
       }
+      await controller.saveIncomingForLocalWallets(
+        coin: coin,
+        networkId: network.id,
+        contract: draft.tokenContract,
+        from: from,
+        to: draft.recipient,
+        amountRaw: draft.amount.raw.toString(),
+        hash: hash,
+        createdAt: createdAt,
+        broadcastAt: DateTime.now().millisecondsSinceEpoch,
+      );
       session.broadcastTxHash = hash;
       if (context.mounted) context.go('/broadcast-result');
     } on EvmNonceConflict {

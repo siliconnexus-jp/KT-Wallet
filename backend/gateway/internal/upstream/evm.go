@@ -1,6 +1,7 @@
 package upstream
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,6 +25,28 @@ type EVM struct {
 // "polygon-amoy", ...).
 func NewEVM(name string, urls []string, clk clock.Clock, client *http.Client, attemptTimeout time.Duration) *EVM {
 	return &EVM{pool: NewPool(name, urls, clk, client, attemptTimeout)}
+}
+
+// NewEVMRoundRobin balances calls across the leading primaryCount endpoints,
+// then uses any remaining endpoints as ordered fallbacks.
+func NewEVMRoundRobin(
+	name string,
+	urls []string,
+	primaryCount int,
+	clk clock.Clock,
+	client *http.Client,
+	attemptTimeout time.Duration,
+) *EVM {
+	return &EVM{
+		pool: NewPoolRoundRobinPrefix(
+			name,
+			urls,
+			primaryCount,
+			clk,
+			client,
+			attemptTimeout,
+		),
+	}
 }
 
 func (e *EVM) call(ctx context.Context, method string, params ...any) (json.RawMessage, error) {
@@ -52,6 +75,46 @@ func (e *EVM) TokenBalance(ctx context.Context, contract, holder string) (*big.I
 // TransactionCount returns the pending nonce for address.
 func (e *EVM) TransactionCount(ctx context.Context, address string) (*big.Int, error) {
 	return e.quantity(ctx, "eth_getTransactionCount", address, "pending")
+}
+
+// TransactionStatus reads the node's transaction receipt directly. This is
+// intentionally independent of explorer/indexer history: an explorer may lag
+// behind the chain even after the recipient balance has changed.
+//
+// The returned status is one of "confirmed", "failed", "pending", "unknown".
+func (e *EVM) TransactionStatus(ctx context.Context, hash string) (string, error) {
+	raw, err := e.call(ctx, "eth_getTransactionReceipt", hash)
+	if err != nil {
+		return "", err
+	}
+	if !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		var receipt struct {
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal(raw, &receipt); err != nil {
+			return "", &Unavailable{Upstream: e.pool.name, Message: "malformed transaction receipt"}
+		}
+		switch strings.ToLower(receipt.Status) {
+		case "0x1":
+			return "confirmed", nil
+		case "0x0":
+			return "failed", nil
+		default:
+			return "", &Unavailable{Upstream: e.pool.name, Message: "transaction receipt has no valid status"}
+		}
+	}
+
+	// A known transaction without a receipt is still in the mempool. If the
+	// current node does not know it, keep the state "unknown" rather than
+	// falsely marking it dropped: another RPC may have accepted it.
+	raw, err = e.call(ctx, "eth_getTransactionByHash", hash)
+	if err != nil {
+		return "", err
+	}
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return "unknown", nil
+	}
+	return "pending", nil
 }
 
 // GasPrice returns eth_gasPrice in wei.

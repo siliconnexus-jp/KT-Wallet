@@ -61,6 +61,62 @@ class WalletStore {
   Future<db.Transaction?> transactionById(String walletId, String id) =>
       _wallets.scoped(walletId).transactionById(id);
 
+  /// Backfills incoming rows for transfers made between wallets managed by
+  /// this installation. This also repairs transfers created by older app
+  /// versions before immediate recipient mirroring existed.
+  Future<void> mirrorIncomingTransactions({
+    required String targetWalletId,
+    required Map<String, String> addressesByCoin,
+    Set<String>? networkIds,
+  }) => _db.transaction(() async {
+    final outgoing =
+        await (_db.select(_db.transactions)..where(
+              (tx) =>
+                  tx.walletId.equals(targetWalletId).not() &
+                  tx.direction.equals(db.TxDirection.outgoing.index),
+            ))
+            .get();
+    for (final source in outgoing) {
+      final hash = source.hash;
+      final target = addressesByCoin[source.coin];
+      if (hash == null ||
+          target == null ||
+          source.networkId == null ||
+          (networkIds != null && !networkIds.contains(source.networkId)) ||
+          source.status == db.TxStatus.failed ||
+          source.status == db.TxStatus.expired ||
+          source.status == db.TxStatus.dropped ||
+          source.status == db.TxStatus.replaced) {
+        continue;
+      }
+      final evm =
+          source.coin == Coin.eth.name ||
+          source.coin == Coin.polygon.name ||
+          source.coin == Coin.base.name ||
+          source.coin == Coin.arbitrum.name ||
+          source.coin == Coin.avalanche.name ||
+          source.coin == Coin.bnb.name;
+      final matches = evm
+          ? source.toAddr.toLowerCase() == target.toLowerCase()
+          : source.toAddr == target;
+      if (!matches) continue;
+      await upsertIncomingTransaction(
+        id: 'incoming_${targetWalletId}_${hash}_${source.contract ?? 'native'}',
+        walletId: targetWalletId,
+        coin: Coin.values.firstWhere((coin) => coin.name == source.coin),
+        networkId: source.networkId!,
+        contract: source.contract,
+        from: source.fromAddr,
+        to: source.toAddr,
+        amountRaw: source.amountRaw,
+        hash: hash,
+        status: source.status,
+        createdAt: source.createdAt,
+        broadcastAt: source.broadcastAt,
+      );
+    }
+  });
+
   Future<void> upsertTransaction({
     required String id,
     required String walletId,
@@ -111,6 +167,40 @@ class WalletStore {
           replacesId: Value(replacesId),
           replacedById: Value(replacedById),
           replacementKind: Value(replacementKind),
+        ),
+      );
+
+  Future<void> upsertIncomingTransaction({
+    required String id,
+    required String walletId,
+    required Coin coin,
+    required String networkId,
+    String? contract,
+    required String from,
+    required String to,
+    required String amountRaw,
+    required String hash,
+    required db.TxStatus status,
+    required int createdAt,
+    int? broadcastAt,
+  }) => _wallets
+      .scoped(walletId)
+      .upsertTransaction(
+        db.TransactionsCompanion.insert(
+          id: id,
+          walletId: walletId,
+          coin: coin.name,
+          networkId: Value(networkId),
+          contract: Value(contract),
+          direction: db.TxDirection.incoming,
+          fromAddr: from,
+          toAddr: to,
+          amountRaw: amountRaw,
+          hash: Value(hash),
+          status: status,
+          signMode: db.SignMode.local,
+          createdAt: createdAt,
+          broadcastAt: Value(broadcastAt),
         ),
       );
 

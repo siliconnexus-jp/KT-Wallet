@@ -51,6 +51,8 @@ curl -s localhost:8080/rpc -d '{"jsonrpc":"2.0","id":1,"method":"kt_health"}'
 | `COINGECKO_API_URL` | `https://api.coingecko.com` | CoinGecko base URL (override for tests/proxies) |
 | `ETHERSCAN_API_KEY` | *(unset)* | Optional EVM history enrichment/fallback for all twelve EVM networks; required only for Polygon Amoy |
 | `ETHERSCAN_API_URL` | `https://api.etherscan.io/v2/api` | Etherscan-family endpoint |
+| `ALCHEMY_API_KEYS` | *(unset)* | Comma-separated Alchemy keys; round-robin EVM RPC and indexed history across all keys, with automatic failover |
+| `ALCHEMY_API_KEY` | *(unset)* | Backward-compatible single-key fallback, used only when `ALCHEMY_API_KEYS` is empty |
 | `HELIUS_API_KEY` | *(unset)* | Optional Solana parsed-history enrichment (exact native transfer); standard RPC remains available without it |
 | `HELIUS_API_URL` | `https://mainnet.helius-rpc.com` | Helius RPC base URL (`sol-mainnet` transfer history) |
 | `HELIUS_DEVNET_API_URL` | `https://devnet.helius-rpc.com` | Helius RPC base URL (`sol-devnet` transfer history) |
@@ -69,7 +71,8 @@ Operational behavior (fixed by contract):
   partner out of the box — add more endpoints via that network's `*_RPC_URLS`
   variable to get one.
 - **Caching** — prices 30 s; balances 10 s keyed (network, address,
-  tokenset-hash); chain params 5 s; history 30 s. Broadcast is never cached.
+  tokenset-hash); chain params 5 s; history 5 s. Broadcast and direct
+  transaction-status checks are never cached.
   Cache keys include the network id: a testnet answer is never served for a
   mainnet request (or vice versa).
 - **Rate limiting** — inbound: token bucket per client IP → `-32001` when
@@ -198,15 +201,15 @@ monotonic: slow ≤ standard ≤ fast.
   `TransferContract` transactions, merged newest-first. TRC-20 rows include
   their contract and are verified against the active network's registry.
   `tron-nile` runs the same code against the nile TronGrid base URL.
-- **EVM families** — Etherscan v2 is preferred when `ETHERSCAN_API_KEY` is
-  configured. Without a key (or when Etherscan is temporarily unavailable),
-  Ethereum, Polygon mainnet, Base, Arbitrum, Avalanche and BNB use keyless
-  Blockscout/Routescan explorers. Polygon Amoy is the sole exception: its
-  official explorer requires an API key, so it reports `unsupported` when no
-  Etherscan key is configured. Normal transactions and ERC-20 transfers are
-  kept as event-level rows (`hash + logIndex`), so multiple transfers in one
-  transaction are not lost; only its zero-value contract wrapper is removed.
-  Token symbols/decimals are authoritative only for registered contracts.
+- **EVM families** — Alchemy Transfers API is preferred when
+  `ALCHEMY_API_KEY` is configured and covers native/internal/ERC-20 movements
+  on all twelve EVM networks, including BNB 56/97 and Polygon Amoy. The same
+  key also prepends Alchemy to every EVM JSON-RPC failover pool for balances,
+  fee estimation, status checks and broadcasts. If Alchemy is unavailable,
+  Etherscan v2 (`ETHERSCAN_API_KEY`) and then keyless Blockscout/Routescan
+  explorers remain fallbacks. Transfer rows keep their event-level
+  `uniqueId`, so multiple transfers in one transaction are not lost. Token
+  symbols/decimals are authoritative only for registered contracts.
 - **solana** — Helius `getTransfersByAddress` is preferred when
   `HELIUS_API_KEY` is set. Without it, standard Solana RPC loads signatures
   and transaction details and derives native/SPL balance deltas. Unknown SPL
