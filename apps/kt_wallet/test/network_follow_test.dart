@@ -278,6 +278,7 @@ void main() {
         usdcBaseSepoliaToken,
         usdcArbitrumSepoliaToken,
         usdcAvalancheFujiToken,
+        busdBnbTestnetToken,
         usdtTronNileToken,
         usdcSolanaDevnetToken,
         pyusdSolanaDevnetToken,
@@ -292,6 +293,7 @@ void main() {
         baseSepolia.rpcUrl,
         arbitrumSepolia.rpcUrl,
         avalancheFuji.rpcUrl,
+        bnbTestnet.rpcUrl,
         solanaDevnet.rpcUrl,
         solanaDevnet.rpcUrl,
       ]);
@@ -564,7 +566,7 @@ void main() {
       );
       final result = await service.fetch(Coin.tron, 'TTronAddr');
       expect(result.status, HistoryStatus.ok);
-      expect(seen, hasLength(2)); // trc20 + native,并发两条
+      expect(seen, hasLength(3)); // trc20 + native + internal,并发三条
       for (final url in seen) {
         expect(url, startsWith('https://nile.trongrid.io/v1/accounts/'));
       }

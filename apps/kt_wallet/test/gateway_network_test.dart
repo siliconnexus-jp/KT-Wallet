@@ -630,7 +630,7 @@ void main() {
       );
       final result = await service.fetch(Coin.tron, 'TTronAddr');
       expect(result.status, HistoryStatus.ok);
-      expect(tronGridHits, 2); // trc20 + native
+      expect(tronGridHits, 3); // trc20 + native + internal
       expect(gateway.paramsOf('kt_getHistory'), isEmpty);
     });
   });

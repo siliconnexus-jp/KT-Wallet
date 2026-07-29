@@ -1,6 +1,7 @@
 package upstream
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -57,6 +58,20 @@ type EtherscanTokenTx struct {
 	IsError         string `json:"isError"`
 }
 
+// EtherscanInternalTx is one native-value movement emitted from an EVM call
+// trace (`module=account&action=txlistinternal`). Contract-based faucets,
+// multisigs, bridges, and airdrops can credit a wallet this way without
+// producing a normal transaction whose `to` is the wallet.
+type EtherscanInternalTx struct {
+	Hash      string `json:"hash"`
+	TraceID   string `json:"traceId"`
+	From      string `json:"from"`
+	To        string `json:"to"`
+	Value     string `json:"value"`
+	TimeStamp string `json:"timeStamp"`
+	IsError   string `json:"isError"`
+}
+
 // TxList fetches the newest `limit` normal transactions for address on the
 // given chain id.
 func (e *Etherscan) TxList(ctx context.Context, chainID int, address string, limit int) ([]EtherscanTx, error) {
@@ -71,6 +86,15 @@ func (e *Etherscan) TxList(ctx context.Context, chainID int, address string, lim
 func (e *Etherscan) TokenTxList(ctx context.Context, chainID int, address string, limit int) ([]EtherscanTokenTx, error) {
 	var txs []EtherscanTokenTx
 	if err := e.accountList(ctx, chainID, address, limit, "tokentx", &txs); err != nil {
+		return nil, err
+	}
+	return txs, nil
+}
+
+// InternalTxList fetches native-value call-trace transfers involving address.
+func (e *Etherscan) InternalTxList(ctx context.Context, chainID int, address string, limit int) ([]EtherscanInternalTx, error) {
+	var txs []EtherscanInternalTx
+	if err := e.accountList(ctx, chainID, address, limit, "txlistinternal", &txs); err != nil {
 		return nil, err
 	}
 	return txs, nil
@@ -113,6 +137,14 @@ func (e *Etherscan) accountList(ctx context.Context, chainID int, address string
 	}
 	if err := json.Unmarshal(data, &out); err != nil {
 		return &Unavailable{Upstream: "etherscan", Message: "malformed Etherscan response"}
+	}
+	trimmedResult := bytes.TrimSpace(out.Result)
+	if len(trimmedResult) == 0 || bytes.Equal(trimmedResult, []byte("null")) {
+		msg := out.Message
+		if msg == "" {
+			msg = "explorer returned no result"
+		}
+		return &Unavailable{Upstream: "etherscan", Message: msg}
 	}
 	if err := json.Unmarshal(out.Result, dest); err != nil {
 		// status "0" + non-array result carries an error string

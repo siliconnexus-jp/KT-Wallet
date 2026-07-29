@@ -1,0 +1,80 @@
+{
+  "capturedAt": "2026-07-29T11:28:04+09:00",
+  "platform": "iPhone 17 Pro Simulator / iOS 26.2",
+  "walletAddress": "0xb787f3c2f96403b5a73dc66de68e4a6395d4e632",
+  "gateway": {
+    "url": "https://gateway.kt-wallet.com",
+    "version": "1.7.1",
+    "health": "ok",
+    "polygonAmoyBalanceAndFees": "ok",
+    "polygonAmoyHistory": {
+      "status": "ok",
+      "recordCount": 11,
+      "assets": ["POL", "USDC"],
+      "requiredTransactionHashesPresent": true
+    },
+    "bnbTestnetBalance": "ok",
+    "bnbTestnetHistory": "unsupported"
+  },
+  "transactions": [
+    {
+      "network": "Polygon Amoy",
+      "asset": "POL",
+      "hash": "0xa8095d58d53cf837a072b415cb82d70ec4b07ab06c24464f2fae65ca8b5f1b7a",
+      "blockNumber": "0x2974cae",
+      "receiptStatus": "0x1",
+      "to": "0x000000000000000000000000000000000000dead",
+      "gasUsed": "0x5208"
+    },
+    {
+      "network": "Polygon Amoy",
+      "asset": "Circle USDC",
+      "hash": "0x1ade19d1f8c17d75a42fc3eab919f4939ac03fb78ac037082882ab4777111bd9",
+      "blockNumber": "0x2974cdd",
+      "receiptStatus": "0x1",
+      "to": "0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582",
+      "gasUsed": "0xea3b"
+    },
+    {
+      "network": "BNB Smart Chain Testnet",
+      "asset": "tBNB",
+      "hash": "0x6ec2963a6e437c8f452e6d67e0f5a17c7785b1e082ccc5edcfad25204c8b073c",
+      "blockNumber": "0x743a8ef",
+      "receiptStatus": "0x1",
+      "to": "0xb787f3c2f96403b5a73dc66de68e4a6395d4e632",
+      "gasUsed": "0x5208"
+    },
+    {
+      "network": "BNB Smart Chain Testnet",
+      "asset": "tBNB",
+      "hash": "0xb6bbed2c7c16908d9b9fc07b08e620ce2647502d920b24fc4283147aa0056be3",
+      "blockNumber": "0x743b8de",
+      "receiptStatus": "0x1",
+      "to": "0xb787f3c2f96403b5a73dc66de68e4a6395d4e632",
+      "gasUsed": "0x5208"
+    },
+    {
+      "network": "BNB Smart Chain Testnet",
+      "asset": "BUSD bootstrap swap",
+      "hash": "0x0122368527979e6c9d41aa18ff72bb86bc67889b7ad010998902272fc384abca",
+      "blockNumber": "0x743b916",
+      "receiptStatus": "0x1",
+      "to": "0xd99d1c33f9fc3444f8101754abc46c52416550d1",
+      "gasUsed": "0x1f493"
+    },
+    {
+      "network": "BNB Smart Chain Testnet",
+      "asset": "BUSD",
+      "hash": "0xb021e7c244acb73a7a000e9f11174fe35d58e19c98685e24730527286fbfaeb6",
+      "blockNumber": "0x743b945",
+      "receiptStatus": "0x1",
+      "to": "0xed24fc36d5ee211ea25a80239fb8c4cfd80f12ee",
+      "gasUsed": "0xa307"
+    }
+  ],
+  "security": {
+    "mnemonicIncluded": false,
+    "privateKeyIncluded": false,
+    "mainnetTransactionPerformed": false
+  }
+}

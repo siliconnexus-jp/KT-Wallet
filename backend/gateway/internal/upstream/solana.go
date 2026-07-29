@@ -41,6 +41,11 @@ type Solana struct {
 	pool *Pool
 }
 
+const (
+	splTokenProgram     = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+	splToken2022Program = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+)
+
 // NewSolana builds a Solana client over the given RPC URLs.
 func NewSolana(urls []string, clk clock.Clock, client *http.Client, attemptTimeout time.Duration) *Solana {
 	return &Solana{pool: NewPool("solana", urls, clk, client, attemptTimeout)}
@@ -106,6 +111,41 @@ func (s *Solana) GetTokenBalance(ctx context.Context, address, mint string) (*bi
 	return total, nil
 }
 
+// GetOwnedTokenAccounts returns legacy SPL and Token-2022 account addresses
+// owned by the wallet. Incoming transfers to an existing ATA touch the token
+// account, not necessarily the owner public key, so owner-only signature
+// history is incomplete.
+func (s *Solana) GetOwnedTokenAccounts(ctx context.Context, owner string) ([]string, error) {
+	seen := map[string]bool{}
+	accounts := make([]string, 0)
+	for _, programID := range []string{splTokenProgram, splToken2022Program} {
+		raw, err := s.pool.Call(ctx, "getTokenAccountsByOwner", []any{
+			owner,
+			map[string]string{"programId": programID},
+			map[string]string{"encoding": "jsonParsed", "commitment": "confirmed"},
+		})
+		if err != nil {
+			return nil, err
+		}
+		var out struct {
+			Value []struct {
+				Pubkey string `json:"pubkey"`
+			} `json:"value"`
+		}
+		if err := json.Unmarshal(raw, &out); err != nil {
+			return nil, &Unavailable{Upstream: "solana", Message: "malformed token account result"}
+		}
+		for _, account := range out.Value {
+			if account.Pubkey == "" || seen[account.Pubkey] {
+				continue
+			}
+			seen[account.Pubkey] = true
+			accounts = append(accounts, account.Pubkey)
+		}
+	}
+	return accounts, nil
+}
+
 // GetSignaturesForAddress returns the newest transaction signatures touching
 // address. This is a standard Solana JSON-RPC method and needs no indexer key.
 func (s *Solana) GetSignaturesForAddress(ctx context.Context, address string, limit int) ([]SolanaSignature, error) {
@@ -129,9 +169,10 @@ func (s SolanaSignature) Failed() bool {
 	return len(trimmed) != 0 && !bytes.Equal(trimmed, []byte("null"))
 }
 
-// GetTransactionAccountImpact resolves direction and native SOL delta for an
-// address from preBalances/postBalances. It intentionally does not claim an
-// SPL-token amount; token history requires an enriched indexer such as Helius.
+// GetTransactionAccountImpact resolves native SOL and owned SPL-token balance
+// deltas from one parsed transaction. It works even when an incoming token
+// transfer touches only the recipient ATA and omits the owner public key from
+// the transaction account list.
 func (s *Solana) GetTransactionAccountImpact(ctx context.Context, signature, address string) (*SolanaAccountImpact, error) {
 	raw, err := s.pool.Call(ctx, "getTransaction", []any{
 		signature,
@@ -182,28 +223,27 @@ func (s *Solana) GetTransactionAccountImpact(ctx context.Context, signature, add
 			break
 		}
 	}
-	if index < 0 || index >= len(out.Meta.PreBalances) || index >= len(out.Meta.PostBalances) {
-		return nil, &Unavailable{Upstream: "solana", Message: "address missing from transaction balances"}
-	}
-	pre, ok := new(big.Int).SetString(out.Meta.PreBalances[index].String(), 10)
-	if !ok {
-		return nil, &Unavailable{Upstream: "solana", Message: "malformed preBalance"}
-	}
-	post, ok := new(big.Int).SetString(out.Meta.PostBalances[index].String(), 10)
-	if !ok {
-		return nil, &Unavailable{Upstream: "solana", Message: "malformed postBalance"}
-	}
-	delta := new(big.Int).Sub(post, pre)
+	delta := new(big.Int)
 	direction := "in"
-	switch delta.Sign() {
-	case -1:
-		direction = "out"
-		delta.Abs(delta)
-	case 0:
-		// A zero native delta is common for token/program interactions. The
-		// signer initiated it; a non-signer was touched by it.
-		if signer {
+	if index >= 0 && index < len(out.Meta.PreBalances) && index < len(out.Meta.PostBalances) {
+		pre, ok := new(big.Int).SetString(out.Meta.PreBalances[index].String(), 10)
+		if !ok {
+			return nil, &Unavailable{Upstream: "solana", Message: "malformed preBalance"}
+		}
+		post, ok := new(big.Int).SetString(out.Meta.PostBalances[index].String(), 10)
+		if !ok {
+			return nil, &Unavailable{Upstream: "solana", Message: "malformed postBalance"}
+		}
+		delta.Sub(post, pre)
+		switch delta.Sign() {
+		case -1:
 			direction = "out"
+			delta.Abs(delta)
+		case 0:
+			// A zero native delta is common for token/program interactions.
+			if signer {
+				direction = "out"
+			}
 		}
 	}
 	tokenDeltas := map[string]*big.Int{}
@@ -245,6 +285,9 @@ func (s *Solana) GetTransactionAccountImpact(ctx context.Context, signature, add
 			Amount:    tokenDelta,
 			Decimals:  tokenDecimals[mint],
 		})
+	}
+	if index < 0 && len(tokenImpacts) == 0 {
+		return nil, &Unavailable{Upstream: "solana", Message: "address missing from transaction balances"}
 	}
 	return &SolanaAccountImpact{
 		Direction: direction,

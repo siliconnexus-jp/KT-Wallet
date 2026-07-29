@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KT Wallet · iOS 全链 E2E 报告 · 2026-07-29</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #070a12;
+      --panel: #0e1422;
+      --panel-2: #131b2d;
+      --line: rgba(255,255,255,.09);
+      --text: #f5f7ff;
+      --muted: #98a3b9;
+      --blue: #5f7cff;
+      --cyan: #45d5d0;
+      --green: #47dc97;
+      --amber: #f3b54a;
+      --red: #ff6b7c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(95,124,255,.18), transparent 29rem),
+        radial-gradient(circle at 88% 12%, rgba(69,213,208,.1), transparent 25rem),
+        var(--bg);
+      color: var(--text);
+      font: 15px/1.65 -apple-system, BlinkMacSystemFont, "SF Pro Display",
+        "PingFang SC", "Noto Sans CJK SC", sans-serif;
+    }
+    a { color: #9eb0ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+    header { padding: 72px 0 38px; }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px;
+      background: rgba(255,255,255,.04); color: #c9d2e8; font-size: 12px;
+      letter-spacing: .08em; text-transform: uppercase;
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 18px var(--green); }
+    h1 { margin: 22px 0 12px; font-size: clamp(38px, 7vw, 74px); line-height: 1.02; letter-spacing: -.045em; }
+    .lede { max-width: 780px; color: #b6c0d5; font-size: 18px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 24px; }
+    .tag { padding: 6px 10px; border-radius: 8px; color: var(--muted); background: rgba(255,255,255,.045); border: 1px solid var(--line); font-size: 12px; }
+    section { margin: 24px 0; padding: 26px; border: 1px solid var(--line); border-radius: 24px; background: linear-gradient(145deg, rgba(19,27,45,.94), rgba(10,15,26,.94)); box-shadow: 0 24px 80px rgba(0,0,0,.25); }
+    h2 { margin: 0 0 18px; font-size: 24px; letter-spacing: -.02em; }
+    h3 { margin: 0 0 8px; font-size: 16px; }
+    p { margin: 8px 0; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .stat { min-height: 124px; padding: 18px; border-radius: 18px; background: rgba(255,255,255,.035); border: 1px solid var(--line); }
+    .stat strong { display: block; margin-top: 16px; font-size: 34px; letter-spacing: -.04em; }
+    .stat span { color: var(--muted); font-size: 12px; }
+    .pass { color: var(--green); }
+    .warn { color: var(--amber); }
+    .fail { color: var(--red); }
+    .table-scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 920px; }
+    th, td { padding: 13px 10px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+    td { font-size: 13px; }
+    code { padding: 2px 6px; border-radius: 6px; color: #dbe2f8; background: rgba(255,255,255,.06); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .hash { display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .status { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; }
+    .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+    .callouts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .callout { padding: 18px; border-radius: 18px; border: 1px solid var(--line); background: rgba(255,255,255,.03); }
+    .callout.warning { border-color: rgba(243,181,74,.26); background: rgba(243,181,74,.06); }
+    .callout.error { border-color: rgba(255,107,124,.24); background: rgba(255,107,124,.055); }
+    .callout p { color: #b9c3d6; font-size: 13px; }
+    .gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    figure { margin: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: #0a0e18; }
+    figure img { display: block; width: 100%; height: 560px; object-fit: cover; object-position: top; background: #f4f5f8; }
+    figcaption { padding: 13px 15px; color: #c5cee1; border-top: 1px solid var(--line); }
+    figcaption small { display: block; color: var(--muted); margin-top: 2px; }
+    .wide { grid-column: span 2; }
+    .wide img { object-fit: contain; background: #0a0e18; }
+    ul { padding-left: 20px; color: #c2cbdd; }
+    footer { padding: 36px 0 72px; color: var(--muted); font-size: 12px; }
+    @media (max-width: 900px) {
+      header { padding-top: 48px; }
+      .stats, .gallery { grid-template-columns: repeat(2, 1fr); }
+      .callouts { grid-template-columns: 1fr; }
+      .wide { grid-column: span 2; }
+    }
+    @media (max-width: 620px) {
+      .wrap { width: min(100% - 20px, 1180px); }
+      section { padding: 18px; border-radius: 19px; }
+      .stats, .gallery { grid-template-columns: 1fr; }
+      .wide { grid-column: span 1; }
+      figure img { height: auto; max-height: none; object-fit: contain; }
+      h1 { font-size: 42px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="wrap">
+    <div class="eyebrow"><span class="dot"></span> Real testnet · No mock</div>
+    <h1>iOS 全链 E2E<br>测试报告</h1>
+    <p class="lede">
+      KT Wallet 在 iPhone 17 Pro / iOS 26.2 Simulator 上完成当前 8 条链的真实地址派生、
+      Wallet Core 签名、Face ID 授权、测试网广播、链上确认、余额与交易记录 UI 验收。
+    </p>
+    <div class="meta">
+      <span class="tag">2026-07-29 · Asia/Tokyo</span>
+      <span class="tag">Flutter 3.44.2</span>
+      <span class="tag">Gateway 1.7.1</span>
+      <span class="tag">真实测试助记词 · 未写入报告</span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section>
+      <h2>结论</h2>
+      <div class="stats">
+        <div class="stat"><span>原生币发送</span><strong class="pass">8 / 8</strong></div>
+        <div class="stat"><span>已配置稳定币发送</span><strong class="pass">8 / 8</strong></div>
+        <div class="stat"><span>累计链上确认交易</span><strong class="pass">22</strong></div>
+        <div class="stat"><span>Gateway 新交易可见</span><strong class="warn">7 / 8</strong></div>
+      </div>
+      <p>
+        转账与签名主链路已通过。原报告的 16 笔链上证据之外，本轮又重新广播并确认
+        Polygon Amoy POL、Polygon Amoy Circle USDC、BNB Testnet tBNB 与 BUSD。
+        BNB Smart Chain 不在 Circle 官方 USDC 发行网络中，本轮改用 BSC Testnet
+        的 Binance USD 测试部署；余额不足时先以 0.001 tBNB 在测试网兑换，
+        再由 KT Wallet 真实签名并发送 1 BUSD。
+        本轮机器可读证据见
+        <a href="evidence-2026-07-29-rerun.json">evidence-2026-07-29-rerun.json</a>。
+      </p>
+    </section>
+
+    <section>
+      <h2>逐链结果与链上证据</h2>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>网络</th>
+              <th>原生币</th>
+              <th>稳定币</th>
+              <th>交易记录</th>
+              <th>链上链接</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Ethereum Sepolia</td>
+              <td><span class="status pass">ETH 已确认</span></td>
+              <td><span class="status pass">Test USDT 已确认</span></td>
+              <td><span class="status pass">Gateway 已命中</span></td>
+              <td>
+                <a class="hash" href="https://sepolia.etherscan.io/tx/0xcfa83586c4aecb381004fe3212db4bfde76673e623aa936415623e11b442306e">ETH · 0xcfa835…2306e</a>
+                <a class="hash" href="https://sepolia.etherscan.io/tx/0x20a86a9b24f5216124306f4efad0cb7f3ddf0e26c062b4ce56df87896c08827c">USDT · 0x20a86a…8827c</a>
+              </td>
+            </tr>
+            <tr>
+              <td>Polygon Amoy</td>
+              <td><span class="status pass">POL 已确认</span></td>
+              <td><span class="status pass">USDC 已确认</span></td>
+              <td><span class="status pass">Gateway 已命中</span></td>
+              <td>
+                <a class="hash" href="https://amoy.polygonscan.com/tx/0xa8095d58d53cf837a072b415cb82d70ec4b07ab06c24464f2fae65ca8b5f1b7a">POL · 0xa8095d…f1b7a</a>
+                <a class="hash" href="https://amoy.polygonscan.com/tx/0x1ade19d1f8c17d75a42fc3eab919f4939ac03fb78ac037082882ab4777111bd9">USDC · 0x1ade19…11bd9</a>
+              </td>
+            </tr>
+            <tr>
+              <td>Base Sepolia</td>
+              <td><span class="status pass">ETH 已确认</span></td>
+              <td><span class="status pass">USDC 已确认</span></td>
+              <td><span class="status pass">Gateway 已命中</span></td>
+              <td>
+                <a class="hash" href="https://sepolia.basescan.org/tx/0x5d7a29292f3850abc455945acffd8292335c529c720e3ea4a30a89f8b8096dc7">ETH · 0x5d7a29…6dc7</a>
+                <a class="hash" href="https://sepolia.basescan.org/tx/0x7c39b53b233c3b0861600cdb5ca61417283f87cecf5448c0231b5d8cbf9618aa">USDC · 0x7c39b5…18aa</a>
+              </td>
+            </tr>
+            <tr>
+              <td>Arbitrum Sepolia</td>
+              <td><span class="status pass">ETH 已确认</span></td>
+              <td><span class="status pass">USDC 已确认</span></td>
+              <td><span class="status pass">Gateway 已命中</span></td>
+              <td>
+                <a class="hash" href="https://sepolia.arbiscan.io/tx/0xeb8d2d4270d9481fbedaeef22718853aadc6fd5624f72a636d0ab171ec648d98">ETH · 0xeb8d2d…8d98</a>
+                <a class="hash" href="https://sepolia.arbiscan.io/tx/0xe8c98086db282b9c1c4cfee1a73dee40609f257f3283cc22d45e3b8d19c3ca64">USDC · 0xe8c980…ca64</a>
+              </td>
+            </tr>
+            <tr>
+              <td>Avalanche Fuji</td>
+              <td><span class="status pass">AVAX 已确认</span></td>
+              <td><span class="status pass">USDC 已确认</span></td>
+              <td><span class="status pass">Gateway 已命中</span></td>
+              <td>
+                <a class="hash" href="https://testnet.snowtrace.io/tx/0x8fc5f399248ce2fdeb1e7892ca0b641d57c9031e5251b23a5e6e7e130bc33c62">AVAX · 0x8fc5f3…3c62</a>
+                <a class="hash" href="https://testnet.snowtrace.io/tx/0xf0cf033bedeae296f6e7045651587b919788e8536b8e2646c8d962dd2f824896">USDC · 0xf0cf03…4896</a>
+              </td>
+            </tr>
+            <tr>
+              <td>BNB Smart Chain Testnet</td>
+              <td><span class="status pass">BNB 已确认</span></td>
+              <td><span class="status pass">BUSD 已确认</span></td>
+              <td><span class="status warn">明确 unsupported</span></td>
+              <td>
+                <a class="hash" href="https://testnet.bscscan.com/tx/0xb6bbed2c7c16908d9b9fc07b08e620ce2647502d920b24fc4283147aa0056be3">tBNB · 0xb6bbed…56be3</a>
+                <a class="hash" href="https://testnet.bscscan.com/tx/0xb021e7c244acb73a7a000e9f11174fe35d58e19c98685e24730527286fbfaeb6">BUSD · 0xb021e7…faeb6</a>
+              </td>
+            </tr>
+            <tr>
+              <td>TRON Nile</td>
+              <td><span class="status pass">TRX 已确认</span></td>
+              <td><span class="status pass">Test USDT 已确认</span></td>
+              <td><span class="status pass">Gateway 已命中</span></td>
+              <td>
+                <a class="hash" href="https://nile.tronscan.org/#/transaction/6ce25302d9ccfeab62a966b187c4797aa7b7331759911d5af495017ac98a4087">TRX · 6ce253…4087</a>
+                <a class="hash" href="https://nile.tronscan.org/#/transaction/80f70a7c3206fcfe88704835e1e6842a8d9989cd7c31284c7268663fca63ceb6">USDT · 80f70a…ceb6</a>
+              </td>
+            </tr>
+            <tr>
+              <td>Solana Devnet</td>
+              <td><span class="status pass">SOL 已确认</span></td>
+              <td><span class="status pass">Circle USDC 已确认</span></td>
+              <td><span class="status pass">Gateway 已命中</span></td>
+              <td>
+                <a class="hash" href="https://explorer.solana.com/tx/4YT4m5XvfRtdb1nxa5t1b9wCqWuWud1ae24GrikSjswQKijDWvchDdv6FcECqTe95yQTbyM16CC5jRbyVwwxie4N?cluster=devnet">SOL · 4YT4m5…xie4N</a>
+                <a class="hash" href="https://explorer.solana.com/tx/4kEzkJ6rrPd25UTyX1JH7MvPkrRZgPRzzw2vrAd5mDsfwJgqopYDPPBV3ab23YcT7JAYkXCUNMPyHu6DewZhy8NA?cluster=devnet">USDC · 4kEzkJ…y8NA</a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>本轮修复与保留边界</h2>
+      <div class="callouts">
+        <article class="callout error">
+          <h3>首页余额聚合仍显示 <code>--</code></h3>
+          <p>
+            同一次 iOS 会话中，转账页能够读取真实 AVAX、USDC 等余额并完成发送，
+            但首页资产列表仍为 <code>--</code>。问题位于首页 MarketController
+            聚合刷新/状态映射，不在地址派生、RPC 基础余额或签名发送链路。
+          </p>
+        </article>
+        <article class="callout">
+          <h3>Polygon Amoy Gateway 与历史索引已通过</h3>
+          <p>
+            已移除失效的 <code>rpc-amoy.polygon.technology</code>，改为两个独立
+            RPC 并启用 failover。Gateway 1.7.1 公网实测可读取真实 POL、USDC、
+            nonce 与动态费用；Etherscan V2 索引已配置，真实查询返回 11 条
+            POL/USDC 记录，本轮两笔 txHash 均已命中。
+          </p>
+        </article>
+        <article class="callout warning">
+          <h3>BNB 历史现在 fail-closed</h3>
+          <p>
+            Routescan 已停止索引 BNB 56/97，Gateway 1.7.1 已移除该失效源。
+            现在返回 <code>unsupported</code>，不会再把上游下线误报为“钱包无记录”。
+            完整历史仍需配置支持 BNB 的可信索引服务；App 自己广播的交易继续由本地
+            Pending/Confirmed 记录合并展示。
+          </p>
+        </article>
+        <article class="callout">
+          <h3>iOS 自动化需响应 Face ID</h3>
+          <p>
+            首轮测试因系统签名授权未响应而超时，随后通过 Simulator 的
+            Matching Face 完成每一次签名授权并全部通过。这证明测试确实走了原生认证，
+            但持续自动化应增加可复用的 Face ID 驱动步骤。
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <h2>iOS 实机画面证据</h2>
+      <div class="gallery">
+        <figure class="wide">
+          <img src="screenshots/ios-01-live-testnet-home.png" alt="iOS 测试网首页">
+          <figcaption>测试网首页<small>可见当前聚合余额仍为 --，已列为问题。</small></figcaption>
+        </figure>
+        <figure>
+          <img src="screenshots/ios-18-live-wallet-history.png" alt="全部交易记录">
+          <figcaption>全部币种交易记录<small>来自 Gateway 的真实测试网记录。</small></figcaption>
+        </figure>
+        <figure>
+          <img src="screenshots/ios-19-base-usdc-live-history.png" alt="Base USDC 单币记录">
+          <figcaption>Base Sepolia USDC 记录<small>按网络与合约过滤。</small></figcaption>
+        </figure>
+        <figure><img src="screenshots/ios-native-ethereum.png" alt="Ethereum 转账"><figcaption>Ethereum Sepolia · ETH</figcaption></figure>
+        <figure><img src="screenshots/ios-stable-ethereum-usdt.png" alt="Ethereum USDT 转账"><figcaption>Ethereum Sepolia · Test USDT</figcaption></figure>
+        <figure><img src="screenshots/ios-native-polygon.png" alt="Polygon 转账"><figcaption>Polygon Amoy · POL</figcaption></figure>
+        <figure><img src="screenshots/ios-stable-polygon-usdc.png" alt="Polygon USDC 转账"><figcaption>Polygon Amoy · USDC</figcaption></figure>
+        <figure><img src="screenshots/ios-native-base.png" alt="Base 转账"><figcaption>Base Sepolia · ETH</figcaption></figure>
+        <figure><img src="screenshots/ios-stable-base-usdc.png" alt="Base USDC 转账"><figcaption>Base Sepolia · USDC</figcaption></figure>
+        <figure><img src="screenshots/ios-native-arbitrum.png" alt="Arbitrum 转账"><figcaption>Arbitrum Sepolia · ETH</figcaption></figure>
+        <figure><img src="screenshots/ios-stable-arbitrum-usdc.png" alt="Arbitrum USDC 转账"><figcaption>Arbitrum Sepolia · USDC</figcaption></figure>
+        <figure><img src="screenshots/ios-native-avalanche.png" alt="Avalanche 转账"><figcaption>Avalanche Fuji · AVAX</figcaption></figure>
+        <figure><img src="screenshots/ios-stable-avalanche-usdc.png" alt="Avalanche USDC 转账"><figcaption>Avalanche Fuji · USDC</figcaption></figure>
+        <figure><img src="screenshots/ios-native-bnb.png" alt="BNB 转账"><figcaption>BNB Testnet · BNB</figcaption></figure>
+        <figure><img src="screenshots/ios-stable-bnb-busd.png" alt="BNB BUSD 转账"><figcaption>BNB Testnet · BUSD<small>真实余额 21.363304321080390567 BUSD。</small></figcaption></figure>
+        <figure class="wide"><img src="10-bnb-busd-bscscan.png" alt="BUSD BscScan 成功回执"><figcaption>BscScan 测试网回执<small>1 BUSD 转账，Status: Success。</small></figcaption></figure>
+        <figure><img src="screenshots/ios-native-tron.png" alt="TRON 转账"><figcaption>TRON Nile · TRX</figcaption></figure>
+        <figure><img src="screenshots/ios-stable-tron-usdt.png" alt="TRON USDT 转账"><figcaption>TRON Nile · Test USDT</figcaption></figure>
+        <figure><img src="screenshots/ios-native-solana.png" alt="Solana 转账"><figcaption>Solana Devnet · SOL</figcaption></figure>
+        <figure><img src="screenshots/ios-stable-solana-usdc.png" alt="Solana USDC 转账"><figcaption>Solana Devnet · Circle USDC</figcaption></figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>测试方法</h2>
+      <ul>
+        <li>从本机忽略文件加载测试助记词；报告和终端输出不包含助记词或私钥。</li>
+        <li>iOS 原生 <code>MethodChannelCoreCrypto</code> 保存钱包、派生地址和签名；未启用 <code>KT_ALLOW_MOCK_CRYPTO</code>。</li>
+        <li>每笔交易经过真实 Face ID 授权、测试网广播、receipt/status 确认和发送后余额校验。</li>
+        <li>交易记录通过生产 Gateway <code>https://gateway.kt-wallet.com/rpc</code> 再次查询，并验证本轮 txHash 是否出现。</li>
+        <li>UI 截图由同一个真实测试账户在 iOS Simulator 中生成；新增 BUSD 转账页与 BscScan 成功回执截图。</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="wrap">
+    KT Wallet iOS E2E · 仅使用测试网资产 · 生成于 2026-07-29
+  </footer>
+</body>
+</html>

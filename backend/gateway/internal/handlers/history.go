@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"ktwallet/gateway/internal/rpc"
 	"ktwallet/gateway/internal/upstream"
@@ -110,8 +111,12 @@ func (g *Gateway) tronHistory(ctx context.Context, network, address string, limi
 	if err != nil {
 		return nil, upstreamError("trongrid", err)
 	}
+	internal, err := tron.InternalTransactions(ctx, address, limit)
+	if err != nil {
+		return nil, upstreamError("trongrid", err)
+	}
 
-	records := make([]historyRecord, 0, len(trc20)+len(native))
+	records := make([]historyRecord, 0, len(trc20)+len(native)+len(internal))
 	tokenHashes := make(map[string]bool, len(trc20))
 	for i, t := range trc20 {
 		dir := "in"
@@ -147,14 +152,64 @@ func (g *Gateway) tronHistory(ctx context.Context, network, address string, limi
 		if !t.Success {
 			status = "failed"
 		}
+		id := t.TxID
+		decimals := 6
+		symbol := "TRX"
+		contract := ""
+		verified := true
+		if t.TokenID != "" {
+			id += ":trc10:" + t.TokenID
+			decimals = 0
+			symbol = "TRC10"
+			contract = t.TokenID
+			verified = false
+		}
 		records = append(records, historyRecord{
-			ID:          t.TxID,
+			ID:          id,
 			Hash:        t.TxID,
 			Direction:   dir,
 			AmountRaw:   t.Amount,
-			Decimals:    6,
-			Symbol:      "TRX",
-			Verified:    true,
+			Decimals:    decimals,
+			Symbol:      symbol,
+			Contract:    contract,
+			Verified:    verified,
+			TimestampMs: t.BlockTimestamp,
+			Status:      status,
+		})
+	}
+	for _, t := range internal {
+		from := strings.ToLower(t.From)
+		to := strings.ToLower(t.To)
+		if from != selfHex && to != selfHex {
+			continue
+		}
+		dir := "in"
+		if from == selfHex {
+			dir = "out"
+		}
+		status := "ok"
+		if !t.Success {
+			status = "failed"
+		}
+		decimals := 6
+		symbol := "TRX"
+		contract := ""
+		verified := true
+		if t.TokenID != "" {
+			decimals = 0
+			symbol = "TRC10"
+			contract = t.TokenID
+			verified = false
+		}
+		records = append(records, historyRecord{
+			ID:          t.TxID + ":internal:" + t.InternalTxID,
+			Hash:        t.TxID,
+			Direction:   dir,
+			AmountRaw:   t.Amount,
+			Decimals:    decimals,
+			Symbol:      symbol,
+			Contract:    contract,
+			Verified:    verified,
 			TimestampMs: t.BlockTimestamp,
 			Status:      status,
 		})
@@ -179,14 +234,17 @@ func (g *Gateway) tronHistory(ctx context.Context, network, address string, limi
 func (g *Gateway) evmHistory(ctx context.Context, chain, network, address string, limit int) (*historyResult, *rpc.Error) {
 	chainID := networks[network].EtherscanChainID
 	var (
-		txs        []upstream.EtherscanTx
-		tokenTxs   []upstream.EtherscanTokenTx
-		primaryErr error
+		txs         []upstream.EtherscanTx
+		tokenTxs    []upstream.EtherscanTokenTx
+		internalTxs []upstream.EtherscanInternalTx
+		primaryErr  error
 	)
 	// Etherscan v2 is multichain and covers every supported EVM network,
 	// including Polygon Amoy, when a key is configured.
 	if g.cfg.EtherscanKey != "" {
-		txs, tokenTxs, primaryErr = evmHistoryLists(ctx, g.scan, chainID, address, limit)
+		txs, tokenTxs, internalTxs, primaryErr = evmHistoryLists(
+			ctx, g.scan, chainID, address, limit, true,
+		)
 		if primaryErr == nil {
 			return evmHistoryResult(
 				chain,
@@ -194,6 +252,7 @@ func (g *Gateway) evmHistory(ctx context.Context, chain, network, address string
 				limit,
 				txs,
 				tokenTxs,
+				internalTxs,
 				g.officialByNetwork[network],
 			), nil
 		}
@@ -203,7 +262,9 @@ func (g *Gateway) evmHistory(ctx context.Context, chain, network, address string
 	// temporarily unhealthy.
 	if fallback := g.historyScan[network]; fallback != nil {
 		var err error
-		txs, tokenTxs, err = evmHistoryLists(ctx, fallback, chainID, address, limit)
+		txs, tokenTxs, internalTxs, err = evmHistoryLists(
+			ctx, fallback, chainID, address, limit, true,
+		)
 		if err == nil {
 			return evmHistoryResult(
 				chain,
@@ -211,6 +272,7 @@ func (g *Gateway) evmHistory(ctx context.Context, chain, network, address string
 				limit,
 				txs,
 				tokenTxs,
+				internalTxs,
 				g.officialByNetwork[network],
 			), nil
 		}
@@ -230,16 +292,24 @@ func evmHistoryLists(
 	chainID int,
 	address string,
 	limit int,
-) ([]upstream.EtherscanTx, []upstream.EtherscanTokenTx, error) {
+	includeInternal bool,
+) ([]upstream.EtherscanTx, []upstream.EtherscanTokenTx, []upstream.EtherscanInternalTx, error) {
 	txs, err := source.TxList(ctx, chainID, address, limit)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	tokenTxs, err := source.TokenTxList(ctx, chainID, address, limit)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return txs, tokenTxs, nil
+	var internalTxs []upstream.EtherscanInternalTx
+	if includeInternal {
+		// Internal traces are an enrichment layer. Some otherwise compatible
+		// explorers do not expose txlistinternal; that must not hide normal and
+		// token history which was already fetched successfully.
+		internalTxs, _ = source.InternalTxList(ctx, chainID, address, limit)
+	}
+	return txs, tokenTxs, internalTxs, nil
 }
 
 func evmHistoryResult(
@@ -247,11 +317,16 @@ func evmHistoryResult(
 	limit int,
 	txs []upstream.EtherscanTx,
 	tokenTxs []upstream.EtherscanTokenTx,
+	internalTxs []upstream.EtherscanInternalTx,
 	registry map[string]tokenMeta,
 ) *historyResult {
 	self := strings.ToLower(address)
 	symbol := chains[chain].Symbol
-	records := make([]historyRecord, 0, len(txs)+len(tokenTxs))
+	records := make([]historyRecord, 0, len(txs)+len(tokenTxs)+len(internalTxs))
+	normalMovements := make(map[string]bool, len(txs))
+	for _, t := range txs {
+		normalMovements[evmMovementKey(t.Hash, t.From, t.To, t.Value, t.TimeStamp)] = true
+	}
 	// Token transfers are appended first so the ERC-20 amount wins when the
 	// same hash also appears as its zero-value contract-call wrapper.
 	for i, t := range tokenTxs {
@@ -288,6 +363,48 @@ func evmHistoryResult(
 			Symbol:      tokenSymbol,
 			Contract:    contract,
 			Verified:    verified,
+			TimestampMs: ts * 1000,
+			Status:      status,
+		})
+	}
+	for i, t := range internalTxs {
+		if t.Hash == "" || t.Value == "" || t.Value == "0" {
+			continue
+		}
+		// Some nominally Etherscan-compatible explorers return the normal
+		// txlist body for txlistinternal. Suppress that false duplicate.
+		if normalMovements[evmMovementKey(t.Hash, t.From, t.To, t.Value, t.TimeStamp)] {
+			continue
+		}
+		from := strings.ToLower(t.From)
+		to := strings.ToLower(t.To)
+		if from != self && to != self {
+			continue
+		}
+		dir := "in"
+		if from == self {
+			dir = "out"
+		}
+		status := "ok"
+		if t.IsError != "" && t.IsError != "0" {
+			status = "failed"
+		}
+		ts, err := strconv.ParseInt(t.TimeStamp, 10, 64)
+		if err != nil {
+			continue
+		}
+		traceID := t.TraceID
+		if traceID == "" {
+			traceID = strconv.Itoa(i)
+		}
+		records = append(records, historyRecord{
+			ID:          t.Hash + ":internal:" + traceID,
+			Hash:        t.Hash,
+			Direction:   dir,
+			AmountRaw:   t.Value,
+			Decimals:    18,
+			Symbol:      symbol,
+			Verified:    true,
 			TimestampMs: ts * 1000,
 			Status:      status,
 		})
@@ -341,6 +458,13 @@ func evmHistoryResult(
 	return &historyResult{Status: "ok", Records: deduped}
 }
 
+func evmMovementKey(hash, from, to, value, timestamp string) string {
+	return strings.Join(
+		[]string{hash, strings.ToLower(from), strings.ToLower(to), value, timestamp},
+		"|",
+	)
+}
+
 func (g *Gateway) solanaHistory(ctx context.Context, network, address string, limit int) (*historyResult, *rpc.Error) {
 	if g.cfg.HeliusKey != "" {
 		transfers, err := g.hel[network].Transfers(ctx, address, limit)
@@ -355,7 +479,7 @@ func (g *Gateway) solanaHistory(ctx context.Context, network, address string, li
 		// Helius is an optional enrichment layer. A key/configuration outage
 		// must not hide the standard signature history available from RPC.
 	}
-	signatures, err := g.sol[network].GetSignaturesForAddress(ctx, address, limit)
+	signatures, err := g.solanaHistorySignatures(ctx, network, address, limit)
 	if err != nil {
 		return nil, upstreamError("solana", err)
 	}
@@ -428,6 +552,78 @@ func (g *Gateway) solanaHistory(ctx context.Context, network, address string, li
 		return nil, upstreamError("solana", detailErr)
 	}
 	return &historyResult{Status: "ok", Records: records}, nil
+}
+
+func (g *Gateway) solanaHistorySignatures(
+	ctx context.Context,
+	network, owner string,
+	limit int,
+) ([]upstream.SolanaSignature, error) {
+	node := g.sol[network]
+	ownerSignatures, err := node.GetSignaturesForAddress(ctx, owner, limit)
+	if err != nil {
+		return nil, err
+	}
+	bySignature := make(map[string]upstream.SolanaSignature)
+	for _, signature := range ownerSignatures {
+		if signature.Signature != "" {
+			bySignature[signature.Signature] = signature
+		}
+	}
+	tokenAccounts, err := node.GetOwnedTokenAccounts(ctx, owner)
+	if err == nil {
+		// Bound fan-out for wallets that have accumulated hundreds of spam
+		// token accounts. Registered/common assets are normally far below it.
+		if len(tokenAccounts) > 32 {
+			tokenAccounts = tokenAccounts[:32]
+		}
+		var mu sync.Mutex
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, 6)
+		for _, tokenAccount := range tokenAccounts {
+			wg.Add(1)
+			go func(account string) {
+				defer wg.Done()
+				select {
+				case sem <- struct{}{}:
+					defer func() { <-sem }()
+				case <-ctx.Done():
+					return
+				}
+				rows, rowErr := node.GetSignaturesForAddress(ctx, account, limit)
+				if rowErr != nil {
+					return
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				for _, signature := range rows {
+					if signature.Signature != "" {
+						bySignature[signature.Signature] = signature
+					}
+				}
+			}(tokenAccount)
+		}
+		wg.Wait()
+	}
+	signatures := make([]upstream.SolanaSignature, 0, len(bySignature))
+	for _, signature := range bySignature {
+		signatures = append(signatures, signature)
+	}
+	sort.SliceStable(signatures, func(i, j int) bool {
+		left, right := signatures[i].BlockTime, signatures[j].BlockTime
+		if left == nil {
+			return false
+		}
+		if right == nil {
+			return true
+		}
+		return *left > *right
+	})
+	maxCandidates := limit * 4
+	if len(signatures) > maxCandidates {
+		signatures = signatures[:maxCandidates]
+	}
+	return signatures, nil
 }
 
 func heliusHistoryResult(

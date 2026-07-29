@@ -10,7 +10,10 @@ import 'package:kt_wallet/src/rpc/http_transport.dart';
 import 'package:kt_wallet/src/transfer/broadcast_service.dart';
 import 'package:kt_wallet/src/transfer/chain_params_service.dart';
 
-const _walletId = 'polygon-amoy-e2e-v1';
+// Bump the fixture id when the simulator may contain an older Keychain entry
+// created with biometric access control. This E2E wallet is intentionally
+// stored with requireAuth=false and tests signing, not the authentication UI.
+const _walletId = 'polygon-amoy-e2e-v2';
 const _rpcUrl = 'https://polygon-amoy-bor-rpc.publicnode.com';
 const _usdc = '0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582';
 const _sink = '0x000000000000000000000000000000000000dEaD';
@@ -44,11 +47,15 @@ void main() {
       );
 
       try {
+        // ignore: avoid_print
+        print('POLYGON_E2E_STAGE=READ_BALANCES');
         final polBefore = await rpc.getBalance(addresses.polygon);
         final usdcBefore = await rpc.erc20Balance(_usdc, addresses.polygon);
         expect(polBefore, greaterThan(BigInt.from(1000000000000000)));
         expect(usdcBefore, greaterThanOrEqualTo(BigInt.from(1000000)));
 
+        // ignore: avoid_print
+        print('POLYGON_E2E_STAGE=NATIVE_PARAMS');
         final nativeParams = await params.fetchEvmParams(
           Chain.polygon,
           addresses.polygon,
@@ -63,6 +70,8 @@ void main() {
           value: BigInt.from(1000000000000),
           data: Uint8List(0),
         ).encodeUnsigned();
+        // ignore: avoid_print
+        print('POLYGON_E2E_STAGE=NATIVE_SIGN_BROADCAST');
         final nativeHash = await _signBroadcastAndConfirm(
           crypto,
           broadcaster,
@@ -70,6 +79,8 @@ void main() {
           nativeTx,
         );
 
+        // ignore: avoid_print
+        print('POLYGON_E2E_STAGE=TOKEN_PARAMS');
         final tokenParams = await params.fetchEvmParams(
           Chain.polygon,
           addresses.polygon,
@@ -84,6 +95,8 @@ void main() {
           value: BigInt.zero,
           data: Erc20.transferCalldata(to: _sink, amount: BigInt.from(1000000)),
         ).encodeUnsigned();
+        // ignore: avoid_print
+        print('POLYGON_E2E_STAGE=TOKEN_SIGN_BROADCAST');
         final tokenHash = await _signBroadcastAndConfirm(
           crypto,
           broadcaster,
@@ -91,6 +104,8 @@ void main() {
           tokenTx,
         );
 
+        // ignore: avoid_print
+        print('POLYGON_E2E_STAGE=VERIFY_BALANCES');
         expect(await rpc.getBalance(addresses.polygon), lessThan(polBefore));
         expect(
           await rpc.erc20Balance(_usdc, addresses.polygon),
@@ -114,14 +129,20 @@ Future<String> _signBroadcastAndConfirm(
   JsonRpcTransport transport,
   Uint8List unsigned,
 ) async {
+  // ignore: avoid_print
+  print('POLYGON_E2E_STAGE=SIGN');
   final signed = await crypto.signTransaction(
     walletId: _walletId,
     coin: Coin.polygon,
     signingInput: unsigned,
   );
+  // ignore: avoid_print
+  print('POLYGON_E2E_STAGE=BROADCAST');
   final result = await broadcaster.broadcast(Chain.polygon, signed.signedTx);
   expect(result.status, BroadcastStatus.ok, reason: result.message);
   final hash = result.txHash!;
+  // ignore: avoid_print
+  print('POLYGON_E2E_STAGE=WAIT_RECEIPT:$hash');
   final receipt = await _waitForReceipt(transport, hash);
   expect(receipt['status'], '0x1', reason: '$receipt');
   return hash;

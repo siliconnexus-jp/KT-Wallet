@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -172,6 +173,39 @@ func TestNewEVMFamilyHistoryUsesEtherscanChainID(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAvalancheHistoryIncludesInternalNativeReceipt(t *testing.T) {
+	scan := newRESTFake(t)
+	scan.route("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("action") == "txlistinternal" {
+			_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[{
+				"hash":"0xairdrop","traceId":"0_1",
+				"from":"0x2222222222222222222222222222222222222222","to":%q,
+				"value":"5000000000000000","timeStamp":"1700000100","isError":"0"
+			}]}`, evmSelf)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"status":"1","message":"OK","result":[]}`)
+	})
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.EVMHistoryFallbackURLs = map[string]string{
+			"avalanche-fuji": scan.srv.URL,
+		}
+	})
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(
+		`{"chain":"avalanche","network":"avalanche-fuji","address":%q}`, evmSelf,
+	)))
+	assertJSONEq(t, `[{
+		"id":"0xairdrop:internal:0_1","hash":"0xairdrop","direction":"in",
+		"amountRaw":"5000000000000000","decimals":18,"symbol":"AVAX",
+		"verified":true,"timestampMs":1700000100000,"status":"ok"
+	}]`, res["records"])
+	if scan.hitCount("/") != 3 {
+		t.Fatalf("Avalanche history must query normal, token and internal lists")
 	}
 }
 

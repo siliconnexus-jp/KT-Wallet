@@ -290,13 +290,10 @@ void main() {
         final ethCall = params.firstWhere((p) => p['chain'] == 'eth');
         final ethTokens = ethCall['tokens'] as List<Object?>;
         expect(ethTokens, hasLength(11));
-        final dai = ethTokens
-            .cast<Map<String, Object?>>()
-            .firstWhere((token) => token['symbol'] == 'DAI');
-        expect(
-          dai['contract'],
-          '0x6B175474E89094C44Da98b954EedeAC495271d0F',
+        final dai = ethTokens.cast<Map<String, Object?>>().firstWhere(
+          (token) => token['symbol'] == 'DAI',
         );
+        expect(dai['contract'], '0x6B175474E89094C44Da98b954EedeAC495271d0F');
         expect(dai['decimals'], 18);
       },
     );
@@ -660,7 +657,7 @@ void main() {
           'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
         );
         expect(tron.status, HistoryStatus.ok); // direct TronGrid answered
-        expect(tronGridHits, 2); // trc20 + native endpoints
+        expect(tronGridHits, 3); // trc20 + native + internal endpoints
 
         // No direct history source exists for the other chains: an honest
         // error (the gateway WAS configured), never a silent "unsupported".
@@ -677,7 +674,14 @@ void main() {
         final service = HistoryService(
           client: MockClient((request) async {
             if (request.url.host.contains('blockscout')) {
-              return http.Response(jsonEncode({'items': <Object?>[]}), 200);
+              return http.Response(
+                jsonEncode({
+                  'status': '1',
+                  'message': 'OK',
+                  'result': <Object?>[],
+                }),
+                200,
+              );
             }
             if (request.url.host.contains('solana')) {
               return http.Response(

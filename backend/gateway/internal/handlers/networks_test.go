@@ -26,6 +26,27 @@ func newEthPairEnv(t *testing.T) (mainnet, sepolia *rpcFake, e *env) {
 	return mainnet, sepolia, e
 }
 
+func TestProductionTestnetDefaultsAvoidRetiredUpstreams(t *testing.T) {
+	cfg := handlers.Defaults()
+
+	if len(cfg.PolygonAmoyURLs) < 2 {
+		t.Fatalf("Polygon Amoy needs provider failover, got %v", cfg.PolygonAmoyURLs)
+	}
+	for _, endpoint := range cfg.PolygonAmoyURLs {
+		if strings.Contains(endpoint, "rpc-amoy.polygon.technology") {
+			t.Fatalf("retired Polygon Amoy endpoint must not be shipped: %s", endpoint)
+		}
+	}
+	if len(cfg.BNBTestnetURLs) < 2 {
+		t.Fatalf("BNB Testnet needs provider failover, got %v", cfg.BNBTestnetURLs)
+	}
+	for _, network := range []string{"bnb-mainnet", "bnb-testnet"} {
+		if endpoint := cfg.EVMHistoryFallbackURLs[network]; endpoint != "" {
+			t.Fatalf("%s must not use the retired Routescan index: %s", network, endpoint)
+		}
+	}
+}
+
 func TestNetworkOmittedUsesMainnetUpstream(t *testing.T) {
 	mainnet, sepolia, e := newEthPairEnv(t)
 
@@ -183,7 +204,7 @@ func TestTronNileHistory(t *testing.T) {
 		{"id":"tdup:trc20:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:1","hash":"tdup","direction":"in","amountRaw":"250000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":false,"timestampMs":3000,"status":"ok"},
 		{"id":"n3","hash":"n3","direction":"out","amountRaw":"42","decimals":6,"symbol":"TRX","verified":true,"timestampMs":2000,"status":"failed"}
 	]`, res["records"])
-	if got := nile.hitCount("/v1/accounts/"); got != 2 { // trc20 + native
+	if got := nile.hitCount("/v1/accounts/"); got != 3 { // trc20 + native + internal
 		t.Fatalf("nile base URL must serve the history calls, hits = %d", got)
 	}
 	if len(mainGrid.hitsFor("/")) != 0 {
@@ -303,10 +324,10 @@ func TestHistoryCacheIsolatedPerNetwork(t *testing.T) {
 	result(t, e.rpc("kt_getHistory", pNile)) // must not be served from the mainnet cache entry
 	result(t, e.rpc("kt_getHistory", pMain))
 	result(t, e.rpc("kt_getHistory", pNile))
-	if got := mainGrid.hitCount("/v1/accounts/"); got != 2 { // trc20 + native, fetched once
+	if got := mainGrid.hitCount("/v1/accounts/"); got != 3 { // all history feeds, fetched once
 		t.Fatalf("mainnet history should be fetched once then cached, hits = %d", got)
 	}
-	if got := nile.hitCount("/v1/accounts/"); got != 2 {
+	if got := nile.hitCount("/v1/accounts/"); got != 3 {
 		t.Fatalf("nile history should be fetched once then cached, hits = %d", got)
 	}
 }

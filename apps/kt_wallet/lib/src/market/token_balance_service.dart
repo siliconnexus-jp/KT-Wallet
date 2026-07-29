@@ -346,6 +346,18 @@ const busdBnbToken = TokenInfo(
   network: 'BNB Smart Chain',
 );
 
+/// Legacy Binance-issued BUSD used by the BSC Testnet faucet and PancakeSwap
+/// test pools. It is a test-only deployment and must never be queried while
+/// the active BNB network is mainnet.
+const busdBnbTestnetToken = TokenInfo(
+  id: 'busd-bnb-testnet',
+  symbol: 'BUSD',
+  chain: Coin.bnb,
+  contract: '0xeD24FC36d5Ee211Ea25A80239Fb8C4Cfd80f12Ee',
+  decimals: 18,
+  network: 'BNB Smart Chain Testnet',
+);
+
 const pyusdEthToken = TokenInfo(
   id: 'pyusd-eth',
   symbol: 'PYUSD',
@@ -469,7 +481,7 @@ const builtinTokensByNetworkId = <String, List<TokenInfo>>{
   'avalanche-mainnet': [usdcAvalancheToken, usdtAvalancheToken],
   'avalanche-fuji': [usdcAvalancheFujiToken],
   'bnb-mainnet': [busdBnbToken],
-  'bnb-testnet': [],
+  'bnb-testnet': [busdBnbTestnetToken],
   'tron-mainnet': [usdtTronToken],
   'tron-nile': [usdtTronNileToken],
   'sol-mainnet': [

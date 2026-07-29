@@ -159,12 +159,13 @@ type NativeTransfer struct {
 	TxID           string
 	Owner, To      string // hex (41-prefixed)
 	Amount         string
+	TokenID        string // non-empty for TransferAssetContract (TRC-10)
 	BlockTimestamp int64
 	Success        bool
 }
 
-// NativeTransactions lists native transactions for addr, keeping only
-// TransferContract entries.
+// NativeTransactions lists protocol-level value transfers for addr:
+// TransferContract (TRX) and TransferAssetContract (TRC-10).
 func (t *Tron) NativeTransactions(ctx context.Context, addr string, limit int) ([]NativeTransfer, error) {
 	var out struct {
 		Data []struct {
@@ -181,6 +182,7 @@ func (t *Tron) NativeTransactions(ctx context.Context, addr string, limit int) (
 							Amount       json.Number `json:"amount"`
 							OwnerAddress string      `json:"owner_address"`
 							ToAddress    string      `json:"to_address"`
+							AssetName    string      `json:"asset_name"`
 						} `json:"value"`
 					} `json:"parameter"`
 				} `json:"contract"`
@@ -193,7 +195,11 @@ func (t *Tron) NativeTransactions(ctx context.Context, addr string, limit int) (
 	}
 	var transfers []NativeTransfer
 	for _, d := range out.Data {
-		if len(d.RawData.Contract) == 0 || d.RawData.Contract[0].Type != "TransferContract" {
+		if len(d.RawData.Contract) == 0 {
+			continue
+		}
+		contractType := d.RawData.Contract[0].Type
+		if contractType != "TransferContract" && contractType != "TransferAssetContract" {
 			continue
 		}
 		v := d.RawData.Contract[0].Parameter.Value
@@ -206,11 +212,94 @@ func (t *Tron) NativeTransactions(ctx context.Context, addr string, limit int) (
 			Owner:          v.OwnerAddress,
 			To:             v.ToAddress,
 			Amount:         v.Amount.String(),
+			TokenID:        v.AssetName,
 			BlockTimestamp: d.BlockTimestamp,
 			Success:        success,
 		})
 	}
 	return transfers, nil
+}
+
+// InternalTransfer is a TRX/TRC-10 value movement created while a smart
+// contract executes. TronGrid normalizes the parent transaction id and the
+// internal trace id separately.
+type InternalTransfer struct {
+	TxID, InternalTxID string
+	From, To           string // hex (41-prefixed)
+	Amount             string
+	TokenID            string // empty means TRX
+	BlockTimestamp     int64
+	Success            bool
+}
+
+// InternalTransactions lists contract-created value movements touching addr.
+func (t *Tron) InternalTransactions(ctx context.Context, addr string, limit int) ([]InternalTransfer, error) {
+	var out struct {
+		Data []struct {
+			TxID           string `json:"tx_id"`
+			InternalTxID   string `json:"internal_tx_id"`
+			From           string `json:"from_address"`
+			To             string `json:"to_address"`
+			BlockTimestamp int64  `json:"block_timestamp"`
+			Data           struct {
+				Rejected       bool            `json:"rejected"`
+				CallValue      json.RawMessage `json:"call_value"`
+				CallTokenValue json.RawMessage `json:"call_token_value"`
+				TokenID        json.RawMessage `json:"token_id"`
+			} `json:"data"`
+		} `json:"data"`
+	}
+	path := fmt.Sprintf(
+		"/v1/accounts/%s/internal-transactions?limit=%d&only_confirmed=true",
+		url.PathEscape(addr),
+		limit,
+	)
+	if err := t.do(ctx, http.MethodGet, path, nil, &out); err != nil {
+		return nil, err
+	}
+	transfers := make([]InternalTransfer, 0, len(out.Data))
+	for _, d := range out.Data {
+		amount := tronGridScalar(d.Data.CallValue)
+		tokenID := ""
+		if tokenAmount := tronGridScalar(d.Data.CallTokenValue); tokenAmount != "" {
+			amount = tokenAmount
+			tokenID = tronGridScalar(d.Data.TokenID)
+		}
+		if amount == "" || amount == "0" || d.TxID == "" || d.InternalTxID == "" {
+			continue
+		}
+		transfers = append(transfers, InternalTransfer{
+			TxID:           d.TxID,
+			InternalTxID:   d.InternalTxID,
+			From:           d.From,
+			To:             d.To,
+			Amount:         amount,
+			TokenID:        tokenID,
+			BlockTimestamp: d.BlockTimestamp,
+			Success:        !d.Data.Rejected,
+		})
+	}
+	return transfers, nil
+}
+
+func tronGridScalar(raw json.RawMessage) string {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return ""
+	}
+	var wrapped map[string]json.RawMessage
+	if json.Unmarshal(trimmed, &wrapped) == nil {
+		return tronGridScalar(wrapped["_"])
+	}
+	var text string
+	if json.Unmarshal(trimmed, &text) == nil {
+		return text
+	}
+	var number json.Number
+	if json.Unmarshal(trimmed, &number) == nil {
+		return number.String()
+	}
+	return ""
 }
 
 // Broadcast POSTs a signed transaction and returns the txid. The endpoint

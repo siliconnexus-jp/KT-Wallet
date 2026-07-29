@@ -395,6 +395,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
       final networks = NetworkScope.maybeOf(context);
       final controller = HistoryController(
         wallets: WalletScope.of(context),
+        networkChanges: networks,
         // Locally recorded rows are filtered to the ACTIVE network instances,
         // re-read on every refresh so an environment switch applies at once.
         activeNetworkIds: networks == null
@@ -441,65 +442,22 @@ class _RecordsScreenState extends State<RecordsScreen> {
     ),
   );
 
-  /// Loading placeholder: three '--' shimmer rows, mirroring the row layout.
+  /// Quiet structural placeholders that match a real transaction row.
   Widget _loadingCard() => KtCard(
-    child: Column(
-      children: [
-        for (var i = 0; i < 3; i++) ...[
-          if (i > 0)
-            Divider(
-              height: 1,
-              color: WalletColors.text.withValues(alpha: 0.06),
-            ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: WalletColors.text3.withValues(alpha: 0.08),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '--',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: WalletColors.text3,
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        '--',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: WalletColors.text3,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Text(
-                  '--',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: WalletColors.text3,
-                  ),
-                ),
-              ],
-            ),
-          ),
+    key: const ValueKey('history-loading-skeleton'),
+    child: ExcludeSemantics(
+      child: Column(
+        children: [
+          for (var i = 0; i < 3; i++) ...[
+            if (i > 0)
+              Divider(
+                height: 1,
+                color: WalletColors.text.withValues(alpha: 0.055),
+              ),
+            _HistorySkeletonRow(index: i),
+          ],
         ],
-      ],
+      ),
     ),
   );
 
@@ -654,6 +612,85 @@ class _RecordsScreenState extends State<RecordsScreen> {
       ],
     );
   }
+}
+
+class _HistorySkeletonRow extends StatelessWidget {
+  const _HistorySkeletonRow({required this.index});
+
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    final fill = WalletColors.text.withValues(alpha: 0.055);
+    final quietFill = WalletColors.text.withValues(alpha: 0.035);
+    return Padding(
+      key: ValueKey('history-skeleton-row-$index'),
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: fill, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _HistorySkeletonBar(
+                  width: index.isEven ? 78 : 92,
+                  height: 13,
+                  color: fill,
+                ),
+                const SizedBox(height: 8),
+                _HistorySkeletonBar(
+                  width: index.isEven ? 112 : 96,
+                  height: 10,
+                  color: quietFill,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 24),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              _HistorySkeletonBar(
+                width: index.isEven ? 68 : 82,
+                height: 13,
+                color: fill,
+              ),
+              const SizedBox(height: 8),
+              _HistorySkeletonBar(width: 44, height: 10, color: quietFill),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistorySkeletonBar extends StatelessWidget {
+  const _HistorySkeletonBar({
+    required this.width,
+    required this.height,
+    required this.color,
+  });
+
+  final double width;
+  final double height;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: width,
+    height: height,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(height / 2),
+    ),
+  );
 }
 
 /// "今天 14:32" / "昨天 09:11" / "7月17日 20:04"-style timestamp, reusing the

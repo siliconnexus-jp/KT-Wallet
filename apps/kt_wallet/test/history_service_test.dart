@@ -165,6 +165,9 @@ void main() {
               'meta': {'at': 1, 'page_size': 2},
             };
           }
+          if (request.url.path.endsWith('/internal-transactions')) {
+            return {'data': <Object?>[], 'success': true};
+          }
           expect(request.url.path, '/v1/accounts/$_me/transactions');
           expect(request.url.queryParameters['limit'], '20');
           return {
@@ -192,7 +195,7 @@ void main() {
 
       final result = await service.fetch(Coin.tron, _me);
       expect(result.status, HistoryStatus.ok);
-      // Merged newest-first, de-duplicated by hash.
+      // Merged newest-first; the TRC-20 wrapper is not a second transfer.
       expect(result.records.map((r) => r.hash), [
         'tx-out-usdt',
         'tx-out-trx',
@@ -300,7 +303,7 @@ void main() {
     final service = _service(
       body: (request) {
         if (request.url.host.contains('blockscout')) {
-          return {'items': <Object?>[]};
+          return {'status': '1', 'message': 'OK', 'result': <Object?>[]};
         }
         return {'jsonrpc': '2.0', 'id': 1, 'result': <Object?>[]};
       },
@@ -311,6 +314,221 @@ void main() {
       expect(result.records, isEmpty);
     }
   });
+
+  test('Avalanche direct history includes native internal receipts', () async {
+    final actions = <String>[];
+    final service = HistoryService(
+      endpoints: (coin) => coin == Coin.avalanche
+          ? 'https://api.avax-test.network/ext/bc/C/rpc'
+          : '',
+      client: MockClient((request) async {
+        final action = request.url.queryParameters['action']!;
+        actions.add(action);
+        final result = action == 'txlistinternal'
+            ? [
+                {
+                  'hash': '0xairdrop',
+                  'traceId': '0_1',
+                  'from': '0x1111111111111111111111111111111111111111',
+                  'to': '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                  'value': '5000000000000000',
+                  'timeStamp': '1700000100',
+                  'isError': '0',
+                },
+              ]
+            : <Object?>[];
+        return http.Response(
+          jsonEncode({'status': '1', 'message': 'OK', 'result': result}),
+          200,
+        );
+      }),
+    );
+
+    final result = await service.fetch(
+      Coin.avalanche,
+      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    );
+
+    expect(actions, ['txlist', 'tokentx', 'txlistinternal']);
+    expect(result.status, HistoryStatus.ok);
+    expect(result.records, hasLength(1));
+    expect(result.records.single.id, '0xairdrop:internal:0_1');
+    expect(result.records.single.outgoing, isFalse);
+    expect(result.records.single.amountText, '0.005 AVAX');
+  });
+
+  test(
+    'EVM direct history includes ERC-20 events with verified metadata',
+    () async {
+      const address = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      final service = HistoryService(
+        endpoints: (_) => 'https://rpc.ankr.com/eth',
+        client: MockClient((request) async {
+          final action = request.url.queryParameters['action'];
+          final result = action == 'tokentx'
+              ? [
+                  {
+                    'hash': '0xtoken',
+                    'logIndex': '3',
+                    'from': '0x1111111111111111111111111111111111111111',
+                    'to': address,
+                    'value': '2500000',
+                    'timeStamp': '1700000200',
+                    'tokenDecimal': '18',
+                    'tokenSymbol': 'FAKE',
+                    'contractAddress':
+                        '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+                    'isError': '0',
+                  },
+                ]
+              : <Object?>[];
+          return http.Response(
+            jsonEncode({'status': '1', 'message': 'OK', 'result': result}),
+            200,
+          );
+        }),
+      );
+
+      final record = (await service.fetch(Coin.eth, address)).records.single;
+      expect(record.id, contains(':token:'));
+      expect(record.amountText, '2.5 USDT');
+      expect(record.assetSymbol, 'USDT');
+      expect(record.assetVerified, isTrue);
+      expect(record.outgoing, isFalse);
+    },
+  );
+
+  test(
+    'Solana direct history finds an incoming SPL transfer through its ATA',
+    () async {
+      const owner = '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin';
+      const ata = 'Ata111111111111111111111111111111111111111';
+      const mint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+      final service = HistoryService(
+        endpoints: (_) => 'https://api.mainnet-beta.solana.com',
+        client: MockClient((request) async {
+          final payload = jsonDecode(request.body) as Map<String, dynamic>;
+          final method = payload['method'];
+          final params = payload['params'] as List<dynamic>;
+          final Object? result;
+          if (method == 'getTokenAccountsByOwner') {
+            result = {
+              'value': [
+                {'pubkey': ata},
+              ],
+            };
+          } else if (method == 'getSignaturesForAddress') {
+            result = params.first == ata
+                ? [
+                    {
+                      'signature': 'ata-signature',
+                      'blockTime': 1700000300,
+                      'err': null,
+                    },
+                  ]
+                : <Object?>[];
+          } else if (method == 'getTransaction') {
+            result = {
+              'meta': {
+                'err': null,
+                'preBalances': [100],
+                'postBalances': [100],
+                'preTokenBalances': [
+                  {
+                    'mint': mint,
+                    'owner': owner,
+                    'uiTokenAmount': {'amount': '1000000', 'decimals': 6},
+                  },
+                ],
+                'postTokenBalances': [
+                  {
+                    'mint': mint,
+                    'owner': owner,
+                    'uiTokenAmount': {'amount': '3000000', 'decimals': 6},
+                  },
+                ],
+              },
+              'transaction': {
+                'message': {
+                  // The wallet owner is deliberately absent; only its ATA was
+                  // touched by this incoming token transfer.
+                  'accountKeys': [
+                    {'pubkey': ata},
+                  ],
+                },
+              },
+            };
+          } else {
+            fail('unexpected Solana RPC method $method');
+          }
+          return http.Response(
+            jsonEncode({'jsonrpc': '2.0', 'id': 1, 'result': result}),
+            200,
+          );
+        }),
+      );
+
+      final record = (await service.fetch(Coin.solana, owner)).records.single;
+      expect(record.hash, 'ata-signature');
+      expect(record.outgoing, isFalse);
+      expect(record.amountText, '2 USDC');
+      expect(record.assetContract, mint);
+      expect(record.assetVerified, isTrue);
+    },
+  );
+
+  test(
+    'TRON direct history includes TRC-10 and internal TRX receipts',
+    () async {
+      final service = _service(
+        body: (request) {
+          if (request.url.path.endsWith('/transactions/trc20')) {
+            return {'data': <Object?>[]};
+          }
+          if (request.url.path.endsWith('/internal-transactions')) {
+            return {
+              'data': [
+                {
+                  'tx_id': 'parent',
+                  'internal_tx_id': 'trace-1',
+                  'from_address': '41b3dcf27c251da9363f1a4888257c16676cf54edf',
+                  'to_address': _meHex,
+                  'block_timestamp': 3000,
+                  'data': {
+                    'rejected': false,
+                    'call_value': {'_': '2500000'},
+                  },
+                },
+              ],
+            };
+          }
+          final trc10 = _nativeTransferItem(
+            hash: 'trc10',
+            ownerHex: _meHex,
+            ts: 2000,
+            amount: 42,
+          );
+          final contract =
+              ((trc10['raw_data'] as Map)['contract'] as List).first as Map;
+          contract['type'] = 'TransferAssetContract';
+          ((contract['parameter'] as Map)['value'] as Map)['asset_name'] =
+              '1002000';
+          return {
+            'data': [trc10],
+          };
+        },
+      );
+
+      final records = (await service.fetch(Coin.tron, _me)).records;
+      expect(records.map((record) => record.id), [
+        'parent:internal:trace-1',
+        'trc10:trc10:1002000',
+      ]);
+      expect(records.first.amountText, '2.5 TRX');
+      expect(records.last.amountText, '42 TRC10');
+      expect(records.last.assetVerified, isFalse);
+    },
+  );
 
   test(
     'a 400 for an invalid (demo mock) address surfaces as error status',

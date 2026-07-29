@@ -60,6 +60,10 @@ void main() {
       isKnownOfficialTokenIdentity('BUSD', officialBusdEthereumContract),
       isTrue,
     );
+    expect(
+      isKnownOfficialTokenIdentity('BUSD', busdBnbTestnetToken.contract),
+      isTrue,
+    );
   });
 
   test('the default static registry carries canonical stablecoins', () {

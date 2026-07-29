@@ -66,6 +66,7 @@ func defaultOfficialTokens() []OfficialToken {
 		{Network: "avalanche-mainnet", Symbol: "USDT", Name: "Tether USD", Contract: "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7", Decimals: 6, Popular: true},
 		{Network: "avalanche-fuji", Symbol: "USDC", Name: "Test USD Coin", Contract: "0x5425890298aed601595a70ab815c96711a31bc65", Decimals: 6},
 		{Network: "bnb-mainnet", Symbol: "BUSD", Name: "Binance-Peg BUSD", Contract: "0xe9e7cea3dedca5984780bafc599bd69add087d56", Decimals: 18, Popular: true},
+		{Network: "bnb-testnet", Symbol: "BUSD", Name: "Test Binance USD", Contract: "0xed24fc36d5ee211ea25a80239fb8c4cfd80f12ee", Decimals: 18},
 		{Network: "tron-mainnet", Symbol: "USDT", Name: "Tether USD", Contract: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", Decimals: 6, Popular: true},
 		{Network: "tron-nile", Symbol: "USDT", Name: "Test Tether USD", Contract: "TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf", Decimals: 6},
 		{Network: "sol-mainnet", Symbol: "USDC", Name: "USD Coin", Contract: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", Decimals: 6, Popular: true},

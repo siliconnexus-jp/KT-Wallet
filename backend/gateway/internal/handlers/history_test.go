@@ -43,6 +43,10 @@ func tronGridFixture(t *testing.T) *restFake {
 		],
 		"success": true
 	}`, tronOtherHex, tronSelfHex, tronOtherHex, tronSelfHex, tronSelfHex, tronOtherHex, tronSelfHex))
+	grid.routeJSON(
+		"/v1/accounts/"+tronSelfB58+"/internal-transactions",
+		`{"data":[],"success":true}`,
+	)
 	return grid
 }
 
@@ -80,6 +84,40 @@ func TestTronHistoryLimit(t *testing.T) {
 	}
 }
 
+func TestTronHistoryIncludesTRC10AndInternalTRX(t *testing.T) {
+	grid := newRESTFake(t)
+	grid.routeJSON(
+		"/v1/accounts/"+tronSelfB58+"/transactions/trc20",
+		`{"data":[],"success":true}`,
+	)
+	grid.routeJSON(
+		"/v1/accounts/"+tronSelfB58+"/internal-transactions",
+		fmt.Sprintf(`{"data":[{
+			"tx_id":"parent","internal_tx_id":"trace-1",
+			"from_address":%q,"to_address":%q,"block_timestamp":3000,
+			"data":{"rejected":false,"call_value":{"_":2500000}}
+		}],"success":true}`, tronOtherHex, tronSelfHex),
+	)
+	grid.routeJSON(
+		"/v1/accounts/"+tronSelfB58+"/transactions",
+		fmt.Sprintf(`{"data":[{
+			"txID":"trc10","block_timestamp":2000,
+			"ret":[{"contractRet":"SUCCESS"}],
+			"raw_data":{"contract":[{"type":"TransferAssetContract",
+				"parameter":{"value":{"amount":42,"asset_name":"1002000",
+					"owner_address":%q,"to_address":%q}}}]}
+		}],"success":true}`, tronSelfHex, tronOtherHex),
+	)
+	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
+
+	res := result(t, e.rpc("kt_getHistory",
+		fmt.Sprintf(`{"chain":"tron","address":%q}`, tronSelfB58)))
+	assertJSONEq(t, `[
+		{"id":"parent:internal:trace-1","hash":"parent","direction":"in","amountRaw":"2500000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":3000,"status":"ok"},
+		{"id":"trc10:trc10:1002000","hash":"trc10","direction":"out","amountRaw":"42","decimals":0,"symbol":"TRC10","contract":"1002000","verified":false,"timestampMs":2000,"status":"ok"}
+	]`, res["records"])
+}
+
 func TestTronHistoryUpstreamFailure(t *testing.T) {
 	grid := newRESTFake(t)
 	grid.route("/v1/accounts/", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(502) })
@@ -113,7 +151,7 @@ func TestEthHistoryWithoutKeyUsesPublicExplorer(t *testing.T) {
 	assertJSONEq(t, `[
 		{"id":"0xf1","hash":"0xf1","direction":"out","amountRaw":"77","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000300000,"status":"ok"}
 	]`, res["records"])
-	if explorer.hitCount("/") != 2 {
+	if explorer.hitCount("/") != 3 {
 		t.Fatal("keyless history must use the configured public explorer")
 	}
 }
@@ -162,8 +200,8 @@ func TestEthHistoryWithKey(t *testing.T) {
 	]`, res["records"])
 
 	hits := scan.hitsFor("/")
-	if len(hits) != 2 {
-		t.Fatalf("expected normal + token Etherscan calls, got %d", len(hits))
+	if len(hits) != 3 {
+		t.Fatalf("expected normal + token + internal Etherscan calls, got %d", len(hits))
 	}
 	u, _ := url.Parse(hits[0].Path)
 	q := u.Query()
@@ -178,6 +216,10 @@ func TestEthHistoryWithKey(t *testing.T) {
 	tokenURL, _ := url.Parse(hits[1].Path)
 	if tokenURL.Query().Get("action") != "tokentx" {
 		t.Fatalf("second Etherscan call must query tokentx: %s", hits[1].Path)
+	}
+	internalURL, _ := url.Parse(hits[2].Path)
+	if internalURL.Query().Get("action") != "txlistinternal" {
+		t.Fatalf("third Etherscan call must query txlistinternal: %s", hits[2].Path)
 	}
 }
 
@@ -318,7 +360,7 @@ func TestEthHistoryEtherscanFailureFallsBackToPublicExplorer(t *testing.T) {
 	assertJSONEq(t, `[
 		{"id":"0xfallback","hash":"0xfallback","direction":"in","amountRaw":"9","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000500000,"status":"ok"}
 	]`, res["records"])
-	if scan.hitCount("/") != 1 || explorer.hitCount("/") != 2 {
+	if scan.hitCount("/") != 1 || explorer.hitCount("/") != 3 {
 		t.Fatalf("expected primary then fallback, got scan=%d explorer=%d",
 			scan.hitCount("/"), explorer.hitCount("/"))
 	}
@@ -374,6 +416,63 @@ func TestSolanaHistoryWithoutKeyUsesRPC(t *testing.T) {
 	if node.count("getSignaturesForAddress") != 1 || node.count("getTransaction") != 1 {
 		t.Fatalf("expected signature + transaction RPC calls, got %d/%d",
 			node.count("getSignaturesForAddress"), node.count("getTransaction"))
+	}
+}
+
+func TestSolanaHistoryFindsIncomingSPLTransferThroughATA(t *testing.T) {
+	const (
+		ata  = "Ata111111111111111111111111111111111111111"
+		mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+	)
+	node := newRPCFake(t)
+	node.result("getTokenAccountsByOwner", map[string]any{
+		"value": []any{map[string]any{"pubkey": ata}},
+	})
+	node.handle("getSignaturesForAddress", func(params []json.RawMessage) (any, map[string]any) {
+		var account string
+		_ = json.Unmarshal(params[0], &account)
+		if account != ata {
+			return []any{}, nil
+		}
+		return []any{map[string]any{
+			"signature": "ata-sig",
+			"blockTime": 1700000600,
+			"err":       nil,
+		}}, nil
+	})
+	node.result("getTransaction", map[string]any{
+		"meta": map[string]any{
+			"preBalances":  []any{100},
+			"postBalances": []any{100},
+			"preTokenBalances": []any{map[string]any{
+				"mint": mint, "owner": solSelf,
+				"uiTokenAmount": map[string]any{"amount": "1000000", "decimals": 6},
+			}},
+			"postTokenBalances": []any{map[string]any{
+				"mint": mint, "owner": solSelf,
+				"uiTokenAmount": map[string]any{"amount": "3000000", "decimals": 6},
+			}},
+		},
+		"transaction": map[string]any{
+			"message": map[string]any{
+				// Owner deliberately absent: an incoming SPL transfer may
+				// touch only its associated token account.
+				"accountKeys": []any{map[string]any{"pubkey": ata}},
+			},
+		},
+	})
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.SolanaURLs = []string{node.srv.URL}
+	})
+
+	res := result(t, e.rpc("kt_getHistory",
+		fmt.Sprintf(`{"chain":"solana","address":%q}`, solSelf)))
+	assertJSONEq(t, `[
+		{"id":"ata-sig:spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","hash":"ata-sig","direction":"in","amountRaw":"2000000","decimals":6,"symbol":"USDC","contract":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","verified":true,"timestampMs":1700000600000,"status":"ok"}
+	]`, res["records"])
+	if node.count("getSignaturesForAddress") != 2 {
+		t.Fatalf("must query owner and deduplicated ATA signatures, got %d",
+			node.count("getSignaturesForAddress"))
 	}
 }
 
@@ -507,17 +606,17 @@ func TestHistoryCache(t *testing.T) {
 	p := fmt.Sprintf(`{"chain":"tron","address":%q}`, tronSelfB58)
 	result(t, e.rpc("kt_getHistory", p))
 	result(t, e.rpc("kt_getHistory", p))
-	if got := grid.hitCount("/v1/accounts/"); got != 2 { // trc20 + native, once each
+	if got := grid.hitCount("/v1/accounts/"); got != 3 { // trc20 + native + internal, once each
 		t.Fatalf("second call within 30s TTL must be cached, upstream hits = %d", got)
 	}
 	e.clk.Advance(31 * time.Second)
 	result(t, e.rpc("kt_getHistory", p))
-	if got := grid.hitCount("/v1/accounts/"); got != 4 {
+	if got := grid.hitCount("/v1/accounts/"); got != 6 {
 		t.Fatalf("expected refetch after TTL, upstream hits = %d", got)
 	}
 	// A different limit is a different cache key.
 	result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"tron","address":%q,"limit":3}`, tronSelfB58)))
-	if got := grid.hitCount("/v1/accounts/"); got != 6 {
+	if got := grid.hitCount("/v1/accounts/"); got != 9 {
 		t.Fatalf("different limit must miss the cache, upstream hits = %d", got)
 	}
 }

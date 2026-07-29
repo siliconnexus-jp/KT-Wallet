@@ -82,7 +82,7 @@ type Config struct {
 // Defaults returns the production upstream configuration.
 func Defaults() Config {
 	return Config{
-		Version:        "1.7.0",
+		Version:        "1.7.1",
 		Clock:          clock.Real{},
 		AttemptTimeout: 10 * time.Second,
 		EthURLs:        []string{"https://eth.llamarpc.com", "https://cloudflare-eth.com"},
@@ -90,26 +90,36 @@ func Defaults() Config {
 		// The newer EVM families default to the same public endpoints the app
 		// uses in direct mode (see builtinNetworks in the app's networks.dart),
 		// so gateway mode and direct mode read the same chains out of the box.
-		BaseURLs:            []string{"https://mainnet.base.org"},
-		ArbitrumURLs:        []string{"https://arb1.arbitrum.io/rpc"},
-		AvalancheURLs:       []string{"https://api.avax.network/ext/bc/C/rpc"},
-		BNBURLs:             []string{"https://bsc-dataseed.bnbchain.org"},
-		SolanaURLs:          []string{"https://api.mainnet-beta.solana.com"},
-		TronURL:             "https://api.trongrid.io",
-		EthSepoliaURLs:      []string{"https://ethereum-sepolia-rpc.publicnode.com"},
-		PolygonAmoyURLs:     []string{"https://rpc-amoy.polygon.technology"},
+		BaseURLs:       []string{"https://mainnet.base.org"},
+		ArbitrumURLs:   []string{"https://arb1.arbitrum.io/rpc"},
+		AvalancheURLs:  []string{"https://api.avax.network/ext/bc/C/rpc"},
+		BNBURLs:        []string{"https://bsc-dataseed.bnbchain.org"},
+		SolanaURLs:     []string{"https://api.mainnet-beta.solana.com"},
+		TronURL:        "https://api.trongrid.io",
+		EthSepoliaURLs: []string{"https://ethereum-sepolia-rpc.publicnode.com"},
+		// Polygon retired the legacy rpc-amoy.polygon.technology hostname.
+		// Keep multiple independently operated endpoints so gateway mode
+		// remains usable when one provider is blocked or unhealthy.
+		PolygonAmoyURLs: []string{
+			"https://polygon-amoy-bor-rpc.publicnode.com",
+			"https://polygon-amoy.drpc.org",
+		},
 		BaseSepoliaURLs:     []string{"https://sepolia.base.org"},
 		ArbitrumSepoliaURLs: []string{"https://sepolia-rollup.arbitrum.io/rpc"},
 		AvalancheFujiURLs:   []string{"https://api.avax-test.network/ext/bc/C/rpc"},
-		BNBTestnetURLs:      []string{"https://bsc-testnet-dataseed.bnbchain.org"},
-		SolanaDevnetURLs:    []string{"https://api.devnet.solana.com"},
-		TronNileURL:         "https://nile.trongrid.io",
-		CoinGeckoURL:        "https://api.coingecko.com",
-		CoinGeckoInterval:   time.Second,
-		EtherscanURL:        "https://api.etherscan.io/v2/api",
-		HeliusURL:           "https://mainnet.helius-rpc.com",
-		HeliusDevnetURL:     "https://devnet.helius-rpc.com",
-		OfficialTokens:      defaultOfficialTokens(),
+		BNBTestnetURLs: []string{
+			"https://bsc-testnet-dataseed.bnbchain.org",
+			"https://bsc-testnet.bnbchain.org",
+			"https://bsc-testnet-rpc.publicnode.com",
+		},
+		SolanaDevnetURLs:  []string{"https://api.devnet.solana.com"},
+		TronNileURL:       "https://nile.trongrid.io",
+		CoinGeckoURL:      "https://api.coingecko.com",
+		CoinGeckoInterval: time.Second,
+		EtherscanURL:      "https://api.etherscan.io/v2/api",
+		HeliusURL:         "https://mainnet.helius-rpc.com",
+		HeliusDevnetURL:   "https://devnet.helius-rpc.com",
+		OfficialTokens:    defaultOfficialTokens(),
 		EVMHistoryFallbackURLs: map[string]string{
 			"eth-mainnet":       "https://eth.blockscout.com/api",
 			"eth-sepolia":       "https://eth-sepolia.blockscout.com/api",
@@ -120,8 +130,11 @@ func Defaults() Config {
 			"arbitrum-sepolia":  "https://arbitrum-sepolia.blockscout.com/api",
 			"avalanche-mainnet": "https://api.routescan.io/v2/network/mainnet/evm/43114/etherscan/api",
 			"avalanche-fuji":    "https://api.routescan.io/v2/network/testnet/evm/43113/etherscan/api",
-			"bnb-mainnet":       "https://api.routescan.io/v2/network/mainnet/evm/56/etherscan/api",
-			"bnb-testnet":       "https://api.routescan.io/v2/network/testnet/evm/97/etherscan/api",
+			// Routescan removed BNB Smart Chain 56/97 from its indexed
+			// networks. Omitting those fallbacks is deliberate: returning
+			// "unsupported" is safer than misreporting a real wallet as
+			// having no transactions. Operators can configure Etherscan v2
+			// (or another compatible indexer) for BNB history.
 		},
 	}
 }

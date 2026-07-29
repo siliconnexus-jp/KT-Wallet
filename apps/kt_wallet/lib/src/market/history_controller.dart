@@ -17,11 +17,14 @@ class HistoryController extends ChangeNotifier {
     required WalletController wallets,
     HistoryService? service,
     Set<String> Function()? activeNetworkIds,
+    Listenable? networkChanges,
   }) : _wallets = wallets,
        _service = service ?? HistoryService(),
-       _activeNetworkIds = activeNetworkIds {
+       _activeNetworkIds = activeNetworkIds,
+       _networkChanges = networkChanges {
     _walletId = _wallets.current?.id;
     _wallets.addListener(_onWalletsChanged);
+    _networkChanges?.addListener(_onNetworkChanged);
   }
 
   final WalletController _wallets;
@@ -32,6 +35,7 @@ class HistoryController extends ChangeNotifier {
   /// selected) must not appear in this list. Null (older wiring, tests
   /// injecting their own controller) keeps every network, as before.
   final Set<String> Function()? _activeNetworkIds;
+  final Listenable? _networkChanges;
 
   Future<List<db.Transaction>> _loadLocalTransactions() =>
       _wallets.localTransactions(networkIds: _activeNetworkIds?.call());
@@ -49,7 +53,7 @@ class HistoryController extends ChangeNotifier {
   HistoryResult resultFor(Coin coin) =>
       _results[coin] ?? const HistoryResult.unsupported();
 
-  /// True until the first refresh completes (rows render '--' placeholders).
+  /// True until the first refresh completes (rows render structural placeholders).
   bool get isLoading => !_hasRefreshed || _refreshing;
 
   /// At least one chain returned a real (possibly empty) history.
@@ -179,9 +183,14 @@ class HistoryController extends ChangeNotifier {
     if (id != null) refresh();
   }
 
+  void _onNetworkChanged() {
+    if (_wallets.current != null) refresh();
+  }
+
   @override
   void dispose() {
     _wallets.removeListener(_onWalletsChanged);
+    _networkChanges?.removeListener(_onNetworkChanged);
     super.dispose();
   }
 }

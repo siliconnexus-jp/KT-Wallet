@@ -24,6 +24,7 @@
   {"network":"avalanche-mainnet","symbol":"USDT","name":"Tether USD","contract":"0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7","decimals":6,"popular":true},
   {"network":"avalanche-fuji","symbol":"USDC","name":"Test USD Coin","contract":"0x5425890298aed601595a70ab815c96711a31bc65","decimals":6},
   {"network":"bnb-mainnet","symbol":"BUSD","name":"Binance-Peg BUSD","contract":"0xe9e7cea3dedca5984780bafc599bd69add087d56","decimals":18,"popular":true},
+  {"network":"bnb-testnet","symbol":"BUSD","name":"Test Binance USD","contract":"0xed24fc36d5ee211ea25a80239fb8c4cfd80f12ee","decimals":18},
   {"network":"tron-mainnet","symbol":"USDT","name":"Tether USD","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","decimals":6,"popular":true},
   {"network":"tron-nile","symbol":"USDT","name":"Test Tether USD","contract":"TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf","decimals":6},
   {"network":"sol-mainnet","symbol":"USDC","name":"USD Coin","contract":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","decimals":6,"popular":true},

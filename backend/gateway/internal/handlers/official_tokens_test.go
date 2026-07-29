@@ -97,12 +97,18 @@ func TestCheckedInOfficialTokenCatalogLoads(t *testing.T) {
 		"BONK": false, "PYUSD": false, "BUSD": false,
 	}
 	hasBNB := false
+	hasBNBTestnetBUSD := false
 	for _, token := range tokens {
 		if _, ok := wanted[token.Symbol]; ok {
 			wanted[token.Symbol] = true
 		}
 		if token.Network == "bnb-mainnet" {
 			hasBNB = true
+		}
+		if token.Network == "bnb-testnet" &&
+			token.Symbol == "BUSD" &&
+			token.Contract == "0xed24fc36d5ee211ea25a80239fb8c4cfd80f12ee" {
+			hasBNBTestnetBUSD = true
 		}
 	}
 	for symbol, found := range wanted {
@@ -112,6 +118,9 @@ func TestCheckedInOfficialTokenCatalogLoads(t *testing.T) {
 	}
 	if !hasBNB {
 		t.Error("checked-in catalog is missing BNB Smart Chain")
+	}
+	if !hasBNBTestnetBUSD {
+		t.Error("checked-in catalog is missing BNB Testnet BUSD")
 	}
 }
 

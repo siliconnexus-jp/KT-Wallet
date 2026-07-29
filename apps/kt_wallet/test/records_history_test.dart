@@ -17,9 +17,13 @@ import 'package:kt_wallet/src/wallets/wallet_model.dart';
 class _FakeHistoryService extends HistoryService {
   _FakeHistoryService(this.results);
   final Map<Coin, HistoryResult> results;
+  final Map<Coin, int> fetchCounts = {};
+
   @override
-  Future<HistoryResult> fetch(Coin coin, String address) async =>
-      results[coin]!;
+  Future<HistoryResult> fetch(Coin coin, String address) async {
+    fetchCounts.update(coin, (count) => count + 1, ifAbsent: () => 1);
+    return results[coin]!;
+  }
 }
 
 WalletController _wallets() => WalletController(
@@ -58,6 +62,31 @@ Widget _app(HistoryController controller) => MaterialApp(
 const _unsupported = HistoryResult.unsupported();
 
 void main() {
+  testWidgets('history refreshes when the active network profile changes', (
+    tester,
+  ) async {
+    final service = _FakeHistoryService({
+      for (final coin in Coin.values) coin: _unsupported,
+    });
+    final networkChanges = ChangeNotifier();
+    final controller = HistoryController(
+      wallets: _wallets(),
+      service: service,
+      networkChanges: networkChanges,
+    );
+    await controller.refresh();
+
+    networkChanges.notifyListeners();
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    for (final coin in _wallets().current!.addresses.enabledCoins) {
+      expect(service.fetchCounts[coin], 2, reason: '$coin should refetch');
+    }
+    controller.dispose();
+    networkChanges.dispose();
+  });
+
   testWidgets('records page shows live TRON rows when the fetch succeeds', (
     tester,
   ) async {
@@ -158,7 +187,7 @@ void main() {
     },
   );
 
-  testWidgets('records page shows -- placeholders while loading', (
+  testWidgets('records page shows structural placeholders while loading', (
     tester,
   ) async {
     final controller = _controller({
@@ -168,7 +197,14 @@ void main() {
     await tester.pumpWidget(_app(controller));
     await tester.pumpAndSettle();
 
-    expect(find.text('--'), findsWidgets);
+    expect(
+      find.byKey(const ValueKey('history-loading-skeleton')),
+      findsOneWidget,
+    );
+    for (var i = 0; i < 3; i++) {
+      expect(find.byKey(ValueKey('history-skeleton-row-$i')), findsOneWidget);
+    }
+    expect(find.text('--'), findsNothing);
     expect(find.text('-120.00 USDT'), findsNothing);
     controller.dispose();
   });
