@@ -201,6 +201,7 @@ func TestAvalancheHistoryIncludesInternalNativeReceipt(t *testing.T) {
 	)))
 	assertJSONEq(t, `[{
 		"id":"0xairdrop:internal:0_1","hash":"0xairdrop","direction":"in",
+		"from":"0x2222222222222222222222222222222222222222","to":"0x1111111111111111111111111111111111111111",
 		"amountRaw":"5000000000000000","decimals":18,"symbol":"AVAX",
 		"verified":true,"timestampMs":1700000100000,"status":"ok"
 	}]`, res["records"])

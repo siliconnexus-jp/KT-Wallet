@@ -356,6 +356,8 @@ class GatewayClient {
           id: row['id'] is String ? row['id'] as String : hash,
           hash: hash,
           outgoing: direction == 'out',
+          fromAddress: row['from'] is String ? row['from'] as String : null,
+          toAddress: row['to'] is String ? row['to'] as String : null,
           amountRaw: row['amountRaw'] is String
               ? BigInt.tryParse(row['amountRaw'] as String)
               : null,
@@ -608,6 +610,8 @@ class GatewayHistoryRecord {
     required this.id,
     required this.hash,
     required this.outgoing,
+    this.fromAddress,
+    this.toAddress,
     required this.amountRaw,
     required this.decimals,
     required this.symbol,
@@ -620,6 +624,8 @@ class GatewayHistoryRecord {
   final String id;
   final String hash;
   final bool outgoing;
+  final String? fromAddress;
+  final String? toAddress;
   final BigInt? amountRaw;
   final int? decimals;
   final String? symbol;

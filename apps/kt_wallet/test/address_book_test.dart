@@ -21,6 +21,17 @@ Finder _sheetField(int index) => find
     .at(index);
 
 void main() {
+  testWidgets('address book shows grouped local wallet addresses', (
+    tester,
+  ) async {
+    await _open(tester, 'W16 地址管理');
+
+    expect(find.text('本地钱包地址'), findsOneWidget);
+    expect(find.text('EVM · 6 条网络'), findsWidgets);
+    expect(find.textContaining('当前钱包 ·'), findsWidgets);
+    expect(find.text('已保存联系人'), findsOneWidget);
+  });
+
   testWidgets('address book: "+" validates the address and appends a contact', (
     tester,
   ) async {
@@ -68,6 +79,7 @@ void main() {
     expect(find.text('Crol'), findsOneWidget);
 
     // The gallery seeds demo contacts; the new row is appended last.
+    await tester.ensureVisible(find.byIcon(Icons.more_vert).last);
     await tester.tap(find.byIcon(Icons.more_vert).last);
     await tester.pumpAndSettle();
     expect(find.text('编辑'), findsOneWidget);
@@ -105,6 +117,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('TRON'), findsWidgets);
 
+    await tester.ensureVisible(find.byIcon(Icons.more_vert).last);
     await tester.tap(find.byIcon(Icons.more_vert).last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('编辑'));

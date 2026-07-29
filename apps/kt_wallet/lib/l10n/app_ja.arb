@@ -128,6 +128,8 @@
   "hotConfirmHint": "認証後、この端末が署名し自動で送信します",
   "watchConfirmHint": "QRにフレーズや秘密鍵は含まれません",
   "fromAddress": "送信元",
+  "transactionSourceAddress": "送信元アドレス",
+  "transactionDestinationAccount": "受取アカウント",
   "totalSpend": "合計支出",
   "unbackedTransferWarning": "このウォレットはリカバリーフレーズが未バックアップです。送金前にバックアップを推奨します。",
   "pendingSignTitle": "署名待ち取引",
@@ -235,6 +237,18 @@
   "transactionReceiptSubject": "{network} 取引証明",
   "actionCopy": "アドレスをコピー",
   "addressBookTitle": "アドレス帳",
+  "localWalletAddresses": "ローカルウォレットアドレス",
+  "savedContacts": "保存済みの連絡先",
+  "localWalletLabel": "ローカルウォレット",
+  "currentWalletLabel": "現在のウォレット",
+  "evmNetworksLabel": "EVM · {count} ネットワーク",
+  "@evmNetworksLabel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "searchNameOrAddress": "名称またはアドレスを検索",
   "assetUnavailable": "この資産は利用できません",
   "noMatchingContacts": "一致する連絡先がありません",

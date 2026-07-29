@@ -24,6 +24,8 @@ type SolanaSignature struct {
 type SolanaAccountImpact struct {
 	Direction string
 	Amount    *big.Int
+	From      string
+	To        string
 	Tokens    []SolanaTokenImpact
 }
 
@@ -34,6 +36,8 @@ type SolanaTokenImpact struct {
 	Direction string
 	Amount    *big.Int
 	Decimals  int
+	From      string
+	To        string
 }
 
 // Solana is a Solana JSON-RPC client backed by a failover Pool.
@@ -196,7 +200,8 @@ func (s *Solana) GetTransactionAccountImpact(ctx context.Context, signature, add
 		} `json:"meta"`
 		Transaction struct {
 			Message struct {
-				AccountKeys []json.RawMessage `json:"accountKeys"`
+				AccountKeys  []json.RawMessage `json:"accountKeys"`
+				Instructions []json.RawMessage `json:"instructions"`
 			} `json:"message"`
 		} `json:"transaction"`
 	}
@@ -204,6 +209,7 @@ func (s *Solana) GetTransactionAccountImpact(ctx context.Context, signature, add
 		return nil, &Unavailable{Upstream: "solana", Message: "malformed getTransaction result"}
 	}
 	index, signer := -1, false
+	keys := make([]string, len(out.Transaction.Message.AccountKeys))
 	for i, rawKey := range out.Transaction.Message.AccountKeys {
 		var key string
 		keySigner := false
@@ -217,10 +223,10 @@ func (s *Solana) GetTransactionAccountImpact(ctx context.Context, signature, add
 			}
 			key, keySigner = parsed.Pubkey, parsed.Signer
 		}
+		keys[i] = key
 		if key == address {
 			index = i
 			signer = keySigner
-			break
 		}
 	}
 	delta := new(big.Int)
@@ -270,6 +276,65 @@ func (s *Solana) GetTransactionAccountImpact(ctx context.Context, signature, add
 	applyTokenBalances(out.Meta.PreTokenBalances, -1)
 	applyTokenBalances(out.Meta.PostTokenBalances, 1)
 	tokenImpacts := make([]SolanaTokenImpact, 0, len(tokenDeltas))
+	type tokenAccountIdentity struct {
+		owner string
+		mint  string
+	}
+	tokenAccounts := map[string]tokenAccountIdentity{}
+	for _, rows := range [][]solanaTokenBalance{out.Meta.PreTokenBalances, out.Meta.PostTokenBalances} {
+		for _, row := range rows {
+			if row.AccountIndex != nil && *row.AccountIndex >= 0 && *row.AccountIndex < len(keys) && row.Owner != "" && row.Mint != "" {
+				tokenAccounts[keys[*row.AccountIndex]] = tokenAccountIdentity{
+					owner: row.Owner,
+					mint:  row.Mint,
+				}
+			}
+		}
+	}
+	from, to := "", ""
+	partiesByMint := map[string][2]string{}
+	for _, rawInstruction := range out.Transaction.Message.Instructions {
+		var instruction struct {
+			Program string `json:"program"`
+			Parsed  *struct {
+				Info struct {
+					Source      string `json:"source"`
+					Destination string `json:"destination"`
+					Authority   string `json:"authority"`
+				} `json:"info"`
+			} `json:"parsed"`
+		}
+		if json.Unmarshal(rawInstruction, &instruction) != nil || instruction.Parsed == nil {
+			continue
+		}
+		source := instruction.Parsed.Info.Source
+		destination := instruction.Parsed.Info.Destination
+		if source == "" || destination == "" {
+			continue
+		}
+		if instruction.Program == "system" {
+			if source == address || destination == address {
+				from, to = source, destination
+			}
+			continue
+		}
+		sourceAccount := tokenAccounts[source]
+		destinationAccount := tokenAccounts[destination]
+		candidateFrom := sourceAccount.owner
+		if candidateFrom == "" {
+			candidateFrom = instruction.Parsed.Info.Authority
+		}
+		candidateTo := destinationAccount.owner
+		if candidateFrom == address || candidateTo == address {
+			mint := sourceAccount.mint
+			if mint == "" {
+				mint = destinationAccount.mint
+			}
+			if mint != "" {
+				partiesByMint[mint] = [2]string{candidateFrom, candidateTo}
+			}
+		}
+	}
 	for mint, tokenDelta := range tokenDeltas {
 		if tokenDelta.Sign() == 0 {
 			continue
@@ -279,11 +344,14 @@ func (s *Solana) GetTransactionAccountImpact(ctx context.Context, signature, add
 			tokenDirection = "out"
 			tokenDelta.Abs(tokenDelta)
 		}
+		parties := partiesByMint[mint]
 		tokenImpacts = append(tokenImpacts, SolanaTokenImpact{
 			Mint:      mint,
 			Direction: tokenDirection,
 			Amount:    tokenDelta,
 			Decimals:  tokenDecimals[mint],
+			From:      parties[0],
+			To:        parties[1],
 		})
 	}
 	if index < 0 && len(tokenImpacts) == 0 {
@@ -292,11 +360,14 @@ func (s *Solana) GetTransactionAccountImpact(ctx context.Context, signature, add
 	return &SolanaAccountImpact{
 		Direction: direction,
 		Amount:    delta,
+		From:      from,
+		To:        to,
 		Tokens:    tokenImpacts,
 	}, nil
 }
 
 type solanaTokenBalance struct {
+	AccountIndex  *int   `json:"accountIndex"`
 	Mint          string `json:"mint"`
 	Owner         string `json:"owner"`
 	UiTokenAmount struct {

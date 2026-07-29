@@ -423,6 +423,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fromAddress => '转出地址';
 
   @override
+  String get transactionSourceAddress => '来源地址';
+
+  @override
+  String get transactionDestinationAccount => '到账账户';
+
+  @override
   String get totalSpend => '总支出';
 
   @override
@@ -716,6 +722,23 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get addressBookTitle => '地址管理';
+
+  @override
+  String get localWalletAddresses => '本地钱包地址';
+
+  @override
+  String get savedContacts => '已保存联系人';
+
+  @override
+  String get localWalletLabel => '本地钱包';
+
+  @override
+  String get currentWalletLabel => '当前钱包';
+
+  @override
+  String evmNetworksLabel(int count) {
+    return 'EVM · $count 条网络';
+  }
 
   @override
   String get searchNameOrAddress => '搜索名称或地址';

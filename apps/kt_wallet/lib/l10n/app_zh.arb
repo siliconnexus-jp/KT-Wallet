@@ -238,6 +238,8 @@
   "hotConfirmHint": "验证身份后本机签名并自动广播",
   "watchConfirmHint": "二维码中不包含助记词或私钥",
   "fromAddress": "转出地址",
+  "transactionSourceAddress": "来源地址",
+  "transactionDestinationAccount": "到账账户",
   "totalSpend": "总支出",
   "unbackedTransferWarning": "该钱包尚未备份助记词。建议先完成备份，再进行转账。",
   "pendingSignTitle": "待签名交易",
@@ -396,6 +398,18 @@
   },
   "actionCopy": "复制地址",
   "addressBookTitle": "地址管理",
+  "localWalletAddresses": "本地钱包地址",
+  "savedContacts": "已保存联系人",
+  "localWalletLabel": "本地钱包",
+  "currentWalletLabel": "当前钱包",
+  "evmNetworksLabel": "EVM · {count} 条网络",
+  "@evmNetworksLabel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "searchNameOrAddress": "搜索名称或地址",
   "assetUnavailable": "该资产已不可用",
   "noMatchingContacts": "没有匹配的联系人",

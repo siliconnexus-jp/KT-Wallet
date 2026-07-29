@@ -199,10 +199,10 @@ func TestTronNileHistory(t *testing.T) {
 		t.Fatalf("nile history must be supported through TronGrid, got %v", res["status"])
 	}
 	assertJSONEq(t, `[
-		{"id":"t1:trc20:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:0","hash":"t1","direction":"out","amountRaw":"1000000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":false,"timestampMs":5000,"status":"ok"},
-		{"id":"n1","hash":"n1","direction":"in","amountRaw":"7000000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":4000,"status":"ok"},
-		{"id":"tdup:trc20:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:1","hash":"tdup","direction":"in","amountRaw":"250000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":false,"timestampMs":3000,"status":"ok"},
-		{"id":"n3","hash":"n3","direction":"out","amountRaw":"42","decimals":6,"symbol":"TRX","verified":true,"timestampMs":2000,"status":"failed"}
+		{"id":"t1:trc20:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:0","hash":"t1","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"1000000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":false,"timestampMs":5000,"status":"ok"},
+		{"id":"n1","hash":"n1","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"7000000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":4000,"status":"ok"},
+		{"id":"tdup:trc20:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:1","hash":"tdup","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"250000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":false,"timestampMs":3000,"status":"ok"},
+		{"id":"n3","hash":"n3","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"42","decimals":6,"symbol":"TRX","verified":true,"timestampMs":2000,"status":"failed"}
 	]`, res["records"])
 	if got := nile.hitCount("/v1/accounts/"); got != 3 { // trc20 + native + internal
 		t.Fatalf("nile base URL must serve the history calls, hits = %d", got)
@@ -272,7 +272,7 @@ func TestSolDevnetHistoryUsesDevnetHelius(t *testing.T) {
 	res := result(t, e.rpc("kt_getHistory",
 		fmt.Sprintf(`{"chain":"solana","network":"sol-devnet","address":%q}`, solSelf)))
 	assertJSONEq(t, `[
-		{"id":"dsig1:1:2:-1","hash":"dsig1","direction":"out","amountRaw":"42","decimals":9,"symbol":"SOL","verified":true,"timestampMs":1700000300000,"status":"ok"}
+		{"id":"dsig1:1:2:-1","hash":"dsig1","direction":"out","from":"9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin","to":"4Nd1mYtBS4yPPsSycFSCA1WzX7yBW2cVDpn9WzWtLDwT","amountRaw":"42","decimals":9,"symbol":"SOL","verified":true,"timestampMs":1700000300000,"status":"ok"}
 	]`, res["records"])
 	if len(mainHel.hitsFor("/")) != 0 {
 		t.Fatal("sol-devnet history must use the devnet Helius endpoint, not mainnet")

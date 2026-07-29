@@ -15,6 +15,7 @@ import 'package:kt_wallet/src/market/history_service.dart';
 const _me = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 const _meHex = '41a614f803b6fd780986a42c78ec9c7f77e6ded13c';
 const _other = 'TVjsyZ7fYF3qLF6BQgPmTEZy1xrNNyVAAA';
+const _otherHex = '41b3dcf27c251da9363f1a4888257c16676cf54edf';
 
 Map<String, Object?> _trc20Item({
   required String hash,
@@ -67,7 +68,7 @@ Map<String, Object?> _nativeTransferItem({
           'value': {
             'amount': amount,
             'owner_address': ownerHex,
-            'to_address': '41b3dcf27c251da9363f1a4888257c16676cf54edf',
+            'to_address': ownerHex == _meHex ? _otherHex : _meHex,
           },
           'type_url': 'type.googleapis.com/protocol.TransferContract',
         },
@@ -128,6 +129,7 @@ HistoryService _service({
 void main() {
   test('tronAddressHex decodes base58check to the 41-prefixed hex form', () {
     expect(tronAddressHex(_me), _meHex);
+    expect(tronHexAddressToBase58(_meHex), _me);
     // Structurally invalid inputs (wrong length / bad alphabet) return null.
     // NOTE: the checksum is deliberately NOT verified — the hex form is only
     // used for direction comparison, so a right-length decode is enough.
@@ -205,6 +207,8 @@ void main() {
 
       final outUsdt = result.records[0];
       expect(outUsdt.outgoing, isTrue);
+      expect(outUsdt.fromAddress, _me);
+      expect(outUsdt.toAddress, _other);
       expect(outUsdt.amountText, '120.5 USDT');
       expect(outUsdt.assetSymbol, 'USDT');
       expect(outUsdt.assetContract, _me);
@@ -215,15 +219,21 @@ void main() {
 
       final outTrx = result.records[1];
       expect(outTrx.outgoing, isTrue); // owner_address (hex) == our address
+      expect(outTrx.fromAddress, _me);
+      expect(outTrx.toAddress, 'TSNEe5Tf4rnc9zPMNXfaTF5fZfHDDH8oyW');
       expect(outTrx.amountText, '5 TRX');
       expect(outTrx.confirmed, isTrue);
 
       final inUsdt = result.records[2];
       expect(inUsdt.outgoing, isFalse);
+      expect(inUsdt.fromAddress, _other);
+      expect(inUsdt.toAddress, _me);
       expect(inUsdt.amountText, '300 USDT');
 
       final inTrx = result.records[3];
       expect(inTrx.outgoing, isFalse); // someone else's owner_address
+      expect(inTrx.fromAddress, 'TSNEe5Tf4rnc9zPMNXfaTF5fZfHDDH8oyW');
+      expect(inTrx.toAddress, _me);
       expect(inTrx.amountText, '1 TRX');
       expect(inTrx.confirmed, isFalse); // contractRet REVERT
     },
@@ -354,6 +364,14 @@ void main() {
     expect(result.records, hasLength(1));
     expect(result.records.single.id, '0xairdrop:internal:0_1');
     expect(result.records.single.outgoing, isFalse);
+    expect(
+      result.records.single.fromAddress,
+      '0x1111111111111111111111111111111111111111',
+    );
+    expect(
+      result.records.single.toAddress,
+      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    );
     expect(result.records.single.amountText, '0.005 AVAX');
   });
 
@@ -395,6 +413,8 @@ void main() {
       expect(record.assetSymbol, 'USDT');
       expect(record.assetVerified, isTrue);
       expect(record.outgoing, isFalse);
+      expect(record.fromAddress, '0x1111111111111111111111111111111111111111');
+      expect(record.toAddress, address);
     },
   );
 
@@ -403,6 +423,8 @@ void main() {
     () async {
       const owner = '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin';
       const ata = 'Ata111111111111111111111111111111111111111';
+      const sender = '4Nd1mYtBS4yPPsSycFSCA1WzX7yBW2cVDpn9WzWtLDwT';
+      const senderAta = 'Ata222222222222222222222222222222222222222';
       const mint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
       final service = HistoryService(
         endpoints: (_) => 'https://api.mainnet-beta.solana.com',
@@ -431,10 +453,17 @@ void main() {
             result = {
               'meta': {
                 'err': null,
-                'preBalances': [100],
-                'postBalances': [100],
+                'preBalances': [100, 100],
+                'postBalances': [100, 100],
                 'preTokenBalances': [
                   {
+                    'accountIndex': 0,
+                    'mint': mint,
+                    'owner': sender,
+                    'uiTokenAmount': {'amount': '3000000', 'decimals': 6},
+                  },
+                  {
+                    'accountIndex': 1,
                     'mint': mint,
                     'owner': owner,
                     'uiTokenAmount': {'amount': '1000000', 'decimals': 6},
@@ -442,6 +471,13 @@ void main() {
                 ],
                 'postTokenBalances': [
                   {
+                    'accountIndex': 0,
+                    'mint': mint,
+                    'owner': sender,
+                    'uiTokenAmount': {'amount': '1000000', 'decimals': 6},
+                  },
+                  {
+                    'accountIndex': 1,
                     'mint': mint,
                     'owner': owner,
                     'uiTokenAmount': {'amount': '3000000', 'decimals': 6},
@@ -453,7 +489,21 @@ void main() {
                   // The wallet owner is deliberately absent; only its ATA was
                   // touched by this incoming token transfer.
                   'accountKeys': [
+                    {'pubkey': senderAta},
                     {'pubkey': ata},
+                  ],
+                  'instructions': [
+                    {
+                      'program': 'spl-token',
+                      'parsed': {
+                        'type': 'transfer',
+                        'info': {
+                          'source': senderAta,
+                          'destination': ata,
+                          'authority': sender,
+                        },
+                      },
+                    },
                   ],
                 },
               },
@@ -471,6 +521,8 @@ void main() {
       final record = (await service.fetch(Coin.solana, owner)).records.single;
       expect(record.hash, 'ata-signature');
       expect(record.outgoing, isFalse);
+      expect(record.fromAddress, sender);
+      expect(record.toAddress, owner);
       expect(record.amountText, '2 USDC');
       expect(record.assetContract, mint);
       expect(record.assetVerified, isTrue);

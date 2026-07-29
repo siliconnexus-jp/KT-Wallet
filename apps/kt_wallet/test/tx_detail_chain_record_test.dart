@@ -32,6 +32,8 @@ void main() {
             coin: Coin.tron,
             hash: 'abc123def456',
             outgoing: false,
+            fromAddress: 'TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT',
+            toAddress: 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
             amountText: '88.5 USDT',
             timestamp: DateTime(2026, 3, 9, 20, 4),
             confirmed: true,
@@ -154,6 +156,8 @@ void main() {
             coin: Coin.tron,
             hash: 'abc123def456',
             outgoing: false,
+            fromAddress: 'TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT',
+            toAddress: 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
             amountText: '88.5 USDT',
             timestamp: DateTime(2026, 3, 9, 20, 4),
             confirmed: true,
@@ -183,6 +187,22 @@ void main() {
     expect(rendered?.transactionTimeLabel, '交易时间');
     expect(rendered?.transactionTime, '2026-03-09 20:04');
     expect(rendered?.explorerUrl, contains('abc123def456'));
+    expect(
+      rendered?.fields.any(
+        (field) =>
+            field.label == '来源地址' &&
+            field.value == 'TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT',
+      ),
+      isTrue,
+    );
+    expect(
+      rendered?.fields.any(
+        (field) =>
+            field.label == '到账账户' &&
+            field.value == '日常钱包\nTQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
+      ),
+      isTrue,
+    );
     expect(external.sharedFiles, hasLength(1));
     expect(external.sharedFiles.single.text, rendered?.explorerUrl);
     expect(File(external.sharedFiles.single.path).readAsBytesSync(), const [

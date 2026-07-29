@@ -138,6 +138,28 @@ func base58Decode(s string) ([]byte, bool) {
 	return append(make([]byte, zeros), b...), true
 }
 
+func base58Encode(payload []byte) string {
+	n := new(big.Int).SetBytes(payload)
+	fiftyEight := big.NewInt(58)
+	zero := big.NewInt(0)
+	mod := new(big.Int)
+	encoded := make([]byte, 0, len(payload)*2)
+	for n.Cmp(zero) > 0 {
+		n.DivMod(n, fiftyEight, mod)
+		encoded = append(encoded, b58Alphabet[mod.Int64()])
+	}
+	for _, b := range payload {
+		if b != 0 {
+			break
+		}
+		encoded = append(encoded, '1')
+	}
+	for left, right := 0, len(encoded)-1; left < right; left, right = left+1, right-1 {
+		encoded[left], encoded[right] = encoded[right], encoded[left]
+	}
+	return string(encoded)
+}
+
 // tronAddrHex normalizes a TRON address (base58check T... or 41-hex) to
 // lowercase 41-prefixed hex for comparison. Unrecognized inputs are returned
 // lowercased so comparisons stay deterministic.
@@ -158,4 +180,23 @@ func tronAddrHex(addr string) string {
 		}
 	}
 	return strings.ToLower(addr)
+}
+
+// tronAddrDisplay converts TronGrid's 41-prefixed raw address to the
+// user-facing base58check form while preserving already-readable addresses.
+func tronAddrDisplay(addr string) string {
+	if strings.HasPrefix(addr, "T") {
+		return addr
+	}
+	normalized := strings.ToLower(strings.TrimSpace(addr))
+	if len(normalized) != 42 || !strings.HasPrefix(normalized, "41") {
+		return addr
+	}
+	payload, err := hex.DecodeString(normalized)
+	if err != nil || len(payload) != 21 {
+		return addr
+	}
+	first := sha256.Sum256(payload)
+	second := sha256.Sum256(first[:])
+	return base58Encode(append(payload, second[:4]...))
 }

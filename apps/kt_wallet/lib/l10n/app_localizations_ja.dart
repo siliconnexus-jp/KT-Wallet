@@ -426,6 +426,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get fromAddress => '送信元';
 
   @override
+  String get transactionSourceAddress => '送信元アドレス';
+
+  @override
+  String get transactionDestinationAccount => '受取アカウント';
+
+  @override
   String get totalSpend => '合計支出';
 
   @override
@@ -724,6 +730,23 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get addressBookTitle => 'アドレス帳';
+
+  @override
+  String get localWalletAddresses => 'ローカルウォレットアドレス';
+
+  @override
+  String get savedContacts => '保存済みの連絡先';
+
+  @override
+  String get localWalletLabel => 'ローカルウォレット';
+
+  @override
+  String get currentWalletLabel => '現在のウォレット';
+
+  @override
+  String evmNetworksLabel(int count) {
+    return 'EVM · $count ネットワーク';
+  }
 
   @override
   String get searchNameOrAddress => '名称またはアドレスを検索';

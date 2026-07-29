@@ -128,6 +128,8 @@
   "hotConfirmHint": "After authentication, this device signs and broadcasts automatically",
   "watchConfirmHint": "The QR contains no phrase or private key",
   "fromAddress": "From",
+  "transactionSourceAddress": "Source address",
+  "transactionDestinationAccount": "Received by",
   "totalSpend": "Total spend",
   "unbackedTransferWarning": "This wallet's recovery phrase isn't backed up. Back it up before sending.",
   "pendingSignTitle": "Pending signature",
@@ -235,6 +237,18 @@
   "transactionReceiptSubject": "{network} transaction receipt",
   "actionCopy": "Copy address",
   "addressBookTitle": "Address book",
+  "localWalletAddresses": "Local wallet addresses",
+  "savedContacts": "Saved contacts",
+  "localWalletLabel": "Local wallet",
+  "currentWalletLabel": "Current wallet",
+  "evmNetworksLabel": "EVM · {count} networks",
+  "@evmNetworksLabel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "searchNameOrAddress": "Search name or address",
   "assetUnavailable": "This asset is no longer available",
   "noMatchingContacts": "No matching contacts",

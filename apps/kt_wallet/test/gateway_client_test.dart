@@ -385,6 +385,8 @@ void main() {
               {
                 'hash': '0xaaa',
                 'direction': 'out',
+                'from': '0xEthAddr',
+                'to': '0xRecipient',
                 'amountRaw': '1500000000000000000',
                 'decimals': 18,
                 'symbol': 'ETH',
@@ -423,6 +425,8 @@ void main() {
       expect(history.records, hasLength(2));
       expect(history.records[0].hash, '0xaaa');
       expect(history.records[0].outgoing, isTrue);
+      expect(history.records[0].fromAddress, '0xEthAddr');
+      expect(history.records[0].toAddress, '0xRecipient');
       expect(history.records[0].failed, isFalse);
       expect(history.records[0].amountRaw, BigInt.parse('1500000000000000000'));
       expect(history.records[1].outgoing, isFalse);

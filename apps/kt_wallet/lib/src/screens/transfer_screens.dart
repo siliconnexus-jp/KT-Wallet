@@ -699,12 +699,23 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     final contacts = await controller.loadContacts();
     if (!mounted) return;
     final l10n = AppLocalizations.of(context);
-    final compatible = contacts
+    final localWallets = [
+      for (final wallet in controller.wallets)
+        Contact(
+          id: 'local-wallet:${wallet.id}:${_asset.chain.name}',
+          name: wallet.name,
+          address: addressForChain(wallet.addresses, _asset.chain),
+          chain: _asset.chain.name,
+          createdAt: 0,
+        ),
+    ].where((entry) => entry.address.trim().isNotEmpty).toList();
+    final compatibleContacts = contacts
         .where(
           (contact) =>
               Addresses.validate(_asset.chain, contact.address).isValid,
         )
         .toList();
+    final compatible = [...localWallets, ...compatibleContacts];
 
     final selected = await showModalBottomSheet<Contact>(
       context: context,
@@ -816,11 +827,21 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                           color: WalletColors.text3,
                         ),
                       ),
-                      trailing: const Icon(
-                        Icons.chevron_right,
-                        size: 18,
-                        color: WalletColors.text3,
-                      ),
+                      trailing: compatible[i].id.startsWith('local-wallet:')
+                          ? NetworkBadge(
+                              label:
+                                  compatible[i].id.contains(
+                                    ':${controller.current?.id}:',
+                                  )
+                                  ? l10n.currentWalletLabel
+                                  : l10n.localWalletLabel,
+                              dotColor: WalletColors.accent,
+                            )
+                          : const Icon(
+                              Icons.chevron_right,
+                              size: 18,
+                              color: WalletColors.text3,
+                            ),
                       onTap: () => Navigator.of(ctx).pop(compatible[i]),
                     ),
                   ],
@@ -1119,7 +1140,9 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
               const SizedBox(height: 12),
               if (selectedContact != null) ...[
                 Semantics(
-                  label: '${l10n.addressBookTitle}: ${selectedContact.name}',
+                  label:
+                      '${selectedContact.id.startsWith('local-wallet:') ? l10n.localWalletLabel : l10n.addressBookTitle}: '
+                      '${selectedContact.name}',
                   child: Container(
                     key: const ValueKey('transfer-selected-contact'),
                     padding: const EdgeInsets.symmetric(
@@ -3002,6 +3025,30 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
     Chain.solana => 'SOL',
   };
 
+  String _destinationAccountValue(
+    BuildContext context,
+    Chain chain,
+    String address,
+  ) {
+    final evm = switch (chain) {
+      Chain.ethereum ||
+      Chain.polygon ||
+      Chain.base ||
+      Chain.arbitrum ||
+      Chain.avalanche ||
+      Chain.bnb => true,
+      _ => false,
+    };
+    for (final wallet in WalletScope.of(context).wallets) {
+      final local = addressForChain(wallet.addresses, chain);
+      final matches = evm
+          ? local.toLowerCase() == address.toLowerCase()
+          : local == address;
+      if (matches) return '${wallet.name}\n$address';
+    }
+    return address;
+  }
+
   TransactionCardData? _receiptForLive(BuildContext context, Transaction tx) {
     final hash = tx.hash;
     final chain = _chainFor(tx);
@@ -3087,6 +3134,18 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
       footer: l10n.transactionReceiptFooter,
       fields: [
         TransactionCardField(label: l10n.networkRow, value: network.name),
+        if (record.fromAddress != null)
+          TransactionCardField(
+            label: l10n.transactionSourceAddress,
+            value: record.fromAddress!,
+            mono: true,
+          ),
+        if (record.toAddress != null)
+          TransactionCardField(
+            label: l10n.transactionDestinationAccount,
+            value: _destinationAccountValue(context, chain, record.toAddress!),
+            mono: true,
+          ),
         if (record.assetContract != null)
           TransactionCardField(
             label: l10n.contractAddress,
@@ -3681,6 +3740,26 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
               ),
               const SizedBox(height: 14),
               KtDetailRow(label: l10n.networkRow, value: network.name),
+              if (record.fromAddress != null) ...[
+                const SizedBox(height: 14),
+                KtDetailRow(
+                  label: l10n.transactionSourceAddress,
+                  value: _short(record.fromAddress!),
+                  mono: true,
+                ),
+              ],
+              if (record.toAddress != null) ...[
+                const SizedBox(height: 14),
+                KtDetailRow(
+                  label: l10n.transactionDestinationAccount,
+                  value: _destinationAccountValue(
+                    context,
+                    chainOf(record.coin),
+                    record.toAddress!,
+                  ),
+                  mono: true,
+                ),
+              ],
               if (record.assetContract != null) ...[
                 const SizedBox(height: 14),
                 KtDetailRow(

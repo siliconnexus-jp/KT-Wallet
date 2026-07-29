@@ -445,6 +445,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fromAddress => 'From';
 
   @override
+  String get transactionSourceAddress => 'Source address';
+
+  @override
+  String get transactionDestinationAccount => 'Received by';
+
+  @override
   String get totalSpend => 'Total spend';
 
   @override
@@ -764,6 +770,23 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addressBookTitle => 'Address book';
+
+  @override
+  String get localWalletAddresses => 'Local wallet addresses';
+
+  @override
+  String get savedContacts => 'Saved contacts';
+
+  @override
+  String get localWalletLabel => 'Local wallet';
+
+  @override
+  String get currentWalletLabel => 'Current wallet';
+
+  @override
+  String evmNetworksLabel(int count) {
+    return 'EVM · $count networks';
+  }
 
   @override
   String get searchNameOrAddress => 'Search name or address';

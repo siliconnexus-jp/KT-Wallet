@@ -1,7 +1,14 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:chains/chains.dart'
-    show Amount, base58Decode, solanaToken2022Program, solanaTokenProgram;
+    show
+        Amount,
+        base58Decode,
+        base58Encode,
+        sha256,
+        solanaToken2022Program,
+        solanaTokenProgram;
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:http/http.dart' as http;
 
@@ -22,6 +29,8 @@ class ChainTxRecord {
     required this.hash,
     required this.outgoing,
     this.id,
+    this.fromAddress,
+    this.toAddress,
     this.amountText,
     this.assetContract,
     this.assetSymbol,
@@ -43,6 +52,11 @@ class ChainTxRecord {
 
   /// Direction relative to the queried address (from == address → outgoing).
   final bool outgoing;
+
+  /// Real participants exposed by the chain/indexer. Either side may remain
+  /// null when a legacy source cannot prove it; callers must not invent one.
+  final String? fromAddress;
+  final String? toAddress;
 
   /// Formatted "120.5 USDT" when the amount and symbol were parseable, null
   /// otherwise — the UI renders '--' instead of inventing a number.
@@ -213,8 +227,10 @@ class HistoryService {
       }) {
         final hash = item['hash'];
         if (hash is! String || hash.isEmpty) return;
-        final from = '${item['from'] ?? ''}'.toLowerCase();
-        final to = '${item['to'] ?? ''}'.toLowerCase();
+        final rawFrom = '${item['from'] ?? ''}'.trim();
+        final rawTo = '${item['to'] ?? ''}'.trim();
+        final from = rawFrom.toLowerCase();
+        final to = rawTo.toLowerCase();
         if (from != lower && to != lower) return;
         final seconds = int.tryParse('${item['timeStamp'] ?? ''}');
         final value = BigInt.tryParse('${item['value'] ?? ''}');
@@ -226,6 +242,8 @@ class HistoryService {
             id: internal ? '$hash:internal:$trace' : hash,
             hash: hash,
             outgoing: from == lower,
+            fromAddress: rawFrom.isEmpty ? null : rawFrom,
+            toAddress: rawTo.isEmpty ? null : rawTo,
             amountText: _formatAmount(value, 18, _nativeSymbol(coin)),
             timestamp: DateTime.fromMillisecondsSinceEpoch(seconds * 1000),
             confirmed: item['isError'] != '1',
@@ -243,8 +261,10 @@ class HistoryService {
         if (item is! Map) continue;
         final hash = item['hash'];
         final contract = '${item['contractAddress'] ?? ''}'.trim();
-        final from = '${item['from'] ?? ''}'.toLowerCase();
-        final to = '${item['to'] ?? ''}'.toLowerCase();
+        final rawFrom = '${item['from'] ?? ''}'.trim();
+        final rawTo = '${item['to'] ?? ''}'.trim();
+        final from = rawFrom.toLowerCase();
+        final to = rawTo.toLowerCase();
         final seconds = int.tryParse('${item['timeStamp'] ?? ''}');
         final raw = BigInt.tryParse('${item['value'] ?? ''}');
         if (hash is! String ||
@@ -276,6 +296,8 @@ class HistoryService {
             id: '$hash:token:${contract.toLowerCase()}:$logIndex',
             hash: hash,
             outgoing: from == lower,
+            fromAddress: rawFrom.isEmpty ? null : rawFrom,
+            toAddress: rawTo.isEmpty ? null : rawTo,
             amountText: decimals == null
                 ? null
                 : _formatAmount(raw, decimals, symbol),
@@ -428,12 +450,17 @@ class HistoryService {
             ? (transaction['transaction'] as Map)['message']
             : null;
         if (meta is! Map || message is! Map) continue;
-
         final tokenDeltas = _solanaTokenDeltas(meta, address);
         if (tokenDeltas.isNotEmpty) {
           for (final entry in tokenDeltas.entries) {
             final delta = entry.value.amount;
             if (delta == BigInt.zero) continue;
+            final parties = _solanaTransferParties(
+              message,
+              meta,
+              address,
+              mint: entry.key,
+            );
             final official = _findSolanaToken(entry.key);
             final symbol = official?.symbol ?? 'SPL';
             final decimals = official?.decimals ?? entry.value.decimals;
@@ -443,6 +470,9 @@ class HistoryService {
                 id: '$signature:spl:${entry.key}',
                 hash: signature,
                 outgoing: delta.isNegative,
+                fromAddress:
+                    parties.from ?? (delta.isNegative ? address : null),
+                toAddress: parties.to ?? (delta.isNegative ? null : address),
                 amountText: _formatAmount(delta.abs(), decimals, symbol),
                 assetContract: entry.key,
                 assetSymbol: symbol,
@@ -453,6 +483,7 @@ class HistoryService {
             );
           }
         } else {
+          final parties = _solanaTransferParties(message, meta, address);
           final keys = message['accountKeys'];
           final preBalances = meta['preBalances'];
           final postBalances = meta['postBalances'];
@@ -478,6 +509,8 @@ class HistoryService {
               id: signature,
               hash: signature,
               outgoing: delta.isNegative,
+              fromAddress: parties.from ?? (delta.isNegative ? address : null),
+              toAddress: parties.to ?? (delta.isNegative ? null : address),
               amountText: _formatAmount(delta.abs(), 9, 'SOL'),
               timestamp: timestamp,
               confirmed: item['err'] == null && meta['err'] == null,
@@ -540,6 +573,82 @@ class HistoryService {
     return deltas;
   }
 
+  /// Extracts wallet-level participants from parsed System/SPL transfer
+  /// instructions. SPL instructions carry token-account addresses, so the
+  /// pre/post balance owner metadata is used to resolve those back to wallets.
+  ({String? from, String? to}) _solanaTransferParties(
+    Map<dynamic, dynamic> message,
+    Map<dynamic, dynamic> meta,
+    String owner, {
+    String? mint,
+  }) {
+    final rawKeys = message['accountKeys'];
+    if (rawKeys is! List) return (from: null, to: null);
+    final keys = [
+      for (final key in rawKeys)
+        if (key is String)
+          key
+        else if (key is Map && key['pubkey'] is String)
+          key['pubkey'] as String
+        else
+          '',
+    ];
+    final tokenAccounts = <String, ({String owner, String mint})>{};
+    void collectOwners(Object? rows) {
+      if (rows is! List) return;
+      for (final row in rows) {
+        if (row is! Map ||
+            row['accountIndex'] is! int ||
+            row['owner'] is! String ||
+            row['mint'] is! String) {
+          continue;
+        }
+        final index = row['accountIndex'] as int;
+        if (index >= 0 && index < keys.length && keys[index].isNotEmpty) {
+          tokenAccounts[keys[index]] = (
+            owner: row['owner'] as String,
+            mint: row['mint'] as String,
+          );
+        }
+      }
+    }
+
+    collectOwners(meta['preTokenBalances']);
+    collectOwners(meta['postTokenBalances']);
+
+    final instructions = message['instructions'];
+    if (instructions is! List) return (from: null, to: null);
+    for (final instruction in instructions) {
+      if (instruction is! Map || instruction['parsed'] is! Map) continue;
+      final parsed = instruction['parsed'] as Map;
+      final info = parsed['info'];
+      if (info is! Map) continue;
+      final source = info['source'];
+      final destination = info['destination'];
+      if (source is! String || destination is! String) continue;
+      if (instruction['program'] == 'system') {
+        if (mint != null) continue;
+        if (source == owner || destination == owner) {
+          return (from: source, to: destination);
+        }
+        continue;
+      }
+      final sourceAccount = tokenAccounts[source];
+      final destinationAccount = tokenAccounts[destination];
+      if (mint != null &&
+          sourceAccount?.mint != mint &&
+          destinationAccount?.mint != mint) {
+        continue;
+      }
+      final authority = info['authority'];
+      final from =
+          sourceAccount?.owner ?? (authority is String ? authority : null);
+      final to = destinationAccount?.owner;
+      if (from == owner || to == owner) return (from: from, to: to);
+    }
+    return (from: null, to: null);
+  }
+
   TokenInfo? _findSolanaToken(String mint) {
     for (final token in _tokenRegistry()) {
       if (token.chain == Coin.solana && token.contract == mint) return token;
@@ -586,6 +695,8 @@ class HistoryService {
       id: record.id,
       hash: record.hash,
       outgoing: record.outgoing,
+      fromAddress: record.fromAddress,
+      toAddress: record.toAddress,
       amountText: raw != null && decimals != null && symbol != null
           ? _formatAmount(raw, decimals, symbol)
           : null,
@@ -625,13 +736,15 @@ class HistoryService {
         }
       }
       for (final item in native) {
-        final record = item is Map ? _parseNative(item, myHex) : null;
+        final record = item is Map ? _parseNative(item, myHex, address) : null;
         if (record != null && !tokenHashes.contains(record.hash)) {
           records.add(record);
         }
       }
       for (final item in internal) {
-        final record = item is Map ? _parseTronInternal(item, myHex) : null;
+        final record = item is Map
+            ? _parseTronInternal(item, myHex, address)
+            : null;
         if (record != null) records.add(record);
       }
       records.sort((a, b) => b.timestamp.compareTo(a.timestamp));
@@ -705,6 +818,8 @@ class HistoryService {
       id: '$hash:trc20:${assetContract ?? 'unknown'}',
       hash: hash,
       outgoing: item['from'] == address,
+      fromAddress: item['from'] is String ? item['from'] as String : null,
+      toAddress: item['to'] is String ? item['to'] as String : null,
       amountText: amountText,
       assetContract: assetContract,
       assetSymbol: assetSymbol,
@@ -720,7 +835,11 @@ class HistoryService {
   ///   [{type, parameter: {value: {amount, owner_address, to_address}}}]}}`
   /// (addresses in 41-prefixed hex). Supports native TRX TransferContract and
   /// TRC-10 TransferAssetContract; TRC-20 events come from their own endpoint.
-  ChainTxRecord? _parseNative(Map<dynamic, dynamic> item, String? myHex) {
+  ChainTxRecord? _parseNative(
+    Map<dynamic, dynamic> item,
+    String? myHex,
+    String myAddress,
+  ) {
     final hash = item['txID'];
     final ts = item['block_timestamp'];
     if (hash is! String || ts is! int) return null;
@@ -745,6 +864,22 @@ class HistoryService {
     final amount = _parseChainInteger(value['amount']);
     if (amount == null || amount.isNegative) return null;
     final owner = value['owner_address'];
+    final recipient = value['to_address'];
+    final ownerHex = owner is String ? owner.toLowerCase() : '';
+    final recipientHex = recipient is String ? recipient.toLowerCase() : '';
+    if (myHex != null && ownerHex != myHex && recipientHex != myHex) {
+      return null;
+    }
+    final ownerText = owner is String
+        ? (ownerHex == myHex
+              ? myAddress
+              : tronHexAddressToBase58(owner) ?? owner)
+        : null;
+    final recipientText = recipient is String
+        ? (recipientHex == myHex
+              ? myAddress
+              : tronHexAddressToBase58(recipient) ?? recipient)
+        : null;
     final tokenId = type == 'TransferAssetContract'
         ? '${value['asset_name'] ?? ''}'.trim()
         : '';
@@ -756,8 +891,9 @@ class HistoryService {
       // Hex owner vs our base58-decoded address; an undecodable address (the
       // demo mocks) can't match, so those rows read as incoming — moot in
       // practice because TronGrid rejects mock addresses before this point.
-      outgoing:
-          myHex != null && owner is String && owner.toLowerCase() == myHex,
+      outgoing: myHex != null && ownerHex == myHex,
+      fromAddress: ownerText,
+      toAddress: recipientText,
       amountText: _formatAmount(
         amount,
         isTrc10 ? 0 : 6,
@@ -771,7 +907,11 @@ class HistoryService {
     );
   }
 
-  ChainTxRecord? _parseTronInternal(Map<dynamic, dynamic> item, String? myHex) {
+  ChainTxRecord? _parseTronInternal(
+    Map<dynamic, dynamic> item,
+    String? myHex,
+    String myAddress,
+  ) {
     final hash = item['tx_id'];
     final internalId = item['internal_tx_id'];
     final timestamp = item['block_timestamp'];
@@ -802,6 +942,10 @@ class HistoryService {
       id: '$hash:internal:$internalId',
       hash: hash,
       outgoing: from == myHex,
+      fromAddress: from == myHex
+          ? myAddress
+          : tronHexAddressToBase58(from) ?? from,
+      toAddress: to == myHex ? myAddress : tronHexAddressToBase58(to) ?? to,
       amountText: _formatAmount(
         amount,
         isTrc10 ? 0 : 6,
@@ -850,4 +994,22 @@ String? tronAddressHex(String address) {
   } catch (_) {
     return null;
   }
+}
+
+/// Converts TronGrid's 41-prefixed raw address to the base58check form shown
+/// to users. Invalid input remains unknown instead of being reformatted.
+String? tronHexAddressToBase58(String hex) {
+  final normalized = hex.trim().toLowerCase();
+  if (normalized.length != 42 || !normalized.startsWith('41')) return null;
+  final payload = Uint8List(21);
+  for (var i = 0; i < payload.length; i++) {
+    final value = int.tryParse(
+      normalized.substring(i * 2, i * 2 + 2),
+      radix: 16,
+    );
+    if (value == null) return null;
+    payload[i] = value;
+  }
+  final checksum = sha256(sha256(payload)).sublist(0, 4);
+  return base58Encode(Uint8List.fromList([...payload, ...checksum]));
 }

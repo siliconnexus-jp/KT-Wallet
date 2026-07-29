@@ -868,6 +868,18 @@ abstract class AppLocalizations {
   /// **'转出地址'**
   String get fromAddress;
 
+  /// No description provided for @transactionSourceAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源地址'**
+  String get transactionSourceAddress;
+
+  /// No description provided for @transactionDestinationAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'到账账户'**
+  String get transactionDestinationAccount;
+
   /// No description provided for @totalSpend.
   ///
   /// In zh, this message translates to:
@@ -1425,6 +1437,36 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'地址管理'**
   String get addressBookTitle;
+
+  /// No description provided for @localWalletAddresses.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地钱包地址'**
+  String get localWalletAddresses;
+
+  /// No description provided for @savedContacts.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存联系人'**
+  String get savedContacts;
+
+  /// No description provided for @localWalletLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地钱包'**
+  String get localWalletLabel;
+
+  /// No description provided for @currentWalletLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前钱包'**
+  String get currentWalletLabel;
+
+  /// No description provided for @evmNetworksLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'EVM · {count} 条网络'**
+  String evmNetworksLabel(int count);
 
   /// No description provided for @searchNameOrAddress.
   ///

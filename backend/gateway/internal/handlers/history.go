@@ -24,6 +24,8 @@ type historyRecord struct {
 	ID          string `json:"id"`
 	Hash        string `json:"hash"`
 	Direction   string `json:"direction"` // "in" | "out"
+	From        string `json:"from,omitempty"`
+	To          string `json:"to,omitempty"`
 	AmountRaw   string `json:"amountRaw"`
 	Decimals    int    `json:"decimals"`
 	Symbol      string `json:"symbol"`
@@ -131,6 +133,8 @@ func (g *Gateway) tronHistory(ctx context.Context, network, address string, limi
 			ID:          fmt.Sprintf("%s:trc20:%s:%d", t.TransactionID, t.Contract, i),
 			Hash:        t.TransactionID,
 			Direction:   dir,
+			From:        t.From,
+			To:          t.To,
 			AmountRaw:   t.Value,
 			Decimals:    decimals,
 			Symbol:      symbol,
@@ -168,6 +172,8 @@ func (g *Gateway) tronHistory(ctx context.Context, network, address string, limi
 			ID:          id,
 			Hash:        t.TxID,
 			Direction:   dir,
+			From:        tronAddrDisplay(t.Owner),
+			To:          tronAddrDisplay(t.To),
 			AmountRaw:   t.Amount,
 			Decimals:    decimals,
 			Symbol:      symbol,
@@ -205,6 +211,8 @@ func (g *Gateway) tronHistory(ctx context.Context, network, address string, limi
 			ID:          t.TxID + ":internal:" + t.InternalTxID,
 			Hash:        t.TxID,
 			Direction:   dir,
+			From:        tronAddrDisplay(t.From),
+			To:          tronAddrDisplay(t.To),
 			AmountRaw:   t.Amount,
 			Decimals:    decimals,
 			Symbol:      symbol,
@@ -358,6 +366,8 @@ func evmHistoryResult(
 			ID:          t.Hash + ":" + eventIndex,
 			Hash:        t.Hash,
 			Direction:   dir,
+			From:        t.From,
+			To:          t.To,
 			AmountRaw:   t.Value,
 			Decimals:    tokenDecimals,
 			Symbol:      tokenSymbol,
@@ -401,6 +411,8 @@ func evmHistoryResult(
 			ID:          t.Hash + ":internal:" + traceID,
 			Hash:        t.Hash,
 			Direction:   dir,
+			From:        t.From,
+			To:          t.To,
 			AmountRaw:   t.Value,
 			Decimals:    18,
 			Symbol:      symbol,
@@ -434,6 +446,8 @@ func evmHistoryResult(
 			ID:          t.Hash,
 			Hash:        t.Hash,
 			Direction:   dir,
+			From:        t.From,
+			To:          t.To,
 			AmountRaw:   t.Value,
 			Decimals:    18,
 			Symbol:      symbol,
@@ -504,6 +518,13 @@ func (g *Gateway) solanaHistory(ctx context.Context, network, address string, li
 		}
 		if len(impact.Tokens) > 0 {
 			for _, token := range impact.Tokens {
+				from, to := token.From, token.To
+				if token.Direction == "out" && from == "" {
+					from = address
+				}
+				if token.Direction == "in" && to == "" {
+					to = address
+				}
 				symbol, decimals, verified := historyTokenMeta(
 					g.officialByNetwork[network],
 					token.Mint,
@@ -514,6 +535,8 @@ func (g *Gateway) solanaHistory(ctx context.Context, network, address string, li
 					ID:          sig.Signature + ":spl:" + token.Mint,
 					Hash:        sig.Signature,
 					Direction:   token.Direction,
+					From:        from,
+					To:          to,
 					AmountRaw:   token.Amount.String(),
 					Decimals:    decimals,
 					Symbol:      symbol,
@@ -536,10 +559,19 @@ func (g *Gateway) solanaHistory(ctx context.Context, network, address string, li
 		if impact.Amount.Sign() == 0 {
 			continue
 		}
+		from, to := impact.From, impact.To
+		if impact.Direction == "out" && from == "" {
+			from = address
+		}
+		if impact.Direction == "in" && to == "" {
+			to = address
+		}
 		records = append(records, historyRecord{
 			ID:          sig.Signature,
 			Hash:        sig.Signature,
 			Direction:   impact.Direction,
+			From:        from,
+			To:          to,
 			AmountRaw:   impact.Amount.String(),
 			Decimals:    9,
 			Symbol:      "SOL",
@@ -661,6 +693,8 @@ func heliusHistoryResult(
 			),
 			Hash:        transfer.Signature,
 			Direction:   dir,
+			From:        transfer.FromUserAccount,
+			To:          transfer.ToUserAccount,
 			AmountRaw:   transfer.Amount,
 			Decimals:    decimals,
 			Symbol:      symbol,

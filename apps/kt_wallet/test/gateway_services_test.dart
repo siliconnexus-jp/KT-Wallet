@@ -568,6 +568,8 @@ void main() {
                 'id': '0xaaa',
                 'hash': '0xaaa',
                 'direction': 'out',
+                'from': '0xEthAddr',
+                'to': '0xRecipient',
                 'amountRaw': '1500000000000000000',
                 'decimals': 18,
                 'symbol': 'ETH',
@@ -579,6 +581,8 @@ void main() {
                 'id': '0xbbb:7',
                 'hash': '0xbbb',
                 'direction': 'in',
+                'from': '0xSender',
+                'to': '0xEthAddr',
                 'amountRaw': '2000000',
                 'decimals': 6,
                 'symbol': 'USDT',
@@ -605,6 +609,8 @@ void main() {
       // Newest first.
       expect(result.records[0].hash, '0xbbb');
       expect(result.records[0].outgoing, isFalse);
+      expect(result.records[0].fromAddress, '0xSender');
+      expect(result.records[0].toAddress, '0xEthAddr');
       expect(result.records[0].confirmed, isFalse); // status: failed
       expect(result.records[0].amountText, '2 USDT');
       expect(result.records[0].id, '0xbbb:7');

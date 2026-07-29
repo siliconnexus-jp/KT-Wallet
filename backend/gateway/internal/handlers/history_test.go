@@ -62,10 +62,10 @@ func TestTronHistoryMergeDedupeDirection(t *testing.T) {
 		t.Fatalf("tron history must always be supported, got %v", res["status"])
 	}
 	assertJSONEq(t, `[
-		{"id":"t1:trc20:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:0","hash":"t1","direction":"out","amountRaw":"1000000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":true,"timestampMs":5000,"status":"ok"},
-		{"id":"n1","hash":"n1","direction":"in","amountRaw":"7000000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":4000,"status":"ok"},
-		{"id":"tdup:trc20:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:1","hash":"tdup","direction":"in","amountRaw":"250000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":true,"timestampMs":3000,"status":"ok"},
-		{"id":"n3","hash":"n3","direction":"out","amountRaw":"42","decimals":6,"symbol":"TRX","verified":true,"timestampMs":2000,"status":"failed"}
+		{"id":"t1:trc20:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:0","hash":"t1","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"1000000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":true,"timestampMs":5000,"status":"ok"},
+		{"id":"n1","hash":"n1","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"7000000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":4000,"status":"ok"},
+		{"id":"tdup:trc20:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:1","hash":"tdup","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"250000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":true,"timestampMs":3000,"status":"ok"},
+		{"id":"n3","hash":"n3","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"42","decimals":6,"symbol":"TRX","verified":true,"timestampMs":2000,"status":"failed"}
 	]`, res["records"])
 	// n4 (TriggerSmartContract) skipped; tdup deduped across the two feeds.
 }
@@ -113,8 +113,8 @@ func TestTronHistoryIncludesTRC10AndInternalTRX(t *testing.T) {
 	res := result(t, e.rpc("kt_getHistory",
 		fmt.Sprintf(`{"chain":"tron","address":%q}`, tronSelfB58)))
 	assertJSONEq(t, `[
-		{"id":"parent:internal:trace-1","hash":"parent","direction":"in","amountRaw":"2500000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":3000,"status":"ok"},
-		{"id":"trc10:trc10:1002000","hash":"trc10","direction":"out","amountRaw":"42","decimals":0,"symbol":"TRC10","contract":"1002000","verified":false,"timestampMs":2000,"status":"ok"}
+		{"id":"parent:internal:trace-1","hash":"parent","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"2500000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":3000,"status":"ok"},
+		{"id":"trc10:trc10:1002000","hash":"trc10","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"42","decimals":0,"symbol":"TRC10","contract":"1002000","verified":false,"timestampMs":2000,"status":"ok"}
 	]`, res["records"])
 }
 
@@ -149,7 +149,7 @@ func TestEthHistoryWithoutKeyUsesPublicExplorer(t *testing.T) {
 		t.Fatalf("status = %v", res["status"])
 	}
 	assertJSONEq(t, `[
-		{"id":"0xf1","hash":"0xf1","direction":"out","amountRaw":"77","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000300000,"status":"ok"}
+		{"id":"0xf1","hash":"0xf1","direction":"out","from":"0x1111111111111111111111111111111111111111","to":"0x2222222222222222222222222222222222222222","amountRaw":"77","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000300000,"status":"ok"}
 	]`, res["records"])
 	if explorer.hitCount("/") != 3 {
 		t.Fatal("keyless history must use the configured public explorer")
@@ -195,8 +195,8 @@ func TestEthHistoryWithKey(t *testing.T) {
 		t.Fatalf("status = %v", res["status"])
 	}
 	assertJSONEq(t, `[
-		{"id":"0xh1:7","hash":"0xh1","direction":"out","amountRaw":"2500000","decimals":6,"symbol":"USDT","contract":"0xdac17f958d2ee523a2206206994597c13d831ec7","verified":true,"timestampMs":1700000100000,"status":"ok"},
-		{"id":"0xh2","hash":"0xh2","direction":"in","amountRaw":"2000","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000000000,"status":"failed"}
+		{"id":"0xh1:7","hash":"0xh1","direction":"out","from":"0x1111111111111111111111111111111111111111","to":"0x2222222222222222222222222222222222222222","amountRaw":"2500000","decimals":6,"symbol":"USDT","contract":"0xdac17f958d2ee523a2206206994597c13d831ec7","verified":true,"timestampMs":1700000100000,"status":"ok"},
+		{"id":"0xh2","hash":"0xh2","direction":"in","from":"0x2222222222222222222222222222222222222222","to":"0x1111111111111111111111111111111111111111","amountRaw":"2000","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000000000,"status":"failed"}
 	]`, res["records"])
 
 	hits := scan.hitsFor("/")
@@ -358,7 +358,7 @@ func TestEthHistoryEtherscanFailureFallsBackToPublicExplorer(t *testing.T) {
 
 	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf)))
 	assertJSONEq(t, `[
-		{"id":"0xfallback","hash":"0xfallback","direction":"in","amountRaw":"9","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000500000,"status":"ok"}
+		{"id":"0xfallback","hash":"0xfallback","direction":"in","from":"0x2222222222222222222222222222222222222222","to":"0x1111111111111111111111111111111111111111","amountRaw":"9","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000500000,"status":"ok"}
 	]`, res["records"])
 	if scan.hitCount("/") != 1 || explorer.hitCount("/") != 3 {
 		t.Fatalf("expected primary then fallback, got scan=%d explorer=%d",
@@ -411,7 +411,7 @@ func TestSolanaHistoryWithoutKeyUsesRPC(t *testing.T) {
 		t.Fatalf("status = %v", res["status"])
 	}
 	assertJSONEq(t, `[
-		{"id":"rpc-sig-1:spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","hash":"rpc-sig-1","direction":"out","amountRaw":"2000000","decimals":6,"symbol":"USDC","contract":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","verified":true,"timestampMs":1700000400000,"status":"ok"}
+		{"id":"rpc-sig-1:spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","hash":"rpc-sig-1","direction":"out","from":"9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin","amountRaw":"2000000","decimals":6,"symbol":"USDC","contract":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","verified":true,"timestampMs":1700000400000,"status":"ok"}
 	]`, res["records"])
 	if node.count("getSignaturesForAddress") != 1 || node.count("getTransaction") != 1 {
 		t.Fatalf("expected signature + transaction RPC calls, got %d/%d",
@@ -421,8 +421,9 @@ func TestSolanaHistoryWithoutKeyUsesRPC(t *testing.T) {
 
 func TestSolanaHistoryFindsIncomingSPLTransferThroughATA(t *testing.T) {
 	const (
-		ata  = "Ata111111111111111111111111111111111111111"
-		mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+		ata       = "Ata111111111111111111111111111111111111111"
+		senderATA = "Ata222222222222222222222222222222222222222"
+		mint      = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 	)
 	node := newRPCFake(t)
 	node.result("getTokenAccountsByOwner", map[string]any{
@@ -442,22 +443,38 @@ func TestSolanaHistoryFindsIncomingSPLTransferThroughATA(t *testing.T) {
 	})
 	node.result("getTransaction", map[string]any{
 		"meta": map[string]any{
-			"preBalances":  []any{100},
-			"postBalances": []any{100},
-			"preTokenBalances": []any{map[string]any{
-				"mint": mint, "owner": solSelf,
-				"uiTokenAmount": map[string]any{"amount": "1000000", "decimals": 6},
-			}},
-			"postTokenBalances": []any{map[string]any{
-				"mint": mint, "owner": solSelf,
-				"uiTokenAmount": map[string]any{"amount": "3000000", "decimals": 6},
-			}},
+			"preBalances":  []any{100, 100},
+			"postBalances": []any{100, 100},
+			"preTokenBalances": []any{
+				map[string]any{"accountIndex": 0, "mint": mint, "owner": solOther,
+					"uiTokenAmount": map[string]any{"amount": "3000000", "decimals": 6}},
+				map[string]any{"accountIndex": 1, "mint": mint, "owner": solSelf,
+					"uiTokenAmount": map[string]any{"amount": "1000000", "decimals": 6}},
+			},
+			"postTokenBalances": []any{
+				map[string]any{"accountIndex": 0, "mint": mint, "owner": solOther,
+					"uiTokenAmount": map[string]any{"amount": "1000000", "decimals": 6}},
+				map[string]any{"accountIndex": 1, "mint": mint, "owner": solSelf,
+					"uiTokenAmount": map[string]any{"amount": "3000000", "decimals": 6}},
+			},
 		},
 		"transaction": map[string]any{
 			"message": map[string]any{
 				// Owner deliberately absent: an incoming SPL transfer may
 				// touch only its associated token account.
-				"accountKeys": []any{map[string]any{"pubkey": ata}},
+				"accountKeys": []any{
+					map[string]any{"pubkey": senderATA},
+					map[string]any{"pubkey": ata},
+				},
+				"instructions": []any{map[string]any{
+					"program": "spl-token",
+					"parsed": map[string]any{
+						"type": "transfer",
+						"info": map[string]any{
+							"source": senderATA, "destination": ata, "authority": solOther,
+						},
+					},
+				}},
 			},
 		},
 	})
@@ -468,7 +485,7 @@ func TestSolanaHistoryFindsIncomingSPLTransferThroughATA(t *testing.T) {
 	res := result(t, e.rpc("kt_getHistory",
 		fmt.Sprintf(`{"chain":"solana","address":%q}`, solSelf)))
 	assertJSONEq(t, `[
-		{"id":"ata-sig:spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","hash":"ata-sig","direction":"in","amountRaw":"2000000","decimals":6,"symbol":"USDC","contract":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","verified":true,"timestampMs":1700000600000,"status":"ok"}
+		{"id":"ata-sig:spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","hash":"ata-sig","direction":"in","from":"4Nd1mYtBS4yPPsSycFSCA1WzX7yBW2cVDpn9WzWtLDwT","to":"9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin","amountRaw":"2000000","decimals":6,"symbol":"USDC","contract":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","verified":true,"timestampMs":1700000600000,"status":"ok"}
 	]`, res["records"])
 	if node.count("getSignaturesForAddress") != 2 {
 		t.Fatalf("must query owner and deduplicated ATA signatures, got %d",
@@ -534,7 +551,7 @@ func TestSolanaHeliusFailureFallsBackToRPC(t *testing.T) {
 
 	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"solana","address":%q}`, solSelf)))
 	assertJSONEq(t, `[
-		{"id":"fallback-sig","hash":"fallback-sig","direction":"in","amountRaw":"60","decimals":9,"symbol":"SOL","verified":true,"timestampMs":1700000600000,"status":"ok"}
+		{"id":"fallback-sig","hash":"fallback-sig","direction":"in","to":"9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin","amountRaw":"60","decimals":9,"symbol":"SOL","verified":true,"timestampMs":1700000600000,"status":"ok"}
 	]`, res["records"])
 }
 
@@ -567,9 +584,9 @@ func TestSolanaHistoryWithHeliusKey(t *testing.T) {
 		t.Fatalf("status = %v", res["status"])
 	}
 	assertJSONEq(t, `[
-		{"id":"sig1:1:2:0","hash":"sig1","direction":"out","amountRaw":"2500000","decimals":6,"symbol":"USDC","contract":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","verified":true,"timestampMs":1700000200000,"status":"ok"},
-		{"id":"sig2:2:3:-1","hash":"sig2","direction":"in","amountRaw":"123","decimals":9,"symbol":"SOL","verified":true,"timestampMs":1700000100000,"status":"ok"},
-		{"id":"sig3:3:4:-1","hash":"sig3","direction":"in","amountRaw":"42000000","decimals":6,"symbol":"USDT","contract":"Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB","verified":true,"timestampMs":1700000050000,"status":"ok"}
+		{"id":"sig1:1:2:0","hash":"sig1","direction":"out","from":"9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin","to":"4Nd1mYtBS4yPPsSycFSCA1WzX7yBW2cVDpn9WzWtLDwT","amountRaw":"2500000","decimals":6,"symbol":"USDC","contract":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","verified":true,"timestampMs":1700000200000,"status":"ok"},
+		{"id":"sig2:2:3:-1","hash":"sig2","direction":"in","from":"4Nd1mYtBS4yPPsSycFSCA1WzX7yBW2cVDpn9WzWtLDwT","to":"9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin","amountRaw":"123","decimals":9,"symbol":"SOL","verified":true,"timestampMs":1700000100000,"status":"ok"},
+		{"id":"sig3:3:4:-1","hash":"sig3","direction":"in","from":"4Nd1mYtBS4yPPsSycFSCA1WzX7yBW2cVDpn9WzWtLDwT","to":"9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin","amountRaw":"42000000","decimals":6,"symbol":"USDT","contract":"Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB","verified":true,"timestampMs":1700000050000,"status":"ok"}
 	]`, res["records"])
 
 	u, _ := url.Parse(hel.hitsFor("/")[0].Path)
