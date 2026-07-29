@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,65 +9,71 @@ import 'package:ui_kit/ui_kit.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(ScreenSecurity.resetForTest);
-  tearDown(ScreenSecurity.resetForTest);
-
-  testWidgets('sensitive content stays concealed after a screenshot event', (
-    tester,
-  ) async {
-    final events = StreamController<void>.broadcast();
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: ScreenshotSensitiveBuilder(
-          screenshotEvents: events.stream,
-          builder: (context, concealed) => Scaffold(
-            body: Container(
-              color: const Color(0xFF10131A),
-              child: Text(
-                'secret phrase',
-                key: const ValueKey('sensitive-text'),
-                style: TextStyle(
-                  color: concealed ? const Color(0xFF10131A) : Colors.white,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    Text text() => tester.widget(find.byKey(const ValueKey('sensitive-text')));
-    expect(text().style?.color, Colors.white);
-
-    events.add(null);
-    await tester.pump();
-    expect(text().style?.color, const Color(0xFF10131A));
-
-    // Ordinary rebuilds must not reveal the value again.
-    await tester.pump();
-    expect(text().style?.color, const Color(0xFF10131A));
-
-    await tester.pumpWidget(const SizedBox());
-    await events.close();
+  setUp(() {
+    ScreenSecurity.resetForTest();
+    AndroidScreenshotProtection.resetForTest();
+  });
+  tearDown(() {
+    ScreenSecurity.resetForTest();
+    AndroidScreenshotProtection.resetForTest();
   });
 
-  testWidgets('one native screenshot both warns and conceals sensitive text', (
+  testWidgets('Android raises FLAG_SECURE for the protected widget lifetime', (
     tester,
   ) async {
-    const background = Color(0xFF10131A);
+    const channel = MethodChannel('kt/secure_screen');
+    final applied = <bool>[];
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+        call,
+      ) async {
+        if (call.method == 'setSecure') {
+          final secure = call.arguments as bool;
+          applied.add(secure);
+        }
+        return null;
+      });
+
+      await tester.pumpWidget(
+        const AndroidScreenshotBlocked(
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: Text('recovery phrase', key: ValueKey('protected-content')),
+          ),
+        ),
+      );
+      await tester.idle();
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('protected-content')), findsOneWidget);
+      expect(applied, [true]);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.idle();
+      await tester.pump();
+      expect(applied, [true, false]);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        null,
+      );
+    }
+  });
+
+  testWidgets('native screenshot warns without changing page content', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ScreenSecurityGuard(
         locale: const Locale('zh'),
-        child: MaterialApp(
-          home: ScreenshotSensitiveBuilder(
-            builder: (context, concealed) => Scaffold(
-              backgroundColor: background,
-              body: Text(
-                'secret phrase',
-                key: const ValueKey('native-sensitive-text'),
-                style: TextStyle(color: concealed ? background : Colors.white),
-              ),
+        child: const MaterialApp(
+          home: Scaffold(
+            body: Text(
+              'secret phrase',
+              key: ValueKey('native-sensitive-text'),
+              style: TextStyle(color: Colors.black),
             ),
           ),
         ),
@@ -86,7 +93,7 @@ void main() {
     final text = tester.widget<Text>(
       find.byKey(const ValueKey('native-sensitive-text')),
     );
-    expect(text.style?.color, background);
+    expect(text.style?.color, Colors.black);
     expect(
       find.byKey(const ValueKey('screen-security-warning')),
       findsOneWidget,

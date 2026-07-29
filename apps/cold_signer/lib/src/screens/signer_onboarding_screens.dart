@@ -39,64 +39,57 @@ Widget _signerBtn(
   onPressed: onPressed ?? () {},
 );
 
-Widget _wordGrid(List<String> words) => ScreenshotSensitiveBuilder(
-  builder: (context, concealed) => Column(
-    children: [
-      for (var r = 0; r < (words.length / 2).ceil(); r++)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Row(
-            children: [
-              for (var c = 0; c < 2; c++) ...[
-                if (c > 0) const SizedBox(width: 10),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: SignerColors.surface,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          (r * 2 + c + 1).toString().padLeft(2, '0'),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontFamily: KtFonts.mono,
-                            color: Color(0xFF5A616C),
-                          ),
+Widget _wordGrid(List<String> words) => Column(
+  children: [
+    for (var r = 0; r < (words.length / 2).ceil(); r++)
+      Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          children: [
+            for (var c = 0; c < 2; c++) ...[
+              if (c > 0) const SizedBox(width: 10),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: SignerColors.surface,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        (r * 2 + c + 1).toString().padLeft(2, '0'),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontFamily: KtFonts.mono,
+                          color: Color(0xFF5A616C),
                         ),
-                        const SizedBox(width: 10),
-                        // Keyed so flow tests can read the (possibly generated)
-                        // word at each position; keys never affect rendering.
-                        ExcludeSemantics(
-                          excluding: concealed,
-                          child: Text(
-                            words[r * 2 + c],
-                            key: Key('mnemonic-word-${r * 2 + c}'),
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              fontFamily: KtFonts.mono,
-                              color: concealed
-                                  ? SignerColors.surface
-                                  : SignerColors.text,
-                            ),
-                          ),
+                      ),
+                      const SizedBox(width: 10),
+                      // Keyed so flow tests can read the (possibly generated)
+                      // word at each position; keys never affect rendering.
+                      Text(
+                        words[r * 2 + c],
+                        key: Key('mnemonic-word-${r * 2 + c}'),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          fontFamily: KtFonts.mono,
+                          color: SignerColors.text,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ],
-          ),
+          ],
         ),
-    ],
-  ),
+      ),
+  ],
 );
 
 /// C11 启动页.

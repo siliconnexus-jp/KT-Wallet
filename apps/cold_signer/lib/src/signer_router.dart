@@ -72,6 +72,12 @@ final _liveOverrides = <String, Widget Function(BuildContext, GoRouterState)>{
       SignerResultQrScreen(request: _requestExtra(s), result: _resultExtra(s)),
 };
 
+const _androidScreenshotBlockedRoutes = {
+  '/mnemonic-show',
+  '/mnemonic-verify',
+  '/mnemonic-import',
+};
+
 GoRouter buildSignerRouter({String initialLocation = '/'}) => GoRouter(
   initialLocation: initialLocation,
   routes: [
@@ -81,7 +87,11 @@ GoRouter buildSignerRouter({String initialLocation = '/'}) => GoRouter(
         path: entry.value.$1,
         builder: (c, s) {
           final live = _liveOverrides[entry.value.$1];
-          return live == null ? entry.value.$2(c) : live(c, s);
+          final screen = live == null ? entry.value.$2(c) : live(c, s);
+          if (!_androidScreenshotBlockedRoutes.contains(entry.value.$1)) {
+            return screen;
+          }
+          return AndroidScreenshotBlocked(child: screen);
         },
       ),
   ],

@@ -46,63 +46,84 @@ class ScreenSecurity {
   }
 }
 
-/// Rebuilds sensitive content as concealed after the first screenshot event.
+/// Reference-counted Android `FLAG_SECURE` bridge.
 ///
-/// Screenshot callbacks are delivered after the OS has captured the screen,
-/// so this cannot redact the image that already exists. It does make the
-/// sensitive value disappear immediately and keeps it concealed for the
-/// remaining lifetime of this widget. Re-entering the page creates a new
-/// widget state and allows the user to review the value again.
-class ScreenshotSensitiveBuilder extends StatefulWidget {
-  const ScreenshotSensitiveBuilder({
-    required this.builder,
-    super.key,
-    this.screenshotEvents,
-  });
+/// A screenshot notification is too late to redact the image that was just
+/// saved. Sensitive Android routes therefore opt out of capture before their
+/// content is rendered. iOS intentionally does not call this bridge because
+/// it has no public equivalent to `FLAG_SECURE`.
+abstract final class AndroidScreenshotProtection {
+  static const MethodChannel _channel = MethodChannel('kt/secure_screen');
 
-  final Widget Function(BuildContext context, bool concealed) builder;
-  final Stream<void>? screenshotEvents;
+  static int _holders = 0;
+  static bool? _scheduled;
+  static Future<void> _pending = Future<void>.value();
 
-  @override
-  State<ScreenshotSensitiveBuilder> createState() =>
-      _ScreenshotSensitiveBuilderState();
+  @visibleForTesting
+  static int get holders => _holders;
+
+  @visibleForTesting
+  static bool get enabled => _holders > 0;
+
+  static Future<void> retain() {
+    _holders++;
+    return _sync();
+  }
+
+  static Future<void> release() {
+    if (_holders > 0) _holders--;
+    return _sync();
+  }
+
+  static Future<void> _sync() {
+    final secure = enabled;
+    if (_scheduled == secure) return _pending;
+    _scheduled = secure;
+    _pending = _channel.invokeMethod<void>('setSecure', secure).catchError((_) {
+      // Older hosts and widget tests may not install the native handler.
+    });
+    return _pending;
+  }
+
+  @visibleForTesting
+  static void resetForTest() {
+    _holders = 0;
+    _scheduled = null;
+    _pending = Future<void>.value();
+  }
 }
 
-class _ScreenshotSensitiveBuilderState
-    extends State<ScreenshotSensitiveBuilder> {
-  StreamSubscription<void>? _subscription;
-  bool _concealed = false;
+/// Prevents Android screenshots for the lifetime of this subtree.
+class AndroidScreenshotBlocked extends StatefulWidget {
+  const AndroidScreenshotBlocked({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  State<AndroidScreenshotBlocked> createState() =>
+      _AndroidScreenshotBlockedState();
+}
+
+class _AndroidScreenshotBlockedState extends State<AndroidScreenshotBlocked> {
+  bool _retained = false;
 
   @override
   void initState() {
     super.initState();
-    _listen();
-  }
-
-  void _listen() {
-    _subscription = (widget.screenshotEvents ?? ScreenSecurity.screenshots)
-        .listen((_) {
-          if (mounted && !_concealed) setState(() => _concealed = true);
-        });
-  }
-
-  @override
-  void didUpdateWidget(ScreenshotSensitiveBuilder oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.screenshotEvents != widget.screenshotEvents) {
-      _subscription?.cancel();
-      _listen();
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      _retained = true;
+      unawaited(AndroidScreenshotProtection.retain());
     }
   }
 
   @override
   void dispose() {
-    _subscription?.cancel();
+    if (_retained) unawaited(AndroidScreenshotProtection.release());
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => widget.builder(context, _concealed);
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// App-root security layer that shows a non-blocking screenshot warning.

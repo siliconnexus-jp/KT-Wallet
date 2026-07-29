@@ -6,9 +6,8 @@ import '../../l10n/app_localizations.dart';
 
 /// Pushes native privacy-cover copy used while the app is backgrounded.
 ///
-/// Screenshots are intentionally allowed on both platforms. Screenshot and
-/// recording signals are handled by [ScreenSecurity] so the app can warn the
-/// user and conceal recovery words without relying on Android `FLAG_SECURE`.
+/// Normal screenshots are allowed on both platforms and produce a warning.
+/// Sensitive Android routes separately opt into `FLAG_SECURE`.
 abstract final class SecureScreen {
   static const _channel = MethodChannel('kt/secure_screen');
 
@@ -47,7 +46,8 @@ abstract final class SecureScreen {
   static void resetPrivacyStringsForTest() => _pushedStrings = null;
 }
 
-/// Conceals sensitive content while the OS reports active recording/mirroring.
+/// Blocks Android screenshots and conceals sensitive content while the OS
+/// reports active recording/mirroring.
 ///
 /// Wrap any screen or sheet that can put a recovery phrase — whole or partial
 /// — in front of the user.
@@ -57,13 +57,15 @@ class SecureContent extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
-    valueListenable: ScreenSecurity.captured,
-    builder: (context, captured, _) {
-      if (captured) return const _CaptureBlocked();
-      return child;
-    },
-    child: child,
+  Widget build(BuildContext context) => AndroidScreenshotBlocked(
+    child: ValueListenableBuilder<bool>(
+      valueListenable: ScreenSecurity.captured,
+      builder: (context, captured, _) {
+        if (captured) return const _CaptureBlocked();
+        return child;
+      },
+      child: child,
+    ),
   );
 }
 

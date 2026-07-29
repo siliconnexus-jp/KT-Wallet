@@ -26,7 +26,7 @@
   "ruleHandwriteTitle": "Back up by hand on paper only",
   "ruleHandwriteDesc": "Write two copies and store them separately in safe physical locations",
   "ruleNoCaptureTitle": "Never photograph, screenshot, or type it into an online device",
-  "ruleNoCaptureDesc": "Don't save it to photos, cloud, or chat apps; the app warns you and conceals the recovery phrase after a screenshot",
+  "ruleNoCaptureDesc": "Don't save it to photos, cloud, or chat apps; iOS warns after a screenshot, while Android blocks screenshots on recovery-phrase screens",
 
   "backupMnemonicTitle": "Back up recovery phrase",
   "mnemonicShowConfirmBtn": "I've written it down — verify",

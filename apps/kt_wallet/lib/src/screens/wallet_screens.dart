@@ -116,62 +116,55 @@ Widget _mnemonicUnavailable(
 }
 
 Widget _wordGrid(List<String> words) {
-  return ScreenshotSensitiveBuilder(
-    builder: (context, concealed) => Column(
-      children: [
-        for (var r = 0; r < (words.length / 2).ceil(); r++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Row(
-              children: [
-                for (var c = 0; c < 2; c++) ...[
-                  if (c > 0) const SizedBox(width: 10),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: WalletColors.surface,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        children: [
-                          Text(
-                            (r * 2 + c + 1).toString().padLeft(2, '0'),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontFamily: KtFonts.mono,
-                              color: WalletColors.text3,
-                            ),
+  return Column(
+    children: [
+      for (var r = 0; r < (words.length / 2).ceil(); r++)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
+            children: [
+              for (var c = 0; c < 2; c++) ...[
+                if (c > 0) const SizedBox(width: 10),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: WalletColors.surface,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          (r * 2 + c + 1).toString().padLeft(2, '0'),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontFamily: KtFonts.mono,
+                            color: WalletColors.text3,
                           ),
-                          const SizedBox(width: 10),
-                          ExcludeSemantics(
-                            excluding: concealed,
-                            child: Text(
-                              words[r * 2 + c],
-                              key: Key('mnemonic-word-${r * 2 + c}'),
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                                fontFamily: KtFonts.mono,
-                                color: concealed
-                                    ? WalletColors.surface
-                                    : WalletColors.text,
-                              ),
-                            ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          words[r * 2 + c],
+                          key: Key('mnemonic-word-${r * 2 + c}'),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            fontFamily: KtFonts.mono,
+                            color: WalletColors.text,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ],
-            ),
+            ],
           ),
-      ],
-    ),
+        ),
+    ],
   );
 }
 
@@ -479,8 +472,8 @@ class CreateWarnScreen extends StatelessWidget {
 class MnemonicShowScreen extends StatelessWidget {
   const MnemonicShowScreen({super.key});
 
-  // The whole screen is sensitive. Recording/mirroring conceals the screen,
-  // and a screenshot event immediately conceals the recovery words.
+  // Recording/mirroring conceals the screen. Android also blocks screenshots
+  // at the window layer; iOS keeps the page stable and shows a warning.
   @override
   Widget build(BuildContext context) =>
       SecureContent(child: _buildContent(context));
@@ -612,7 +605,7 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
   }
 
   // The challenge options are drawn from the real phrase, so this screen gets
-  // the same recording and screenshot concealment as the backup screen.
+  // the same recording protection and Android screenshot blocking.
   @override
   Widget build(BuildContext context) =>
       SecureContent(child: _buildContent(context));

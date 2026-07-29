@@ -241,7 +241,7 @@ abstract class AppLocalizations {
   /// No description provided for @ruleNoCaptureDesc.
   ///
   /// In zh, this message translates to:
-  /// **'不要保存到相册、云盘或聊天软件；检测到截图后会立即隐藏助记词并提醒'**
+  /// **'不要保存到相册、云盘或聊天软件；iOS 截图后提醒，Android 助记词页面禁止截图'**
   String get ruleNoCaptureDesc;
 
   /// No description provided for @backupMnemonicTitle.

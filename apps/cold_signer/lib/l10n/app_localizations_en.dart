@@ -87,7 +87,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ruleNoCaptureDesc =>
-      'Don\'t save it to photos, cloud, or chat apps; the app warns you and conceals the recovery phrase after a screenshot';
+      'Don\'t save it to photos, cloud, or chat apps; iOS warns after a screenshot, while Android blocks screenshots on recovery-phrase screens';
 
   @override
   String get backupMnemonicTitle => 'Back up recovery phrase';

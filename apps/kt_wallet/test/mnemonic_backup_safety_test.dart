@@ -109,7 +109,7 @@ void main() {
       expectNoDemoWords();
     });
 
-    testWidgets('screenshot event conceals the recovery phrase words', (
+    testWidgets('screenshot event does not hide recovery words', (
       tester,
     ) async {
       final controller = await _controller();
@@ -119,10 +119,7 @@ void main() {
 
       expect(tester.widget<Text>(wordFinder).style?.color, WalletColors.text);
       await _sendScreenshotEvent(tester);
-      expect(
-        tester.widget<Text>(wordFinder).style?.color,
-        WalletColors.surface,
-      );
+      expect(tester.widget<Text>(wordFinder).style?.color, WalletColors.text);
     });
   });
 

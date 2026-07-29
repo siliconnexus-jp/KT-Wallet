@@ -78,7 +78,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ruleNoCaptureTitle => '永不拍照、截图或输入联网设备';
 
   @override
-  String get ruleNoCaptureDesc => '不要保存到相册、云盘或聊天软件；检测到截图后会立即隐藏助记词并提醒';
+  String get ruleNoCaptureDesc => '不要保存到相册、云盘或聊天软件；iOS 截图后提醒，Android 助记词页面禁止截图';
 
   @override
   String get backupMnemonicTitle => '备份助记词';

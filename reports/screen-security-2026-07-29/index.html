@@ -104,7 +104,8 @@
     <h1>屏幕安全与后台隐私保护测试报告</h1>
     <p class="lede">
       iOS Simulator 与 Android API 35 模拟器验收。测试覆盖 KT Wallet、KT Cold Signer，
-      包括允许截屏、截屏后安全提醒、助记词隐藏、系统面板行为以及真实后台任务卡保护。
+      包括普通页面允许截屏与安全提醒、Android 助记词页面系统级截屏阻止、
+      iOS 截屏提醒、系统面板行为以及真实后台任务卡保护。
     </p>
     <div class="stamp">
       <span class="pill"><i class="dot"></i>核心验收通过</span>
@@ -116,13 +117,13 @@
   <section class="summary">
     <article class="card">
       <div class="eyebrow">Screenshot</div>
-      <div class="metric">允许 + 提醒</div>
-      <p>不再使用 Android <code>FLAG_SECURE</code> 阻止用户截屏；成功截屏后显示 6 秒安全横幅。</p>
+      <div class="metric">按页面保护</div>
+      <p>普通页面允许截屏并提醒；Android 助记词展示、校验及导入页面使用 <code>FLAG_SECURE</code>。</p>
     </article>
     <article class="card">
       <div class="eyebrow">Mnemonic</div>
-      <div class="metric">立即隐藏</div>
-      <p>系统回调到达后，助记词文字颜色与卡片背景一致，并在本次页面生命周期内持续隐藏。</p>
+      <div class="metric">Android 阻止</div>
+      <p>Android 不保存助记词截图；iOS 收到事后通知时只显示提醒，不改变助记词页面。</p>
     </article>
     <article class="card">
       <div class="eyebrow">Background</div>
@@ -155,7 +156,7 @@
     </figure>
     <figure class="card">
       <img src="screenshots/ios-wallet-screenshot-warning.png" alt="iOS KT Wallet 截屏提醒">
-      <figcaption><strong>KT Wallet · 截屏后</strong><span>真实 Simulator “Trigger Screenshot”；横幅出现，助记词立即隐藏。</span></figcaption>
+      <figcaption><strong>KT Wallet · 截屏提醒（旧图）</strong><span>此图记录旧版短暂隐藏行为；当前版本只显示安全横幅，不再改变助记词文字。</span></figcaption>
     </figure>
     <figure class="card wide">
       <img src="screenshots/ios-wallet-background-protected.png" alt="iOS KT Wallet 后台保护">
@@ -167,7 +168,7 @@
     </figure>
     <figure class="card wide">
       <img src="screenshots/ios-cold-signer-screenshot-warning.png" alt="iOS KT Cold Signer 截屏提醒">
-      <figcaption><strong>KT Cold Signer · 截屏后</strong><span>真实 iOS 截屏事件；安全横幅出现，助记词被隐藏。</span></figcaption>
+      <figcaption><strong>KT Cold Signer · 截屏提醒（旧图）</strong><span>此图记录旧版短暂隐藏行为；当前版本只显示安全横幅，不再改变助记词文字。</span></figcaption>
     </figure>
     <figure class="card wide">
       <img src="screenshots/ios-cold-signer-background-protected.png" alt="iOS KT Cold Signer 后台保护">
@@ -183,7 +184,7 @@
     </figure>
     <figure class="card">
       <img src="screenshots/android-wallet-screenshot-warning.png" alt="Android KT Wallet 截屏提醒">
-      <figcaption><strong>KT Wallet · 截屏后</strong><span>原生测试事件进入正式 MethodChannel；横幅出现且助记词隐藏。</span></figcaption>
+      <figcaption><strong>KT Wallet · 调试事件通道</strong><span>此图验证提醒层；当前 Android 助记词页面的真实系统截图已由 FLAG_SECURE 阻止，不会产生成功回调。</span></figcaption>
     </figure>
     <figure class="card">
       <img src="screenshots/android-wallet-background-protected.png" alt="Android KT Wallet 后台保护">
@@ -195,7 +196,7 @@
     </figure>
     <figure class="card">
       <img src="screenshots/android-cold-signer-screenshot-warning.png" alt="Android KT Cold Signer 截屏提醒">
-      <figcaption><strong>KT Cold Signer · 截屏后</strong><span>中文安全横幅与深色离线签名器界面保持一致。</span></figcaption>
+      <figcaption><strong>KT Cold Signer · 调试事件通道</strong><span>当前 Android 助记词路由已改为系统级阻止；普通页面仍使用此安全横幅。</span></figcaption>
     </figure>
     <figure class="card">
       <img src="screenshots/android-cold-signer-background-protected.png" alt="Android KT Cold Signer 后台保护">
@@ -207,9 +208,11 @@
   <table>
     <thead><tr><th>项目</th><th>平台</th><th>结果</th><th>验收说明</th></tr></thead>
     <tbody>
-      <tr><td>用户截屏</td><td>iOS / Android</td><td class="pass">通过</td><td>截屏保持可用，不再输出黑屏或阻止操作。</td></tr>
-      <tr><td>截屏安全横幅</td><td>iOS / Android 14+</td><td class="pass">通过</td><td>显示 6 秒，可手动关闭；连续事件会重新计时。</td></tr>
-      <tr><td>助记词截屏后隐藏</td><td>iOS / Android</td><td class="pass">通过</td><td>回调后所有单词与背景同色，序号保留以说明页面状态。</td></tr>
+      <tr><td>普通页面截屏</td><td>iOS / Android</td><td class="pass">通过</td><td>截屏保持可用，成功后显示安全横幅。</td></tr>
+      <tr><td>Android 助记词截屏</td><td>Android</td><td class="pass">已阻止</td><td>展示、校验、导入及其他 SecureContent 页面启用 FLAG_SECURE；系统不保存截图。</td></tr>
+      <tr><td>截屏安全横幅</td><td>iOS / Android 14+</td><td class="pass">通过</td><td>普通页面显示 6 秒；FLAG_SECURE 页面因截图未成功，不产生系统成功回调。</td></tr>
+      <tr><td>iOS 助记词截屏提醒</td><td>iOS</td><td class="pass">通过</td><td>截图完成后显示安全横幅；助记词页面不隐藏、不闪烁。</td></tr>
+      <tr><td>iOS 已保存截图脱敏</td><td>iOS</td><td>不支持</td><td>公开系统通知在截图完成后到达，不能回溯修改已保存图片。</td></tr>
       <tr><td>通知栏 / 控制中心</td><td>iOS / Android</td><td class="pass">通过</td><td>只进入 inactive/失焦，不进入品牌保护页。</td></tr>
       <tr><td>切换其他 App 后任务卡</td><td>iOS / Android</td><td class="pass">通过</td><td>仅品牌图标和“内容已隐藏”文案可见。</td></tr>
       <tr><td>点击任务卡恢复</td><td>Android</td><td class="pass">通过</td><td>PrivacyActivity 自动退出，MainActivity 恢复为 RESUMED。</td></tr>
@@ -239,7 +242,8 @@
   <h2>平台边界</h2>
   <p class="note">
     iOS 与 Android 的截屏通知都是“截图完成后”到达，无法回溯修改用户刚刚保存的那一张图片。
-    当前实现会在回调到达后立即隐藏助记词并提醒用户。Android 官方截屏检测仅适用于 API 34+；
+    因此 Android 助记词页面不依赖通知，而是在页面生命周期内启用 FLAG_SECURE；系统不会保存截图。
+    iOS 当前只在回调到达后提醒用户，不再改变助记词显示。Android 官方截屏检测仅适用于 API 34+；
     Android 13 及以下不使用 MediaStore 扫描或额外存储权限来伪装可靠检测能力。
   </p>
 

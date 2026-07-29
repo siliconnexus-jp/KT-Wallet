@@ -79,7 +79,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get ruleNoCaptureDesc =>
-      '写真・クラウド・チャットアプリに保存しないでください。スクリーンショットを検出すると、復元フレーズをすぐに隠して警告します';
+      '写真・クラウド・チャットアプリに保存しないでください。iOS は撮影後に警告し、Android は復元フレーズ画面の撮影を禁止します';
 
   @override
   String get backupMnemonicTitle => 'リカバリーフレーズをバックアップ';

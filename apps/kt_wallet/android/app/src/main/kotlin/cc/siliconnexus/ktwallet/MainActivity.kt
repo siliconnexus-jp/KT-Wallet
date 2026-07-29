@@ -18,6 +18,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.annotation.RequiresApi
@@ -51,14 +52,19 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        // Screenshots remain available in every mode. The legacy setSecure
-        // method is accepted for compatibility with an older Dart bundle, but
-        // deliberately does not raise FLAG_SECURE; Android 14+ reports a
-        // successful screenshot through ScreenCaptureCallback instead.
+        // Normal wallet screens remain shareable. Recovery-phrase, import and
+        // verification routes raise FLAG_SECURE through this channel before
+        // rendering their sensitive content, then clear it when they leave.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kt/secure_screen")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "setSecure" -> {
+                        val secure = call.arguments as? Boolean ?: false
+                        if (secure) {
+                            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                        } else {
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                        }
                         result.success(null)
                     }
                     "setPrivacyStrings" -> {

@@ -26,7 +26,7 @@
   "ruleHandwriteTitle": "紙とペンで手書きバックアップのみ",
   "ruleHandwriteDesc": "2部書き写し、安全な物理的場所に分けて保管してください",
   "ruleNoCaptureTitle": "撮影・スクリーンショット・オンライン端末への入力は厳禁",
-  "ruleNoCaptureDesc": "写真・クラウド・チャットアプリに保存しないでください。スクリーンショットを検出すると、復元フレーズをすぐに隠して警告します",
+  "ruleNoCaptureDesc": "写真・クラウド・チャットアプリに保存しないでください。iOS は撮影後に警告し、Android は復元フレーズ画面の撮影を禁止します",
 
   "backupMnemonicTitle": "リカバリーフレーズをバックアップ",
   "mnemonicShowConfirmBtn": "手書きしました — 確認へ",

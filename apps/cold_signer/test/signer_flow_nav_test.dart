@@ -30,7 +30,7 @@ Future<void> _sendScreenshotEvent(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('screenshot event conceals the recovery phrase words', (
+  testWidgets('screenshot event warns without hiding phrase words', (
     tester,
   ) async {
     await _open(tester, 'C3 助记词展示');
@@ -38,7 +38,7 @@ void main() {
 
     expect(tester.widget<Text>(wordFinder).style?.color, SignerColors.text);
     await _sendScreenshotEvent(tester);
-    expect(tester.widget<Text>(wordFinder).style?.color, SignerColors.surface);
+    expect(tester.widget<Text>(wordFinder).style?.color, SignerColors.text);
     expect(
       find.byKey(const ValueKey('screen-security-warning')),
       findsOneWidget,
