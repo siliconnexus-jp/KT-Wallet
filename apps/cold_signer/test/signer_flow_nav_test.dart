@@ -8,7 +8,9 @@ import 'package:ui_kit/ui_kit.dart';
 Future<void> _open(WidgetTester tester, String galleryEntry) async {
   // Pin the locale so the localized UI asserted below is in Chinese.
   tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+  tester.platformDispatcher.localeTestValue = const Locale('zh');
   addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+  addTearDown(tester.platformDispatcher.clearLocaleTestValue);
   await tester.pumpWidget(ColdSignerApp());
   await tester.pumpAndSettle();
   await tester.scrollUntilVisible(find.text(galleryEntry), 200);
@@ -37,6 +39,11 @@ void main() {
     expect(tester.widget<Text>(wordFinder).style?.color, SignerColors.text);
     await _sendScreenshotEvent(tester);
     expect(tester.widget<Text>(wordFinder).style?.color, SignerColors.surface);
+    expect(
+      find.byKey(const ValueKey('screen-security-warning')),
+      findsOneWidget,
+    );
+    expect(find.text('当前屏幕已被截图，请注意您的钱包安全'), findsOneWidget);
   });
 
   testWidgets('create onboarding: welcome → warn → show → verify → password', (

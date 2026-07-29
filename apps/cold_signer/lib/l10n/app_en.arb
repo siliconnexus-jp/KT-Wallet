@@ -26,7 +26,7 @@
   "ruleHandwriteTitle": "Back up by hand on paper only",
   "ruleHandwriteDesc": "Write two copies and store them separately in safe physical locations",
   "ruleNoCaptureTitle": "Never photograph, screenshot, or type it into an online device",
-  "ruleNoCaptureDesc": "Don't save it to photos, cloud, or chat apps; this app blocks screenshots",
+  "ruleNoCaptureDesc": "Don't save it to photos, cloud, or chat apps; the app warns you and conceals the recovery phrase after a screenshot",
 
   "backupMnemonicTitle": "Back up recovery phrase",
   "mnemonicShowConfirmBtn": "I've written it down — verify",
@@ -164,7 +164,7 @@
   "verifyEverySignDesc": "Can't be disabled (enforced in V1)",
   "accessSection": "Access",
   "changeAppPassword": "Change app password",
-  "screenCaptureProtection": "Screenshot & recording protection",
+  "screenCaptureProtection": "Screenshot safety alerts",
 
   "permanentlyDeleteWallet": "Permanently delete wallet",
   "stepPassword": "Password",

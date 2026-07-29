@@ -15,7 +15,6 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -32,13 +31,11 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            setRecentsScreenshotEnabled(false)
-        }
-        // The standalone signer is always displaying secrets (mnemonics, the
-        // signing QR loop), so FLAG_SECURE is set unconditionally: no
-        // screenshots, no screen recording, blanked recents preview.
-        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        // Screenshots are intentionally allowed. Android 14+ reports a
+        // successful capture through ScreenCaptureCallback so Flutter can
+        // warn the user and conceal mnemonic words immediately afterwards.
+        // Recents screenshots stay enabled so Android captures the branded
+        // cover installed by onUserLeaveHint instead of reusing an old frame.
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -92,21 +89,19 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun onUserLeaveHint() {
-        // Fires before onPause for Home/Recents navigation, early enough for
-        // Android's task snapshot compositor to capture the cover.
+        // This callback represents a user-driven Home/app switch. System
+        // overlays and a same-Activity intent do not invoke it.
         showPrivacyCover()
+        startActivity(Intent(this, PrivacyActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        })
+        overridePendingTransition(0, 0)
         super.onUserLeaveHint()
     }
 
     override fun onResume() {
         super.onResume()
         hidePrivacyCover()
-    }
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        if (!hasFocus) showPrivacyCover()
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus && !isFinishing) hidePrivacyCover()
     }
 
     private fun showPrivacyCover() {
@@ -195,9 +190,9 @@ class MainActivity : FlutterFragmentActivity() {
             "bluetooth" to bluetooth,
             "passcode" to if (keyguard.isDeviceSecure) "safe" else "unsafe",
             "biometric" to biometric,
-            // FLAG_SECURE is unconditional for this Activity, so capture is
-            // prevented rather than guessed from MediaStore or broad access.
-            "screenCapture" to "safe",
+            // Android has no reliable recording-state probe here. A
+            // post-screenshot callback is not evidence that recording is off.
+            "screenCapture" to "unknown",
             "integrity" to if (hasRootEvidence()) "unsafe" else "unknown"
         )
     }

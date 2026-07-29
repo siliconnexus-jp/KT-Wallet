@@ -2,11 +2,6 @@ import Flutter
 import UIKit
 
 class SceneDelegate: FlutterSceneDelegate {
-  override func sceneWillResignActive(_ scene: UIScene) {
-    (UIApplication.shared.delegate as? AppDelegate)?.showPrivacyCover()
-    super.sceneWillResignActive(scene)
-  }
-
   override func sceneDidEnterBackground(_ scene: UIScene) {
     (UIApplication.shared.delegate as? AppDelegate)?.showPrivacyCover()
     super.sceneDidEnterBackground(scene)

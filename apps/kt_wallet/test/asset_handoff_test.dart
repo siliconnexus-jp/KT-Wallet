@@ -40,6 +40,37 @@ WalletController _wallets() => WalletController(
   ),
 );
 
+WalletController _twoWallets() => WalletController(
+  WalletManager(
+    initial: [
+      HotWallet(
+        id: 'w1',
+        name: 'Current wallet',
+        avatarColor: 0xFF000000,
+        addresses: const ChainAddresses(
+          eth: '0x1111111111111111111111111111111111111111',
+          polygon: '0x1111111111111111111111111111111111111111',
+          tron: 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
+          solana: 'So11111111111111111111111111111111111111112',
+        ),
+        sortOrder: 0,
+      ),
+      HotWallet(
+        id: 'w2',
+        name: 'Savings wallet',
+        avatarColor: 0xFF111111,
+        addresses: const ChainAddresses(
+          eth: '0x2222222222222222222222222222222222222222',
+          polygon: '0x2222222222222222222222222222222222222222',
+          tron: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+          solana: 'So11111111111111111111111111111111111111113',
+        ),
+        sortOrder: 1,
+      ),
+    ],
+  ),
+);
+
 Widget _app(Widget home, WalletController wallets) => MaterialApp(
   debugShowCheckedModeBanner: false,
   locale: const Locale('zh'),
@@ -200,6 +231,58 @@ void main() {
         findsNothing,
       );
     });
+
+    testWidgets(
+      'recipient picker hides the current wallet and lists contacts first',
+      (tester) async {
+        final wallets = _twoWallets();
+        final alice = await wallets.addContact(
+          name: 'Alice contact',
+          address: '0x3333333333333333333333333333333333333333',
+          chain: Chain.ethereum.name,
+        );
+        // Even if a user saved their own address previously, it must not
+        // reappear as a valid recipient through the contact section.
+        final self = await wallets.addContact(
+          name: 'My own address',
+          address: '0x1111111111111111111111111111111111111111',
+          chain: Chain.ethereum.name,
+        );
+        final asset = AssetRef.native(
+          coin: Coin.eth,
+          name: 'Ethereum',
+          symbol: 'ETH',
+        );
+
+        await tester.pumpWidget(
+          _app(TransferInputScreen(asset: asset), wallets),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('transfer-address-book')));
+        await tester.pumpAndSettle();
+
+        final aliceRow = find.byKey(ValueKey('transfer-contact-${alice.id}'));
+        const otherWalletRow = ValueKey(
+          'transfer-contact-local-wallet:w2:ethereum',
+        );
+        expect(aliceRow, findsOneWidget);
+        expect(find.byKey(otherWalletRow), findsOneWidget);
+        expect(
+          find.byKey(
+            const ValueKey('transfer-contact-local-wallet:w1:ethereum'),
+          ),
+          findsNothing,
+        );
+        expect(
+          find.byKey(ValueKey('transfer-contact-${self.id}')),
+          findsNothing,
+        );
+        expect(
+          tester.getTopLeft(aliceRow).dy,
+          lessThan(tester.getTopLeft(find.byKey(otherWalletRow)).dy),
+        );
+      },
+    );
 
     testWidgets('without an asset the full list is still offered', (
       tester,

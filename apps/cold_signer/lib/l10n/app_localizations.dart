@@ -241,7 +241,7 @@ abstract class AppLocalizations {
   /// No description provided for @ruleNoCaptureDesc.
   ///
   /// In zh, this message translates to:
-  /// **'不要保存到相册、云盘或聊天软件，本 App 已禁用截图'**
+  /// **'不要保存到相册、云盘或聊天软件；检测到截图后会立即隐藏助记词并提醒'**
   String get ruleNoCaptureDesc;
 
   /// No description provided for @backupMnemonicTitle.
@@ -949,7 +949,7 @@ abstract class AppLocalizations {
   /// No description provided for @screenCaptureProtection.
   ///
   /// In zh, this message translates to:
-  /// **'截图与录屏防护'**
+  /// **'截图安全提醒'**
   String get screenCaptureProtection;
 
   /// No description provided for @permanentlyDeleteWallet.

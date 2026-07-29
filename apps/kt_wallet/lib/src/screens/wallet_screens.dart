@@ -479,10 +479,8 @@ class CreateWarnScreen extends StatelessWidget {
 class MnemonicShowScreen extends StatelessWidget {
   const MnemonicShowScreen({super.key});
 
-  // The whole screen is sensitive, both branches: FLAG_SECURE has to be up
-  // before a single word can paint, and guarding the refusal panel too costs
-  // nothing. Without this the backup screen told the user "don't screenshot
-  // this" while the OS happily allowed it.
+  // The whole screen is sensitive. Recording/mirroring conceals the screen,
+  // and a screenshot event immediately conceals the recovery words.
   @override
   Widget build(BuildContext context) =>
       SecureContent(child: _buildContent(context));
@@ -613,9 +611,8 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
     if (mounted) context.go('/home');
   }
 
-  // The challenge options are drawn from the real phrase, so this screen
-  // leaks words too — it gets the same FLAG_SECURE treatment as the backup
-  // screen.
+  // The challenge options are drawn from the real phrase, so this screen gets
+  // the same recording and screenshot concealment as the backup screen.
   @override
   Widget build(BuildContext context) =>
       SecureContent(child: _buildContent(context));

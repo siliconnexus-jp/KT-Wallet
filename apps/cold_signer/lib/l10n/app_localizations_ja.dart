@@ -79,7 +79,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get ruleNoCaptureDesc =>
-      '写真・クラウド・チャットアプリに保存しないでください。本アプリはスクリーンショットを禁止しています';
+      '写真・クラウド・チャットアプリに保存しないでください。スクリーンショットを検出すると、復元フレーズをすぐに隠して警告します';
 
   @override
   String get backupMnemonicTitle => 'リカバリーフレーズをバックアップ';
@@ -459,7 +459,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get changeAppPassword => 'アプリのパスワードを変更';
 
   @override
-  String get screenCaptureProtection => 'スクリーンショット・録画防止';
+  String get screenCaptureProtection => 'スクリーンショット安全通知';
 
   @override
   String get permanentlyDeleteWallet => 'ウォレットを完全に削除';

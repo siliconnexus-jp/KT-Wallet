@@ -2,13 +2,16 @@ import 'dart:async';
 
 import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/main.dart';
 import 'package:kt_wallet/src/security/biometric_auth.dart';
 import 'package:kt_wallet/src/state/device_mode.dart';
+import 'package:kt_wallet/src/state/locale_controller.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
 import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 /// Proves the combined single-installer gate: first launch shows the
 /// device-mode picker, each choice boots the full corresponding experience,
@@ -74,6 +77,40 @@ Future<DeviceModeController> _pumpRoot(
 }
 
 void main() {
+  testWidgets('screenshot warning follows the app language override', (
+    tester,
+  ) async {
+    ScreenSecurity.resetForTest();
+    addTearDown(ScreenSecurity.resetForTest);
+    tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+
+    await tester.pumpWidget(
+      RootApp(
+        localeController: LocaleController(initial: const Locale('en')),
+        modeController: DeviceModeController(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Choose device mode'), findsOneWidget);
+
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+          'kt/screen_security',
+          const StandardMethodCodec().encodeMethodCall(
+            MethodCall('screenshotTaken'),
+          ),
+          (_) {},
+        );
+    await tester.pump();
+
+    expect(
+      find.text('A screenshot was taken. Please protect your wallet.'),
+      findsOneWidget,
+    );
+    expect(find.text('当前屏幕已被截图，请注意您的钱包安全'), findsNothing);
+  });
+
   testWidgets('fresh start (no mode) shows the device-mode picker', (
     tester,
   ) async {

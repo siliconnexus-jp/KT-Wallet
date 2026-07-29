@@ -87,7 +87,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ruleNoCaptureDesc =>
-      'Don\'t save it to photos, cloud, or chat apps; this app blocks screenshots';
+      'Don\'t save it to photos, cloud, or chat apps; the app warns you and conceals the recovery phrase after a screenshot';
 
   @override
   String get backupMnemonicTitle => 'Back up recovery phrase';
@@ -475,7 +475,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get changeAppPassword => 'Change app password';
 
   @override
-  String get screenCaptureProtection => 'Screenshot & recording protection';
+  String get screenCaptureProtection => 'Screenshot safety alerts';
 
   @override
   String get permanentlyDeleteWallet => 'Permanently delete wallet';

@@ -34,7 +34,6 @@ import '../state/networks.dart';
 import '../state/locale_controller.dart';
 import '../state/wallet_controller.dart';
 import '../state/wallet_scope.dart';
-import '../transfer/airgap_codec.dart' show addressForChain;
 import '../wallets/wallet_model.dart';
 
 /// Display name + badge color per validated chain (address book rows).
@@ -200,59 +199,6 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
       tag?.$2 ?? c.chain,
       tag?.$3 ?? WalletColors.text3,
     );
-  }
-
-  List<({Wallet wallet, String address, List<Chain> chains})>
-  _localWalletAddresses() {
-    final entries = <({Wallet wallet, String address, List<Chain> chains})>[];
-    for (final wallet in _controller?.wallets ?? const <Wallet>[]) {
-      final grouped = <String, ({String address, List<Chain> chains})>{};
-      for (final chain in Chain.values) {
-        final address = addressForChain(wallet.addresses, chain);
-        if (address.trim().isEmpty) continue;
-        final key = chain == Chain.tron || chain == Chain.solana
-            ? address
-            : address.toLowerCase();
-        final current = grouped[key];
-        grouped[key] = (
-          address: current?.address ?? address,
-          chains: [...?current?.chains, chain],
-        );
-      }
-      for (final group in grouped.values) {
-        entries.add((
-          wallet: wallet,
-          address: group.address,
-          chains: group.chains,
-        ));
-      }
-    }
-    return entries;
-  }
-
-  String _localNetworkLabel(AppLocalizations l10n, List<Chain> chains) {
-    if (chains.length == 1) {
-      return _chainTags.firstWhere((tag) => tag.$1 == chains.first).$2;
-    }
-    final evmCount = chains.where((chain) {
-      return chain != Chain.tron && chain != Chain.solana;
-    }).length;
-    if (evmCount == chains.length) return l10n.evmNetworksLabel(evmCount);
-    return chains.map((chain) => chain.name).join(' · ');
-  }
-
-  Color _localNetworkColor(List<Chain> chains) => chains.length == 1
-      ? _chainTags.firstWhere((tag) => tag.$1 == chains.first).$3
-      : WalletColors.accent;
-
-  Future<void> _copyLocalAddress(String address) async {
-    await Clipboard.setData(ClipboardData(text: address));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context).addressCopied)),
-      );
   }
 
   Future<void> _addContact() => _contactSheet();
@@ -526,13 +472,6 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                 d.$3.toLowerCase().contains(q) ||
                 d.$4.toLowerCase().contains(q);
           }).toList();
-    final localResults = _localWalletAddresses().where((entry) {
-      if (q.isEmpty) return true;
-      final network = _localNetworkLabel(l10n, entry.chains);
-      return entry.wallet.name.toLowerCase().contains(q) ||
-          entry.address.toLowerCase().contains(q) ||
-          network.toLowerCase().contains(q);
-    }).toList();
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(
@@ -574,97 +513,6 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
             ],
           ),
         ),
-        if (localResults.isNotEmpty) ...[
-          Text(
-            l10n.localWalletAddresses,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: WalletColors.text2,
-            ),
-          ),
-          KtCard(
-            child: Column(
-              children: [
-                for (var i = 0; i < localResults.length; i++) ...[
-                  if (i > 0) const Divider(height: 25),
-                  Builder(
-                    builder: (context) {
-                      final entry = localResults[i];
-                      final current =
-                          entry.wallet.id == _controller?.current?.id;
-                      return Row(
-                        children: [
-                          KtAvatar(
-                            color: Color(
-                              entry.wallet.avatarColor,
-                            ).withValues(alpha: 0.12),
-                            initial: entry.wallet.name.characters.first
-                                .toUpperCase(),
-                            size: 40,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        entry.wallet.name,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: WalletColors.text,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 7),
-                                    NetworkBadge(
-                                      label: _localNetworkLabel(
-                                        l10n,
-                                        entry.chains,
-                                      ),
-                                      dotColor: _localNetworkColor(
-                                        entry.chains,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  '${current ? l10n.currentWalletLabel : l10n.localWalletLabel} · '
-                                  '${_abbrevAddress(entry.address)}',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontFamily: KtFonts.mono,
-                                    color: WalletColors.text3,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: l10n.copyAddress,
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => _copyLocalAddress(entry.address),
-                            icon: const Icon(
-                              Icons.copy_rounded,
-                              size: 17,
-                              color: WalletColors.text3,
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
         if (results.isNotEmpty) ...[
           Text(
             l10n.savedContacts,
@@ -675,7 +523,7 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
             ),
           ),
         ],
-        if (results.isEmpty && localResults.isEmpty)
+        if (results.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 32),
             child: Center(

@@ -29,12 +29,6 @@ import UIKit
     )
     NotificationCenter.default.addObserver(
       self,
-      selector: #selector(willResignActive),
-      name: UIApplication.willResignActiveNotification,
-      object: nil
-    )
-    NotificationCenter.default.addObserver(
-      self,
       selector: #selector(didBecomeActive),
       name: UIApplication.didBecomeActiveNotification,
       object: nil
@@ -64,11 +58,6 @@ import UIKit
     }
   }
 
-  override func applicationWillResignActive(_ application: UIApplication) {
-    showPrivacyCover()
-    super.applicationWillResignActive(application)
-  }
-
   override func applicationDidBecomeActive(_ application: UIApplication) {
     super.applicationDidBecomeActive(application)
     hidePrivacyCover()
@@ -83,10 +72,6 @@ import UIKit
       "screenCaptureChanged",
       arguments: UIScreen.main.isCaptured
     )
-  }
-
-  @objc private func willResignActive() {
-    showPrivacyCover()
   }
 
   @objc private func didBecomeActive() {
@@ -115,7 +100,7 @@ import UIKit
       icon.heightAnchor.constraint(equalToConstant: 88),
     ])
     let text = localizedProtectionText()
-    let title = protectionLabel("KT Wallet", size: 26, weight: .bold, color: .white)
+    let title = protectionLabel("KT Cold Signer", size: 26, weight: .bold, color: .white)
     // No glyph here: the "⚖" that used to prefix this line was the scales of
     // Libra, left over from the old brand, and it sat directly above the app
     // icon that already identifies the app.
@@ -177,12 +162,12 @@ import UIKit
   private func localizedProtectionText() -> (active: String, hidden: String) {
     let language = Locale.preferredLanguages.first ?? "en"
     if language.hasPrefix("zh") {
-      return ("KT 钱包保护已启动", "您的钱包内容已隐藏")
+      return ("KT冷钱包保护已启动", "您的钱包内容已隐藏")
     }
     if language.hasPrefix("ja") {
-      return ("KT Wallet 保護が有効です", "ウォレットの内容は非表示です")
+      return ("KT Cold Signer 保護が有効です", "ウォレットの内容は非表示です")
     }
-    return ("KT Wallet Protection is active", "Your wallet content is hidden")
+    return ("KT Cold Signer Protection is active", "Your wallet content is hidden")
   }
 
   private func appIcon() -> UIImage? {

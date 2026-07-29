@@ -93,14 +93,15 @@ class _ColdSignerAppState extends State<ColdSignerApp> {
   @override
   Widget build(BuildContext context) {
     final router = _router;
-    return ScreenSecurityGuard(
-      child: SignerWalletScope(
-        controller: widget.walletController,
-        child: LocaleScope(
-          controller: widget.localeController,
-          child: ListenableBuilder(
-            listenable: widget.localeController,
-            builder: (context, _) => router == null
+    return ListenableBuilder(
+      listenable: widget.localeController,
+      builder: (context, _) => ScreenSecurityGuard(
+        locale: widget.localeController.locale,
+        child: SignerWalletScope(
+          controller: widget.walletController,
+          child: LocaleScope(
+            controller: widget.localeController,
+            child: router == null
                 // One frame at most, while the vault decides home vs. welcome.
                 ? MaterialApp(
                     onGenerateTitle: (context) =>

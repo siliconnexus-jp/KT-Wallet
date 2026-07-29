@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -11,6 +12,7 @@ class ScreenSecurity {
   static const MethodChannel _channel = MethodChannel('kt/screen_security');
   static final StreamController<void> _screenshots =
       StreamController<void>.broadcast();
+  static final ValueNotifier<bool> _captured = ValueNotifier(false);
   static bool _installed = false;
 
   static Stream<void> get screenshots {
@@ -18,12 +20,29 @@ class ScreenSecurity {
     return _screenshots.stream;
   }
 
+  /// True while the OS reports active screen recording or mirroring.
+  static ValueListenable<bool> get captured {
+    _install();
+    return _captured;
+  }
+
   static void _install() {
     if (_installed) return;
     _installed = true;
     _channel.setMethodCallHandler((call) async {
-      if (call.method == 'screenshotTaken') _screenshots.add(null);
+      switch (call.method) {
+        case 'screenshotTaken':
+          _screenshots.add(null);
+        case 'screenCaptureChanged':
+          _captured.value = call.arguments == true;
+      }
+      return null;
     });
+  }
+
+  @visibleForTesting
+  static void resetForTest() {
+    _captured.value = false;
   }
 }
 

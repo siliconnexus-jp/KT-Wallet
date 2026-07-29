@@ -26,7 +26,7 @@
   "ruleHandwriteTitle": "只用纸笔手写备份",
   "ruleHandwriteDesc": "抄写两份，分开存放在安全的物理位置",
   "ruleNoCaptureTitle": "永不拍照、截图或输入联网设备",
-  "ruleNoCaptureDesc": "不要保存到相册、云盘或聊天软件，本 App 已禁用截图",
+  "ruleNoCaptureDesc": "不要保存到相册、云盘或聊天软件；检测到截图后会立即隐藏助记词并提醒",
 
   "backupMnemonicTitle": "备份助记词",
   "mnemonicShowConfirmBtn": "我已手写备份，开始验证",
@@ -191,7 +191,7 @@
   "verifyEverySignDesc": "不可关闭（V1 强制）",
   "accessSection": "访问",
   "changeAppPassword": "修改 App 密码",
-  "screenCaptureProtection": "截图与录屏防护",
+  "screenCaptureProtection": "截图安全提醒",
 
   "permanentlyDeleteWallet": "永久删除钱包",
   "stepPassword": "密码",

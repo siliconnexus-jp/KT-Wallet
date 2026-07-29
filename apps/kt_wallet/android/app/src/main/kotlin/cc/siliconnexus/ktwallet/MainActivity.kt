@@ -18,7 +18,6 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.annotation.RequiresApi
@@ -33,9 +32,7 @@ class MainActivity : FlutterFragmentActivity() {
     private var privacyCover: View? = null
     private var securityChannel: MethodChannel? = null
     private var screenCaptureCallback: Activity.ScreenCaptureCallback? = null
-    private var secureScreenEnabled = false
     private var activityResumed = false
-    private var windowHasFocus = false
 
     // Overlay copy pushed from Dart. The resource strings resolve against the
     // SYSTEM language, which ignores an in-app language override; these win
@@ -46,31 +43,22 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Android may snapshot a task before a newly-added overlay completes
-        // its first render pass. API 33+ provides the only race-free contract:
-        // opt out of system Recents screenshots entirely. The in-window brand
-        // cover remains for Home, overlays and older Android releases.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            setRecentsScreenshotEnabled(false)
-        }
+        // Keep Recents screenshots enabled: onUserLeaveHint installs the
+        // branded privacy cover before Android snapshots the task. Disabling
+        // task screenshots here would make Android reuse an older app frame
+        // instead of capturing the newly installed protection page.
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        // Dart toggles FLAG_SECURE around the embedded signer mode: signer
-        // content (mnemonics, signing QRs) must not appear in screenshots or
-        // the recents switcher, while normal wallet mode stays shareable.
+        // Screenshots remain available in every mode. The legacy setSecure
+        // method is accepted for compatibility with an older Dart bundle, but
+        // deliberately does not raise FLAG_SECURE; Android 14+ reports a
+        // successful screenshot through ScreenCaptureCallback instead.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kt/secure_screen")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "setSecure" -> {
-                        val secure = call.arguments as? Boolean ?: false
-                        secureScreenEnabled = secure
-                        if (secure) {
-                            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                        } else {
-                            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                        }
                         result.success(null)
                     }
                     "setPrivacyStrings" -> {
@@ -86,7 +74,7 @@ class MainActivity : FlutterFragmentActivity() {
                         // Rebuild in place when the app is protected. Removing
                         // the cover unconditionally here can expose Flutter to
                         // the Recents compositor if this async call arrives
-                        // after onPause/onWindowFocusChanged(false).
+                        // after the Activity has entered the background.
                         if (changed) rebuildPrivacyCover()
                         result.success(null)
                     }
@@ -191,9 +179,13 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun onUserLeaveHint() {
-        // Fires before onPause for Home/Recents navigation, early enough for
-        // Android's task snapshot compositor to capture the cover.
+        // This callback represents a user-driven Home/app switch. System
+        // overlays and a same-Activity intent do not invoke it.
         showPrivacyCover()
+        startActivity(Intent(this, PrivacyActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        })
+        overridePendingTransition(0, 0)
         super.onUserLeaveHint()
     }
 
@@ -203,15 +195,12 @@ class MainActivity : FlutterFragmentActivity() {
         refreshPrivacyCover()
     }
 
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        windowHasFocus = hasFocus
-        if (!hasFocus) refreshPrivacyCover()
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus && !isFinishing) refreshPrivacyCover()
-    }
-
-    private fun privacyProtectionRequired() =
-        !activityResumed || !windowHasFocus
+    // Do not use onWindowFocusChanged here. Pulling the notification shade,
+    // showing a permission dialog, or opening another system overlay removes
+    // focus while the Activity is still visible. Banking-style privacy
+    // protection should replace Recents/background snapshots, not the live
+    // screen under a temporary system overlay.
+    private fun privacyProtectionRequired() = !activityResumed
 
     private fun refreshPrivacyCover() {
         if (privacyProtectionRequired()) showPrivacyCover() else hidePrivacyCover()
@@ -442,7 +431,9 @@ class MainActivity : FlutterFragmentActivity() {
             "bluetooth" to bluetooth,
             "passcode" to if (keyguard.isDeviceSecure) "safe" else "unsafe",
             "biometric" to biometric,
-            "screenCapture" to if (secureScreenEnabled) "safe" else "unknown",
+            // Android exposes a post-capture callback, not a reliable
+            // recording-state probe. Do not claim that capture is blocked.
+            "screenCapture" to "unknown",
             "integrity" to if (hasRootEvidence()) "unsafe" else "unknown"
         )
     }

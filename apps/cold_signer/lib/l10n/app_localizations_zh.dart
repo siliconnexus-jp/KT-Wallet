@@ -78,7 +78,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ruleNoCaptureTitle => '永不拍照、截图或输入联网设备';
 
   @override
-  String get ruleNoCaptureDesc => '不要保存到相册、云盘或聊天软件，本 App 已禁用截图';
+  String get ruleNoCaptureDesc => '不要保存到相册、云盘或聊天软件；检测到截图后会立即隐藏助记词并提醒';
 
   @override
   String get backupMnemonicTitle => '备份助记词';
@@ -454,7 +454,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get changeAppPassword => '修改 App 密码';
 
   @override
-  String get screenCaptureProtection => '截图与录屏防护';
+  String get screenCaptureProtection => '截图安全提醒';
 
   @override
   String get permanentlyDeleteWallet => '永久删除钱包';

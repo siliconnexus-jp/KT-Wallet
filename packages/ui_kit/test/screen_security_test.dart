@@ -1,11 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(ScreenSecurity.resetForTest);
+  tearDown(ScreenSecurity.resetForTest);
 
   testWidgets('sensitive content stays concealed after a screenshot event', (
     tester,
@@ -45,6 +49,49 @@ void main() {
 
     await tester.pumpWidget(const SizedBox());
     await events.close();
+  });
+
+  testWidgets('one native screenshot both warns and conceals sensitive text', (
+    tester,
+  ) async {
+    const background = Color(0xFF10131A);
+    await tester.pumpWidget(
+      ScreenSecurityGuard(
+        locale: const Locale('zh'),
+        child: MaterialApp(
+          home: ScreenshotSensitiveBuilder(
+            builder: (context, concealed) => Scaffold(
+              backgroundColor: background,
+              body: Text(
+                'secret phrase',
+                key: const ValueKey('native-sensitive-text'),
+                style: TextStyle(color: concealed ? background : Colors.white),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+          'kt/screen_security',
+          const StandardMethodCodec().encodeMethodCall(
+            MethodCall('screenshotTaken'),
+          ),
+          (_) {},
+        );
+    await tester.pump();
+
+    final text = tester.widget<Text>(
+      find.byKey(const ValueKey('native-sensitive-text')),
+    );
+    expect(text.style?.color, background);
+    expect(
+      find.byKey(const ValueKey('screen-security-warning')),
+      findsOneWidget,
+    );
+    expect(find.text('当前屏幕已被截图，请注意您的钱包安全'), findsOneWidget);
   });
 
   Future<StreamController<void>> pumpGuard(

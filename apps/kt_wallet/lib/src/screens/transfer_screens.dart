@@ -722,29 +722,45 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
   /// valid on the active chain. Compatibility is intentionally based on the
   /// address family rather than the contact's saved label: one EVM address is
   /// usable on Ethereum, Arbitrum, Base, Polygon, Avalanche and BNB, while
-  /// TRON and Solana remain isolated.
+  /// TRON and Solana remain isolated. The current wallet's own recipient is
+  /// omitted, including a saved contact that resolves to the same address.
+  /// Saved contacts come first; other local wallets remain convenient
+  /// shortcuts below them.
   Future<void> _pickContact() async {
     final controller = WalletScope.of(context);
     final contacts = await controller.loadContacts();
     if (!mounted) return;
     final l10n = AppLocalizations.of(context);
-    final localWallets = [
-      for (final wallet in controller.wallets)
-        Contact(
-          id: 'local-wallet:${wallet.id}:${_asset.chain.name}',
-          name: wallet.name,
-          address: addressForChain(wallet.addresses, _asset.chain),
-          chain: _asset.chain.name,
-          createdAt: 0,
-        ),
-    ].where((entry) => entry.address.trim().isNotEmpty).toList();
+    final current = controller.current;
+    final currentAddress = current == null
+        ? ''
+        : addressForChain(current.addresses, _asset.chain).trim();
+    final localWallets =
+        [
+              for (final wallet in controller.wallets)
+                if (wallet.id != current?.id)
+                  Contact(
+                    id: 'local-wallet:${wallet.id}:${_asset.chain.name}',
+                    name: wallet.name,
+                    address: addressForChain(wallet.addresses, _asset.chain),
+                    chain: _asset.chain.name,
+                    createdAt: 0,
+                  ),
+            ]
+            .where(
+              (entry) =>
+                  entry.address.trim().isNotEmpty &&
+                  !_sameRecipientAddress(entry.address, currentAddress),
+            )
+            .toList();
     final compatibleContacts = contacts
         .where(
           (contact) =>
-              Addresses.validate(_asset.chain, contact.address).isValid,
+              Addresses.validate(_asset.chain, contact.address).isValid &&
+              !_sameRecipientAddress(contact.address, currentAddress),
         )
         .toList();
-    final compatible = [...localWallets, ...compatibleContacts];
+    final compatible = [...compatibleContacts, ...localWallets];
 
     final selected = await showModalBottomSheet<Contact>(
       context: context,
@@ -886,6 +902,22 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
         _addrController.text = selected.address;
       });
     }
+  }
+
+  bool _sameRecipientAddress(String left, String right) {
+    final a = left.trim();
+    final b = right.trim();
+    if (a.isEmpty || b.isEmpty) return false;
+    final isEvm = switch (_asset.chain) {
+      Chain.ethereum ||
+      Chain.polygon ||
+      Chain.base ||
+      Chain.arbitrum ||
+      Chain.avalanche ||
+      Chain.bnb => true,
+      _ => false,
+    };
+    return isEvm ? a.toLowerCase() == b.toLowerCase() : a == b;
   }
 
   /// Opens the custom fee screen and maps its result back onto the segmented

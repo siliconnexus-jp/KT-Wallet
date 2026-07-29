@@ -26,7 +26,7 @@
   "ruleHandwriteTitle": "紙とペンで手書きバックアップのみ",
   "ruleHandwriteDesc": "2部書き写し、安全な物理的場所に分けて保管してください",
   "ruleNoCaptureTitle": "撮影・スクリーンショット・オンライン端末への入力は厳禁",
-  "ruleNoCaptureDesc": "写真・クラウド・チャットアプリに保存しないでください。本アプリはスクリーンショットを禁止しています",
+  "ruleNoCaptureDesc": "写真・クラウド・チャットアプリに保存しないでください。スクリーンショットを検出すると、復元フレーズをすぐに隠して警告します",
 
   "backupMnemonicTitle": "リカバリーフレーズをバックアップ",
   "mnemonicShowConfirmBtn": "手書きしました — 確認へ",
@@ -164,7 +164,7 @@
   "verifyEverySignDesc": "無効にできません（V1で強制）",
   "accessSection": "アクセス",
   "changeAppPassword": "アプリのパスワードを変更",
-  "screenCaptureProtection": "スクリーンショット・録画防止",
+  "screenCaptureProtection": "スクリーンショット安全通知",
 
   "permanentlyDeleteWallet": "ウォレットを完全に削除",
   "stepPassword": "パスワード",

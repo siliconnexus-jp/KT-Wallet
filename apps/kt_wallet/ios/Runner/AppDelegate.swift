@@ -37,12 +37,6 @@ import UniformTypeIdentifiers
     )
     NotificationCenter.default.addObserver(
       self,
-      selector: #selector(willResignActive),
-      name: UIApplication.willResignActiveNotification,
-      object: nil
-    )
-    NotificationCenter.default.addObserver(
-      self,
       selector: #selector(didBecomeActive),
       name: UIApplication.didBecomeActiveNotification,
       object: nil
@@ -292,11 +286,6 @@ import UniformTypeIdentifiers
     }
   }
 
-  override func applicationWillResignActive(_ application: UIApplication) {
-    showPrivacyCover()
-    super.applicationWillResignActive(application)
-  }
-
   override func applicationDidBecomeActive(_ application: UIApplication) {
     super.applicationDidBecomeActive(application)
     hidePrivacyCover()
@@ -313,10 +302,6 @@ import UniformTypeIdentifiers
     )
   }
 
-  @objc private func willResignActive() {
-    showPrivacyCover()
-  }
-
   @objc private func didBecomeActive() {
     hidePrivacyCover()
   }
@@ -330,7 +315,6 @@ import UniformTypeIdentifiers
   private func rebuildPrivacyCover() {
     let keepProtected =
       privacyProtectionRequired || privacyCover?.isHidden == false
-      || UIApplication.shared.applicationState != .active
     discardPrivacyCover()
     if keepProtected {
       privacyProtectionRequired = true
