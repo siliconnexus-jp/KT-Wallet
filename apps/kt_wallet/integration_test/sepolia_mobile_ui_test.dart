@@ -57,7 +57,7 @@ void main() {
     await tester.pump();
     for (var i = 0; i < 30; i++) {
       await tester.pump(const Duration(milliseconds: 500));
-      if (find.textContaining('198 USDT · Sepolia').evaluate().isNotEmpty) {
+      if (find.textContaining('USDT · Sepolia').evaluate().isNotEmpty) {
         break;
       }
     }

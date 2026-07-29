@@ -7,6 +7,8 @@ import 'package:chains/rpc.dart';
 import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:kt_wallet/src/market/token_balance_service.dart'
+    show usdtSepoliaToken;
 import 'package:kt_wallet/src/rpc/http_transport.dart';
 import 'package:kt_wallet/src/transfer/broadcast_service.dart';
 import 'package:kt_wallet/src/transfer/chain_params_service.dart';
@@ -53,6 +55,12 @@ void main() {
       try {
         final initialEth = await rpc.getBalance(addresses.eth);
         expect(initialEth, greaterThan(BigInt.from(1000000000000000)));
+        expect(
+          await _erc20Decimals(transport, _testUsdt),
+          usdtSepoliaToken.decimals,
+          reason: 'test transfer amounts must use the deployed token scale',
+        );
+        final tokenUnit = BigInt.from(10).pow(usdtSepoliaToken.decimals);
 
         final nativeParams = await paramsService.fetchEvmParams(
           Chain.ethereum,
@@ -86,7 +94,7 @@ void main() {
           Chain.ethereum,
           addresses.eth,
         );
-        final mintAmount = BigInt.from(100) * BigInt.from(10).pow(18);
+        final mintAmount = BigInt.from(100) * tokenUnit;
         final mintTx = Eip1559Tx(
           chainId: BigInt.from(11155111),
           nonce: BigInt.from(mintParams.nonce),
@@ -110,7 +118,7 @@ void main() {
           Chain.ethereum,
           addresses.eth,
         );
-        final transferAmount = BigInt.from(10).pow(18);
+        final transferAmount = tokenUnit;
         final tokenTx = Eip1559Tx(
           chainId: BigInt.from(11155111),
           nonce: BigInt.from(tokenParams.nonce),
@@ -145,6 +153,23 @@ void main() {
     },
     timeout: const Timeout(Duration(minutes: 4)),
   );
+}
+
+Future<int> _erc20Decimals(JsonRpcTransport transport, String contract) async {
+  final response = await transport.post(_rpcUrl, {
+    'jsonrpc': '2.0',
+    'id': 1,
+    'method': 'eth_call',
+    'params': [
+      {'to': contract, 'data': '0x313ce567'},
+      'latest',
+    ],
+  });
+  final result = response is Map ? response['result'] : null;
+  if (result is! String || !result.startsWith('0x')) {
+    throw StateError('token decimals unavailable');
+  }
+  return int.parse(result.substring(2), radix: 16);
 }
 
 Future<String> _signBroadcastAndConfirm(

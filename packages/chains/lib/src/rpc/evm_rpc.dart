@@ -48,6 +48,9 @@ class EvmRpc {
   Future<BigInt> getBalance(String address) async =>
       _hexToBigInt(await _call('eth_getBalance', [address, 'latest']));
 
+  Future<BigInt> getBlockNumber() async =>
+      _hexToBigInt(await _call('eth_blockNumber', const []));
+
   Future<int> getNonce(String address) async => getNonceAt(address, 'pending');
 
   Future<int> getConfirmedNonce(String address) async =>

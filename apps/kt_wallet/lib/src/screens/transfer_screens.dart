@@ -24,14 +24,23 @@ import 'package:wallet_data/wallet_data.dart'
 
 import '../../l10n/app_localizations.dart';
 import 'home_screen.dart' show tokenRowMeta;
-import '../market/balance_service.dart' show BalanceStatus;
+import '../market/balance_service.dart' show BalanceService, BalanceStatus;
 import '../market/asset_ref.dart' show AssetDeployment, AssetRef, chainOf;
 import '../market/explorer_links.dart' show explorerTxUrl;
 import '../market/history_service.dart' show ChainTxRecord;
 import '../market/market_scope.dart'
     show MarketScope, effectiveRpcEndpoints, prefsGatewayResolver;
 import '../market/token_balance_service.dart'
-    show TokenInfo, builtinTokensByNetworkId, usdcSolanaDevnetToken;
+    show
+        TokenInfo,
+        builtinTokenForNetwork,
+        builtinTokensByNetworkId,
+        usdcArbitrumToken,
+        usdcAvalancheToken,
+        usdcBaseToken,
+        usdcSolanaToken,
+        usdtEthToken,
+        usdtTronToken;
 import '../market/transaction_card.dart';
 import '../market/transaction_status_service.dart';
 import '../platform/external_actions.dart';
@@ -40,12 +49,13 @@ import '../rpc/http_transport.dart';
 import '../security/biometric_auth.dart';
 import '../security/wallet_pin.dart';
 import '../state/app_prefs.dart' show AppPrefsScope, AuthMethod;
-import '../state/networks.dart' show Network, NetworkScope, ethSepolia;
+import '../state/networks.dart' show Network, NetworkScope;
 import '../transfer/airgap_codec.dart';
 import '../transfer/broadcast_service.dart';
 import '../transfer/chain_params_service.dart';
 import '../transfer/local_transfer_service.dart';
 import '../transfer/frame_scan.dart';
+import '../transfer/transaction_confirmation_service.dart';
 import '../transfer/transfer_draft.dart';
 import '../widgets/scan_viewfinder.dart';
 import '../widgets/pin_pad.dart';
@@ -207,6 +217,7 @@ class _TransferAsset {
     this.initial, {
     this.contract,
     this.tokenProgram,
+    this.supported = true,
   });
   final String symbol, network, networkName;
   final Chain chain;
@@ -218,6 +229,51 @@ class _TransferAsset {
   /// Token contract for token assets; null for native coins.
   final String? contract;
   final String? tokenProgram;
+  final bool supported;
+
+  factory _TransferAsset.native({
+    required String symbol,
+    required String network,
+    required String networkName,
+    required Coin coin,
+    required String available,
+    required String availableLabel,
+    required Color color,
+    required String initial,
+  }) => _TransferAsset(
+    symbol,
+    network,
+    networkName,
+    chainOf(coin),
+    BalanceService.decimalsFor[coin]!,
+    available,
+    availableLabel,
+    color,
+    initial,
+  );
+
+  factory _TransferAsset.token(
+    TokenInfo token, {
+    required String network,
+    required String networkName,
+    required String available,
+    required String availableLabel,
+    required Color color,
+    required String initial,
+  }) => _TransferAsset(
+    token.symbol,
+    network,
+    networkName,
+    chainOf(token.chain),
+    token.decimals,
+    available,
+    availableLabel,
+    color,
+    initial,
+    contract: token.contract,
+    tokenProgram: token.tokenProgram,
+  );
+
   Amount get availableAmount =>
       Amount.parse(available, decimals, symbol: symbol);
 
@@ -233,197 +289,168 @@ class _TransferAsset {
     initial,
     contract: contract,
     tokenProgram: tokenProgram,
+    supported: supported,
   );
 
   _TransferAsset forNetwork(Network activeNetwork) {
-    if (chain == Chain.ethereum &&
-        symbol == 'USDT' &&
-        activeNetwork.id == ethSepolia.id) {
+    if (contract == null) {
       return _TransferAsset(
         symbol,
-        'Sepolia · ERC-20',
+        activeNetwork.name,
         activeNetwork.name,
         chain,
-        18,
+        BalanceService.decimalsFor[rpcCoinForChain(chain)]!,
         available,
         availableLabel,
         color,
         initial,
-        contract: _TransferInputScreenState.sepoliaTestUsdtContract,
       );
     }
-    if (symbol == 'USDC' && activeNetwork.isTestnet) {
-      final contract = switch (activeNetwork.id) {
-        'base-sepolia' => '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-        'arbitrum-sepolia' => '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d',
-        'avalanche-fuji' => '0x5425890298aed601595a70AB815c96711a31Bc65',
-        'sol-devnet' => usdcSolanaDevnetToken.contract,
-        _ => null,
-      };
-      if (contract != null) {
-        return _TransferAsset(
-          symbol,
-          '${activeNetwork.name} · ERC-20',
-          activeNetwork.name,
-          chain,
-          decimals,
-          available,
-          availableLabel,
-          color,
-          initial,
-          contract: contract,
-        );
-      }
-    }
-    if (activeNetwork.isTestnet) {
+
+    final token = builtinTokenForNetwork(
+      networkId: activeNetwork.id,
+      chain: rpcCoinForChain(chain),
+      symbol: symbol,
+    );
+    if (token == null) {
       return _TransferAsset(
         symbol,
         activeNetwork.name,
         activeNetwork.name,
         chain,
         decimals,
-        available,
-        availableLabel,
+        '0',
+        '0',
         color,
         initial,
         contract: contract,
         tokenProgram: tokenProgram,
+        supported: false,
       );
     }
-    return this;
+    return _TransferAsset.token(
+      token,
+      network: '${activeNetwork.name} · ${_tokenStandard(chain)}',
+      networkName: activeNetwork.name,
+      available: available,
+      availableLabel: availableLabel,
+      color: color,
+      initial: initial,
+    );
   }
+
+  static String _tokenStandard(Chain chain) => switch (chain) {
+    Chain.tron => 'TRC-20',
+    Chain.solana => 'SPL',
+    _ => 'ERC-20',
+  };
 }
 
 class _TransferInputScreenState extends State<TransferInputScreen> {
-  static const sepoliaTestUsdtContract =
-      '0xc4DCC311c028e341fd8602D8eB89c5de94625927';
-  static const _assets = [
-    _TransferAsset(
-      'USDT',
-      'TRON · TRC-20',
-      'TRON',
-      Chain.tron,
-      6,
-      '3120.00',
-      '3,120.00',
-      Color(0xFF26A17B),
-      '₮',
-      contract: usdtTronContract,
+  static final _assets = [
+    _TransferAsset.token(
+      usdtTronToken,
+      network: 'TRON · TRC-20',
+      networkName: 'TRON',
+      available: '3120.00',
+      availableLabel: '3,120.00',
+      color: const Color(0xFF26A17B),
+      initial: '₮',
     ),
-    _TransferAsset(
-      'ETH',
-      'Ethereum',
-      'Ethereum',
-      Chain.ethereum,
-      18,
-      '0.0842',
-      '0.0842',
-      Color(0xFF627EEA),
-      'Ξ',
+    _TransferAsset.native(
+      symbol: 'ETH',
+      network: 'Ethereum',
+      networkName: 'Ethereum',
+      coin: Coin.eth,
+      available: '0.0842',
+      availableLabel: '0.0842',
+      color: const Color(0xFF627EEA),
+      initial: 'Ξ',
     ),
-    _TransferAsset(
-      'USDT',
-      'Ethereum · ERC-20',
-      'Ethereum',
-      Chain.ethereum,
-      6,
-      '100.00',
-      '100.00',
-      Color(0xFF26A17B),
-      '₮',
-      contract: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+    _TransferAsset.token(
+      usdtEthToken,
+      network: 'Ethereum · ERC-20',
+      networkName: 'Ethereum',
+      available: '100.00',
+      availableLabel: '100.00',
+      color: const Color(0xFF26A17B),
+      initial: '₮',
     ),
-    _TransferAsset(
-      'SOL',
-      'Solana',
-      'Solana',
-      Chain.solana,
-      9,
-      '0.531',
-      '0.531',
-      Color(0xFF9945FF),
-      '◎',
+    _TransferAsset.native(
+      symbol: 'SOL',
+      network: 'Solana',
+      networkName: 'Solana',
+      coin: Coin.solana,
+      available: '0.531',
+      availableLabel: '0.531',
+      color: const Color(0xFF9945FF),
+      initial: '◎',
     ),
-    _TransferAsset(
-      'USDC',
-      'Solana · SPL',
-      'Solana',
-      Chain.solana,
-      6,
-      '100.00',
-      '100.00',
-      Color(0xFF2775CA),
-      r'$',
-      contract: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+    _TransferAsset.token(
+      usdcSolanaToken,
+      network: 'Solana · SPL',
+      networkName: 'Solana',
+      available: '100.00',
+      availableLabel: '100.00',
+      color: const Color(0xFF2775CA),
+      initial: r'$',
     ),
-    _TransferAsset(
-      'ETH',
-      'Base',
-      'Base',
-      Chain.base,
-      18,
-      '0.1',
-      '0.1',
-      Color(0xFF0052FF),
-      'B',
+    _TransferAsset.native(
+      symbol: 'ETH',
+      network: 'Base',
+      networkName: 'Base',
+      coin: Coin.base,
+      available: '0.1',
+      availableLabel: '0.1',
+      color: const Color(0xFF0052FF),
+      initial: 'B',
     ),
-    _TransferAsset(
-      'USDC',
-      'Base · ERC-20',
-      'Base',
-      Chain.base,
-      6,
-      '100.00',
-      '100.00',
-      Color(0xFF2775CA),
-      r'$',
-      contract: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    _TransferAsset.token(
+      usdcBaseToken,
+      network: 'Base · ERC-20',
+      networkName: 'Base',
+      available: '100.00',
+      availableLabel: '100.00',
+      color: const Color(0xFF2775CA),
+      initial: r'$',
     ),
-    _TransferAsset(
-      'ETH',
-      'Arbitrum One',
-      'Arbitrum One',
-      Chain.arbitrum,
-      18,
-      '0.1',
-      '0.1',
-      Color(0xFF28A0F0),
-      'A',
+    _TransferAsset.native(
+      symbol: 'ETH',
+      network: 'Arbitrum One',
+      networkName: 'Arbitrum One',
+      coin: Coin.arbitrum,
+      available: '0.1',
+      availableLabel: '0.1',
+      color: const Color(0xFF28A0F0),
+      initial: 'A',
     ),
-    _TransferAsset(
-      'USDC',
-      'Arbitrum One · ERC-20',
-      'Arbitrum One',
-      Chain.arbitrum,
-      6,
-      '100.00',
-      '100.00',
-      Color(0xFF2775CA),
-      r'$',
-      contract: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+    _TransferAsset.token(
+      usdcArbitrumToken,
+      network: 'Arbitrum One · ERC-20',
+      networkName: 'Arbitrum One',
+      available: '100.00',
+      availableLabel: '100.00',
+      color: const Color(0xFF2775CA),
+      initial: r'$',
     ),
-    _TransferAsset(
-      'AVAX',
-      'Avalanche C-Chain',
-      'Avalanche C-Chain',
-      Chain.avalanche,
-      18,
-      '1.0',
-      '1.0',
-      Color(0xFFE84142),
-      'A',
+    _TransferAsset.native(
+      symbol: 'AVAX',
+      network: 'Avalanche C-Chain',
+      networkName: 'Avalanche C-Chain',
+      coin: Coin.avalanche,
+      available: '1.0',
+      availableLabel: '1.0',
+      color: const Color(0xFFE84142),
+      initial: 'A',
     ),
-    _TransferAsset(
-      'USDC',
-      'Avalanche C-Chain · ERC-20',
-      'Avalanche C-Chain',
-      Chain.avalanche,
-      6,
-      '100.00',
-      '100.00',
-      Color(0xFF2775CA),
-      r'$',
-      contract: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E',
+    _TransferAsset.token(
+      usdcAvalancheToken,
+      network: 'Avalanche C-Chain · ERC-20',
+      networkName: 'Avalanche C-Chain',
+      available: '100.00',
+      availableLabel: '100.00',
+      color: const Color(0xFF2775CA),
+      initial: r'$',
     ),
   ];
   int _assetIndex = 0;
@@ -593,6 +620,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
 
   /// Returns the parsed amount if it is valid and within balance, else null.
   Amount? get _amount {
+    if (!_asset.supported) return null;
     final text = _amountController.text.trim();
     if (text.isEmpty) return null;
     try {
@@ -992,22 +1020,19 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
             ? () {
                 // Hand the entered transfer to the downstream screens. Starting
                 // a new draft invalidates any earlier request/result.
-                TransferSessionScope.maybeOf(context)
-                  ?..draft = TransferDraft(
+                TransferSessionScope.maybeOf(context)?.begin(
+                  TransferDraft(
                     symbol: _asset.symbol,
                     networkLabel: _asset.network,
                     chain: _asset.chain,
-                    decimals: _asset.decimals,
                     recipient:
                         addrCheck.normalized ?? _addrController.text.trim(),
                     amount: _amount!,
                     feeTier: _fee,
                     tokenContract: _asset.contract,
                     tokenProgram: _asset.tokenProgram,
-                  )
-                  ..request = null
-                  ..result = null
-                  ..broadcastTxHash = null;
+                  ),
+                );
                 context.push(isHot ? '/confirm-hot' : '/confirm-watch');
               }
             : null,
@@ -1673,7 +1698,7 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
       setState(() {
         _networkFee = Amount(
           raw: gasLimit * tier.maxFeePerGas,
-          decimals: 18,
+          decimals: BalanceService.decimalsFor[rpcCoinForChain(draft.chain)]!,
           symbol: symbol,
         );
         _state = _FeeEstimate.ready;
@@ -2699,9 +2724,19 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
   }
 }
 
-/// W9 广播结果.
+/// W9 广播结果. A successfully submitted transaction starts as pending and
+/// this screen reconciles its persistent status and reads the live confirmation
+/// depth while it remains visible.
+/// It never retries the broadcast.
 class BroadcastResultScreen extends StatefulWidget {
-  const BroadcastResultScreen({super.key});
+  const BroadcastResultScreen({
+    super.key,
+    this.confirmationService,
+    this.pollInterval = const Duration(seconds: 3),
+  });
+
+  final TransactionConfirmationService? confirmationService;
+  final Duration pollInterval;
 
   @override
   State<BroadcastResultScreen> createState() => _BroadcastResultScreenState();
@@ -2711,8 +2746,11 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
     with WidgetsBindingObserver {
   Transaction? _transaction;
   TransactionStatusService? _statusService;
+  TransactionConfirmationService? _confirmationService;
   Timer? _timer;
   bool _loading = false;
+  bool _checkingConfirmations = false;
+  int? _confirmations;
 
   @override
   void initState() {
@@ -2723,13 +2761,17 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final endpoints = effectiveRpcEndpoints(
+      AppPrefsScope.maybeOf(context),
+      NetworkScope.maybeOf(context),
+    );
     _statusService ??= TransactionStatusService(
-      endpoints: effectiveRpcEndpoints(
-        AppPrefsScope.maybeOf(context),
-        NetworkScope.maybeOf(context),
-      ),
+      endpoints: endpoints,
       gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
     );
+    _confirmationService ??=
+        widget.confirmationService ??
+        TransactionConfirmationService(endpoints: endpoints);
     if (!_loading && _transaction == null) _reload();
   }
 
@@ -2756,21 +2798,31 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
     _timer?.cancel();
     if (!_pending(tx)) return;
     _timer = Timer(
-      immediately ? Duration.zero : const Duration(seconds: 8),
+      immediately ? Duration.zero : widget.pollInterval,
       () => _check(tx),
     );
   }
 
   Future<void> _check(Transaction tx) async {
-    final service = _statusService;
-    if (!mounted || service == null || !_pending(tx)) return;
-    final status = await service.check(tx);
+    if (!mounted || !_pending(tx)) return;
+    final directStatus = await _readConfirmationDepth();
+    final fallbackStatus = directStatus == null
+        ? await _statusService?.check(tx)
+        : null;
     if (!mounted) return;
-    final next = switch (status) {
-      ChainTransactionStatus.confirmed => TxStatus.confirmed,
-      ChainTransactionStatus.failed => TxStatus.failed,
-      ChainTransactionStatus.pending || ChainTransactionStatus.unknown => null,
-    };
+    final next =
+        directStatus ??
+        switch (fallbackStatus) {
+          ChainTransactionStatus.confirmed => TxStatus.confirmed,
+          ChainTransactionStatus.failed => TxStatus.failed,
+          ChainTransactionStatus.pending ||
+          ChainTransactionStatus.unknown ||
+          null => null,
+        };
+    if (next == TxStatus.pending) {
+      _scheduleCheck(tx);
+      return;
+    }
     if (next != null && next != tx.status) {
       await WalletScope.of(
         context,
@@ -2779,6 +2831,31 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
       return;
     }
     _scheduleCheck(tx);
+  }
+
+  /// Reads the direct chain receipt/status so the number shown on screen is
+  /// an actual block/slot depth. If direct RPC is unavailable, the caller
+  /// falls back to [TransactionStatusService], which can use the Gateway for
+  /// status reconciliation but never invents a confirmation count.
+  Future<TxStatus?> _readConfirmationDepth() async {
+    if (_checkingConfirmations) return null;
+    final session = TransferSessionScope.maybeOf(context);
+    final draft = session?.draft;
+    final hash = session?.broadcastTxHash;
+    final service = _confirmationService;
+    if (draft == null || hash == null || service == null) return null;
+    _checkingConfirmations = true;
+    try {
+      final snapshot = await service.check(draft.chain, hash);
+      if (mounted) {
+        setState(() => _confirmations = snapshot.confirmations);
+      }
+      return snapshot.status;
+    } catch (_) {
+      return null;
+    } finally {
+      _checkingConfirmations = false;
+    }
   }
 
   @override
@@ -2794,6 +2871,7 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    if (widget.confirmationService == null) _confirmationService?.close();
     super.dispose();
   }
 
@@ -2880,6 +2958,15 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
           child: Column(
             children: [
               KtDetailRow(label: l10n.txHash, value: hashValue, mono: true),
+              const SizedBox(height: 14),
+              KeyedSubtree(
+                key: const ValueKey('broadcast-confirmations'),
+                child: KtDetailRow(
+                  label: l10n.confirmations,
+                  value: _confirmations?.toString() ?? '--',
+                  mono: true,
+                ),
+              ),
               const SizedBox(height: 14),
               KtDetailRow(
                 label: l10n.statusLabel,
@@ -3131,17 +3218,17 @@ class _TxDetailScreenState extends State<TxDetailScreen>
       ? value
       : '${value.substring(0, 12)}…${value.substring(value.length - 10)}';
 
-  (int, String) _nativeUnit(Transaction tx) => switch (tx.coin) {
-    'polygon' => (18, 'POL'),
-    'avalanche' => (18, 'AVAX'),
-    'bnb' => (18, 'BNB'),
-    'tron' => (6, 'TRX'),
-    'solana' => (9, 'SOL'),
-    _ => (18, 'ETH'),
-  };
+  (int, String)? _nativeUnit(Transaction tx) {
+    final chain = _chainFor(tx);
+    if (chain == null) return null;
+    final coin = rpcCoinForChain(chain);
+    return (BalanceService.decimalsFor[coin]!, BalanceService.symbolFor[coin]!);
+  }
 
   String _displayNativeRaw(String raw, Transaction tx) {
-    final (decimals, symbol) = _nativeUnit(tx);
+    final unit = _nativeUnit(tx);
+    if (unit == null) return '$raw base units';
+    final (decimals, symbol) = unit;
     final amount = Amount(
       raw: BigInt.parse(raw),
       decimals: decimals,
@@ -3499,7 +3586,7 @@ class _TxDetailScreenState extends State<TxDetailScreen>
               KtDetailRow(
                 label: l10n.amountLabel,
                 value: cancel
-                    ? '0 ${_nativeUnit(original).$2}'
+                    ? '0 ${_nativeUnit(original)!.$2}'
                     : original.contract != null
                     ? '${original.amountRaw} Token (raw)'
                     : _displayNativeRaw(original.amountRaw, original),
@@ -4432,70 +4519,86 @@ class TransferAuthSheet extends StatelessWidget {
                 color: WalletColors.surface,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
-              padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: WalletColors.border,
-                      borderRadius: BorderRadius.circular(2),
+              child: SafeArea(
+                top: false,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(context).height * 0.92,
+                  ),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: WalletColors.border,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Container(
+                          width: 88,
+                          height: 88,
+                          decoration: BoxDecoration(
+                            color: WalletColors.accent.withValues(alpha: 0.06),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            passwordFirst ? Icons.password_rounded : Icons.face,
+                            size: 44,
+                            color: WalletColors.accent,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          l10n.authToConfirmTransfer,
+                          style: const TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w700,
+                            color: WalletColors.text,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          l10n.authEveryTransfer,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: WalletColors.text2,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        KtPrimaryButton(
+                          label: passwordFirst
+                              ? l10n.authPassword
+                              : l10n.useFaceId,
+                          onPressed: () => passwordFirst
+                              ? _usePin(context)
+                              : _faceId(context),
+                        ),
+                        const SizedBox(height: 12),
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => passwordFirst
+                              ? _faceId(context)
+                              : _usePin(context),
+                          child: Text(
+                            passwordFirst
+                                ? l10n.authBiometrics
+                                : l10n.usePasscode,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: WalletColors.text2,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  Container(
-                    width: 88,
-                    height: 88,
-                    decoration: BoxDecoration(
-                      color: WalletColors.accent.withValues(alpha: 0.06),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      passwordFirst ? Icons.password_rounded : Icons.face,
-                      size: 44,
-                      color: WalletColors.accent,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    l10n.authToConfirmTransfer,
-                    style: const TextStyle(
-                      fontSize: 19,
-                      fontWeight: FontWeight.w700,
-                      color: WalletColors.text,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    l10n.authEveryTransfer,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: WalletColors.text2,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  KtPrimaryButton(
-                    label: passwordFirst ? l10n.authPassword : l10n.useFaceId,
-                    onPressed: () =>
-                        passwordFirst ? _usePin(context) : _faceId(context),
-                  ),
-                  const SizedBox(height: 12),
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () =>
-                        passwordFirst ? _faceId(context) : _usePin(context),
-                    child: Text(
-                      passwordFirst ? l10n.authBiometrics : l10n.usePasscode,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: WalletColors.text2,
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),

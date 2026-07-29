@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:chains/chains.dart' show solanaToken2022Program;
 import 'package:chains/rpc.dart';
@@ -105,6 +107,41 @@ void main() {
     expect(byId['usdc-polygon']!.contract, _usdcPolygon);
     expect(byId['usdt-tron']!.chain, Coin.tron);
     expect(byId['usdt-tron']!.contract, _usdtTron);
+  });
+
+  test('network token lookup binds symbol to exact chain deployment', () {
+    expect(
+      builtinTokenForNetwork(
+        networkId: 'eth-sepolia',
+        chain: Coin.eth,
+        symbol: 'usdt',
+      ),
+      same(usdtSepoliaToken),
+    );
+    expect(
+      builtinTokenForNetwork(
+        networkId: 'base-sepolia',
+        chain: Coin.base,
+        symbol: 'USDC',
+      ),
+      same(usdcBaseSepoliaToken),
+    );
+    expect(
+      builtinTokenForNetwork(
+        networkId: 'eth-sepolia',
+        chain: Coin.base,
+        symbol: 'USDT',
+      ),
+      isNull,
+    );
+    expect(
+      builtinTokenForNetwork(
+        networkId: 'eth-mainnet',
+        chain: Coin.eth,
+        symbol: 'MISSING',
+      ),
+      isNull,
+    );
   });
 
   test(
@@ -342,4 +379,83 @@ void _registryAddressShapes() {
         .toList();
     expect(ids.toSet().length, ids.length, reason: 'duplicate registry id');
   });
+
+  test('network + chain + symbol selects at most one built-in token', () {
+    final identities = <String>{};
+    for (final entry in builtinTokensByNetworkId.entries) {
+      for (final token in entry.value) {
+        final identity =
+            '${entry.key}|${token.chain.name}|${token.symbol.toUpperCase()}';
+        expect(
+          identities.add(identity),
+          isTrue,
+          reason: 'ambiguous token lookup: $identity',
+        );
+      }
+    }
+  });
+
+  test('app and checked-in gateway token precision catalogs match', () {
+    final file = _findRepoFile('backend/gateway/config/official-tokens.json');
+    final decoded = jsonDecode(file.readAsStringSync());
+    expect(decoded, isA<List<Object?>>());
+    final gatewayRows = decoded as List<Object?>;
+    final gatewayByIdentity = <String, Map<Object?, Object?>>{};
+    for (final raw in gatewayRows) {
+      expect(raw, isA<Map<Object?, Object?>>());
+      final row = raw as Map<Object?, Object?>;
+      final network = row['network'];
+      final contract = row['contract'];
+      expect(network, isA<String>());
+      expect(contract, isA<String>());
+      final identity = _catalogIdentity(network as String, contract as String);
+      expect(
+        gatewayByIdentity.putIfAbsent(identity, () => row),
+        same(row),
+        reason: 'duplicate gateway identity: $identity',
+      );
+    }
+
+    final appRows = <String, TokenInfo>{};
+    for (final entry in builtinTokensByNetworkId.entries) {
+      for (final token in entry.value) {
+        final identity = _catalogIdentity(entry.key, token.contract);
+        expect(
+          appRows.putIfAbsent(identity, () => token),
+          same(token),
+          reason: 'duplicate app identity: $identity',
+        );
+      }
+    }
+    expect(gatewayByIdentity.keys.toSet(), appRows.keys.toSet());
+    for (final entry in appRows.entries) {
+      final gateway = gatewayByIdentity[entry.key]!;
+      expect(
+        gateway['symbol'],
+        entry.value.symbol,
+        reason: '${entry.key} symbol drift',
+      );
+      expect(
+        gateway['decimals'],
+        entry.value.decimals,
+        reason: '${entry.key} decimals drift',
+      );
+    }
+  });
+}
+
+String _catalogIdentity(String network, String contract) =>
+    '$network|${contract.startsWith('0x') ? contract.toLowerCase() : contract}';
+
+File _findRepoFile(String relativePath) {
+  var directory = Directory.current.absolute;
+  while (true) {
+    final candidate = File('${directory.path}/$relativePath');
+    if (candidate.existsSync()) return candidate;
+    final parent = directory.parent;
+    if (parent.path == directory.path) {
+      throw StateError('repository file not found: $relativePath');
+    }
+    directory = parent;
+  }
 }

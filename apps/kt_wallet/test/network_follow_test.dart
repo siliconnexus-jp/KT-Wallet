@@ -415,7 +415,6 @@ void main() {
       symbol: 'ETH',
       networkLabel: 'Ethereum',
       chain: Chain.ethereum,
-      decimals: 18,
       recipient: '0x52908400098527886E0F7030069857D2E4169EE7',
       amount: Amount.parse('0.5', 18, symbol: 'ETH'),
       feeTier: 1,

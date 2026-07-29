@@ -10,7 +10,6 @@ class TransferDraft {
     required this.symbol,
     required this.networkLabel,
     required this.chain,
-    required this.decimals,
     required this.recipient,
     required this.amount,
     required this.feeTier,
@@ -25,7 +24,11 @@ class TransferDraft {
   final String networkLabel;
 
   final Chain chain;
-  final int decimals;
+
+  /// The scale is owned by the exact [Amount]. Keeping a second writable
+  /// integer here allowed raw units and Solana `transferChecked` decimals to
+  /// disagree inside one draft.
+  int get decimals => amount.decimals;
 
   /// Normalized recipient address (already validated by the input screen).
   final String recipient;
@@ -70,6 +73,14 @@ class TransferSession {
   /// Stable local row id used as the transaction moves from awaitingSig to
   /// signed/submitted/pending without creating duplicate history entries.
   String? localTransactionId;
+
+  /// Starts a distinct user transfer. A session lives for the app lifetime,
+  /// so assigning only [draft] would accidentally reuse the previous
+  /// transaction's database id and broadcast result.
+  void begin(TransferDraft next) {
+    clear();
+    draft = next;
+  }
 
   void clear() {
     draft = null;

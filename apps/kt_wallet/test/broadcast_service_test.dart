@@ -326,6 +326,8 @@ void main() {
           find.text(truncateMiddle(result.txHash, head: 6, tail: 6)),
           findsOneWidget,
         );
+        expect(find.text('确认中'), findsOneWidget);
+        expect(find.textContaining(RegExp(r'\(\d+/\d+\)')), findsNothing);
         expect(jsonRpc.calls, 0);
         expect(rest.calls, 0);
       },

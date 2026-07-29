@@ -494,6 +494,27 @@ const builtinTokensByNetworkId = <String, List<TokenInfo>>{
   'sol-devnet': [usdcSolanaDevnetToken, pyusdSolanaDevnetToken],
 };
 
+/// Finds one exact built-in deployment for a concrete network.
+///
+/// Callers that construct transactions must resolve by network id + chain +
+/// symbol together. A symbol alone is not an identity, and carrying a
+/// mainnet contract or its decimals across a network switch can scale an
+/// otherwise valid amount incorrectly.
+TokenInfo? builtinTokenForNetwork({
+  required String networkId,
+  required Coin chain,
+  required String symbol,
+}) {
+  final normalizedSymbol = symbol.toUpperCase();
+  return (builtinTokensByNetworkId[networkId] ?? const <TokenInfo>[])
+      .where(
+        (token) =>
+            token.chain == chain &&
+            token.symbol.toUpperCase() == normalizedSymbol,
+      )
+      .firstOrNull;
+}
+
 /// Symbols whose brand identity is security-sensitive. Anyone can deploy a
 /// token contract and claim one of these symbols; the symbol alone is never
 /// proof that the asset is issued by the expected organization.

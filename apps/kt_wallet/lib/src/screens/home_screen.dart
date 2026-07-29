@@ -491,6 +491,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
               builder: (context) {
                 final local = history.localTransactionForHash(r.hash);
                 return _RecordRow(
+                  key: ValueKey('history-record-${r.hash}'),
                   record: _TxRecord(
                     r.outgoing,
                     '${r.amountText ?? '--'}${r.assetVerified ? '' : ' ⚠'}',
@@ -718,7 +719,7 @@ String _formatRecordTime(AppLocalizations l10n, DateTime t) {
 }
 
 class _RecordRow extends StatelessWidget {
-  const _RecordRow({required this.record, this.onTap});
+  const _RecordRow({super.key, required this.record, this.onTap});
   final _TxRecord record;
   final VoidCallback? onTap;
   @override

@@ -38,8 +38,11 @@ class FakeRest implements RestTransport {
   }
 }
 
-Map<String, Object?> _ok(Object? result) =>
-    {'jsonrpc': '2.0', 'id': 1, 'result': result};
+Map<String, Object?> _ok(Object? result) => {
+  'jsonrpc': '2.0',
+  'id': 1,
+  'result': result,
+};
 
 void main() {
   group('EvmRpc', () {
@@ -48,7 +51,23 @@ void main() {
         url: 'x',
         transport: FakeJsonRpc((m, p) => _ok('0x0de0b6b3a7640000')),
       );
-      expect(await rpc.getBalance('0xabc'), BigInt.parse('1000000000000000000'));
+      expect(
+        await rpc.getBalance('0xabc'),
+        BigInt.parse('1000000000000000000'),
+      );
+    });
+
+    test('getBlockNumber parses the latest hex block height', () async {
+      final rpc = EvmRpc(
+        url: 'x',
+        transport: FakeJsonRpc((method, params) {
+          expect(method, 'eth_blockNumber');
+          expect(params, isEmpty);
+          return _ok('0x66');
+        }),
+      );
+
+      expect(await rpc.getBlockNumber(), BigInt.from(102));
     });
 
     test('erc20Balance builds balanceOf calldata and parses result', () async {
@@ -61,7 +80,9 @@ void main() {
         }),
       );
       final bal = await rpc.erc20Balance(
-          '0xcontract', '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed');
+        '0xcontract',
+        '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
+      );
       expect(bal, BigInt.from(100000000));
       final call = params[0] as Map;
       expect(call['data'], startsWith('0x70a08231'));
@@ -70,13 +91,15 @@ void main() {
     test('feeHistory yields slow<=standard<=fast tiers', () async {
       final rpc = EvmRpc(
         url: 'x',
-        transport: FakeJsonRpc((m, p) => _ok({
-              'baseFeePerGas': ['0x64', '0x64'], // 100
-              'reward': [
-                ['0x1', '0x2', '0x3'],
-                ['0x1', '0x2', '0x3'],
-              ],
-            })),
+        transport: FakeJsonRpc(
+          (m, p) => _ok({
+            'baseFeePerGas': ['0x64', '0x64'], // 100
+            'reward': [
+              ['0x1', '0x2', '0x3'],
+              ['0x1', '0x2', '0x3'],
+            ],
+          }),
+        ),
       );
       final fees = await rpc.estimateFees();
       expect(fees.slow.maxPriorityFeePerGas, BigInt.from(1));
@@ -89,45 +112,57 @@ void main() {
     test('RPC error response throws RpcException with code', () async {
       final rpc = EvmRpc(
         url: 'x',
-        transport: FakeJsonRpc((m, p) => {
-              'jsonrpc': '2.0',
-              'id': 1,
-              'error': {'code': -32000, 'message': 'nonce too low'},
-            }),
+        transport: FakeJsonRpc(
+          (m, p) => {
+            'jsonrpc': '2.0',
+            'id': 1,
+            'error': {'code': -32000, 'message': 'nonce too low'},
+          },
+        ),
       );
       expect(
         () => rpc.getNonce('0xabc'),
-        throwsA(isA<RpcException>()
-            .having((e) => e.code, 'code', -32000)),
+        throwsA(isA<RpcException>().having((e) => e.code, 'code', -32000)),
       );
     });
 
     test('non-hex quantity throws instead of returning garbage', () async {
-      final rpc = EvmRpc(url: 'x', transport: FakeJsonRpc((m, p) => _ok('123')));
+      final rpc = EvmRpc(
+        url: 'x',
+        transport: FakeJsonRpc((m, p) => _ok('123')),
+      );
       expect(() => rpc.getBalance('0xabc'), throwsA(isA<RpcException>()));
     });
 
-    test('malformed feeHistory throws RpcException, not an untyped error',
-        () async {
-      // Missing reward field.
-      final rpc = EvmRpc(
-        url: 'x',
-        transport: FakeJsonRpc((m, p) => _ok({'baseFeePerGas': ['0x1']})),
-      );
-      expect(() => rpc.estimateFees(), throwsA(isA<RpcException>()));
+    test(
+      'malformed feeHistory throws RpcException, not an untyped error',
+      () async {
+        // Missing reward field.
+        final rpc = EvmRpc(
+          url: 'x',
+          transport: FakeJsonRpc(
+            (m, p) => _ok({
+              'baseFeePerGas': ['0x1'],
+            }),
+          ),
+        );
+        expect(() => rpc.estimateFees(), throwsA(isA<RpcException>()));
 
-      // Short reward row.
-      final rpc2 = EvmRpc(
-        url: 'x',
-        transport: FakeJsonRpc((m, p) => _ok({
+        // Short reward row.
+        final rpc2 = EvmRpc(
+          url: 'x',
+          transport: FakeJsonRpc(
+            (m, p) => _ok({
               'baseFeePerGas': ['0x1'],
               'reward': [
-                ['0x1']
+                ['0x1'],
               ],
-            })),
-      );
-      expect(() => rpc2.estimateFees(), throwsA(isA<RpcException>()));
-    });
+            }),
+          ),
+        );
+        expect(() => rpc2.estimateFees(), throwsA(isA<RpcException>()));
+      },
+    );
   });
 
   group('SolanaRpc', () {
@@ -142,9 +177,11 @@ void main() {
     test('getLatestBlockhash extracts nested blockhash', () async {
       final rpc = SolanaRpc(
         url: 'x',
-        transport: FakeJsonRpc((m, p) => _ok({
-              'value': {'blockhash': 'HASH123', 'lastValidBlockHeight': 100}
-            })),
+        transport: FakeJsonRpc(
+          (m, p) => _ok({
+            'value': {'blockhash': 'HASH123', 'lastValidBlockHeight': 100},
+          }),
+        ),
       );
       expect(await rpc.getLatestBlockhash(), 'HASH123');
     });
@@ -152,9 +189,11 @@ void main() {
     test('signatureStatus null when unknown', () async {
       final rpc = SolanaRpc(
         url: 'x',
-        transport: FakeJsonRpc((m, p) => _ok({
-              'value': [null]
-            })),
+        transport: FakeJsonRpc(
+          (m, p) => _ok({
+            'value': [null],
+          }),
+        ),
       );
       expect(await rpc.signatureStatus('sig'), isNull);
     });
@@ -173,10 +212,10 @@ void main() {
       final message = Uint8List.fromList([1, 2, 3]);
       expect(await rpc.getFeeForMessage(message), BigInt.from(5000));
       await rpc.simulateMessage(message);
-      expect(
-        transport.requests.map((request) => request['method']),
-        ['getFeeForMessage', 'simulateTransaction'],
-      );
+      expect(transport.requests.map((request) => request['method']), [
+        'getFeeForMessage',
+        'simulateTransaction',
+      ]);
     });
   });
 
@@ -192,11 +231,13 @@ void main() {
     test('getTrxBalance parses SUN balance', () async {
       final rpc = TronRpc(
         baseUrl: 'https://api',
-        transport: FakeRest(onGet: (u) => {
-              'data': [
-                {'balance': 1420000000}
-              ]
-            }),
+        transport: FakeRest(
+          onGet: (u) => {
+            'data': [
+              {'balance': 1420000000},
+            ],
+          },
+        ),
       );
       expect(await rpc.getTrxBalance('Tabc'), BigInt.from(1420000000));
     });
@@ -204,7 +245,9 @@ void main() {
     test('broadcast returns txid on success', () async {
       final rpc = TronRpc(
         baseUrl: 'https://api',
-        transport: FakeRest(onPost: (u, b) => {'result': true, 'txid': 'abc123'}),
+        transport: FakeRest(
+          onPost: (u, b) => {'result': true, 'txid': 'abc123'},
+        ),
       );
       expect(await rpc.broadcast({'raw': 'x'}), 'abc123');
     });
@@ -213,7 +256,8 @@ void main() {
       final rpc = TronRpc(
         baseUrl: 'https://api',
         transport: FakeRest(
-            onPost: (u, b) => {'result': false, 'message': 'TAPOS error'}),
+          onPost: (u, b) => {'result': false, 'message': 'TAPOS error'},
+        ),
       );
       expect(() => rpc.broadcast({'raw': 'x'}), throwsA(isA<RpcException>()));
     });
@@ -236,23 +280,26 @@ void main() {
       expect(transport.posts.single.$2, {'transaction': 'deadbeef'});
     });
 
-    test('a full transaction JSON still goes to broadcasttransaction', () async {
-      final transport = FakeRest(
-        onPost: (u, b) => {'result': true, 'txid': 'abc123'},
-      );
-      final rpc = TronRpc(baseUrl: 'https://api', transport: transport);
-      final body = {
-        'raw_data': {'contract': <Object?>[]},
-        'raw_data_hex': '0a02',
-        'signature': ['ff'],
-      };
-      expect(await rpc.broadcast(body), 'abc123');
-      expect(
-        transport.posts.single.$1,
-        'https://api/wallet/broadcasttransaction',
-      );
-      expect(transport.posts.single.$2, same(body));
-    });
+    test(
+      'a full transaction JSON still goes to broadcasttransaction',
+      () async {
+        final transport = FakeRest(
+          onPost: (u, b) => {'result': true, 'txid': 'abc123'},
+        );
+        final rpc = TronRpc(baseUrl: 'https://api', transport: transport);
+        final body = {
+          'raw_data': {'contract': <Object?>[]},
+          'raw_data_hex': '0a02',
+          'signature': ['ff'],
+        };
+        expect(await rpc.broadcast(body), 'abc123');
+        expect(
+          transport.posts.single.$1,
+          'https://api/wallet/broadcasttransaction',
+        );
+        expect(transport.posts.single.$2, same(body));
+      },
+    );
 
     // TronGrid answers node-level failures with a top-level `Error` and no
     // `code`/`message`; reading only the latter reported "rejected: null".
@@ -297,52 +344,56 @@ void main() {
     test('malformed balance is an error, not a silent zero', () async {
       final rpc = TronRpc(
         baseUrl: 'https://api',
-        transport: FakeRest(onGet: (u) => {
-              'data': [
-                {'balance': 'oops'}
-              ]
-            }),
+        transport: FakeRest(
+          onGet: (u) => {
+            'data': [
+              {'balance': 'oops'},
+            ],
+          },
+        ),
       );
       expect(() => rpc.getTrxBalance('Tabc'), throwsA(isA<RpcException>()));
     });
 
-    test('TRC-20 fee limit comes from energy, resources and chain price',
-        () async {
-      final rpc = TronRpc(
-        baseUrl: 'https://api',
-        transport: FakeRest(
-          onPost: (url, body) {
-            if (url.endsWith('triggerconstantcontract')) {
-              return {
-                'result': {'result': true},
-                'energy_used': 100000,
-              };
-            }
-            if (url.endsWith('getaccountresource')) {
-              return {'EnergyLimit': 40000, 'EnergyUsed': 10000};
-            }
-            if (url.endsWith('getchainparameters')) {
-              return {
-                'chainParameter': [
-                  {'key': 'getEnergyFee', 'value': 420},
-                ],
-              };
-            }
-            throw StateError(url);
-          },
-        ),
-      );
+    test(
+      'TRC-20 fee limit comes from energy, resources and chain price',
+      () async {
+        final rpc = TronRpc(
+          baseUrl: 'https://api',
+          transport: FakeRest(
+            onPost: (url, body) {
+              if (url.endsWith('triggerconstantcontract')) {
+                return {
+                  'result': {'result': true},
+                  'energy_used': 100000,
+                };
+              }
+              if (url.endsWith('getaccountresource')) {
+                return {'EnergyLimit': 40000, 'EnergyUsed': 10000};
+              }
+              if (url.endsWith('getchainparameters')) {
+                return {
+                  'chainParameter': [
+                    {'key': 'getEnergyFee', 'value': 420},
+                  ],
+                };
+              }
+              throw StateError(url);
+            },
+          ),
+        );
 
-      final estimate = await rpc.estimateTokenEnergy(
-        owner: 'owner',
-        contract: 'contract',
-        parameter: '00',
-      );
+        final estimate = await rpc.estimateTokenEnergy(
+          owner: 'owner',
+          contract: 'contract',
+          parameter: '00',
+        );
 
-      expect(estimate.energyRequired, 100000);
-      expect(estimate.energyAvailable, 30000);
-      expect(estimate.energyPriceSun, 420);
-      expect(estimate.feeLimitSun, 35280000);
-    });
+        expect(estimate.energyRequired, 100000);
+        expect(estimate.energyAvailable, 30000);
+        expect(estimate.energyPriceSun, 420);
+        expect(estimate.feeLimitSun, 35280000);
+      },
+    );
   });
 }

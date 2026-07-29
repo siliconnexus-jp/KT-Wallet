@@ -138,7 +138,6 @@ final TransferDraft demoDraft = TransferDraft(
   symbol: 'USDT',
   networkLabel: 'TRON · TRC-20',
   chain: Chain.tron,
-  decimals: 6,
   recipient: 'TWd4qCEUf3aVpXe2HKk9gJt6nMxR38uQz',
   amount: Amount.parse('120.00', 6, symbol: 'USDT'),
   feeTier: 1,
