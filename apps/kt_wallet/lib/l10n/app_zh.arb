@@ -373,6 +373,27 @@
   "receiveImageDenied": "未获得相册权限,无法保存",
   "receiveImageUseShare": "此系统版本无法直接保存,请使用右上角分享",
   "receiveImageFailed": "生成收款图片失败",
+  "receiveExportSubtitle": "包含地址、网络与可扫描的收款二维码",
+  "exportTransactionReceipt": "导出交易凭证",
+  "exportTransactionReceiptSubtitle": "包含本次交易明细与链上验证二维码",
+  "transactionReceiptTitle": "链上交易凭证",
+  "transactionReceiptTimeLabel": "交易时间",
+  "saveReceiptToPhotos": "保存到相册",
+  "shareReceiptImage": "分享凭证图片",
+  "transactionReceiptSaved": "交易凭证已保存到相册",
+  "transactionReceiptDenied": "未获得相册权限，无法保存交易凭证",
+  "transactionReceiptUseShare": "此系统版本无法直接保存，请改用分享",
+  "transactionReceiptFailed": "生成交易凭证失败",
+  "scanToVerifyOnChain": "扫描二维码，在区块浏览器验证",
+  "transactionReceiptFooter": "由 KT Wallet 生成 · 请以链上数据为准",
+  "transactionReceiptSubject": "{network} 交易凭证",
+  "@transactionReceiptSubject": {
+    "placeholders": {
+      "network": {
+        "type": "String"
+      }
+    }
+  },
   "actionCopy": "复制地址",
   "addressBookTitle": "地址管理",
   "searchNameOrAddress": "搜索名称或地址",

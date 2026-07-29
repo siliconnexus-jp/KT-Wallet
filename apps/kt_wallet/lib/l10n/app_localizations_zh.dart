@@ -668,6 +668,50 @@ class AppLocalizationsZh extends AppLocalizations {
   String get receiveImageFailed => '生成收款图片失败';
 
   @override
+  String get receiveExportSubtitle => '包含地址、网络与可扫描的收款二维码';
+
+  @override
+  String get exportTransactionReceipt => '导出交易凭证';
+
+  @override
+  String get exportTransactionReceiptSubtitle => '包含本次交易明细与链上验证二维码';
+
+  @override
+  String get transactionReceiptTitle => '链上交易凭证';
+
+  @override
+  String get transactionReceiptTimeLabel => '交易时间';
+
+  @override
+  String get saveReceiptToPhotos => '保存到相册';
+
+  @override
+  String get shareReceiptImage => '分享凭证图片';
+
+  @override
+  String get transactionReceiptSaved => '交易凭证已保存到相册';
+
+  @override
+  String get transactionReceiptDenied => '未获得相册权限，无法保存交易凭证';
+
+  @override
+  String get transactionReceiptUseShare => '此系统版本无法直接保存，请改用分享';
+
+  @override
+  String get transactionReceiptFailed => '生成交易凭证失败';
+
+  @override
+  String get scanToVerifyOnChain => '扫描二维码，在区块浏览器验证';
+
+  @override
+  String get transactionReceiptFooter => '由 KT Wallet 生成 · 请以链上数据为准';
+
+  @override
+  String transactionReceiptSubject(String network) {
+    return '$network 交易凭证';
+  }
+
+  @override
   String get actionCopy => '复制地址';
 
   @override

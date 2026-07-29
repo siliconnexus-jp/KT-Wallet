@@ -1330,6 +1330,90 @@ abstract class AppLocalizations {
   /// **'生成收款图片失败'**
   String get receiveImageFailed;
 
+  /// No description provided for @receiveExportSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'包含地址、网络与可扫描的收款二维码'**
+  String get receiveExportSubtitle;
+
+  /// No description provided for @exportTransactionReceipt.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出交易凭证'**
+  String get exportTransactionReceipt;
+
+  /// No description provided for @exportTransactionReceiptSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'包含本次交易明细与链上验证二维码'**
+  String get exportTransactionReceiptSubtitle;
+
+  /// No description provided for @transactionReceiptTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'链上交易凭证'**
+  String get transactionReceiptTitle;
+
+  /// No description provided for @transactionReceiptTimeLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易时间'**
+  String get transactionReceiptTimeLabel;
+
+  /// No description provided for @saveReceiptToPhotos.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存到相册'**
+  String get saveReceiptToPhotos;
+
+  /// No description provided for @shareReceiptImage.
+  ///
+  /// In zh, this message translates to:
+  /// **'分享凭证图片'**
+  String get shareReceiptImage;
+
+  /// No description provided for @transactionReceiptSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易凭证已保存到相册'**
+  String get transactionReceiptSaved;
+
+  /// No description provided for @transactionReceiptDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'未获得相册权限，无法保存交易凭证'**
+  String get transactionReceiptDenied;
+
+  /// No description provided for @transactionReceiptUseShare.
+  ///
+  /// In zh, this message translates to:
+  /// **'此系统版本无法直接保存，请改用分享'**
+  String get transactionReceiptUseShare;
+
+  /// No description provided for @transactionReceiptFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成交易凭证失败'**
+  String get transactionReceiptFailed;
+
+  /// No description provided for @scanToVerifyOnChain.
+  ///
+  /// In zh, this message translates to:
+  /// **'扫描二维码，在区块浏览器验证'**
+  String get scanToVerifyOnChain;
+
+  /// No description provided for @transactionReceiptFooter.
+  ///
+  /// In zh, this message translates to:
+  /// **'由 KT Wallet 生成 · 请以链上数据为准'**
+  String get transactionReceiptFooter;
+
+  /// No description provided for @transactionReceiptSubject.
+  ///
+  /// In zh, this message translates to:
+  /// **'{network} 交易凭证'**
+  String transactionReceiptSubject(String network);
+
   /// No description provided for @actionCopy.
   ///
   /// In zh, this message translates to:

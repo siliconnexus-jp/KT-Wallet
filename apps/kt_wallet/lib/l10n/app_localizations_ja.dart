@@ -676,6 +676,50 @@ class AppLocalizationsJa extends AppLocalizations {
   String get receiveImageFailed => '受取画像を作成できませんでした';
 
   @override
+  String get receiveExportSubtitle => 'アドレス、ネットワーク、読取可能な受取QRを含みます';
+
+  @override
+  String get exportTransactionReceipt => '取引証明をエクスポート';
+
+  @override
+  String get exportTransactionReceiptSubtitle => '取引明細とオンチェーン確認用QRを含みます';
+
+  @override
+  String get transactionReceiptTitle => 'オンチェーン取引証明';
+
+  @override
+  String get transactionReceiptTimeLabel => '取引日時';
+
+  @override
+  String get saveReceiptToPhotos => '写真に保存';
+
+  @override
+  String get shareReceiptImage => '取引証明画像を共有';
+
+  @override
+  String get transactionReceiptSaved => '取引証明を写真に保存しました';
+
+  @override
+  String get transactionReceiptDenied => '写真ライブラリへのアクセスが拒否されました';
+
+  @override
+  String get transactionReceiptUseShare => 'このOSでは直接保存できません。共有をご利用ください';
+
+  @override
+  String get transactionReceiptFailed => '取引証明を作成できませんでした';
+
+  @override
+  String get scanToVerifyOnChain => 'スキャンしてブロックエクスプローラーで確認';
+
+  @override
+  String get transactionReceiptFooter => 'KT Wallet が生成 · オンチェーンデータが正です';
+
+  @override
+  String transactionReceiptSubject(String network) {
+    return '$network 取引証明';
+  }
+
+  @override
   String get actionCopy => 'アドレスをコピー';
 
   @override

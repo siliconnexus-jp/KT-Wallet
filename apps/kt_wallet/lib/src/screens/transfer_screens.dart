@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:ui_kit/ui_kit.dart';
 import 'package:wallet_data/wallet_data.dart'
     show
@@ -29,8 +30,11 @@ import '../market/explorer_links.dart' show explorerTxUrl;
 import '../market/history_service.dart' show ChainTxRecord;
 import '../market/market_scope.dart'
     show MarketScope, effectiveRpcEndpoints, prefsGatewayResolver;
-import '../market/token_balance_service.dart' show usdcSolanaDevnetToken;
+import '../market/token_balance_service.dart'
+    show TokenInfo, builtinTokensByNetworkId, usdcSolanaDevnetToken;
+import '../market/transaction_card.dart';
 import '../platform/external_actions.dart';
+import '../platform/media_gallery.dart';
 import '../rpc/http_transport.dart';
 import '../security/biometric_auth.dart';
 import '../security/wallet_pin.dart';
@@ -2764,6 +2768,8 @@ class TxDetailScreen extends StatefulWidget {
     this.transaction,
     this.chainRecord,
     this.transferService,
+    this.tempDirectory,
+    this.cardRenderer,
   });
 
   final String? transactionId;
@@ -2777,6 +2783,12 @@ class TxDetailScreen extends StatefulWidget {
   final Transaction? transaction;
   final LocalTransferService? transferService;
 
+  /// Injectable seams keep export UI tests deterministic. The production
+  /// path renders a real high-resolution card and stages it in the platform
+  /// temporary directory before opening the share sheet.
+  final Future<Directory> Function()? tempDirectory;
+  final Future<Uint8List> Function(TransactionCardData)? cardRenderer;
+
   /// Demo tx hash of the displayed transaction (matches the broadcast flow).
   static const _txHash = '8f6d2c…a94e07';
 
@@ -2788,6 +2800,7 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
   Future<Transaction?>? _transaction;
   String? _activeId;
   bool _submitting = false;
+  bool _exportingReceipt = false;
 
   @override
   void initState() {
@@ -2902,6 +2915,7 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
   (int, String) _nativeUnit(Transaction tx) => switch (tx.coin) {
     'polygon' => (18, 'POL'),
     'avalanche' => (18, 'AVAX'),
+    'bnb' => (18, 'BNB'),
     'tron' => (6, 'TRX'),
     'solana' => (9, 'SOL'),
     _ => (18, 'ETH'),
@@ -2918,9 +2932,27 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
   }
 
   String _displayAmount(Transaction tx) {
-    if (tx.contract != null) return '${tx.amountRaw} Token (raw)';
-    final amount = _displayNativeRaw(tx.amountRaw, tx);
+    final token = _tokenFor(tx);
+    final amount = token == null
+        ? tx.contract == null
+              ? _displayNativeRaw(tx.amountRaw, tx)
+              : '${tx.amountRaw} Token (raw)'
+        : '${Amount(raw: BigInt.parse(tx.amountRaw), decimals: token.decimals, symbol: token.symbol).format(maxFraction: 8)} ${token.symbol}';
     return tx.direction == TxDirection.outgoing ? '-$amount' : amount;
+  }
+
+  TokenInfo? _tokenFor(Transaction tx) {
+    final contract = tx.contract;
+    final networkId = tx.networkId;
+    if (contract == null || networkId == null) return null;
+    for (final token
+        in builtinTokensByNetworkId[networkId] ?? const <TokenInfo>[]) {
+      final matches = contract.startsWith('0x')
+          ? token.contract.toLowerCase() == contract.toLowerCase()
+          : token.contract == contract;
+      if (matches) return token;
+    }
+    return null;
   }
 
   String _date(int millis) {
@@ -2949,6 +2981,235 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
             content: Text(AppLocalizations.of(context).externalActionFailed),
           ),
         );
+    }
+  }
+
+  TransactionCardTone _receiptTone(TxStatus status) => switch (status) {
+    TxStatus.confirmed => TransactionCardTone.success,
+    TxStatus.failed ||
+    TxStatus.dropped ||
+    TxStatus.expired => TransactionCardTone.failed,
+    TxStatus.replaced => TransactionCardTone.neutral,
+    _ => TransactionCardTone.pending,
+  };
+
+  String _nativeSymbolForChain(Chain chain) => switch (chain) {
+    Chain.ethereum || Chain.base || Chain.arbitrum => 'ETH',
+    Chain.polygon => 'POL',
+    Chain.avalanche => 'AVAX',
+    Chain.bnb => 'BNB',
+    Chain.tron => 'TRX',
+    Chain.solana => 'SOL',
+  };
+
+  TransactionCardData? _receiptForLive(BuildContext context, Transaction tx) {
+    final hash = tx.hash;
+    final chain = _chainFor(tx);
+    if (hash == null || hash.isEmpty || chain == null) return null;
+    final l10n = AppLocalizations.of(context);
+    final network =
+        _rowNetwork(tx) ?? NetworkScope.of(context).activeFor(chain);
+    final token = _tokenFor(tx);
+    final symbol = token?.symbol ?? _nativeSymbolForChain(chain);
+    final fields = <TransactionCardField>[
+      TransactionCardField(label: l10n.networkRow, value: network.name),
+      TransactionCardField(
+        label: l10n.fromAddress,
+        value: tx.fromAddr,
+        mono: true,
+      ),
+      TransactionCardField(
+        label: l10n.recipientAddress,
+        value: tx.toAddr,
+        mono: true,
+      ),
+      if (tx.contract != null)
+        TransactionCardField(
+          label: l10n.contractAddress,
+          value: tx.contract!,
+          mono: true,
+        ),
+      if (tx.feeRaw != null)
+        TransactionCardField(
+          label: l10n.networkFee,
+          value: _displayNativeRaw(tx.feeRaw!, tx),
+        ),
+      if (tx.nonce != null)
+        TransactionCardField(
+          label: l10n.txNonceLabel,
+          value: tx.nonce!,
+          mono: true,
+        ),
+      TransactionCardField(label: l10n.txHash, value: hash, mono: true),
+    ];
+    return TransactionCardData(
+      title: l10n.transactionReceiptTitle,
+      amount: _displayAmount(tx),
+      direction: tx.direction == TxDirection.outgoing
+          ? l10n.txSent
+          : l10n.txReceived,
+      status: _statusLabel(l10n, tx.status),
+      transactionTimeLabel: l10n.transactionReceiptTimeLabel,
+      transactionTime: _date(tx.createdAt),
+      networkName: network.name,
+      isTestnet: network.isTestnet,
+      testnetLabel: l10n.testnetBadge,
+      explorerUrl: explorerTxUrl(network, hash),
+      scanLabel: l10n.scanToVerifyOnChain,
+      footer: l10n.transactionReceiptFooter,
+      fields: fields,
+      tone: _receiptTone(tx.status),
+      tokenIconAsset: TokenIcon.assetFor(symbol),
+      networkIconAsset: ChainIcon.assetFor(chain),
+    );
+  }
+
+  TransactionCardData _receiptForChainRecord(
+    BuildContext context,
+    ChainTxRecord record,
+  ) {
+    final l10n = AppLocalizations.of(context);
+    final chain = chainOf(record.coin);
+    final network = NetworkScope.of(context).activeFor(chain);
+    final symbol = record.assetSymbol ?? _nativeSymbolForChain(chain);
+    return TransactionCardData(
+      title: l10n.transactionReceiptTitle,
+      amount: record.amountText ?? '--',
+      direction: record.outgoing ? l10n.txSent : l10n.txReceived,
+      status: record.confirmed ? l10n.txStatusConfirmed : l10n.txStatusFailed,
+      transactionTimeLabel: l10n.transactionReceiptTimeLabel,
+      transactionTime: _date(record.timestamp.millisecondsSinceEpoch),
+      networkName: network.name,
+      isTestnet: network.isTestnet,
+      testnetLabel: l10n.testnetBadge,
+      explorerUrl: explorerTxUrl(network, record.hash),
+      scanLabel: l10n.scanToVerifyOnChain,
+      footer: l10n.transactionReceiptFooter,
+      fields: [
+        TransactionCardField(label: l10n.networkRow, value: network.name),
+        if (record.assetContract != null)
+          TransactionCardField(
+            label: l10n.contractAddress,
+            value: record.assetContract!,
+            mono: true,
+          ),
+        TransactionCardField(
+          label: l10n.txHash,
+          value: record.hash,
+          mono: true,
+        ),
+      ],
+      tone: record.confirmed
+          ? TransactionCardTone.success
+          : TransactionCardTone.failed,
+      tokenIconAsset: TokenIcon.assetFor(symbol),
+      networkIconAsset: ChainIcon.assetFor(chain),
+    );
+  }
+
+  Future<void> _chooseReceiptExport(TransactionCardData data) async {
+    if (_exportingReceipt) return;
+    final l10n = AppLocalizations.of(context);
+    final action = await showModalBottomSheet<_ReceiptExportAction>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: WalletColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              l10n.exportTransactionReceipt,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: WalletColors.text,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              l10n.exportTransactionReceiptSubtitle,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.45,
+                color: WalletColors.text3,
+              ),
+            ),
+            const SizedBox(height: 18),
+            _ReceiptActionTile(
+              key: const ValueKey('receipt-save-photos'),
+              icon: Icons.download_rounded,
+              title: l10n.saveReceiptToPhotos,
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(_ReceiptExportAction.save),
+            ),
+            const SizedBox(height: 10),
+            _ReceiptActionTile(
+              key: const ValueKey('receipt-share-image'),
+              icon: Icons.ios_share_rounded,
+              title: l10n.shareReceiptImage,
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(_ReceiptExportAction.share),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+    await _runReceiptExport(data, action);
+  }
+
+  Future<void> _runReceiptExport(
+    TransactionCardData data,
+    _ReceiptExportAction action,
+  ) async {
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    setState(() => _exportingReceipt = true);
+    try {
+      final png = await (widget.cardRenderer ?? renderTransactionCardPng)(data);
+      if (action == _ReceiptExportAction.save) {
+        final outcome = await MediaGallery.instance.saveImage(
+          png,
+          name: 'kt-wallet-transaction',
+        );
+        if (!mounted) return;
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(switch (outcome) {
+              SaveImageOutcome.saved => l10n.transactionReceiptSaved,
+              SaveImageOutcome.denied => l10n.transactionReceiptDenied,
+              SaveImageOutcome.unsupported => l10n.transactionReceiptUseShare,
+              SaveImageOutcome.failed => l10n.transactionReceiptFailed,
+            }),
+          ),
+        );
+        return;
+      }
+
+      final directory =
+          await (widget.tempDirectory?.call() ?? getTemporaryDirectory());
+      final file = File('${directory.path}/kt-wallet-transaction.png');
+      file.writeAsBytesSync(png, flush: true);
+      await ExternalActions.instance.shareFile(
+        path: file.path,
+        mimeType: 'image/png',
+        text: data.explorerUrl,
+        subject: l10n.transactionReceiptSubject(data.networkName),
+      );
+    } on Object {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.transactionReceiptFailed)),
+      );
+    } finally {
+      if (mounted) setState(() => _exportingReceipt = false);
     }
   }
 
@@ -3168,6 +3429,7 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
         (chain == null
             ? tx.coin
             : NetworkScope.of(context).activeFor(chain).name);
+    final receipt = _receiptForLive(context, tx);
     // Replacement is offered only while the row's own network is active.
     final canReplace = _canReplace(tx) && _rowNetworkIsActive(tx);
     return KtScreen(
@@ -3305,6 +3567,13 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
             ],
           ),
         ),
+        if (receipt != null)
+          _TransactionReceiptPanel(
+            exporting: _exportingReceipt,
+            title: l10n.exportTransactionReceipt,
+            subtitle: l10n.exportTransactionReceiptSubtitle,
+            onTap: () => _chooseReceiptExport(receipt),
+          ),
       ],
     );
   }
@@ -3316,6 +3585,7 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
     final l10n = AppLocalizations.of(context);
     final network = NetworkScope.of(context).activeFor(chainOf(record.coin));
     final url = explorerTxUrl(network, record.hash);
+    final receipt = _receiptForChainRecord(context, record);
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(
@@ -3433,6 +3703,12 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
             ],
           ),
         ),
+        _TransactionReceiptPanel(
+          exporting: _exportingReceipt,
+          title: l10n.exportTransactionReceipt,
+          subtitle: l10n.exportTransactionReceiptSubtitle,
+          onTap: () => _chooseReceiptExport(receipt),
+        ),
       ],
     );
   }
@@ -3526,6 +3802,149 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
       ],
     );
   }
+}
+
+enum _ReceiptExportAction { save, share }
+
+class _TransactionReceiptPanel extends StatelessWidget {
+  const _TransactionReceiptPanel({
+    required this.exporting,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final bool exporting;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    key: const ValueKey('transaction-export-receipt'),
+    color: WalletColors.surface,
+    borderRadius: BorderRadius.circular(18),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: exporting ? null : onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF5578FF), Color(0xFF3155DD)],
+                ),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: exporting
+                  ? const Padding(
+                      padding: EdgeInsets.all(13),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.qr_code_2_rounded,
+                      size: 24,
+                      color: Colors.white,
+                    ),
+            ),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: WalletColors.text,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      height: 1.35,
+                      color: WalletColors.text3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 15,
+              color: WalletColors.text3,
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _ReceiptActionTile extends StatelessWidget {
+  const _ReceiptActionTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: WalletColors.bg,
+    borderRadius: BorderRadius.circular(16),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: WalletColors.accent.withValues(alpha: 0.09),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, size: 21, color: WalletColors.accent),
+            ),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: WalletColors.text,
+                ),
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: WalletColors.text3),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 /// W30 转账身份验证 (bottom sheet). Production submits through native Wallet

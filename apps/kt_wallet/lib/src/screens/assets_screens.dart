@@ -1617,44 +1617,72 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           ),
         ),
         if (address.isNotEmpty)
-          GestureDetector(
+          Material(
             key: const ValueKey('receive-save-image'),
-            behavior: HitTestBehavior.opaque,
-            onTap: _savingImage ? null : _saveReceiveImage,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: WalletColors.surface,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (_savingImage)
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: WalletColors.accent,
+            color: WalletColors.surface,
+            borderRadius: BorderRadius.circular(18),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: _savingImage ? null : _saveReceiveImage,
+              borderRadius: BorderRadius.circular(18),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: WalletColors.accent.withValues(alpha: 0.09),
+                        borderRadius: BorderRadius.circular(13),
                       ),
-                    )
-                  else
+                      child: _savingImage
+                          ? const Padding(
+                              padding: EdgeInsets.all(13),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: WalletColors.accent,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.image_outlined,
+                              size: 22,
+                              color: WalletColors.accent,
+                            ),
+                    ),
+                    const SizedBox(width: 13),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l10n.saveReceiveImage,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: WalletColors.text,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            l10n.receiveExportSubtitle,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              height: 1.35,
+                              color: WalletColors.text3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
                     const Icon(
-                      Icons.image_outlined,
-                      size: 18,
-                      color: WalletColors.accent,
+                      Icons.arrow_forward_ios_rounded,
+                      size: 15,
+                      color: WalletColors.text3,
                     ),
-                  const SizedBox(width: 8),
-                  Text(
-                    l10n.saveReceiveImage,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: WalletColors.accent,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
