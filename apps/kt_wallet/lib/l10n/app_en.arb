@@ -98,6 +98,15 @@
   "mnemonicWordChallenge": "What is word {position}?",
   "mnemonicChallengeHint": "Pick the correct word below",
   "verifyWrong": "Wrong choice — check your written backup and try again",
+  "walletCreateAuthLocked": "Security verification is temporarily locked. Try again in {seconds} seconds.",
+  "@walletCreateAuthLocked": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "walletCreateFailed": "Wallet creation could not be completed. Please try again.",
   "walletCreatedBackedUp": "Wallet created and backed up",
   "backupVerified": "Backup verified — your phrase is correct",
   "mnemonicInvalid": "Invalid recovery phrase — check each word and try again",

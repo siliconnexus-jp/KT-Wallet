@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:core_crypto/core_crypto.dart';
 import 'package:core_crypto/testing.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +25,23 @@ const _mnemonic =
 
 /// The demo words that must never surface on a real path.
 const _demoWords = ['walnut', 'breeze', 'copper', 'stadium'];
+
+class _LockedStoreCoreCrypto extends MockCoreCrypto {
+  final storeStarted = Completer<void>();
+  final releaseStore = Completer<void>();
+
+  @override
+  Future<void> storeWallet({
+    required String walletId,
+    required String mnemonic,
+    bool requireAuth = true,
+    String? kdfPassword,
+  }) async {
+    if (!storeStarted.isCompleted) storeStarted.complete();
+    await releaseStore.future;
+    throw const AuthLockedException(60);
+  }
+}
 
 Future<WalletController> _controller({
   MockCoreCrypto? crypto,
@@ -168,6 +187,55 @@ void main() {
       expect(controller.count, before + 1); // the new wallet is committed
       expect(controller.pendingMnemonic, isNull);
     });
+
+    testWidgets(
+      'native lockout shows an in-button spinner and a retryable error',
+      (tester) async {
+        final crypto = _LockedStoreCoreCrypto();
+        final controller = await _controller(crypto: crypto, store: false);
+        await controller.beginCreate();
+        final correct = controller.pendingMnemonic!.split(' ')[3];
+        await _pump(tester, controller, '/mnemonic-verify');
+
+        await tester.tap(find.text(correct).last);
+        await tester.pump();
+        await tester.tap(find.text('确认'));
+        await tester.pump();
+
+        expect(crypto.storeStarted.isCompleted, isTrue);
+        expect(
+          find.byKey(const ValueKey('kt-primary-button-loading')),
+          findsOneWidget,
+        );
+        expect(
+          tester
+              .widget<AnimatedOpacity>(
+                find.byKey(const ValueKey('kt-primary-button-loading-layer')),
+              )
+              .opacity,
+          1,
+        );
+
+        crypto.releaseStore.complete();
+        await tester.pumpAndSettle();
+
+        expect(find.text('安全验证暂时锁定，请在 60 秒后重试。'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('mnemonic-verify-submit-error')),
+          findsOneWidget,
+        );
+        expect(
+          tester
+              .widget<AnimatedOpacity>(
+                find.byKey(const ValueKey('kt-primary-button-loading-layer')),
+              )
+              .opacity,
+          0,
+        );
+        expect(find.text('确认'), findsOneWidget);
+        expect(controller.pendingMnemonic, isNotNull);
+      },
+    );
   });
 
   group('view-recovery-phrase sheet', () {

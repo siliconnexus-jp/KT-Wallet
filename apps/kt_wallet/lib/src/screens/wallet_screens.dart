@@ -554,6 +554,8 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
   static const _challengePosition = 4; // 1-based
 
   String? _selected;
+  String? _submitError;
+  bool _submitting = false;
 
   /// Null when there is no real phrase behind this step — see
   /// [_activeMnemonic]. The screen then refuses instead of quizzing the user
@@ -572,7 +574,7 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
   }
 
   Future<void> _confirm() async {
-    if (_selected == null) return;
+    if (_selected == null || _submitting) return;
     final l10n = AppLocalizations.of(context);
     final controller = WalletScope.of(context);
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
@@ -585,23 +587,52 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
       messenger.showSnackBar(SnackBar(content: Text(l10n.verifyWrong)));
       return;
     }
-    if (controller.pendingMnemonic != null) {
-      // Create-onboarding: commit the new wallet now that backup is verified.
-      final name = l10n.walletDefaultName(controller.count + 1);
-      await controller.finalizeCreate(name: name);
-      messenger.showSnackBar(
-        SnackBar(content: Text(l10n.walletCreatedBackedUp)),
-      );
-    } else {
-      // Gallery / golden rendering only: under a real [WalletScope] a null
-      // pendingMnemonic means [_activeMnemonic] returned null, the screen
-      // refused above and this button was never rendered. Kept so the design
-      // gallery's demo controller still completes the flow end to end.
-      final current = controller.current;
-      if (current != null) controller.markBackedUp(current.id);
-      messenger.showSnackBar(SnackBar(content: Text(l10n.backupVerified)));
+
+    setState(() {
+      _submitting = true;
+      _submitError = null;
+    });
+
+    String? failure;
+    try {
+      if (controller.pendingMnemonic != null) {
+        // Create-onboarding: commit the new wallet now that backup is verified.
+        final name = l10n.walletDefaultName(controller.count + 1);
+        await controller.finalizeCreate(name: name);
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.walletCreatedBackedUp)),
+        );
+      } else {
+        // Gallery / golden rendering only: under a real [WalletScope] a null
+        // pendingMnemonic means [_activeMnemonic] returned null, the screen
+        // refused above and this button was never rendered. Kept so the design
+        // gallery's demo controller still completes the flow end to end.
+        final current = controller.current;
+        if (current != null) controller.markBackedUp(current.id);
+        messenger.showSnackBar(SnackBar(content: Text(l10n.backupVerified)));
+      }
+    } on AuthLockedException catch (error) {
+      failure = l10n.walletCreateAuthLocked(error.cooldownSec);
+    } on AuthCancelledException catch (_) {
+      failure = l10n.mnemonicAuthRequired;
+    } on AuthFailedException catch (_) {
+      failure = l10n.mnemonicAuthRequired;
+    } on CoreCryptoException catch (_) {
+      failure = l10n.walletCreateFailed;
+    } catch (_) {
+      failure = l10n.walletCreateFailed;
     }
-    if (mounted) context.go('/home');
+
+    if (!mounted) return;
+    if (failure != null) {
+      setState(() {
+        _submitting = false;
+        _submitError = failure;
+      });
+      return;
+    }
+    setState(() => _submitting = false);
+    context.go('/home');
   }
 
   // The challenge options are drawn from the real phrase, so this screen gets
@@ -637,24 +668,9 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
       bottom: KtPrimaryButton(
         label: l10n.actionConfirm,
         onPressed: _selected == null ? null : _confirm,
+        loading: _submitting,
       ),
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            for (final done in [true, false, false]) ...[
-              Container(
-                width: 28,
-                height: 4,
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: BoxDecoration(
-                  color: done ? WalletColors.green : WalletColors.border,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ],
-          ],
-        ),
         Column(
           children: [
             Text(
@@ -689,7 +705,12 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
                           final sel = word == _selected;
                           return GestureDetector(
                             behavior: HitTestBehavior.opaque,
-                            onTap: () => setState(() => _selected = word),
+                            onTap: _submitting
+                                ? null
+                                : () => setState(() {
+                                    _selected = word;
+                                    _submitError = null;
+                                  }),
                             child: Container(
                               height: 48,
                               alignment: Alignment.center,
@@ -726,6 +747,36 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
               ),
           ],
         ),
+        if (_submitError case final error?)
+          Container(
+            key: const ValueKey('mnemonic-verify-submit-error'),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: WalletColors.red.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  size: 18,
+                  color: WalletColors.red,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    error,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.45,
+                      color: WalletColors.red,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }

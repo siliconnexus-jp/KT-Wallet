@@ -98,6 +98,15 @@
   "mnemonicWordChallenge": "{position} 番目の単語は？",
   "mnemonicChallengeHint": "下から正しい単語を選択してください",
   "verifyWrong": "選択が違います。手書きバックアップを確認して再試行してください",
+  "walletCreateAuthLocked": "セキュリティ認証は一時的にロックされています。{seconds} 秒後に再試行してください。",
+  "@walletCreateAuthLocked": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "walletCreateFailed": "ウォレットの作成を完了できませんでした。もう一度お試しください。",
   "walletCreatedBackedUp": "ウォレットを作成しバックアップしました",
   "backupVerified": "バックアップを確認しました — フレーズは正しいです",
   "mnemonicInvalid": "リカバリーフレーズが無効です。各単語を確認して再試行してください",

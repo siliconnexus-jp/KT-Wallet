@@ -278,6 +278,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get verifyWrong => '选择有误，请对照您手写的备份重试';
 
   @override
+  String walletCreateAuthLocked(int seconds) {
+    return '安全验证暂时锁定，请在 $seconds 秒后重试。';
+  }
+
+  @override
+  String get walletCreateFailed => '钱包创建未完成，请重试。';
+
+  @override
   String get walletCreatedBackedUp => '钱包已创建并完成备份';
 
   @override

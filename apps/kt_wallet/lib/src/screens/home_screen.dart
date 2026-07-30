@@ -27,9 +27,9 @@ import 'wallet_screens.dart' show AddWalletScreen;
 /// [WalletScope], so switching wallets rebuilds it live; hot vs watch wallets
 /// change the action row and the backup banner (ui-m.md §8.1).
 /// Stateful shell: the bottom tab bar switches between the three top-level
-/// tabs (home / assets / settings) via an IndexedStack. Transaction history
-/// remains a first-class page reached from the home action instead of taking
-/// permanent tab-bar space.
+/// tabs (home / assets / settings) while retaining every tab's scroll state.
+/// Transaction history remains a first-class page reached from the home action
+/// instead of taking permanent tab-bar space.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.assets});
 
@@ -104,6 +104,11 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _selectTab(int tab) {
+    if (tab == _tab) return;
+    setState(() => _tab = tab);
+  }
+
   @override
   Widget build(BuildContext context) {
     // A production install intentionally has no demo wallet. It must land on
@@ -129,13 +134,13 @@ class _HomeScreenState extends State<HomeScreen> {
           bottom: false,
           child: Stack(
             children: [
-              IndexedStack(
-                index: _tab,
+              _AnimatedTabStack(
+                selected: _tab,
                 children: [
                   _HomeTab(
                     assets: widget.assets ?? demoAssets,
-                    onViewAll: () => setState(() => _tab = 1),
-                    onOpenSettings: () => setState(() => _tab = 2),
+                    onViewAll: () => _selectTab(1),
+                    onOpenSettings: () => _selectTab(2),
                   ),
                   const _AssetsTab(),
                   const _SettingsTab(),
@@ -147,10 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 bottom: 0,
                 child: SafeArea(
                   top: false,
-                  child: _TabBar(
-                    selected: _tab,
-                    onTap: (i) => setState(() => _tab = i),
-                  ),
+                  child: _TabBar(selected: _tab, onTap: _selectTab),
                 ),
               ),
             ],
@@ -164,6 +166,107 @@ class _HomeScreenState extends State<HomeScreen> {
 /// Room a tab's scroll view must leave at the bottom so its last row is not
 /// stuck under the floating tab bar.
 const kTabBarInset = 88.0;
+
+const _tabFadeDuration = Duration(milliseconds: 140);
+const _tabIndicatorDuration = Duration(milliseconds: 220);
+const _tabMotionCurve = Cubic(0.2, 0.8, 0.2, 1);
+
+/// Retains all three top-level surfaces and uses a short crossfade to soften
+/// the content swap. The bottom indicator already communicates direction, so
+/// moving the full page as well only makes this high-frequency action feel
+/// like it is being thrown sideways.
+class _AnimatedTabStack extends StatefulWidget {
+  const _AnimatedTabStack({required this.selected, required this.children});
+
+  final int selected;
+  final List<Widget> children;
+
+  @override
+  State<_AnimatedTabStack> createState() => _AnimatedTabStackState();
+}
+
+class _AnimatedTabStackState extends State<_AnimatedTabStack>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _transitionClock;
+
+  bool _reduceMotion = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _transitionClock = AnimationController(
+      vsync: this,
+      duration: _tabFadeDuration,
+    )..addStatusListener(_handleTransitionStatus);
+  }
+
+  void _handleTransitionStatus(AnimationStatus status) {
+    // The clock only keeps outgoing tabs mounted for their transition.
+    // Rebuild once on completion to offstage them instead of rebuilding every
+    // wrapper on every animation frame.
+    if (status == AnimationStatus.completed && mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = MediaQuery.disableAnimationsOf(context);
+    _transitionClock.duration = _reduceMotion
+        ? const Duration(milliseconds: 100)
+        : _tabFadeDuration;
+  }
+
+  @override
+  void didUpdateWidget(_AnimatedTabStack oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selected != widget.selected) {
+      _transitionClock.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _transitionClock.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final transitioning = _transitionClock.isAnimating;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        for (final (index, child) in widget.children.indexed)
+          AnimatedOpacity(
+            key: ValueKey('home-tab-opacity-$index'),
+            opacity: index == widget.selected ? 1 : 0,
+            duration: _reduceMotion
+                ? const Duration(milliseconds: 100)
+                : _tabFadeDuration,
+            curve: _tabMotionCurve,
+            child: Offstage(
+              offstage: !transitioning && index != widget.selected,
+              child: TickerMode(
+                enabled: index == widget.selected,
+                child: ExcludeSemantics(
+                  excluding: index != widget.selected,
+                  child: IgnorePointer(
+                    ignoring: index != widget.selected,
+                    child: RepaintBoundary(
+                      key: ValueKey('home-tab-surface-$index'),
+                      child: child,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
 
 class _HomeTab extends StatelessWidget {
   const _HomeTab({required this.assets, this.onViewAll, this.onOpenSettings});
@@ -1857,6 +1960,7 @@ class _TabBar extends StatelessWidget {
       (l10n.tabAssets, Icons.pie_chart),
       (l10n.tabSettings, Icons.settings),
     ];
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Container(
@@ -1873,51 +1977,136 @@ class _TabBar extends StatelessWidget {
             ),
           ],
         ),
-        child: Row(
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            for (final (i, tab) in tabs.indexed)
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => onTap(i),
-                  child: Container(
+            IgnorePointer(
+              child: AnimatedAlign(
+                key: const ValueKey('home-tab-indicator'),
+                alignment: Alignment(selected - 1.0, 0),
+                duration: reduceMotion
+                    ? const Duration(milliseconds: 100)
+                    : _tabIndicatorDuration,
+                curve: _tabMotionCurve,
+                child: FractionallySizedBox(
+                  widthFactor: 1 / 3,
+                  heightFactor: 1,
+                  child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: i == selected
-                          ? WalletColors.accent.withValues(alpha: 0.08)
-                          : null,
+                      color: WalletColors.accent.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(22),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          tab.$2,
-                          size: 22,
-                          color: i == selected
-                              ? WalletColors.accent
-                              : WalletColors.text3,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          tab.$1,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: i == selected
-                                ? FontWeight.w600
-                                : FontWeight.w500,
-                            color: i == selected
-                                ? WalletColors.accent
-                                : WalletColors.text3,
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ),
               ),
+            ),
+            Row(
+              children: [
+                for (final (i, tab) in tabs.indexed)
+                  Expanded(
+                    child: _TabBarItem(
+                      key: ValueKey('home-tab-$i'),
+                      label: tab.$1,
+                      icon: tab.$2,
+                      selected: i == selected,
+                      reduceMotion: reduceMotion,
+                      onTap: () => onTap(i),
+                    ),
+                  ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
+}
+
+class _TabBarItem extends StatefulWidget {
+  const _TabBarItem({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.reduceMotion,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final bool reduceMotion;
+  final VoidCallback onTap;
+
+  @override
+  State<_TabBarItem> createState() => _TabBarItemState();
+}
+
+class _TabBarItemState extends State<_TabBarItem> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed == value) return;
+    setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: widget.selected,
+    label: widget.label,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => _setPressed(true),
+      onTapCancel: () => _setPressed(false),
+      onTapUp: (_) => _setPressed(false),
+      onTap: () {
+        if (!widget.selected) HapticFeedback.selectionClick();
+        widget.onTap();
+      },
+      child: AnimatedScale(
+        scale: widget.reduceMotion || !_pressed ? 1 : 0.96,
+        duration: widget.reduceMotion
+            ? Duration.zero
+            : const Duration(milliseconds: 100),
+        curve: Curves.easeOutCubic,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(end: widget.selected ? 1 : 0),
+          duration: widget.reduceMotion
+              ? const Duration(milliseconds: 100)
+              : const Duration(milliseconds: 180),
+          curve: _tabMotionCurve,
+          builder: (context, progress, _) {
+            final color = Color.lerp(
+              WalletColors.text3,
+              WalletColors.accent,
+              progress,
+            );
+            return Transform.translate(
+              offset: widget.reduceMotion ? Offset.zero : Offset(0, -progress),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(widget.icon, size: 22, color: color),
+                  const SizedBox(height: 2),
+                  Text(
+                    widget.label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.lerp(
+                        FontWeight.w500,
+                        FontWeight.w600,
+                        progress,
+                      ),
+                      color: color,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    ),
+  );
 }

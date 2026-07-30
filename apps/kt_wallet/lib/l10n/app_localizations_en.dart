@@ -289,6 +289,15 @@ class AppLocalizationsEn extends AppLocalizations {
       'Wrong choice — check your written backup and try again';
 
   @override
+  String walletCreateAuthLocked(int seconds) {
+    return 'Security verification is temporarily locked. Try again in $seconds seconds.';
+  }
+
+  @override
+  String get walletCreateFailed =>
+      'Wallet creation could not be completed. Please try again.';
+
+  @override
   String get walletCreatedBackedUp => 'Wallet created and backed up';
 
   @override

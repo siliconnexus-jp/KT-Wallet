@@ -129,6 +129,15 @@
   },
   "mnemonicChallengeHint": "从下列单词中选择正确的一项",
   "verifyWrong": "选择有误，请对照您手写的备份重试",
+  "walletCreateAuthLocked": "安全验证暂时锁定，请在 {seconds} 秒后重试。",
+  "@walletCreateAuthLocked": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "walletCreateFailed": "钱包创建未完成，请重试。",
   "walletCreatedBackedUp": "钱包已创建并完成备份",
   "backupVerified": "备份已验证，助记词记录正确",
   "mnemonicInvalid": "助记词无效，请检查每个单词后重试",

@@ -604,6 +604,18 @@ abstract class AppLocalizations {
   /// **'选择有误，请对照您手写的备份重试'**
   String get verifyWrong;
 
+  /// No description provided for @walletCreateAuthLocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'安全验证暂时锁定，请在 {seconds} 秒后重试。'**
+  String walletCreateAuthLocked(int seconds);
+
+  /// No description provided for @walletCreateFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包创建未完成，请重试。'**
+  String get walletCreateFailed;
+
   /// No description provided for @walletCreatedBackedUp.
   ///
   /// In zh, this message translates to:

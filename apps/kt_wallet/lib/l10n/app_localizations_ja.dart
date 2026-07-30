@@ -281,6 +281,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String get verifyWrong => '選択が違います。手書きバックアップを確認して再試行してください';
 
   @override
+  String walletCreateAuthLocked(int seconds) {
+    return 'セキュリティ認証は一時的にロックされています。$seconds 秒後に再試行してください。';
+  }
+
+  @override
+  String get walletCreateFailed => 'ウォレットの作成を完了できませんでした。もう一度お試しください。';
+
+  @override
   String get walletCreatedBackedUp => 'ウォレットを作成しバックアップしました';
 
   @override
