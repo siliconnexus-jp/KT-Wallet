@@ -1,6 +1,7 @@
 import 'package:chains/chains.dart' show Amount, Chain;
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 import 'package:wallet_data/wallet_data.dart' show TxStatus;
@@ -294,6 +295,21 @@ class _HomeTab extends StatelessWidget {
                           '${l10n.balanceChangePeriod}')
               : '+\$12.06 (+1.4%) ${l10n.balanceChangePeriod}',
         ),
+        if (live && market.isRefreshing && market.hasLiveBalances) ...[
+          const SizedBox(height: 8),
+          Text(
+            l10n.marketUpdating,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: WalletColors.text3,
+            ),
+          ),
+        ],
+        if (live && market.showingCachedData) ...[
+          const SizedBox(height: 8),
+          MarketFreshnessLabel(market: market),
+        ],
         if (live && testnet) ...[
           const SizedBox(height: 12),
           const _FiatHiddenTestnetNote(),
@@ -305,7 +321,11 @@ class _HomeTab extends StatelessWidget {
         const SizedBox(height: 24),
         _AssetsCard(
           assets: live
-              ? liveAssetRows(market, chainsLabel: l10n.assetOnChains)
+              ? preferredAssetRows(
+                  context,
+                  market,
+                  liveAssetRows(market, chainsLabel: l10n.assetOnChains),
+                )
               : assets,
           onViewAll: onViewAll,
         ),
@@ -355,9 +375,17 @@ class _AssetsTab extends StatelessWidget {
           const MarketOfflineBanner(),
           const SizedBox(height: 12),
         ],
+        if (market != null && market.showingCachedData) ...[
+          MarketFreshnessLabel(market: market),
+          const SizedBox(height: 12),
+        ],
         _AssetsCard(
           assets: live
-              ? liveAssetRows(market, chainsLabel: l10n.assetOnChains)
+              ? preferredAssetRows(
+                  context,
+                  market,
+                  liveAssetRows(market, chainsLabel: l10n.assetOnChains),
+                )
               : demoAssets,
         ),
       ],
@@ -390,9 +418,16 @@ class _RecordsScreenState extends State<RecordsScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_owned == null &&
-        HistoryScope.maybeOf(context) == null &&
-        MarketScope.maybeOf(context) != null) {
+    final shared = HistoryScope.maybeOf(context);
+    if (shared != null) {
+      if (HistoryScope.shouldAutoRefresh(context)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) shared.refreshIfNeeded();
+        });
+      }
+      return;
+    }
+    if (_owned == null && MarketScope.maybeOf(context) != null) {
       final networks = NetworkScope.maybeOf(context);
       final controller = HistoryController(
         wallets: WalletScope.of(context),
@@ -478,39 +513,99 @@ class _RecordsScreenState extends State<RecordsScreen> {
     if (records.isEmpty) {
       return _emptyCard(l10n);
     }
-    return KtCard(
-      child: Column(
-        children: [
-          for (final (i, r) in records.indexed) ...[
-            if (i > 0)
-              Divider(
-                height: 1,
-                color: WalletColors.text.withValues(alpha: 0.06),
-              ),
-            Builder(
-              builder: (context) {
-                final local = history.localTransactionForHash(r.hash);
-                return _RecordRow(
-                  key: ValueKey('history-record-${r.hash}'),
-                  record: _TxRecord(
-                    r.outgoing,
-                    '${r.amountText ?? '--'}${r.assetVerified ? '' : ' ⚠'}',
-                    _formatRecordTime(l10n, r.timestamp),
-                    status: local?.status,
+    return Column(
+      children: [
+        KtCard(
+          child: Column(
+            children: [
+              for (final (i, r) in records.indexed) ...[
+                if (i > 0)
+                  Divider(
+                    height: 1,
+                    color: WalletColors.text.withValues(alpha: 0.06),
                   ),
-                  // A row we broadcast ourselves opens its local record; one
-                  // that only exists on chain travels as `extra` so the detail
-                  // screen renders THAT transaction, not a demo one.
-                  onTap: () => local == null
-                      ? context.push('/tx-detail', extra: r)
-                      : context.push(
-                          '/tx-detail?id=${Uri.encodeComponent(local.id)}',
-                        ),
-                );
-              },
+                Builder(
+                  builder: (context) {
+                    final local = history.localTransactionForHash(r.hash);
+                    return _RecordRow(
+                      key: ValueKey('history-record-${r.id ?? r.hash}'),
+                      record: _TxRecord(
+                        r.outgoing,
+                        '${r.amountText ?? '--'}${r.assetVerified ? '' : ' ⚠'}',
+                        _formatRecordTime(l10n, r.timestamp),
+                        status: local?.status,
+                      ),
+                      // A row we broadcast ourselves opens its local record;
+                      // one that only exists on chain travels as `extra`.
+                      onTap: () => local == null
+                          ? context.push('/tx-detail', extra: r)
+                          : context.push(
+                              '/tx-detail?id=${Uri.encodeComponent(local.id)}',
+                            ),
+                    );
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (history.canLoadMore || history.isLoadingMore) ...[
+          const SizedBox(height: 12),
+          Semantics(
+            button: true,
+            label: history.isLoadingMore
+                ? l10n.historyLoadingMore
+                : l10n.historyLoadMore,
+            child: TextButton(
+              key: const ValueKey('history-load-more'),
+              onPressed: history.isLoadingMore
+                  ? null
+                  : () => history.loadMore(),
+              child: Text(
+                history.isLoadingMore
+                    ? l10n.historyLoadingMore
+                    : l10n.historyLoadMore,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _cachedHistoryLabel(AppLocalizations l10n, HistoryController history) {
+    final timestamp = history.lastUpdatedAt;
+    if (!history.showingCachedData || timestamp == null) {
+      return const SizedBox.shrink();
+    }
+    final age = DateTime.now().difference(timestamp);
+    final relative = age.inMinutes < 1
+        ? l10n.marketCachedJustNow
+        : age.inHours < 1
+        ? l10n.marketCachedMinutes(age.inMinutes)
+        : l10n.marketCachedHours(age.inHours);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Semantics(
+        liveRegion: true,
+        label: '$relative. ${l10n.marketCachedStale}',
+        child: Row(
+          key: const ValueKey('history-cached-label'),
+          children: [
+            const Icon(
+              Icons.schedule_rounded,
+              size: 14,
+              color: WalletColors.text3,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                '$relative · ${l10n.marketCachedStale}',
+                style: const TextStyle(fontSize: 12, color: WalletColors.text3),
+              ),
             ),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -551,16 +646,16 @@ class _RecordsScreenState extends State<RecordsScreen> {
     final l10n = AppLocalizations.of(context);
     final history = HistoryScope.maybeOf(context) ?? _owned;
     final assetStatus = history == null ? null : _assetStatus(history);
-    final Widget body;
+    late final Widget content;
     if (history == null) {
       // No trustworthy history source means no records. Never substitute
       // design fixtures on a wallet-facing surface.
-      body = _emptyCard(l10n);
+      content = _emptyCard(l10n);
     } else if (assetStatus == HistoryStatus.unsupported ||
         (assetStatus == null && history.allUnsupported)) {
       // No chain in this context has a keyless history API — say so instead
       // of showing demo rows that could pass for live data.
-      body = Padding(
+      content = Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Center(
           child: Text(
@@ -571,10 +666,10 @@ class _RecordsScreenState extends State<RecordsScreen> {
       );
     } else if ((history.isLoading || assetStatus == HistoryStatus.loading) &&
         _visibleRecords(history).isEmpty) {
-      body = _loadingCard();
+      content = _loadingCard();
     } else if (assetStatus == HistoryStatus.error ||
         (assetStatus == null && history.isError)) {
-      body = Column(
+      content = Column(
         children: [
           const MarketOfflineBanner(),
           const SizedBox(height: 12),
@@ -587,8 +682,11 @@ class _RecordsScreenState extends State<RecordsScreen> {
         ],
       );
     } else {
-      body = _liveCard(context, l10n, history);
+      content = _liveCard(context, l10n, history);
     }
+    final body = history == null
+        ? content
+        : Column(children: [_cachedHistoryLabel(l10n, history), content]);
     if (widget.embedded) {
       return Material(
         color: Colors.transparent,
@@ -906,7 +1004,10 @@ List<_SettingsItem> _settingsItems(AppLocalizations l10n) => [
   _SettingsItem(Icons.info_outline, l10n.settingsAbout, '/about'),
 ];
 
-/// Demo rows for the design gallery, the goldens, and the offline fallback.
+/// Fixture rows for the design gallery and golden tests only.
+///
+/// Production screens always render the controller's last verified values,
+/// including the honest unknown state when no snapshot exists.
 ///
 /// The numbers are illustrative, but each row still names the chain it stands
 /// for so tapping it opens THAT asset's detail — which then shows '--' for
@@ -1109,6 +1210,43 @@ List<AssetRow> liveAssetRows(
   for (final group in tokensBySymbol(market.tokens).values)
     liveTokenGroupRow(market, group, chainsLabel: chainsLabel),
 ];
+
+/// Applies the persisted asset preferences without ever hiding an unknown
+/// balance. Favorites lead; the remaining rows use their real USD holding
+/// value when available.
+List<AssetRow> preferredAssetRows(
+  BuildContext context,
+  MarketController market,
+  List<AssetRow> source,
+) {
+  final prefs = AppPrefsScope.maybeOf(context);
+  final rows = [
+    for (final row in source)
+      if (!(prefs?.hideZeroBalances ?? false) ||
+          row.ref == null ||
+          !market.isDefinitelyZero(row.ref!.group))
+        row,
+  ];
+  rows.sort((left, right) {
+    final leftFavorite =
+        left.ref != null && (prefs?.isFavoriteAsset(left.ref!.symbol) ?? false);
+    final rightFavorite =
+        right.ref != null &&
+        (prefs?.isFavoriteAsset(right.ref!.symbol) ?? false);
+    if (leftFavorite != rightFavorite) return leftFavorite ? -1 : 1;
+    final leftValue = left.ref == null
+        ? null
+        : market.fiatTotalFor(left.ref!.group, left.ref!.symbol);
+    final rightValue = right.ref == null
+        ? null
+        : market.fiatTotalFor(right.ref!.group, right.ref!.symbol);
+    if (leftValue == null && rightValue == null) return 0;
+    if (leftValue == null) return 1;
+    if (rightValue == null) return -1;
+    return rightValue.compareTo(leftValue);
+  });
+  return rows;
+}
 
 class AssetRow {
   const AssetRow(
@@ -1445,9 +1583,9 @@ class _ActionRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         for (final (label, icon, primary, route) in actions)
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
+          _PressScale(
             onTap: route == null ? onMore : () => context.push(route),
+            semanticLabel: label,
             child: Column(
               children: [
                 Container(
@@ -1509,9 +1647,9 @@ class _NetworkChips extends StatelessWidget {
           // network settings rather than sitting there inert.
           for (final (i, (chain, dot)) in _chainDots.indexed) ...[
             if (i > 0) const SizedBox(width: 8),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
+            _PressScale(
               onTap: () => context.push('/network'),
+              semanticLabel: networks.activeFor(chain).name,
               child: NetworkBadge(
                 label: networks.activeFor(chain).name,
                 dotColor: dot,
@@ -1551,9 +1689,9 @@ class _AssetsCard extends StatelessWidget {
                   color: WalletColors.text,
                 ),
               ),
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
+              _PressScale(
                 onTap: onViewAll,
+                semanticLabel: '${l10n.viewAll} ${l10n.tabAssets}',
                 child: Row(
                   children: [
                     Text(
@@ -1576,11 +1714,11 @@ class _AssetsCard extends StatelessWidget {
           const SizedBox(height: 18),
           for (var i = 0; i < assets.length; i++) ...[
             if (i > 0) const SizedBox(height: 18),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
+            _PressScale(
               // The row's own asset rides along as `extra`; without it the
               // detail route rendered one fixed token for every row.
               onTap: () => context.push('/token', extra: assets[i].ref),
+              semanticLabel: '${assets[i].name}, ${assets[i].sub}',
               child: _AssetTile(assets[i]),
             ),
           ],
@@ -1653,6 +1791,57 @@ class _AssetTile extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Crisp, interruptible press feedback used on the high-frequency home
+/// actions. It scales only transform content for 120ms and respects platform
+/// haptics; navigation itself is never delayed by the animation.
+class _PressScale extends StatefulWidget {
+  const _PressScale({
+    required this.child,
+    required this.onTap,
+    required this.semanticLabel,
+  });
+
+  final Widget child;
+  final VoidCallback? onTap;
+  final String semanticLabel;
+
+  @override
+  State<_PressScale> createState() => _PressScaleState();
+}
+
+class _PressScaleState extends State<_PressScale> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed == value) return;
+    setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: widget.semanticLabel,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: widget.onTap == null ? null : (_) => _setPressed(true),
+      onTapCancel: widget.onTap == null ? null : () => _setPressed(false),
+      onTapUp: widget.onTap == null ? null : (_) => _setPressed(false),
+      onTap: widget.onTap == null
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              widget.onTap!();
+            },
+      child: AnimatedScale(
+        scale: _pressed ? 0.97 : 1,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOutCubic,
+        child: widget.child,
+      ),
+    ),
+  );
 }
 
 class _TabBar extends StatelessWidget {

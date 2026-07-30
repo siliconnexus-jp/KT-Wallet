@@ -5,6 +5,7 @@ import 'package:core_crypto/core_crypto.dart' show ChainAddresses, Coin;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/src/market/balance_service.dart';
 import 'package:kt_wallet/src/market/market_controller.dart';
+import 'package:kt_wallet/src/market/market_snapshot.dart';
 import 'package:kt_wallet/src/market/price_service.dart';
 import 'package:kt_wallet/src/market/token_balance_service.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
@@ -16,6 +17,7 @@ class FakeBalanceService extends BalanceService {
   Map<Coin, BalanceResult> results;
   int calls = 0;
   ChainAddresses? lastAddresses;
+  int subsetCalls = 0;
 
   /// When set, the next fetch waits on it before returning (for in-flight
   /// state assertions); consumed once.
@@ -36,6 +38,21 @@ class FakeBalanceService extends BalanceService {
     }
     return results;
   }
+
+  @override
+  Future<Map<Coin, BalanceResult>> fetchCoins(
+    ChainAddresses addresses,
+    Iterable<Coin> coins, {
+    BalanceResultCallback? onResult,
+    Set<Coin> skipGateway = const {},
+  }) async {
+    subsetCalls++;
+    final subset = {for (final coin in coins) coin: ?results[coin]};
+    for (final entry in subset.entries) {
+      onResult?.call(entry.key, entry.value);
+    }
+    return subset;
+  }
 }
 
 class FakeTokenBalanceService extends TokenBalanceService {
@@ -44,6 +61,40 @@ class FakeTokenBalanceService extends TokenBalanceService {
   @override
   Future<Map<String, BalanceResult>> fetchAll(ChainAddresses addresses) async =>
       results;
+}
+
+class FakeCombinedTokenBalanceService extends TokenBalanceService {
+  FakeCombinedTokenBalanceService(this.batch);
+  final TokenBalanceBatch batch;
+
+  @override
+  bool get gatewayEnabled => true;
+
+  @override
+  Future<TokenBalanceBatch> fetchAllWithNative(
+    ChainAddresses addresses, {
+    NativeBalanceResultCallback? onNativeResult,
+  }) async {
+    for (final entry in batch.native.entries) {
+      onNativeResult?.call(entry.key, entry.value);
+    }
+    return batch;
+  }
+}
+
+class FakeSnapshotStore implements MarketSnapshotStore {
+  FakeSnapshotStore({this.snapshot});
+  MarketSnapshot? snapshot;
+  MarketSnapshot? saved;
+
+  @override
+  Future<MarketSnapshot?> load(String walletId, String scope) async =>
+      snapshot?.scope == scope ? snapshot : null;
+
+  @override
+  Future<void> save(String walletId, MarketSnapshot snapshot) async {
+    saved = snapshot;
+  }
 }
 
 class ProgressiveBalanceService extends BalanceService {
@@ -229,6 +280,113 @@ void main() {
       await done;
       expect(controller.isRefreshing, isFalse);
       expect(controller.balanceFor(Coin.solana).status, BalanceStatus.error);
+    },
+  );
+
+  test(
+    'persistent snapshot is shown while live balances refresh in background',
+    () async {
+      final gate = Completer<void>();
+      final balances = FakeBalanceService(_okResults())..gate = gate;
+      final savedAt = DateTime(2026, 7, 30, 8);
+      final snapshots = FakeSnapshotStore(
+        snapshot: MarketSnapshot(
+          scope: 'mainnet',
+          savedAt: savedAt,
+          native: {
+            Coin.eth: BalanceResult.ok(
+              Amount(
+                raw: BigInt.parse('500000000000000000'),
+                decimals: 18,
+                symbol: 'ETH',
+              ),
+            ),
+          },
+          tokens: const {},
+          nativePrices: const {Coin.eth: 2000},
+          tokenPrices: const {},
+          nativeChanges: const {},
+          tokenChanges: const {},
+        ),
+      );
+      final controller = MarketController(
+        wallets: _wallets(),
+        balances: balances,
+        prices: FakePriceService(_prices),
+        snapshots: snapshots,
+        snapshotScope: () => 'mainnet',
+      );
+
+      final done = controller.refresh();
+      await pumpEventQueue();
+
+      expect(controller.isRefreshing, isTrue);
+      expect(controller.showingCachedData, isTrue);
+      expect(controller.lastUpdatedAt, savedAt);
+      expect(controller.balanceFor(Coin.eth).amount!.format(), '0.5');
+      expect(controller.totalUsd, 1000);
+
+      gate.complete();
+      await done;
+      expect(controller.isRefreshing, isFalse);
+      expect(controller.showingCachedData, isFalse);
+      expect(controller.balanceFor(Coin.eth).amount!.format(), '1');
+      await pumpEventQueue();
+      expect(snapshots.saved, isNotNull);
+    },
+  );
+
+  test(
+    'same-scope refresh keeps last-good rows instead of resetting to --',
+    () async {
+      final balances = FakeBalanceService(_okResults());
+      final controller = MarketController(
+        wallets: _wallets(),
+        balances: balances,
+        prices: FakePriceService(_prices),
+        snapshotScope: () => 'mainnet',
+      );
+      await controller.refresh();
+
+      final gate = Completer<void>();
+      balances.gate = gate;
+      final done = controller.refresh();
+      expect(controller.isRefreshing, isTrue);
+      expect(controller.balanceFor(Coin.eth).status, BalanceStatus.ok);
+      expect(controller.balanceFor(Coin.eth).amount!.format(), '1');
+
+      gate.complete();
+      await done;
+    },
+  );
+
+  test(
+    'gateway token batch supplies native balances without duplicate calls',
+    () async {
+      final native = {
+        for (final coin in Coin.values)
+          coin: BalanceResult.ok(
+            Amount(
+              raw: BigInt.zero,
+              decimals: BalanceService.decimalsFor[coin]!,
+              symbol: BalanceService.symbolFor[coin]!,
+            ),
+          ),
+      };
+      final balances = FakeBalanceService(_okResults());
+      final controller = MarketController(
+        wallets: _wallets(),
+        balances: balances,
+        prices: FakePriceService(_prices),
+        tokens: FakeCombinedTokenBalanceService(
+          TokenBalanceBatch(tokens: const {}, native: native),
+        ),
+      );
+
+      await controller.refresh();
+      expect(balances.calls, 0);
+      expect(balances.subsetCalls, 0);
+      expect(controller.balanceFor(Coin.eth).status, BalanceStatus.ok);
     },
   );
 

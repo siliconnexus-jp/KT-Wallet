@@ -9,6 +9,7 @@ import '../state/wallet_controller.dart';
 import 'balance_service.dart';
 import 'gateway_client.dart';
 import 'market_controller.dart';
+import 'market_snapshot.dart';
 import 'price_service.dart';
 import 'token_balance_service.dart';
 
@@ -103,6 +104,14 @@ TokenRegistryResolver networkTokenRegistry(NetworkController? networks) =>
 final Expando<NetworkController> _networkSourceFor = Expando(
   'kt.activeNetworkSource',
 );
+final Expando<_GatewayClientSlot> _gatewayClientFor = Expando(
+  'kt.sharedGatewayClient',
+);
+
+class _GatewayClientSlot {
+  String? url;
+  GatewayClient? client;
+}
 
 /// The active network id of [coin]'s chain family for [prefs]-scoped callers,
 /// preferring an explicitly passed [networks] source over the linked one.
@@ -132,19 +141,25 @@ GatewayResolver prefsGatewayResolver(
   AppPrefsController? prefs, [
   NetworkController? networks,
 ]) {
-  GatewayClient? cached;
-  String? cachedUrl;
+  if (prefs != null && networks != null) {
+    _networkSourceFor[prefs] = networks;
+  }
   return () {
     final url = prefs?.gatewayUrl;
     if (url == null || url.isEmpty) return null;
-    if (cached == null || cachedUrl != url) {
-      cached = GatewayClient(
+    final slot = _gatewayClientFor[prefs!] ??= _GatewayClientSlot();
+    if (slot.client == null || slot.url != url) {
+      slot.client?.close();
+      slot.client = GatewayClient(
         baseUrl: url,
-        networks: (coin) => _activeNetworkId(prefs, networks, coin),
+        networks: (coin) => _activeNetworkId(prefs, null, coin),
+        // Mobile networks should not spend the full direct-RPC timeout merely
+        // discovering that the preferred Gateway is unreachable.
+        timeout: const Duration(seconds: 4),
       );
-      cachedUrl = url;
+      slot.url = url;
     }
-    return cached;
+    return slot.client;
   };
 }
 
@@ -169,6 +184,7 @@ class MarketScopeHost extends StatefulWidget {
     this.controller,
     this.prefs,
     this.networks,
+    this.ready = true,
     required this.child,
   });
 
@@ -179,6 +195,7 @@ class MarketScopeHost extends StatefulWidget {
   /// Explicit active-network source override (tests); production leaves this
   /// null and the enclosing [NetworkScope] is used.
   final NetworkController? networks;
+  final bool ready;
 
   final Widget child;
 
@@ -210,6 +227,12 @@ class _MarketScopeHostState extends State<MarketScopeHost> {
         prices: PriceService(gateway: _gateway),
         isTestnet: (coin) =>
             _networks?.activeFor(chainForRpcCoin(coin)).isTestnet ?? false,
+        snapshots: WalletMarketSnapshotStore(widget.wallets),
+        snapshotScope: () => [
+          for (final coin in Coin.values)
+            _networks?.activeFor(chainForRpcCoin(coin)).id ?? 'mainnet',
+        ].join('|'),
+        canRefresh: () => widget.ready,
       );
 
   /// Effective endpoint for [coin] at call time (prefs override → active
@@ -264,10 +287,21 @@ class _MarketScopeHostState extends State<MarketScopeHost> {
     final now = _snapshotEndpoints();
     if (listEquals(now, _lastEndpoints)) return;
     _lastEndpoints = now;
+    if (!widget.ready) return;
     // Balances fetched from the old node are stale the moment the endpoint
     // (or active network) changes; refetch (the generation guard drops any
     // in-flight results).
     _controller.refresh();
+  }
+
+  @override
+  void didUpdateWidget(MarketScopeHost oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.ready && widget.ready) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _controller.refreshIfNeeded();
+      });
+    }
   }
 
   @override

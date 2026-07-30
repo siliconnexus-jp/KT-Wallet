@@ -82,6 +82,26 @@ class WalletController extends ChangeNotifier {
     return _store.transactionById(walletId, id);
   }
 
+  /// Small wallet-scoped values used by display caches. Callers must pass an
+  /// id owned by this controller; the repository remains scoped to that id.
+  Future<String?> walletSetting(String walletId, String key) async {
+    if (_store == null || !_manager.wallets.any((w) => w.id == walletId)) {
+      return null;
+    }
+    return _store.setting(walletId, key);
+  }
+
+  Future<void> putWalletSetting(
+    String walletId,
+    String key,
+    String value,
+  ) async {
+    if (_store == null || !_manager.wallets.any((w) => w.id == walletId)) {
+      return;
+    }
+    await _store.putSetting(walletId, key, value);
+  }
+
   Future<void> saveOutgoingTransaction({
     required String id,
     String? reqId,

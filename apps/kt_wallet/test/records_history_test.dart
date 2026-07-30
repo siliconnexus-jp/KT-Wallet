@@ -5,6 +5,7 @@ import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/src/market/asset_ref.dart';
 import 'package:kt_wallet/src/market/history_controller.dart';
 import 'package:kt_wallet/src/market/history_service.dart';
+import 'package:kt_wallet/src/market/history_snapshot.dart';
 import 'package:kt_wallet/src/market/token_balance_service.dart'
     show usdtEthToken;
 import 'package:kt_wallet/src/screens/home_screen.dart';
@@ -20,9 +21,54 @@ class _FakeHistoryService extends HistoryService {
   final Map<Coin, int> fetchCounts = {};
 
   @override
-  Future<HistoryResult> fetch(Coin coin, String address) async {
+  Future<HistoryResult> fetch(
+    Coin coin,
+    String address, {
+    int limit = HistoryService.pageSize,
+  }) async {
     fetchCounts.update(coin, (count) => count + 1, ifAbsent: () => 1);
     return results[coin]!;
+  }
+}
+
+class _PagedHistoryService extends HistoryService {
+  final requestedLimits = <int>[];
+
+  @override
+  Future<HistoryResult> fetch(
+    Coin coin,
+    String address, {
+    int limit = HistoryService.pageSize,
+  }) async {
+    requestedLimits.add(limit);
+    if (coin != Coin.eth) return const HistoryResult.unsupported();
+    return HistoryResult.ok([
+      for (var i = 0; i < limit; i++)
+        ChainTxRecord(
+          coin: Coin.eth,
+          id: '0x${i.toRadixString(16)}:0',
+          hash: '0x${i.toRadixString(16)}',
+          outgoing: i.isEven,
+          amountText: '$i ETH',
+          timestamp: DateTime(2026, 7, 30).subtract(Duration(minutes: i)),
+          confirmed: true,
+        ),
+    ]);
+  }
+}
+
+class _HistorySnapshotMemory implements HistorySnapshotStore {
+  _HistorySnapshotMemory(this.snapshot);
+  HistorySnapshot? snapshot;
+  HistorySnapshot? saved;
+
+  @override
+  Future<HistorySnapshot?> load(String walletId, String scope) async =>
+      snapshot?.scope == scope ? snapshot : null;
+
+  @override
+  Future<void> save(String walletId, HistorySnapshot snapshot) async {
+    saved = snapshot;
   }
 }
 
@@ -62,6 +108,59 @@ Widget _app(HistoryController controller) => MaterialApp(
 const _unsupported = HistoryResult.unsupported();
 
 void main() {
+  test('history expands its bounded remote window when loading more', () async {
+    final service = _PagedHistoryService();
+    final controller = HistoryController(wallets: _wallets(), service: service);
+    addTearDown(controller.dispose);
+
+    await controller.refresh();
+    expect(controller.records, hasLength(20));
+    expect(controller.canLoadMore, isTrue);
+
+    await controller.loadMore();
+    expect(controller.records, hasLength(40));
+    expect(service.requestedLimits, containsAllInOrder([20, 40]));
+  });
+
+  test('cached history remains visible when the live refresh fails', () async {
+    final cachedAt = DateTime(2026, 7, 30, 12);
+    final snapshots = _HistorySnapshotMemory(
+      HistorySnapshot(
+        scope: 'scope',
+        savedAt: cachedAt,
+        results: {
+          Coin.eth: HistoryResult.ok([
+            ChainTxRecord(
+              coin: Coin.eth,
+              hash: '0xcached',
+              outgoing: false,
+              amountText: '1 ETH',
+              timestamp: cachedAt,
+              confirmed: true,
+            ),
+          ]),
+        },
+      ),
+    );
+    final controller = HistoryController(
+      wallets: _wallets(),
+      service: _FakeHistoryService({
+        for (final coin in Coin.values) coin: const HistoryResult.error(),
+      }),
+      snapshots: snapshots,
+      snapshotScope: () => 'scope',
+    );
+    addTearDown(controller.dispose);
+
+    await controller.refresh();
+    expect(
+      controller.records.map((record) => record.hash),
+      contains('0xcached'),
+    );
+    expect(controller.showingCachedData, isTrue);
+    expect(controller.lastUpdatedAt, cachedAt);
+  });
+
   testWidgets('history refreshes when the active network profile changes', (
     tester,
   ) async {

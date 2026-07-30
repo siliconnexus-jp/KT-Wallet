@@ -17,6 +17,8 @@ class AppPrefsController extends ChangeNotifier {
   static const _keyAutoLockMinutes = 'prefs.autoLockMinutes';
   static const _keyFiat = 'prefs.fiat';
   static const _keyAuthMethod = 'prefs.authMethod';
+  static const _keyHideZeroBalances = 'prefs.assets.hideZero';
+  static const _keyFavoriteAssets = 'prefs.assets.favorites';
 
   /// Production Gateway used when the user has not chosen an override.
   static const defaultGatewayUrl = 'https://gateway.kt-wallet.com';
@@ -50,6 +52,8 @@ class AppPrefsController extends ChangeNotifier {
   int _autoLockMinutes = 1;
   String _fiat = 'USD';
   AuthMethod _authMethod = AuthMethod.biometrics;
+  bool _hideZeroBalances = false;
+  Set<String> _favoriteAssets = const {};
 
   bool get appLock => _appLock;
   bool get privacyMode => _privacyMode;
@@ -58,6 +62,10 @@ class AppPrefsController extends ChangeNotifier {
   int get autoLockMinutes => _autoLockMinutes;
   String get fiat => _fiat;
   AuthMethod get authMethod => _authMethod;
+  bool get hideZeroBalances => _hideZeroBalances;
+  Set<String> get favoriteAssets => Set.unmodifiable(_favoriteAssets);
+  bool isFavoriteAsset(String symbol) =>
+      _favoriteAssets.contains(symbol.toUpperCase());
 
   final Map<Coin, String> _rpcOverrides = {};
 
@@ -82,6 +90,13 @@ class AppPrefsController extends ChangeNotifier {
       _authMethod = prefs.getString(_keyAuthMethod) == 'password'
           ? AuthMethod.password
           : AuthMethod.biometrics;
+      _hideZeroBalances =
+          prefs.getBool(_keyHideZeroBalances) ?? _hideZeroBalances;
+      _favoriteAssets = {
+        for (final symbol
+            in prefs.getStringList(_keyFavoriteAssets) ?? const <String>[])
+          symbol.toUpperCase(),
+      };
       for (final entry in rpcPrefKeys.entries) {
         final url = prefs.getString(entry.value);
         if (url != null && url.isNotEmpty) {
@@ -150,6 +165,29 @@ class AppPrefsController extends ChangeNotifier {
         _keyAuthMethod,
         method == AuthMethod.password ? 'password' : 'biometrics',
       );
+    } catch (_) {
+      // Persistence is best-effort; the in-memory choice still applies.
+    }
+  }
+
+  Future<void> setHideZeroBalances(bool value) async {
+    if (value == _hideZeroBalances) return;
+    _hideZeroBalances = value;
+    notifyListeners();
+    await _persistBool(_keyHideZeroBalances, value);
+  }
+
+  Future<void> toggleFavoriteAsset(String symbol) async {
+    final normalized = symbol.trim().toUpperCase();
+    if (normalized.isEmpty) return;
+    final next = {..._favoriteAssets};
+    if (!next.add(normalized)) next.remove(normalized);
+    _favoriteAssets = next;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final values = next.toList()..sort();
+      await prefs.setStringList(_keyFavoriteAssets, values);
     } catch (_) {
       // Persistence is best-effort; the in-memory choice still applies.
     }

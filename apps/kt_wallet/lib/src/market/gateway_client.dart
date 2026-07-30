@@ -228,6 +228,10 @@ class GatewayClient {
             },
         ],
     });
+    return _parseBalances(result);
+  }
+
+  GatewayBalances _parseBalances(Object? result) {
     if (result is! Map) throw const FormatException('bad balances result');
     final native = result['native'];
     if (native is! Map) throw const FormatException('missing native balance');
@@ -254,6 +258,69 @@ class GatewayClient {
                 symbol: row['symbol'] is String ? row['symbol'] as String : '',
               ),
       ],
+    );
+  }
+
+  /// `kt_getPortfolio` — all active chain balances in one mobile HTTP request.
+  ///
+  /// Unsupported/custom networks are omitted before the request and returned
+  /// in [GatewayPortfolio.failedChains], so callers can fall back directly for
+  /// only those chains. Gateway-side failures are isolated the same way.
+  Future<GatewayPortfolio> getPortfolio(
+    List<GatewayPortfolioQuery> queries,
+  ) async {
+    final accounts = <Map<String, Object?>>[];
+    final failed = <Coin>{};
+    for (final query in queries) {
+      try {
+        final network = await _networkParam(query.chain);
+        accounts.add({
+          'chain': chainName(query.chain),
+          'network': ?network,
+          'address': query.address,
+          if (query.tokens.isNotEmpty)
+            'tokens': [
+              for (final token in query.tokens)
+                {
+                  'contract': token.contract,
+                  'decimals': token.decimals,
+                  'symbol': token.symbol,
+                },
+            ],
+        });
+      } catch (_) {
+        failed.add(query.chain);
+      }
+    }
+    if (accounts.isEmpty) {
+      return GatewayPortfolio(balances: const {}, failedChains: failed);
+    }
+    final result = await _call('kt_getPortfolio', {'accounts': accounts});
+    if (result is! Map || result['accounts'] is! List) {
+      throw const FormatException('bad portfolio result');
+    }
+    final balances = <Coin, GatewayBalances>{};
+    for (final row in result['accounts'] as List) {
+      if (row is! Map || row['chain'] is! String) continue;
+      final name = row['chain'] as String;
+      final chain = Coin.values.where((coin) => coin.name == name).firstOrNull;
+      if (chain == null) continue;
+      if (row['error'] != null || row['result'] == null) {
+        failed.add(chain);
+        continue;
+      }
+      try {
+        balances[chain] = _parseBalances(row['result']);
+      } catch (_) {
+        failed.add(chain);
+      }
+    }
+    for (final query in queries) {
+      if (!balances.containsKey(query.chain)) failed.add(query.chain);
+    }
+    return GatewayPortfolio(
+      balances: Map.unmodifiable(balances),
+      failedChains: Set.unmodifiable(failed),
     );
   }
 
@@ -572,6 +639,25 @@ class GatewayTokenQuery {
   final String contract;
   final int decimals;
   final String symbol;
+}
+
+class GatewayPortfolioQuery {
+  const GatewayPortfolioQuery({
+    required this.chain,
+    required this.address,
+    this.tokens = const [],
+  });
+
+  final Coin chain;
+  final String address;
+  final List<GatewayTokenQuery> tokens;
+}
+
+class GatewayPortfolio {
+  const GatewayPortfolio({required this.balances, required this.failedChains});
+
+  final Map<Coin, GatewayBalances> balances;
+  final Set<Coin> failedChains;
 }
 
 class GatewayNativeBalance {

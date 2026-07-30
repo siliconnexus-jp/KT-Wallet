@@ -92,10 +92,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await _openTransfer(tester, AssetRef.token(pyusdSolanaDevnetToken));
-      await _waitUntil(
-        tester,
-        () => find.text('Devnet').evaluate().isNotEmpty,
-      );
+      await _waitUntil(tester, () => find.text('Devnet').evaluate().isNotEmpty);
       await _capture(binding, tester, '03-pyusd-devnet-transfer');
       GoRouter.of(tester.element(find.byType(Scaffold).first)).pop();
       await tester.pumpAndSettle();

@@ -1,13 +1,16 @@
 // ignore_for_file: prefer_initializing_formals
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/widgets.dart';
 import 'package:wallet_data/wallet_data.dart' as db;
 
 import '../state/wallet_controller.dart';
+import '../observability/experience_metrics.dart';
 import 'history_service.dart';
+import 'history_snapshot.dart';
 import 'token_balance_service.dart';
 import 'transaction_status_service.dart';
 
@@ -23,12 +26,18 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     TransactionStatusService? statusService,
     Set<String> Function()? activeNetworkIds,
     Listenable? networkChanges,
+    bool Function()? canRefresh,
+    HistorySnapshotStore? snapshots,
+    String Function()? snapshotScope,
     this.pollInterval = const Duration(seconds: 8),
   }) : _wallets = wallets,
        _service = service ?? HistoryService(),
        _statusService = statusService ?? TransactionStatusService(),
        _activeNetworkIds = activeNetworkIds,
-       _networkChanges = networkChanges {
+       _networkChanges = networkChanges,
+       _canRefresh = canRefresh ?? _alwaysRefresh,
+       _snapshots = snapshots,
+       _snapshotScope = snapshotScope ?? _defaultSnapshotScope {
     _walletId = _wallets.current?.id;
     _wallets.addListener(_onWalletsChanged);
     _networkChanges?.addListener(_onNetworkChanged);
@@ -46,14 +55,26 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   /// injecting their own controller) keeps every network, as before.
   final Set<String> Function()? _activeNetworkIds;
   final Listenable? _networkChanges;
+  final bool Function() _canRefresh;
+  final HistorySnapshotStore? _snapshots;
+  final String Function() _snapshotScope;
+  static bool _alwaysRefresh() => true;
+  static String _defaultSnapshotScope() => 'default';
+  bool _refreshRequested = false;
 
   Future<List<db.Transaction>> _loadLocalTransactions() =>
       _wallets.localTransactions(networkIds: _activeNetworkIds?.call());
 
   String? _walletId;
+  String? _activeSnapshotScope;
   int _generation = 0;
   bool _refreshing = false;
   bool _hasRefreshed = false;
+  bool _showingCachedData = false;
+  bool _loadingMore = false;
+  DateTime? _lastUpdatedAt;
+  int _remoteLimit = HistoryService.pageSize;
+  TransactionStatusNotice? _notice;
   Timer? _pollTimer;
   List<db.Transaction> _localTransactions = const [];
 
@@ -67,6 +88,26 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   /// True until the first refresh completes (rows render structural placeholders).
   bool get isLoading => !_hasRefreshed;
   bool get isRefreshing => _refreshing;
+  bool get isLoadingMore => _loadingMore;
+  bool get showingCachedData => _showingCachedData;
+  DateTime? get lastUpdatedAt => _lastUpdatedAt;
+  TransactionStatusNotice? get notice => _notice;
+
+  void clearNotice(TransactionStatusNotice notice) {
+    if (identical(_notice, notice)) _notice = null;
+  }
+
+  /// True while at least one chain filled the current result window. Increasing
+  /// the window is cursor-like from the UI's perspective and remains bounded
+  /// by the Gateway's 100-record contract.
+  bool get canLoadMore =>
+      !_refreshing &&
+      _remoteLimit < 100 &&
+      _results.values.any(
+        (result) =>
+            result.status == HistoryStatus.ok &&
+            result.records.length >= _remoteLimit,
+      );
 
   /// At least one chain returned a real (possibly empty) history.
   bool get hasLiveRecords =>
@@ -170,23 +211,65 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// First-build refresh: no-op if one already ran or is running.
   void refreshIfNeeded() {
+    if (!_canRefresh()) {
+      _refreshRequested = true;
+      return;
+    }
     if (_hasRefreshed || _refreshing) return;
     refresh();
+  }
+
+  void configurationReady() {
+    if (!_canRefresh() || !_refreshRequested) return;
+    _refreshRequested = false;
+    refreshIfNeeded();
   }
 
   /// Fetches every chain's history concurrently for the current wallet.
   /// A refresh superseded by a newer one (wallet switched mid-flight)
   /// discards its results.
-  Future<void> refresh() async {
+  Future<void> refresh({bool loadingMore = false}) async {
+    if (!_canRefresh()) {
+      _refreshRequested = true;
+      return;
+    }
     final wallet = _wallets.current;
     if (wallet == null || _refreshing) return;
+    final metricStopwatch = Stopwatch()..start();
     final generation = ++_generation;
+    final scope = _snapshotScope();
+    final contextChanged =
+        wallet.id != _walletId || scope != _activeSnapshotScope;
+    _walletId = wallet.id;
+    _activeSnapshotScope = scope;
     _refreshing = true;
+    _loadingMore = loadingMore;
     final coins = wallet.addresses.enabledCoins;
-    if (!_hasRefreshed) {
+    if (contextChanged) {
+      _remoteLimit = HistoryService.pageSize;
+      _hasRefreshed = false;
+      _showingCachedData = false;
+      _lastUpdatedAt = null;
       _results = {
         for (final coin in coins) coin: const HistoryResult.loading(),
       };
+    }
+
+    if (contextChanged && _snapshots != null) {
+      final snapshot = await _snapshots.load(wallet.id, scope);
+      if (generation != _generation) return;
+      if (snapshot != null) {
+        _results = {
+          for (final coin in coins)
+            coin:
+                snapshot.results[coin] ??
+                _results[coin] ??
+                const HistoryResult.loading(),
+        };
+        _hasRefreshed = true;
+        _showingCachedData = true;
+        _lastUpdatedAt = snapshot.savedAt;
+      }
     }
     _localTransactions = await _loadLocalTransactions();
     if (generation != _generation) return;
@@ -196,13 +279,21 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
 
     final historyFuture = Future.wait([
       for (final coin in coins)
-        _service.fetch(coin, wallet.addresses.forCoin(coin)).then((result) {
-          if (generation == _generation) {
-            _results = {..._results, coin: result};
-            notifyListeners();
-          }
-          return (coin, result);
-        }),
+        _service
+            .fetch(coin, wallet.addresses.forCoin(coin), limit: _remoteLimit)
+            .then((result) {
+              if (generation == _generation) {
+                final previous = _results[coin];
+                // Keep a restored/last-good chain visible while its live
+                // explorer call fails. The final merge marks it stale.
+                if (!(result.status == HistoryStatus.error &&
+                    previous?.status == HistoryStatus.ok)) {
+                  _results = {..._results, coin: result};
+                }
+                notifyListeners();
+              }
+              return (coin, result);
+            }),
     ]);
     final statusFuture = _refreshPendingStatuses(
       generation,
@@ -212,7 +303,21 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     await statusFuture;
 
     if (generation != _generation) return; // superseded — drop stale results
-    _results = {for (final (coin, result) in entries) coin: result};
+    final liveFetchSucceeded = entries.any(
+      (entry) => entry.$2.status == HistoryStatus.ok,
+    );
+    var retainedCached = false;
+    _results = {
+      for (final (coin, result) in entries)
+        coin:
+            result.status == HistoryStatus.error &&
+                _results[coin]?.status == HistoryStatus.ok
+            ? () {
+                retainedCached = true;
+                return _results[coin]!;
+              }()
+            : result,
+    };
     _localTransactions = await _loadLocalTransactions();
     if (generation != _generation) return;
     final remoteByHash = {
@@ -238,18 +343,59 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
         continue;
       }
       if (local.status == db.TxStatus.confirmed) continue;
+      final confirmedHash = hash!;
       await _wallets.updateTransactionStatus(
         local.id,
         remote.confirmed ? db.TxStatus.confirmed : db.TxStatus.failed,
-        hash: hash,
+        hash: confirmedHash,
+      );
+      _notice = TransactionStatusNotice(
+        hash: confirmedHash,
+        coin: Coin.values.firstWhere(
+          (coin) => coin.name == local.coin,
+          orElse: () => Coin.eth,
+        ),
+        confirmed: remote.confirmed,
       );
     }
     _localTransactions = await _loadLocalTransactions();
     if (generation != _generation) return;
     _refreshing = false;
+    _loadingMore = false;
     _hasRefreshed = true;
+    _showingCachedData = retainedCached;
+    final now = DateTime.now();
+    _lastUpdatedAt = retainedCached ? (_lastUpdatedAt ?? now) : now;
     _schedulePoll();
     notifyListeners();
+
+    if (_snapshots != null &&
+        _results.values.any((result) => result.status == HistoryStatus.ok)) {
+      _snapshots
+          .save(
+            wallet.id,
+            HistorySnapshot(
+              scope: scope,
+              savedAt: _lastUpdatedAt!,
+              results: _results,
+            ),
+          )
+          .ignore();
+    }
+    ExperienceMetrics.instance.record(
+      loadingMore ? 'history.loadMore' : 'history.refresh',
+      metricStopwatch.elapsed,
+      success: liveFetchSucceeded,
+    );
+  }
+
+  /// Expands the per-chain history window by one page. The service and
+  /// Gateway remain bounded at 100 records so a tap cannot fan out into an
+  /// unbounded explorer crawl.
+  Future<void> loadMore() async {
+    if (!canLoadMore) return;
+    _remoteLimit = math.min(100, _remoteLimit + HistoryService.pageSize);
+    await refresh(loadingMore: true);
   }
 
   Future<void> _refreshPendingStatuses(
@@ -279,6 +425,16 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
               next,
               hash: transaction.hash,
             );
+            if (next == db.TxStatus.confirmed || next == db.TxStatus.failed) {
+              _notice = TransactionStatusNotice(
+                hash: transaction.hash!,
+                coin: Coin.values.firstWhere(
+                  (coin) => coin.name == transaction.coin,
+                  orElse: () => Coin.eth,
+                ),
+                confirmed: next == db.TxStatus.confirmed,
+              );
+            }
           }
         }),
     ]);
@@ -328,7 +484,6 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   void _onWalletsChanged() {
     final id = _wallets.current?.id;
     if (id == _walletId) return;
-    _walletId = id;
     if (id != null) {
       _refreshing = false;
       refresh();
@@ -339,6 +494,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     if (_wallets.current != null) {
       _generation++;
       _refreshing = false;
+      _activeSnapshotScope = null;
       refresh();
     }
   }
@@ -353,6 +509,18 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   }
 }
 
+class TransactionStatusNotice {
+  const TransactionStatusNotice({
+    required this.hash,
+    required this.coin,
+    required this.confirmed,
+  });
+
+  final String hash;
+  final Coin coin;
+  final bool confirmed;
+}
+
 /// Provides a [HistoryController] to history surfaces and rebuilds dependents
 /// when it notifies. Like [MarketScope] there is no implicit controller:
 /// tests may inject one through this scope; production history surfaces mount
@@ -361,11 +529,20 @@ class HistoryScope extends InheritedNotifier<HistoryController> {
   const HistoryScope({
     super.key,
     required HistoryController controller,
+    this.autoRefresh = false,
     required super.child,
   }) : super(notifier: controller);
+
+  /// Production's app-wide host opts in. Tests and galleries can inject a
+  /// controller without an unexpected network refresh.
+  final bool autoRefresh;
 
   /// The controller, or null when no scope is mounted. Registers a dependency
   /// — rebuilds the caller on refresh.
   static HistoryController? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<HistoryScope>()?.notifier;
+
+  static bool shouldAutoRefresh(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<HistoryScope>()?.autoRefresh ??
+      false;
 }

@@ -374,6 +374,7 @@ func AlchemyNetworkURLs(keys []string) map[string][]string {
 func (g *Gateway) Register(s *rpc.Server) {
 	s.Register("kt_health", g.Health)
 	s.Register("kt_getBalances", g.GetBalances)
+	s.Register("kt_getPortfolio", g.GetPortfolio)
 	s.Register("kt_getPrices", g.GetPrices)
 	s.Register("kt_getChainParams", g.GetChainParams)
 	s.Register("kt_getHistory", g.GetHistory)

@@ -21,9 +21,7 @@ Finder _sheetField(int index) => find
     .at(index);
 
 void main() {
-  testWidgets('address book only shows saved contacts', (
-    tester,
-  ) async {
+  testWidgets('address book only shows saved contacts', (tester) async {
     await _open(tester, 'W16 地址管理');
 
     expect(find.text('本地钱包地址'), findsNothing);

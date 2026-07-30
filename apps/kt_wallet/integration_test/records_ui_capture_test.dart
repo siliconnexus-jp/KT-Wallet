@@ -21,8 +21,11 @@ class _FixtureHistoryService extends HistoryService {
   final Map<Coin, HistoryResult> results;
 
   @override
-  Future<HistoryResult> fetch(Coin coin, String address) async =>
-      results[coin] ?? const HistoryResult.unsupported();
+  Future<HistoryResult> fetch(
+    Coin coin,
+    String address, {
+    int limit = HistoryService.pageSize,
+  }) async => results[coin] ?? const HistoryResult.unsupported();
 }
 
 WalletController _wallets() => WalletController(

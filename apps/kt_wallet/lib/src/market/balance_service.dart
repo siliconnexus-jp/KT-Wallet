@@ -129,6 +129,16 @@ class BalanceService {
   Future<Map<Coin, BalanceResult>> fetchAll(
     ChainAddresses addresses, {
     BalanceResultCallback? onResult,
+  }) => fetchCoins(addresses, addresses.enabledCoins, onResult: onResult);
+
+  /// Fetches a subset of native balances. [skipGateway] is used after a
+  /// token-bearing gateway request for that chain has already failed; retrying
+  /// the same gateway call before direct fallback only adds another timeout.
+  Future<Map<Coin, BalanceResult>> fetchCoins(
+    ChainAddresses addresses,
+    Iterable<Coin> coins, {
+    BalanceResultCallback? onResult,
+    Set<Coin> skipGateway = const {},
   }) async {
     final eth = EvmRpc(url: _endpoints(Coin.eth), transport: _jsonRpc);
     final polygon = EvmRpc(url: _endpoints(Coin.polygon), transport: _jsonRpc);
@@ -157,13 +167,16 @@ class BalanceService {
     };
     final gateway = _gateway();
     final entries = await Future.wait([
-      for (final coin in addresses.enabledCoins)
-        _fetchChain(gateway, coin, addresses.forCoin(coin), direct[coin]!).then(
-          (entry) {
-            onResult?.call(entry.$1, entry.$2);
-            return entry;
-          },
-        ),
+      for (final coin in coins)
+        _fetchChain(
+          skipGateway.contains(coin) ? null : gateway,
+          coin,
+          addresses.forCoin(coin),
+          direct[coin]!,
+        ).then((entry) {
+          onResult?.call(entry.$1, entry.$2);
+          return entry;
+        }),
     ]);
     return {for (final (coin, result) in entries) coin: result};
   }

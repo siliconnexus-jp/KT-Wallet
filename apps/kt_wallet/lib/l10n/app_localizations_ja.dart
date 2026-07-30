@@ -21,6 +21,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get actionCancel => 'キャンセル';
 
   @override
+  String get actionClose => '閉じる';
+
+  @override
   String get actionDelete => '削除';
 
   @override
@@ -91,6 +94,25 @@ class AppLocalizationsJa extends AppLocalizations {
   String get balanceChangePeriod => '過去24時間';
 
   @override
+  String get marketUpdating => '残高を更新中…';
+
+  @override
+  String get marketCachedJustNow => 'たった今確認済み';
+
+  @override
+  String marketCachedMinutes(int count) {
+    return '$count 分前に確認済み';
+  }
+
+  @override
+  String marketCachedHours(int count) {
+    return '$count 時間前に確認済み';
+  }
+
+  @override
+  String get marketCachedStale => 'ネットワークの再接続まで保存済みの実残高を表示します';
+
+  @override
   String get actionReceive => '受取';
 
   @override
@@ -106,7 +128,35 @@ class AppLocalizationsJa extends AppLocalizations {
   String get assetsSortByValue => '保有額の高い順';
 
   @override
+  String get assetsHideZero => '残高ゼロを非表示';
+
+  @override
+  String get assetsFavoritesOnly => 'お気に入り';
+
+  @override
+  String assetAddFavorite(Object symbol) {
+    return '$symbolをお気に入りに追加';
+  }
+
+  @override
+  String assetRemoveFavorite(Object symbol) {
+    return '$symbolをお気に入りから削除';
+  }
+
+  @override
   String get recordsTitle => '取引履歴';
+
+  @override
+  String get historyLoadMore => 'さらに読み込む';
+
+  @override
+  String get historyLoadingMore => '読み込み中…';
+
+  @override
+  String get transactionConfirmedNotice => '取引がオンチェーンで確認されました';
+
+  @override
+  String get transactionFailedNotice => '取引がオンチェーンで失敗しました';
 
   @override
   String get txSent => '送信';

@@ -4,6 +4,7 @@
   "appTagline": "Dual-device cold wallet · online watch client",
   "actionConfirm": "Confirm",
   "actionCancel": "Cancel",
+  "actionClose": "Close",
   "actionDelete": "Delete",
   "actionNext": "Next",
   "actionImport": "Import",
@@ -26,12 +27,39 @@
   "backupNow": "Back up now",
   "balanceTitle": "Total value (USD)",
   "balanceChangePeriod": "past 24h",
+  "marketUpdating": "Updating balances…",
+  "marketCachedJustNow": "Last verified just now",
+  "marketCachedMinutes": "Last verified {count} min ago",
+  "@marketCachedMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "marketCachedHours": "Last verified {count} hr ago",
+  "@marketCachedHours": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "marketCachedStale": "Saved balances are shown while the network reconnects",
   "actionReceive": "Receive",
   "actionSend": "Send",
   "actionMore": "More",
   "actionScanSign": "Scan signature",
   "assetsSortByValue": "Sorted by holding value",
+  "assetsHideZero": "Hide zero balances",
+  "assetsFavoritesOnly": "Favorites",
+  "assetAddFavorite": "Add {symbol} to favorites",
+  "assetRemoveFavorite": "Remove {symbol} from favorites",
   "recordsTitle": "Transactions",
+  "historyLoadMore": "Load more",
+  "historyLoadingMore": "Loading more…",
+  "transactionConfirmedNotice": "Transaction confirmed on-chain",
+  "transactionFailedNotice": "Transaction failed on-chain",
   "txSent": "Sent",
   "txReceived": "Received",
   "dateToday": "Today",

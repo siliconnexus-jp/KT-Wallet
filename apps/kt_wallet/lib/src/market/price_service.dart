@@ -74,11 +74,27 @@ class PriceService {
   /// Last successful token quote set. Stablecoins are market-priced too so a
   /// depeg is reflected instead of being silently forced to $1.
   Map<String, double>? get lastGoodTokenUsd => _lastGoodTokenUsd;
+  Map<Coin, double> get lastGoodChange24h => _lastGoodChange24h;
+  Map<String, double> get lastGoodTokenChange24h => _lastGoodTokenChange24h;
 
   double? tokenPriceUsd(String symbol) => _lastGoodTokenUsd?[symbol];
   double? change24hPercent(Coin coin) => _lastGoodChange24h[coin];
   double? tokenChange24hPercent(String symbol) =>
       _lastGoodTokenChange24h[symbol];
+
+  /// Hydrates the display-only last-good cache before a background refresh.
+  /// Transaction construction never reads these values.
+  void restoreLastGood({
+    required Map<Coin, double> nativeUsd,
+    required Map<String, double> tokenUsd,
+    required Map<Coin, double> nativeChange24h,
+    required Map<String, double> tokenChange24h,
+  }) {
+    if (nativeUsd.isNotEmpty) _lastGood = Map.unmodifiable(nativeUsd);
+    if (tokenUsd.isNotEmpty) _lastGoodTokenUsd = Map.unmodifiable(tokenUsd);
+    _lastGoodChange24h = Map.unmodifiable(nativeChange24h);
+    _lastGoodTokenChange24h = Map.unmodifiable(tokenChange24h);
+  }
 
   /// Fetches spot USD prices. Returns null on any failure; partial responses
   /// keep whichever coins were present.

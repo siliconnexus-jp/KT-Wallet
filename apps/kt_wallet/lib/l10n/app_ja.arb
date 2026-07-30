@@ -4,6 +4,7 @@
   "appTagline": "二台構成のコールドウォレット・オンライン監視端末",
   "actionConfirm": "確認",
   "actionCancel": "キャンセル",
+  "actionClose": "閉じる",
   "actionDelete": "削除",
   "actionNext": "次へ",
   "actionImport": "インポート",
@@ -26,12 +27,39 @@
   "backupNow": "今すぐバックアップ",
   "balanceTitle": "総資産評価額 (USD)",
   "balanceChangePeriod": "過去24時間",
+  "marketUpdating": "残高を更新中…",
+  "marketCachedJustNow": "たった今確認済み",
+  "marketCachedMinutes": "{count} 分前に確認済み",
+  "@marketCachedMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "marketCachedHours": "{count} 時間前に確認済み",
+  "@marketCachedHours": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "marketCachedStale": "ネットワークの再接続まで保存済みの実残高を表示します",
   "actionReceive": "受取",
   "actionSend": "送金",
   "actionMore": "その他",
   "actionScanSign": "署名スキャン",
   "assetsSortByValue": "保有額の高い順",
+  "assetsHideZero": "残高ゼロを非表示",
+  "assetsFavoritesOnly": "お気に入り",
+  "assetAddFavorite": "{symbol}をお気に入りに追加",
+  "assetRemoveFavorite": "{symbol}をお気に入りから削除",
   "recordsTitle": "取引履歴",
+  "historyLoadMore": "さらに読み込む",
+  "historyLoadingMore": "読み込み中…",
+  "transactionConfirmedNotice": "取引がオンチェーンで確認されました",
+  "transactionFailedNotice": "取引がオンチェーンで失敗しました",
   "txSent": "送信",
   "txReceived": "受取",
   "dateToday": "今日",

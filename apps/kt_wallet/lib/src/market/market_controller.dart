@@ -6,8 +6,10 @@ import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/foundation.dart';
 
 import '../state/wallet_controller.dart';
+import '../observability/experience_metrics.dart';
 import 'asset_ref.dart' show AssetDeployment;
 import 'balance_service.dart';
+import 'market_snapshot.dart';
 import 'price_service.dart';
 import 'token_balance_service.dart';
 
@@ -25,10 +27,16 @@ class MarketController extends ChangeNotifier {
     PriceService? prices,
     TokenBalanceService? tokens,
     bool Function(Coin coin)? isTestnet,
+    MarketSnapshotStore? snapshots,
+    String Function()? snapshotScope,
+    bool Function()? canRefresh,
   }) : _wallets = wallets,
        _balances = balances ?? BalanceService(),
        _prices = prices ?? PriceService(),
        _isTestnet = isTestnet ?? _neverTestnet,
+       _snapshots = snapshots,
+       _snapshotScope = snapshotScope ?? _defaultSnapshotScope,
+       _canRefresh = canRefresh ?? _alwaysRefresh,
        // Deliberately nullable (no network-hitting default): contexts that
        // never wire a token service (older tests, gallery) simply have no
        // token rows.
@@ -44,6 +52,9 @@ class MarketController extends ChangeNotifier {
   final BalanceService _balances;
   final PriceService _prices;
   final TokenBalanceService? _tokens;
+  final MarketSnapshotStore? _snapshots;
+  final String Function() _snapshotScope;
+  final bool Function() _canRefresh;
 
   /// Whether [coin]'s ACTIVE network instance is a testnet, re-evaluated on
   /// every read (network switches apply live). Testnet amounts are real but
@@ -52,11 +63,16 @@ class MarketController extends ChangeNotifier {
   final bool Function(Coin coin) _isTestnet;
 
   static bool _neverTestnet(Coin _) => false;
+  static bool _alwaysRefresh() => true;
+  static String _defaultSnapshotScope() => 'default';
 
   String? _walletId;
+  String? _activeSnapshotScope;
   int _generation = 0;
   bool _refreshing = false;
   bool _hasRefreshed = false;
+  bool _showingCachedData = false;
+  DateTime? _lastUpdatedAt;
 
   Map<Coin, BalanceResult> _results = {
     for (final coin in Coin.values) coin: const BalanceResult.loading(),
@@ -69,6 +85,8 @@ class MarketController extends ChangeNotifier {
 
   /// True once at least one refresh has completed (success or not).
   bool get hasRefreshed => _hasRefreshed;
+  bool get showingCachedData => _showingCachedData;
+  DateTime? get lastUpdatedAt => _lastUpdatedAt;
 
   BalanceResult balanceFor(Coin coin) =>
       _results[coin] ?? const BalanceResult.unsupported();
@@ -143,6 +161,32 @@ class MarketController extends ChangeNotifier {
   /// mixed group (ETH spans Ethereum and its L2s) should not have to branch.
   BalanceResult resultFor(AssetDeployment at) =>
       at.tokenId == null ? balanceFor(at.coin) : tokenBalanceFor(at.tokenId!);
+
+  /// True only when every deployment returned a real balance and the total is
+  /// exactly zero. Unknown/error rows are never hidden as if they were empty.
+  bool isDefinitelyZero(Iterable<AssetDeployment> deployments) {
+    var sawAny = false;
+    for (final deployment in deployments) {
+      final result = resultFor(deployment);
+      final amount = result.amount;
+      if (result.status != BalanceStatus.ok || amount == null) return false;
+      sawAny = true;
+      if (amount.raw != BigInt.zero) return false;
+    }
+    return sawAny;
+  }
+
+  double? fiatTotalFor(Iterable<AssetDeployment> deployments, String symbol) {
+    var total = 0.0;
+    var sawAny = false;
+    for (final deployment in deployments) {
+      final value = fiatFor(deployment, symbol);
+      if (value == null) continue;
+      total += value;
+      sawAny = true;
+    }
+    return sawAny ? total : null;
+  }
 
   /// USD value of one deployment, or null when unavailable.
   double? fiatFor(AssetDeployment at, String symbol) {
@@ -220,7 +264,7 @@ class MarketController extends ChangeNotifier {
   /// First-entry refresh: no-op if one already ran or is running (wallet
   /// switches and pull-to-refresh call [refresh] directly).
   void refreshIfNeeded() {
-    if (_hasRefreshed || _refreshing) return;
+    if (!_canRefresh() || _hasRefreshed || _refreshing) return;
     refresh();
   }
 
@@ -228,17 +272,65 @@ class MarketController extends ChangeNotifier {
   /// A refresh superseded by a newer one (e.g. wallet switched mid-flight)
   /// discards its results.
   Future<void> refresh() async {
+    if (!_canRefresh()) return;
     final wallet = _wallets.current;
     if (wallet == null) return;
+    final metricStopwatch = Stopwatch()..start();
     final generation = ++_generation;
+    final scope = _snapshotScope();
+    final contextChanged =
+        wallet.id != _walletId || scope != _activeSnapshotScope;
+    _walletId = wallet.id;
+    _activeSnapshotScope = scope;
     _refreshing = true;
-    _results = {
-      for (final coin in Coin.values) coin: const BalanceResult.loading(),
-    };
-    _tokenResults = {
-      for (final token in tokens) token.id: const BalanceResult.loading(),
-    };
+    if (contextChanged) {
+      _results = {
+        for (final coin in Coin.values) coin: const BalanceResult.loading(),
+      };
+      _tokenResults = {
+        for (final token in tokens) token.id: const BalanceResult.loading(),
+      };
+      _pricesUsd = null;
+      _showingCachedData = false;
+      _lastUpdatedAt = null;
+      _hasRefreshed = false;
+    }
     notifyListeners();
+
+    if (contextChanged && _snapshots != null) {
+      final snapshot = await _snapshots.load(wallet.id, scope);
+      if (generation != _generation) return;
+      if (snapshot != null) {
+        final tokenIds = {for (final token in tokens) token.id};
+        _results = {
+          for (final coin in Coin.values)
+            coin:
+                snapshot.native[coin] ??
+                _results[coin] ??
+                const BalanceResult.loading(),
+        };
+        _tokenResults = {
+          for (final token in tokens)
+            token.id:
+                (tokenIds.contains(token.id)
+                    ? snapshot.tokens[token.id]
+                    : null) ??
+                const BalanceResult.loading(),
+        };
+        _prices.restoreLastGood(
+          nativeUsd: snapshot.nativePrices,
+          tokenUsd: snapshot.tokenPrices,
+          nativeChange24h: snapshot.nativeChanges,
+          tokenChange24h: snapshot.tokenChanges,
+        );
+        _pricesUsd = snapshot.nativePrices.isEmpty
+            ? null
+            : snapshot.nativePrices;
+        _showingCachedData = true;
+        _lastUpdatedAt = snapshot.savedAt;
+        notifyListeners();
+      }
+    }
 
     final tokenService = _tokens;
     // With every active chain on a testnet there is nothing to price — skip
@@ -246,41 +338,119 @@ class MarketController extends ChangeNotifier {
     // Mixed environments still fetch once; testnet chains ignore the result
     // via the fiat guards above.
     final skipPrices = Coin.values.every(_isTestnet);
-    final (balances, prices, tokenBalances) = await (
-      _balances.fetchAll(
+    void revealNative(Coin coin, BalanceResult result) {
+      if (generation != _generation) return;
+      _results = {..._results, coin: result};
+      notifyListeners();
+    }
+
+    late final Future<TokenBalanceBatch> tokenFuture;
+    late final Future<Map<Coin, BalanceResult>> balanceFuture;
+    if (tokenService != null && tokenService.gatewayEnabled) {
+      tokenFuture = tokenService.fetchAllWithNative(
         wallet.addresses,
-        onResult: (coin, result) {
-          // Reveal each fast chain immediately. A slow or unavailable RPC on
-          // another chain must not keep an already-known ETH/SOL/etc. balance
-          // behind the same '--' placeholder.
-          if (generation != _generation) return;
-          _results = {..._results, coin: result};
-          notifyListeners();
-        },
-      ),
+        onNativeResult: revealNative,
+      );
+      balanceFuture = tokenFuture.then((batch) async {
+        final missing = wallet.addresses.enabledCoins
+            .where((coin) => !batch.native.containsKey(coin))
+            .toList();
+        if (missing.isEmpty) return batch.native;
+        final fallback = await _balances.fetchCoins(
+          wallet.addresses,
+          missing,
+          onResult: revealNative,
+          skipGateway: batch.gatewayFailedChains,
+        );
+        return {...batch.native, ...fallback};
+      });
+    } else {
+      balanceFuture = _balances.fetchAll(
+        wallet.addresses,
+        onResult: revealNative,
+      );
+      tokenFuture = tokenService == null
+          ? Future.value(const TokenBalanceBatch(tokens: {}))
+          : tokenService
+                .fetchAll(wallet.addresses)
+                .then((results) => TokenBalanceBatch(tokens: results));
+    }
+
+    final (balances, prices, tokenBatch) = await (
+      balanceFuture,
       skipPrices
           ? Future<Map<Coin, double>?>.value(null)
           : _prices.fetchUsdPrices(),
-      tokenService == null
-          ? Future.value(const <String, BalanceResult>{})
-          : tokenService.fetchAll(wallet.addresses),
+      tokenFuture,
     ).wait;
 
     if (generation != _generation) return; // superseded — drop stale results
-    _results = balances;
-    _tokenResults = tokenBalances;
-    // A failed price fetch falls back to the session's last good quotes
-    // (prices drift slowly; balances are never substituted this way).
-    _pricesUsd = prices ?? _prices.lastGoodUsd;
+    final liveFetchSucceeded =
+        balances.values.any((result) => result.status == BalanceStatus.ok) ||
+        tokenBatch.tokens.values.any(
+          (result) => result.status == BalanceStatus.ok,
+        );
+    var retainedStale = false;
+    BalanceResult retainLastGood(BalanceResult? previous, BalanceResult fresh) {
+      if (fresh.status == BalanceStatus.error &&
+          previous?.status == BalanceStatus.ok) {
+        retainedStale = true;
+        return previous!;
+      }
+      return fresh;
+    }
+
+    _results = {
+      for (final coin in Coin.values)
+        coin: retainLastGood(
+          _results[coin],
+          balances[coin] ?? const BalanceResult.unsupported(),
+        ),
+    };
+    _tokenResults = {
+      for (final token in tokens)
+        token.id: retainLastGood(
+          _tokenResults[token.id],
+          tokenBatch.tokens[token.id] ?? const BalanceResult.unsupported(),
+        ),
+    };
+    // A failed price fetch falls back to the session's last good quotes.
+    // Mark that state stale too; otherwise fiat values could silently look
+    // current while only the native/token balance calls succeeded.
+    if (prices == null && (_pricesUsd != null || _prices.lastGoodUsd != null)) {
+      retainedStale = true;
+    }
+    _pricesUsd = prices ?? _pricesUsd ?? _prices.lastGoodUsd;
     _refreshing = false;
     _hasRefreshed = true;
+    _showingCachedData = retainedStale;
+    final now = DateTime.now();
+    _lastUpdatedAt = retainedStale ? (_lastUpdatedAt ?? now) : now;
     notifyListeners();
+
+    if (_snapshots != null && hasLiveBalances) {
+      final snapshot = MarketSnapshot(
+        scope: scope,
+        savedAt: _lastUpdatedAt!,
+        native: _results,
+        tokens: _tokenResults,
+        nativePrices: _pricesUsd ?? const {},
+        tokenPrices: _prices.lastGoodTokenUsd ?? const {},
+        nativeChanges: _prices.lastGoodChange24h,
+        tokenChanges: _prices.lastGoodTokenChange24h,
+      );
+      _snapshots.save(wallet.id, snapshot).ignore();
+    }
+    ExperienceMetrics.instance.record(
+      'market.refresh',
+      metricStopwatch.elapsed,
+      success: liveFetchSucceeded,
+    );
   }
 
   void _onWalletsChanged() {
     final id = _wallets.current?.id;
     if (id == _walletId) return;
-    _walletId = id;
     if (id != null) refresh();
   }
 

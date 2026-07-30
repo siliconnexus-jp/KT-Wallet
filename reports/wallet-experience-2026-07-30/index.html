@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KT Wallet 一线钱包体验升级验收报告</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #10131a;
+      --muted: #667085;
+      --soft: #f2f4f8;
+      --line: #e4e7ec;
+      --card: rgba(255, 255, 255, .94);
+      --blue: #3158e8;
+      --cyan: #2bc7c9;
+      --green: #138a5b;
+      --amber: #a86400;
+      --red: #b42318;
+      --shadow: 0 24px 72px rgba(16, 24, 40, .10);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 2%, rgba(49, 88, 232, .12), transparent 30rem),
+        radial-gradient(circle at 92% 8%, rgba(43, 199, 201, .10), transparent 28rem),
+        #f7f8fb;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        "Noto Sans SC", sans-serif;
+      line-height: 1.65;
+    }
+    a { color: inherit; }
+    .shell { width: min(1180px, calc(100% - 36px)); margin: 0 auto; }
+    .hero { padding: 76px 0 44px; }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 7px 12px;
+      color: #2546c7;
+      background: rgba(49, 88, 232, .09);
+      border: 1px solid rgba(49, 88, 232, .14);
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+    h1 {
+      max-width: 900px;
+      margin: 24px 0 14px;
+      font-size: clamp(40px, 7vw, 76px);
+      line-height: 1.03;
+      letter-spacing: -.055em;
+    }
+    .lead { max-width: 760px; margin: 0; color: var(--muted); font-size: 18px; }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+    .pill {
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,.72);
+      color: #344054;
+      font-size: 13px;
+      font-weight: 650;
+    }
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin: 18px 0 54px;
+    }
+    .stat {
+      padding: 22px;
+      border: 1px solid rgba(255,255,255,.8);
+      border-radius: 22px;
+      background: var(--card);
+      box-shadow: 0 12px 36px rgba(16, 24, 40, .06);
+    }
+    .stat strong { display: block; font-size: 27px; letter-spacing: -.035em; }
+    .stat span { color: var(--muted); font-size: 13px; }
+    section { margin: 0 0 58px; scroll-margin-top: 20px; }
+    h2 { margin: 0 0 9px; font-size: 30px; letter-spacing: -.035em; }
+    h3 { margin: 0; font-size: 18px; letter-spacing: -.015em; }
+    .section-intro { max-width: 790px; margin: 0 0 22px; color: var(--muted); }
+    .panel {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: var(--card);
+      box-shadow: var(--shadow);
+    }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    th, td { padding: 16px 18px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: #475467; background: #f8f9fb; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+    td { font-size: 14px; }
+    tr:last-child td { border-bottom: 0; }
+    .ok { color: var(--green); font-weight: 750; }
+    .note { color: var(--amber); font-weight: 750; }
+    .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .feature {
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: rgba(255,255,255,.78);
+    }
+    .feature p { margin: 7px 0 0; color: var(--muted); font-size: 14px; }
+    .badge {
+      display: inline-block;
+      margin-bottom: 12px;
+      padding: 5px 9px;
+      border-radius: 8px;
+      background: #eef2ff;
+      color: #2949c8;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .06em;
+    }
+    .shots {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+    figure {
+      margin: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: white;
+      box-shadow: 0 16px 42px rgba(16,24,40,.08);
+    }
+    figure img { display: block; width: 100%; height: auto; background: #f5f6f8; }
+    figcaption { padding: 14px 16px 16px; }
+    figcaption strong { display: block; font-size: 14px; }
+    figcaption span { color: var(--muted); font-size: 12px; }
+    .callout {
+      padding: 22px 24px;
+      border: 1px solid rgba(19, 138, 91, .2);
+      border-radius: 20px;
+      background: rgba(19, 138, 91, .06);
+    }
+    .callout.warning {
+      border-color: rgba(168, 100, 0, .22);
+      background: rgba(168, 100, 0, .06);
+    }
+    .callout p { margin: 6px 0 0; color: #475467; }
+    code {
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: #eef0f4;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: .88em;
+    }
+    .review-list {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      padding: 0;
+      list-style: none;
+    }
+    .review-list li {
+      padding: 17px 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255,255,255,.78);
+      font-size: 14px;
+    }
+    footer { padding: 8px 0 54px; color: var(--muted); font-size: 13px; }
+    @media (max-width: 900px) {
+      .status-grid { grid-template-columns: repeat(2, 1fr); }
+      .shots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 620px) {
+      .shell { width: min(100% - 24px, 1180px); }
+      .hero { padding-top: 48px; }
+      .status-grid, .cards, .review-list, .shots { grid-template-columns: 1fr; }
+      .stat { padding: 18px; }
+      h2 { font-size: 26px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="shell">
+      <div class="eyebrow"><span class="dot"></span> Acceptance passed · 2026-07-30</div>
+      <h1>KT Wallet<br>一线钱包体验升级</h1>
+      <p class="lead">
+        本轮聚焦“打开快、数据可信、弱网可用、操作有反馈”。实现已经通过代码审查、
+        Flutter/Go 全量回归、Gateway 生产验证，以及 iOS 与 Android 同步骤视觉验收。
+      </p>
+      <div class="meta">
+        <span class="pill">iPhone 17 Pro Simulator · iOS 26.2</span>
+        <span class="pill">Pixel 9 Pro Emulator · Android 15 / API 35</span>
+        <span class="pill">Gateway v1.9.1</span>
+        <span class="pill">12 张原始截图</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell">
+    <div class="status-grid">
+      <div class="stat"><strong class="ok">PASS</strong><span>Flutter analyze</span></div>
+      <div class="stat"><strong>530 + 105</strong><span>双 App 测试全部通过</span></div>
+      <div class="stat"><strong class="ok">PASS</strong><span>Go test + race</span></div>
+      <div class="stat"><strong>1 request</strong><span>多链余额移动端往返</span></div>
+    </div>
+
+    <section id="outcome">
+      <h2>结论</h2>
+      <p class="section-intro">
+        这版已经从“网络慢时整页等待、失败时空白”提升到可信的 stale-while-revalidate
+        体验：先显示上次验证数据，再后台刷新；失败保留旧值并标注时间，不伪造 0，
+        不回退到生产演示数据。距离一线钱包仍有系统级推送、真机性能基线等下一阶段能力，
+        但本轮目标已经形成闭环。
+      </p>
+      <div class="callout">
+        <h3>生产 Gateway 已同步上线</h3>
+        <p>
+          发布 <code>20260730T085324Z-worktree-v1.9.1-portfolio</code>，
+          SHA-256 <code>ff4e80de…17d89eab</code>。内网 <code>127.0.0.1:8119</code>
+          和公网 <code>https://gateway.kt-wallet.com</code> 均已验证
+          <code>kt_getPortfolio</code> 返回真实链上余额。
+        </p>
+      </div>
+    </section>
+
+    <section id="before-after">
+      <h2>Before / After</h2>
+      <p class="section-intro">按产品体验而不是代码文件来验收每项改动。</p>
+      <div class="panel table-wrap">
+        <table>
+          <thead><tr><th>体验点</th><th>Before</th><th>After</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>冷启动余额</td><td>等待所有 RPC；常见 <code>--</code></td><td>先显示按钱包/网络隔离的上次验证值</td><td>立即可读，同时保留真实性</td></tr>
+            <tr><td>刷新失败</td><td>已知余额可能被 error/空白替换</td><td>保留 last-good，明确显示验证时间与离线状态</td><td>弱网不跳值，不把失败误报为 0</td></tr>
+            <tr><td>余额请求</td><td>原生币与 Token 分链重复往返</td><td><code>kt_getPortfolio</code> 单 HTTP 往返，逐链隔离</td><td>降低移动网络握手与队头阻塞</td></tr>
+            <tr><td>交易历史</td><td>每次进入重新查询；固定首屏</td><td>持久缓存 + 本地 Pending 合并 + 20→100 有界加载</td><td>打开即见记录，长历史可继续浏览</td></tr>
+            <tr><td>资产管理</td><td>固定顺序，零余额占据首屏</td><td>收藏优先、价值排序、可隐藏确定为零的资产</td><td>高频资产更快触达，未知状态不会被误隐藏</td></tr>
+            <tr><td>操作手感</td><td>关键入口缺少一致的触压反馈</td><td>120ms、0.97 缩放、easeOutCubic + 轻触觉</td><td>反馈即时克制，并避免装饰性过动效</td></tr>
+            <tr><td>交易状态</td><td>离开记录页后确认变化不明显</td><td>前台轮询确认后全局顶部提示 6 秒</td><td>不阻塞当前操作，状态变化可感知</td></tr>
+            <tr><td>可观测性</td><td>关键刷新耗时不可见</td><td>本地有界指标 + DevTools Timeline，零敏感字段</td><td>可量化体验，不采集地址、金额和交易内容</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="implementation">
+      <h2>实现范围</h2>
+      <div class="cards">
+        <article class="feature"><span class="badge">DATA TRUST</span><h3>可信市场快照</h3><p>版本化、钱包隔离、网络组合隔离；仅用于展示，转账仍强制读取新余额、手续费和 nonce。</p></article>
+        <article class="feature"><span class="badge">HISTORY</span><h3>历史缓存与分页</h3><p>合并本地 submitted/pending 和链上记录；错误链保留缓存，成功链独立更新，最大 100 条。</p></article>
+        <article class="feature"><span class="badge">NETWORK</span><h3>聚合 Gateway</h3><p>最多 16 个账户、聚合并发 4、Token 并发 4；老 Gateway 或单链失败自动兼容回退。</p></article>
+        <article class="feature"><span class="badge">POLISH</span><h3>偏好、反馈与语义</h3><p>收藏、隐藏零余额、触觉、按压动效和 Semantics；中文、英文、日文文案同步生成。</p></article>
+      </div>
+    </section>
+
+    <section id="ios">
+      <h2>iOS 逐步截图</h2>
+      <p class="section-intro">同一套确定性验收数据，截图由运行中的 iOS App 容器直接导出。</p>
+      <div class="shots">
+        <figure><img src="screenshots/ios-01-cached-home.png" alt="iOS 缓存首页"><figcaption><strong>01 · 缓存首页</strong><span>3 分钟前验证，真实旧值立即可读</span></figcaption></figure>
+        <figure><img src="screenshots/ios-02-assets-preferences.png" alt="iOS 资产偏好"><figcaption><strong>02 · 资产偏好</strong><span>USDC 收藏，隐藏确定零余额</span></figcaption></figure>
+        <figure><img src="screenshots/ios-03-offline-honest-assets.png" alt="iOS 离线资产"><figcaption><strong>03 · 离线真实状态</strong><span>显示 -- 与错误说明，不注入演示余额</span></figcaption></figure>
+        <figure><img src="screenshots/ios-04-cached-history.png" alt="iOS 缓存历史"><figcaption><strong>04 · 缓存历史</strong><span>浏览器失败仍保留 4 分钟前已验证记录</span></figcaption></figure>
+        <figure><img src="screenshots/ios-05-history-load-more.png" alt="iOS 加载更多"><figcaption><strong>05 · 历史首窗</strong><span>20 条后显示可访问的加载更多入口</span></figcaption></figure>
+        <figure><img src="screenshots/ios-06-history-expanded.png" alt="iOS 历史展开"><figcaption><strong>06 · 历史展开</strong><span>窗口扩展到 40 条，行键稳定且不重复</span></figcaption></figure>
+      </div>
+    </section>
+
+    <section id="android">
+      <h2>Android 逐步截图</h2>
+      <p class="section-intro">Android 15 / API 35 同步骤运行，原图由 App 沙箱导出。</p>
+      <div class="shots">
+        <figure><img src="screenshots/android-01-cached-home.png" alt="Android 缓存首页"><figcaption><strong>01 · 缓存首页</strong><span>首屏结构、金额与 freshness 一致</span></figcaption></figure>
+        <figure><img src="screenshots/android-02-assets-preferences.png" alt="Android 资产偏好"><figcaption><strong>02 · 资产偏好</strong><span>收藏与隐藏零余额可持久化</span></figcaption></figure>
+        <figure><img src="screenshots/android-03-offline-honest-assets.png" alt="Android 离线资产"><figcaption><strong>03 · 离线真实状态</strong><span>未知值保持未知，官方图标与收藏保留</span></figcaption></figure>
+        <figure><img src="screenshots/android-04-cached-history.png" alt="Android 缓存历史"><figcaption><strong>04 · 缓存历史</strong><span>弱网时不把真实历史清空</span></figcaption></figure>
+        <figure><img src="screenshots/android-05-history-load-more.png" alt="Android 加载更多"><figcaption><strong>05 · 历史首窗</strong><span>有界分页入口在列表末尾</span></figcaption></figure>
+        <figure><img src="screenshots/android-06-history-expanded.png" alt="Android 历史展开"><figcaption><strong>06 · 历史展开</strong><span>追加窗口后方向、金额、时间保持正确</span></figcaption></figure>
+      </div>
+    </section>
+
+    <section id="tests">
+      <h2>测试与验收矩阵</h2>
+      <div class="panel table-wrap">
+        <table>
+          <thead><tr><th>范围</th><th>命令 / 环境</th><th>结果</th><th>覆盖</th></tr></thead>
+          <tbody>
+            <tr><td>静态检查</td><td><code>flutter analyze</code></td><td class="ok">PASS</td><td>整个 workspace，无 issue</td></tr>
+            <tr><td>KT Wallet</td><td><code>flutter test</code></td><td class="ok">530 PASS</td><td>Widget、状态、网络、交易、Golden</td></tr>
+            <tr><td>KT Cold Signer</td><td><code>flutter test</code></td><td class="ok">105 PASS</td><td>PIN、反重放、签名流程、安全检查、Golden</td></tr>
+            <tr><td>共享包</td><td>6 个 package 全量测试</td><td class="ok">PASS</td><td>Airgap、Chains、Crypto、UI Kit、DB、Test Support</td></tr>
+            <tr><td>Gateway</td><td><code>go vet ./...</code> + <code>go test ./...</code></td><td class="ok">PASS</td><td>Handlers、RPC、缓存、上游、限流</td></tr>
+            <tr><td>Gateway 竞态</td><td><code>go test -race ./...</code></td><td class="ok">PASS</td><td>聚合账户与并发 Token 查询</td></tr>
+            <tr><td>iOS 集成</td><td>iPhone 17 Pro Simulator</td><td class="ok">PASS</td><td>6 步视觉与行为断言</td></tr>
+            <tr><td>Android 集成</td><td>Pixel 9 Pro · API 35</td><td class="ok">PASS</td><td>6 步视觉与行为断言</td></tr>
+            <tr><td>生产部署</td><td>systemd + public HTTPS</td><td class="ok">PASS</td><td>active、监听、health、真实 portfolio</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="review">
+      <h2>Code review 修复记录</h2>
+      <ul class="review-list">
+        <li><strong>缓存历史被渐进错误覆盖：</strong>逐链返回 error 时先保留 last-good，再在最终合并中标记 stale。</li>
+        <li><strong>离线指标误报成功：</strong>区分“有缓存可展示”和“本轮在线请求成功”，Timeline 记录后者。</li>
+        <li><strong>本地缓存读取异常：</strong>数据库读取失败纳入安全降级，不让 controller 永久停在 refreshing。</li>
+        <li><strong>Go 并发闭包：</strong>显式绑定循环索引和账户，配合 <code>-race</code> 验证无数据竞争。</li>
+        <li><strong>生产演示数据：</strong>离线资产路径不再因为网络失败切换设计 fixtures。</li>
+        <li><strong>Golden 漂移：</strong>Cold Signer 助记词提示基准同步当前真实换行，并全量复测。</li>
+      </ul>
+    </section>
+
+    <section id="limits">
+      <h2>已知边界与下一步</h2>
+      <div class="callout warning">
+        <h3>本轮没有虚报为已完成的能力</h3>
+        <p>
+          交易确认提示目前是 App 前台/恢复前台后的本地轮询通知，不是系统级后台 Push；
+          后者仍需要设备 token 注册、服务端订阅与 APNs/FCM 基础设施。截图来自模拟器，
+          发布前仍应在低端 Android 真机和至少一台 iPhone 上采集启动、滚动、刷新与内存基线。
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="shell">
+    KT Wallet · Wallet Experience Acceptance · Generated from verified local and production evidence.
+  </footer>
+</body>
+</html>

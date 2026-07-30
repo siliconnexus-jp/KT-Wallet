@@ -4,6 +4,7 @@
   "appTagline": "双机离线钱包 · 联网观察端",
   "actionConfirm": "确认",
   "actionCancel": "取消",
+  "actionClose": "关闭",
   "actionDelete": "删除",
   "actionNext": "下一步",
   "actionImport": "导入",
@@ -40,12 +41,39 @@
   "backupNow": "立即备份",
   "balanceTitle": "总资产估值 (USD)",
   "balanceChangePeriod": "过去24小时",
+  "marketUpdating": "正在更新余额…",
+  "marketCachedJustNow": "刚刚验证",
+  "marketCachedMinutes": "{count} 分钟前验证",
+  "@marketCachedMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "marketCachedHours": "{count} 小时前验证",
+  "@marketCachedHours": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "marketCachedStale": "网络恢复前将继续显示已保存的真实余额",
   "actionReceive": "收款",
   "actionSend": "转账",
   "actionMore": "更多",
   "actionScanSign": "扫签名",
   "assetsSortByValue": "按持仓价值排序",
+  "assetsHideZero": "隐藏零余额",
+  "assetsFavoritesOnly": "只看收藏",
+  "assetAddFavorite": "收藏 {symbol}",
+  "assetRemoveFavorite": "取消收藏 {symbol}",
   "recordsTitle": "交易记录",
+  "historyLoadMore": "加载更多",
+  "historyLoadingMore": "正在加载更多…",
+  "transactionConfirmedNotice": "交易已在链上确认",
+  "transactionFailedNotice": "交易在链上执行失败",
   "txSent": "转出",
   "txReceived": "收款",
   "dateToday": "今天",

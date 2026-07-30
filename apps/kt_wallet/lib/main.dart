@@ -10,6 +10,7 @@ import 'l10n/app_localizations.dart';
 import 'src/app_router.dart';
 import 'src/data/database_provider.dart';
 import 'src/market/market_scope.dart';
+import 'src/market/history_scope_host.dart';
 import 'src/security/app_lock_gate.dart';
 import 'src/security/secure_screen.dart';
 import 'src/state/app_prefs.dart';
@@ -609,6 +610,7 @@ class KtWalletApp extends StatefulWidget {
 
 class _KtWalletAppState extends State<KtWalletApp> {
   late final GoRouter _router;
+  bool _marketConfigReady = false;
 
   /// In-flight transfer flow state (draft → sign-request → decoded result),
   /// shared across the transfer screens via [TransferSessionScope].
@@ -626,12 +628,19 @@ class _KtWalletAppState extends State<KtWalletApp> {
   void initState() {
     super.initState();
     _router = buildRouter(initialLocation: widget.initialLocation);
-    // Pick up a persisted language override (no-op if none / in tests).
-    widget.localeController.load();
-    // Pick up persisted preferences, e.g. saved RPC overrides (same no-op
-    // guarantee in tests without the SharedPreferences plugin).
-    _prefs.load();
-    _networks.load();
+    _loadConfiguration();
+  }
+
+  Future<void> _loadConfiguration() async {
+    // Do not start a mainnet refresh before persisted RPC/network selections
+    // have loaded. Apart from wasting requests, that could briefly hydrate a
+    // cache belonging to the wrong network environment.
+    await Future.wait([
+      widget.localeController.load(),
+      _prefs.load(),
+      _networks.load(),
+    ]);
+    if (mounted) setState(() => _marketConfigReady = true);
   }
 
   @override
@@ -640,7 +649,10 @@ class _KtWalletAppState extends State<KtWalletApp> {
     // A rebuilt app widget can carry a different preferences object (a fresh
     // KtWalletApp in tests, a mode switch in the installer). initState has
     // already run for this State, so nothing else would load it.
-    if (!identical(oldWidget.prefs, widget.prefs)) _prefs.load();
+    if (!identical(oldWidget.prefs, widget.prefs)) {
+      _marketConfigReady = false;
+      _loadConfiguration();
+    }
   }
 
   @override
@@ -672,9 +684,16 @@ class _KtWalletAppState extends State<KtWalletApp> {
                   child: MarketScopeHost(
                     wallets: widget.controller,
                     prefs: _prefs,
-                    child: TransferSessionScope(
-                      session: _transferSession,
-                      child: child!,
+                    ready: _marketConfigReady,
+                    child: HistoryScopeHost(
+                      wallets: widget.controller,
+                      prefs: _prefs,
+                      networks: _networks,
+                      ready: _marketConfigReady,
+                      child: TransferSessionScope(
+                        session: _transferSession,
+                        child: child!,
+                      ),
                     ),
                   ),
                 ),

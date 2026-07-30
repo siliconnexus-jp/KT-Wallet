@@ -124,6 +124,12 @@ abstract class AppLocalizations {
   /// **'取消'**
   String get actionCancel;
 
+  /// No description provided for @actionClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get actionClose;
+
   /// No description provided for @actionDelete.
   ///
   /// In zh, this message translates to:
@@ -256,6 +262,36 @@ abstract class AppLocalizations {
   /// **'过去24小时'**
   String get balanceChangePeriod;
 
+  /// No description provided for @marketUpdating.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在更新余额…'**
+  String get marketUpdating;
+
+  /// No description provided for @marketCachedJustNow.
+  ///
+  /// In zh, this message translates to:
+  /// **'刚刚验证'**
+  String get marketCachedJustNow;
+
+  /// No description provided for @marketCachedMinutes.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 分钟前验证'**
+  String marketCachedMinutes(int count);
+
+  /// No description provided for @marketCachedHours.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 小时前验证'**
+  String marketCachedHours(int count);
+
+  /// No description provided for @marketCachedStale.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络恢复前将继续显示已保存的真实余额'**
+  String get marketCachedStale;
+
   /// No description provided for @actionReceive.
   ///
   /// In zh, this message translates to:
@@ -286,11 +322,59 @@ abstract class AppLocalizations {
   /// **'按持仓价值排序'**
   String get assetsSortByValue;
 
+  /// No description provided for @assetsHideZero.
+  ///
+  /// In zh, this message translates to:
+  /// **'隐藏零余额'**
+  String get assetsHideZero;
+
+  /// No description provided for @assetsFavoritesOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'只看收藏'**
+  String get assetsFavoritesOnly;
+
+  /// No description provided for @assetAddFavorite.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏 {symbol}'**
+  String assetAddFavorite(Object symbol);
+
+  /// No description provided for @assetRemoveFavorite.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消收藏 {symbol}'**
+  String assetRemoveFavorite(Object symbol);
+
   /// No description provided for @recordsTitle.
   ///
   /// In zh, this message translates to:
   /// **'交易记录'**
   String get recordsTitle;
+
+  /// No description provided for @historyLoadMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载更多'**
+  String get historyLoadMore;
+
+  /// No description provided for @historyLoadingMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在加载更多…'**
+  String get historyLoadingMore;
+
+  /// No description provided for @transactionConfirmedNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易已在链上确认'**
+  String get transactionConfirmedNotice;
+
+  /// No description provided for @transactionFailedNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易在链上执行失败'**
+  String get transactionFailedNotice;
 
   /// No description provided for @txSent.
   ///

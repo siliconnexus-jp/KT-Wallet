@@ -21,6 +21,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get actionCancel => 'Cancel';
 
   @override
+  String get actionClose => 'Close';
+
+  @override
   String get actionDelete => 'Delete';
 
   @override
@@ -91,6 +94,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get balanceChangePeriod => 'past 24h';
 
   @override
+  String get marketUpdating => 'Updating balances…';
+
+  @override
+  String get marketCachedJustNow => 'Last verified just now';
+
+  @override
+  String marketCachedMinutes(int count) {
+    return 'Last verified $count min ago';
+  }
+
+  @override
+  String marketCachedHours(int count) {
+    return 'Last verified $count hr ago';
+  }
+
+  @override
+  String get marketCachedStale =>
+      'Saved balances are shown while the network reconnects';
+
+  @override
   String get actionReceive => 'Receive';
 
   @override
@@ -106,7 +129,35 @@ class AppLocalizationsEn extends AppLocalizations {
   String get assetsSortByValue => 'Sorted by holding value';
 
   @override
+  String get assetsHideZero => 'Hide zero balances';
+
+  @override
+  String get assetsFavoritesOnly => 'Favorites';
+
+  @override
+  String assetAddFavorite(Object symbol) {
+    return 'Add $symbol to favorites';
+  }
+
+  @override
+  String assetRemoveFavorite(Object symbol) {
+    return 'Remove $symbol from favorites';
+  }
+
+  @override
   String get recordsTitle => 'Transactions';
+
+  @override
+  String get historyLoadMore => 'Load more';
+
+  @override
+  String get historyLoadingMore => 'Loading more…';
+
+  @override
+  String get transactionConfirmedNotice => 'Transaction confirmed on-chain';
+
+  @override
+  String get transactionFailedNotice => 'Transaction failed on-chain';
 
   @override
   String get txSent => 'Sent';

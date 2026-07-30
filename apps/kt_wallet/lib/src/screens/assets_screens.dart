@@ -31,6 +31,7 @@ import 'home_screen.dart'
 import '../widgets/market_offline_banner.dart';
 import '../widgets/token_icon.dart';
 import '../state/networks.dart';
+import '../state/app_prefs.dart';
 import '../state/wallet_scope.dart';
 
 /// W2 资产列表 — search + network filter + full asset list. Live: the search
@@ -126,6 +127,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
 
   String _query = '';
   int _net = 0; // 0 = all
+  bool _favoritesOnly = false;
 
   @override
   void initState() {
@@ -202,17 +204,26 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    // No scope (gallery/goldens) → demo rows byte-for-byte; scope with all
-    // fetches failed → demo rows behind the offline banner; else live rows.
+    // No scope (gallery/goldens) → demo rows byte-for-byte. A mounted live
+    // scope ALWAYS uses real rows, including full failure: unavailable values
+    // render as "--" and must never be replaced by plausible design fixtures.
     final market = MarketScope.maybeOf(context);
+    final prefs = AppPrefsScope.maybeOf(context);
     final offline = market?.isOffline ?? false;
-    final live = market != null && !offline;
+    final live = market != null;
     final rows = live ? _liveRows(market, l10n) : _assets;
     final networks = market == null ? _legacyNetworks : _networks;
     final q = _query.trim().toLowerCase();
     final results = [
       for (final a in rows)
         if ((_net == 0 || _onNetwork(a.$8, networks[_net - 1])) &&
+            (!_favoritesOnly ||
+                (a.$9 != null &&
+                    (prefs?.isFavoriteAsset(a.$9!.symbol) ?? false))) &&
+            (!(prefs?.hideZeroBalances ?? false) ||
+                a.$9 == null ||
+                market == null ||
+                !market.isDefinitelyZero(a.$9!.group)) &&
             (q.isEmpty ||
                 a.$3.toLowerCase().contains(q) ||
                 a.$4.toLowerCase().contains(q)))
@@ -278,7 +289,41 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
           selected: _net,
           onChanged: (i) => setState(() => _net = i),
         ),
+        if (prefs != null)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilterChip(
+                key: const ValueKey('assets-favorites-filter'),
+                selected: _favoritesOnly,
+                label: Text(l10n.assetsFavoritesOnly),
+                avatar: Icon(
+                  _favoritesOnly
+                      ? Icons.star_rounded
+                      : Icons.star_border_rounded,
+                  size: 17,
+                ),
+                onSelected: (value) {
+                  HapticFeedback.selectionClick();
+                  setState(() => _favoritesOnly = value);
+                },
+              ),
+              FilterChip(
+                key: const ValueKey('assets-hide-zero-filter'),
+                selected: prefs.hideZeroBalances,
+                label: Text(l10n.assetsHideZero),
+                avatar: const Icon(Icons.visibility_off_outlined, size: 17),
+                onSelected: (value) {
+                  HapticFeedback.selectionClick();
+                  prefs.setHideZeroBalances(value);
+                },
+              ),
+            ],
+          ),
         if (offline) const MarketOfflineBanner(),
+        if (market != null && market.showingCachedData)
+          MarketFreshnessLabel(market: market),
         if (results.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 32),
@@ -295,12 +340,27 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
               children: [
                 for (var i = 0; i < results.length; i++) ...[
                   if (i > 0) const SizedBox(height: 18),
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
+                  InkWell(
+                    borderRadius: BorderRadius.circular(12),
                     // The row's own asset rides along as `extra`; without it
                     // the detail route rendered one fixed token for every row.
-                    onTap: () => context.push('/token', extra: results[i].$9),
-                    child: _AssetTile(results[i]),
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      context.push('/token', extra: results[i].$9);
+                    },
+                    child: _AssetTile(
+                      results[i],
+                      favorite:
+                          results[i].$9 != null &&
+                          (prefs?.isFavoriteAsset(results[i].$9!.symbol) ??
+                              false),
+                      onFavorite: prefs == null || results[i].$9 == null
+                          ? null
+                          : () {
+                              HapticFeedback.selectionClick();
+                              prefs.toggleFavoriteAsset(results[i].$9!.symbol);
+                            },
+                    ),
                   ),
                 ],
               ],
@@ -312,7 +372,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
 }
 
 class _AssetTile extends StatelessWidget {
-  const _AssetTile(this.a);
+  const _AssetTile(this.a, {this.favorite = false, this.onFavorite});
   final (
     Color,
     String,
@@ -325,60 +385,95 @@ class _AssetTile extends StatelessWidget {
     AssetRef?,
   )
   a;
+  final bool favorite;
+  final VoidCallback? onFavorite;
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      TokenIcon(
-        symbol: a.$3,
-        size: 40,
-        fallbackColor: a.$1,
-        fallbackInitial: a.$2,
-      ),
-      const SizedBox(width: 12),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              a.$3,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: WalletColors.text,
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Semantics(
+      button: true,
+      label: '${a.$3}, ${a.$4}, ${a.$5}',
+      child: Row(
+        children: [
+          TokenIcon(
+            symbol: a.$3,
+            size: 40,
+            fallbackColor: a.$1,
+            fallbackInitial: a.$2,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  a.$3,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: WalletColors.text,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  a.$4,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: WalletColors.text2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                a.$5,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: WalletColors.text,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                a.$6,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: a.$7,
+                ),
+              ),
+            ],
+          ),
+          if (onFavorite != null) ...[
+            const SizedBox(width: 4),
+            Semantics(
+              button: true,
+              label: favorite
+                  ? l10n.assetRemoveFavorite(a.$3)
+                  : l10n.assetAddFavorite(a.$3),
+              child: IconButton(
+                visualDensity: VisualDensity.compact,
+                tooltip: favorite
+                    ? l10n.assetRemoveFavorite(a.$3)
+                    : l10n.assetAddFavorite(a.$3),
+                onPressed: onFavorite,
+                icon: Icon(
+                  favorite ? Icons.star_rounded : Icons.star_border_rounded,
+                  size: 20,
+                  color: favorite
+                      ? const Color(0xFFF5A623)
+                      : WalletColors.text3,
+                ),
               ),
             ),
-            const SizedBox(height: 3),
-            Text(
-              a.$4,
-              style: const TextStyle(fontSize: 12, color: WalletColors.text2),
-            ),
           ],
-        ),
-      ),
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            a.$5,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: WalletColors.text,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            a.$6,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: a.$7,
-            ),
-          ),
         ],
       ),
-    ],
-  );
+    );
+  }
 }
 
 /// Brand dot per protocol family, for the network badge on the detail screen.

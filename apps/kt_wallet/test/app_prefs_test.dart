@@ -43,6 +43,24 @@ void main() {
     expect(reloaded.fiat, 'JPY');
   });
 
+  test('asset visibility and favorites persist across restarts', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = AppPrefsController();
+
+    await prefs.setHideZeroBalances(true);
+    await prefs.toggleFavoriteAsset('eth');
+    await prefs.toggleFavoriteAsset('USDC');
+
+    final reloaded = AppPrefsController();
+    await reloaded.load();
+    expect(reloaded.hideZeroBalances, isTrue);
+    expect(reloaded.isFavoriteAsset('ETH'), isTrue);
+    expect(reloaded.isFavoriteAsset('usdc'), isTrue);
+
+    await reloaded.toggleFavoriteAsset('ETH');
+    expect(reloaded.isFavoriteAsset('ETH'), isFalse);
+  });
+
   test(
     'rpc overrides: null by default, round-trip through storage, reset',
     () async {

@@ -572,6 +572,27 @@ bool isKnownOfficialTokenIdentity(String symbol, String? contract) {
 /// network switch applies from the very next refresh.
 typedef TokenRegistryResolver = List<TokenInfo> Function();
 
+class TokenBalanceBatch {
+  const TokenBalanceBatch({
+    required this.tokens,
+    this.native = const {},
+    this.gatewayFailedChains = const {},
+  });
+
+  final Map<String, BalanceResult> tokens;
+
+  /// Native balances already returned by the same token-bearing gateway call.
+  /// Reusing them removes the previous second request per chain.
+  final Map<Coin, BalanceResult> native;
+
+  /// Chains whose combined gateway call failed. Native fallback for these
+  /// chains should go directly to RPC rather than retrying the gateway.
+  final Set<Coin> gatewayFailedChains;
+}
+
+typedef NativeBalanceResultCallback =
+    void Function(Coin coin, BalanceResult result);
+
 /// Fetches live token balances for the current wallet:
 ///
 /// * ERC-20 on Ethereum/Polygon via `eth_call` with `balanceOf(address)`
@@ -620,6 +641,8 @@ class TokenBalanceService {
   /// static construction-time list (today's behavior).
   List<TokenInfo> get tokens => _registry?.call() ?? _staticTokens;
 
+  bool get gatewayEnabled => _gateway() != null;
+
   /// Fetches every registry token concurrently. Never throws: each per-token
   /// failure collapses to [BalanceStatus.error] for that token only. Results
   /// are keyed by [TokenInfo.id].
@@ -632,27 +655,118 @@ class TokenBalanceService {
   /// that chain falls back to today's direct path — one broken gateway never
   /// costs more than the extra round trip. Direct mode never contacts it.
   Future<Map<String, BalanceResult>> fetchAll(ChainAddresses addresses) async {
+    return (await fetchAllWithNative(addresses)).tokens;
+  }
+
+  /// Fetches token balances and, in gateway mode, reuses the native balance
+  /// included in each `kt_getBalances` response. Direct mode intentionally
+  /// returns no native rows; [MarketController] starts its existing direct
+  /// native fetch concurrently.
+  Future<TokenBalanceBatch> fetchAllWithNative(
+    ChainAddresses addresses, {
+    NativeBalanceResultCallback? onNativeResult,
+  }) async {
     final gateway = _gateway();
     if (gateway != null) {
       final byChain = <Coin, List<TokenInfo>>{};
       for (final token in tokens) {
         byChain.putIfAbsent(token.chain, () => []).add(token);
       }
-      final chainMaps = await Future.wait([
+      try {
+        final portfolio = await gateway.getPortfolio([
+          for (final entry in byChain.entries)
+            GatewayPortfolioQuery(
+              chain: entry.key,
+              address: addresses.forCoin(entry.key),
+              tokens: [
+                for (final token in entry.value)
+                  GatewayTokenQuery(
+                    contract: token.contract,
+                    decimals: token.decimals,
+                    symbol: token.symbol,
+                  ),
+              ],
+            ),
+        ]);
+        final tokenResults = <String, BalanceResult>{};
+        final nativeResults = <Coin, BalanceResult>{};
+        final failedChains = {...portfolio.failedChains};
+        final fallbacks = <Future<void>>[];
+        for (final entry in byChain.entries) {
+          final chain = entry.key;
+          final chainTokens = entry.value;
+          final balances = portfolio.balances[chain];
+          if (balances == null) {
+            fallbacks.add(
+              Future.wait([
+                for (final token in chainTokens) _guard(token, addresses),
+              ]).then((rows) {
+                for (final (id, result) in rows) {
+                  tokenResults[id] = result;
+                }
+              }),
+            );
+            failedChains.add(chain);
+            continue;
+          }
+          final byContract = {
+            for (final row in balances.tokens) row.contract: row,
+          };
+          for (final token in chainTokens) {
+            tokenResults[token.id] = _mapGatewayRow(
+              token,
+              byContract[token.contract],
+            );
+          }
+          final native = BalanceResult.ok(
+            Amount(
+              raw: balances.native.raw,
+              decimals: balances.native.decimals,
+              symbol: balances.native.symbol,
+            ),
+          );
+          nativeResults[chain] = native;
+          onNativeResult?.call(chain, native);
+        }
+        await Future.wait(fallbacks);
+        return TokenBalanceBatch(
+          tokens: tokenResults,
+          native: nativeResults,
+          gatewayFailedChains: failedChains,
+        );
+      } catch (_) {
+        // A gateway deployed before kt_getPortfolio returns method-not-found.
+        // Keep the per-chain contract as a backwards-compatible fallback.
+      }
+      final chainBatches = await Future.wait([
         for (final entry in byChain.entries)
-          _gatewayChain(gateway, entry.key, entry.value, addresses),
+          _gatewayChain(gateway, entry.key, entry.value, addresses).then((
+            batch,
+          ) {
+            final native = batch.native[entry.key];
+            if (native != null) onNativeResult?.call(entry.key, native);
+            return batch;
+          }),
       ]);
-      return {for (final map in chainMaps) ...map};
+      return TokenBalanceBatch(
+        tokens: {for (final batch in chainBatches) ...batch.tokens},
+        native: {for (final batch in chainBatches) ...batch.native},
+        gatewayFailedChains: {
+          for (final batch in chainBatches) ...batch.gatewayFailedChains,
+        },
+      );
     }
     final entries = await Future.wait([
       for (final token in tokens) _guard(token, addresses),
     ]);
-    return {for (final (id, result) in entries) id: result};
+    return TokenBalanceBatch(
+      tokens: {for (final (id, result) in entries) id: result},
+    );
   }
 
   /// One gateway `kt_getBalances` call for all of [chainTokens] (same chain);
   /// on any call-level failure, falls back to the direct path per token.
-  Future<Map<String, BalanceResult>> _gatewayChain(
+  Future<TokenBalanceBatch> _gatewayChain(
     GatewayClient gateway,
     Coin chain,
     List<TokenInfo> chainTokens,
@@ -672,17 +786,31 @@ class TokenBalanceService {
         ],
       );
       final byContract = {for (final row in balances.tokens) row.contract: row};
-      return {
-        for (final token in chainTokens)
-          token.id: _mapGatewayRow(token, byContract[token.contract]),
-      };
+      return TokenBalanceBatch(
+        tokens: {
+          for (final token in chainTokens)
+            token.id: _mapGatewayRow(token, byContract[token.contract]),
+        },
+        native: {
+          chain: BalanceResult.ok(
+            Amount(
+              raw: balances.native.raw,
+              decimals: balances.native.decimals,
+              symbol: balances.native.symbol,
+            ),
+          ),
+        },
+      );
     } catch (_) {
       // Gateway unreachable/erroring for this chain: direct fallback, same
       // per-token isolation as direct mode.
       final entries = await Future.wait([
         for (final token in chainTokens) _guard(token, addresses),
       ]);
-      return {for (final (id, result) in entries) id: result};
+      return TokenBalanceBatch(
+        tokens: {for (final (id, result) in entries) id: result},
+        gatewayFailedChains: {chain},
+      );
     }
   }
 

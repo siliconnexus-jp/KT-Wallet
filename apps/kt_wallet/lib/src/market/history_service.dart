@@ -139,40 +139,47 @@ class HistoryService {
   ///
   /// With a gateway configured, `kt_getHistory` is asked first. If it is
   /// unreachable, the request falls through to the chain's public API.
-  Future<HistoryResult> fetch(Coin coin, String address) async {
+  Future<HistoryResult> fetch(
+    Coin coin,
+    String address, {
+    int limit = pageSize,
+  }) async {
+    final effectiveLimit = limit.clamp(1, 100);
     final gateway = _gateway();
     if (gateway != null) {
       try {
         final history = await gateway.getHistory(
           chain: coin,
           address: address,
-          limit: pageSize,
+          limit: effectiveLimit,
         );
         if (history.unsupported) return const HistoryResult.unsupported();
         final records = [
           for (final record in history.records) _mapGatewayRecord(coin, record),
         ]..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-        return HistoryResult.ok(List.unmodifiable(records.take(pageSize)));
+        return HistoryResult.ok(
+          List.unmodifiable(records.take(effectiveLimit)),
+        );
       } catch (_) {
         // Gateway unreachable/erroring: fall through to direct chain APIs.
       }
     }
     switch (coin) {
       case Coin.tron:
-        return _fetchTron(address);
+        return _fetchTron(address, effectiveLimit);
       case Coin.eth:
       case Coin.polygon:
       case Coin.base:
       case Coin.arbitrum:
       case Coin.avalanche:
       case Coin.bnb:
-        return _fetchEvm(coin, address);
+        return _fetchEvm(coin, address, effectiveLimit);
       case Coin.solana:
-        return _fetchSolana(address);
+        return _fetchSolana(address, effectiveLimit);
     }
   }
 
-  Future<HistoryResult> _fetchEvm(Coin coin, String address) async {
+  Future<HistoryResult> _fetchEvm(Coin coin, String address, int limit) async {
     try {
       final base = _evmHistoryApi(coin);
 
@@ -183,7 +190,7 @@ class HistoryService {
             'action': action,
             'address': address,
             'page': '1',
-            'offset': '$pageSize',
+            'offset': '$limit',
             'sort': 'desc',
           },
         );
@@ -317,7 +324,7 @@ class HistoryService {
           .where((record) {
             return seen.add(record.id ?? record.hash);
           })
-          .take(pageSize);
+          .take(limit);
       return HistoryResult.ok(List.unmodifiable(deduped));
     } catch (_) {
       return const HistoryResult.error();
@@ -367,7 +374,7 @@ class HistoryService {
     _ => 'ETH',
   };
 
-  Future<HistoryResult> _fetchSolana(String address) async {
+  Future<HistoryResult> _fetchSolana(String address, int limit) async {
     try {
       final rpc = _endpoints(Coin.solana);
       final bySignature = <String, Map<dynamic, dynamic>>{};
@@ -375,7 +382,7 @@ class HistoryService {
       Future<void> collectSignatures(String account) async {
         final result = await _solanaCall(rpc, 'getSignaturesForAddress', [
           account,
-          {'limit': pageSize},
+          {'limit': limit},
         ]);
         if (result is! List) throw const FormatException('bad signatures');
         for (final item in result) {
@@ -424,7 +431,7 @@ class HistoryService {
         });
       final records = <ChainTxRecord>[];
       var detailFailed = false;
-      for (final item in signatures.take(pageSize * 3)) {
+      for (final item in signatures.take(limit * 3)) {
         final signature = item['signature'];
         if (signature is! String) continue;
         Object? transaction;
@@ -518,13 +525,13 @@ class HistoryService {
             ),
           );
         }
-        if (records.length >= pageSize) break;
+        if (records.length >= limit) break;
       }
       if (records.isEmpty && signatures.isNotEmpty && detailFailed) {
         return const HistoryResult.error();
       }
       records.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      return HistoryResult.ok(List.unmodifiable(records.take(pageSize)));
+      return HistoryResult.ok(List.unmodifiable(records.take(limit)));
     } catch (_) {
       return const HistoryResult.error();
     }
@@ -711,18 +718,16 @@ class HistoryService {
 
   /// TRC-20, TRX/TRC-10 and contract-created internal transfers, fetched
   /// concurrently and merged newest-first.
-  Future<HistoryResult> _fetchTron(String address) async {
+  Future<HistoryResult> _fetchTron(String address, int limit) async {
     try {
       final (trc20, native, internal) = await (
         _getData(
-          '$tronApiUrl/v1/accounts/$address/transactions/trc20?limit=$pageSize',
+          '$tronApiUrl/v1/accounts/$address/transactions/trc20?limit=$limit',
         ),
-        _getData(
-          '$tronApiUrl/v1/accounts/$address/transactions?limit=$pageSize',
-        ),
+        _getData('$tronApiUrl/v1/accounts/$address/transactions?limit=$limit'),
         _getData(
           '$tronApiUrl/v1/accounts/$address/internal-transactions'
-          '?limit=$pageSize&only_confirmed=true',
+          '?limit=$limit&only_confirmed=true',
         ),
       ).wait;
 
@@ -754,7 +759,7 @@ class HistoryService {
           .where((record) {
             return seen.add(record.id ?? record.hash);
           })
-          .take(pageSize);
+          .take(limit);
       return HistoryResult.ok(List.unmodifiable(deduped));
     } catch (_) {
       // ClientException / TimeoutException / FormatException / a 4xx for the

@@ -908,6 +908,11 @@ void main() {
       // An absent preference resolves to the production Gateway.
       final resolver = prefsGatewayResolver(prefs);
       expect(resolver()!.baseUrl, AppPrefsController.defaultGatewayUrl);
+      expect(
+        identical(resolver(), prefsGatewayResolver(prefs)()),
+        isTrue,
+        reason: 'all app surfaces should reuse one gateway connection pool',
+      );
 
       await prefs.setGatewayUrl('   ');
       expect(resolver(), isNull);

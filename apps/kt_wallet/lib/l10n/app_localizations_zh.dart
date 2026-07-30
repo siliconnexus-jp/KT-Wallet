@@ -21,6 +21,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get actionCancel => '取消';
 
   @override
+  String get actionClose => '关闭';
+
+  @override
   String get actionDelete => '删除';
 
   @override
@@ -91,6 +94,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get balanceChangePeriod => '过去24小时';
 
   @override
+  String get marketUpdating => '正在更新余额…';
+
+  @override
+  String get marketCachedJustNow => '刚刚验证';
+
+  @override
+  String marketCachedMinutes(int count) {
+    return '$count 分钟前验证';
+  }
+
+  @override
+  String marketCachedHours(int count) {
+    return '$count 小时前验证';
+  }
+
+  @override
+  String get marketCachedStale => '网络恢复前将继续显示已保存的真实余额';
+
+  @override
   String get actionReceive => '收款';
 
   @override
@@ -106,7 +128,35 @@ class AppLocalizationsZh extends AppLocalizations {
   String get assetsSortByValue => '按持仓价值排序';
 
   @override
+  String get assetsHideZero => '隐藏零余额';
+
+  @override
+  String get assetsFavoritesOnly => '只看收藏';
+
+  @override
+  String assetAddFavorite(Object symbol) {
+    return '收藏 $symbol';
+  }
+
+  @override
+  String assetRemoveFavorite(Object symbol) {
+    return '取消收藏 $symbol';
+  }
+
+  @override
   String get recordsTitle => '交易记录';
+
+  @override
+  String get historyLoadMore => '加载更多';
+
+  @override
+  String get historyLoadingMore => '正在加载更多…';
+
+  @override
+  String get transactionConfirmedNotice => '交易已在链上确认';
+
+  @override
+  String get transactionFailedNotice => '交易在链上执行失败';
 
   @override
   String get txSent => '转出';

@@ -276,6 +276,54 @@ void main() {
     });
   });
 
+  group('kt_getPortfolio', () {
+    test('parses per-chain results and preserves partial failures', () async {
+      final recorder = _Recorder()
+        ..results = {
+          'kt_getPortfolio': {
+            'accounts': [
+              {
+                'chain': 'eth',
+                'result': {
+                  'native': {
+                    'raw': '1000000000000000000',
+                    'decimals': 18,
+                    'symbol': 'ETH',
+                  },
+                  'tokens': const <Object?>[],
+                },
+              },
+              {'chain': 'solana', 'error': 'upstream unavailable'},
+            ],
+          },
+        };
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: recorder.client,
+      );
+
+      final result = await client.getPortfolio(const [
+        GatewayPortfolioQuery(
+          chain: Coin.eth,
+          address: '0x1111111111111111111111111111111111111111',
+        ),
+        GatewayPortfolioQuery(
+          chain: Coin.solana,
+          address: '11111111111111111111111111111111',
+        ),
+      ]);
+
+      expect(
+        result.balances[Coin.eth]!.native.raw,
+        BigInt.parse('1000000000000000000'),
+      );
+      expect(result.failedChains, contains(Coin.solana));
+      expect(recorder.requests.single['method'], 'kt_getPortfolio');
+      final params = recorder.requests.single['params'] as Map<String, Object?>;
+      expect(params['accounts'], hasLength(2));
+    });
+  });
+
   group('kt_getPrices', () {
     test(
       'exact params; unknown symbols omitted by the gateway stay absent',

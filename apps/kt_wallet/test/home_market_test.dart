@@ -243,6 +243,25 @@ void main() {
   });
 
   testWidgets(
+    'offline assets list shows unavailable real rows, never design fixtures',
+    (tester) async {
+      final controller = _offlineController();
+      await tester.pumpWidget(
+        _app(
+          MarketScope(controller: controller, child: const AssetsListScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('网络不可用，实时数据加载失败'), findsOneWidget);
+      expect(find.text('0.0842 ETH'), findsNothing);
+      expect(find.text('3,120.00 USDT · TRON'), findsNothing);
+      expect(find.text('-- ETH · 3 条链'), findsOneWidget);
+      controller.dispose();
+    },
+  );
+
+  testWidgets(
     'assets list network filter keeps only that chain\'s token rows',
     (tester) async {
       final controller = _liveController();

@@ -61,6 +61,12 @@ class WalletStore {
   Future<db.Transaction?> transactionById(String walletId, String id) =>
       _wallets.scoped(walletId).transactionById(id);
 
+  Future<String?> setting(String walletId, String key) =>
+      _wallets.scoped(walletId).setting(key);
+
+  Future<void> putSetting(String walletId, String key, String value) =>
+      _wallets.scoped(walletId).putSetting(key, value);
+
   /// Backfills incoming rows for transfers made between wallets managed by
   /// this installation. This also repairs transfers created by older app
   /// versions before immediate recipient mirroring existed.

@@ -53,7 +53,9 @@ func TestEVMBalancesGolden(t *testing.T) {
 			{"contract":%q,"raw":"0","decimals":18,"symbol":"DAI"}
 		]}`, evmTokenA, evmTokenB), result(t, resp))
 
-	// The last eth_call must be a balanceOf(holder) against the token contract.
+	// Token calls run with bounded concurrency, so the last completed request is
+	// intentionally nondeterministic. It must still be balanceOf(holder)
+	// against one of the requested contracts.
 	params := node.params("eth_call")
 	var call struct{ To, Data string }
 	_ = json.Unmarshal(params[0], &call)
@@ -61,8 +63,9 @@ func TestEVMBalancesGolden(t *testing.T) {
 	if call.Data != wantData {
 		t.Fatalf("balanceOf calldata = %s, want %s", call.Data, wantData)
 	}
-	if strings.ToLower(call.To) != evmTokenB {
-		t.Fatalf("eth_call to = %s, want %s", call.To, evmTokenB)
+	to := strings.ToLower(call.To)
+	if to != evmTokenA && to != evmTokenB {
+		t.Fatalf("eth_call to = %s, want one of %s / %s", call.To, evmTokenA, evmTokenB)
 	}
 }
 
@@ -72,6 +75,36 @@ func TestEVMBalancesNoTokens(t *testing.T) {
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.EthURLs = []string{node.srv.URL} })
 	resp := e.rpc("kt_getBalances", balancesParams("eth", evmSelf, ""))
 	assertJSONEq(t, `{"native":{"raw":"0","decimals":18,"symbol":"ETH"},"tokens":[]}`, result(t, resp))
+}
+
+func TestPortfolioCombinesChainsAndIsolatesFailures(t *testing.T) {
+	node := newRPCFake(t)
+	node.result("eth_getBalance", "0x5")
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.EthURLs = []string{node.srv.URL}
+		cfg.PolygonURLs = []string{node.srv.URL}
+	})
+	params := fmt.Sprintf(`{"accounts":[
+		{"chain":"eth","address":%q},
+		{"chain":"polygon","address":%q},
+		{"chain":"solana","address":"not-a-solana-address"}
+	]}`, evmSelf, evmSelf)
+	accounts := result(t, e.rpc("kt_getPortfolio", params))["accounts"].([]any)
+	if len(accounts) != 3 {
+		t.Fatalf("accounts length = %d, want 3", len(accounts))
+	}
+	eth := accounts[0].(map[string]any)
+	polygon := accounts[1].(map[string]any)
+	bad := accounts[2].(map[string]any)
+	if eth["result"].(map[string]any)["native"].(map[string]any)["symbol"] != "ETH" {
+		t.Fatalf("bad eth result: %v", eth)
+	}
+	if polygon["result"].(map[string]any)["native"].(map[string]any)["symbol"] != "POL" {
+		t.Fatalf("bad polygon result: %v", polygon)
+	}
+	if bad["error"] == nil || bad["result"] != nil {
+		t.Fatalf("invalid sibling must be isolated: %v", bad)
+	}
 }
 
 func TestPolygonNativeSymbol(t *testing.T) {

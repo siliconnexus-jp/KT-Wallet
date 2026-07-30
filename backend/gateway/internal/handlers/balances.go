@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"ktwallet/gateway/internal/rpc"
 )
+
+const tokenBalanceConcurrency = 4
 
 type tokenRef struct {
 	Contract string `json:"contract"`
@@ -32,6 +35,70 @@ type tokenBalanceEntry struct {
 type balancesResult struct {
 	Native balanceEntry        `json:"native"`
 	Tokens []tokenBalanceEntry `json:"tokens"`
+}
+
+type portfolioAccount struct {
+	Chain   string     `json:"chain"`
+	Network string     `json:"network"`
+	Address string     `json:"address"`
+	Tokens  []tokenRef `json:"tokens"`
+}
+
+type portfolioEntry struct {
+	Chain   string          `json:"chain"`
+	Network string          `json:"network,omitempty"`
+	Result  *balancesResult `json:"result,omitempty"`
+	Error   string          `json:"error,omitempty"`
+}
+
+type portfolioResult struct {
+	Accounts []portfolioEntry `json:"accounts"`
+}
+
+// GetPortfolio implements kt_getPortfolio. It collapses the app's per-chain
+// balance fan-out into one mobile round trip while preserving per-chain
+// failure isolation. Each account still passes through GetBalances, including
+// its validation, cache and bounded token concurrency.
+func (g *Gateway) GetPortfolio(ctx context.Context, params json.RawMessage) (any, *rpc.Error) {
+	var p struct {
+		Accounts []portfolioAccount `json:"accounts"`
+	}
+	if err := json.Unmarshal(params, &p); err != nil || len(p.Accounts) == 0 {
+		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: expected non-empty {"accounts":[...]}`)
+	}
+	if len(p.Accounts) > 16 {
+		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: "accounts" exceeds 16`)
+	}
+
+	res := &portfolioResult{Accounts: make([]portfolioEntry, len(p.Accounts))}
+	var wg sync.WaitGroup
+	limit := make(chan struct{}, 4)
+	for i, account := range p.Accounts {
+		i, account := i, account
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			limit <- struct{}{}
+			defer func() { <-limit }()
+			raw, err := json.Marshal(account)
+			if err != nil {
+				res.Accounts[i] = portfolioEntry{Chain: account.Chain, Network: account.Network, Error: "invalid account"}
+				return
+			}
+			value, rpcErr := g.GetBalances(ctx, raw)
+			entry := portfolioEntry{Chain: account.Chain, Network: account.Network}
+			if rpcErr != nil {
+				entry.Error = rpcErr.Message
+			} else if balances, ok := value.(*balancesResult); ok {
+				entry.Result = balances
+			} else {
+				entry.Error = "invalid balances result"
+			}
+			res.Accounts[i] = entry
+		}()
+	}
+	wg.Wait()
+	return res, nil
 }
 
 // GetBalances implements kt_getBalances. Native balance failure fails the
@@ -98,19 +165,28 @@ func (g *Gateway) evmBalances(ctx context.Context, chain, network string, meta c
 	}
 	res := &balancesResult{
 		Native: balanceEntry{Raw: native.String(), Decimals: meta.Decimals, Symbol: meta.Symbol},
-		Tokens: make([]tokenBalanceEntry, 0, len(tokens)),
+		Tokens: make([]tokenBalanceEntry, len(tokens)),
 	}
-	for _, t := range tokens {
-		entry := tokenBalanceEntry{Contract: t.Contract, Raw: "0", Decimals: t.Decimals, Symbol: t.Symbol}
-		if !evmAddressRe.MatchString(t.Contract) {
-			entry.Error = "invalid contract address"
-		} else if bal, err := evm.TokenBalance(ctx, t.Contract, address); err != nil {
-			entry.Error = err.Error()
-		} else {
-			entry.Raw = bal.String()
-		}
-		res.Tokens = append(res.Tokens, entry)
+	var wg sync.WaitGroup
+	limit := make(chan struct{}, tokenBalanceConcurrency)
+	for i, t := range tokens {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			limit <- struct{}{}
+			defer func() { <-limit }()
+			entry := tokenBalanceEntry{Contract: t.Contract, Raw: "0", Decimals: t.Decimals, Symbol: t.Symbol}
+			if !evmAddressRe.MatchString(t.Contract) {
+				entry.Error = "invalid contract address"
+			} else if bal, err := evm.TokenBalance(ctx, t.Contract, address); err != nil {
+				entry.Error = err.Error()
+			} else {
+				entry.Raw = bal.String()
+			}
+			res.Tokens[i] = entry
+		}()
 	}
+	wg.Wait()
 	return res, nil
 }
 
@@ -144,16 +220,25 @@ func (g *Gateway) solanaBalances(ctx context.Context, network string, meta chain
 	}
 	res := &balancesResult{
 		Native: balanceEntry{Raw: native.String(), Decimals: meta.Decimals, Symbol: meta.Symbol},
-		Tokens: make([]tokenBalanceEntry, 0, len(tokens)),
+		Tokens: make([]tokenBalanceEntry, len(tokens)),
 	}
-	for _, t := range tokens {
-		entry := tokenBalanceEntry{Contract: t.Contract, Raw: "0", Decimals: t.Decimals, Symbol: t.Symbol}
-		if bal, err := g.sol[network].GetTokenBalance(ctx, address, t.Contract); err != nil {
-			entry.Error = err.Error()
-		} else {
-			entry.Raw = bal.String()
-		}
-		res.Tokens = append(res.Tokens, entry)
+	var wg sync.WaitGroup
+	limit := make(chan struct{}, tokenBalanceConcurrency)
+	for i, t := range tokens {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			limit <- struct{}{}
+			defer func() { <-limit }()
+			entry := tokenBalanceEntry{Contract: t.Contract, Raw: "0", Decimals: t.Decimals, Symbol: t.Symbol}
+			if bal, err := g.sol[network].GetTokenBalance(ctx, address, t.Contract); err != nil {
+				entry.Error = err.Error()
+			} else {
+				entry.Raw = bal.String()
+			}
+			res.Tokens[i] = entry
+		}()
 	}
+	wg.Wait()
 	return res, nil
 }
