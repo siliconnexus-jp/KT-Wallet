@@ -1,7 +1,7 @@
 import 'package:drift/drift.dart';
 
 import 'database.dart';
-import 'tables.dart' show TxStatus;
+import 'tables.dart' show TxCheckOutcome, TxStatus;
 
 /// Raised when a second locally-created EVM transaction tries to reserve a
 /// nonce that is already owned by a submitted or pending transaction.
@@ -150,7 +150,11 @@ class WalletRepository {
             t.networkId.equals(networkId) &
             t.fromAddr.equals(from) &
             t.nonce.equals(nonce) &
-            t.status.isIn([TxStatus.submitted.index, TxStatus.pending.index]),
+            t.status.isIn([
+              TxStatus.submitted.index,
+              TxStatus.broadcast.index,
+              TxStatus.pending.index,
+            ]),
       );
     final active = await query.get();
     final conflicts = active.where((row) => row.id != replacesId).toList();
@@ -167,6 +171,9 @@ class WalletRepository {
     TxStatus status, {
     String? hash,
     int? broadcastAt,
+    int? lastCheckedAt,
+    TxCheckOutcome? lastCheckOutcome,
+    bool clearLastCheckOutcome = false,
   }) async {
     await (_db.update(
       _db.transactions,
@@ -177,15 +184,43 @@ class WalletRepository {
         broadcastAt: broadcastAt == null
             ? const Value.absent()
             : Value(broadcastAt),
+        lastCheckedAt: lastCheckedAt == null
+            ? const Value.absent()
+            : Value(lastCheckedAt),
+        lastCheckOutcome: clearLastCheckOutcome
+            ? const Value(null)
+            : lastCheckOutcome == null
+            ? const Value.absent()
+            : Value(lastCheckOutcome),
       ),
     );
   }
 
-  /// Commits an accepted EVM replacement as one database transaction: the old
-  /// row becomes `replaced`, while the new row becomes `pending` with the
-  /// node-returned hash. Returns false when the original was already finalized
-  /// by a concurrent history refresh.
-  Future<bool> acceptEvmReplacement({
+  /// Backfills an observed EVM nonce without ever overwriting existing
+  /// evidence. Returns true only when this call changed the row.
+  Future<bool> setTransactionNonceIfAbsent(String id, String nonce) async {
+    final parsed = BigInt.tryParse(nonce);
+    if (parsed == null || parsed.isNegative) {
+      throw ArgumentError.value(nonce, 'nonce');
+    }
+    final changed =
+        await (_db.update(_db.transactions)..where(
+              (t) =>
+                  t.walletId.equals(walletId) &
+                  t.id.equals(id) &
+                  t.nonce.isNull(),
+            ))
+            .write(TransactionsCompanion(nonce: Value(parsed.toString())));
+    return changed == 1;
+  }
+
+  /// Records that an EVM node accepted a replacement for propagation.
+  ///
+  /// Node acceptance is not finality: the original transaction can still win
+  /// the nonce race. Both rows therefore remain live until a receipt proves
+  /// which hash consumed the nonce. [replacedById] is only a candidate link at
+  /// this stage; [settleEvmTransaction] applies the terminal lineage.
+  Future<bool> recordEvmReplacementBroadcast({
     required String originalId,
     required String replacementId,
     required String hash,
@@ -200,12 +235,7 @@ class WalletRepository {
       await (_db.update(_db.transactions)..where(
             (t) => t.walletId.equals(walletId) & t.id.equals(originalId),
           ))
-          .write(
-            TransactionsCompanion(
-              status: const Value(TxStatus.replaced),
-              replacedById: Value(replacementId),
-            ),
-          );
+          .write(TransactionsCompanion(replacedById: Value(replacementId)));
     }
     await (_db.update(_db.transactions)..where(
           (t) => t.walletId.equals(walletId) & t.id.equals(replacementId),
@@ -219,6 +249,74 @@ class WalletRepository {
         );
     return canReplace;
   });
+
+  /// Applies a receipt-backed terminal EVM result and resolves every locally
+  /// known transaction competing for the same nonce.
+  ///
+  /// A confirmed or reverted transaction consumes its nonce. If [id] is a
+  /// replacement, the original becomes `replaced`; if [id] is the original,
+  /// every still-live replacement becomes `replaced`. Local signing/broadcast
+  /// failures must continue to use [updateTransactionStatus] because they do
+  /// not prove that any nonce was consumed on-chain.
+  Future<void> settleEvmTransaction({
+    required String id,
+    required TxStatus status,
+    String? hash,
+    int? lastCheckedAt,
+  }) {
+    if (status != TxStatus.confirmed && status != TxStatus.failed) {
+      throw ArgumentError.value(status, 'status', 'must consume the nonce');
+    }
+    return _db.transaction(() async {
+      final row = await transactionById(id);
+      if (row == null) return;
+      await (_db.update(
+        _db.transactions,
+      )..where((t) => t.walletId.equals(walletId) & t.id.equals(id))).write(
+        TransactionsCompanion(
+          status: Value(status),
+          hash: hash == null ? const Value.absent() : Value(hash),
+          lastCheckedAt: lastCheckedAt == null
+              ? const Value.absent()
+              : Value(lastCheckedAt),
+          lastCheckOutcome: const Value(null),
+        ),
+      );
+
+      const live = [TxStatus.submitted, TxStatus.broadcast, TxStatus.pending];
+      final liveIndexes = live.map((value) => value.index).toList();
+      final originalId = row.replacesId;
+      if (originalId != null) {
+        await (_db.update(_db.transactions)..where(
+              (t) =>
+                  t.walletId.equals(walletId) &
+                  t.id.equals(originalId) &
+                  t.status.isIn(liveIndexes),
+            ))
+            .write(
+              TransactionsCompanion(
+                status: const Value(TxStatus.replaced),
+                replacedById: Value(id),
+                lastCheckOutcome: const Value(null),
+              ),
+            );
+      }
+
+      await (_db.update(_db.transactions)..where(
+            (t) =>
+                t.walletId.equals(walletId) &
+                t.replacesId.equals(id) &
+                t.status.isIn(liveIndexes),
+          ))
+          .write(
+            TransactionsCompanion(
+              status: const Value(TxStatus.replaced),
+              replacedById: Value(id),
+              lastCheckOutcome: const Value(null),
+            ),
+          );
+    });
+  }
 
   // ---- address book ------------------------------------------------------
 

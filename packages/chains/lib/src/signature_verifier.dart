@@ -8,7 +8,9 @@ import 'package:pointycastle/ecc/curves/secp256k1.dart';
 import 'base58.dart';
 import 'address.dart';
 import 'keccak.dart';
+import 'rlp.dart';
 import 'sha256.dart';
+import 'transaction_parser.dart';
 
 class SignatureVerificationError implements Exception {
   const SignatureVerificationError(this.message);
@@ -16,6 +18,34 @@ class SignatureVerificationError implements Exception {
 
   @override
   String toString() => 'SignatureVerificationError: $message';
+}
+
+/// Validates an uncompressed SEC1 public key on secp256k1.
+///
+/// Length/prefix checks alone are insufficient: arbitrary x/y bytes can be
+/// hashed into an apparently matching address even when they are not a point
+/// on the curve. Pairing code uses this before accepting exported public keys.
+bool isValidSecp256k1PublicKey(List<int> encoded) {
+  if (encoded.length != 65 || encoded.first != 0x04) return false;
+  try {
+    final params = ECCurve_secp256k1();
+    final point = params.curve.decodePoint(encoded);
+    if (point == null ||
+        point.isInfinity ||
+        point.x == null ||
+        point.y == null) {
+      return false;
+    }
+    final x = point.x!;
+    final y = point.y!;
+    final curve = params.curve;
+    final left = y.square();
+    final right = (x.square() * x) + (curve.a! * x) + curve.b!;
+    if (left != right) return false;
+    return (point * params.n)?.isInfinity ?? false;
+  } on Object {
+    return false;
+  }
 }
 
 class VerifiedTransaction {
@@ -41,12 +71,15 @@ Future<VerifiedTransaction> verifySignedTransaction({
   Chain.base ||
   Chain.arbitrum ||
   Chain.avalanche ||
-  Chain.bnb => Future.value(_verifyEvm(unsignedTx, signedTx, claimedSigner)),
+  Chain.bnb => Future.value(
+    _verifyEvm(chain, unsignedTx, signedTx, claimedSigner),
+  ),
   Chain.tron => Future.value(_verifyTron(unsignedTx, signedTx, claimedSigner)),
   Chain.solana => _verifySolana(unsignedTx, signedTx, claimedSigner),
 };
 
 VerifiedTransaction _verifyEvm(
+  Chain chain,
   Uint8List unsigned,
   Uint8List signed,
   String claimed,
@@ -56,6 +89,13 @@ VerifiedTransaction _verifyEvm(
       signed.isEmpty ||
       signed.first != 0x02) {
     throw const SignatureVerificationError('expected EIP-1559 transaction');
+  }
+  try {
+    parseUnsignedTransfer(chain, unsigned);
+  } on Object {
+    throw const SignatureVerificationError(
+      'unsupported or non-canonical EIP-1559 transaction',
+    );
   }
   final unsignedList = _decodeRlpList(unsigned, 1);
   final signedList = _decodeRlpList(signed, 1);
@@ -70,8 +110,29 @@ VerifiedTransaction _verifyEvm(
   final parity = _scalar(signedList[9].payload).toInt();
   final r = _scalar(signedList[10].payload);
   final s = _scalar(signedList[11].payload);
+  if (signedList[9].isList || signedList[10].isList || signedList[11].isList) {
+    throw const SignatureVerificationError('signature scalar cannot be a list');
+  }
   if (parity < 0 || parity > 1) {
     throw const SignatureVerificationError('invalid recovery parity');
+  }
+  final params = ECCurve_secp256k1();
+  if (s > (params.n >> 1)) {
+    throw const SignatureVerificationError('non-canonical high-s signature');
+  }
+  final canonicalSigned = Uint8List.fromList([
+    0x02,
+    ...Rlp.encodeList([
+      for (var i = 0; i < 9; i++) signedList[i].encoded,
+      Rlp.encodeBigInt(BigInt.from(parity)),
+      Rlp.encodeBigInt(r),
+      Rlp.encodeBigInt(s),
+    ]),
+  ]);
+  if (!_bytesEqual(canonicalSigned, signed)) {
+    throw const SignatureVerificationError(
+      'non-canonical EIP-1559 signed transaction',
+    );
   }
   final publicKey = _recoverSecp256k1(keccak256(unsigned), r, s, parity);
   final encoded = publicKey.getEncoded(false);
@@ -86,28 +147,25 @@ VerifiedTransaction _verifyEvm(
   );
 }
 
-/// Pulls `(raw_data, signature)` out of either TRON signed-payload shape.
+/// Pulls `(raw_data, signature)` out of the canonical TRON AIRGAP-V1 result.
 ///
 /// The signers emit `{"transaction": "<full signed Transaction protobuf>"}`
-/// (what `/wallet/broadcasthex` takes). The older
-/// `{"raw_data_hex", "signature": [...]}` shape is still accepted here: a
-/// signature is authentic or not regardless of how it was framed, and an
-/// offline signer running an older build must still be verifiable.
+/// (what `/wallet/broadcasthex` takes). An old `raw_data_hex + signature`
+/// fragment is deliberately rejected: it is not a complete object accepted
+/// by the direct broadcast endpoint and must not pass verification only to
+/// fail later or acquire extra broadcast-time fields.
 (Uint8List, Uint8List) _tronRawAndSignature(Map<String, Object?> map) {
+  if (map.keys.any((key) => key != 'transaction' && key != 'txID')) {
+    throw const SignatureVerificationError('unknown TRON signed field');
+  }
   final transaction = map['transaction'];
   if (transaction is String) {
     final (raw, signature) = _decodeTronTransaction(_hexDecode(transaction));
     return (raw, signature);
   }
-  final rawHex = map['raw_data_hex'];
-  final signatures = map['signature'];
-  if (rawHex is! String ||
-      signatures is! List ||
-      signatures.length != 1 ||
-      signatures.first is! String) {
-    throw const SignatureVerificationError('incomplete TRON signature');
-  }
-  return (_hexDecode(rawHex), _hexDecode(signatures.first as String));
+  throw const SignatureVerificationError(
+    'expected full signed TRON transaction',
+  );
 }
 
 /// Reads `Transaction { raw_data = 1; repeated signature = 2; }` — exactly the
@@ -127,7 +185,14 @@ VerifiedTransaction _verifyEvm(
       }
       final group = bytes[cursor++];
       result |= (group & 0x7f) << shift;
-      if (group & 0x80 == 0) return (result, cursor);
+      if (group & 0x80 == 0) {
+        if (cursor - at > 1 && group == 0) {
+          throw const SignatureVerificationError(
+            'non-canonical TRON transaction',
+          );
+        }
+        return (result, cursor);
+      }
       shift += 7;
     }
   }
@@ -182,6 +247,9 @@ VerifiedTransaction _verifyTron(
   final recovery = signature[64];
   if (recovery > 3) {
     throw const SignatureVerificationError('invalid TRON recovery id');
+  }
+  if (s > (ECCurve_secp256k1().n >> 1)) {
+    throw const SignatureVerificationError('non-canonical high-s signature');
   }
   final publicKey = _recoverSecp256k1(txIdBytes, r, s, recovery);
   final encoded = publicKey.getEncoded(false);
@@ -245,23 +313,29 @@ ECPoint _recoverSecp256k1(
   BigInt s,
   int recoveryId,
 ) {
-  final params = ECCurve_secp256k1();
-  final n = params.n;
-  if (r <= BigInt.zero || r >= n || s <= BigInt.zero || s >= n) {
-    throw const SignatureVerificationError('invalid secp256k1 scalar');
-  }
-  final x = r + BigInt.from(recoveryId ~/ 2) * n;
-  final point = params.curve.decompressPoint(recoveryId & 1, x);
-  if (!(point * n)!.isInfinity) {
+  try {
+    final params = ECCurve_secp256k1();
+    final n = params.n;
+    if (r <= BigInt.zero || r >= n || s <= BigInt.zero || s >= n) {
+      throw const SignatureVerificationError('invalid secp256k1 scalar');
+    }
+    final x = r + BigInt.from(recoveryId ~/ 2) * n;
+    final point = params.curve.decompressPoint(recoveryId & 1, x);
+    if (!(point * n)!.isInfinity) {
+      throw const SignatureVerificationError('invalid recovery point');
+    }
+    final e = _scalar(digest);
+    final rInv = r.modInverse(n);
+    final q = ((point * (s * rInv % n))! - (params.G * (e * rInv % n))!)!;
+    if (q.isInfinity) {
+      throw const SignatureVerificationError('recovered infinity signer');
+    }
+    return q;
+  } on SignatureVerificationError {
+    rethrow;
+  } on Object {
     throw const SignatureVerificationError('invalid recovery point');
   }
-  final e = _scalar(digest);
-  final rInv = r.modInverse(n);
-  final q = ((point * (s * rInv % n))! - (params.G * (e * rInv % n))!)!;
-  if (q.isInfinity) {
-    throw const SignatureVerificationError('recovered infinity signer');
-  }
-  return q;
 }
 
 class _RlpItem {
@@ -346,7 +420,13 @@ _RlpItem _readRlp(Uint8List source, int offset) {
   while (cursor < bytes.length && shift <= 14) {
     final byte = bytes[cursor++];
     value |= (byte & 0x7f) << shift;
-    if (byte & 0x80 == 0) return (value: value, next: cursor);
+    if (byte & 0x80 == 0) {
+      final count = cursor - offset;
+      if ((count > 1 && byte == 0) || (count == 3 && byte > 3)) {
+        throw const SignatureVerificationError('non-canonical shortvec');
+      }
+      return (value: value, next: cursor);
+    }
     shift += 7;
   }
   throw const SignatureVerificationError('invalid shortvec');

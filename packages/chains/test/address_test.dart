@@ -39,7 +39,10 @@ void main() {
     test('rejects wrong length / non-hex', () {
       expect(Addresses.validate(Chain.ethereum, '0x1234').isValid, isFalse);
       expect(
-        Addresses.validate(Chain.ethereum, '0xZZ6916095ca1df60bB79Ce92cE3Ea74c37c5d359').isValid,
+        Addresses.validate(
+          Chain.ethereum,
+          '0xZZ6916095ca1df60bB79Ce92cE3Ea74c37c5d359',
+        ).isValid,
         isFalse,
       );
     });
@@ -61,7 +64,10 @@ void main() {
     });
 
     test('rejects an address not starting with T', () {
-      expect(Addresses.validate(Chain.tron, usdt.substring(1)).isValid, isFalse);
+      expect(
+        Addresses.validate(Chain.tron, usdt.substring(1)).isValid,
+        isFalse,
+      );
     });
   });
 
@@ -74,7 +80,10 @@ void main() {
     });
 
     test('rejects invalid base58 characters', () {
-      expect(Addresses.validate(Chain.solana, 'not_base58_0OIl').isValid, isFalse);
+      expect(
+        Addresses.validate(Chain.solana, 'not_base58_0OIl').isValid,
+        isFalse,
+      );
     });
   });
 
@@ -108,6 +117,32 @@ void main() {
       ]) {
         expect(base58Encode(base58Decode(s)), s);
       }
+    });
+  });
+
+  group('chain-aware address identity', () {
+    test('EVM identity ignores checksum presentation case', () {
+      const checksum = '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed';
+      expect(
+        Addresses.equal(Chain.ethereum, checksum, checksum.toLowerCase()),
+        isTrue,
+      );
+      expect(
+        Addresses.equal(Chain.bnb, checksum.toUpperCase(), checksum),
+        isTrue,
+      );
+    });
+
+    test('TRON and Solana Base58 identity remains case-sensitive', () {
+      const tron = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+      const solana = 'So11111111111111111111111111111111111111112';
+      expect(Addresses.equal(Chain.tron, tron, tron), isTrue);
+      expect(Addresses.equal(Chain.tron, tron, tron.toLowerCase()), isFalse);
+      expect(Addresses.equal(Chain.solana, solana, solana), isTrue);
+      expect(
+        Addresses.equal(Chain.solana, solana, solana.toLowerCase()),
+        isFalse,
+      );
     });
   });
 }

@@ -1,2 +1,4 @@
 "CFBundleDisplayName" = "KT冷钱包";
 "CFBundleName" = "KT冷钱包";
+"NSCameraUsageDescription" = "相机用于扫描在线钱包生成的签名请求二维码。";
+"NSFaceIDUsageDescription" = "Face ID 可代替应用 PIN 授权签名。";

@@ -33,8 +33,12 @@ void main() {
   Future<void> openSecurity(
     WidgetTester tester, {
     required bool appLock,
+    String? authMethod,
   }) async {
-    SharedPreferences.setMockInitialValues({'prefs.appLock': appLock});
+    SharedPreferences.setMockInitialValues({
+      'prefs.appLock': appLock,
+      'prefs.authMethod': ?authMethod,
+    });
     tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
     addTearDown(tester.platformDispatcher.clearLocalesTestValue);
     await tester.pumpWidget(KtWalletApp(initialLocation: '/security'));
@@ -156,8 +160,24 @@ void main() {
   });
 
   testWidgets(
+    'legacy lock with no PIN and unavailable biometrics cannot be disabled',
+    (tester) async {
+      await openSecurity(tester, appLock: true);
+
+      await tapAppLockSwitch(tester);
+
+      expect(find.text('生物识别不可用，请使用钱包 PIN'), findsOneWidget);
+      expect(await WalletPin.instance.isSet(), isFalse);
+      expect(await persistedAppLock(), isTrue);
+    },
+  );
+
+  testWidgets(
     'password authentication choice enrolls PIN with the custom keypad',
     (tester) async {
+      BiometricAuth.instance = const FakeBiometricAuth(
+        BiometricOutcome.success,
+      );
       await openSecurity(tester, appLock: true);
 
       await tester.tap(find.text('人脸 / 生物识别'));
@@ -173,6 +193,57 @@ void main() {
       expect(find.text('钱包密码'), findsOneWidget);
       expect(await persistedAuthMethod(), 'password');
       expect((await WalletPin.instance.verify('135790')).isOk, isTrue);
+
+      // A fresh controller/screen restores the selected method.
+      await tester.pumpWidget(KtWalletApp(initialLocation: '/security'));
+      await tester.pumpAndSettle();
+      expect(find.text('钱包密码'), findsOneWidget);
+      expect(find.text('人脸 / 生物识别'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'switching to biometrics verifies current PIN and fails closed when unavailable',
+    (tester) async {
+      await WalletPin.instance.setPin('135790');
+      await openSecurity(tester, appLock: true, authMethod: 'password');
+
+      await tester.tap(find.text('钱包密码'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('人脸 / 生物识别'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('请输入当前钱包密码'), findsOneWidget);
+      await tapPin(tester, '135790');
+
+      expect(find.text('生物识别不可用，请使用钱包 PIN'), findsOneWidget);
+      expect(await persistedAuthMethod(), 'password');
+      expect(find.text('钱包密码'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'changing wallet PIN requires the old PIN and replaces it only after confirmation',
+    (tester) async {
+      await WalletPin.instance.setPin('135790');
+      await openSecurity(tester, appLock: true, authMethod: 'password');
+
+      await tester.tap(find.text('修改钱包密码'));
+      await tester.pumpAndSettle();
+      expect(find.text('请输入当前钱包密码'), findsOneWidget);
+
+      await tapPin(tester, '000000');
+      expect(find.text('密码错误，请重试'), findsOneWidget);
+      await tapPin(tester, '135790');
+      expect(find.text('设置 6 位密码'), findsOneWidget);
+
+      await tapPin(tester, '246810');
+      expect(find.text('再次输入以确认'), findsOneWidget);
+      await tapPin(tester, '246810');
+
+      expect(find.text('钱包密码已修改'), findsOneWidget);
+      expect((await WalletPin.instance.verify('246810')).isOk, isTrue);
+      expect((await WalletPin.instance.verify('135790')).isOk, isFalse);
     },
   );
 }

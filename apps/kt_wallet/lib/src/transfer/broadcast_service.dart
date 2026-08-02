@@ -1,15 +1,15 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:chains/chains.dart' show Chain, sha256;
+import 'package:chains/chains.dart' show Chain;
 import 'package:chains/rpc.dart';
-import 'package:flutter/foundation.dart' show kReleaseMode;
 
 import '../market/balance_service.dart'
     show RpcEndpointResolver, defaultRpcEndpointFor;
 import '../market/gateway_client.dart';
+import '../observability/experience_metrics.dart';
 import '../rpc/http_transport.dart';
-import 'airgap_codec.dart' show BroadcastSignatureMarkers, hexEncode;
+import 'airgap_codec.dart' show hexEncode;
 import 'chain_params_service.dart' show rpcCoinForChain;
 
 /// How a broadcast attempt ended.
@@ -17,13 +17,13 @@ enum BroadcastStatus {
   /// Accepted by a real node; [BroadcastOutcome.txHash] is the node's answer.
   ok,
 
-  /// Demo-signature short-circuit: nothing touched the network, the flow
-  /// proceeds on the simulated-success path exactly as before.
-  simulated,
-
-  /// A node (or the transport) rejected the transaction;
-  /// [BroadcastOutcome.message] carries the reason for the failed UI.
+  /// A real node returned a syntactically valid response that explicitly
+  /// rejected the transaction. It is safe to show a failed state.
   error,
+
+  /// The request started, but no authoritative node answer reached the app.
+  /// The transaction may already be on-chain and MUST NOT be submitted again.
+  unknown,
 
   /// The signed payload cannot be submitted with the clients we have — see
   /// the TRON note on [BroadcastService.broadcast].
@@ -31,32 +31,37 @@ enum BroadcastStatus {
 }
 
 /// Result of [BroadcastService.broadcast]. [txHash] is non-null exactly for
-/// [BroadcastStatus.ok] and [BroadcastStatus.simulated].
+/// [BroadcastStatus.ok].
 class BroadcastOutcome {
-  const BroadcastOutcome._(this.status, {this.txHash, this.message});
+  const BroadcastOutcome._(
+    this.status, {
+    this.txHash,
+    this.message,
+    this.rejectionKind,
+  });
   const BroadcastOutcome.ok(String txHash)
     : this._(BroadcastStatus.ok, txHash: txHash);
-  const BroadcastOutcome.simulated(String txHash)
-    : this._(BroadcastStatus.simulated, txHash: txHash);
-  const BroadcastOutcome.error(String message)
-    : this._(BroadcastStatus.error, message: message);
+  BroadcastOutcome.error(RpcRejectionKind rejectionKind)
+    : this._(
+        BroadcastStatus.error,
+        message: publicRpcRejectionMessage(rejectionKind),
+        rejectionKind: rejectionKind,
+      );
+  const BroadcastOutcome.unknown(String message)
+    : this._(BroadcastStatus.unknown, message: message);
   const BroadcastOutcome.unsupported(String message)
     : this._(BroadcastStatus.unsupported, message: message);
 
   final BroadcastStatus status;
   final String? txHash;
   final String? message;
+  final RpcRejectionKind? rejectionKind;
 }
 
 /// Pushes a signed transaction to the chain's node via the tested
 /// `chains/rpc` clients over injectable transports (production defaults to
 /// the http-backed ones, which own the 10s timeouts). Endpoints resolve
 /// through the same prefs-aware resolver as the market services.
-///
-/// GATE: demo signatures — the `SIGNED-V1:` bytes produced by
-/// `buildDemoSignResult` — are NEVER sent to a real node. The service detects
-/// the prefix and short-circuits to the current simulated-success path; real
-/// signatures arrive with the wallet-core signing integration.
 ///
 /// Broadcast is never auto-retried (INV-15); one call posts at most once.
 class BroadcastService {
@@ -79,35 +84,26 @@ class BroadcastService {
   /// Optional gateway (null in direct mode), resolved on every broadcast.
   final GatewayResolver _gateway;
 
-  /// The demo signature marker (see `buildDemoSignResult`).
-  /// True when [signedTx] is a simulated-signer payload, not a real signature.
-  static bool isDemoSignature(Uint8List signedTx) =>
-      BroadcastSignatureMarkers.isDemo(signedTx);
-
   /// Broadcasts [signedTx] on [chain] and returns the node's transaction
-  /// hash. Errors are returned, never thrown — the caller maps them onto the
-  /// flow's broadcastError → failed transition.
+  /// hash. Outcomes are returned, never thrown. A node rejection is [error],
+  /// while response loss, timeout and malformed transport responses are
+  /// [unknown] because the signed bytes may already have reached the chain.
   ///
-  /// GATEWAY SEMANTICS: the demo-signature gate stays FIRST — a `SIGNED-V1:`
-  /// payload never touches the gateway or a node, regardless of config. For
-  /// real signatures with a gateway configured, `kt_broadcast` is tried
-  /// first; a -32000 upstream error means a real node already saw and
-  /// REJECTED the transaction, so it surfaces as the failed outcome without
-  /// a direct re-post (INV-15: one broadcast call posts at most once to a
-  /// node that answers). Any other gateway failure (transport, rate limit,
-  /// unsupported, protocol error — the tx never reached a node) falls back
-  /// to today's direct path.
-  Future<BroadcastOutcome> broadcast(Chain chain, Uint8List signedTx) async {
-    if (isDemoSignature(signedTx)) {
-      if (kReleaseMode) {
-        return const BroadcastOutcome.unsupported(
-          'Simulated signatures are disabled in release builds',
-        );
-      }
-      // Simulated success, no network: the demo hash matches what
-      // buildDemoSignResult put in the SignResult (sha256 of the bytes).
-      return BroadcastOutcome.simulated(hexEncode(sha256(signedTx)));
-    }
+  /// GATEWAY SEMANTICS: with a gateway configured, `kt_broadcast` is tried
+  /// first. A -32000 upstream error means a real node explicitly REJECTED the
+  /// transaction; -32003 explicitly means the gateway attempted submission
+  /// but lost the authoritative answer. Unsupported-network preflight and
+  /// gateway rate limiting are known to happen before forwarding, so only
+  /// those may use the direct path. Any other gateway failure is
+  /// outcome-unknown and is never re-posted.
+  Future<BroadcastOutcome> broadcast(Chain chain, Uint8List signedTx) =>
+      ExperienceMetrics.instance.measure(
+        ExperienceMetricNames.transactionBroadcast,
+        () => _broadcast(chain, signedTx),
+        isSuccess: (outcome) => outcome.status == BroadcastStatus.ok,
+      );
+
+  Future<BroadcastOutcome> _broadcast(Chain chain, Uint8List signedTx) async {
     final gateway = _gateway();
     if (gateway != null) {
       final payload = _gatewayPayload(chain, signedTx);
@@ -128,12 +124,27 @@ class BroadcastService {
           );
         } on GatewayException catch (e) {
           if (e.isUpstreamError) {
-            return BroadcastOutcome.error(e.upstreamMessage ?? e.message);
+            return BroadcastOutcome.error(
+              publicRpcRejectionKind(e.upstreamMessage ?? e.message),
+            );
           }
-          // Gateway couldn't forward (unsupported/rate-limited/protocol):
-          // fall through to the direct path.
-        } catch (_) {
-          // Transport failure/timeout before a node answered: direct path.
+          if (e.isSubmissionUnknown) {
+            return const BroadcastOutcome.unknown(
+              'Gateway response unavailable',
+            );
+          }
+          if (e.isUnsupported || e.isRateLimited) {
+            // Both contract errors are emitted before any upstream write.
+            // Falling through is therefore still a single node submission.
+          } else {
+            return const BroadcastOutcome.unknown(
+              'Gateway response unavailable',
+            );
+          }
+        } on GatewayNetworkUnsupported {
+          // Local/health-manifest preflight: no request was forwarded.
+        } on Object {
+          return const BroadcastOutcome.unknown('Gateway response unavailable');
         }
       }
     }
@@ -185,11 +196,15 @@ class BroadcastService {
           );
           return BroadcastOutcome.ok(await rpc.broadcast(decoded));
       }
-    } on RpcException catch (e) {
-      return BroadcastOutcome.error(e.message);
-    } catch (e) {
-      // Timeouts, transport failures, malformed responses.
-      return BroadcastOutcome.error('$e');
+    } on RpcRejectedException catch (e) {
+      return BroadcastOutcome.error(e.kind);
+    } on RpcException {
+      return const BroadcastOutcome.unknown('RPC response unavailable');
+    } on Object {
+      // Timeouts, connection loss and malformed responses are not proof that
+      // a signed transaction was rejected. Preserve it for hash polling, and
+      // never surface exception text that may contain a keyed custom RPC URL.
+      return const BroadcastOutcome.unknown('RPC response unavailable');
     }
   }
 

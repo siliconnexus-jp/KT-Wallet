@@ -1,8 +1,5 @@
-import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter/widgets.dart';
 
-import '../wallets/wallet_manager.dart';
-import '../wallets/wallet_model.dart';
 import 'wallet_controller.dart';
 
 /// Provides the app-wide [WalletController] to the widget tree and rebuilds
@@ -14,33 +11,19 @@ class WalletScope extends InheritedNotifier<WalletController> {
     required super.child,
   }) : super(notifier: controller);
 
-  /// The live controller, or a shared demo controller when a screen is rendered
-  /// standalone (the gallery index and golden tests). Real navigation always
-  /// runs under a [WalletScope].
+  /// The live controller. Tests and galleries must inject their own explicit
+  /// fixture scope; production and standalone widgets both fail closed.
   static WalletController of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<WalletScope>();
-    return scope?.notifier ?? _fallback;
+    final controller = scope?.notifier;
+    if (controller != null) return controller;
+    throw FlutterError(
+      'WalletScope.of() called outside the production WalletScope.',
+    );
   }
 
-  // Fallback id/addresses match the design-demo literals so standalone screens
-  // (wallet detail's Wallet ID row, the receive screen's TRON address) render
-  // exactly like the Pencil designs and the recorded goldens.
-  static final WalletController _fallback = WalletController(
-    WalletManager(
-      initial: [
-        HotWallet(
-          id: 'WLT-91A4C7',
-          name: '日常钱包',
-          avatarColor: 0xFFF59E0B,
-          addresses: const ChainAddresses(
-            eth: '0xa71c8B29b3d4b79E19bE1',
-            polygon: '0xa71c8B29b3d4b79E19bE1',
-            tron: 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
-            solana: 'ayKpXwMWd4qmDqVr2W',
-          ),
-          backedUp: false,
-        ),
-      ],
-    ),
-  );
+  /// Returns null for intentionally standalone renders. Screens may use this
+  /// to show an unavailable state, but never to acquire fixture wallet data.
+  static WalletController? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<WalletScope>()?.notifier;
 }

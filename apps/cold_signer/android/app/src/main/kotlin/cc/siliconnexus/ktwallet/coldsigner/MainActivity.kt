@@ -8,7 +8,6 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.graphics.Color
 import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.os.Build
 import android.provider.Settings
@@ -19,28 +18,53 @@ import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.ktwallet.core_crypto.CoreCryptoAuthLifecycleHost
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 // FlutterFragmentActivity (not FlutterActivity): local_auth's BiometricPrompt
 // requires a FragmentActivity host.
-class MainActivity : FlutterFragmentActivity() {
+class MainActivity : FlutterFragmentActivity(), CoreCryptoAuthLifecycleHost {
     private var privacyCover: View? = null
     private var securityChannel: MethodChannel? = null
     private var screenCaptureCallback: Activity.ScreenCaptureCallback? = null
+    private lateinit var nativeIncidentStore: NativeIncidentStore
+    private lateinit var nativeAnrWatchdog: NativeAnrWatchdog
+    private val systemAuthPrivacyGuard = SystemAuthPrivacyGuard()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        nativeIncidentStore = NativeIncidentStore(applicationContext)
+        NativeFatalObserver(nativeIncidentStore).install()
+        nativeAnrWatchdog = NativeAnrWatchdog(nativeIncidentStore)
         // Screenshots are intentionally allowed. Android 14+ reports a
         // successful capture through ScreenCaptureCallback so Flutter can
-        // warn the user and conceal mnemonic words immediately afterwards.
+        // warn the user. Mnemonic routes independently enable FLAG_SECURE
+        // before rendering, so their pixels never enter the saved screenshot.
         // Recents screenshots stay enabled so Android captures the branded
         // cover installed by onUserLeaveHint instead of reusing an old frame.
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "kt/native_observability"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "pendingIncidents" -> result.success(nativeIncidentStore.pendingPayload())
+                "ackIncidents" -> {
+                    val throughId = call.argument<Number>("throughId")?.toLong()
+                    if (throughId == null || !nativeIncidentStore.acknowledge(throughId)) {
+                        result.error("INVALID", "Invalid acknowledgement", null)
+                    } else {
+                        result.success(null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kt/secure_screen")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -60,6 +84,22 @@ class MainActivity : FlutterFragmentActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             "kt/screen_security"
         )
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "kt/system_auth_visibility"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "started" -> {
+                    systemAuthPrivacyGuard.started()
+                    result.success(null)
+                }
+                "finished" -> {
+                    systemAuthPrivacyGuard.finished()
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "kt/device_security"
@@ -100,13 +140,16 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun onPause() {
+        nativeAnrWatchdog.setForeground(false)
         showPrivacyCover()
         super.onPause()
     }
 
     override fun onUserLeaveHint() {
-        // This callback represents a user-driven Home/app switch. System
-        // overlays and a same-Activity intent do not invoke it.
+        if (systemAuthPrivacyGuard.suppressesPrivacyActivity()) {
+            super.onUserLeaveHint()
+            return
+        }
         showPrivacyCover()
         startActivity(Intent(this, PrivacyActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
@@ -117,7 +160,21 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        nativeAnrWatchdog.setForeground(true)
         hidePrivacyCover()
+    }
+
+    override fun onDestroy() {
+        nativeAnrWatchdog.stop()
+        super.onDestroy()
+    }
+
+    override fun onCoreCryptoAuthStarted() {
+        systemAuthPrivacyGuard.started()
+    }
+
+    override fun onCoreCryptoAuthFinished() {
+        systemAuthPrivacyGuard.finished()
     }
 
     private fun showPrivacyCover() {
@@ -171,9 +228,6 @@ class MainActivity : FlutterFragmentActivity() {
             getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val network = connectivity.activeNetwork
         val capabilities = network?.let(connectivity::getNetworkCapabilities)
-        val connected = capabilities?.hasCapability(
-            NetworkCapabilities.NET_CAPABILITY_INTERNET
-        ) == true
 
         val keyguard = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
         val airplaneEnabled = Settings.Global.getInt(
@@ -201,7 +255,14 @@ class MainActivity : FlutterFragmentActivity() {
         }
 
         return mapOf(
-            "network" to if (connected) "unsafe" else "safe",
+            // An offline signer treats ANY active network as connected. A
+            // local-only Wi-Fi/VPN/captive path is not green merely because it
+            // lacks NET_CAPABILITY_INTERNET. If Android cannot resolve the
+            // capabilities for an active handle, the honest answer is unknown.
+            "network" to DeviceSecurityClassifier.network(
+                activeNetworkPresent = network != null,
+                capabilitiesAvailable = capabilities != null
+            ),
             "airplane" to if (airplaneEnabled) "safe" else "unsafe",
             "bluetooth" to bluetooth,
             "passcode" to if (keyguard.isDeviceSecure) "safe" else "unsafe",
@@ -209,7 +270,7 @@ class MainActivity : FlutterFragmentActivity() {
             // Android has no reliable recording-state probe here. A
             // post-screenshot callback is not evidence that recording is off.
             "screenCapture" to "unknown",
-            "integrity" to if (hasRootEvidence()) "unsafe" else "unknown"
+            "integrity" to DeviceSecurityClassifier.integrity(hasRootEvidence())
         )
     }
 

@@ -5,15 +5,19 @@
 Pod::Spec.new do |s|
   s.name             = 'core_crypto'
   s.version          = '0.0.1'
-  s.summary          = 'A new Flutter plugin project.'
+  s.summary          = 'Native key custody and Wallet Core signing for KT Wallet.'
   s.description      = <<-DESC
-A new Flutter plugin project.
+Device-bound wallet storage, public derivation, authenticated transaction
+signing, and encrypted backup support for the KT Wallet Flutter applications.
                        DESC
-  s.homepage         = 'http://example.com'
+  s.homepage         = 'https://github.com/siliconnexus-jp/KT-Wallet'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Your Company' => 'email@example.com' }
+  s.author           = { 'SiliconNexus' => 'https://github.com/siliconnexus-jp' }
   s.source           = { :path => '.' }
-  s.source_files = 'core_crypto/Sources/core_crypto/**/*'
+  # Keep the privacy manifest out of Compile Sources. It is packaged as a
+  # resource bundle below; a broad `/**/*` glob makes Xcode emit "no rule to
+  # process PrivacyInfo.xcprivacy" and can silently omit the SDK declaration.
+  s.source_files = 'core_crypto/Sources/core_crypto/**/*.swift'
   s.dependency 'Flutter'
   # Trust Wallet Core: audited C++ crypto (mnemonic, derivation, signing).
   s.dependency 'TrustWalletCore', '4.7.0'
@@ -23,9 +27,10 @@ A new Flutter plugin project.
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }
   s.swift_version = '5.0'
 
-  # If your plugin requires a privacy manifest, for example if it uses any
-  # required reason APIs, update the PrivacyInfo.xcprivacy file to describe your
-  # plugin's privacy impact, and then uncomment this line. For more information,
-  # see https://developer.apple.com/documentation/bundleresources/privacy_manifest_files
-  # s.resource_bundles = {'core_crypto_privacy' => ['core_crypto/Sources/core_crypto/PrivacyInfo.xcprivacy']}
+  # AuthGate persists non-sensitive retry/lockout counters in app-scoped
+  # UserDefaults, so this SDK declares the CA92.1 required-reason category in
+  # its own bundle instead of relying on the host application's declaration.
+  s.resource_bundles = {
+    'core_crypto_privacy' => ['core_crypto/Sources/core_crypto/PrivacyInfo.xcprivacy']
+  }
 end

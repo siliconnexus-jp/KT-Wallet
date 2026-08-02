@@ -53,6 +53,43 @@ func TestLimiterKeysAreIsolated(t *testing.T) {
 	}
 }
 
+func TestLimiterBoundsHighCardinalityClients(t *testing.T) {
+	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+	l := newLimiter(clk, 1, 1, 4)
+	for _, key := range []string{"a", "b", "c", "d"} {
+		if !l.Allow(key) {
+			t.Fatalf("first request for %q should pass", key)
+		}
+	}
+	if len(l.buckets) != 4 {
+		t.Fatalf("bucket table grew to %d, want hard cap 4", len(l.buckets))
+	}
+	if l.Allow("e") {
+		t.Fatal("new high-cardinality clients must share the exhausted overflow bucket")
+	}
+	if len(l.buckets) != 4 {
+		t.Fatalf("overflow traffic grew bucket table to %d", len(l.buckets))
+	}
+}
+
+func TestLimiterReclaimsFullyRefilledBucketsBeforeOverflow(t *testing.T) {
+	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+	l := newLimiter(clk, 1, 1, 3)
+	if !l.Allow("a") || !l.Allow("b") {
+		t.Fatal("initial keys should pass")
+	}
+	clk.Advance(2 * time.Second)
+	if !l.Allow("c") {
+		t.Fatal("a new key should use reclaimed capacity")
+	}
+	if _, exists := l.buckets[overflowBucketKey]; exists {
+		t.Fatal("reclaimable idle buckets must not force overflow limiting")
+	}
+	if len(l.buckets) != 1 {
+		t.Fatalf("expected only the new live bucket, got %d", len(l.buckets))
+	}
+}
+
 func TestIntervalSpacesCalls(t *testing.T) {
 	iv := NewInterval(120 * time.Millisecond)
 	ctx := context.Background()

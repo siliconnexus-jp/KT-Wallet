@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../security/secure_vault.dart' show isFlutterTestEnv;
 
 /// Injectable probe deciding whether a live [MobileScanner] session should be
@@ -149,23 +150,32 @@ class _ScanViewfinderState extends State<ScanViewfinder> {
         : null,
   );
 
-  Widget _fallbackContent() => ColoredBox(
+  Widget _fallbackContent(BuildContext context) => ColoredBox(
     color: SignerColors.surface,
     child: Center(
       child: isFlutterTestEnv
-          ? _scanFrame(withIcon: true)
-          : const Column(
+          ? Padding(
+              padding: const EdgeInsets.all(16),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: _scanFrame(withIcon: true),
+              ),
+            )
+          : Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
+                const Icon(
                   Icons.no_photography_outlined,
                   size: 52,
                   color: SignerColors.border,
                 ),
-                SizedBox(height: 12),
+                const SizedBox(height: 12),
                 Text(
-                  'Camera unavailable',
-                  style: TextStyle(fontSize: 14, color: SignerColors.text2),
+                  AppLocalizations.of(context).cameraUnavailable,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: SignerColors.text2,
+                  ),
                 ),
               ],
             ),
@@ -189,13 +199,26 @@ class _ScanViewfinderState extends State<ScanViewfinder> {
   Widget build(BuildContext context) {
     final camera = _camera;
     if (!_attempting || camera == null) {
-      return GestureDetector(
-        onTap: isFlutterTestEnv ? widget.onSimulatedTap : null,
-        child: _card(
-          clip: false,
-          child: isFlutterTestEnv
-              ? Center(child: _scanFrame(withIcon: true))
-              : _fallbackContent(),
+      final tappable = isFlutterTestEnv && widget.onSimulatedTap != null;
+      return Semantics(
+        button: tappable,
+        label: tappable ? AppLocalizations.of(context).scanPendingTx : null,
+        child: GestureDetector(
+          onTap: tappable ? widget.onSimulatedTap : null,
+          child: _card(
+            clip: false,
+            child: isFlutterTestEnv
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: _scanFrame(withIcon: true),
+                      ),
+                    ),
+                  )
+                : _fallbackContent(context),
+          ),
         ),
       );
     }
@@ -217,10 +240,19 @@ class _ScanViewfinderState extends State<ScanViewfinder> {
                   onDetect: _onDetect,
                   // Both builders render the simulated viewfinder so a camera
                   // that never comes up (or dies) degrades to the demo look.
-                  placeholderBuilder: (_) => _fallbackContent(),
-                  errorBuilder: (_, _) => _fallbackContent(),
+                  placeholderBuilder: (_) => _fallbackContent(context),
+                  errorBuilder: (_, _) => _fallbackContent(context),
                 ),
-                if (live) Center(child: _scanFrame(withIcon: false)),
+                if (live)
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: _scanFrame(withIcon: false),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

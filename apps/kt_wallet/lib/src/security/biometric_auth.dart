@@ -1,4 +1,5 @@
-import 'package:flutter/services.dart' show MissingPluginException;
+import 'package:flutter/services.dart'
+    show MethodChannel, MissingPluginException;
 import 'package:local_auth/local_auth.dart';
 
 import '../state/flutter_test_env.dart';
@@ -86,6 +87,8 @@ abstract class BiometricAuth {
 class LocalAuthBiometricAuth extends BiometricAuth {
   const LocalAuthBiometricAuth();
 
+  static const _authVisibility = MethodChannel('kt/system_auth_visibility');
+
   @override
   Future<bool> canAuthenticate() async {
     // Under `flutter test` the plugin channel is dead — its futures never
@@ -105,12 +108,26 @@ class LocalAuthBiometricAuth extends BiometricAuth {
     final auth = LocalAuthentication();
     try {
       if (!await auth.isDeviceSupported()) return BiometricOutcome.unavailable;
+      await _notifyAuthVisibility('started');
       // `false` is the one non-throwing negative: the user failed the
       // challenge with no side effects. Every other outcome throws.
-      final ok = await auth.authenticate(localizedReason: reason);
-      return ok ? BiometricOutcome.success : BiometricOutcome.failure;
+      try {
+        final ok = await auth.authenticate(localizedReason: reason);
+        return ok ? BiometricOutcome.success : BiometricOutcome.failure;
+      } finally {
+        await _notifyAuthVisibility('finished');
+      }
     } catch (error) {
       return biometricOutcomeForError(error);
+    }
+  }
+
+  Future<void> _notifyAuthVisibility(String method) async {
+    try {
+      await _authVisibility.invokeMethod<void>(method);
+    } catch (_) {
+      // Privacy coordination must never turn an auth provider error into a
+      // successful verdict or prevent the provider from being consulted.
     }
   }
 }

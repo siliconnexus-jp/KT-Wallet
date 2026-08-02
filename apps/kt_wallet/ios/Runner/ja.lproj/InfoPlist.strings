@@ -1,2 +1,5 @@
 "CFBundleDisplayName" = "KT Wallet";
 "CFBundleName" = "KT Wallet";
+"NSCameraUsageDescription" = "カメラは、オフライン署名端末のQRコード（アカウントのエクスポートと署名済みトランザクション）および受取アドレスのQRコードをスキャンするために使用します。";
+"NSFaceIDUsageDescription" = "Face IDは、送金の確認と、Appロックが有効な場合のKT Walletのロック解除に使用します。";
+"NSPhotoLibraryAddUsageDescription" = "受取カードを保存すると、QR画像が写真ライブラリに追加されます。KT Walletが既存の写真を読み取ることはありません。";

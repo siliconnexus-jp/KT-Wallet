@@ -1,3 +1,6 @@
+import 'support/e2e_credential_batch.dart';
+import 'support/e2e_wallet_cleanup.dart';
+
 import 'dart:async';
 
 import 'package:core_crypto/core_crypto.dart';
@@ -13,6 +16,7 @@ import 'package:kt_wallet/src/wallets/wallet_model.dart';
 const _mnemonic = String.fromEnvironment('SEPOLIA_E2E_MNEMONIC');
 
 void main() {
+  requireFreshE2eCredentialBatchIfConfigured();
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('capture live balance and populated ETH send form', (
@@ -25,6 +29,7 @@ void main() {
       mnemonic: _mnemonic,
       requireAuth: false,
     );
+    registerE2eWalletCleanup(crypto, walletId);
     final addresses = await crypto.deriveAddresses(walletId);
     final wallets = WalletController(
       WalletManager(

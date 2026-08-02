@@ -36,18 +36,28 @@ class _FakeBalances extends BalanceService {
 }
 
 class _FakePrices extends PriceService {
-  _FakePrices(this.prices, {this.tokenPrices = const {'USDT': 0.95}});
+  _FakePrices(
+    this.prices, {
+    this.tokenPrices = const {'USDT': 0.95},
+    this.tokenChanges = const {},
+  });
   final Map<Coin, double>? prices;
   final Map<String, double> tokenPrices;
+  final Map<String, double> tokenChanges;
   @override
   Future<Map<Coin, double>?> fetchUsdPrices() async => prices;
   @override
   double? tokenPriceUsd(String symbol) => tokenPrices[symbol];
+  @override
+  double? tokenChange24hPercent(String symbol) => tokenChanges[symbol];
 }
 
 class _FakeTokens extends TokenBalanceService {
-  _FakeTokens(this.results);
+  _FakeTokens(this.results, {this.registry = builtinTokens});
   final Map<String, BalanceResult> results;
+  final List<TokenInfo> registry;
+  @override
+  List<TokenInfo> get tokens => registry;
   @override
   Future<Map<String, BalanceResult>> fetchAll(ChainAddresses addresses) async =>
       results;
@@ -348,6 +358,61 @@ void main() {
     expect(find.text(r'≈ $100.00'), findsNothing);
     expect(find.text(r'$1.00'), findsNothing);
   });
+
+  testWidgets(
+    'testnet token detail never reuses mainnet fiat price or 24h movement',
+    (tester) async {
+      final wallets = _wallets();
+      _walletController = wallets;
+      final market = MarketController(
+        wallets: wallets,
+        balances: _FakeBalances({}),
+        prices: _FakePrices(
+          {Coin.bnb: 600.0},
+          tokenPrices: const {'BUSD': 0.80},
+          tokenChanges: const {'BUSD': 4.2},
+        ),
+        tokens: _FakeTokens(
+          {
+            busdBnbTestnetToken.id: BalanceResult.ok(
+              Amount(
+                raw: BigInt.parse('10000000000000000000'),
+                decimals: 18,
+                symbol: 'BUSD',
+              ),
+            ),
+          },
+          registry: const [busdBnbTestnetToken],
+        ),
+        isTestnet: (coin) => coin == Coin.bnb,
+      );
+      addTearDown(market.dispose);
+      await market.refresh();
+      final networks = NetworkController(
+        initialEnvironment: NetworkEnvironment.testnet,
+      );
+
+      await tester.pumpWidget(
+        _app(
+          market,
+          NetworkScope(
+            controller: networks,
+            child: TokenDetailScreen(
+              asset: AssetRef.token(busdBnbTestnetToken),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('10 BUSD'), findsOneWidget);
+      expect(find.text('BNB Smart Chain Testnet'), findsWidgets);
+      expect(find.text(r'$0.80'), findsNothing);
+      expect(find.text(r'$8.00'), findsNothing);
+      expect(find.text('+4.20%'), findsNothing);
+      expect(find.text('--'), findsWidgets);
+    },
+  );
 
   group('explorer links', () {
     const evm = Network(

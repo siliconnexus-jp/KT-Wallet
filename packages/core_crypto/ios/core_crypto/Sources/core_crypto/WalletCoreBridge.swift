@@ -7,8 +7,10 @@ import WalletCore
 enum WalletCoreBridge {
   enum BridgeError: Error { case invalidMnemonic, invalidInput, signFailed }
 
-  static func generateMnemonic(strength: Int32) -> String {
-    let wallet = HDWallet(strength: strength, passphrase: "")!
+  static func generateMnemonic(strength: Int32) throws -> String {
+    guard strength == 128 || strength == 192 || strength == 256,
+      let wallet = HDWallet(strength: strength, passphrase: "")
+    else { throw BridgeError.invalidInput }
     defer { /* HDWallet zeroizes on dealloc */ }
     return wallet.mnemonic
   }

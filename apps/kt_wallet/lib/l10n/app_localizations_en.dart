@@ -27,6 +27,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get actionDelete => 'Delete';
 
   @override
+  String get pinKeyDelete => 'Delete last digit';
+
+  @override
   String get actionNext => 'Next';
 
   @override
@@ -121,6 +124,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get actionMore => 'More';
+
+  @override
+  String get actionShare => 'Share';
 
   @override
   String get actionScanSign => 'Scan signature';
@@ -339,6 +345,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createWatchWallet => 'Create watch wallet';
 
   @override
+  String get invalidOfflineWalletExport => 'Invalid offline wallet export';
+
+  @override
+  String get offlineWalletAlreadyPaired =>
+      'This offline wallet is already paired';
+
+  @override
   String walletIdProtocol(String id, int version) {
     return 'Wallet ID: $id · protocol v$version';
   }
@@ -360,6 +373,14 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get walletDeleteFailed =>
+      'The wallet could not be deleted safely. Nothing was removed; try again.';
+
+  @override
+  String get walletUpdateFailed =>
+      'Changes could not be saved. Nothing was changed; try again.';
+
+  @override
   String get sortAction => 'Reorder';
 
   @override
@@ -378,6 +399,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get walletTypeLabel => 'Wallet type';
+
+  @override
+  String get walletIdLabel => 'Wallet ID';
+
+  @override
+  String get coldSignerWalletIdLabel => 'KT Cold Signer wallet ID';
 
   @override
   String get standardWallet => 'Standard wallet';
@@ -434,6 +461,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addressInvalid => 'Invalid address';
 
   @override
+  String recipientLookalikeWarning(String label) {
+    return 'This address closely resembles $label, but is not identical. It may be a clipboard-poisoning address.';
+  }
+
+  @override
+  String get recipientLookalikeReview => 'I verified the full address';
+
+  @override
   String get amountLabel => 'Amount';
 
   @override
@@ -452,6 +487,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get networkFee => 'Network fee';
+
+  @override
+  String get expectedAssetChanges => 'Expected asset changes';
+
+  @override
+  String outgoingAsset(String symbol) {
+    return '$symbol sent';
+  }
+
+  @override
+  String get maximumNetworkFee => 'Maximum network fee';
+
+  @override
+  String upToNegativeAmount(String amount) {
+    return 'Up to -$amount';
+  }
+
+  @override
+  String get solanaRentReserve => 'Recoverable account reserve';
 
   @override
   String get feeCustom => 'Custom';
@@ -559,6 +613,74 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get transactionNotSubmitted =>
+      'The transaction was not submitted. Try again.';
+
+  @override
+  String get broadcastUnsupported =>
+      'This signed transaction can\'t be broadcast on the selected network.';
+
+  @override
+  String get rpcRejectInsufficientFunds =>
+      'Insufficient balance for the amount and maximum network fee.';
+
+  @override
+  String get rpcRejectNonceTooLow =>
+      'The transaction nonce is too low. Refresh and try again.';
+
+  @override
+  String get rpcRejectNonceTooHigh =>
+      'The transaction nonce is too high. Refresh and try again.';
+
+  @override
+  String get rpcRejectReplacementFeeTooLow =>
+      'The replacement network fee is too low.';
+
+  @override
+  String get rpcRejectFeeTooLow => 'The network fee is too low.';
+
+  @override
+  String get rpcRejectGasLimitTooLow => 'The transaction gas limit is too low.';
+
+  @override
+  String get rpcRejectBlockGasLimit =>
+      'The transaction exceeds the network block gas limit.';
+
+  @override
+  String get rpcRejectFeeCapBelowBase =>
+      'The fee cap is below the current network base fee.';
+
+  @override
+  String get rpcRejectAlreadyKnown =>
+      'The network already knows this transaction. Check its status instead of sending again.';
+
+  @override
+  String get rpcRejectExecutionReverted =>
+      'The transaction was reverted during execution.';
+
+  @override
+  String get rpcRejectInvalidSender => 'The transaction sender is invalid.';
+
+  @override
+  String get rpcRejectExpiredReference =>
+      'The transaction\'s block reference has expired. Rebuild the transaction.';
+
+  @override
+  String get rpcRejectAccountInUse =>
+      'A required account is currently in use. Wait and try again.';
+
+  @override
+  String get rpcRejectSimulationFailed =>
+      'The network rejected the transaction simulation.';
+
+  @override
+  String get rpcRejectInvalidSignature =>
+      'The transaction signature is invalid.';
+
+  @override
+  String get rpcRejectGeneric => 'The network rejected the transaction.';
+
+  @override
   String get signatureVerified =>
       'Signature verified · signer matches the wallet address; contents untampered';
 
@@ -573,6 +695,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get txSubmitted => 'Transaction submitted';
+
+  @override
+  String get txSubmissionUnknown => 'Broadcast result unknown';
+
+  @override
+  String get txSubmissionUnknownMessage =>
+      'The signed transaction may have reached the network. Do not send it again. KT Wallet will keep checking its locally derived transaction hash.';
 
   @override
   String get txTimeLabel => 'Time';
@@ -594,6 +723,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get txStatusFailed => 'Failed';
+
+  @override
+  String get txStatusUnknown => 'Status unavailable';
 
   @override
   String get txStatusDropped => 'Dropped';
@@ -653,6 +785,57 @@ class AppLocalizationsEn extends AppLocalizations {
       'The network fee could not be estimated, so sending is disabled.';
 
   @override
+  String get tokenRiskChecking => 'Checking token identity…';
+
+  @override
+  String get tokenRiskCheckingBody =>
+      'KT Wallet is checking this exact network and contract against the verified catalog and independent threat intelligence before signing.';
+
+  @override
+  String get tokenRiskVerifiedTitle => 'Official token identity confirmed';
+
+  @override
+  String get tokenRiskVerifiedBody =>
+      'The network and contract address match the operator-verified token catalog. This verifies identity, not investment safety.';
+
+  @override
+  String get tokenRiskUnsafeTitle => 'Risky token contract detected';
+
+  @override
+  String get tokenRiskUnsafeBody =>
+      'A configured security source found explicit malicious evidence for this exact contract. Signing is blocked to protect your wallet.';
+
+  @override
+  String get tokenRiskUnknownTitle => 'Token risk is unknown';
+
+  @override
+  String get tokenRiskUnknownBody =>
+      'No configured source can confirm this contract\'s identity or safety. Check the full contract address with an official source before continuing.';
+
+  @override
+  String get tokenRiskUnavailableTitle => 'Unable to check token risk';
+
+  @override
+  String get tokenRiskUnavailableBody =>
+      'The risk service is unavailable. KT Wallet cannot confirm that this contract is safe; verify it independently before continuing.';
+
+  @override
+  String get tokenRiskBlockedHint =>
+      'Sending is disabled because this token contract is marked as risky.';
+
+  @override
+  String get signRequestBuildFailed =>
+      'The on-chain transaction parameters could not be verified. Signing is disabled.';
+
+  @override
+  String get signRequestSaveFailed =>
+      'The pending transaction could not be saved safely. No signing QR was created; go back and try again.';
+
+  @override
+  String get transactionSimulationFailed =>
+      'Transaction simulation failed and nothing was signed. Check the balance, amount, recipient, or token contract.';
+
+  @override
   String get txNonceLabel => 'Nonce';
 
   @override
@@ -668,6 +851,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get txReplacedByLabel => 'Replaced by transaction';
 
   @override
+  String get txReplacementPendingLabel => 'Competing replacement';
+
+  @override
   String get txNotFound => 'Local transaction record not found';
 
   @override
@@ -677,6 +863,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get txDetailTitle => 'Transaction details';
+
+  @override
+  String get txBroadcastTime => 'Broadcast time';
+
+  @override
+  String get txLastStatusCheck => 'Last status check';
+
+  @override
+  String get txNotCheckedYet => 'Not checked yet';
+
+  @override
+  String get txCopyHash => 'Copy transaction hash';
+
+  @override
+  String get txHashCopied => 'Transaction hash copied';
+
+  @override
+  String get txViewInExplorer => 'View in block explorer';
 
   @override
   String get confirmedPrefix => 'Confirmed';
@@ -1089,11 +1293,25 @@ class AppLocalizationsEn extends AppLocalizations {
       'Your on-device wallet data couldn\'t be read. Try again; if the problem persists, reinstall the app.';
 
   @override
+  String get walletPersistenceFailed =>
+      'The wallet couldn\'t be saved securely. Nothing was added. Please try again.';
+
+  @override
+  String get walletAlreadyExists => 'This wallet is already on this device.';
+
+  @override
   String get cryptoUnavailableTitle => 'Wallet engine unavailable';
 
   @override
   String get cryptoUnavailableDesc =>
       'This Android build does not include Trust Wallet Core. Install a wallet-core-enabled build; simulated keys are never used automatically.';
+
+  @override
+  String get secureStorageUnavailableTitle => 'Secure storage unavailable';
+
+  @override
+  String get secureStorageUnavailableDesc =>
+      'KT Wallet cannot safely read your PIN and lockout state. Your wallet remains locked. Restart the app or reinstall it from a trusted source.';
 
   @override
   String get actionRetry => 'Retry';
@@ -1155,6 +1373,19 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get setPinDesc =>
       'Unlocks the app when biometrics are unavailable. The PIN is stored only in this device\'s secure area.';
+
+  @override
+  String get changeWalletPin => 'Change wallet PIN';
+
+  @override
+  String get changeWalletPinDesc =>
+      'Verify your current identity before replacing the 6-digit PIN';
+
+  @override
+  String get enterCurrentPin => 'Enter your current wallet PIN';
+
+  @override
+  String get walletPinChanged => 'Wallet PIN changed';
 
   @override
   String get pinMismatch => 'The two entries don\'t match — set it again';
@@ -1219,9 +1450,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get rpcProbeFailed => 'RPC probe failed — check the URL';
 
   @override
+  String get endpointUrlInvalid =>
+      'Enter a valid HTTPS URL without embedded credentials. HTTP is allowed only for localhost.';
+
+  @override
   String chainIdMismatch(Object actual) {
     return 'Chain ID mismatch: node returned $actual';
   }
+
+  @override
+  String transferNetworkUnavailable(String network) {
+    return 'No active network is available for $network.';
+  }
+
+  @override
+  String get transferChainIdUnavailable =>
+      'The selected EVM network has no Chain ID.';
 
   @override
   String get deleteNetwork => 'Delete network';
@@ -1264,6 +1508,27 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get airdropRateLimited => 'Too many requests. Try again later.';
+
+  @override
+  String get airdropUnavailable => 'Test funds are temporarily unavailable';
+
+  @override
+  String get airdropInvalidRequest =>
+      'The faucet rejected this address or request';
+
+  @override
+  String get airdropInsufficientFunds =>
+      'The faucet does not have enough test funds';
+
+  @override
+  String get airdropRejected => 'The faucet rejected the request';
+
+  @override
+  String get airdropMalformedResponse =>
+      'The faucet returned an invalid response';
+
+  @override
   String get fiatHiddenTestnet => 'Testnet assets have no market price';
 
   @override
@@ -1274,7 +1539,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupEncryptedRowDesc =>
-      'Save an encrypted copy to iCloud Drive or Files';
+      'Save an encrypted copy with the system file picker';
 
   @override
   String get backupIntro =>
@@ -1287,14 +1552,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backupPasswordConfirm => 'Repeat the password';
 
   @override
-  String get backupPasswordTooShort => 'At least 8 characters';
+  String get backupPasswordTooShort => 'Use at least 14 characters';
+
+  @override
+  String get backupPasswordTooLong => 'Use no more than 128 characters';
+
+  @override
+  String get backupPasswordTooWeak =>
+      'Avoid repeated, sequential, or common passwords';
 
   @override
   String get backupPasswordMismatch => 'The two passwords do not match';
 
   @override
   String get backupPasswordWarning =>
-      'There is no way to recover this password. Lose it and the backup is unopenable — keep your written recovery phrase as well.';
+      'Use a unique long passphrase. It cannot be recovered; if you lose it, the backup cannot be opened. Keep your written recovery phrase as well.';
 
   @override
   String get backupCreate => 'Create backup';
@@ -1334,6 +1606,20 @@ class AppLocalizationsEn extends AppLocalizations {
       'This backup was written by a newer version of the app';
 
   @override
+  String get restoreFileTooLarge =>
+      'This file is too large to be a KT Wallet backup';
+
+  @override
+  String get restoreFileUnavailable => 'This device cannot open backup files';
+
+  @override
+  String get restoreFileReadFailed =>
+      'Could not read the selected file. Try again';
+
+  @override
+  String get restoreSelectedFileFallback => 'Backup file';
+
+  @override
   String get restoreRestored => 'Wallet restored';
 
   @override
@@ -1364,4 +1650,261 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aboutCopiedLink => 'Link copied';
+
+  @override
+  String get aboutTrustTitle => 'Trust & legal';
+
+  @override
+  String get aboutPrivacyPolicy => 'Privacy policy';
+
+  @override
+  String get aboutPrivacyPolicyDesc => 'What the apps process and send';
+
+  @override
+  String get aboutSecurityRisk => 'Security & risk notice';
+
+  @override
+  String get aboutSecurityRiskDesc =>
+      'Current guarantees and known limitations';
+
+  @override
+  String get aboutSecurityPolicy => 'Security policy';
+
+  @override
+  String get aboutSecurityPolicyDesc =>
+      'Scope, safe research, and response targets';
+
+  @override
+  String get aboutThirdPartyNotices => 'Open-source notices';
+
+  @override
+  String get aboutThirdPartyNoticesDesc => 'Licenses for bundled dependencies';
+
+  @override
+  String get aboutReportSecurity => 'Report a security issue';
+
+  @override
+  String get aboutReportSecurityDesc =>
+      'Read the private reporting process first';
+
+  @override
+  String get aboutNeverShareSecrets =>
+      'KT Wallet will never ask for your recovery phrase or private key.';
+
+  @override
+  String get diagnosticsTitle => 'Support diagnostics';
+
+  @override
+  String get diagnosticsSubtitle =>
+      'Export a privacy-safe JSON package for troubleshooting';
+
+  @override
+  String get diagnosticsConfirmTitle => 'Export diagnostics?';
+
+  @override
+  String get diagnosticsConfirmBody =>
+      'Review what is and is not included before sharing.';
+
+  @override
+  String get diagnosticsIncludesTitle => 'Included';
+
+  @override
+  String get diagnosticsIncludesBody =>
+      'App and build details, network modes, service state, and aggregate performance';
+
+  @override
+  String get diagnosticsExcludesTitle => 'Never included';
+
+  @override
+  String get diagnosticsExcludesBody =>
+      'Addresses, balances, amounts, transactions, keys, signatures, recovery phrases, or endpoint URLs';
+
+  @override
+  String get diagnosticsExportAction => 'Export and share';
+
+  @override
+  String get diagnosticsShareSubject => 'KT Wallet support diagnostics';
+
+  @override
+  String get diagnosticsShareText =>
+      'Redacted KT Wallet diagnostics. Review the file before sharing.';
+
+  @override
+  String get diagnosticsReady => 'Diagnostic package ready';
+
+  @override
+  String get diagnosticsFailed => 'Could not create the diagnostic package';
+
+  @override
+  String get diagnosticsUploadTitle => 'Send anonymous performance report';
+
+  @override
+  String get diagnosticsUploadSubtitle =>
+      'Review and send fixed aggregate metrics once; never uploads in the background';
+
+  @override
+  String get diagnosticsUploadConfirmTitle =>
+      'Send an anonymous performance report?';
+
+  @override
+  String get diagnosticsUploadConfirmBody =>
+      'This is a one-time upload you initiate. It does not upload in the background or retry automatically. The server retains only anonymous aggregates for 7 days.';
+
+  @override
+  String get diagnosticsUploadIncludesBody =>
+      'App version, platform, broad language, build mode, and counts, outcomes, P50/P95 for fixed performance metrics';
+
+  @override
+  String get diagnosticsUploadExcludesBody =>
+      'Wallet or device IDs, addresses, balances, amounts, transactions, tx hashes, timestamps, error text, stacks, keys, signatures, recovery phrases, or endpoint URLs';
+
+  @override
+  String get diagnosticsUploadAction => 'Agree and send';
+
+  @override
+  String get diagnosticsUploadSent => 'Anonymous performance report sent';
+
+  @override
+  String get diagnosticsUploadAlreadySent =>
+      'The same anonymous report was already sent';
+
+  @override
+  String get diagnosticsUploadNoSamples =>
+      'There are no performance samples to send yet';
+
+  @override
+  String get diagnosticsUploadFailed =>
+      'Could not send the anonymous report; it was not retried';
+
+  @override
+  String get diagnosticsUploadGatewayRequired =>
+      'Direct mode does not upload diagnostics; enable KT Gateway first';
+
+  @override
+  String get settingsApprovals => 'Token approvals';
+
+  @override
+  String get approvalsTitle => 'Token approvals';
+
+  @override
+  String get approvalsSubtitle =>
+      'Review contracts that can spend your ERC-20 tokens';
+
+  @override
+  String get approvalPrivacyTitle => 'External approval scan';
+
+  @override
+  String get approvalPrivacyBody =>
+      'To find outstanding approvals, KT Wallet sends this wallet\'s public address and selected mainnet to GoPlus through the configured Gateway. Keys, balances and transaction contents are not sent. You can turn this off at any time.';
+
+  @override
+  String get approvalEnableAndScan => 'Allow and scan';
+
+  @override
+  String get approvalDisableScan => 'Turn off external scan';
+
+  @override
+  String get approvalScanAgain => 'Scan again';
+
+  @override
+  String get approvalLoading => 'Checking outstanding approvals…';
+
+  @override
+  String get approvalEmptyTitle => 'No outstanding approvals found';
+
+  @override
+  String get approvalEmptyBody =>
+      'The provider completed this scan and returned no ERC-20 allowances for this wallet on the selected network.';
+
+  @override
+  String get approvalUnavailableTitle => 'Approval status unavailable';
+
+  @override
+  String get approvalUnavailableBody =>
+      'The provider did not complete the scan. Your approval list is unknown — this is not an empty result.';
+
+  @override
+  String get approvalUnsupportedTitle => 'This network is not covered';
+
+  @override
+  String get approvalUnsupportedBody =>
+      'Approval scanning currently supports Ethereum, Polygon, Base, Arbitrum and BNB Smart Chain mainnets only.';
+
+  @override
+  String get approvalUnlimited => 'Unlimited allowance';
+
+  @override
+  String approvalAmount(String amount) {
+    return 'Allowance: $amount';
+  }
+
+  @override
+  String get approvalSpender => 'Spender';
+
+  @override
+  String get approvalTokenContract => 'Token contract';
+
+  @override
+  String get approvalApprovedAt => 'Last changed';
+
+  @override
+  String get approvalRisky => 'Risk signal found';
+
+  @override
+  String get approvalIdentityUnknown => 'Safety not confirmed';
+
+  @override
+  String get approvalKnownSpender => 'Known provider tag';
+
+  @override
+  String get approvalReadOnlyNotice =>
+      'Hot wallets revoke locally with an exact zero-allowance transaction. Watch wallets use the paired KT Cold Signer QR round trip.';
+
+  @override
+  String get approvalPrivacyEnabled =>
+      'External scan is enabled for this device';
+
+  @override
+  String get approvalNoWallet => 'Select a wallet to review approvals';
+
+  @override
+  String get approvalRevoke => 'Revoke approval';
+
+  @override
+  String get approvalRevokeTitle => 'Revoke this token approval?';
+
+  @override
+  String get approvalRevokeBody =>
+      'KT Wallet will send approve(spender, 0) to the token contract. This changes the allowance only; it does not transfer tokens.';
+
+  @override
+  String get approvalRevokeConfirm => 'Authenticate and revoke';
+
+  @override
+  String get approvalRevokePreparing =>
+      'Simulating the exact revocation and estimating its maximum fee…';
+
+  @override
+  String approvalRevokeMaximumFee(String fee) {
+    return 'Maximum network fee: $fee';
+  }
+
+  @override
+  String get approvalRevokeSubmitted =>
+      'Revocation submitted. It remains pending until the chain confirms it.';
+
+  @override
+  String get approvalRevokePending => 'Revocation pending';
+
+  @override
+  String get approvalRevokeFailed =>
+      'The revocation was not submitted. Nothing is shown as revoked.';
+
+  @override
+  String get approvalRevokeAuthFailed =>
+      'Authentication was not completed. Nothing was signed.';
+
+  @override
+  String get approvalRevokeHotOnly =>
+      'No signing-capable wallet is available for this revocation.';
 }

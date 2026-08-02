@@ -5,6 +5,8 @@ import 'package:kt_wallet/src/screens/settings_screens.dart';
 import 'package:kt_wallet/src/state/app_prefs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/test_wallet_scope.dart';
+
 /// The security screen used to own a second [AppPrefsController] over the same
 /// SharedPreferences keys. Toggles persisted, so the value survived a restart
 /// and the screen looked correct — but the app-wide controller never heard
@@ -15,7 +17,7 @@ Widget _app(Widget home) => MaterialApp(
   locale: const Locale('zh'),
   localizationsDelegates: AppLocalizations.localizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,
-  home: home,
+  home: withTestWalletScope(home),
 );
 
 /// The 隐私模式 / App 锁 switches carry no text, so they are found by the
@@ -72,7 +74,7 @@ void main() {
     expect(find.text('5 分钟'), findsOneWidget);
   });
 
-  testWidgets('without a scope the screen still works on its own controller', (
+  testWidgets('an explicit wallet fixture keeps the standalone screen usable', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -81,8 +83,30 @@ void main() {
 
     expect(find.text('隐私模式'), findsOneWidget);
     await _tapSwitchIn(tester, '隐私模式');
-    // Nothing to assert against but the absence of a crash: the fallback
-    // controller keeps the design gallery and the goldens rendering.
+    // The wallet fixture is explicit; production has no standalone fallback.
     expect(find.text('隐私模式'), findsOneWidget);
   });
+
+  testWidgets(
+    'preference storage failure keeps security UI unchanged and is visible',
+    (tester) async {
+      final prefs = AppPrefsController(
+        preferencesProvider: () async => throw StateError('storage offline'),
+      );
+      await tester.pumpWidget(
+        _app(
+          AppPrefsScope(
+            controller: prefs,
+            child: const SecuritySettingsScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await _tapSwitchIn(tester, '隐私模式');
+
+      expect(prefs.privacyMode, isFalse);
+      expect(find.text('无法保存更改，当前内容未改变，请重试。'), findsOneWidget);
+    },
+  );
 }

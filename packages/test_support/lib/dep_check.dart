@@ -4,6 +4,285 @@
 /// entrypoint is `tool/check_deps.dart`.
 library;
 
+import 'dart:convert';
+
+final _cjkText = RegExp(r'[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]');
+final _asciiPunctuationBesideCjk = RegExp(
+  r'[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af][,:;]|'
+  r'[,:;](?:[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]|\{)',
+);
+
+/// Verifies an intentionally narrow set of Gradle dependency pins.
+///
+/// Each artifact must appear exactly once with the reviewed SHA-256 and
+/// [origin]. The origin marker must not appear on any additional artifact, so
+/// copying it onto an unreviewed dependency cannot silently broaden trust.
+List<String> findReviewedArtifactPinIssues(
+  String verificationMetadata,
+  Map<String, String> reviewedArtifacts, {
+  required String origin,
+}) {
+  final issues = <String>[];
+  for (final artifact in reviewedArtifacts.entries) {
+    final artifactTag = RegExp(
+      '<artifact name="${RegExp.escape(artifact.key)}">',
+    );
+    final exactBlock = RegExp(
+      '<artifact name="${RegExp.escape(artifact.key)}">\\s*'
+      '<sha256 value="${artifact.value}" origin="${RegExp.escape(origin)}"/>\\s*'
+      '</artifact>',
+    );
+    if (artifactTag.allMatches(verificationMetadata).length != 1 ||
+        exactBlock.allMatches(verificationMetadata).length != 1) {
+      issues.add('${artifact.key}: missing, duplicated, or hash mismatch');
+    }
+  }
+  if (RegExp(
+        'origin="${RegExp.escape(origin)}"',
+      ).allMatches(verificationMetadata).length !=
+      reviewedArtifacts.length) {
+    issues.add('reviewed trust set was broadened or truncated');
+  }
+  return issues;
+}
+
+Set<String> _icuPlaceholders(String value) => RegExp(
+  r'\{([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\})',
+).allMatches(value).map((match) => match.group(1)!).toSet();
+
+/// Validates that localized Flutter ARB catalogs expose the exact same
+/// user-visible keys and ICU placeholders as the English source catalog.
+///
+/// Metadata entries (`@key`) are intentionally ignored: Flutter permits
+/// translator catalogs to omit source-only descriptions, while the runtime
+/// contract is the user-visible key and placeholder set. English is also
+/// checked for accidental CJK fallback text because it is the platform and
+/// unsupported-locale fallback.
+List<String> findArbCatalogIssues(
+  Map<String, String> catalogs, {
+  String defaultLocale = 'en',
+  Map<String, Set<String>> sameAsDefaultAllowedKeys = const {},
+  Map<String, Set<String>> cjkAsciiPunctuationAllowedKeys = const {},
+}) {
+  final issues = <String>[];
+  final parsed = <String, Map<String, String>>{};
+
+  for (final entry in catalogs.entries) {
+    Object? decoded;
+    try {
+      decoded = jsonDecode(entry.value);
+    } on FormatException {
+      issues.add('${entry.key}: invalid JSON');
+      continue;
+    }
+    if (decoded is! Map<String, dynamic>) {
+      issues.add('${entry.key}: ARB root must be an object');
+      continue;
+    }
+    if (decoded['@@locale'] != entry.key) {
+      issues.add(
+        '${entry.key}: @@locale must equal ${entry.key}, got ${decoded['@@locale']}',
+      );
+    }
+    final messages = <String, String>{};
+    for (final message in decoded.entries) {
+      if (message.key.startsWith('@')) continue;
+      if (message.value is! String) {
+        issues.add('${entry.key}:${message.key}: value must be a string');
+        continue;
+      }
+      if ((message.value as String).trim().isEmpty) {
+        issues.add('${entry.key}:${message.key}: value is empty');
+      }
+      messages[message.key] = message.value as String;
+    }
+    parsed[entry.key] = messages;
+  }
+
+  final source = parsed[defaultLocale];
+  if (source == null) {
+    issues.add('missing default ARB catalog: $defaultLocale');
+    return issues;
+  }
+
+  for (final allowance in sameAsDefaultAllowedKeys.entries) {
+    if (allowance.key == defaultLocale || !parsed.containsKey(allowance.key)) {
+      issues.add(
+        '${allowance.key}: identical-value allowlist locale is invalid',
+      );
+      continue;
+    }
+    final unknown = allowance.value.difference(source.keys.toSet());
+    if (unknown.isNotEmpty) {
+      issues.add(
+        '${allowance.key}: identical-value allowlist has unknown keys '
+        '${unknown.toList()..sort()}',
+      );
+    }
+  }
+  for (final allowance in cjkAsciiPunctuationAllowedKeys.entries) {
+    if (allowance.key == defaultLocale || !parsed.containsKey(allowance.key)) {
+      issues.add(
+        '${allowance.key}: CJK punctuation allowlist locale is invalid',
+      );
+      continue;
+    }
+    final unknown = allowance.value.difference(source.keys.toSet());
+    if (unknown.isNotEmpty) {
+      issues.add(
+        '${allowance.key}: CJK punctuation allowlist has unknown keys '
+        '${unknown.toList()..sort()}',
+      );
+    }
+  }
+
+  for (final entry in parsed.entries) {
+    final missing = source.keys.toSet().difference(entry.value.keys.toSet());
+    final extra = entry.value.keys.toSet().difference(source.keys.toSet());
+    if (missing.isNotEmpty) {
+      issues.add('${entry.key}: missing keys ${missing.toList()..sort()}');
+    }
+    if (extra.isNotEmpty) {
+      issues.add('${entry.key}: extra keys ${extra.toList()..sort()}');
+    }
+    for (final key in source.keys.toSet().intersection(
+      entry.value.keys.toSet(),
+    )) {
+      final expected = _icuPlaceholders(source[key]!);
+      final actual = _icuPlaceholders(entry.value[key]!);
+      if (expected.length != actual.length || !expected.containsAll(actual)) {
+        issues.add(
+          '${entry.key}:$key: placeholders ${actual.toList()..sort()} '
+          'do not match ${expected.toList()..sort()}',
+        );
+      }
+      if (entry.key != defaultLocale &&
+          entry.value[key] == source[key] &&
+          !(sameAsDefaultAllowedKeys[entry.key]?.contains(key) ?? false)) {
+        issues.add('${entry.key}:$key: value is identical to $defaultLocale');
+      }
+      if (entry.key != defaultLocale &&
+          _asciiPunctuationBesideCjk.hasMatch(entry.value[key]!) &&
+          !(cjkAsciiPunctuationAllowedKeys[entry.key]?.contains(key) ??
+              false)) {
+        issues.add('${entry.key}:$key: ASCII punctuation beside CJK');
+      }
+    }
+  }
+
+  for (final entry in source.entries) {
+    if (_cjkText.hasMatch(entry.value)) {
+      issues.add('$defaultLocale:${entry.key}: English fallback contains CJK');
+    }
+  }
+  return issues;
+}
+
+Map<String, String> _parseAndroidStrings(String xml) {
+  final values = <String, String>{};
+  final pattern = RegExp(
+    r'''<string\b[^>]*\bname\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)</string>''',
+  );
+  for (final match in pattern.allMatches(xml)) {
+    values[match.group(1)!] = match.group(2)!.trim();
+  }
+  return values;
+}
+
+/// Validates Android's default/Chinese/Japanese string resources. The default
+/// file is the fallback for every unsupported locale and therefore must stay
+/// English-only.
+List<String> findAndroidStringResourceIssues(
+  Map<String, String> resources, {
+  String defaultQualifier = 'values',
+}) {
+  final issues = <String>[];
+  final parsed = {
+    for (final entry in resources.entries)
+      entry.key: _parseAndroidStrings(entry.value),
+  };
+  final source = parsed[defaultQualifier];
+  if (source == null) return ['missing Android fallback: $defaultQualifier'];
+
+  for (final entry in parsed.entries) {
+    final missing = source.keys.toSet().difference(entry.value.keys.toSet());
+    final extra = entry.value.keys.toSet().difference(source.keys.toSet());
+    if (missing.isNotEmpty) {
+      issues.add('${entry.key}: missing strings ${missing.toList()..sort()}');
+    }
+    if (extra.isNotEmpty) {
+      issues.add('${entry.key}: extra strings ${extra.toList()..sort()}');
+    }
+    for (final value in entry.value.entries) {
+      if (value.value.isEmpty) {
+        issues.add('${entry.key}:${value.key}: value is empty');
+      }
+    }
+  }
+  for (final entry in source.entries) {
+    if (_cjkText.hasMatch(entry.value)) {
+      issues.add('$defaultQualifier:${entry.key}: fallback contains CJK');
+    }
+  }
+  return issues;
+}
+
+Map<String, String> _parseInfoPlistStrings(String contents) {
+  final values = <String, String>{};
+  final pattern = RegExp(r'''"([^"]+)"\s*=\s*"((?:\\.|[^"])*)"\s*;''');
+  for (final match in pattern.allMatches(contents)) {
+    values[match.group(1)!] = match.group(2)!;
+  }
+  return values;
+}
+
+/// Validates the localized iOS display names and permission explanations.
+/// All locales must expose exactly [requiredKeys], so a new permission cannot
+/// silently fall back to English on a Chinese or Japanese device.
+List<String> findInfoPlistStringsIssues(
+  Map<String, String> localizations, {
+  required Set<String> requiredKeys,
+  String defaultLocale = 'en',
+}) {
+  final issues = <String>[];
+  final parsed = {
+    for (final entry in localizations.entries)
+      entry.key: _parseInfoPlistStrings(entry.value),
+  };
+  if (!parsed.containsKey(defaultLocale)) {
+    issues.add('missing iOS fallback: $defaultLocale');
+  }
+  for (final entry in parsed.entries) {
+    final keys = entry.value.keys.toSet();
+    final missing = requiredKeys.difference(keys);
+    final extra = keys.difference(requiredKeys);
+    if (missing.isNotEmpty) {
+      issues.add(
+        '${entry.key}: missing InfoPlist keys ${missing.toList()..sort()}',
+      );
+    }
+    if (extra.isNotEmpty) {
+      issues.add(
+        '${entry.key}: unexpected InfoPlist keys ${extra.toList()..sort()}',
+      );
+    }
+    for (final value in entry.value.entries) {
+      if (value.value.trim().isEmpty) {
+        issues.add('${entry.key}:${value.key}: value is empty');
+      }
+    }
+  }
+  final fallback = parsed[defaultLocale];
+  if (fallback != null) {
+    for (final entry in fallback.entries) {
+      if (_cjkText.hasMatch(entry.value)) {
+        issues.add('$defaultLocale:${entry.key}: fallback contains CJK');
+      }
+    }
+  }
+  return issues;
+}
+
 /// Direct dependencies cold_signer is allowed to declare.
 ///
 /// The rule this encodes: **nothing here may be able to open a socket.** Every
@@ -29,7 +308,6 @@ const coldSignerDependencyWhitelist = {
   'shared_preferences',
   'flutter_secure_storage',
   'drift',
-  'sqlite3_flutter_libs',
   'path',
   'path_provider',
   // Offline crypto + device capabilities.
@@ -58,7 +336,10 @@ List<String> parseDirectDependencies(String pubspecYaml) {
       continue;
     }
     // A new top-level key ends the dependencies block.
-    if (inDeps && line.isNotEmpty && !line.startsWith(' ') && !line.startsWith('#')) {
+    if (inDeps &&
+        line.isNotEmpty &&
+        !line.startsWith(' ') &&
+        !line.startsWith('#')) {
       inDeps = false;
     }
     if (!inDeps) continue;
@@ -75,9 +356,9 @@ List<String> findWhitelistViolations(
   String pubspecYaml, {
   Set<String> whitelist = coldSignerDependencyWhitelist,
 }) {
-  return parseDirectDependencies(pubspecYaml)
-      .where((d) => !whitelist.contains(d))
-      .toList();
+  return parseDirectDependencies(
+    pubspecYaml,
+  ).where((d) => !whitelist.contains(d)).toList();
 }
 
 /// Banned import statements found in a Dart source file.
@@ -99,8 +380,75 @@ List<String> findBannedImports(
 }
 
 /// True when the manifest requests the INTERNET permission.
+///
+/// A high-priority app manifest can use `tools:node="remove"` to delete a
+/// permission contributed by a transitive Android library. That marker is a
+/// security control, not an active request, so it must not trip the source
+/// firewall.
 bool manifestDeclaresInternet(String manifestXml) {
-  return manifestXml.contains('android.permission.INTERNET');
+  final permissionTags = RegExp(
+    r'<uses-permission\b[^>]*>',
+    caseSensitive: false,
+    multiLine: true,
+  );
+  for (final match in permissionTags.allMatches(manifestXml)) {
+    final tag = match.group(0)!;
+    if (!tag.contains('android.permission.INTERNET')) continue;
+    final removesPermission = RegExp(
+      r'''tools:node\s*=\s*["']remove["']''',
+      caseSensitive: false,
+    ).hasMatch(tag);
+    if (!removesPermission) return true;
+  }
+  return false;
+}
+
+/// Whether the application explicitly disables backup and supplies rules for
+/// both the pre-Android-12 and Android-12+ extraction systems.
+bool manifestHasFailClosedBackup(String manifestXml) {
+  return RegExp(
+        r'''android:allowBackup\s*=\s*["']false["']''',
+      ).hasMatch(manifestXml) &&
+      manifestXml.contains('android:fullBackupContent=') &&
+      manifestXml.contains('android:dataExtractionRules=');
+}
+
+/// True when an Apple privacy manifest declares app-scoped UserDefaults under
+/// the CA92.1 required-reason code and explicitly disables tracking.
+bool privacyManifestDeclaresAppScopedUserDefaults(String plistXml) {
+  return plistXml.contains('NSPrivacyAccessedAPICategoryUserDefaults') &&
+      plistXml.contains('<string>CA92.1</string>') &&
+      RegExp(
+        r'<key>NSPrivacyTracking</key>\s*<false\s*/>',
+        multiLine: true,
+      ).hasMatch(plistXml);
+}
+
+/// Both supported Apple package managers must embed the SDK manifest, while
+/// CocoaPods must not also compile `.xcprivacy` as a source file.
+bool applePackageMetadataEmbedsPrivacyManifest({
+  required String podspec,
+  required String packageSwift,
+}) {
+  final podEmbeds =
+      podspec.contains('s.resource_bundles') &&
+      podspec.contains("'core_crypto_privacy'") &&
+      podspec.contains('PrivacyInfo.xcprivacy');
+  final podSourcesAreNarrow = podspec.contains(
+    "s.source_files = 'core_crypto/Sources/core_crypto/**/*.swift'",
+  );
+  final swiftPackageEmbeds = packageSwift.contains(
+    '.process("PrivacyInfo.xcprivacy")',
+  );
+  return podEmbeds && podSourcesAreNarrow && swiftPackageEmbeds;
+}
+
+/// Ensures a Flutter iOS Podfile declares the same minimum supported version
+/// as the Runner and raises older transitive Pod targets during generation.
+bool podfileEnforcesIos13Floor(String podfile) {
+  return RegExp(r'''platform\s+:ios\s*,\s*['"]13\.0['"]''').hasMatch(podfile) &&
+      podfile.contains("config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']") &&
+      podfile.contains("Gem::Version.new('13.0')");
 }
 
 /// Network-capable `dart:io` symbols. The signer legitimately imports
@@ -149,4 +497,35 @@ List<String> findStaleWhitelistEntries(
 }) {
   final declared = parseDirectDependencies(pubspecYaml).toSet();
   return whitelist.where((w) => !declared.contains(w)).toList()..sort();
+}
+
+/// Stock package-template text that must not survive in a repository claiming
+/// public-test readiness. Besides looking unfinished, these placeholders hide
+/// the API and security boundaries reviewers need in order to use the code
+/// safely.
+const documentationPlaceholderMarkers = [
+  'TODO: Put a short description',
+  'TODO: List what your package can do',
+  'TODO: List prerequisites',
+  'TODO: Include short and useful examples',
+  'TODO: Tell users more about the package',
+  'TODO: Describe initial release',
+  'A new Flutter plugin project',
+  'A new Flutter package project',
+  'This project is a starting point',
+  'github.com/my_org/my_repo',
+];
+
+/// Returns every known stock template marker still present in [contents].
+List<String> findDocumentationPlaceholders(String contents) => [
+  for (final marker in documentationPlaceholderMarkers)
+    if (contents.contains(marker)) marker,
+];
+
+/// Every real-chain integration entrypoint that reads the funded mnemonic must
+/// validate the versioned batch metadata before registering or running tests.
+bool realE2eEntrypointHasCredentialGuard(String contents) {
+  const readsMnemonic = "String.fromEnvironment('SEPOLIA_E2E_MNEMONIC')";
+  const guard = 'requireFreshE2eCredentialBatchIfConfigured();';
+  return !contents.contains(readsMnemonic) || contents.contains(guard);
 }

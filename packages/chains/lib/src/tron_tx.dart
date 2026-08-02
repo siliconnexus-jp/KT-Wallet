@@ -103,8 +103,8 @@ final class TransferContract implements TronContract {
     required Uint8List ownerAddress,
     required Uint8List toAddress,
     required this.amount,
-  })  : ownerAddress = _checkRawAddress(ownerAddress, 'ownerAddress'),
-        toAddress = _checkRawAddress(toAddress, 'toAddress') {
+  }) : ownerAddress = _checkRawAddress(ownerAddress, 'ownerAddress'),
+       toAddress = _checkRawAddress(toAddress, 'toAddress') {
     _checkInt64(amount, 'amount');
   }
 
@@ -153,9 +153,9 @@ final class TriggerSmartContract implements TronContract {
     required Uint8List ownerAddress,
     required Uint8List contractAddress,
     required Uint8List data,
-  })  : ownerAddress = _checkRawAddress(ownerAddress, 'ownerAddress'),
-        contractAddress = _checkRawAddress(contractAddress, 'contractAddress'),
-        data = Uint8List.fromList(data);
+  }) : ownerAddress = _checkRawAddress(ownerAddress, 'ownerAddress'),
+       contractAddress = _checkRawAddress(contractAddress, 'contractAddress'),
+       data = Uint8List.fromList(data);
 
   /// Raw 21-byte 0x41-prefixed caller address.
   final Uint8List ownerAddress;
@@ -216,15 +216,17 @@ class TronRawTx {
     required this.timestamp,
     required this.contract,
     this.feeLimit,
-  })  : refBlockBytes = Uint8List.fromList(refBlockBytes),
-        refBlockHash = Uint8List.fromList(refBlockHash) {
+  }) : refBlockBytes = Uint8List.fromList(refBlockBytes),
+       refBlockHash = Uint8List.fromList(refBlockHash) {
     if (refBlockBytes.length != 2) {
       throw ArgumentError(
-          'refBlockBytes must be 2 bytes, got ${refBlockBytes.length}');
+        'refBlockBytes must be 2 bytes, got ${refBlockBytes.length}',
+      );
     }
     if (refBlockHash.length != 8) {
       throw ArgumentError(
-          'refBlockHash must be 8 bytes, got ${refBlockHash.length}');
+        'refBlockHash must be 8 bytes, got ${refBlockHash.length}',
+      );
     }
     if (expiration < 0 || timestamp < 0) {
       throw ArgumentError('expiration and timestamp must be non-negative');
@@ -286,6 +288,8 @@ class TronRawTx {
             ),
           ),
         );
+      case TxOperation.approvalRevoke:
+        throw ArgumentError('approval revoke is only supported on EVM chains');
     }
   }
 
@@ -349,9 +353,8 @@ class TronRawTx {
 
   /// The transaction ID: hex `sha256(raw_data)` — also the digest the
   /// signer's secp256k1 key signs.
-  String txId() => signingHash()
-      .map((b) => b.toRadixString(16).padLeft(2, '0'))
-      .join();
+  String txId() =>
+      signingHash().map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
   /// The digest the signer's secp256k1 key actually signs:
   /// `sha256(encodeRawData())`.
@@ -414,7 +417,8 @@ abstract final class Trc20 {
 Uint8List _checkRawAddress(Uint8List address, String name) {
   if (address.length != 21 || address[0] != 0x41) {
     throw ArgumentError(
-        '$name must be a raw 21-byte 0x41-prefixed TRON address');
+      '$name must be a raw 21-byte 0x41-prefixed TRON address',
+    );
   }
   return Uint8List.fromList(address);
 }

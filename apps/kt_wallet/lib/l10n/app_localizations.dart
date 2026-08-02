@@ -136,6 +136,12 @@ abstract class AppLocalizations {
   /// **'删除'**
   String get actionDelete;
 
+  /// No description provided for @pinKeyDelete.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除最后一位'**
+  String get pinKeyDelete;
+
   /// No description provided for @actionNext.
   ///
   /// In zh, this message translates to:
@@ -309,6 +315,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'更多'**
   String get actionMore;
+
+  /// No description provided for @actionShare.
+  ///
+  /// In zh, this message translates to:
+  /// **'分享'**
+  String get actionShare;
 
   /// No description provided for @actionScanSign.
   ///
@@ -688,6 +700,18 @@ abstract class AppLocalizations {
   /// **'创建观察钱包'**
   String get createWatchWallet;
 
+  /// No description provided for @invalidOfflineWalletExport.
+  ///
+  /// In zh, this message translates to:
+  /// **'离线钱包导出数据无效'**
+  String get invalidOfflineWalletExport;
+
+  /// No description provided for @offlineWalletAlreadyPaired.
+  ///
+  /// In zh, this message translates to:
+  /// **'此离线钱包已完成配对'**
+  String get offlineWalletAlreadyPaired;
+
   /// No description provided for @walletIdProtocol.
   ///
   /// In zh, this message translates to:
@@ -718,6 +742,18 @@ abstract class AppLocalizations {
   /// **'已删除「{name}」'**
   String deletedWallet(String name);
 
+  /// No description provided for @walletDeleteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法安全删除钱包，当前内容未被移除，请重试。'**
+  String get walletDeleteFailed;
+
+  /// No description provided for @walletUpdateFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法保存更改，当前内容未改变，请重试。'**
+  String get walletUpdateFailed;
+
   /// No description provided for @sortAction.
   ///
   /// In zh, this message translates to:
@@ -741,6 +777,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'钱包类型'**
   String get walletTypeLabel;
+
+  /// No description provided for @walletIdLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包 ID'**
+  String get walletIdLabel;
+
+  /// No description provided for @coldSignerWalletIdLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'KT冷钱包 ID'**
+  String get coldSignerWalletIdLabel;
 
   /// No description provided for @standardWallet.
   ///
@@ -832,6 +880,18 @@ abstract class AppLocalizations {
   /// **'地址无效'**
   String get addressInvalid;
 
+  /// No description provided for @recipientLookalikeWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'此地址与“{label}”首尾高度相似，但并不相同，可能是剪贴板地址投毒。'**
+  String recipientLookalikeWarning(String label);
+
+  /// No description provided for @recipientLookalikeReview.
+  ///
+  /// In zh, this message translates to:
+  /// **'我已核对完整地址'**
+  String get recipientLookalikeReview;
+
   /// No description provided for @amountLabel.
   ///
   /// In zh, this message translates to:
@@ -867,6 +927,36 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'网络手续费'**
   String get networkFee;
+
+  /// No description provided for @expectedAssetChanges.
+  ///
+  /// In zh, this message translates to:
+  /// **'预计资产变化'**
+  String get expectedAssetChanges;
+
+  /// No description provided for @outgoingAsset.
+  ///
+  /// In zh, this message translates to:
+  /// **'转出 {symbol}'**
+  String outgoingAsset(String symbol);
+
+  /// No description provided for @maximumNetworkFee.
+  ///
+  /// In zh, this message translates to:
+  /// **'最高网络手续费'**
+  String get maximumNetworkFee;
+
+  /// No description provided for @upToNegativeAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'最多 -{amount}'**
+  String upToNegativeAmount(String amount);
+
+  /// No description provided for @solanaRentReserve.
+  ///
+  /// In zh, this message translates to:
+  /// **'可回收账户租金'**
+  String get solanaRentReserve;
 
   /// No description provided for @feeCustom.
   ///
@@ -1054,6 +1144,114 @@ abstract class AppLocalizations {
   /// **'广播失败：{message}'**
   String broadcastFailedMessage(String message);
 
+  /// No description provided for @transactionNotSubmitted.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易未提交，请重试。'**
+  String get transactionNotSubmitted;
+
+  /// No description provided for @broadcastUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前网络无法广播这笔签名交易。'**
+  String get broadcastUnsupported;
+
+  /// No description provided for @rpcRejectInsufficientFunds.
+  ///
+  /// In zh, this message translates to:
+  /// **'余额不足，无法支付转账金额和最高网络手续费。'**
+  String get rpcRejectInsufficientFunds;
+
+  /// No description provided for @rpcRejectNonceTooLow.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易 nonce 过低，请刷新后重试。'**
+  String get rpcRejectNonceTooLow;
+
+  /// No description provided for @rpcRejectNonceTooHigh.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易 nonce 过高，请刷新后重试。'**
+  String get rpcRejectNonceTooHigh;
+
+  /// No description provided for @rpcRejectReplacementFeeTooLow.
+  ///
+  /// In zh, this message translates to:
+  /// **'替换交易的网络手续费过低。'**
+  String get rpcRejectReplacementFeeTooLow;
+
+  /// No description provided for @rpcRejectFeeTooLow.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络手续费过低。'**
+  String get rpcRejectFeeTooLow;
+
+  /// No description provided for @rpcRejectGasLimitTooLow.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易 Gas Limit 过低。'**
+  String get rpcRejectGasLimitTooLow;
+
+  /// No description provided for @rpcRejectBlockGasLimit.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易超过当前网络的区块 Gas 上限。'**
+  String get rpcRejectBlockGasLimit;
+
+  /// No description provided for @rpcRejectFeeCapBelowBase.
+  ///
+  /// In zh, this message translates to:
+  /// **'手续费上限低于当前网络基础费。'**
+  String get rpcRejectFeeCapBelowBase;
+
+  /// No description provided for @rpcRejectAlreadyKnown.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络已收到这笔交易，请查询状态，不要重复发送。'**
+  String get rpcRejectAlreadyKnown;
+
+  /// No description provided for @rpcRejectExecutionReverted.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易执行时被链上合约回退。'**
+  String get rpcRejectExecutionReverted;
+
+  /// No description provided for @rpcRejectInvalidSender.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易发送地址无效。'**
+  String get rpcRejectInvalidSender;
+
+  /// No description provided for @rpcRejectExpiredReference.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易引用的区块信息已过期，请重新构建交易。'**
+  String get rpcRejectExpiredReference;
+
+  /// No description provided for @rpcRejectAccountInUse.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易所需账户正在使用中，请稍后重试。'**
+  String get rpcRejectAccountInUse;
+
+  /// No description provided for @rpcRejectSimulationFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络拒绝了本次交易预执行。'**
+  String get rpcRejectSimulationFailed;
+
+  /// No description provided for @rpcRejectInvalidSignature.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易签名无效。'**
+  String get rpcRejectInvalidSignature;
+
+  /// No description provided for @rpcRejectGeneric.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络拒绝了这笔交易。'**
+  String get rpcRejectGeneric;
+
   /// No description provided for @signatureVerified.
   ///
   /// In zh, this message translates to:
@@ -1083,6 +1281,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'交易已提交'**
   String get txSubmitted;
+
+  /// No description provided for @txSubmissionUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'广播结果待确认'**
+  String get txSubmissionUnknown;
+
+  /// No description provided for @txSubmissionUnknownMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'签名交易可能已经到达网络，请勿再次发送。KT Wallet 将使用本地计算的交易哈希继续查询链上结果。'**
+  String get txSubmissionUnknownMessage;
 
   /// No description provided for @txTimeLabel.
   ///
@@ -1125,6 +1335,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'失败'**
   String get txStatusFailed;
+
+  /// No description provided for @txStatusUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'状态暂不可用'**
+  String get txStatusUnknown;
 
   /// No description provided for @txStatusDropped.
   ///
@@ -1222,6 +1438,90 @@ abstract class AppLocalizations {
   /// **'无法估算网络费，暂时无法发送'**
   String get feeUnavailableHint;
 
+  /// No description provided for @tokenRiskChecking.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在检查 Token 身份…'**
+  String get tokenRiskChecking;
+
+  /// No description provided for @tokenRiskCheckingBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'KT Wallet 正在签名前通过验证目录和独立威胁情报核对当前网络与完整合约地址。'**
+  String get tokenRiskCheckingBody;
+
+  /// No description provided for @tokenRiskVerifiedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'官方 Token 身份已核对'**
+  String get tokenRiskVerifiedTitle;
+
+  /// No description provided for @tokenRiskVerifiedBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络与合约地址匹配运营方验证目录。蓝勾仅确认身份，不代表投资安全。'**
+  String get tokenRiskVerifiedBody;
+
+  /// No description provided for @tokenRiskUnsafeTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'检测到高风险 Token 合约'**
+  String get tokenRiskUnsafeTitle;
+
+  /// No description provided for @tokenRiskUnsafeBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'已配置的安全数据源发现该完整合约地址存在明确恶意证据。为保护钱包，本次签名已阻止。'**
+  String get tokenRiskUnsafeBody;
+
+  /// No description provided for @tokenRiskUnknownTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'Token 风险状态无法确认'**
+  String get tokenRiskUnknownTitle;
+
+  /// No description provided for @tokenRiskUnknownBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前没有已配置的数据源能够确认该合约的身份或安全性。继续前请通过项目官方渠道核对完整合约地址。'**
+  String get tokenRiskUnknownBody;
+
+  /// No description provided for @tokenRiskUnavailableTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法检查 Token 风险'**
+  String get tokenRiskUnavailableTitle;
+
+  /// No description provided for @tokenRiskUnavailableBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'风险服务当前不可用。KT Wallet 无法确认该合约安全，请独立核验后再继续。'**
+  String get tokenRiskUnavailableBody;
+
+  /// No description provided for @tokenRiskBlockedHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'该 Token 合约已被标记为高风险，暂时无法发送。'**
+  String get tokenRiskBlockedHint;
+
+  /// No description provided for @signRequestBuildFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法验证链上交易参数，签名已禁用。'**
+  String get signRequestBuildFailed;
+
+  /// No description provided for @signRequestSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法安全保存待签名交易，签名二维码未生成。请返回后重试。'**
+  String get signRequestSaveFailed;
+
+  /// No description provided for @transactionSimulationFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易预执行失败，未进行签名。请检查余额、金额、收款地址或 Token 合约。'**
+  String get transactionSimulationFailed;
+
   /// No description provided for @txNonceLabel.
   ///
   /// In zh, this message translates to:
@@ -1252,6 +1552,12 @@ abstract class AppLocalizations {
   /// **'已由交易替换'**
   String get txReplacedByLabel;
 
+  /// No description provided for @txReplacementPendingLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'竞争中的替换交易'**
+  String get txReplacementPendingLabel;
+
   /// No description provided for @txNotFound.
   ///
   /// In zh, this message translates to:
@@ -1269,6 +1575,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'交易详情'**
   String get txDetailTitle;
+
+  /// No description provided for @txBroadcastTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'广播时间'**
+  String get txBroadcastTime;
+
+  /// No description provided for @txLastStatusCheck.
+  ///
+  /// In zh, this message translates to:
+  /// **'最后状态查询'**
+  String get txLastStatusCheck;
+
+  /// No description provided for @txNotCheckedYet.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未查询'**
+  String get txNotCheckedYet;
+
+  /// No description provided for @txCopyHash.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制交易 Hash'**
+  String get txCopyHash;
+
+  /// No description provided for @txHashCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易 Hash 已复制'**
+  String get txHashCopied;
+
+  /// No description provided for @txViewInExplorer.
+  ///
+  /// In zh, this message translates to:
+  /// **'在区块浏览器查看'**
+  String get txViewInExplorer;
 
   /// No description provided for @confirmedPrefix.
   ///
@@ -1423,13 +1765,13 @@ abstract class AppLocalizations {
   /// No description provided for @receiveImageDenied.
   ///
   /// In zh, this message translates to:
-  /// **'未获得相册权限,无法保存'**
+  /// **'未获得相册权限，无法保存'**
   String get receiveImageDenied;
 
   /// No description provided for @receiveImageUseShare.
   ///
   /// In zh, this message translates to:
-  /// **'此系统版本无法直接保存,请使用右上角分享'**
+  /// **'此系统版本无法直接保存，请使用右上角分享'**
   String get receiveImageUseShare;
 
   /// No description provided for @receiveImageFailed.
@@ -1585,13 +1927,13 @@ abstract class AppLocalizations {
   /// No description provided for @contactsEmpty.
   ///
   /// In zh, this message translates to:
-  /// **'还没有联系人,点右上角 + 添加'**
+  /// **'还没有联系人，点右上角 + 添加'**
   String get contactsEmpty;
 
   /// No description provided for @tokensEmpty.
   ///
   /// In zh, this message translates to:
-  /// **'还没有自定义代币,点右上角 + 添加'**
+  /// **'还没有自定义代币，点右上角 + 添加'**
   String get tokensEmpty;
 
   /// No description provided for @contactBobExchange.
@@ -1735,13 +2077,13 @@ abstract class AppLocalizations {
   /// No description provided for @screenCaptureBlockedHint.
   ///
   /// In zh, this message translates to:
-  /// **'为保护助记词,内容已隐藏。停止录屏或断开投屏后会自动恢复。'**
+  /// **'为保护助记词，内容已隐藏。停止录屏或断开投屏后会自动恢复。'**
   String get screenCaptureBlockedHint;
 
   /// No description provided for @screenshotWarning.
   ///
   /// In zh, this message translates to:
-  /// **'你刚刚截图了助记词。它已存入相册,任何能看到相册的人都能取走你的资产 —— 请立刻把资产转移到新钱包。'**
+  /// **'你刚刚截图了助记词。它已存入相册，任何能看到相册的人都能取走你的资产 —— 请立刻把资产转移到新钱包。'**
   String get screenshotWarning;
 
   /// No description provided for @rpcMeasuring.
@@ -2011,8 +2353,20 @@ abstract class AppLocalizations {
   /// No description provided for @walletLoadErrorDesc.
   ///
   /// In zh, this message translates to:
-  /// **'无法读取本机的钱包数据。请重试;若问题持续,请重新安装应用。'**
+  /// **'无法读取本机的钱包数据。请重试；若问题持续，请重新安装应用。'**
   String get walletLoadErrorDesc;
+
+  /// No description provided for @walletPersistenceFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法安全保存钱包，本次未添加任何钱包。请重试。'**
+  String get walletPersistenceFailed;
+
+  /// No description provided for @walletAlreadyExists.
+  ///
+  /// In zh, this message translates to:
+  /// **'该钱包已存在于本机。'**
+  String get walletAlreadyExists;
 
   /// No description provided for @cryptoUnavailableTitle.
   ///
@@ -2025,6 +2379,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'此 Android 构建未包含 Trust Wallet Core。请安装启用了 Wallet Core 的构建；应用不会自动改用模拟密钥。'**
   String get cryptoUnavailableDesc;
+
+  /// No description provided for @secureStorageUnavailableTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'安全存储不可用'**
+  String get secureStorageUnavailableTitle;
+
+  /// No description provided for @secureStorageUnavailableDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'KT钱包无法安全读取密码和锁定状态，钱包将保持锁定。请重新启动 App，或从可信来源重新安装。'**
+  String get secureStorageUnavailableDesc;
 
   /// No description provided for @actionRetry.
   ///
@@ -2133,6 +2499,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'生物识别不可用时用密码解锁 App。密码仅保存在本机安全区域。'**
   String get setPinDesc;
+
+  /// No description provided for @changeWalletPin.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改钱包密码'**
+  String get changeWalletPin;
+
+  /// No description provided for @changeWalletPinDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'更换 6 位密码前必须验证当前身份'**
+  String get changeWalletPinDesc;
+
+  /// No description provided for @enterCurrentPin.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入当前钱包密码'**
+  String get enterCurrentPin;
+
+  /// No description provided for @walletPinChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包密码已修改'**
+  String get walletPinChanged;
 
   /// No description provided for @pinMismatch.
   ///
@@ -2245,20 +2635,38 @@ abstract class AppLocalizations {
   /// No description provided for @probeOkSave.
   ///
   /// In zh, this message translates to:
-  /// **'探测通过,已保存'**
+  /// **'探测通过，已保存'**
   String get probeOkSave;
 
   /// No description provided for @rpcProbeFailed.
   ///
   /// In zh, this message translates to:
-  /// **'RPC 探测失败,请检查地址'**
+  /// **'RPC 探测失败，请检查地址'**
   String get rpcProbeFailed;
+
+  /// No description provided for @endpointUrlInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入不包含账号凭证的有效 HTTPS 地址。仅 localhost 可使用 HTTP。'**
+  String get endpointUrlInvalid;
 
   /// No description provided for @chainIdMismatch.
   ///
   /// In zh, this message translates to:
-  /// **'Chain ID 不匹配:节点返回 {actual}'**
+  /// **'Chain ID 不匹配：节点返回 {actual}'**
   String chainIdMismatch(Object actual);
+
+  /// No description provided for @transferNetworkUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前没有可用于 {network} 的活动网络。'**
+  String transferNetworkUnavailable(String network);
+
+  /// No description provided for @transferChainIdUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前选择的 EVM 网络缺少 Chain ID。'**
+  String get transferChainIdUnavailable;
 
   /// No description provided for @deleteNetwork.
   ///
@@ -2317,14 +2725,50 @@ abstract class AppLocalizations {
   /// No description provided for @airdropOk.
   ///
   /// In zh, this message translates to:
-  /// **'空投成功,余额稍后刷新'**
+  /// **'空投成功，余额稍后刷新'**
   String get airdropOk;
 
   /// No description provided for @airdropFailed.
   ///
   /// In zh, this message translates to:
-  /// **'空投失败:{message}'**
+  /// **'空投失败：{message}'**
   String airdropFailed(Object message);
+
+  /// No description provided for @airdropRateLimited.
+  ///
+  /// In zh, this message translates to:
+  /// **'请求过于频繁，请稍后重试'**
+  String get airdropRateLimited;
+
+  /// No description provided for @airdropUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'测试币服务暂时不可用'**
+  String get airdropUnavailable;
+
+  /// No description provided for @airdropInvalidRequest.
+  ///
+  /// In zh, this message translates to:
+  /// **'水龙头拒绝了该地址或请求'**
+  String get airdropInvalidRequest;
+
+  /// No description provided for @airdropInsufficientFunds.
+  ///
+  /// In zh, this message translates to:
+  /// **'水龙头测试币余额不足'**
+  String get airdropInsufficientFunds;
+
+  /// No description provided for @airdropRejected.
+  ///
+  /// In zh, this message translates to:
+  /// **'水龙头拒绝了请求'**
+  String get airdropRejected;
+
+  /// No description provided for @airdropMalformedResponse.
+  ///
+  /// In zh, this message translates to:
+  /// **'测试币服务返回了无效响应'**
+  String get airdropMalformedResponse;
 
   /// No description provided for @fiatHiddenTestnet.
   ///
@@ -2347,7 +2791,7 @@ abstract class AppLocalizations {
   /// No description provided for @backupEncryptedRowDesc.
   ///
   /// In zh, this message translates to:
-  /// **'把加密副本保存到 iCloud Drive 或文件'**
+  /// **'通过系统文件选择器保存加密副本'**
   String get backupEncryptedRowDesc;
 
   /// No description provided for @backupIntro.
@@ -2371,8 +2815,20 @@ abstract class AppLocalizations {
   /// No description provided for @backupPasswordTooShort.
   ///
   /// In zh, this message translates to:
-  /// **'至少 8 位'**
+  /// **'请至少输入 14 个字符'**
   String get backupPasswordTooShort;
+
+  /// No description provided for @backupPasswordTooLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'最多输入 128 个字符'**
+  String get backupPasswordTooLong;
+
+  /// No description provided for @backupPasswordTooWeak.
+  ///
+  /// In zh, this message translates to:
+  /// **'请勿使用重复、连续或常见密码'**
+  String get backupPasswordTooWeak;
 
   /// No description provided for @backupPasswordMismatch.
   ///
@@ -2383,7 +2839,7 @@ abstract class AppLocalizations {
   /// No description provided for @backupPasswordWarning.
   ///
   /// In zh, this message translates to:
-  /// **'这个密码无法找回。密码丢了备份就打不开了 —— 请同时保留手抄的助记词。'**
+  /// **'请使用独立且足够长的密码短语。这个密码无法找回，丢失后备份将无法打开；请同时保留手抄的助记词。'**
   String get backupPasswordWarning;
 
   /// No description provided for @backupCreate.
@@ -2458,6 +2914,30 @@ abstract class AppLocalizations {
   /// **'此备份由更新版本的 App 生成'**
   String get restoreTooNew;
 
+  /// No description provided for @restoreFileTooLarge.
+  ///
+  /// In zh, this message translates to:
+  /// **'此文件过大，不可能是 KT 钱包备份'**
+  String get restoreFileTooLarge;
+
+  /// No description provided for @restoreFileUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'此设备无法打开备份文件'**
+  String get restoreFileUnavailable;
+
+  /// No description provided for @restoreFileReadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法读取所选文件，请重试'**
+  String get restoreFileReadFailed;
+
+  /// No description provided for @restoreSelectedFileFallback.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份文件'**
+  String get restoreSelectedFileFallback;
+
   /// No description provided for @restoreRestored.
   ///
   /// In zh, this message translates to:
@@ -2503,7 +2983,7 @@ abstract class AppLocalizations {
   /// No description provided for @aboutOpenSourceDesc.
   ///
   /// In zh, this message translates to:
-  /// **'你的私钥交给了这份代码,它是可以被审阅的'**
+  /// **'你的私钥交给了这份代码，它是可以被审阅的'**
   String get aboutOpenSourceDesc;
 
   /// No description provided for @aboutTagline.
@@ -2517,6 +2997,450 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'链接已复制'**
   String get aboutCopiedLink;
+
+  /// No description provided for @aboutTrustTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'信任与法律信息'**
+  String get aboutTrustTitle;
+
+  /// No description provided for @aboutPrivacyPolicy.
+  ///
+  /// In zh, this message translates to:
+  /// **'隐私政策'**
+  String get aboutPrivacyPolicy;
+
+  /// No description provided for @aboutPrivacyPolicyDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'了解 App 在本地处理及联网发送的数据'**
+  String get aboutPrivacyPolicyDesc;
+
+  /// No description provided for @aboutSecurityRisk.
+  ///
+  /// In zh, this message translates to:
+  /// **'安全与风险说明'**
+  String get aboutSecurityRisk;
+
+  /// No description provided for @aboutSecurityRiskDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前安全保证、已知限制与使用边界'**
+  String get aboutSecurityRiskDesc;
+
+  /// No description provided for @aboutSecurityPolicy.
+  ///
+  /// In zh, this message translates to:
+  /// **'安全政策'**
+  String get aboutSecurityPolicy;
+
+  /// No description provided for @aboutSecurityPolicyDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'漏洞范围、安全研究与响应时限'**
+  String get aboutSecurityPolicyDesc;
+
+  /// No description provided for @aboutThirdPartyNotices.
+  ///
+  /// In zh, this message translates to:
+  /// **'开源依赖与许可证'**
+  String get aboutThirdPartyNotices;
+
+  /// No description provided for @aboutThirdPartyNoticesDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看随 App 分发的第三方组件说明'**
+  String get aboutThirdPartyNoticesDesc;
+
+  /// No description provided for @aboutReportSecurity.
+  ///
+  /// In zh, this message translates to:
+  /// **'报告安全问题'**
+  String get aboutReportSecurity;
+
+  /// No description provided for @aboutReportSecurityDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'先阅读私密报告流程与敏感信息要求'**
+  String get aboutReportSecurityDesc;
+
+  /// No description provided for @aboutNeverShareSecrets.
+  ///
+  /// In zh, this message translates to:
+  /// **'KT Wallet 永远不会索要您的助记词或私钥。'**
+  String get aboutNeverShareSecrets;
+
+  /// No description provided for @diagnosticsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'支持诊断'**
+  String get diagnosticsTitle;
+
+  /// No description provided for @diagnosticsSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出用于排查问题的隐私安全 JSON 包'**
+  String get diagnosticsSubtitle;
+
+  /// No description provided for @diagnosticsConfirmTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出诊断包？'**
+  String get diagnosticsConfirmTitle;
+
+  /// No description provided for @diagnosticsConfirmBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'分享前请确认包含和排除的信息。'**
+  String get diagnosticsConfirmBody;
+
+  /// No description provided for @diagnosticsIncludesTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'包含'**
+  String get diagnosticsIncludesTitle;
+
+  /// No description provided for @diagnosticsIncludesBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'App 与构建信息、网络模式、服务状态和汇总性能'**
+  String get diagnosticsIncludesBody;
+
+  /// No description provided for @diagnosticsExcludesTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'永不包含'**
+  String get diagnosticsExcludesTitle;
+
+  /// No description provided for @diagnosticsExcludesBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址、余额、金额、交易、密钥、签名、助记词或节点地址'**
+  String get diagnosticsExcludesBody;
+
+  /// No description provided for @diagnosticsExportAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出并分享'**
+  String get diagnosticsExportAction;
+
+  /// No description provided for @diagnosticsShareSubject.
+  ///
+  /// In zh, this message translates to:
+  /// **'KT钱包支持诊断'**
+  String get diagnosticsShareSubject;
+
+  /// No description provided for @diagnosticsShareText.
+  ///
+  /// In zh, this message translates to:
+  /// **'已脱敏的 KT钱包诊断信息。分享前请检查文件。'**
+  String get diagnosticsShareText;
+
+  /// No description provided for @diagnosticsReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'诊断包已准备好'**
+  String get diagnosticsReady;
+
+  /// No description provided for @diagnosticsFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法创建诊断包'**
+  String get diagnosticsFailed;
+
+  /// No description provided for @diagnosticsUploadTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送匿名性能报告'**
+  String get diagnosticsUploadTitle;
+
+  /// No description provided for @diagnosticsUploadSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'审阅后单次发送固定聚合指标；不会在后台自动上传'**
+  String get diagnosticsUploadSubtitle;
+
+  /// No description provided for @diagnosticsUploadConfirmTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送匿名性能报告？'**
+  String get diagnosticsUploadConfirmTitle;
+
+  /// No description provided for @diagnosticsUploadConfirmBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'这是一次由您主动发起的上传，不会在后台自动上传，也不会自动重试。服务端只保留匿名汇总指标 7 天。'**
+  String get diagnosticsUploadConfirmBody;
+
+  /// No description provided for @diagnosticsUploadIncludesBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'App 版本、平台、大致语言、构建模式，以及固定性能项的计数、成功/失败数和 P50/P95'**
+  String get diagnosticsUploadIncludesBody;
+
+  /// No description provided for @diagnosticsUploadExcludesBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包或设备标识、地址、余额、金额、交易、txHash、时间戳、错误文本、调用栈、密钥、签名、助记词或节点地址'**
+  String get diagnosticsUploadExcludesBody;
+
+  /// No description provided for @diagnosticsUploadAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'同意并发送'**
+  String get diagnosticsUploadAction;
+
+  /// No description provided for @diagnosticsUploadSent.
+  ///
+  /// In zh, this message translates to:
+  /// **'匿名性能报告已发送'**
+  String get diagnosticsUploadSent;
+
+  /// No description provided for @diagnosticsUploadAlreadySent.
+  ///
+  /// In zh, this message translates to:
+  /// **'相同的匿名报告已经发送过'**
+  String get diagnosticsUploadAlreadySent;
+
+  /// No description provided for @diagnosticsUploadNoSamples.
+  ///
+  /// In zh, this message translates to:
+  /// **'目前没有可发送的性能样本'**
+  String get diagnosticsUploadNoSamples;
+
+  /// No description provided for @diagnosticsUploadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'匿名性能报告发送失败；没有自动重试'**
+  String get diagnosticsUploadFailed;
+
+  /// No description provided for @diagnosticsUploadGatewayRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'直接连接模式不会上传诊断；请先启用 KT Gateway'**
+  String get diagnosticsUploadGatewayRequired;
+
+  /// No description provided for @settingsApprovals.
+  ///
+  /// In zh, this message translates to:
+  /// **'Token 授权管理'**
+  String get settingsApprovals;
+
+  /// No description provided for @approvalsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'Token 授权管理'**
+  String get approvalsTitle;
+
+  /// No description provided for @approvalsSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看哪些合约可以动用您的 ERC-20 Token'**
+  String get approvalsSubtitle;
+
+  /// No description provided for @approvalPrivacyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'外部授权扫描'**
+  String get approvalPrivacyTitle;
+
+  /// No description provided for @approvalPrivacyBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'为了查询尚未撤销的授权，KT钱包会通过当前配置的 Gateway，将此钱包的公开地址和所选主网发送给 GoPlus。不会发送密钥、余额或交易内容，您可随时关闭。'**
+  String get approvalPrivacyBody;
+
+  /// No description provided for @approvalEnableAndScan.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许并开始扫描'**
+  String get approvalEnableAndScan;
+
+  /// No description provided for @approvalDisableScan.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭外部扫描'**
+  String get approvalDisableScan;
+
+  /// No description provided for @approvalScanAgain.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新扫描'**
+  String get approvalScanAgain;
+
+  /// No description provided for @approvalLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在检查尚未撤销的授权…'**
+  String get approvalLoading;
+
+  /// No description provided for @approvalEmptyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'未发现尚未撤销的授权'**
+  String get approvalEmptyTitle;
+
+  /// No description provided for @approvalEmptyBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务已完整完成本次扫描，并确认此钱包在所选网络没有 ERC-20 allowance。'**
+  String get approvalEmptyBody;
+
+  /// No description provided for @approvalUnavailableTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'授权状态暂不可用'**
+  String get approvalUnavailableTitle;
+
+  /// No description provided for @approvalUnavailableBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务未能完成扫描，当前授权清单未知；这不代表没有授权。'**
+  String get approvalUnavailableBody;
+
+  /// No description provided for @approvalUnsupportedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前网络尚未覆盖'**
+  String get approvalUnsupportedTitle;
+
+  /// No description provided for @approvalUnsupportedBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'授权扫描目前仅支持 Ethereum、Polygon、Base、Arbitrum 与 BNB Smart Chain 主网。'**
+  String get approvalUnsupportedBody;
+
+  /// No description provided for @approvalUnlimited.
+  ///
+  /// In zh, this message translates to:
+  /// **'无限额度授权'**
+  String get approvalUnlimited;
+
+  /// No description provided for @approvalAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'授权额度：{amount}'**
+  String approvalAmount(String amount);
+
+  /// No description provided for @approvalSpender.
+  ///
+  /// In zh, this message translates to:
+  /// **'被授权合约'**
+  String get approvalSpender;
+
+  /// No description provided for @approvalTokenContract.
+  ///
+  /// In zh, this message translates to:
+  /// **'Token 合约'**
+  String get approvalTokenContract;
+
+  /// No description provided for @approvalApprovedAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'最后变更时间'**
+  String get approvalApprovedAt;
+
+  /// No description provided for @approvalRisky.
+  ///
+  /// In zh, this message translates to:
+  /// **'发现风险信号'**
+  String get approvalRisky;
+
+  /// No description provided for @approvalIdentityUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'安全性尚未确认'**
+  String get approvalIdentityUnknown;
+
+  /// No description provided for @approvalKnownSpender.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务商已识别标签'**
+  String get approvalKnownSpender;
+
+  /// No description provided for @approvalReadOnlyNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'热钱包通过精确的零额度交易在本机撤销；观察钱包通过配对的 KT冷钱包完成二维码往返签名。'**
+  String get approvalReadOnlyNotice;
+
+  /// No description provided for @approvalPrivacyEnabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'此设备已允许外部授权扫描'**
+  String get approvalPrivacyEnabled;
+
+  /// No description provided for @approvalNoWallet.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先选择钱包再检查授权'**
+  String get approvalNoWallet;
+
+  /// No description provided for @approvalRevoke.
+  ///
+  /// In zh, this message translates to:
+  /// **'撤销授权'**
+  String get approvalRevoke;
+
+  /// No description provided for @approvalRevokeTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'撤销这项 Token 授权？'**
+  String get approvalRevokeTitle;
+
+  /// No description provided for @approvalRevokeBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'KT钱包会向 Token 合约发送 approve(被授权合约, 0)。这只会把授权额度归零，不会转出 Token。'**
+  String get approvalRevokeBody;
+
+  /// No description provided for @approvalRevokeConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'验证并撤销'**
+  String get approvalRevokeConfirm;
+
+  /// No description provided for @approvalRevokePreparing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在模拟精确的撤销交易并估算最高网络费…'**
+  String get approvalRevokePreparing;
+
+  /// No description provided for @approvalRevokeMaximumFee.
+  ///
+  /// In zh, this message translates to:
+  /// **'最高网络费：{fee}'**
+  String approvalRevokeMaximumFee(String fee);
+
+  /// No description provided for @approvalRevokeSubmitted.
+  ///
+  /// In zh, this message translates to:
+  /// **'撤销交易已提交；链上确认前仍显示为 Pending。'**
+  String get approvalRevokeSubmitted;
+
+  /// No description provided for @approvalRevokePending.
+  ///
+  /// In zh, this message translates to:
+  /// **'撤销确认中'**
+  String get approvalRevokePending;
+
+  /// No description provided for @approvalRevokeFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'撤销交易未提交，不会把授权显示为已撤销。'**
+  String get approvalRevokeFailed;
+
+  /// No description provided for @approvalRevokeAuthFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'未完成身份验证，没有签名任何内容。'**
+  String get approvalRevokeAuthFailed;
+
+  /// No description provided for @approvalRevokeHotOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前没有可用于这笔撤销交易的签名钱包。'**
+  String get approvalRevokeHotOnly;
 }
 
 class _AppLocalizationsDelegate

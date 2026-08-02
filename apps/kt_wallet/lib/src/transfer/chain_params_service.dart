@@ -49,6 +49,30 @@ class EvmNonceState {
   final int pending;
 }
 
+class EvmSpendableBalances {
+  const EvmSpendableBalances({
+    required this.native,
+    BigInt? nativeLatest,
+    this.token,
+    this.pendingAvailable = true,
+  }) : nativeLatest = nativeLatest ?? native;
+
+  /// Pending-state balance after the provider applies known mempool entries.
+  final BigInt native;
+
+  /// Latest mined balance before pending entries are applied.
+  final BigInt nativeLatest;
+  final BigInt? token;
+
+  /// False only when the node explicitly reports that its pending block state
+  /// is unsupported. An ordinary send may use [nativeLatest] only after the
+  /// same node proves confirmed nonce == pending nonce == the chosen nonce;
+  /// a replacement may use it only at the current confirmed nonce. Both paths
+  /// still fail closed when an earlier queued liability cannot be accounted
+  /// for.
+  final bool pendingAvailable;
+}
+
 /// Fetches real chain-state parameters over the tested `chains/rpc` clients.
 /// The transport is injectable (production defaults to the http-backed one,
 /// which owns the 10s request timeouts) and endpoints resolve through the
@@ -131,7 +155,7 @@ class ChainParamsService {
     required String to,
     required BigInt value,
     required String data,
-  }) {
+  }) async {
     if (chain != Chain.ethereum &&
         chain != Chain.polygon &&
         chain != Chain.base &&
@@ -140,10 +164,170 @@ class ChainParamsService {
         chain != Chain.bnb) {
       throw ArgumentError('not an EVM chain: $chain');
     }
+    final gateway = _gateway();
+    if (gateway != null) {
+      try {
+        return await gateway.estimateEvmGas(
+          chain: rpcCoinForChain(chain),
+          from: from,
+          to: to,
+          value: value,
+          data: data,
+        );
+      } catch (_) {
+        // Gateway transport/upstream failure: retry against the active direct
+        // endpoint. A failure of both paths propagates below.
+      }
+    }
     return EvmRpc(
       url: _endpoints(rpcCoinForChain(chain)),
       transport: _jsonRpc,
     ).estimateGas(from: from, to: to, value: value, data: data);
+  }
+
+  /// Simulates the exact transfer before any native key access. New transfers
+  /// default to `pending`; same-nonce replacements explicitly use `latest`
+  /// because they are alternatives to the pending candidate. A node-side
+  /// revert throws. For standard ERC-20 `transfer` calls, an explicit ABI
+  /// `false` return is also a rejection; an empty return remains accepted for
+  /// older non-standard tokens such as USDT.
+  Future<void> simulateEvmTransfer(
+    Chain chain, {
+    required String from,
+    required String to,
+    required BigInt value,
+    required String data,
+    required bool tokenTransfer,
+    String blockTag = 'pending',
+  }) async {
+    if (chain != Chain.ethereum &&
+        chain != Chain.polygon &&
+        chain != Chain.base &&
+        chain != Chain.arbitrum &&
+        chain != Chain.avalanche &&
+        chain != Chain.bnb) {
+      throw ArgumentError('not an EVM chain: $chain');
+    }
+    String result;
+    final gateway = _gateway();
+    if (gateway != null) {
+      try {
+        result = await gateway.simulateEvmTransfer(
+          chain: rpcCoinForChain(chain),
+          from: from,
+          to: to,
+          value: value,
+          data: data,
+          blockTag: blockTag,
+        );
+      } catch (_) {
+        result = await _simulateDirect(
+          chain,
+          from: from,
+          to: to,
+          value: value,
+          data: data,
+          blockTag: blockTag,
+        );
+      }
+    } else {
+      result = await _simulateDirect(
+        chain,
+        from: from,
+        to: to,
+        value: value,
+        data: data,
+        blockTag: blockTag,
+      );
+    }
+    if (!tokenTransfer || result == '0x') return;
+    final encoded = result.substring(2);
+    if (encoded.length != 64) {
+      throw RpcException('malformed ERC-20 transfer result');
+    }
+    if (BigInt.parse(encoded, radix: 16) == BigInt.zero) {
+      throw RpcException('token contract returned false');
+    }
+  }
+
+  Future<String> _simulateDirect(
+    Chain chain, {
+    required String from,
+    required String to,
+    required BigInt value,
+    required String data,
+    required String blockTag,
+  }) {
+    return EvmRpc(
+      url: _endpoints(rpcCoinForChain(chain)),
+      transport: _jsonRpc,
+    ).call(from: from, to: to, value: value, data: data, blockTag: blockTag);
+  }
+
+  /// Reads uncached pending-state balances used to authorize the exact EVM
+  /// transfer. Gateway is preferred for restricted networks; failure falls
+  /// back to the active direct endpoint. Failure of both paths propagates.
+  Future<EvmSpendableBalances> fetchEvmSpendableBalances(
+    Chain chain, {
+    required String address,
+    String? tokenContract,
+  }) async {
+    if (chain != Chain.ethereum &&
+        chain != Chain.polygon &&
+        chain != Chain.base &&
+        chain != Chain.arbitrum &&
+        chain != Chain.avalanche &&
+        chain != Chain.bnb) {
+      throw ArgumentError('not an EVM chain: $chain');
+    }
+    final gateway = _gateway();
+    if (gateway != null) {
+      try {
+        final balances = await gateway.getEvmSpendableBalances(
+          chain: rpcCoinForChain(chain),
+          address: address,
+          tokenContract: tokenContract,
+        );
+        return EvmSpendableBalances(
+          native: balances.native,
+          nativeLatest: balances.nativeLatest,
+          token: balances.token,
+          pendingAvailable: balances.pendingAvailable,
+        );
+      } catch (_) {
+        // Gateway failure: retry the same pending-state reads directly.
+      }
+    }
+
+    final rpc = EvmRpc(
+      url: _endpoints(rpcCoinForChain(chain)),
+      transport: _jsonRpc,
+    );
+    final latest = await Future.wait<BigInt>([
+      rpc.getBalance(address, blockTag: 'latest'),
+      if (tokenContract != null)
+        rpc.erc20Balance(tokenContract, address, blockTag: 'latest'),
+    ]);
+    try {
+      final pending = await Future.wait<BigInt>([
+        rpc.getBalance(address, blockTag: 'pending'),
+        if (tokenContract != null)
+          rpc.erc20Balance(tokenContract, address, blockTag: 'pending'),
+      ]);
+      return EvmSpendableBalances(
+        native: pending[0],
+        nativeLatest: latest[0],
+        token: tokenContract == null ? null : pending[1],
+      );
+    } on RpcException catch (error) {
+      if (!isEvmPendingStateUnavailable(error)) rethrow;
+      return EvmSpendableBalances(
+        native: latest[0],
+        nativeLatest: latest[0],
+        token: tokenContract == null ? null : latest[1],
+        pendingAvailable: false,
+      );
+    }
   }
 
   /// Fetches both mined and mempool nonce views from the same direct node.
@@ -171,6 +355,16 @@ class ChainParamsService {
     ]);
     return EvmNonceState(confirmed: values[0], pending: values[1]);
   }
+}
+
+/// True only for the narrow node capability error where `latest` remains
+/// usable but a pending-state block view does not exist (Avalanche C-Chain is
+/// the common case). Callers must additionally prove confirmed nonce equals
+/// pending nonce before using latest state for a new transaction.
+bool isEvmPendingStateUnavailable(RpcException error) {
+  final message = error.message.toLowerCase();
+  return message.contains('state not available for pending block') ||
+      message.contains('pending block is not available');
 }
 
 GasFeeEstimate _applyChainFeeFloor(Chain chain, GasFeeEstimate fees) {

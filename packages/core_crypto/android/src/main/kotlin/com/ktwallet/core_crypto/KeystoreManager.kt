@@ -5,6 +5,8 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import java.security.KeyStore
 import javax.crypto.Cipher
+import javax.crypto.BadPaddingException
+import javax.crypto.IllegalBlockSizeException
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
@@ -25,6 +27,11 @@ class KeystoreManager {
     }
 
     private fun alias(walletId: String) = "$KEY_ALIAS_PREFIX$walletId"
+
+    fun exists(walletId: String): Boolean {
+        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+        return keyStore.containsAlias(alias(requireValidWalletId(walletId)))
+    }
 
     private fun getOrCreateKey(walletId: String, requireAuth: Boolean): SecretKey {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
@@ -88,7 +95,16 @@ class KeystoreManager {
             entry.secretKey,
             GCMParameterSpec(TAG_LENGTH_BITS, iv),
         )
-        return cipher.doFinal(ciphertext)
+        return try {
+            cipher.doFinal(ciphertext)
+        } catch (_: BadPaddingException) {
+            throw StoredWalletCorruptedException()
+        } catch (_: IllegalBlockSizeException) {
+            throw StoredWalletCorruptedException()
+        } finally {
+            iv.fill(0)
+            ciphertext.fill(0)
+        }
     }
 
     fun deleteKey(walletId: String) {

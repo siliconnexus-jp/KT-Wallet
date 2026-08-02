@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:core_crypto/core_crypto.dart' show Coin;
@@ -114,38 +113,32 @@ void main() {
       },
     );
 
-    test(
-      'timeout surfaces as an exception (10s default is configurable)',
-      () async {
-        final slow = MockClient((request) async {
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-          return http.Response('{}', 200);
-        });
-        final client = GatewayClient(
-          baseUrl: 'https://gw.example',
-          client: slow,
-          timeout: const Duration(milliseconds: 1),
-        );
-        await expectLater(
-          client.getPrices(const ['ETH']),
-          throwsA(isA<TimeoutException>()),
-        );
-      },
-    );
+    test('timeout becomes a privacy-safe transport exception', () async {
+      final slow = MockClient((request) async {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        return http.Response('{}', 200);
+      });
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: slow,
+        timeout: const Duration(milliseconds: 1),
+      );
+      await expectLater(
+        client.getPrices(const ['ETH']),
+        throwsA(isA<GatewayTransportException>()),
+      );
+    });
 
-    test(
-      'non-200 HTTP status throws (transport failure, not GatewayException)',
-      () async {
-        final client = GatewayClient(
-          baseUrl: 'https://gw.example',
-          client: MockClient((request) async => http.Response('oops', 502)),
-        );
-        await expectLater(
-          client.getPrices(const ['ETH']),
-          throwsA(isA<http.ClientException>()),
-        );
-      },
-    );
+    test('non-200 status becomes a privacy-safe transport exception', () async {
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: MockClient((request) async => http.Response('oops', 502)),
+      );
+      await expectLater(
+        client.getPrices(const ['ETH']),
+        throwsA(isA<GatewayTransportException>()),
+      );
+    });
   });
 
   group('kt_getBalances', () {
@@ -274,6 +267,30 @@ void main() {
         throwsA(isA<FormatException>()),
       );
     });
+
+    test(
+      'rejects native decimals or symbol that contradict the chain',
+      () async {
+        for (final native in <Map<String, Object?>>[
+          {'raw': '1000000000000000000', 'decimals': 0, 'symbol': 'ETH'},
+          {'raw': '1000000000000000000', 'decimals': 18, 'symbol': 'BTC'},
+        ]) {
+          final recorder = _Recorder()
+            ..results = {
+              'kt_getBalances': {'native': native},
+            };
+          final client = GatewayClient(
+            baseUrl: 'https://gw.example',
+            client: recorder.client,
+          );
+          await expectLater(
+            client.getBalances(chain: Coin.eth, address: '0xA'),
+            throwsA(isA<FormatException>()),
+            reason: 'gateway metadata must not rescale or relabel native money',
+          );
+        }
+      },
+    );
   });
 
   group('kt_getPortfolio', () {
@@ -322,6 +339,40 @@ void main() {
       final params = recorder.requests.single['params'] as Map<String, Object?>;
       expect(params['accounts'], hasLength(2));
     });
+
+    test(
+      'isolates a portfolio row with contradictory native metadata',
+      () async {
+        final recorder = _Recorder()
+          ..results = {
+            'kt_getPortfolio': {
+              'accounts': [
+                {
+                  'chain': 'eth',
+                  'result': {
+                    'native': {
+                      'raw': '1000000000000000000',
+                      'decimals': 6,
+                      'symbol': 'ETH',
+                    },
+                  },
+                },
+              ],
+            },
+          };
+        final client = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: recorder.client,
+        );
+
+        final result = await client.getPortfolio(const [
+          GatewayPortfolioQuery(chain: Coin.eth, address: '0xA'),
+        ]);
+
+        expect(result.balances, isEmpty);
+        expect(result.failedChains, {Coin.eth});
+      },
+    );
   });
 
   group('kt_getPrices', () {
@@ -335,6 +386,7 @@ void main() {
                 'ETH': {'usd': 2500.5, 'change24h': 3.25},
                 'TRX': {'usd': 0.12, 'change24h': -1.5},
               },
+              'fiatPerUsd': {'USD': 1, 'CNY': 7.2, 'JPY': 151.5},
               'cachedAtMs': 1753000000000,
             },
           };
@@ -354,9 +406,32 @@ void main() {
         });
         expect(prices.usdBySymbol, {'ETH': 2500.5, 'TRX': 0.12});
         expect(prices.change24hBySymbol, {'ETH': 3.25, 'TRX': -1.5});
+        expect(prices.fiatPerUsd, {'USD': 1, 'CNY': 7.2, 'JPY': 151.5});
         expect(prices.cachedAtMs, 1753000000000);
       },
     );
+
+    test('rejects non-positive or non-finite market truth', () async {
+      final recorder = _Recorder()
+        ..results = {
+          'kt_getPrices': {
+            'prices': {
+              'ETH': {'usd': -2500, 'change24h': 1.5},
+              'POL': {'usd': 0, 'change24h': -2},
+              'TRX': {'usd': 0.12, 'change24h': 3.25},
+            },
+            'fiatPerUsd': {'USD': 0, 'CNY': -7.2, 'JPY': 151.5},
+          },
+        };
+      final prices = await GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: recorder.client,
+      ).getPrices(const ['ETH', 'POL', 'TRX']);
+
+      expect(prices.usdBySymbol, {'TRX': 0.12});
+      expect(prices.change24hBySymbol, {'TRX': 3.25});
+      expect(prices.fiatPerUsd, {'USD': 1, 'JPY': 151.5});
+    });
   });
 
   group('kt_getChainParams', () {
@@ -423,6 +498,164 @@ void main() {
     });
   });
 
+  group('EVM preflight', () {
+    test(
+      'simulation and gas estimation carry exact network-scoped call',
+      () async {
+        final recorder = _Recorder()
+          ..results = {
+            'kt_health': {
+              'ok': true,
+              'networks': ['polygon-amoy'],
+            },
+            'kt_simulateEvmTransfer': {'returnData': '0x${'0' * 63}1'},
+            'kt_estimateEvmGas': {'gas': '65432'},
+          };
+        final client = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: recorder.client,
+          networks: (_) => 'polygon-amoy',
+        );
+        final args = (
+          chain: Coin.polygon,
+          from: '0xFrom',
+          to: '0xToken',
+          value: BigInt.from(15),
+          data: '0xa9059cbb',
+        );
+
+        expect(
+          await client.simulateEvmTransfer(
+            chain: args.chain,
+            from: args.from,
+            to: args.to,
+            value: args.value,
+            data: args.data,
+            blockTag: 'latest',
+          ),
+          '0x${'0' * 63}1',
+        );
+        expect(
+          await client.estimateEvmGas(
+            chain: args.chain,
+            from: args.from,
+            to: args.to,
+            value: args.value,
+            data: args.data,
+          ),
+          BigInt.from(65432),
+        );
+
+        final calls = recorder.requests.where(
+          (r) => r['method'] != 'kt_health',
+        );
+        expect(calls, hasLength(2));
+        expect(calls.first['params'], {
+          'chain': 'polygon',
+          'network': 'polygon-amoy',
+          'from': '0xFrom',
+          'to': '0xToken',
+          'value': '15',
+          'data': '0xa9059cbb',
+          'blockTag': 'latest',
+        });
+        expect(calls.last['params'], {
+          'chain': 'polygon',
+          'network': 'polygon-amoy',
+          'from': '0xFrom',
+          'to': '0xToken',
+          'value': '15',
+          'data': '0xa9059cbb',
+        });
+      },
+    );
+
+    test('malformed simulation and zero gas fail closed', () async {
+      final recorder = _Recorder()
+        ..results = {
+          'kt_simulateEvmTransfer': {'returnData': 'not-hex'},
+          'kt_estimateEvmGas': {'gas': '0'},
+        };
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: recorder.client,
+      );
+      await expectLater(
+        client.simulateEvmTransfer(
+          chain: Coin.eth,
+          from: '0xFrom',
+          to: '0xTo',
+          value: BigInt.zero,
+          data: '0x',
+        ),
+        throwsFormatException,
+      );
+      await expectLater(
+        client.estimateEvmGas(
+          chain: Coin.eth,
+          from: '0xFrom',
+          to: '0xTo',
+          value: BigInt.zero,
+          data: '0x',
+        ),
+        throwsFormatException,
+      );
+    });
+
+    test(
+      'uncached spendable balances parse and carry token contract',
+      () async {
+        final recorder = _Recorder()
+          ..results = {
+            'kt_getEvmSpendableBalances': {
+              'nativePending': '900000000000000000',
+              'nativeLatest': '1000000000000000000',
+              'token': '2500000',
+              'pendingAvailable': false,
+            },
+          };
+        final client = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: recorder.client,
+        );
+
+        final balances = await client.getEvmSpendableBalances(
+          chain: Coin.eth,
+          address: '0xFrom',
+          tokenContract: '0xToken',
+        );
+        expect(balances.native, BigInt.parse('900000000000000000'));
+        expect(balances.nativeLatest, BigInt.parse('1000000000000000000'));
+        expect(balances.token, BigInt.from(2500000));
+        expect(balances.pendingAvailable, isFalse);
+        expect(recorder.requests.single['params'], {
+          'chain': 'eth',
+          'address': '0xFrom',
+          'tokenContract': '0xToken',
+        });
+      },
+    );
+
+    test('missing requested token balance fails closed', () async {
+      final recorder = _Recorder()
+        ..results = {
+          'kt_getEvmSpendableBalances': {'native': '1'},
+        };
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: recorder.client,
+      );
+      await expectLater(
+        client.getEvmSpendableBalances(
+          chain: Coin.eth,
+          address: '0xFrom',
+          tokenContract: '0xToken',
+        ),
+        throwsFormatException,
+      );
+    });
+  });
+
   group('kt_getHistory', () {
     test('ok status with records; malformed rows are skipped', () async {
       final recorder = _Recorder()
@@ -475,10 +708,10 @@ void main() {
       expect(history.records[0].outgoing, isTrue);
       expect(history.records[0].fromAddress, '0xEthAddr');
       expect(history.records[0].toAddress, '0xRecipient');
-      expect(history.records[0].failed, isFalse);
+      expect(history.records[0].status, GatewayTransactionStatus.confirmed);
       expect(history.records[0].amountRaw, BigInt.parse('1500000000000000000'));
       expect(history.records[1].outgoing, isFalse);
-      expect(history.records[1].failed, isTrue);
+      expect(history.records[1].status, GatewayTransactionStatus.failed);
     });
 
     test('status unsupported maps to the typed unsupported result', () async {
@@ -537,6 +770,103 @@ void main() {
         throwsA(isA<FormatException>()),
       );
     });
+  });
+
+  group('kt_getEvmTokenApprovals', () {
+    test('requires consent and parses the complete typed approval row', () async {
+      final recorder = _Recorder()
+        ..results = {
+          'kt_health': {
+            'ok': true,
+            'networks': ['eth-mainnet'],
+          },
+          'kt_getEvmTokenApprovals': {
+            'status': 'ok',
+            'source': 'goplus',
+            'network': 'eth-mainnet',
+            'approvals': [
+              {
+                'tokenAddress': '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                'tokenName': 'Token',
+                'tokenSymbol': 'TOK',
+                'decimals': 18,
+                'balance': '5',
+                'spender': '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+                'spenderName': 'Router',
+                'spenderTag': 'Example',
+                'spenderTrusted': false,
+                'amount': 'Unlimited',
+                'unlimited': true,
+                'approvedAt': 1700000000,
+                'transaction':
+                    '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+                'risk': 'unsafe',
+              },
+            ],
+          },
+        };
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: recorder.client,
+        networks: (_) => 'eth-mainnet',
+      );
+
+      await expectLater(
+        client.getEvmTokenApprovals(
+          chain: Coin.eth,
+          address: '0x85f6be9460291e86e0fb49b07d0a83cc5f7206cd',
+          privacyConsent: false,
+        ),
+        throwsArgumentError,
+      );
+      expect(recorder.requests, isEmpty);
+
+      final result = await client.getEvmTokenApprovals(
+        chain: Coin.eth,
+        address: '0x85f6be9460291e86e0fb49b07d0a83cc5f7206cd',
+        privacyConsent: true,
+      );
+      expect(result.network, 'eth-mainnet');
+      expect(result.source, 'goplus');
+      expect(result.approvals, hasLength(1));
+      expect(result.approvals.single.unlimited, isTrue);
+      expect(result.approvals.single.risk, GatewayTokenApprovalRisk.unsafe);
+      expect(recorder.requests.last['params'], {
+        'chain': 'eth',
+        'network': 'eth-mainnet',
+        'address': '0x85f6be9460291e86e0fb49b07d0a83cc5f7206cd',
+        'privacyConsent': true,
+      });
+    });
+
+    test(
+      'malformed rows fail closed instead of becoming an empty list',
+      () async {
+        final recorder = _Recorder()
+          ..results = {
+            'kt_getEvmTokenApprovals': {
+              'status': 'ok',
+              'source': 'goplus',
+              'network': 'eth-mainnet',
+              'approvals': [
+                {'tokenAddress': 'missing-fields'},
+              ],
+            },
+          };
+        final client = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: recorder.client,
+        );
+        await expectLater(
+          client.getEvmTokenApprovals(
+            chain: Coin.eth,
+            address: '0x85f6be9460291e86e0fb49b07d0a83cc5f7206cd',
+            privacyConsent: true,
+          ),
+          throwsFormatException,
+        );
+      },
+    );
   });
 
   group('kt_broadcast and error mapping', () {
@@ -616,6 +946,30 @@ void main() {
             isA<GatewayException>().having((e) => e.code, 'code', -32001),
           ),
         );
+      },
+    );
+
+    test(
+      'transport failures never expose a credential-bearing gateway URL',
+      () async {
+        const canary = 'gateway-client-secret-canary';
+        final client = GatewayClient(
+          baseUrl: 'https://gateway.example/v1/$canary',
+          client: MockClient((request) async {
+            throw http.ClientException('connection refused', request.url);
+          }),
+        );
+
+        Object? thrown;
+        try {
+          await client.broadcast(chain: Coin.eth, payload: '0x02');
+        } on Object catch (error) {
+          thrown = error;
+        }
+
+        expect(thrown, isA<GatewayTransportException>());
+        expect(thrown.toString(), isNot(contains(canary)));
+        expect(thrown.toString(), isNot(contains('gateway.example')));
       },
     );
   });

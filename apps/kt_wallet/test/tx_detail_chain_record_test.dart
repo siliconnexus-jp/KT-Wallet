@@ -5,11 +5,15 @@ import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/l10n/app_localizations.dart';
-import 'package:kt_wallet/src/market/history_service.dart' show ChainTxRecord;
+import 'package:kt_wallet/src/market/history_service.dart'
+    show ChainTxRecord, ChainTxStatus;
 import 'package:kt_wallet/src/market/transaction_card.dart';
 import 'package:kt_wallet/src/platform/external_actions.dart';
 import 'package:kt_wallet/src/platform/media_gallery.dart';
 import 'package:kt_wallet/src/screens/transfer_screens.dart';
+import 'package:kt_wallet/src/state/networks.dart';
+
+import 'support/test_wallet_scope.dart';
 
 /// The detail route had the same defect as the token detail screen: with no
 /// local row it rendered a hardcoded demo transaction, and the records tab
@@ -20,16 +24,96 @@ Widget _app(Widget child) => MaterialApp(
   locale: const Locale('zh'),
   localizationsDelegates: AppLocalizations.localizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,
-  home: child,
+  home: withTestWalletScope(child),
 );
 
 void main() {
+  testWidgets(
+    'chain history keeps its original network after environment switch',
+    (tester) async {
+      final external = FakeExternalActions();
+      final previousExternal = ExternalActions.instance;
+      ExternalActions.instance = external;
+      addTearDown(() => ExternalActions.instance = previousExternal);
+      final networks = NetworkController(); // mainnet remains active
+
+      await tester.pumpWidget(
+        _app(
+          NetworkScope(
+            controller: networks,
+            child: TxDetailScreen(
+              chainRecord: ChainTxRecord(
+                coin: Coin.eth,
+                networkId: 'eth-sepolia',
+                hash: '0xsepolia-history',
+                outgoing: true,
+                amountText: '0.01 ETH',
+                timestamp: DateTime(2026, 8, 3),
+                confirmed: true,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sepolia'), findsOneWidget);
+      expect(find.text('Ethereum'), findsNothing);
+      final explorer = find.byIcon(Icons.open_in_new);
+      expect(explorer, findsOneWidget);
+      await tester.tap(explorer);
+      await tester.pumpAndSettle();
+      expect(
+        external.opened.single.toString(),
+        'https://sepolia.etherscan.io/tx/0xsepolia-history',
+      );
+    },
+  );
+
+  testWidgets(
+    'legacy or cross-family network identity never guesses an explorer',
+    (tester) async {
+      Future<void> pump(ChainTxRecord record) async {
+        await tester.pumpWidget(_app(TxDetailScreen(chainRecord: record)));
+        await tester.pumpAndSettle();
+        expect(find.byIcon(Icons.open_in_new), findsNothing);
+        expect(
+          find.byKey(const ValueKey('transaction-export-receipt')),
+          findsNothing,
+        );
+      }
+
+      await pump(
+        ChainTxRecord(
+          coin: Coin.eth,
+          hash: 'legacy-without-network',
+          outgoing: false,
+          amountText: '1 ETH',
+          timestamp: DateTime(2026, 8, 3),
+          confirmed: true,
+        ),
+      );
+      await pump(
+        ChainTxRecord(
+          coin: Coin.tron,
+          networkId: 'eth-mainnet',
+          hash: 'cross-family-network',
+          outgoing: false,
+          amountText: '1 TRX',
+          timestamp: DateTime(2026, 8, 3),
+          confirmed: true,
+        ),
+      );
+    },
+  );
+
   testWidgets('an on-chain record renders ITS own values', (tester) async {
     await tester.pumpWidget(
       _app(
         TxDetailScreen(
           chainRecord: ChainTxRecord(
             coin: Coin.tron,
+            networkId: 'tron-mainnet',
             hash: 'abc123def456',
             outgoing: false,
             fromAddress: 'TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT',
@@ -68,6 +152,30 @@ void main() {
 
     expect(find.text('失败'), findsWidgets);
     expect(find.text('-120.00 USDT'), findsNothing);
+  });
+
+  testWidgets('an unknown record is honest and not shown as failed', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        TxDetailScreen(
+          chainRecord: ChainTxRecord(
+            coin: Coin.eth,
+            hash: 'status-missing',
+            outgoing: true,
+            amountText: '1 ETH',
+            timestamp: DateTime(2026, 3, 9),
+            status: ChainTxStatus.unknown,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('状态暂不可用'), findsWidgets);
+    expect(find.text('失败'), findsNothing);
+    expect(find.text('已确认'), findsNothing);
   });
 
   testWidgets('an unverified token shows its contract and warning', (
@@ -154,6 +262,7 @@ void main() {
         TxDetailScreen(
           chainRecord: ChainTxRecord(
             coin: Coin.tron,
+            networkId: 'tron-mainnet',
             hash: 'abc123def456',
             outgoing: false,
             fromAddress: 'TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT',
@@ -224,6 +333,7 @@ void main() {
         TxDetailScreen(
           chainRecord: ChainTxRecord(
             coin: Coin.eth,
+            networkId: 'eth-mainnet',
             hash: '0xreceipt',
             outgoing: true,
             amountText: '0.01 ETH',

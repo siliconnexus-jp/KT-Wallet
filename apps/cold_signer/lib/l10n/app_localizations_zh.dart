@@ -24,6 +24,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get actionImport => '导入';
 
   @override
+  String get actionValidating => '正在校验…';
+
+  @override
+  String get cameraUnavailable => '相机不可用';
+
+  @override
   String get done => '完成';
 
   @override
@@ -110,6 +116,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get importWalletTitle => '导入钱包';
 
   @override
+  String get mnemonicInvalidChecksum => '助记词无效，请检查每个单词、单词数量和 BIP-39 校验和。';
+
+  @override
   String wordCountOption(int count) {
     return '$count 个单词';
   }
@@ -134,6 +143,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get enableFaceId => '启用 Face ID';
+
+  @override
+  String get biometricUnavailable => '此设备尚未设置可用的生物识别或设备认证。';
+
+  @override
+  String get walletSecureStorageFailed => '钱包安全存储失败，未保存任何密钥。';
+
+  @override
+  String get secureStorageUnavailableTitle => '安全存储不可用';
+
+  @override
+  String get secureStorageUnavailableDesc =>
+      'KT冷钱包无法安全读取钱包、密码和锁定状态，签名功能将保持锁定。请重新启动 App，或从可信来源重新安装。';
+
+  @override
+  String get actionRetry => '重试';
 
   @override
   String get biometricSkip => '暂不启用，仅使用密码';
@@ -172,6 +197,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get securityCheckPassed => '安全检查通过 · 飞行模式已开启';
+
+  @override
+  String get offlineStatusConfirmed => '网络已断开';
+
+  @override
+  String get offlineStatusConnected => '检测到网络连接';
+
+  @override
+  String get offlineStatusUnknown => '无法确认网络状态';
 
   @override
   String get scanPendingTx => '扫描待签名交易';
@@ -249,6 +283,51 @@ class AppLocalizationsZh extends AppLocalizations {
   String get checkLevelBlock => '危险';
 
   @override
+  String get checkDetailUnknown => '无法确认状态';
+
+  @override
+  String get checkDetailNetworkSafe => '未检测到网络连接';
+
+  @override
+  String get checkDetailNetworkUnsafe => '检测到网络连接';
+
+  @override
+  String get checkDetailAirplaneSafe => '飞行模式已开启';
+
+  @override
+  String get checkDetailAirplaneUnsafe => '飞行模式未开启';
+
+  @override
+  String get checkDetailBluetoothSafe => '蓝牙已关闭';
+
+  @override
+  String get checkDetailBluetoothUnsafe => '蓝牙已开启';
+
+  @override
+  String get checkDetailPasscodeSafe => '设备密码已设置';
+
+  @override
+  String get checkDetailPasscodeUnsafe => '设备密码未设置';
+
+  @override
+  String get checkDetailBiometricSafe => '生物识别可用';
+
+  @override
+  String get checkDetailBiometricUnsafe => '生物识别不可用';
+
+  @override
+  String get checkDetailScreenCaptureSafe => '未检测到屏幕录制';
+
+  @override
+  String get checkDetailScreenCaptureUnsafe => '检测到屏幕录制';
+
+  @override
+  String get checkDetailIntegritySafe => '系统完整性检查通过';
+
+  @override
+  String get checkDetailIntegrityUnsafe => '检测到 root 或越狱';
+
+  @override
   String get securityChecking => '正在检查设备状态…';
 
   @override
@@ -289,6 +368,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get toAddress => '收款地址（To）';
 
   @override
+  String get spenderAddress => '被授权合约';
+
+  @override
+  String get nativeTransferOperation => '原生币转账';
+
+  @override
+  String get tokenTransferOperation => 'Token 转账';
+
+  @override
+  String get approvalRevokeOperation => '撤销 Token 授权';
+
+  @override
+  String get approvalRevokeZeroAllowance => '将授权额度设为零';
+
+  @override
+  String get approvalRevokeSignerNotice =>
+      '这是精确的 ERC-20 approve(被授权合约, 0) 调用，只撤销额度，不会转出 Token。';
+
+  @override
+  String get tokenContractLabel => 'Token 合约';
+
+  @override
+  String get chainIdLabel => 'Chain ID';
+
+  @override
+  String get maximumFeeBaseUnits => '最高网络费（最小单位）';
+
+  @override
   String get walletIdLabel => '钱包 ID';
 
   @override
@@ -314,13 +421,19 @@ class AppLocalizationsZh extends AppLocalizations {
       '该交易包含无法安全解析的内容，KT Cold Signer 已拒绝签名以保护你的资产。';
 
   @override
+  String get transactionParseFailed => '无法安全解析';
+
+  @override
+  String get signingFailed => '签名失败，交易、钱包或认证未通过校验。';
+
+  @override
   String unknownContractCallDetected(String method) {
     return '检测到未知合约调用：$method';
   }
 
   @override
   String get unknownContractCallDesc =>
-      'V1 仅支持原生币和 Token 转账。approve、permit 等授权类调用一律拒绝。';
+      '仅支持原生币转账、Token 转账和精确的 approve(被授权合约, 0) 撤销。非零 approve、permit 与未知调用一律拒绝。';
 
   @override
   String get authTitle => '身份验证';
@@ -350,6 +463,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get enterPinToSign => '输入 App 密码以完成签名';
 
   @override
+  String get enterPinToDelete => '输入 App 密码以继续删除';
+
+  @override
   String get pinIncorrect => '密码错误，请重试';
 
   @override
@@ -371,6 +487,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get signatureVoided => '签名已作废';
+
+  @override
+  String get signResultUnavailable => '签名结果不可用';
 
   @override
   String dynamicShard(int received, int total) {
@@ -421,10 +540,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mnemonicBackupCheckDesc => '定期抽查助记词是否仍能正确抄录';
 
   @override
+  String get mnemonicReviewFailed => '认证或助记词校验失败，未显示任何助记词。';
+
+  @override
   String get deleteWallet => '删除钱包';
 
   @override
-  String get deleteWalletReqDesc => '需要密码、生物识别和确认文字';
+  String get deleteWalletReqDesc => '需要 App 密码和确认文字；已开启系统认证时还必须通过系统认证';
 
   @override
   String get destroyAllData => '销毁全部钱包数据';
@@ -457,6 +579,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get screenCaptureProtection => '截图安全提醒';
 
   @override
+  String get screenCaptureBlocked => '检测到录屏或投屏';
+
+  @override
+  String get screenCaptureBlockedHint => '录屏或投屏期间助记词已隐藏。停止捕获后会自动恢复。';
+
+  @override
   String get permanentlyDeleteWallet => '永久删除钱包';
 
   @override
@@ -476,6 +604,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get typeToConfirmDelete => '请输入「删除钱包」以继续';
 
   @override
+  String get deleteWalletConfirmationPhrase => '删除钱包';
+
+  @override
+  String get verifyToDeleteWallet => '验证以永久删除此钱包';
+
+  @override
+  String get deleteAuthenticationFailed => '认证失败，钱包未删除。';
+
+  @override
+  String get deleteWalletFailed => '无法安全删除钱包，当前钱包未被移除，请重试。';
+
+  @override
   String get displayLanguage => '显示语言';
 
   @override
@@ -488,6 +628,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get languageSystem => '跟随系统';
 
   @override
+  String get settingsSaveFailed => '无法保存设置，当前内容未改变，请重试。';
+
+  @override
   String get deviceMode => '设备模式';
 
   @override
@@ -498,4 +641,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceModeSwitchDesc => '切换前请确认本机不再用作签名器。切换后将返回模式选择页。';
+
+  @override
+  String get deviceModeSaveFailed => '无法保存设备模式，当前模式未改变，请重试。';
+
+  @override
+  String get pinKeyDelete => '删除最后一位';
 }

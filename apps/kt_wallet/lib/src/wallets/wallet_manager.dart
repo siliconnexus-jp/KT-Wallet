@@ -131,3 +131,10 @@ class WalletError implements Exception {
   @override
   String toString() => 'WalletError: $message';
 }
+
+/// The same native account was already materialized under another local
+/// wallet ID. Keeping two labels for one signing key is confusing and can make
+/// balances, history, and self-transfer warnings appear inconsistent.
+class DuplicateWalletError extends WalletError {
+  DuplicateWalletError() : super('wallet already exists');
+}

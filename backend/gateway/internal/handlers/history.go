@@ -80,7 +80,7 @@ func (g *Gateway) GetHistory(ctx context.Context, params json.RawMessage) (any, 
 	}
 
 	key := network + "|" + p.Address + "|" + strconv.Itoa(limit)
-	if v, ok := g.historyCache.Get(key); ok {
+	if v, ok := g.historyCache.GetContext(ctx, key); ok {
 		return v, nil
 	}
 
@@ -96,7 +96,7 @@ func (g *Gateway) GetHistory(ctx context.Context, params json.RawMessage) (any, 
 	if rpcErr != nil {
 		return nil, rpcErr
 	}
-	g.historyCache.Set(key, res)
+	g.historyCache.SetContext(ctx, key, res)
 	return res, nil
 }
 

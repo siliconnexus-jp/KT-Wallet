@@ -70,6 +70,28 @@ void main() {
     });
   });
 
+  group('ERC-20 approval revocation calldata', () {
+    test('encodes only approve(spender, 0)', () {
+      final calldata = Erc20.revokeApprovalCalldata(
+        spender: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
+      );
+      expect(
+        _hex(calldata),
+        '095ea7b3'
+        '0000000000000000000000005aaeb6053f3e94c9b9a09f33669435e7ef1beaed'
+        '${'0' * 64}',
+      );
+      expect(calldata.length, 68);
+    });
+
+    test('rejects a malformed spender address', () {
+      expect(
+        () => Erc20.revokeApprovalCalldata(spender: '0x1234'),
+        throwsArgumentError,
+      );
+    });
+  });
+
   group('TxPreview', () {
     test('native transfer total spend = amount + maxFee', () {
       final preview = TxPreview(
@@ -106,6 +128,31 @@ void main() {
           from: '0xfrom',
           to: '0xto',
           amount: Amount.parse('1', 6),
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('approval revoke requires EVM, contract and zero amount', () {
+      expect(
+        () => TransferIntent(
+          chain: Chain.ethereum,
+          operation: TxOperation.approvalRevoke,
+          from: '0xfrom',
+          to: '0xto',
+          amount: Amount(raw: BigInt.one, decimals: 18),
+          tokenContract: '0xtoken',
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => TransferIntent(
+          chain: Chain.tron,
+          operation: TxOperation.approvalRevoke,
+          from: 'Tfrom',
+          to: 'Tto',
+          amount: Amount(raw: BigInt.zero, decimals: 6),
+          tokenContract: 'Ttoken',
         ),
         throwsArgumentError,
       );

@@ -3,11 +3,17 @@
 /// the human-readable value. Doubles are never used for money
 /// (detailed-design.md §4.1) — enforced by lint (no-double-in-amount).
 class Amount {
+  /// Defensive upper bound for metadata-controlled token scales. Existing
+  /// supported assets use at most 18 decimals; 36 leaves ample protocol room
+  /// while preventing absurd external metadata from driving huge padding and
+  /// misleading UI values.
+  static const maxDecimals = 36;
+
   Amount({required this.raw, required this.decimals, this.symbol = ''}) {
     if (raw < BigInt.zero) {
       throw AmountError('amount cannot be negative: $raw');
     }
-    if (decimals < 0 || decimals > 36) {
+    if (decimals < 0 || decimals > maxDecimals) {
       throw AmountError('unreasonable decimals: $decimals');
     }
   }
@@ -51,10 +57,15 @@ class Amount {
     }
     if (fracPart.length > decimals) {
       throw AmountError(
-          'too many fractional digits for $decimals-decimal token');
+        'too many fractional digits for $decimals-decimal token',
+      );
     }
     final scaled = intPart + fracPart.padRight(decimals, '0');
-    return Amount(raw: BigInt.parse(scaled), decimals: decimals, symbol: symbol);
+    return Amount(
+      raw: BigInt.parse(scaled),
+      decimals: decimals,
+      symbol: symbol,
+    );
   }
 
   static Amount zero(int decimals, {String symbol = ''}) =>

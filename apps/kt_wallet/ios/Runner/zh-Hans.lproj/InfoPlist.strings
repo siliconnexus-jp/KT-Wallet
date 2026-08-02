@@ -1,2 +1,5 @@
 "CFBundleDisplayName" = "KT钱包";
 "CFBundleName" = "KT钱包";
+"NSCameraUsageDescription" = "相机用于扫描离线签名器的二维码（账户导出和已签名交易）以及收款地址二维码。";
+"NSFaceIDUsageDescription" = "Face ID 用于确认转账，并在启用应用锁时解锁 KT钱包。";
+"NSPhotoLibraryAddUsageDescription" = "保存收款卡片会将二维码图片写入您的照片图库。KT钱包不会读取您已有的照片。";

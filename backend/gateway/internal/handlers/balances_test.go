@@ -147,8 +147,8 @@ func TestEVMPerTokenErrorIsolation(t *testing.T) {
 	if good["raw"] != "100" || good["error"] != nil {
 		t.Fatalf("healthy token corrupted by sibling failure: %v", good)
 	}
-	if bad["error"] == nil || !strings.Contains(bad["error"].(string), "execution reverted") {
-		t.Fatalf("failing token must carry its upstream error: %v", bad)
+	if bad["error"] != "token balance temporarily unavailable" {
+		t.Fatalf("failing token must carry a privacy-safe availability error: %v", bad)
 	}
 	if bad["raw"] != "0" {
 		t.Fatalf("failing token raw should be \"0\": %v", bad)
@@ -164,8 +164,8 @@ func TestEVMBalancesNativeFailureFailsCall(t *testing.T) {
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.EthURLs = []string{node.srv.URL} })
 	resp := e.rpc("kt_getBalances", balancesParams("eth", evmSelf, ""))
 	errObj := assertErrCode(t, resp, rpc.CodeUpstream)
-	if d := errData(t, errObj); d["message"] != "header not found" {
-		t.Fatalf("node message lost: %v", d)
+	if d := errData(t, errObj); d["message"] != "upstream rejected request" {
+		t.Fatalf("untrusted node message must be normalized: %v", d)
 	}
 }
 

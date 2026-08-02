@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:airgap_protocol/airgap_protocol.dart';
+import 'package:chains/chains.dart';
 
 /// Canonical demo air-gap traffic for the simulated camera loop.
 ///
@@ -15,7 +16,16 @@ import 'package:airgap_protocol/airgap_protocol.dart';
 /// Fixed 8-byte request id. Random-looking but constant so tests are
 /// deterministic; its hex prefix 7F3A2C matches the REQ-7F3A2C label used
 /// across the design mocks.
-final Uint8List demoReqId = Uint8List.fromList(const [0x7f, 0x3a, 0x2c, 0x91, 0x5e, 0xd4, 0x08, 0xb6]);
+final Uint8List demoReqId = Uint8List.fromList(const [
+  0x7f,
+  0x3a,
+  0x2c,
+  0x91,
+  0x5e,
+  0xd4,
+  0x08,
+  0xb6,
+]);
 
 /// Wallet id shared by the demo hot wallet and this demo signer, so the
 /// validator's walletId check passes for the canonical request.
@@ -47,39 +57,106 @@ const demoChunkSize = 64;
 /// native encoding (protobuf bytes for TRON); the demo uses the utf8 bytes of
 /// this canonical JSON intent so the payload is honest about being simulated
 /// while still flowing through the real fragment → aggregate → decode path.
-Uint8List demoRawTx() => Uint8List.fromList(utf8.encode(jsonEncode({'type': 'trc20_transfer', 'contract': demoUsdtContract, 'from': demoSignerAddress, 'to': demoToAddress, 'amount': '120000000', 'decimals': 6})));
+Uint8List demoRawTx() => _demoRawTxFor(demoSignerAddress);
+
+Uint8List _demoRawTxFor(String signerAddress) => Uint8List.fromList(
+  utf8.encode(
+    jsonEncode({
+      'type': 'trc20_transfer',
+      'contract': demoUsdtContract,
+      'from': signerAddress,
+      'to': demoToAddress,
+      'amount': '120000000',
+      'decimals': 6,
+    }),
+  ),
+);
 
 /// Display-hint summary, mirroring what kt_wallet would attach (reconciliation
 /// only — never a signing input, see payload.dart).
-Map<String, Object> demoSummary() => {'op': 'Token Transfer（TRC-20）', 'token': 'USDT', 'amount': '120.00', 'rawAmount': '120000000', 'decimals': 6, 'from': demoSignerAddress, 'to': demoToAddress};
+Map<String, Object> demoSummary() => _demoSummaryFor(demoSignerAddress);
+
+Map<String, Object> _demoSummaryFor(String signerAddress) => {
+  'op': 'Token Transfer（TRC-20）',
+  'token': 'USDT',
+  'amount': '120.00',
+  'rawAmount': '120000000',
+  'decimals': 6,
+  'from': signerAddress,
+  'to': demoToAddress,
+};
 
 /// The canonical demo sign-request: a TRON USDT transfer of 120.00 to
 /// [demoToAddress]. Only the timestamps vary (they must sit inside the
 /// validator's expiry/clock-skew window); pass [now] to pin them in tests.
 SignRequest demoSignRequest({DateTime? now}) {
   final createdAt = (now ?? DateTime.now()).millisecondsSinceEpoch ~/ 1000;
-  return SignRequest(reqId: demoReqId, walletId: demoWalletId, coin: demoCoinTron, rawTx: demoRawTx(), summary: demoSummary(), createdAt: createdAt, expiresAt: createdAt + demoExpirySeconds);
+  return SignRequest(
+    reqId: demoReqId,
+    walletId: demoWalletId,
+    coin: demoCoinTron,
+    rawTx: demoRawTx(),
+    summary: demoSummary(),
+    createdAt: createdAt,
+    expiresAt: createdAt + demoExpirySeconds,
+  );
+}
+
+/// Test/gallery request addressed to an explicitly supplied local wallet.
+///
+/// Keeping the sender aligned with that wallet is important: the production
+/// signer rejects any raw transaction whose owner/fee payer is not one of its
+/// derived accounts. This helper never participates in release QR ingestion.
+SignRequest demoSignRequestForWallet({
+  required String walletId,
+  required String signerAddress,
+  DateTime? now,
+}) {
+  final createdAt = (now ?? DateTime.now()).millisecondsSinceEpoch ~/ 1000;
+  return SignRequest(
+    reqId: demoReqId,
+    walletId: walletId,
+    coin: demoCoinTron,
+    rawTx: _demoRawTxFor(signerAddress),
+    summary: _demoSummaryFor(signerAddress),
+    createdAt: createdAt,
+    expiresAt: createdAt + demoExpirySeconds,
+  );
 }
 
 /// The exact ordered frame set kt_wallet's animated QR would emit for the
 /// canonical demo request.
-List<AirgapFrame> demoSignRequestFrames({DateTime? now}) => Fragmenter(chunkSize: demoChunkSize).fragment(demoSignRequest(now: now).encode(), reqId: demoReqId);
+List<AirgapFrame> demoSignRequestFrames({DateTime? now}) => Fragmenter(
+  chunkSize: demoChunkSize,
+).fragment(demoSignRequest(now: now).encode(), reqId: demoReqId);
 
 /// Fixed demo transaction hash. NOT a real hash of anything — a deterministic
 /// stand-in, since the demo signer holds no private key.
-const demoTxHash = '5c1f0e6a94d2b7c8130fa6e2d9b45871cc03e9f6a2814d5b7e90c3fa61d82b47';
+const demoTxHash =
+    '5c1f0e6a94d2b7c8130fa6e2d9b45871cc03e9f6a2814d5b7e90c3fa61d82b47';
 
 /// Builds the [SignResult] answering [request]: same reqId/wallet/coin, signed
 /// by the demo signer address. The "signedTx" is the request's rawTx followed
 /// by a fixed 65-byte pattern standing in for the secp256k1 signature — a real
 /// signer would produce the chain's native signed encoding here.
 SignResult demoSignResult(SignRequest request) {
-  final fakeSignature = Uint8List.fromList([for (var i = 0; i < 65; i++) (i * 7 + 13) & 0xff]);
-  return SignResult(reqId: request.reqId, walletId: request.walletId, coin: request.coin, signedTx: Uint8List.fromList([...request.rawTx, ...fakeSignature]), signer: demoSignerAddress, txHash: demoTxHash);
+  final fakeSignature = Uint8List.fromList([
+    for (var i = 0; i < 65; i++) (i * 7 + 13) & 0xff,
+  ]);
+  return SignResult(
+    reqId: request.reqId,
+    walletId: request.walletId,
+    coin: request.coin,
+    signedTx: Uint8List.fromList([...request.rawTx, ...fakeSignature]),
+    signer: demoSignerAddress,
+    txHash: demoTxHash,
+  );
 }
 
 /// Frame set for a sign-result, ready for the animated result QR.
-List<AirgapFrame> demoSignResultFrames(SignResult result) => Fragmenter(chunkSize: demoChunkSize).fragment(result.encode(), reqId: result.reqId);
+List<AirgapFrame> demoSignResultFrames(SignResult result) => Fragmenter(
+  chunkSize: demoChunkSize,
+).fragment(result.encode(), reqId: result.reqId);
 
 // ---- account export (C10 pairing) ------------------------------------------
 
@@ -98,11 +175,31 @@ AccountExport demoAccountExport() => AccountExport(
   walletId: demoExportWalletId,
   walletName: demoExportWalletName,
   accounts: [
-    AccountRecord(coin: 60, address: '0xc71c8B29b3d4b79E19bE1', path: "m/44'/60'/0'/0/0", index: 0),
+    AccountRecord(
+      coin: 60,
+      address: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
+      path: evmDefaultDerivationPath,
+      index: 0,
+    ),
     // Polygon reuses the Ethereum key: same address, same derivation path.
-    AccountRecord(coin: 966, address: '0xc71c8B29b3d4b79E19bE1', path: "m/44'/60'/0'/0/0", index: 0),
-    AccountRecord(coin: 195, address: 'TcPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa', path: "m/44'/195'/0'/0/0", index: 0),
-    AccountRecord(coin: 501, address: 'cyKpXwMWd4qmDqVr2W', path: "m/44'/501'/0'", index: 0),
+    AccountRecord(
+      coin: 966,
+      address: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
+      path: evmDefaultDerivationPath,
+      index: 0,
+    ),
+    AccountRecord(
+      coin: 195,
+      address: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+      path: tronDefaultDerivationPath,
+      index: 0,
+    ),
+    AccountRecord(
+      coin: 501,
+      address: 'So11111111111111111111111111111111111111112',
+      path: solanaDefaultDerivationPath,
+      index: 0,
+    ),
   ],
 );
 
@@ -118,4 +215,6 @@ Uint8List demoExportReqId() {
 /// The exact ordered frame set the export QR on C10 cycles through. Uses the
 /// demo chunk size so the payload spans several frames and the receiver's
 /// multi-frame aggregation actually gets exercised.
-List<AirgapFrame> demoAccountExportFrames() => Fragmenter(chunkSize: demoChunkSize).fragment(demoAccountExport().encode(), reqId: demoExportReqId());
+List<AirgapFrame> demoAccountExportFrames() => Fragmenter(
+  chunkSize: demoChunkSize,
+).fragment(demoAccountExport().encode(), reqId: demoExportReqId());

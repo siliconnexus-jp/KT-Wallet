@@ -25,26 +25,39 @@ class EntropyCipher(private val argon2: Argon2Kt = Argon2Kt()) {
     class OpenFailedException : Exception("kdf layer open failed")
 
     private fun deriveKey(password: String, salt: ByteArray): ByteArray {
-        val hash = argon2.hash(
-            mode = Argon2Mode.ARGON2_ID,
-            password = password.toByteArray(Charsets.UTF_8),
-            salt = salt,
-            tCostInIterations = ITERATIONS,
-            mCostInKibibyte = MEM_KIB,
-            parallelism = PARALLELISM,
-            hashLengthInBytes = 32,
-        )
-        return hash.rawHashAsByteArray()
+        val passwordBytes = password.toByteArray(Charsets.UTF_8)
+        return try {
+            argon2.hash(
+                mode = Argon2Mode.ARGON2_ID,
+                password = passwordBytes,
+                salt = salt,
+                tCostInIterations = ITERATIONS,
+                mCostInKibibyte = MEM_KIB,
+                parallelism = PARALLELISM,
+                hashLengthInBytes = 32,
+            ).rawHashAsByteArray()
+        } finally {
+            passwordBytes.fill(0)
+        }
     }
 
     fun seal(entropy: ByteArray, password: String): ByteArray {
         val salt = ByteArray(SALT_LEN).also { SecureRandom().nextBytes(it) }
         val key = deriveKey(password, salt)
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"))
-        val ct = cipher.doFinal(entropy)
-        key.fill(0)
-        return salt + cipher.iv + ct
+        var iv = ByteArray(0)
+        var ct = ByteArray(0)
+        return try {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"))
+            iv = cipher.iv
+            ct = cipher.doFinal(entropy)
+            salt + iv + ct
+        } finally {
+            key.fill(0)
+            salt.fill(0)
+            iv.fill(0)
+            ct.fill(0)
+        }
     }
 
     fun open(blob: ByteArray, password: String): ByteArray {
@@ -65,6 +78,9 @@ class EntropyCipher(private val argon2: Argon2Kt = Argon2Kt()) {
             throw OpenFailedException()
         } finally {
             key.fill(0)
+            salt.fill(0)
+            iv.fill(0)
+            ct.fill(0)
         }
     }
 }

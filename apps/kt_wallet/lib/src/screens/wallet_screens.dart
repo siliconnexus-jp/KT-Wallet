@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:core_crypto/core_crypto.dart';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -221,12 +222,23 @@ class AddWalletScreen extends StatelessWidget {
   /// Returns to the route that opened this screen. On a fresh install this
   /// screen is the router's initial location, so there is no route to pop;
   /// leave wallet mode instead and reveal the enclosing device-mode picker.
-  void _goBack(BuildContext context) {
+  Future<void> _goBack(BuildContext context) async {
     if (context.canPop()) {
       context.pop();
       return;
     }
-    DeviceModeScope.maybeOf(context)?.exitMode();
+    final scope = DeviceModeScope.maybeOf(context);
+    if (scope == null) return;
+    try {
+      await scope.exitMode();
+    } on Object {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context).walletUpdateFailed),
+        ),
+      );
+    }
   }
 
   /// Starts the create-onboarding flow: generate a fresh mnemonic, then walk
@@ -309,7 +321,7 @@ class AddWalletScreen extends StatelessWidget {
       gap: 16,
       navBar: KtNavBar(
         title: l10n.addWalletTitle,
-        onBack: () => _goBack(context),
+        onBack: () async => _goBack(context),
       ),
       children: [
         Text(
@@ -608,7 +620,7 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
         // refused above and this button was never rendered. Kept so the design
         // gallery's demo controller still completes the flow end to end.
         final current = controller.current;
-        if (current != null) controller.markBackedUp(current.id);
+        if (current != null) await controller.markBackedUp(current.id);
         messenger.showSnackBar(SnackBar(content: Text(l10n.backupVerified)));
       }
     } on AuthLockedException catch (error) {
@@ -795,6 +807,7 @@ class _MnemonicImportScreenState extends State<MnemonicImportScreen> {
 
   final _allControllers = List.generate(24, (_) => TextEditingController());
   int _countIndex = 0;
+  bool _submitting = false;
 
   List<TextEditingController> get _controllers =>
       _allControllers.sublist(0, _wordCounts[_countIndex]);
@@ -830,19 +843,49 @@ class _MnemonicImportScreenState extends State<MnemonicImportScreen> {
   }
 
   Future<void> _import() async {
+    if (_submitting) return;
     final l10n = AppLocalizations.of(context);
     final controller = WalletScope.of(context);
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     final mnemonic = _controllers.map((c) => c.text.trim()).join(' ');
     final name = l10n.walletImportedName(controller.count + 1);
+    setState(() => _submitting = true);
     try {
       await controller.importWallet(mnemonic, name: name);
+    } on DuplicateWalletError catch (_) {
+      if (mounted) {
+        setState(() => _submitting = false);
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.walletAlreadyExists)),
+        );
+      }
+      return;
+    } on InvalidMnemonicException catch (_) {
+      if (mounted) {
+        setState(() => _submitting = false);
+        messenger.showSnackBar(SnackBar(content: Text(l10n.mnemonicInvalid)));
+      }
+      return;
     } on CoreCryptoException catch (_) {
-      messenger.showSnackBar(SnackBar(content: Text(l10n.mnemonicInvalid)));
+      if (mounted) {
+        setState(() => _submitting = false);
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.walletPersistenceFailed)),
+        );
+      }
+      return;
+    } catch (_) {
+      if (mounted) {
+        setState(() => _submitting = false);
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.walletPersistenceFailed)),
+        );
+      }
       return;
     }
+    if (!mounted) return;
     messenger.showSnackBar(SnackBar(content: Text(l10n.mnemonicImported)));
-    if (mounted) context.go('/home');
+    context.go('/home');
   }
 
   // The user types their existing phrase in here; the fields are as sensitive
@@ -861,7 +904,8 @@ class _MnemonicImportScreenState extends State<MnemonicImportScreen> {
       ),
       bottom: KtPrimaryButton(
         label: l10n.actionImport,
-        onPressed: _complete ? _import : null,
+        loading: _submitting,
+        onPressed: _complete && !_submitting ? _import : null,
       ),
       children: [
         KtSegmented(
@@ -882,8 +926,10 @@ class _MnemonicImportScreenState extends State<MnemonicImportScreen> {
                         child: () {
                           final idx = r * 2 + c;
                           return Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: MediaQuery.sizeOf(context).width < 360
+                                  ? 8
+                                  : 14,
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
@@ -919,7 +965,7 @@ class _MnemonicImportScreenState extends State<MnemonicImportScreen> {
                                       isCollapsed: true,
                                       border: InputBorder.none,
                                       contentPadding: EdgeInsets.symmetric(
-                                        vertical: 8,
+                                        vertical: 13,
                                       ),
                                     ),
                                   ),
@@ -936,14 +982,24 @@ class _MnemonicImportScreenState extends State<MnemonicImportScreen> {
           ],
         ),
         Center(
-          child: GestureDetector(
-            onTap: _paste,
-            child: Text(
-              l10n.pasteMnemonic,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: WalletColors.accent,
+          child: Semantics(
+            button: true,
+            label: l10n.pasteMnemonic,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _paste,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Center(
+                  child: Text(
+                    l10n.pasteMnemonic,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: WalletColors.accent,
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -1133,45 +1189,66 @@ class ImportConfirmScreen extends StatelessWidget {
     _ => (WalletColors.text3, 'SLIP-44 $coin'),
   };
 
-  void _createWatchWallet(BuildContext context) {
+  Future<void> _createWatchWallet(BuildContext context) async {
     final l10n = AppLocalizations.of(context);
     final controller = WalletScope.of(context);
     if (!controller.canAddMore) return;
-    final coldWalletId = export?.walletId;
-    if (coldWalletId != null &&
-        controller.wallets.whereType<WatchWallet>().any(
-          (wallet) => wallet.coldWalletId == coldWalletId,
-        )) {
+    final scannedExport = export;
+    if (scannedExport == null) {
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
         ..showSnackBar(
-          const SnackBar(
-            content: Text('This offline wallet is already paired'),
-          ),
+          SnackBar(content: Text(l10n.invalidOfflineWalletExport)),
         );
       return;
     }
-    final id = 'w${DateTime.now().microsecondsSinceEpoch}';
-    controller.add(
-      WatchWallet(
-        id: id,
-        // The wallet's name/id/addresses are DATA from the signer's export —
-        // never retranslated. Demo fallback mirrors the old hardcoded values.
-        name: export?.walletName ?? l10n.walletSeedMain,
-        avatarColor: 0xFF0C1220,
-        addresses: export != null
-            ? addressesFromExport(export!)
-            : const ChainAddresses(
-                eth: '0x8f3C2a71c8B29b3d4b79E19bE1',
-                polygon: '0x8f3C2a71c8B29b3d4b79E19bE1',
-                tron: 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
-                solana: '6yKpXwMWd4qmDqVr2W',
-              ),
-        sortOrder: controller.count,
-        coldWalletId: export?.walletId ?? 'WLT-3E8A91',
-        protocolVersion: 1,
-      ),
-    );
+    try {
+      validateScannedAccountExport(
+        scannedExport,
+        // The only relaxed case is the known debug gallery fixture. Real
+        // camera traffic and every release build require all eight public
+        // keys and their derived addresses.
+        allowLegacyDemo: !kReleaseMode,
+      );
+    } on PayloadError {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(content: Text(l10n.invalidOfflineWalletExport)),
+        );
+      return;
+    }
+    final coldWalletId = scannedExport.walletId;
+    if (controller.wallets.whereType<WatchWallet>().any(
+      (wallet) => wallet.coldWalletId == coldWalletId,
+    )) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(content: Text(l10n.offlineWalletAlreadyPaired)),
+        );
+      return;
+    }
+    late final String id;
+    try {
+      id = controller.allocateWalletId();
+      await controller.add(
+        watchWalletFromAccountExport(
+          scannedExport,
+          id: id,
+          avatarColor: 0xFF0C1220,
+          sortOrder: controller.count,
+          allowLegacyDemo: !kReleaseMode,
+        ),
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(l10n.walletPersistenceFailed)));
+      return;
+    }
+    if (!context.mounted) return;
     controller.select(id);
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
@@ -1182,6 +1259,54 @@ class ImportConfirmScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(14) >= 20;
+    final liveController = WalletScope.maybeOf(context);
+    if (export == null &&
+        liveController != null &&
+        !liveController.allowsTestBypass) {
+      return KtScreen(
+        gap: 18,
+        navBar: KtNavBar(
+          title: l10n.importConfirmTitle,
+          onBack: () => Navigator.of(context).maybePop(),
+        ),
+        bottom: KtPrimaryButton(
+          label: l10n.connectColdWallet,
+          onPressed: () => context.go('/connect-cold'),
+        ),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: WalletColors.red.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.shield_outlined,
+                  size: 20,
+                  color: WalletColors.red,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    l10n.invalidOfflineWalletExport,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.5,
+                      fontWeight: FontWeight.w600,
+                      color: WalletColors.red,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
     final nets = export == null
         ? _demoNets
         : [
@@ -1255,37 +1380,76 @@ class ImportConfirmScreen extends StatelessWidget {
             children: [
               for (var i = 0; i < nets.length; i++) ...[
                 if (i > 0) const SizedBox(height: 13),
-                Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: nets[i].$1,
-                        shape: BoxShape.circle,
+                if (largeText)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: nets[i].$1,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              nets[i].$2,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: WalletColors.text,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        nets[i].$2,
+                      const SizedBox(height: 6),
+                      Text(
+                        nets[i].$3,
                         style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: WalletColors.text,
+                          fontSize: 12,
+                          fontFamily: KtFonts.mono,
+                          color: WalletColors.text2,
                         ),
                       ),
-                    ),
-                    Text(
-                      nets[i].$3,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontFamily: KtFonts.mono,
-                        color: WalletColors.text2,
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: nets[i].$1,
+                          shape: BoxShape.circle,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          nets[i].$2,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: WalletColors.text,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        nets[i].$3,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontFamily: KtFonts.mono,
+                          color: WalletColors.text2,
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ],
           ),
@@ -1312,187 +1476,249 @@ class WalletSwitcherSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final controller = WalletScope.of(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(14) >= 20;
+    final manageAction = Semantics(
+      button: true,
+      label: l10n.manage,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          context.pop();
+          context.push('/wallet-manage');
+        },
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.settings, size: 15, color: WalletColors.text2),
+              const SizedBox(width: 4),
+              Text(
+                l10n.manage,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: WalletColors.text2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
     return Scaffold(
       backgroundColor: WalletColors.text.withValues(alpha: 0.5),
-      body: GestureDetector(
-        // Opaque so taps on the dimmed scrim (where nothing is painted by
-        // this subtree) still hit-test here and dismiss the sheet.
-        behavior: HitTestBehavior.opaque,
-        onTap: () => context.pop(),
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: GestureDetector(
-            onTap: () {},
-            child: Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                color: WalletColors.surface,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: WalletColors.border,
-                      borderRadius: BorderRadius.circular(2),
+      body: Semantics(
+        button: true,
+        label: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+        child: GestureDetector(
+          // Opaque so taps on the dimmed scrim (where nothing is painted by
+          // this subtree) still hit-test here and dismiss the sheet.
+          behavior: HitTestBehavior.opaque,
+          onTap: () => context.pop(),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: GestureDetector(
+              onTap: () {},
+              child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: WalletColors.surface,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: WalletColors.border,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        l10n.walletsTitle,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: WalletColors.text,
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          context.pop();
-                          context.push('/wallet-manage');
-                        },
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.settings,
-                              size: 15,
-                              color: WalletColors.text2,
+                    const SizedBox(height: 16),
+                    if (largeText)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            l10n.walletsTitle,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: WalletColors.text,
                             ),
-                            const SizedBox(width: 4),
-                            Text(
-                              l10n.manage,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: WalletColors.text2,
-                              ),
+                          ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: manageAction,
+                          ),
+                        ],
+                      )
+                    else
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            l10n.walletsTitle,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: WalletColors.text,
                             ),
-                          ],
-                        ),
+                          ),
+                          manageAction,
+                        ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  for (final w in controller.wallets)
-                    () {
-                      final current = w.id == controller.current?.id;
-                      final isHot = w is HotWallet;
-                      final unbacked = isHot && !w.backedUp;
-                      return GestureDetector(
-                        onTap: () {
-                          controller.select(w.id);
-                          context.pop();
-                        },
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            color: current
-                                ? WalletColors.accent.withValues(alpha: 0.04)
-                                : WalletColors.bg,
-                            borderRadius: BorderRadius.circular(14),
-                            border: current
-                                ? Border.all(
-                                    color: WalletColors.accent,
-                                    width: 1.5,
-                                  )
-                                : null,
-                          ),
-                          child: Row(
-                            children: [
-                              Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  KtAvatar(
-                                    color: Color(w.avatarColor),
-                                    initial: w.name.characters.first,
-                                  ),
-                                  if (unbacked)
-                                    Positioned(
-                                      right: -2,
-                                      top: -2,
-                                      child: Container(
-                                        width: 12,
-                                        height: 12,
-                                        decoration: BoxDecoration(
-                                          color: WalletColors.red,
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: WalletColors.surface,
-                                            width: 2,
+                    const SizedBox(height: 16),
+                    for (final w in controller.wallets)
+                      () {
+                        final current = w.id == controller.current?.id;
+                        final isHot = w is HotWallet;
+                        final unbacked = isHot && !w.backedUp;
+                        return GestureDetector(
+                          onTap: () {
+                            controller.select(w.id);
+                            context.pop();
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: current
+                                  ? WalletColors.accent.withValues(alpha: 0.04)
+                                  : WalletColors.bg,
+                              borderRadius: BorderRadius.circular(14),
+                              border: current
+                                  ? Border.all(
+                                      color: WalletColors.accent,
+                                      width: 1.5,
+                                    )
+                                  : null,
+                            ),
+                            child: Row(
+                              children: [
+                                Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    KtAvatar(
+                                      color: Color(w.avatarColor),
+                                      initial: w.name.characters.first,
+                                    ),
+                                    if (unbacked)
+                                      Positioned(
+                                        right: -2,
+                                        top: -2,
+                                        child: Container(
+                                          width: 12,
+                                          height: 12,
+                                          decoration: BoxDecoration(
+                                            color: WalletColors.red,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: WalletColors.surface,
+                                              width: 2,
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
+                                  ],
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      if (MediaQuery.textScalerOf(
+                                            context,
+                                          ).scale(14) >=
+                                          20) ...[
                                         Text(
                                           w.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                           style: const TextStyle(
                                             fontSize: 15,
                                             fontWeight: FontWeight.w600,
                                             color: WalletColors.text,
                                           ),
                                         ),
-                                        const SizedBox(width: 8),
-                                        WalletTypeBadge(
-                                          kind: isHot
-                                              ? WalletKind.hot
-                                              : WalletKind.watch,
-                                          label: isHot
-                                              ? l10n.walletKindHot
-                                              : l10n.walletKindWatch,
+                                        const SizedBox(height: 4),
+                                        Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: WalletTypeBadge(
+                                            kind: isHot
+                                                ? WalletKind.hot
+                                                : WalletKind.watch,
+                                            label: isHot
+                                                ? l10n.walletKindHot
+                                                : l10n.walletKindWatch,
+                                          ),
                                         ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      _demoValue[w.id] ?? '\$0.00',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: WalletColors.text3,
+                                      ] else
+                                        Row(
+                                          children: [
+                                            Flexible(
+                                              child: Text(
+                                                w.name,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: WalletColors.text,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            WalletTypeBadge(
+                                              kind: isHot
+                                                  ? WalletKind.hot
+                                                  : WalletKind.watch,
+                                              label: isHot
+                                                  ? l10n.walletKindHot
+                                                  : l10n.walletKindWatch,
+                                            ),
+                                          ],
+                                        ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        _demoValue[w.id] ?? '\$0.00',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: WalletColors.text3,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              if (current)
-                                const Icon(
-                                  Icons.check_circle,
-                                  size: 20,
-                                  color: WalletColors.accent,
-                                ),
-                            ],
+                                if (current)
+                                  const Icon(
+                                    Icons.check_circle,
+                                    size: 20,
+                                    color: WalletColors.accent,
+                                  ),
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    }(),
-                  const SizedBox(height: 8),
-                  KtPrimaryButton(
-                    label: l10n.addWalletTitle,
-                    onPressed: () {
-                      context.pop();
-                      context.push('/add-wallet');
-                    },
-                  ),
-                ],
+                        );
+                      }(),
+                    const SizedBox(height: 8),
+                    KtPrimaryButton(
+                      label: l10n.addWalletTitle,
+                      onPressed: () {
+                        context.pop();
+                        context.push('/add-wallet');
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1532,7 +1758,15 @@ class _WalletManageScreenState extends State<WalletManageScreen> {
       ),
     );
     if (ok == true && context.mounted) {
-      await controller.remove(w.id);
+      try {
+        await controller.remove(w.id);
+      } catch (_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(content: Text(l10n.walletDeleteFailed)));
+        return;
+      }
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
@@ -1551,30 +1785,50 @@ class _WalletManageScreenState extends State<WalletManageScreen> {
       HotWallet() => l10n.walletStateNotBackedUp,
       WatchWallet() => 'KT Wallet Cold Signer',
     };
+    final largeText = MediaQuery.textScalerOf(context).scale(14) >= 20;
     return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Flexible(
-                child: Text(
-                  w.name,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: WalletColors.text,
-                  ),
-                ),
+          if (largeText) ...[
+            Text(
+              w.name,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: WalletColors.text,
               ),
-              const SizedBox(width: 8),
-              WalletTypeBadge(
+            ),
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: WalletTypeBadge(
                 kind: kind,
                 label: isHot ? l10n.walletKindHot : l10n.walletKindWatch,
               ),
-            ],
-          ),
+            ),
+          ] else
+            Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    w.name,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: WalletColors.text,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                WalletTypeBadge(
+                  kind: kind,
+                  label: isHot ? l10n.walletKindHot : l10n.walletKindWatch,
+                ),
+              ],
+            ),
           const SizedBox(height: 3),
           Text(
             state,
@@ -1602,9 +1856,16 @@ class _WalletManageScreenState extends State<WalletManageScreen> {
       buildDefaultDragHandles: false,
       // onReorderItem (unlike the deprecated onReorder) already delivers the
       // post-removal newIndex, so no manual off-by-one adjustment is needed.
-      onReorderItem: (oldIndex, newIndex) {
+      onReorderItem: (oldIndex, newIndex) async {
         if (newIndex == oldIndex) return;
-        controller.reorder(oldIndex, newIndex);
+        try {
+          await controller.reorder(oldIndex, newIndex);
+        } catch (_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context)
+            ..clearSnackBars()
+            ..showSnackBar(SnackBar(content: Text(l10n.walletUpdateFailed)));
+        }
       },
       children: [
         for (final (i, w) in wallets.indexed)
@@ -1685,6 +1946,7 @@ class _WalletManageScreenState extends State<WalletManageScreen> {
                     const SizedBox(width: 12),
                     _rowBody(l10n, w),
                     IconButton(
+                      tooltip: l10n.actionDelete,
                       icon: const Icon(
                         Icons.delete_outline,
                         size: 20,
@@ -1765,7 +2027,14 @@ class WalletDetailScreen extends StatelessWidget {
       ),
     );
     if (name != null && name.isNotEmpty && name != w.name) {
-      controller.rename(w.id, name);
+      try {
+        await controller.rename(w.id, name);
+      } catch (_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(content: Text(l10n.walletUpdateFailed)));
+      }
     }
   }
 
@@ -1816,7 +2085,15 @@ class WalletDetailScreen extends StatelessWidget {
       ),
     );
     if (ok == true && context.mounted) {
-      await controller.remove(w.id);
+      try {
+        await controller.remove(w.id);
+      } catch (_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(content: Text(l10n.walletDeleteFailed)));
+        return;
+      }
       if (!context.mounted) return;
       unawaited(Navigator.of(context).maybePop());
       ScaffoldMessenger.of(context)
@@ -1829,6 +2106,7 @@ class WalletDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final controller = WalletScope.of(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(14) >= 20;
     final wallet =
         (walletId == null
             ? null
@@ -1864,23 +2142,38 @@ class WalletDetailScreen extends StatelessWidget {
               size: 72,
             ),
             const SizedBox(height: 12),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _rename(context, wallet),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    wallet.name,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: WalletColors.text,
-                    ),
+            Semantics(
+              button: true,
+              label: '${l10n.actionEdit}: ${wallet.name}',
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _rename(context, wallet),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          wallet.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: WalletColors.text,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(
+                        Icons.edit,
+                        size: 16,
+                        color: WalletColors.text3,
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  const Icon(Icons.edit, size: 16, color: WalletColors.text3),
-                ],
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -1888,19 +2181,43 @@ class WalletDetailScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 for (final c in colors)
-                  GestureDetector(
-                    key: ValueKey('palette-$c'),
-                    onTap: () => controller.setColor(wallet.id, c),
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 5),
-                      width: 26,
-                      height: 26,
-                      decoration: BoxDecoration(
-                        color: Color(c),
-                        shape: BoxShape.circle,
-                        border: c == wallet.avatarColor
-                            ? Border.all(color: WalletColors.accent, width: 2)
-                            : null,
+                  Semantics(
+                    button: true,
+                    selected: c == wallet.avatarColor,
+                    label: '${l10n.actionEdit} ${l10n.walletDetailTitle}',
+                    child: GestureDetector(
+                      key: ValueKey('palette-$c'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () async {
+                        try {
+                          await controller.setColor(wallet.id, c);
+                        } catch (_) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context)
+                            ..clearSnackBars()
+                            ..showSnackBar(
+                              SnackBar(content: Text(l10n.walletUpdateFailed)),
+                            );
+                        }
+                      },
+                      child: SizedBox.square(
+                        dimension: 48,
+                        child: Center(
+                          child: Container(
+                            width: 26,
+                            height: 26,
+                            decoration: BoxDecoration(
+                              color: Color(c),
+                              shape: BoxShape.circle,
+                              border: c == wallet.avatarColor
+                                  ? Border.all(
+                                      color: WalletColors.accent,
+                                      width: 2,
+                                    )
+                                  : null,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -1916,11 +2233,15 @@ class WalletDetailScreen extends StatelessWidget {
                 value: isHot ? l10n.standardWallet : l10n.walletKindWatch,
               ),
               const SizedBox(height: 14),
-              KtDetailRow(label: 'Wallet ID', value: wallet.id, mono: true),
+              KtDetailRow(
+                label: l10n.walletIdLabel,
+                value: wallet.id,
+                mono: true,
+              ),
               if (wallet is WatchWallet) ...[
                 const SizedBox(height: 14),
                 KtDetailRow(
-                  label: 'KT Wallet Cold Signer',
+                  label: l10n.coldSignerWalletIdLabel,
                   value: wallet.coldWalletId,
                   mono: true,
                 ),
@@ -1939,44 +2260,93 @@ class WalletDetailScreen extends StatelessWidget {
                 color: WalletColors.amber.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.warning_amber_rounded,
-                    size: 18,
-                    color: WalletColors.amber,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      l10n.backupNotYet,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF9A6503),
-                      ),
+              child: largeText
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              size: 18,
+                              color: WalletColors.amber,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                l10n.backupNotYet,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF9A6503),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: WalletColors.amber,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              l10n.backupNow,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          size: 18,
+                          color: WalletColors.amber,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            l10n.backupNotYet,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF9A6503),
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: WalletColors.amber,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            l10n.backupNow,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: WalletColors.amber,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      l10n.backupNow,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ),
           ),
         if (isHot)
@@ -2024,36 +2394,40 @@ class SecurityRow extends StatelessWidget {
   final String label, sub;
   final bool danger;
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Icon(
-        icon,
-        size: 19,
-        color: danger ? WalletColors.red : WalletColors.text2,
-      ),
-      const SizedBox(width: 12),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: danger ? WalletColors.red : WalletColors.text,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              sub,
-              style: const TextStyle(fontSize: 12, color: WalletColors.text3),
-            ),
-          ],
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: const BoxConstraints(minHeight: 48),
+    child: Row(
+      children: [
+        Icon(
+          icon,
+          size: 19,
+          color: danger ? WalletColors.red : WalletColors.text2,
         ),
-      ),
-      const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3),
-    ],
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: danger ? WalletColors.red : WalletColors.text,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                sub,
+                style: const TextStyle(fontSize: 12, color: WalletColors.text3),
+              ),
+            ],
+          ),
+        ),
+        const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3),
+      ],
+    ),
   );
 }
 
@@ -2222,8 +2596,19 @@ class _MnemonicSheetBodyState extends State<_MnemonicSheetBody> {
                 const SizedBox(height: 8),
                 KtPrimaryButton(
                   label: l10n.backupTranscribed,
-                  onPressed: () {
-                    widget.controller.markBackedUp(widget.wallet.id);
+                  onPressed: () async {
+                    try {
+                      await widget.controller.markBackedUp(widget.wallet.id);
+                    } catch (_) {
+                      if (!mounted) return;
+                      widget.messenger
+                        ..clearSnackBars()
+                        ..showSnackBar(
+                          SnackBar(content: Text(l10n.walletUpdateFailed)),
+                        );
+                      return;
+                    }
+                    if (!context.mounted) return;
                     Navigator.of(context).pop();
                     widget.messenger
                       ..clearSnackBars()

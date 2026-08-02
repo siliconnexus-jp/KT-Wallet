@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:http/http.dart' as http;
 
+import '../rpc/bounded_http_client.dart';
 import 'balance_service.dart' show BalanceService;
+import 'fiat_math.dart';
 import 'gateway_client.dart';
 
 /// CoinGecko simple/price base URL — keyless public API tier.
@@ -20,7 +22,7 @@ class PriceService {
     this.baseUrl = defaultCoinGeckoBaseUrl,
     this.timeout = const Duration(seconds: 10),
     GatewayResolver? gateway,
-  }) : _client = client ?? http.Client(),
+  }) : _client = BoundedHttpClient(client ?? http.Client()),
        _gateway = gateway ?? _noGateway;
 
   static GatewayClient? _noGateway() => null;
@@ -66,6 +68,7 @@ class PriceService {
   Map<String, double>? _lastGoodTokenUsd;
   Map<Coin, double> _lastGoodChange24h = const {};
   Map<String, double> _lastGoodTokenChange24h = const {};
+  Map<String, double> _lastGoodFiatPerUsd = const {'USD': 1};
 
   /// Last successfully fetched quote set (in-memory only), or null if no
   /// fetch has ever succeeded in this session.
@@ -76,6 +79,10 @@ class PriceService {
   Map<String, double>? get lastGoodTokenUsd => _lastGoodTokenUsd;
   Map<Coin, double> get lastGoodChange24h => _lastGoodChange24h;
   Map<String, double> get lastGoodTokenChange24h => _lastGoodTokenChange24h;
+  Map<String, double> get lastGoodFiatPerUsd => _lastGoodFiatPerUsd;
+
+  double? fiatPerUsd(String currency) =>
+      _lastGoodFiatPerUsd[currency.toUpperCase()];
 
   double? tokenPriceUsd(String symbol) => _lastGoodTokenUsd?[symbol];
   double? change24hPercent(Coin coin) => _lastGoodChange24h[coin];
@@ -89,11 +96,33 @@ class PriceService {
     required Map<String, double> tokenUsd,
     required Map<Coin, double> nativeChange24h,
     required Map<String, double> tokenChange24h,
+    Map<String, double> fiatPerUsd = const {'USD': 1},
   }) {
-    if (nativeUsd.isNotEmpty) _lastGood = Map.unmodifiable(nativeUsd);
-    if (tokenUsd.isNotEmpty) _lastGoodTokenUsd = Map.unmodifiable(tokenUsd);
-    _lastGoodChange24h = Map.unmodifiable(nativeChange24h);
-    _lastGoodTokenChange24h = Map.unmodifiable(tokenChange24h);
+    final safeNativeUsd = {
+      for (final entry in nativeUsd.entries)
+        entry.key: ?positiveFiniteMarketNumber(entry.value),
+    };
+    final safeTokenUsd = {
+      for (final entry in tokenUsd.entries)
+        entry.key: ?positiveFiniteMarketNumber(entry.value),
+    };
+    if (safeNativeUsd.isNotEmpty) _lastGood = Map.unmodifiable(safeNativeUsd);
+    if (safeTokenUsd.isNotEmpty) {
+      _lastGoodTokenUsd = Map.unmodifiable(safeTokenUsd);
+    }
+    _lastGoodChange24h = Map.unmodifiable({
+      for (final entry in nativeChange24h.entries)
+        entry.key: ?finiteMarketNumber(entry.value),
+    });
+    _lastGoodTokenChange24h = Map.unmodifiable({
+      for (final entry in tokenChange24h.entries)
+        entry.key: ?finiteMarketNumber(entry.value),
+    });
+    _lastGoodFiatPerUsd = Map.unmodifiable({
+      'USD': 1,
+      for (final entry in fiatPerUsd.entries)
+        entry.key.toUpperCase(): ?positiveFiniteMarketNumber(entry.value),
+    });
   }
 
   /// Fetches spot USD prices. Returns null on any failure; partial responses
@@ -140,6 +169,7 @@ class PriceService {
           }
           _lastGoodChange24h = Map.unmodifiable(changeOut);
           _lastGoodTokenChange24h = Map.unmodifiable(tokenChangeOut);
+          _lastGoodFiatPerUsd = quoted.fiatPerUsd;
           _lastGood = Map.unmodifiable(out);
           return _lastGood;
         }
@@ -154,7 +184,7 @@ class PriceService {
         ...coinGeckoTokenIds.values,
       }.join(',');
       final uri = Uri.parse(
-        '$baseUrl/simple/price?ids=$ids&vs_currencies=usd'
+        '$baseUrl/simple/price?ids=$ids&vs_currencies=usd,cny,jpy'
         '&include_24hr_change=true',
       );
       final resp = await _client.get(uri).timeout(timeout);
@@ -165,26 +195,53 @@ class PriceService {
       final changeOut = <Coin, double>{};
       for (final entry in coinGeckoIds.entries) {
         final row = body[entry.value];
-        final usd = row is Map ? row['usd'] : null;
-        if (usd is num) out[entry.key] = usd.toDouble();
+        final usd = row is Map ? positiveFiniteMarketNumber(row['usd']) : null;
+        if (usd != null) out[entry.key] = usd;
         final change = row is Map ? row['usd_24h_change'] : null;
-        if (change is num) changeOut[entry.key] = change.toDouble();
+        final parsedChange = finiteMarketNumber(change);
+        if (usd != null && parsedChange != null) {
+          changeOut[entry.key] = parsedChange;
+        }
       }
       final tokenOut = <String, double>{};
       final tokenChangeOut = <String, double>{};
       for (final entry in coinGeckoTokenIds.entries) {
         final row = body[entry.value];
-        final usd = row is Map ? row['usd'] : null;
-        if (usd is num) tokenOut[entry.key] = usd.toDouble();
+        final usd = row is Map ? positiveFiniteMarketNumber(row['usd']) : null;
+        if (usd != null) tokenOut[entry.key] = usd;
         final change = row is Map ? row['usd_24h_change'] : null;
-        if (change is num) tokenChangeOut[entry.key] = change.toDouble();
+        final parsedChange = finiteMarketNumber(change);
+        if (usd != null && parsedChange != null) {
+          tokenChangeOut[entry.key] = parsedChange;
+        }
       }
       if (out.isEmpty && tokenOut.isEmpty) return null;
+      final rates = <String, double>{'USD': 1};
+      for (final row in body.values) {
+        if (row is! Map) continue;
+        final usd = row['usd'];
+        final cny = row['cny'];
+        final jpy = row['jpy'];
+        final safeUsd = positiveFiniteMarketNumber(usd);
+        if (safeUsd == null) continue;
+        final safeCny = positiveFiniteMarketNumber(cny);
+        final safeJpy = positiveFiniteMarketNumber(jpy);
+        if (safeCny != null) {
+          final rate = safeCny / safeUsd;
+          if (rate.isFinite && rate > 0) rates['CNY'] = rate;
+        }
+        if (safeJpy != null) {
+          final rate = safeJpy / safeUsd;
+          if (rate.isFinite && rate > 0) rates['JPY'] = rate;
+        }
+        if (rates.length == 3) break;
+      }
       if (tokenOut.isNotEmpty) {
         _lastGoodTokenUsd = Map.unmodifiable(tokenOut);
       }
       _lastGoodChange24h = Map.unmodifiable(changeOut);
       _lastGoodTokenChange24h = Map.unmodifiable(tokenChangeOut);
+      _lastGoodFiatPerUsd = Map.unmodifiable(rates);
       _lastGood = Map.unmodifiable(out);
       return _lastGood;
     } catch (_) {

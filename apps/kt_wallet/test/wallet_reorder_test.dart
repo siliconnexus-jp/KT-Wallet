@@ -40,13 +40,15 @@ void main() {
     test(
       'reorders the list and persists sortOrder across a store reload',
       () async {
-        final controller =
-            WalletController(WalletManager(), store: WalletStore(db))
-              ..add(_wallet('w1', 'A', 0))
-              ..add(_wallet('w2', 'B', 1))
-              ..add(_wallet('w3', 'C', 2));
+        final controller = WalletController(
+          WalletManager(),
+          store: WalletStore(db),
+        );
+        await controller.add(_wallet('w1', 'A', 0));
+        await controller.add(_wallet('w2', 'B', 1));
+        await controller.add(_wallet('w3', 'C', 2));
 
-        controller.reorder(0, 2); // drag A below C
+        await controller.reorder(0, 2); // drag A below C
 
         expect(controller.wallets.map((w) => w.id), ['w2', 'w3', 'w1']);
         expect(controller.wallets.map((w) => w.sortOrder), [0, 1, 2]);
@@ -61,25 +63,68 @@ void main() {
     );
 
     test('moving a wallet up persists too', () async {
-      final controller =
-          WalletController(WalletManager(), store: WalletStore(db))
-            ..add(_wallet('w1', 'A', 0))
-            ..add(_wallet('w2', 'B', 1))
-            ..add(_wallet('w3', 'C', 2));
+      final controller = WalletController(
+        WalletManager(),
+        store: WalletStore(db),
+      );
+      await controller.add(_wallet('w1', 'A', 0));
+      await controller.add(_wallet('w2', 'B', 1));
+      await controller.add(_wallet('w3', 'C', 2));
 
-      controller.reorder(2, 0); // drag C to the top
+      await controller.reorder(2, 0); // drag C to the top
       expect(controller.wallets.map((w) => w.id), ['w3', 'w1', 'w2']);
 
       final reloaded = await WalletStore(db).load();
       expect(reloaded.wallets.map((w) => w.id), ['w3', 'w1', 'w2']);
     });
 
-    test('works without a store (in-memory only)', () {
-      final controller = WalletController(WalletManager())
-        ..add(_wallet('w1', 'A', 0))
-        ..add(_wallet('w2', 'B', 1));
-      controller.reorder(1, 0);
+    test('works without a store (in-memory only)', () async {
+      final controller = WalletController(WalletManager());
+      await controller.add(_wallet('w1', 'A', 0));
+      await controller.add(_wallet('w2', 'B', 1));
+      await controller.reorder(1, 0);
       expect(controller.wallets.map((w) => w.id), ['w2', 'w1']);
+    });
+
+    test(
+      'database failure rolls back the whole reorder and UI state',
+      () async {
+        final store = WalletStore(db);
+        final controller = WalletController(WalletManager(), store: store);
+        await controller.add(_wallet('w1', 'A', 0));
+        await controller.add(_wallet('w2', 'B', 1));
+        await controller.add(_wallet('w3', 'C', 2));
+        await db.customStatement('''
+        CREATE TRIGGER reject_w2_reorder
+        BEFORE UPDATE ON wallets
+        WHEN NEW.id = 'w2'
+        BEGIN
+          SELECT RAISE(ABORT, 'injected reorder failure');
+        END;
+      ''');
+
+        await expectLater(controller.reorder(0, 2), throwsA(anything));
+
+        expect(controller.wallets.map((w) => w.id), ['w1', 'w2', 'w3']);
+        await db.customStatement('DROP TRIGGER reject_w2_reorder');
+        final reloaded = await store.load();
+        expect(reloaded.wallets.map((w) => w.id), ['w1', 'w2', 'w3']);
+        expect(reloaded.wallets.map((w) => w.sortOrder), [0, 1, 2]);
+      },
+    );
+
+    test('close drains queued metadata writes before closing Drift', () async {
+      final controller = WalletController(
+        WalletManager(),
+        store: WalletStore(db),
+      );
+      await controller.add(_wallet('w1', 'Before', 0));
+
+      final rename = controller.rename('w1', 'After');
+      await controller.close();
+      await rename;
+
+      expect(controller.current?.name, 'After');
     });
   });
 
@@ -100,10 +145,12 @@ void main() {
       (tester) async {
         final db = WalletDatabase(NativeDatabase.memory());
         addTearDown(db.close);
-        final controller =
-            WalletController(WalletManager(), store: WalletStore(db))
-              ..add(_wallet('w1', 'Alpha', 0))
-              ..add(_wallet('w2', 'Beta', 1));
+        final controller = WalletController(
+          WalletManager(),
+          store: WalletStore(db),
+        );
+        await controller.add(_wallet('w1', 'Alpha', 0));
+        await controller.add(_wallet('w2', 'Beta', 1));
 
         await tester.pumpWidget(app(controller));
         await tester.pumpAndSettle();

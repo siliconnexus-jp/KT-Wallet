@@ -1,9 +1,31 @@
 import Flutter
 import LocalAuthentication
+import MetricKit
 import Network
 import Photos
 import UIKit
 import UniformTypeIdentifiers
+
+let maxPickedFileBytes = 256 * 1024
+
+enum PickedFileReadError: Error {
+  case tooLarge
+  case invalidLimit
+}
+
+/// Reads one user-selected document without ever allocating the full file.
+/// Backup validation happens in Dart, so this native boundary must protect the
+/// process before untrusted bytes cross the platform channel.
+func readPickedFileBounded(at url: URL, maxBytes: Int) throws -> Data {
+  guard maxBytes > 0 && maxBytes <= maxPickedFileBytes else {
+    throw PickedFileReadError.invalidLimit
+  }
+  let handle = try FileHandle(forReadingFrom: url)
+  defer { handle.closeFile() }
+  let data = handle.readData(ofLength: maxBytes + 1)
+  guard data.count <= maxBytes else { throw PickedFileReadError.tooLarge }
+  return data
+}
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -15,11 +37,23 @@ import UniformTypeIdentifiers
   private var pushedPrivacyStrings: (appName: String, active: String, hidden: String)?
   private var screenSecurityChannel: FlutterMethodChannel?
   private var privacyProtectionRequired = false
+  private let nativeIncidentStore = NativeIncidentStore()
+  private var nativeMetricSubscriber: AnyObject?
 
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    // The database and preferences describe device-bound Keychain wallets.
+    // Restoring those files without their ThisDeviceOnly keys creates an
+    // inconsistent (and potentially misleading) wallet. Recovery is instead
+    // provided by the explicit, encrypted backup/export flow.
+    excludeLocalStateFromSystemBackup()
+    if #available(iOS 14.0, *) {
+      let subscriber = NativeMetricSubscriber(store: nativeIncidentStore)
+      nativeMetricSubscriber = subscriber
+      MXMetricManager.shared.add(subscriber)
+    }
     NotificationCenter.default.addObserver(
       self,
       selector: #selector(screenshotTaken),
@@ -44,9 +78,58 @@ import UniformTypeIdentifiers
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
+  /// Exclude database, preferences, pending transactions and local metrics
+  /// from iCloud/device backups. Never log the container URLs on failure.
+  @discardableResult
+  func excludeLocalStateFromSystemBackup(
+    fileManager: FileManager = .default
+  ) -> Bool {
+    let directories: [FileManager.SearchPathDirectory] = [
+      .documentDirectory,
+      .libraryDirectory,
+    ]
+    var protectedEveryDirectory = true
+    for directory in directories {
+      guard var url = fileManager.urls(for: directory, in: .userDomainMask).first else {
+        protectedEveryDirectory = false
+        continue
+      }
+      var values = URLResourceValues()
+      values.isExcludedFromBackup = true
+      do {
+        try url.setResourceValues(values)
+      } catch {
+        protectedEveryDirectory = false
+      }
+    }
+    return protectedEveryDirectory
+  }
+
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ScreenSecurity") {
+      let nativeObservabilityChannel = FlutterMethodChannel(
+        name: "kt/native_observability",
+        binaryMessenger: registrar.messenger()
+      )
+      nativeObservabilityChannel.setMethodCallHandler { [weak self] call, result in
+        guard let self else { return result(FlutterMethodNotImplemented) }
+        switch call.method {
+        case "pendingIncidents":
+          result(self.nativeIncidentStore.pendingPayload())
+        case "ackIncidents":
+          let args = call.arguments as? [String: Any]
+          guard let throughID = (args?["throughId"] as? NSNumber)?.int64Value,
+            self.nativeIncidentStore.acknowledge(throughID: throughID)
+          else {
+            result(FlutterError(code: "INVALID", message: "Invalid acknowledgement", details: nil))
+            return
+          }
+          result(nil)
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
       screenSecurityChannel = FlutterMethodChannel(
         name: "kt/screen_security",
         binaryMessenger: registrar.messenger()
@@ -138,7 +221,15 @@ import UniformTypeIdentifiers
           self?.presentSavePicker(name: name, data: data, result: result)
         case "pickFile":
           let extensions = args["extensions"] as? [String] ?? []
-          self?.presentOpenPicker(extensions: extensions, result: result)
+          guard
+            let maxBytes = (args["maxBytes"] as? NSNumber)?.intValue,
+            maxBytes > 0,
+            maxBytes <= maxPickedFileBytes
+          else {
+            result(FlutterError(code: "INVALID", message: "Invalid file size limit", details: nil))
+            return
+          }
+          self?.presentOpenPicker(extensions: extensions, maxBytes: maxBytes, result: result)
         default:
           result(FlutterMethodNotImplemented)
         }
@@ -181,7 +272,8 @@ import UniformTypeIdentifiers
     do {
       try data.write(to: staged, options: .atomic)
     } catch {
-      result(FlutterError(code: "FAILED", message: error.localizedDescription, details: nil))
+      // Do not expose sandbox paths or provider diagnostics to Dart/UI.
+      result(FlutterError(code: "FAILED", message: "Could not prepare the file", details: nil))
       return
     }
     // forExporting: is iOS 14+; this app still targets 13, where the same
@@ -205,7 +297,9 @@ import UniformTypeIdentifiers
     host.present(picker, animated: true)
   }
 
-  private func presentOpenPicker(extensions: [String], result: @escaping FlutterResult) {
+  private func presentOpenPicker(
+    extensions: [String], maxBytes: Int, result: @escaping FlutterResult
+  ) {
     guard let host = topViewController() else {
       result(FlutterError(code: "FAILED", message: "No window", details: nil))
       return
@@ -228,7 +322,15 @@ import UniformTypeIdentifiers
       }
       // asCopy: true hands us a tmp copy we already own, so no security-scoped
       // access dance is needed.
-      guard let data = try? Data(contentsOf: picked) else {
+      let data: Data
+      do {
+        data = try readPickedFileBounded(at: picked, maxBytes: maxBytes)
+      } catch PickedFileReadError.tooLarge {
+        result(
+          FlutterError(
+            code: "FILE_TOO_LARGE", message: "Selected file is too large", details: nil))
+        return
+      } catch {
         result(FlutterError(code: "FAILED", message: "Could not read the file", details: nil))
         return
       }
@@ -280,7 +382,7 @@ import UniformTypeIdentifiers
         } else {
           result(
             FlutterError(
-              code: "FAILED", message: error?.localizedDescription, details: nil))
+              code: "FAILED", message: "Could not save the image", details: nil))
         }
       }
     }
@@ -488,6 +590,92 @@ import UniformTypeIdentifiers
         return false
       }
     #endif
+  }
+}
+
+internal struct NativeIncident: Equatable {
+  let id: Int64
+  let kind: String
+}
+
+internal final class NativeIncidentStore {
+  private static let eventsKey = "kt.native-observability.v1.events"
+  private static let nextIDKey = "kt.native-observability.v1.next-id"
+  private static let maxEvents = 32
+  private let defaults: UserDefaults
+  private let lock = NSLock()
+
+  init(defaults: UserDefaults = .standard) {
+    self.defaults = defaults
+  }
+
+  func record(_ kind: String) {
+    guard kind == "fatal" || kind == "anr" else { return }
+    lock.lock()
+    defer { lock.unlock() }
+    let nextID = max(
+      1,
+      (defaults.object(forKey: Self.nextIDKey) as? NSNumber)?.int64Value ?? 1
+    )
+    let bounded = (decode(defaults.string(forKey: Self.eventsKey))
+      + [NativeIncident(id: nextID, kind: kind)]).suffix(Self.maxEvents)
+    defaults.set(nextID + 1, forKey: Self.nextIDKey)
+    defaults.set(encode(Array(bounded)), forKey: Self.eventsKey)
+  }
+
+  func pendingPayload() -> [String: Any] {
+    lock.lock()
+    defer { lock.unlock() }
+    return [
+      "schemaVersion": 1,
+      "events": decode(defaults.string(forKey: Self.eventsKey)).map {
+        ["id": $0.id, "kind": $0.kind]
+      },
+    ]
+  }
+
+  @discardableResult
+  func acknowledge(throughID: Int64) -> Bool {
+    guard throughID > 0 else { return false }
+    lock.lock()
+    defer { lock.unlock() }
+    let remaining = decode(defaults.string(forKey: Self.eventsKey))
+      .filter { $0.id > throughID }
+    defaults.set(encode(remaining), forKey: Self.eventsKey)
+    return true
+  }
+
+  private func encode(_ events: [NativeIncident]) -> String {
+    events.map { "\($0.id):\($0.kind)" }.joined(separator: ",")
+  }
+
+  private func decode(_ encoded: String?) -> [NativeIncident] {
+    guard let encoded, !encoded.isEmpty else { return [] }
+    return Array(encoded.split(separator: ",").compactMap { row in
+      let parts = row.split(separator: ":")
+      guard parts.count == 2, let id = Int64(parts[0]), id > 0 else { return nil }
+      let kind = String(parts[1])
+      guard kind == "fatal" || kind == "anr" else { return nil }
+      return NativeIncident(id: id, kind: kind)
+    }.sorted { $0.id < $1.id }.suffix(Self.maxEvents))
+  }
+}
+
+@available(iOS 14.0, *)
+internal final class NativeMetricSubscriber: NSObject, MXMetricManagerSubscriber {
+  private let store: NativeIncidentStore
+
+  init(store: NativeIncidentStore) {
+    self.store = store
+  }
+
+  func didReceive(_ payloads: [MXMetricPayload]) {}
+
+  func didReceive(_ payloads: [MXDiagnosticPayload]) {
+    for payload in payloads {
+      payload.crashDiagnostics?.forEach { _ in store.record("fatal") }
+      payload.hangDiagnostics?.forEach { _ in store.record("anr") }
+    }
   }
 }
 

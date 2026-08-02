@@ -1,2 +1,4 @@
 "CFBundleDisplayName" = "KT Cold Signer";
 "CFBundleName" = "KT Cold Signer";
+"NSCameraUsageDescription" = "カメラは、オンラインウォレットの署名リクエストQRコードをスキャンするために使用します。";
+"NSFaceIDUsageDescription" = "Face IDは、アプリのPINの代わりに署名を承認するために使用します。";

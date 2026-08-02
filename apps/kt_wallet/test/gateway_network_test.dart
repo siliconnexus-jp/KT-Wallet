@@ -268,6 +268,7 @@ void main() {
     test(
       'testnet environment sends the sepolia id, never the mainnet one',
       () async {
+        SharedPreferences.setMockInitialValues({});
         final networks = NetworkController(
           initialEnvironment: NetworkEnvironment.testnet,
         );

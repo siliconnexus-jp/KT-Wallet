@@ -1,3 +1,6 @@
+import 'support/e2e_credential_batch.dart';
+import 'support/e2e_wallet_cleanup.dart';
+
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -19,6 +22,7 @@ const _usdc = '0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582';
 const _sink = '0x000000000000000000000000000000000000dEaD';
 
 void main() {
+  requireFreshE2eCredentialBatchIfConfigured();
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
@@ -32,6 +36,7 @@ void main() {
         mnemonic: mnemonic,
         requireAuth: false,
       );
+      registerE2eWalletCleanup(crypto, _walletId);
       final addresses = await crypto.deriveAddresses(_walletId);
       final transport = HttpJsonRpcTransport(
         timeout: const Duration(seconds: 20),
@@ -60,14 +65,31 @@ void main() {
           Chain.polygon,
           addresses.polygon,
         );
+        // This case intentionally executes two transactions. Check the
+        // combined worst-case fee budget before broadcasting either one so a
+        // low faucet balance cannot leave the suite half-complete.
+        const nativeValue = 1000000000000;
+        const nativeGas = 21000;
+        const tokenGas = 75000;
+        final requiredBudget =
+            BigInt.from(nativeValue) +
+            nativeParams.fees.standard.maxFeePerGas *
+                BigInt.from(nativeGas + tokenGas);
+        expect(
+          polBefore,
+          greaterThan(requiredBudget),
+          reason:
+              'Amoy account must cover native value plus both transactions’ '
+              'worst-case gas before the first broadcast',
+        );
         final nativeTx = Eip1559Tx(
           chainId: BigInt.from(80002),
           nonce: BigInt.from(nativeParams.nonce),
           maxPriorityFeePerGas: nativeParams.fees.standard.maxPriorityFeePerGas,
           maxFeePerGas: nativeParams.fees.standard.maxFeePerGas,
-          gasLimit: BigInt.from(21000),
+          gasLimit: BigInt.from(nativeGas),
           to: Eip1559Tx.addressBytes(_sink),
-          value: BigInt.from(1000000000000),
+          value: BigInt.from(nativeValue),
           data: Uint8List(0),
         ).encodeUnsigned();
         // ignore: avoid_print
@@ -90,7 +112,7 @@ void main() {
           nonce: BigInt.from(tokenParams.nonce),
           maxPriorityFeePerGas: tokenParams.fees.standard.maxPriorityFeePerGas,
           maxFeePerGas: tokenParams.fees.standard.maxFeePerGas,
-          gasLimit: BigInt.from(75000),
+          gasLimit: BigInt.from(tokenGas),
           to: Eip1559Tx.addressBytes(_usdc),
           value: BigInt.zero,
           data: Erc20.transferCalldata(to: _sink, amount: BigInt.from(1000000)),

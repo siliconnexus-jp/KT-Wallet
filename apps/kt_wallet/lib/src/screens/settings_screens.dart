@@ -30,6 +30,7 @@ import '../widgets/pin_pad.dart';
 import '../widgets/rpc_probe.dart';
 import '../widgets/token_icon.dart';
 import '../state/app_prefs.dart';
+import '../state/endpoint_policy.dart';
 import '../state/networks.dart';
 import '../state/locale_controller.dart';
 import '../state/wallet_controller.dart';
@@ -95,34 +96,46 @@ Widget _sheetField(
   ],
 );
 
-Widget _switch(bool on, {VoidCallback? onTap}) => GestureDetector(
-  behavior: HitTestBehavior.opaque,
-  onTap: onTap,
-  child: AnimatedContainer(
-    duration: const Duration(milliseconds: 160),
-    curve: Curves.easeOut,
-    width: 44,
-    height: 26,
-    padding: const EdgeInsets.all(2),
-    decoration: BoxDecoration(
-      color: on ? WalletColors.accent : const Color(0xFFE1E4EA),
-      borderRadius: BorderRadius.circular(13),
-    ),
-    child: AnimatedAlign(
-      duration: const Duration(milliseconds: 160),
-      curve: Curves.easeOut,
-      alignment: on ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        width: 22,
-        height: 22,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
+Widget _switch(bool on, {required String label, VoidCallback? onTap}) =>
+    Semantics(
+      label: label,
+      toggled: on,
+      enabled: onTap != null,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOut,
+              width: 44,
+              height: 26,
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: on ? WalletColors.accent : const Color(0xFFE1E4EA),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: AnimatedAlign(
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOut,
+                alignment: on ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
-    ),
-  ),
-);
+    );
 
 /// Native display name for each supported language (shown in its own script,
 /// the platform convention). "System" is localized.
@@ -166,10 +179,9 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
 
   Future<void> _load(WalletController controller) async {
     var contacts = await controller.loadContacts();
-    if (contacts.isEmpty && !controller.hasStore) {
-      // No-store fallback (gallery/goldens/tests): seed the classic demo rows
-      // in-memory so the screen renders exactly like the recorded designs. The
-      // real app persists these same rows on first run (see main._seedFirstRun).
+    if (contacts.isEmpty && controller.allowsTestBypass) {
+      // Explicit gallery/golden fixture only. A missing persistence store must
+      // never make a production controller invent contacts.
       if (!mounted) return;
       final l10n = AppLocalizations.of(context);
       for (final (name, address, chain) in [
@@ -478,11 +490,12 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
         title: l10n.addressBookTitle,
         onBack: () => Navigator.of(context).maybePop(),
         trailing: Icons.add,
+        trailingTooltip: l10n.addContactTitle,
         onTrailing: _addContact,
       ),
       children: [
         Container(
-          height: 44,
+          height: 52,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
             color: WalletColors.surface,
@@ -500,7 +513,8 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                     color: WalletColors.text,
                   ),
                   decoration: InputDecoration(
-                    isCollapsed: true,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
                     border: InputBorder.none,
                     hintText: l10n.searchNameOrAddress,
                     hintStyle: const TextStyle(
@@ -545,6 +559,8 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                   Builder(
                     builder: (context) {
                       final d = _display(results[i]);
+                      final largeText =
+                          MediaQuery.textScalerOf(context).scale(14) >= 20;
                       return Row(
                         children: [
                           KtAvatar(
@@ -554,42 +570,82 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final stacked =
+                                    largeText || constraints.maxWidth < 180;
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    if (stacked) ...[
+                                      Text(
+                                        d.$2,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: WalletColors.text,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: NetworkBadge(
+                                          label: d.$4,
+                                          dotColor: d.$5,
+                                        ),
+                                      ),
+                                    ] else
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              d.$2,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                                color: WalletColors.text,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          NetworkBadge(
+                                            label: d.$4,
+                                            dotColor: d.$5,
+                                          ),
+                                        ],
+                                      ),
+                                    const SizedBox(height: 3),
                                     Text(
-                                      d.$2,
+                                      d.$3,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: WalletColors.text,
+                                        fontSize: 12,
+                                        fontFamily: KtFonts.mono,
+                                        color: WalletColors.text3,
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
-                                    NetworkBadge(label: d.$4, dotColor: d.$5),
                                   ],
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  d.$3,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontFamily: KtFonts.mono,
-                                    color: WalletColors.text3,
-                                  ),
-                                ),
-                              ],
+                                );
+                              },
                             ),
                           ),
-                          GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => _contactMenu(results[i]),
-                            child: const Icon(
-                              Icons.more_vert,
-                              size: 18,
-                              color: WalletColors.text3,
+                          Semantics(
+                            button: true,
+                            label: l10n.actionMore,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => _contactMenu(results[i]),
+                              child: const SizedBox.square(
+                                dimension: 48,
+                                child: Icon(
+                                  Icons.more_vert,
+                                  size: 18,
+                                  color: WalletColors.text3,
+                                ),
+                              ),
                             ),
                           ),
                         ],
@@ -671,10 +727,9 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
 
   Future<void> _load(WalletController controller) async {
     var tokens = await controller.loadTokens();
-    if (tokens.isEmpty && !controller.hasStore) {
-      // No-store fallback (gallery/goldens/tests): seed the classic demo rows
-      // in-memory. The real app persists these same rows on first run (see
-      // main._seedFirstRun).
+    if (tokens.isEmpty && controller.allowsTestBypass) {
+      // Explicit gallery/golden fixture only. A missing persistence store must
+      // never make a production controller invent owned tokens.
       for (final (symbol, name, network, contract, enabled) in [
         ('USDT', 'Tether USD', 'TRON · TRC-20', usdtTronToken.contract, true),
         (
@@ -1141,7 +1196,11 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
           ),
         ),
         const SizedBox(width: 8),
-        _switch(token.enabled, onTap: () => _toggle(token)),
+        _switch(
+          token.enabled,
+          label: token.symbol,
+          onTap: () => _toggle(token),
+        ),
       ],
     );
   }
@@ -1193,8 +1252,8 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
               customBorder: const CircleBorder(),
               onTap: () => _addOfficialToken(token),
               child: const SizedBox(
-                width: 36,
-                height: 36,
+                width: 48,
+                height: 48,
                 child: Icon(
                   Icons.add_rounded,
                   size: 21,
@@ -1224,7 +1283,7 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
   );
 
   Widget _searchField(AppLocalizations l10n) => Container(
-    height: 46,
+    height: 52,
     padding: const EdgeInsets.symmetric(horizontal: 14),
     decoration: BoxDecoration(
       color: WalletColors.surface,
@@ -1244,7 +1303,8 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
             enableSuggestions: false,
             style: const TextStyle(fontSize: 14, color: WalletColors.text),
             decoration: InputDecoration(
-              isCollapsed: true,
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 14),
               border: InputBorder.none,
               hintText: l10n.searchTokenHint,
               hintStyle: const TextStyle(
@@ -1311,6 +1371,7 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
         title: l10n.tokenManageTitle,
         onBack: () => Navigator.of(context).maybePop(),
         trailing: Icons.add,
+        trailingTooltip: l10n.addTokenTitle,
         onTrailing: _addToken,
       ),
       children: [
@@ -1400,6 +1461,27 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
   /// Per-network RPC node override chosen in this session (scope-absent demo
   /// fallback only).
   final _rpcOverrides = <String, String>{};
+
+  void _showNetworkSaveFailure([BuildContext? target]) {
+    final ctx = target ?? context;
+    if (!ctx.mounted) return;
+    ScaffoldMessenger.of(ctx)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(ctx).walletUpdateFailed)),
+      );
+  }
+
+  Future<void> _changeEnvironment(
+    NetworkController net,
+    NetworkEnvironment environment,
+  ) async {
+    try {
+      await net.setEnvironment(environment);
+    } on Object {
+      _showNetworkSaveFailure();
+    }
+  }
 
   /// True while a gateway test-connection call is in flight.
   bool _testingGateway = false;
@@ -1522,17 +1604,48 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                 const SizedBox(height: 18),
                 KtPrimaryButton(
                   label: l10n.actionSave,
-                  onPressed: () {
+                  onPressed: () async {
                     // Blank explicitly selects direct mode.
-                    prefs.setGatewayUrl(controller.text);
+                    final value = controller.text.trim();
+                    if (value.isNotEmpty && !EndpointPolicy.isSafeUrl(value)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(l10n.endpointUrlInvalid)),
+                      );
+                      return;
+                    }
+                    try {
+                      await prefs.setGatewayUrl(value);
+                    } on Object {
+                      if (!ctx.mounted) return;
+                      ScaffoldMessenger.of(ctx)
+                        ..clearSnackBars()
+                        ..showSnackBar(
+                          SnackBar(content: Text(l10n.walletUpdateFailed)),
+                        );
+                      return;
+                    }
+                    if (!ctx.mounted) return;
                     Navigator.of(ctx).pop();
                   },
                 ),
                 const SizedBox(height: 8),
                 Center(
                   child: TextButton(
-                    onPressed: () {
-                      prefs.setGatewayUrl(AppPrefsController.defaultGatewayUrl);
+                    onPressed: () async {
+                      try {
+                        await prefs.setGatewayUrl(
+                          AppPrefsController.defaultGatewayUrl,
+                        );
+                      } on Object {
+                        if (!ctx.mounted) return;
+                        ScaffoldMessenger.of(ctx)
+                          ..clearSnackBars()
+                          ..showSnackBar(
+                            SnackBar(content: Text(l10n.walletUpdateFailed)),
+                          );
+                        return;
+                      }
+                      if (!ctx.mounted) return;
                       Navigator.of(ctx).pop();
                     },
                     child: Text(
@@ -1680,7 +1793,8 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
           selected: net.environment == NetworkEnvironment.testnet ? 1 : 0,
           // Foundation behavior: an explicit environment switch clears the
           // per-chain overrides ("everything mainnet/testnet" wins).
-          onChanged: (i) => net.setEnvironment(
+          onChanged: (i) => _changeEnvironment(
+            net,
             i == 1 ? NetworkEnvironment.testnet : NetworkEnvironment.mainnet,
           ),
         ),
@@ -1892,12 +2006,19 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                         ),
                     ],
                   ),
-                  onTap: () {
+                  onTap: () async {
                     // Picking the profile default = clearing the pin.
-                    net.setOverride(
-                      chain,
-                      n.id == _profileDefault(net, chain).id ? null : n.id,
-                    );
+                    try {
+                      await net.setOverride(
+                        chain,
+                        n.id == _profileDefault(net, chain).id ? null : n.id,
+                      );
+                    } on Object {
+                      if (!ctx.mounted) return;
+                      _showNetworkSaveFailure(ctx);
+                      return;
+                    }
+                    if (!ctx.mounted) return;
                     Navigator.of(ctx).pop();
                   },
                 ),
@@ -1931,7 +2052,13 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
         destructive: true,
       ),
     );
-    if (ok == true) await net.removeCustom(n.id);
+    if (ok != true || !sheetCtx.mounted) return;
+    try {
+      await net.removeCustom(n.id);
+    } on Object {
+      if (!sheetCtx.mounted) return;
+      _showNetworkSaveFailure(sheetCtx);
+    }
   }
 
   /// 添加网络 sheet: family picker + name/RPC/symbol (+ chainId for EVM
@@ -2084,32 +2211,50 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                                   probing = true;
                                   error = null;
                                 });
+                                final rpcUrl = rpcController.text.trim();
+                                if (!EndpointPolicy.isSafeUrl(rpcUrl)) {
+                                  setSheetState(() {
+                                    probing = false;
+                                    error = l10n.endpointUrlInvalid;
+                                  });
+                                  return;
+                                }
                                 final probe = RpcProbe(
                                   client: widget.probeClient,
                                 );
                                 final result = await probe.probe(
                                   chain: chain,
-                                  rpcUrl: rpcController.text.trim(),
+                                  rpcUrl: rpcUrl,
                                   expectedChainId: isEvm ? typedChainId : null,
                                 );
                                 if (widget.probeClient == null) probe.close();
                                 if (!ctx.mounted) return;
                                 switch (result) {
-                                  case RpcProbeOk():
+                                  case RpcProbeOk(:final identity):
                                     final explorer = explorerController.text
                                         .trim();
-                                    await net.addCustom(
-                                      chain: chain,
-                                      name: nameController.text.trim(),
-                                      rpcUrl: rpcController.text.trim(),
-                                      symbol: symbolController.text
-                                          .trim()
-                                          .toUpperCase(),
-                                      evmChainId: isEvm ? typedChainId : null,
-                                      explorerUrl: explorer.isEmpty
-                                          ? null
-                                          : explorer,
-                                    );
+                                    try {
+                                      await net.addCustom(
+                                        chain: chain,
+                                        name: nameController.text.trim(),
+                                        rpcUrl: rpcUrl,
+                                        symbol: symbolController.text
+                                            .trim()
+                                            .toUpperCase(),
+                                        evmChainId: isEvm ? typedChainId : null,
+                                        networkIdentity: identity,
+                                        explorerUrl: explorer.isEmpty
+                                            ? null
+                                            : explorer,
+                                      );
+                                    } on Object {
+                                      if (!ctx.mounted) return;
+                                      setSheetState(() {
+                                        probing = false;
+                                        error = l10n.walletUpdateFailed;
+                                      });
+                                      return;
+                                    }
                                     if (!ctx.mounted) return;
                                     Navigator.of(ctx).pop();
                                     messenger
@@ -2194,19 +2339,34 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                 const SizedBox(height: 18),
                 KtPrimaryButton(
                   label: l10n.actionSave,
-                  onPressed: () {
+                  onPressed: () async {
                     final value = controller.text.trim();
-                    if (value.isNotEmpty) {
+                    if (value.isEmpty || !EndpointPolicy.isSafeUrl(value)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(l10n.endpointUrlInvalid)),
+                      );
+                      return;
+                    }
+                    try {
                       if (prefs != null) {
                         // Saving the default back counts as "no override".
-                        prefs.setRpcOverride(
+                        await prefs.setRpcOverride(
                           coin,
                           value == defaultRpcEndpointFor(coin) ? null : value,
                         );
                       } else {
                         setState(() => _rpcOverrides[name] = value);
                       }
+                    } on Object {
+                      if (!ctx.mounted) return;
+                      ScaffoldMessenger.of(ctx)
+                        ..clearSnackBars()
+                        ..showSnackBar(
+                          SnackBar(content: Text(l10n.walletUpdateFailed)),
+                        );
+                      return;
                     }
+                    if (!ctx.mounted) return;
                     Navigator.of(ctx).pop();
                   },
                 ),
@@ -2214,8 +2374,19 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                   const SizedBox(height: 8),
                   Center(
                     child: TextButton(
-                      onPressed: () {
-                        prefs.setRpcOverride(coin, null);
+                      onPressed: () async {
+                        try {
+                          await prefs.setRpcOverride(coin, null);
+                        } on Object {
+                          if (!ctx.mounted) return;
+                          ScaffoldMessenger.of(ctx)
+                            ..clearSnackBars()
+                            ..showSnackBar(
+                              SnackBar(content: Text(l10n.walletUpdateFailed)),
+                            );
+                          return;
+                        }
+                        if (!ctx.mounted) return;
                         Navigator.of(ctx).pop();
                       },
                       child: Text(
@@ -2351,46 +2522,53 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _editRpc(
-                    prefs,
-                    coin,
-                    name,
-                    effectiveRpc(coin, name, rpc),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              l10n.rpcNode,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: WalletColors.text3,
-                              ),
+                Semantics(
+                  button: true,
+                  label: '${l10n.rpcNode}: $name',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _editRpc(
+                      prefs,
+                      coin,
+                      name,
+                      effectiveRpc(coin, name, rpc),
+                    ),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  l10n.rpcNode,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: WalletColors.text3,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  effectiveRpc(coin, name, rpc),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontFamily: KtFonts.mono,
+                                    color: WalletColors.text,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              effectiveRpc(coin, name, rpc),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontFamily: KtFonts.mono,
-                                color: WalletColors.text,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                          const Icon(
+                            Icons.chevron_right,
+                            size: 16,
+                            color: WalletColors.text3,
+                          ),
+                        ],
                       ),
-                      const Icon(
-                        Icons.chevron_right,
-                        size: 16,
-                        color: WalletColors.text3,
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ],
@@ -2450,14 +2628,13 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
 
   /// Shared option-list bottom sheet (same visual pattern as the language
   /// picker): [labels] with the [selected] index checked; returns the tapped
-  /// index via [onSelect].
-  Future<void> _pickOption({
+  /// selected index, or null when dismissed.
+  Future<int?> _pickOption({
     required String title,
     required List<String> labels,
     required int selected,
-    required ValueChanged<int> onSelect,
   }) async {
-    await showModalBottomSheet<void>(
+    return showModalBottomSheet<int>(
       context: context,
       backgroundColor: WalletColors.surface,
       shape: const RoundedRectangleBorder(
@@ -2509,10 +2686,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                         color: WalletColors.accent,
                       )
                     : null,
-                onTap: () {
-                  onSelect(i);
-                  Navigator.of(ctx).pop();
-                },
+                onTap: () => Navigator.of(ctx).pop(i),
               ),
             const SizedBox(height: 12),
           ],
@@ -2521,13 +2695,94 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     );
   }
 
+  void _showSecurityMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<bool> _verifyPin({
+    required WalletPin pin,
+    required String prompt,
+  }) async {
+    if (!mounted) return false;
+    final verified = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: WalletColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _VerifyPinSheet(pin: pin, prompt: prompt),
+    );
+    return verified == true;
+  }
+
+  /// Verifies the authentication method that currently protects the app.
+  ///
+  /// A PIN remains the fallback when the biometric provider disappears or the
+  /// user cancels its prompt. With neither proof available the operation fails
+  /// closed: security settings never become weaker merely because a legacy
+  /// install has no enrolled fallback.
+  Future<bool> _verifyCurrentAuth({
+    required String reason,
+    required String pinPrompt,
+  }) async {
+    final pin = WalletPin.instance;
+    final pinSet = await pin.isSet();
+    if (!mounted) return false;
+    if (_prefs.authMethod == AuthMethod.password && pinSet) {
+      return _verifyPin(pin: pin, prompt: pinPrompt);
+    }
+
+    final auth = BiometricAuth.instance;
+    final canAuthenticate = await auth.canAuthenticate();
+    if (!mounted) return false;
+    var outcome = BiometricOutcome.unavailable;
+    if (canAuthenticate) {
+      outcome = await auth.authenticate(reason: reason);
+      if (!mounted) return false;
+      if (outcome == BiometricOutcome.success) return true;
+    }
+    if (pinSet) return _verifyPin(pin: pin, prompt: pinPrompt);
+
+    final l10n = AppLocalizations.of(context);
+    _showSecurityMessage(
+      outcome == BiometricOutcome.unavailable
+          ? l10n.biometricUnavailable
+          : l10n.biometricFailedRetry,
+    );
+    return false;
+  }
+
+  /// Performs a real biometric prompt before biometrics become the selected
+  /// method. `canAuthenticate` alone is not enrollment proof: availability can
+  /// change between settings and the next sensitive action.
+  Future<bool> _verifyBiometricOnly(String reason) async {
+    final auth = BiometricAuth.instance;
+    final l10n = AppLocalizations.of(context);
+    if (!await auth.canAuthenticate()) {
+      if (mounted) _showSecurityMessage(l10n.biometricUnavailable);
+      return false;
+    }
+    final outcome = await auth.authenticate(reason: reason);
+    if (!mounted) return false;
+    if (outcome == BiometricOutcome.success) return true;
+    _showSecurityMessage(
+      outcome == BiometricOutcome.unavailable
+          ? l10n.biometricUnavailable
+          : l10n.biometricFailedRetry,
+    );
+    return false;
+  }
+
   /// App-lock switch. Turning it ON with no PIN enrolled first walks through
   /// the set-PIN sheet (the gate needs a fallback for devices without
-  /// biometrics); turning it OFF demands proof — a biometric success or the
-  /// current PIN.
+  /// biometrics); turning it OFF always demands current proof.
   Future<void> _toggleAppLock() async {
+    final l10n = AppLocalizations.of(context);
     final pin = WalletPin.instance;
-    final auth = BiometricAuth.instance;
     if (!_prefs.appLock) {
       // Turning ON: enroll a PIN first when none exists yet.
       if (!await pin.isSet()) {
@@ -2543,39 +2798,24 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
         );
         if (enrolled != true) return; // sheet dismissed: leave the lock off
       }
-      await _prefs.setAppLock(true);
-      return;
-    }
-    // Turning OFF. Legacy state (lock on, nothing ever enrolled): there is
-    // nothing to verify against, so the switch just flips.
-    if (!await pin.isSet()) {
-      await _prefs.setAppLock(false);
+      try {
+        await _prefs.setAppLock(true);
+      } on Object {
+        _showSecurityMessage(l10n.walletUpdateFailed);
+      }
       return;
     }
     if (!mounted) return;
-    var verified = false;
-    if (await auth.canAuthenticate()) {
-      if (!mounted) return;
-      final l10n = AppLocalizations.of(context);
-      verified =
-          await auth.authenticate(reason: l10n.appLock) ==
-          BiometricOutcome.success;
+    final verified = await _verifyCurrentAuth(
+      reason: l10n.appLock,
+      pinPrompt: l10n.enterPinToDisable,
+    );
+    if (!verified) return;
+    try {
+      await _prefs.setAppLock(false);
+    } on Object {
+      _showSecurityMessage(l10n.walletUpdateFailed);
     }
-    if (!verified) {
-      // Same order as the gate: biometrics first, PIN numpad as the fallback.
-      if (!mounted) return;
-      final ok = await showModalBottomSheet<bool>(
-        context: context,
-        backgroundColor: WalletColors.surface,
-        isScrollControlled: true,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        builder: (ctx) => _VerifyPinSheet(pin: pin),
-      );
-      verified = ok == true;
-    }
-    if (verified) await _prefs.setAppLock(false);
   }
 
   String _autoLockLabel(AppLocalizations l10n, int minutes) => minutes == 0
@@ -2584,17 +2824,22 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
 
   Future<void> _pickFiat() async {
     final l10n = AppLocalizations.of(context);
-    await _pickOption(
+    final selected = await _pickOption(
       title: l10n.fiatUnit,
       labels: AppPrefsController.fiatOptions,
       selected: AppPrefsController.fiatOptions.indexOf(_prefs.fiat),
-      onSelect: (i) => _prefs.setFiat(AppPrefsController.fiatOptions[i]),
     );
+    if (selected == null || !mounted) return;
+    try {
+      await _prefs.setFiat(AppPrefsController.fiatOptions[selected]);
+    } on Object {
+      _showSecurityMessage(l10n.walletUpdateFailed);
+    }
   }
 
   Future<void> _pickAutoLock() async {
     final l10n = AppLocalizations.of(context);
-    await _pickOption(
+    final selected = await _pickOption(
       title: l10n.autoLock,
       labels: [
         for (final m in AppPrefsController.autoLockOptions)
@@ -2603,26 +2848,33 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
       selected: AppPrefsController.autoLockOptions.indexOf(
         _prefs.autoLockMinutes,
       ),
-      onSelect: (i) =>
-          _prefs.setAutoLockMinutes(AppPrefsController.autoLockOptions[i]),
     );
+    if (selected == null || !mounted) return;
+    try {
+      await _prefs.setAutoLockMinutes(
+        AppPrefsController.autoLockOptions[selected],
+      );
+    } on Object {
+      _showSecurityMessage(l10n.walletUpdateFailed);
+    }
   }
 
   Future<void> _pickAuthMethod() async {
     final l10n = AppLocalizations.of(context);
-    AuthMethod? selectedMethod;
-    await _pickOption(
+    final selected = await _pickOption(
       title: l10n.authMethod,
       labels: [l10n.authBiometrics, l10n.authPassword],
       selected: _prefs.authMethod == AuthMethod.biometrics ? 0 : 1,
-      onSelect: (index) {
-        selectedMethod = index == 0
-            ? AuthMethod.biometrics
-            : AuthMethod.password;
-      },
     );
-    final method = selectedMethod;
-    if (method == null || !mounted) return;
+    if (selected == null || !mounted) return;
+    final method = selected == 0 ? AuthMethod.biometrics : AuthMethod.password;
+    if (method == _prefs.authMethod) return;
+    if (!await _verifyCurrentAuth(
+      reason: l10n.authMethod,
+      pinPrompt: l10n.enterCurrentPin,
+    )) {
+      return;
+    }
     if (method == AuthMethod.password && !await WalletPin.instance.isSet()) {
       if (!mounted) return;
       final enrolled = await showModalBottomSheet<bool>(
@@ -2636,7 +2888,51 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
       );
       if (enrolled != true) return;
     }
-    await _prefs.setAuthMethod(method);
+    if (method == AuthMethod.biometrics &&
+        !await _verifyBiometricOnly(l10n.authMethod)) {
+      return;
+    }
+    try {
+      await _prefs.setAuthMethod(method);
+    } on Object {
+      _showSecurityMessage(l10n.walletUpdateFailed);
+    }
+  }
+
+  Future<void> _togglePrivacyMode() async {
+    final l10n = AppLocalizations.of(context);
+    try {
+      await _prefs.setPrivacyMode(!_prefs.privacyMode);
+    } on Object {
+      _showSecurityMessage(l10n.walletUpdateFailed);
+    }
+  }
+
+  /// Replaces the wallet PIN only after proving the current authentication
+  /// method. This prevents an unlocked, unattended session from silently
+  /// choosing a new fallback secret.
+  Future<void> _changeWalletPin() async {
+    final l10n = AppLocalizations.of(context);
+    final pin = WalletPin.instance;
+    if (!await _verifyCurrentAuth(
+      reason: l10n.changeWalletPin,
+      pinPrompt: l10n.enterCurrentPin,
+    )) {
+      return;
+    }
+    if (!mounted) return;
+    final changed = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: WalletColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => _SetPinSheet(pin: pin),
+    );
+    if (changed == true && mounted) {
+      _showSecurityMessage(l10n.walletPinChanged);
+    }
   }
 
   /// Danger row: deletes the first watch wallet after confirmation (a watch
@@ -2733,9 +3029,16 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                         color: WalletColors.accent,
                       )
                     : null,
-                onTap: () {
-                  controller.setLocale(locale);
-                  Navigator.of(ctx).pop();
+                onTap: () async {
+                  try {
+                    await controller.setLocale(locale);
+                    if (ctx.mounted) Navigator.of(ctx).pop();
+                  } on Object {
+                    if (!ctx.mounted) return;
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(content: Text(l10n.walletUpdateFailed)),
+                    );
+                  }
                 },
               ),
             const SizedBox(height: 12),
@@ -2760,7 +3063,15 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
         icon: Icons.phonelink_setup_rounded,
       ),
     );
-    if (confirmed == true) scope.exitMode();
+    if (confirmed != true) return;
+    try {
+      await scope.exitMode();
+    } on Object {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.walletUpdateFailed)));
+    }
   }
 
   @override
@@ -2791,7 +3102,11 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                 Icons.lock_outline,
                 l10n.appLock,
                 l10n.appLockDesc,
-                _switch(_prefs.appLock, onTap: _toggleAppLock),
+                _switch(
+                  _prefs.appLock,
+                  label: l10n.appLock,
+                  onTap: _toggleAppLock,
+                ),
               ),
               const SizedBox(height: 16),
               GestureDetector(
@@ -2834,6 +3149,21 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
               const SizedBox(height: 16),
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
+                onTap: _changeWalletPin,
+                child: _row(
+                  Icons.pin_outlined,
+                  l10n.changeWalletPin,
+                  l10n.changeWalletPinDesc,
+                  const Icon(
+                    Icons.chevron_right,
+                    size: 16,
+                    color: WalletColors.text3,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: _pickAutoLock,
                 child: _row(
                   Icons.timer_outlined,
@@ -2869,7 +3199,8 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                 l10n.privacyModeDesc,
                 _switch(
                   _prefs.privacyMode,
-                  onTap: () => _prefs.setPrivacyMode(!_prefs.privacyMode),
+                  label: l10n.privacyMode,
+                  onTap: _togglePrivacyMode,
                 ),
               ),
               // Watch wallets hold no key material, so there is nothing to
@@ -2960,46 +3291,49 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     String sub,
     Widget trailing, {
     bool danger = false,
-  }) => Row(
-    children: [
-      Icon(
-        icon,
-        size: 19,
-        color: danger ? WalletColors.red : WalletColors.text2,
-      ),
-      const SizedBox(width: 12),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: danger ? WalletColors.red : WalletColors.text,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              sub,
-              style: const TextStyle(fontSize: 12, color: WalletColors.text3),
-            ),
-          ],
+  }) => ConstrainedBox(
+    constraints: const BoxConstraints(minHeight: 48),
+    child: Row(
+      children: [
+        Icon(
+          icon,
+          size: 19,
+          color: danger ? WalletColors.red : WalletColors.text2,
         ),
-      ),
-      // Without this the description ran straight into the trailing value.
-      // Latin copy happened to be short enough to hide it; the Japanese
-      // strings fill the line and the two collide.
-      const SizedBox(width: 12),
-      // Flexible so a long localized value can ellipsize instead of
-      // overflowing, Align so it still sits on the card's right edge:
-      // a bare Flexible splits the row 1:1 with the Expanded label and
-      // parks every switch and chevron at the midpoint.
-      Flexible(
-        child: Align(alignment: Alignment.centerRight, child: trailing),
-      ),
-    ],
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: danger ? WalletColors.red : WalletColors.text,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                sub,
+                style: const TextStyle(fontSize: 12, color: WalletColors.text3),
+              ),
+            ],
+          ),
+        ),
+        // Without this the description ran straight into the trailing value.
+        // Latin copy happened to be short enough to hide it; the Japanese
+        // strings fill the line and the two collide.
+        const SizedBox(width: 12),
+        // Flexible so a long localized value can ellipsize instead of
+        // overflowing, Align so it still sits on the card's right edge:
+        // a bare Flexible splits the row 1:1 with the Expanded label and
+        // parks every switch and chevron at the midpoint.
+        Flexible(
+          child: Align(alignment: Alignment.centerRight, child: trailing),
+        ),
+      ],
+    ),
   );
 }
 
@@ -3009,31 +3343,66 @@ class _SimpleRow extends StatelessWidget {
   final String label, value;
   final VoidCallback? onTap;
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    behavior: HitTestBehavior.opaque,
-    onTap: onTap,
-    child: Row(
-      children: [
-        Icon(icon, size: 19, color: WalletColors.text2),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: WalletColors.text,
-            ),
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 13, color: WalletColors.text2),
-        ),
-        const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final largeText = MediaQuery.textScalerOf(context).scale(14) >= 20;
+    final labelStyle = const TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w500,
+      color: WalletColors.text,
+    );
+    final valueStyle = const TextStyle(fontSize: 13, color: WalletColors.text2);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: largeText
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Icon(icon, size: 19, color: WalletColors.text2),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(label, style: labelStyle)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          value,
+                          textAlign: TextAlign.end,
+                          style: valueStyle,
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chevron_right,
+                        size: 16,
+                        color: WalletColors.text3,
+                      ),
+                    ],
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  Icon(icon, size: 19, color: WalletColors.text2),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(label, style: labelStyle)),
+                  Text(value, style: valueStyle),
+                  const Icon(
+                    Icons.chevron_right,
+                    size: 16,
+                    color: WalletColors.text3,
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
 }
 
 /// Set-PIN bottom sheet (enrollment for the app-lock fallback). Two-phase,
@@ -3155,9 +3524,10 @@ class _SetPinSheetState extends State<_SetPinSheet> {
 /// entry against [WalletPin] — wrong-PIN and lockout messages inline — and
 /// pops `true` on success.
 class _VerifyPinSheet extends StatefulWidget {
-  const _VerifyPinSheet({required this.pin});
+  const _VerifyPinSheet({required this.pin, this.prompt});
 
   final WalletPin pin;
+  final String? prompt;
 
   @override
   State<_VerifyPinSheet> createState() => _VerifyPinSheetState();
@@ -3219,7 +3589,7 @@ class _VerifyPinSheetState extends State<_VerifyPinSheet> {
             ),
             const SizedBox(height: 16),
             Text(
-              l10n.enterPinToDisable,
+              widget.prompt ?? l10n.enterPinToDisable,
               style: const TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w700,

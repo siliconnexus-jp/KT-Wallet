@@ -25,32 +25,52 @@ class KtDetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            fontFamily: KtFonts.ui,
-            color: dark ? SignerColors.text2 : WalletColors.text2,
-          ),
+    final labelStyle = TextStyle(
+      fontSize: 14,
+      fontFamily: KtFonts.ui,
+      color: dark ? SignerColors.text2 : WalletColors.text2,
+    );
+    final valueStyle = TextStyle(
+      fontSize: mono ? 13 : 14,
+      fontWeight: FontWeight.w500,
+      fontFamily: mono ? KtFonts.mono : KtFonts.ui,
+      color: valueColor ?? (dark ? SignerColors.text : WalletColors.text),
+    );
+    final largeText = MediaQuery.textScalerOf(context).scale(14) >= 20;
+    return Semantics(
+      container: true,
+      label: '$label, $value',
+      child: ExcludeSemantics(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final stacked = largeText || constraints.maxWidth < 280;
+            if (stacked) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: labelStyle),
+                  const SizedBox(height: 6),
+                  Text(value, style: valueStyle),
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: labelStyle),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    value,
+                    textAlign: TextAlign.right,
+                    style: valueStyle,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontSize: mono ? 13 : 14,
-              fontWeight: FontWeight.w500,
-              fontFamily: mono ? KtFonts.mono : KtFonts.ui,
-              color:
-                  valueColor ?? (dark ? SignerColors.text : WalletColors.text),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

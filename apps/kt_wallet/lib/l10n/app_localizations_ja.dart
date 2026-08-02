@@ -27,6 +27,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get actionDelete => '削除';
 
   @override
+  String get pinKeyDelete => '最後の桁を削除';
+
+  @override
   String get actionNext => '次へ';
 
   @override
@@ -120,6 +123,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get actionMore => 'その他';
+
+  @override
+  String get actionShare => '共有';
 
   @override
   String get actionScanSign => '署名スキャン';
@@ -327,6 +333,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get createWatchWallet => '監視ウォレットを作成';
 
   @override
+  String get invalidOfflineWalletExport => 'オフラインウォレットのエクスポートデータが無効です';
+
+  @override
+  String get offlineWalletAlreadyPaired => 'このオフラインウォレットはすでにペアリングされています';
+
+  @override
   String walletIdProtocol(String id, int version) {
     return 'Wallet ID: $id · プロトコル v$version';
   }
@@ -348,6 +360,13 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get walletDeleteFailed =>
+      'ウォレットを安全に削除できませんでした。内容は削除されていません。もう一度お試しください。';
+
+  @override
+  String get walletUpdateFailed => '変更を保存できませんでした。内容は変更されていません。もう一度お試しください。';
+
+  @override
   String get sortAction => '並べ替え';
 
   @override
@@ -360,6 +379,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get walletTypeLabel => 'ウォレット種別';
+
+  @override
+  String get walletIdLabel => 'ウォレット ID';
+
+  @override
+  String get coldSignerWalletIdLabel => 'KT Cold Signer ウォレット ID';
 
   @override
   String get standardWallet => '通常ウォレット';
@@ -415,6 +440,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String get addressInvalid => '無効なアドレス';
 
   @override
+  String recipientLookalikeWarning(String label) {
+    return 'このアドレスは「$label」と先頭・末尾が酷似していますが、同一ではありません。クリップボード汚染の可能性があります。';
+  }
+
+  @override
+  String get recipientLookalikeReview => 'アドレス全体を確認しました';
+
+  @override
   String get amountLabel => '金額';
 
   @override
@@ -433,6 +466,25 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get networkFee => 'ネットワーク手数料';
+
+  @override
+  String get expectedAssetChanges => '予想される資産変動';
+
+  @override
+  String outgoingAsset(String symbol) {
+    return '$symbol を送信';
+  }
+
+  @override
+  String get maximumNetworkFee => 'ネットワーク手数料の上限';
+
+  @override
+  String upToNegativeAmount(String amount) {
+    return '最大 -$amount';
+  }
+
+  @override
+  String get solanaRentReserve => '回収可能なアカウント準備金';
 
   @override
   String get feeCustom => 'カスタム';
@@ -536,6 +588,60 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get transactionNotSubmitted => '取引は送信されませんでした。もう一度お試しください。';
+
+  @override
+  String get broadcastUnsupported => '選択したネットワークでは、この署名済み取引を送信できません。';
+
+  @override
+  String get rpcRejectInsufficientFunds => '送金額と最大ネットワーク手数料を支払うための残高が不足しています。';
+
+  @override
+  String get rpcRejectNonceTooLow => '取引nonceが低すぎます。更新してからもう一度お試しください。';
+
+  @override
+  String get rpcRejectNonceTooHigh => '取引nonceが高すぎます。更新してからもう一度お試しください。';
+
+  @override
+  String get rpcRejectReplacementFeeTooLow => '置換取引のネットワーク手数料が低すぎます。';
+
+  @override
+  String get rpcRejectFeeTooLow => 'ネットワーク手数料が低すぎます。';
+
+  @override
+  String get rpcRejectGasLimitTooLow => '取引のGas Limitが低すぎます。';
+
+  @override
+  String get rpcRejectBlockGasLimit => '取引がネットワークのブロックGas上限を超えています。';
+
+  @override
+  String get rpcRejectFeeCapBelowBase => '手数料上限が現在のネットワーク基本手数料を下回っています。';
+
+  @override
+  String get rpcRejectAlreadyKnown => 'ネットワークはこの取引をすでに認識しています。再送せず状態を確認してください。';
+
+  @override
+  String get rpcRejectExecutionReverted => '取引は実行中にコントラクトによって取り消されました。';
+
+  @override
+  String get rpcRejectInvalidSender => '取引の送信元が無効です。';
+
+  @override
+  String get rpcRejectExpiredReference => '取引のブロック参照が期限切れです。取引を作り直してください。';
+
+  @override
+  String get rpcRejectAccountInUse => '必要なアカウントが使用中です。しばらく待ってからお試しください。';
+
+  @override
+  String get rpcRejectSimulationFailed => 'ネットワークが取引シミュレーションを拒否しました。';
+
+  @override
+  String get rpcRejectInvalidSignature => '取引署名が無効です。';
+
+  @override
+  String get rpcRejectGeneric => 'ネットワークが取引を拒否しました。';
+
+  @override
   String get signatureVerified => '署名を確認 · 署名者はウォレットアドレスと一致し、内容は改ざんされていません';
 
   @override
@@ -549,6 +655,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get txSubmitted => '取引を送信しました';
+
+  @override
+  String get txSubmissionUnknown => '送信結果を確認中';
+
+  @override
+  String get txSubmissionUnknownMessage =>
+      '署名済み取引がネットワークに到達している可能性があります。再送信しないでください。KT Wallet はローカルで算出した取引ハッシュを引き続き確認します。';
 
   @override
   String get txTimeLabel => '日時';
@@ -570,6 +683,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get txStatusFailed => '失敗';
+
+  @override
+  String get txStatusUnknown => 'ステータスを確認できません';
 
   @override
   String get txStatusDropped => '破棄済み';
@@ -625,6 +741,55 @@ class AppLocalizationsJa extends AppLocalizations {
   String get feeUnavailableHint => 'ネットワーク手数料を見積もれないため、送信できません。';
 
   @override
+  String get tokenRiskChecking => 'トークンの識別情報を確認中…';
+
+  @override
+  String get tokenRiskCheckingBody =>
+      '署名前に、検証済み一覧と独立した脅威情報を使用して、現在のネットワークと完全なコントラクトアドレスを確認しています。';
+
+  @override
+  String get tokenRiskVerifiedTitle => '公式トークンの識別情報を確認済み';
+
+  @override
+  String get tokenRiskVerifiedBody =>
+      'ネットワークとコントラクトアドレスが運営者の検証済み一覧と一致します。これは識別情報の確認であり、投資の安全性を保証するものではありません。';
+
+  @override
+  String get tokenRiskUnsafeTitle => '危険なトークンコントラクトを検出';
+
+  @override
+  String get tokenRiskUnsafeBody =>
+      '設定済みのセキュリティ情報源が、この完全なコントラクトに明確な悪意の証拠を検出しました。ウォレットを保護するため署名をブロックしました。';
+
+  @override
+  String get tokenRiskUnknownTitle => 'トークンのリスクを確認できません';
+
+  @override
+  String get tokenRiskUnknownBody =>
+      '設定済みの情報源では、このコントラクトの識別情報や安全性を確認できません。続行前に公式情報で完全なアドレスを確認してください。';
+
+  @override
+  String get tokenRiskUnavailableTitle => 'トークンのリスクを確認できません';
+
+  @override
+  String get tokenRiskUnavailableBody =>
+      'リスクサービスを利用できません。KT Wallet はこのコントラクトの安全性を確認できないため、続行前に別の方法で確認してください。';
+
+  @override
+  String get tokenRiskBlockedHint => 'このトークンコントラクトは危険と判定されたため送信できません。';
+
+  @override
+  String get signRequestBuildFailed => 'オンチェーンの取引パラメータを検証できません。署名は無効です。';
+
+  @override
+  String get signRequestSaveFailed =>
+      '署名待ち取引を安全に保存できなかったため、署名QRコードは生成されませんでした。戻って再試行してください。';
+
+  @override
+  String get transactionSimulationFailed =>
+      '取引シミュレーションに失敗したため署名されませんでした。残高、金額、受取先、またはトークンコントラクトを確認してください。';
+
+  @override
   String get txNonceLabel => 'Nonce';
 
   @override
@@ -640,6 +805,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get txReplacedByLabel => '置換先の取引';
 
   @override
+  String get txReplacementPendingLabel => '競合中の置換取引';
+
+  @override
   String get txNotFound => 'ローカル取引記録が見つかりません';
 
   @override
@@ -649,6 +817,24 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get txDetailTitle => '取引詳細';
+
+  @override
+  String get txBroadcastTime => 'ブロードキャスト時刻';
+
+  @override
+  String get txLastStatusCheck => '最終ステータス確認';
+
+  @override
+  String get txNotCheckedYet => '未確認';
+
+  @override
+  String get txCopyHash => '取引ハッシュをコピー';
+
+  @override
+  String get txHashCopied => '取引ハッシュをコピーしました';
+
+  @override
+  String get txViewInExplorer => 'ブロックエクスプローラーで表示';
 
   @override
   String get confirmedPrefix => '確認済み';
@@ -1040,11 +1226,25 @@ class AppLocalizationsJa extends AppLocalizations {
       '端末内のウォレットデータを読み取れませんでした。もう一度お試しください。問題が続く場合はアプリを再インストールしてください。';
 
   @override
+  String get walletPersistenceFailed =>
+      'ウォレットを安全に保存できなかったため、追加されませんでした。もう一度お試しください。';
+
+  @override
+  String get walletAlreadyExists => 'このウォレットはすでにこの端末にあります。';
+
+  @override
   String get cryptoUnavailableTitle => 'ウォレットエンジンを利用できません';
 
   @override
   String get cryptoUnavailableDesc =>
       'この Android ビルドには Trust Wallet Core が含まれていません。Wallet Core 対応ビルドをインストールしてください。模擬鍵へ自動的に切り替わることはありません。';
+
+  @override
+  String get secureStorageUnavailableTitle => 'セキュアストレージを利用できません';
+
+  @override
+  String get secureStorageUnavailableDesc =>
+      'KT WalletはPINとロック状態を安全に読み取れないため、ウォレットをロックしたままにします。アプリを再起動するか、信頼できる配布元から再インストールしてください。';
 
   @override
   String get actionRetry => '再試行';
@@ -1104,6 +1304,18 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get setPinDesc =>
       '生体認証が使えないときにパスワードでアプリを解除します。パスワードは本端末のセキュアエリアにのみ保存されます。';
+
+  @override
+  String get changeWalletPin => 'ウォレットPINを変更';
+
+  @override
+  String get changeWalletPinDesc => '6桁のPINを変更する前に現在の本人確認が必要です';
+
+  @override
+  String get enterCurrentPin => '現在のウォレットPINを入力';
+
+  @override
+  String get walletPinChanged => 'ウォレットPINを変更しました';
 
   @override
   String get pinMismatch => '2回の入力が一致しません。もう一度設定してください';
@@ -1168,9 +1380,21 @@ class AppLocalizationsJa extends AppLocalizations {
   String get rpcProbeFailed => 'RPC の確認に失敗しました。URL を確認してください';
 
   @override
+  String get endpointUrlInvalid =>
+      '認証情報を含まない有効な HTTPS URL を入力してください。HTTP は localhost のみ使用できます。';
+
+  @override
   String chainIdMismatch(Object actual) {
-    return 'Chain ID が一致しません:ノードは $actual を返しました';
+    return 'Chain ID が一致しません：ノードは $actual を返しました';
   }
+
+  @override
+  String transferNetworkUnavailable(String network) {
+    return '$network で使用できるアクティブなネットワークがありません。';
+  }
+
+  @override
+  String get transferChainIdUnavailable => '選択した EVM ネットワークに Chain ID がありません。';
 
   @override
   String get deleteNetwork => 'ネットワークを削除';
@@ -1206,8 +1430,26 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String airdropFailed(Object message) {
-    return 'エアドロップ失敗:$message';
+    return 'エアドロップ失敗：$message';
   }
+
+  @override
+  String get airdropRateLimited => 'リクエストが多すぎます。しばらくしてから再試行してください';
+
+  @override
+  String get airdropUnavailable => 'テストコインサービスは一時的に利用できません';
+
+  @override
+  String get airdropInvalidRequest => 'フォーセットがこのアドレスまたはリクエストを拒否しました';
+
+  @override
+  String get airdropInsufficientFunds => 'フォーセットのテストコイン残高が不足しています';
+
+  @override
+  String get airdropRejected => 'フォーセットがリクエストを拒否しました';
+
+  @override
+  String get airdropMalformedResponse => 'テストコインサービスから無効な応答が返されました';
 
   @override
   String get fiatHiddenTestnet => 'テストネット資産には市場価格がありません';
@@ -1219,7 +1461,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get backupEncryptedRow => '暗号化バックアップ';
 
   @override
-  String get backupEncryptedRowDesc => '暗号化したコピーを iCloud Drive やファイルに保存';
+  String get backupEncryptedRowDesc => 'システムのファイル選択画面で暗号化コピーを保存';
 
   @override
   String get backupIntro =>
@@ -1232,14 +1474,20 @@ class AppLocalizationsJa extends AppLocalizations {
   String get backupPasswordConfirm => 'パスワードを再入力';
 
   @override
-  String get backupPasswordTooShort => '8 文字以上';
+  String get backupPasswordTooShort => '14 文字以上入力してください';
+
+  @override
+  String get backupPasswordTooLong => '128 文字以内で入力してください';
+
+  @override
+  String get backupPasswordTooWeak => '繰り返し・連続・一般的なパスワードは使用できません';
 
   @override
   String get backupPasswordMismatch => 'パスワードが一致しません';
 
   @override
   String get backupPasswordWarning =>
-      'このパスワードは復元できません。失うとバックアップは開けません。手書きのリカバリーフレーズも保管してください。';
+      '他で使っていない長いパスフレーズを設定してください。このパスワードは復元できず、失うとバックアップを開けません。手書きのリカバリーフレーズも保管してください。';
 
   @override
   String get backupCreate => 'バックアップを作成';
@@ -1278,6 +1526,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get restoreTooNew => 'このバックアップは新しいバージョンで作成されています';
 
   @override
+  String get restoreFileTooLarge => 'このファイルは KT ウォレットのバックアップとして大きすぎます';
+
+  @override
+  String get restoreFileUnavailable => 'この端末ではバックアップファイルを開けません';
+
+  @override
+  String get restoreFileReadFailed => '選択したファイルを読み込めませんでした。もう一度お試しください';
+
+  @override
+  String get restoreSelectedFileFallback => 'バックアップファイル';
+
+  @override
   String get restoreRestored => 'ウォレットを復元しました';
 
   @override
@@ -1308,4 +1568,244 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get aboutCopiedLink => 'リンクをコピーしました';
+
+  @override
+  String get aboutTrustTitle => '信頼と法的情報';
+
+  @override
+  String get aboutPrivacyPolicy => 'プライバシーポリシー';
+
+  @override
+  String get aboutPrivacyPolicyDesc => 'アプリが処理・送信するデータを確認';
+
+  @override
+  String get aboutSecurityRisk => 'セキュリティとリスク';
+
+  @override
+  String get aboutSecurityRiskDesc => '現在の保証、既知の制限、利用範囲';
+
+  @override
+  String get aboutSecurityPolicy => 'セキュリティポリシー';
+
+  @override
+  String get aboutSecurityPolicyDesc => '対象範囲、安全な調査、対応目標';
+
+  @override
+  String get aboutThirdPartyNotices => 'オープンソース通知';
+
+  @override
+  String get aboutThirdPartyNoticesDesc => '同梱する依存関係のライセンス';
+
+  @override
+  String get aboutReportSecurity => 'セキュリティ問題を報告';
+
+  @override
+  String get aboutReportSecurityDesc => '非公開報告の手順と機密情報の扱いを確認';
+
+  @override
+  String get aboutNeverShareSecrets => 'KT Wallet がリカバリーフレーズや秘密鍵を求めることはありません。';
+
+  @override
+  String get diagnosticsTitle => 'サポート診断';
+
+  @override
+  String get diagnosticsSubtitle => '問題調査用のプライバシー保護 JSON を書き出します';
+
+  @override
+  String get diagnosticsConfirmTitle => '診断パッケージを書き出しますか？';
+
+  @override
+  String get diagnosticsConfirmBody => '共有前に、含まれる情報と除外される情報を確認してください。';
+
+  @override
+  String get diagnosticsIncludesTitle => '含まれる情報';
+
+  @override
+  String get diagnosticsIncludesBody => 'App とビルド、ネットワークモード、サービス状態、集計パフォーマンス';
+
+  @override
+  String get diagnosticsExcludesTitle => '含まれない情報';
+
+  @override
+  String get diagnosticsExcludesBody =>
+      'アドレス、残高、金額、取引、鍵、署名、リカバリーフレーズ、エンドポイント URL';
+
+  @override
+  String get diagnosticsExportAction => '書き出して共有';
+
+  @override
+  String get diagnosticsShareSubject => 'KT Wallet サポート診断';
+
+  @override
+  String get diagnosticsShareText =>
+      '匿名化された KT Wallet の診断情報です。共有前にファイルを確認してください。';
+
+  @override
+  String get diagnosticsReady => '診断パッケージを準備しました';
+
+  @override
+  String get diagnosticsFailed => '診断パッケージを作成できませんでした';
+
+  @override
+  String get diagnosticsUploadTitle => '匿名パフォーマンスレポートを送信';
+
+  @override
+  String get diagnosticsUploadSubtitle =>
+      '確認後に固定集計指標を一度だけ送信します。バックグラウンド送信は行いません';
+
+  @override
+  String get diagnosticsUploadConfirmTitle => '匿名パフォーマンスレポートを送信しますか？';
+
+  @override
+  String get diagnosticsUploadConfirmBody =>
+      'ユーザーが開始する一回限りの送信です。バックグラウンドで自動送信せず、自動再試行も行いません。サーバーには匿名集計のみを 7 日間保持します。';
+
+  @override
+  String get diagnosticsUploadIncludesBody =>
+      'App バージョン、プラットフォーム、おおまかな言語、ビルドモード、固定性能項目の件数・成否・P50/P95';
+
+  @override
+  String get diagnosticsUploadExcludesBody =>
+      'ウォレット・端末 ID、アドレス、残高、金額、取引、txHash、時刻、エラー本文、スタック、鍵、署名、リカバリーフレーズ、エンドポイント URL';
+
+  @override
+  String get diagnosticsUploadAction => '同意して送信';
+
+  @override
+  String get diagnosticsUploadSent => '匿名パフォーマンスレポートを送信しました';
+
+  @override
+  String get diagnosticsUploadAlreadySent => '同じ匿名レポートは送信済みです';
+
+  @override
+  String get diagnosticsUploadNoSamples => '送信できるパフォーマンスサンプルはまだありません';
+
+  @override
+  String get diagnosticsUploadFailed => '匿名レポートを送信できませんでした。自動再試行はしていません';
+
+  @override
+  String get diagnosticsUploadGatewayRequired =>
+      'ダイレクトモードでは診断を送信しません。先に KT Gateway を有効にしてください';
+
+  @override
+  String get settingsApprovals => 'トークン承認';
+
+  @override
+  String get approvalsTitle => 'トークン承認';
+
+  @override
+  String get approvalsSubtitle => 'ERC-20 トークンを使用できるコントラクトを確認します';
+
+  @override
+  String get approvalPrivacyTitle => '外部承認スキャン';
+
+  @override
+  String get approvalPrivacyBody =>
+      '未解除の承認を調べるため、KT Wallet は設定済み Gateway を通じて、このウォレットの公開アドレスと選択中のメインネットを GoPlus に送信します。鍵、残高、取引内容は送信しません。いつでも無効にできます。';
+
+  @override
+  String get approvalEnableAndScan => '許可してスキャン';
+
+  @override
+  String get approvalDisableScan => '外部スキャンを無効化';
+
+  @override
+  String get approvalScanAgain => '再スキャン';
+
+  @override
+  String get approvalLoading => '未解除の承認を確認中…';
+
+  @override
+  String get approvalEmptyTitle => '未解除の承認は見つかりませんでした';
+
+  @override
+  String get approvalEmptyBody =>
+      'プロバイダーはスキャンを完了し、選択したネットワークでこのウォレットの ERC-20 allowance はありませんでした。';
+
+  @override
+  String get approvalUnavailableTitle => '承認状態を取得できません';
+
+  @override
+  String get approvalUnavailableBody =>
+      'スキャンが完了しませんでした。承認一覧は不明であり、空という意味ではありません。';
+
+  @override
+  String get approvalUnsupportedTitle => 'このネットワークは未対応です';
+
+  @override
+  String get approvalUnsupportedBody =>
+      '承認スキャンは現在、Ethereum、Polygon、Base、Arbitrum、BNB Smart Chain のメインネットのみ対応しています。';
+
+  @override
+  String get approvalUnlimited => '無制限の承認';
+
+  @override
+  String approvalAmount(String amount) {
+    return '承認額：$amount';
+  }
+
+  @override
+  String get approvalSpender => '使用権限を持つコントラクト';
+
+  @override
+  String get approvalTokenContract => 'トークンコントラクト';
+
+  @override
+  String get approvalApprovedAt => '最終変更';
+
+  @override
+  String get approvalRisky => 'リスク信号を検出';
+
+  @override
+  String get approvalIdentityUnknown => '安全性は未確認';
+
+  @override
+  String get approvalKnownSpender => 'プロバイダー既知タグ';
+
+  @override
+  String get approvalReadOnlyNotice =>
+      'ホットウォレットは厳密なゼロ allowance 取引を端末内で送信します。監視ウォレットはペアリング済み KT Cold Signer との QR 往復署名を使用します。';
+
+  @override
+  String get approvalPrivacyEnabled => 'この端末では外部承認スキャンが有効です';
+
+  @override
+  String get approvalNoWallet => 'ウォレットを選択して承認を確認してください';
+
+  @override
+  String get approvalRevoke => '承認を解除';
+
+  @override
+  String get approvalRevokeTitle => 'このトークン承認を解除しますか？';
+
+  @override
+  String get approvalRevokeBody =>
+      'KT Wallet はトークンコントラクトへ approve(spender, 0) を送信します。allowance のみを変更し、トークンは送金しません。';
+
+  @override
+  String get approvalRevokeConfirm => '認証して解除';
+
+  @override
+  String get approvalRevokePreparing => '正確な解除取引をシミュレーションし、最大手数料を見積もっています…';
+
+  @override
+  String approvalRevokeMaximumFee(String fee) {
+    return '最大ネットワーク手数料：$fee';
+  }
+
+  @override
+  String get approvalRevokeSubmitted =>
+      '解除取引を送信しました。チェーンで確認されるまで Pending のままです。';
+
+  @override
+  String get approvalRevokePending => '承認解除は確認待ちです';
+
+  @override
+  String get approvalRevokeFailed => '解除取引は送信されませんでした。解除済みとして表示しません。';
+
+  @override
+  String get approvalRevokeAuthFailed => '認証が完了しなかったため、署名していません。';
+
+  @override
+  String get approvalRevokeHotOnly => 'この承認解除に使用できる署名対応ウォレットがありません。';
 }

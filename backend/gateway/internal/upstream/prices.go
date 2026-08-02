@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -39,6 +38,8 @@ func NewCoinGecko(base string, client *http.Client, limiter *ratelimit.Interval,
 // cannot calculate a fresh change; callers must not turn that into 0%.
 type MarketQuote struct {
 	USD          float64  `json:"usd"`
+	CNY          float64  `json:"cny"`
+	JPY          float64  `json:"jpy"`
 	USD24hChange *float64 `json:"usd_24h_change"`
 }
 
@@ -52,7 +53,7 @@ func (c *CoinGecko) SimplePrice(ctx context.Context, ids []string) (map[string]M
 	}
 	q := url.Values{}
 	q.Set("ids", strings.Join(ids, ","))
-	q.Set("vs_currencies", "usd")
+	q.Set("vs_currencies", "usd,cny,jpy")
 	q.Set("include_24hr_change", "true")
 	u := c.base + "/api/v3/simple/price?" + q.Encode()
 
@@ -60,16 +61,16 @@ func (c *CoinGecko) SimplePrice(ctx context.Context, ids []string) (map[string]M
 	defer cancel()
 	req, err := http.NewRequestWithContext(actx, http.MethodGet, u, nil)
 	if err != nil {
-		return nil, &Unavailable{Upstream: "coingecko", Message: err.Error()}
+		return nil, safeRequestCreationFailure("coingecko")
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, &Unavailable{Upstream: "coingecko", Message: err.Error()}
+		return nil, safeRequestFailure("coingecko", actx, err)
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	data, err := readBoundedResponse(resp.Body, 1<<20)
 	if err != nil {
-		return nil, &Unavailable{Upstream: "coingecko", Message: err.Error()}
+		return nil, safeResponseReadFailure("coingecko")
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, &Unavailable{Upstream: "coingecko", Message: fmt.Sprintf("CoinGecko returned HTTP %d", resp.StatusCode)}

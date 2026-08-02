@@ -5,7 +5,10 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -15,10 +18,12 @@ import (
 	"syscall"
 	"time"
 
+	"ktwallet/gateway/internal/cache"
 	"ktwallet/gateway/internal/clock"
 	"ktwallet/gateway/internal/handlers"
 	"ktwallet/gateway/internal/ratelimit"
 	"ktwallet/gateway/internal/rpc"
+	"ktwallet/gateway/internal/upstream"
 )
 
 const requestBudget = 25 * time.Second
@@ -30,6 +35,26 @@ func main() {
 	cfg := handlers.Defaults()
 	cfg.Log = log
 	cfg.HTTPClient = &http.Client{Timeout: 15 * time.Second}
+	var sharedCache *cache.RedisStore
+	if rawURL := strings.TrimSpace(os.Getenv("REDIS_URL")); rawURL != "" {
+		var err error
+		sharedCache, err = cache.NewRedisStore(rawURL)
+		if err != nil {
+			log.Error("invalid shared cache configuration", "err", err)
+			os.Exit(1)
+		}
+		pingCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		err = sharedCache.Ping(pingCtx)
+		cancel()
+		if err != nil {
+			log.Error("shared cache unavailable", "err", err)
+			os.Exit(1)
+		}
+		cfg.SharedCache = sharedCache
+		cfg.BroadcastStore = sharedCache
+		defer func() { _ = sharedCache.Close() }()
+		log.Info("shared cache enabled")
+	}
 	if v := envList("ETH_RPC_URLS"); len(v) > 0 {
 		cfg.EthURLs = v
 	}
@@ -114,6 +139,44 @@ func main() {
 		cfg.HeliusDevnetURL = v
 	}
 	cfg.HeliusKey = os.Getenv("HELIUS_API_KEY")
+	if v := strings.TrimSpace(os.Getenv("GOPLUS_API_URL")); v != "" {
+		cfg.GoPlusURL = v
+	}
+	if v := strings.TrimSpace(os.Getenv("GOPLUS_SOLANA_API_URL")); v != "" {
+		cfg.GoPlusSolanaURL = v
+	}
+	if v := strings.TrimSpace(os.Getenv("GOPLUS_APPROVAL_API_URL")); v != "" {
+		cfg.GoPlusApprovalURL = v
+	}
+	cfg.GoPlusAccessToken = strings.TrimSpace(os.Getenv("GOPLUS_ACCESS_TOKEN"))
+	if v := strings.TrimSpace(os.Getenv("DISABLE_EXTERNAL_TOKEN_RISK")); v != "" {
+		disabled, err := strconv.ParseBool(v)
+		if err != nil {
+			log.Error("invalid external token risk configuration")
+			os.Exit(1)
+		}
+		cfg.DisableExternalTokenRisk = disabled
+	}
+	if v := strings.TrimSpace(os.Getenv("DISABLE_EXTERNAL_APPROVAL_LOOKUP")); v != "" {
+		disabled, err := strconv.ParseBool(v)
+		if err != nil {
+			log.Error("invalid external approval lookup configuration")
+			os.Exit(1)
+		}
+		cfg.DisableExternalApprovals = disabled
+	}
+	if !cfg.DisableExternalTokenRisk {
+		if err := upstream.ValidateGoPlusURL(cfg.GoPlusURL); err != nil {
+			log.Error("invalid external token risk configuration", "err", err)
+			os.Exit(1)
+		}
+	}
+	if !cfg.DisableExternalApprovals {
+		if err := upstream.ValidateGoPlusURL(cfg.GoPlusApprovalURL); err != nil {
+			log.Error("invalid external approval lookup configuration", "err", err)
+			os.Exit(1)
+		}
+	}
 	if path := strings.TrimSpace(os.Getenv("OFFICIAL_TOKENS_FILE")); path != "" {
 		tokens, err := handlers.LoadOfficialTokensFile(path)
 		if err != nil {
@@ -128,6 +191,20 @@ func main() {
 		}
 		cfg.OfficialTokens = tokens
 	}
+	if path := strings.TrimSpace(os.Getenv("TOKEN_RISKS_FILE")); path != "" {
+		risks, err := handlers.LoadTokenRisksFile(path)
+		if err != nil {
+			log.Error(
+				"failed to load token risk registry",
+				"path",
+				path,
+				"err",
+				err,
+			)
+			os.Exit(1)
+		}
+		cfg.TokenRisks = risks
+	}
 
 	rate := envFloat("RATE_LIMIT_RPS", 10)
 	burst := envFloat("RATE_LIMIT_BURST", 20)
@@ -135,7 +212,19 @@ func main() {
 
 	gw := handlers.New(cfg)
 	server := rpc.NewServer(log, limiter, requestBudget)
+	trustedProxyCIDRs := strings.TrimSpace(os.Getenv("TRUSTED_PROXY_CIDRS"))
+	if err := server.SetTrustedProxyCIDRs(trustedProxyCIDRs); err != nil {
+		log.Error("invalid trusted proxy configuration", "err", err)
+		os.Exit(1)
+	}
 	gw.Register(server)
+	metricsToken, err := validateMetricsBearerToken(
+		os.Getenv("METRICS_BEARER_TOKEN"),
+	)
+	if err != nil {
+		log.Error("invalid metrics authentication configuration", "err", err)
+		os.Exit(1)
+	}
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /rpc", server)
@@ -143,6 +232,19 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		ready, unavailable := gw.Readiness()
+		if !ready {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":                  ready,
+			"ready":               ready,
+			"unavailableNetworks": unavailable,
+		})
+	})
+	mux.HandleFunc("GET /metrics", metricsHandler(gw.Metrics, metricsToken))
 
 	addr := os.Getenv("GATEWAY_ADDR")
 	if addr == "" {
@@ -203,6 +305,40 @@ func envFloat(key string, def float64) float64 {
 		return def
 	}
 	return v
+}
+
+func validateMetricsBearerToken(raw string) (string, error) {
+	token := strings.TrimSpace(raw)
+	if token == "" {
+		return "", nil
+	}
+	if len(token) < 32 {
+		return "", fmt.Errorf("METRICS_BEARER_TOKEN must contain at least 32 bytes")
+	}
+	return token, nil
+}
+
+func hasValidMetricsBearer(r *http.Request, token string) bool {
+	if token == "" {
+		return false
+	}
+	provided := r.Header.Get("Authorization")
+	expected := "Bearer " + token
+	if len(provided) != len(expected) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
+}
+
+func metricsHandler(metrics func() string, token string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !hasValidMetricsBearer(r, token) {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+		_, _ = w.Write([]byte(metrics()))
+	}
 }
 
 func prependURLs(primaries, fallbacks []string) []string {

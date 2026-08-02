@@ -19,8 +19,14 @@ void main() {
     test('strength maps to word count 12/18/24', () async {
       final mock = MockCoreCrypto();
       expect((await mock.generateMnemonic()).split(' ').length, 12);
-      expect((await mock.generateMnemonic(strength: 192)).split(' ').length, 18);
-      expect((await mock.generateMnemonic(strength: 256)).split(' ').length, 24);
+      expect(
+        (await mock.generateMnemonic(strength: 192)).split(' ').length,
+        18,
+      );
+      expect(
+        (await mock.generateMnemonic(strength: 256)).split(' ').length,
+        24,
+      );
     });
 
     test('same mnemonic derives same addresses; eth == polygon', () async {
@@ -60,11 +66,20 @@ void main() {
       );
       final input = Uint8List.fromList([1, 2, 3]);
       final s1 = await mock.signTransaction(
-          walletId: 'w1', coin: Coin.eth, signingInput: input);
+        walletId: 'w1',
+        coin: Coin.eth,
+        signingInput: input,
+      );
       final s2 = await mock.signTransaction(
-          walletId: 'w1', coin: Coin.eth, signingInput: input);
+        walletId: 'w1',
+        coin: Coin.eth,
+        signingInput: input,
+      );
       final s3 = await mock.signTransaction(
-          walletId: 'w1', coin: Coin.tron, signingInput: input);
+        walletId: 'w1',
+        coin: Coin.tron,
+        signingInput: input,
+      );
       expect(s1.signedTx, s2.signedTx);
       expect(s1.txHash, s2.txHash);
       expect(s1.txHash, isNot(s3.txHash));
@@ -88,6 +103,22 @@ void main() {
       );
     });
 
+    test(
+      'duplicate wallet id never overwrites existing key material',
+      () async {
+        final mock = MockCoreCrypto();
+        final original = await mock.generateMnemonic();
+        final replacement = await mock.generateMnemonic();
+        await mock.storeWallet(walletId: 'w1', mnemonic: original);
+
+        await expectLater(
+          mock.storeWallet(walletId: 'w1', mnemonic: replacement),
+          throwsA(isA<WalletAlreadyExistsException>()),
+        );
+        expect(await mock.exportMnemonic('w1'), original);
+      },
+    );
+
     test('export returns stored mnemonic; delete removes wallet', () async {
       final mock = MockCoreCrypto();
       final mnemonic = await mock.generateMnemonic();
@@ -106,7 +137,20 @@ void main() {
       expect(await mock.validateWord('abandon'), isTrue);
       expect(await mock.validateWord('zzz'), isFalse);
       expect(await mock.suggestWords('ab'), ['abandon', 'ability', 'able']);
+      expect(await mock.suggestWords('ab', limit: 2), ['abandon', 'ability']);
       expect(await mock.suggestWords(''), isEmpty);
+      expect(() => mock.suggestWords('ab', limit: 0), throwsArgumentError);
+      expect(() => mock.validateWord('x' * 65), throwsArgumentError);
+      expect(
+        () => mock.signTransaction(
+          walletId: 'missing',
+          coin: Coin.eth,
+          signingInput: Uint8List(
+            CoreCryptoValidation.maxSigningInputBytes + 1,
+          ),
+        ),
+        throwsArgumentError,
+      );
     });
   });
 
@@ -116,10 +160,7 @@ void main() {
 
     setUp(() async {
       now = DateTime(2026, 1, 1);
-      mock = MockCoreCrypto(
-        authenticator: () async => false,
-        clock: () => now,
-      );
+      mock = MockCoreCrypto(authenticator: () async => false, clock: () => now);
       final seeded = MockCoreCrypto();
       final mnemonic = await seeded.generateMnemonic();
       await mock.storeWallet(walletId: 'w1', mnemonic: mnemonic);
@@ -148,16 +189,18 @@ void main() {
       expect(state.cooldownSec, 60);
     });
 
-    test('operations during cooldown throw AUTH_LOCKED with countdown',
-        () async {
-      for (var i = 0; i < 5; i++) {
-        await attempt();
-      }
-      now = now.add(const Duration(seconds: 30));
-      final during = await attempt();
-      expect(during, isA<AuthLockedException>());
-      expect((during! as AuthLockedException).cooldownSec, 30);
-    });
+    test(
+      'operations during cooldown throw AUTH_LOCKED with countdown',
+      () async {
+        for (var i = 0; i < 5; i++) {
+          await attempt();
+        }
+        now = now.add(const Duration(seconds: 30));
+        final during = await attempt();
+        expect(during, isA<AuthLockedException>());
+        expect((during! as AuthLockedException).cooldownSec, 30);
+      },
+    );
 
     test('ladder escalates 60 → 300 → 900', () async {
       // Attempts during cooldown are rejected WITHOUT counting (by design),
@@ -219,10 +262,7 @@ void main() {
 
     test('bad walletId rejected', () {
       final mock = MockCoreCrypto();
-      expect(
-        () => mock.deriveAddresses('bad wallet id!'),
-        throwsArgumentError,
-      );
+      expect(() => mock.deriveAddresses('bad wallet id!'), throwsArgumentError);
       expect(() => mock.deriveAddresses(''), throwsArgumentError);
     });
 

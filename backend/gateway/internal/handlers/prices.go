@@ -39,8 +39,9 @@ type usdPrice struct {
 }
 
 type cachedPrices struct {
-	prices map[string]usdPrice // symbol -> price, upstream symbols only
-	at     time.Time
+	Prices     map[string]usdPrice `json:"prices"` // symbol -> price, upstream symbols only
+	FiatPerUSD map[string]float64  `json:"fiatPerUsd"`
+	At         time.Time           `json:"at"`
 }
 
 // GetPrices implements kt_getPrices. Unknown symbols are omitted; every quote,
@@ -58,6 +59,7 @@ func (g *Gateway) GetPrices(ctx context.Context, params json.RawMessage) (any, *
 	}
 
 	out := make(map[string]usdPrice)
+	fiatPerUSD := map[string]float64{"USD": 1}
 	seen := make(map[string]bool)
 	var fetch []string
 	for _, s := range p.Symbols {
@@ -78,12 +80,15 @@ func (g *Gateway) GetPrices(ctx context.Context, params json.RawMessage) (any, *
 	if len(fetch) > 0 {
 		sort.Strings(fetch)
 		key := strings.Join(fetch, ",")
-		if v, ok := g.priceCache.Get(key); ok {
+		if v, ok := g.priceCache.GetContext(ctx, key); ok {
 			c := v.(*cachedPrices)
-			for sym, pr := range c.prices {
+			for sym, pr := range c.Prices {
 				out[sym] = pr
 			}
-			cachedAt = c.at
+			for currency, rate := range c.FiatPerUSD {
+				fiatPerUSD[currency] = rate
+			}
+			cachedAt = c.At
 		} else {
 			ids := make([]string, len(fetch))
 			for i, sym := range fetch {
@@ -102,15 +107,28 @@ func (g *Gateway) GetPrices(ctx context.Context, params json.RawMessage) (any, *
 					}
 					fetched[sym] = price
 					out[sym] = price
+					if quote.USD > 0 {
+						if _, exists := fiatPerUSD["CNY"]; !exists && quote.CNY > 0 {
+							fiatPerUSD["CNY"] = quote.CNY / quote.USD
+						}
+						if _, exists := fiatPerUSD["JPY"]; !exists && quote.JPY > 0 {
+							fiatPerUSD["JPY"] = quote.JPY / quote.USD
+						}
+					}
 				}
 			}
 			cachedAt = g.clk.Now()
-			g.priceCache.Set(key, &cachedPrices{prices: fetched, at: cachedAt})
+			g.priceCache.SetContext(ctx, key, &cachedPrices{
+				Prices:     fetched,
+				FiatPerUSD: fiatPerUSD,
+				At:         cachedAt,
+			})
 		}
 	}
 
 	return map[string]any{
 		"prices":     out,
+		"fiatPerUsd": fiatPerUSD,
 		"cachedAtMs": cachedAt.UnixMilli(),
 	}, nil
 }

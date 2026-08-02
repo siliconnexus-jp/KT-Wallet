@@ -1,18 +1,27 @@
 import 'dart:async';
 
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:chains/chains.dart';
+import 'package:core_crypto/core_crypto.dart' show ChainAddresses, Coin;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/main.dart';
+import 'package:kt_wallet/src/market/gateway_client.dart';
 import 'package:kt_wallet/src/screens/transfer_screens.dart';
+import 'package:kt_wallet/src/state/wallet_controller.dart';
+import 'package:kt_wallet/src/state/wallet_scope.dart';
 import 'package:kt_wallet/src/transfer/airgap_codec.dart';
+import 'package:kt_wallet/src/transfer/local_transfer_service.dart';
 import 'package:kt_wallet/src/transfer/transfer_draft.dart';
+import 'package:kt_wallet/src/wallets/wallet_manager.dart';
+import 'package:kt_wallet/src/wallets/wallet_model.dart';
 import 'package:ui_kit/ui_kit.dart';
+import 'package:wallet_data/wallet_data.dart' show TxStatus;
 
 /// End-to-end proof that the watch-wallet signing loop carries REAL
 /// AIRGAP-V1 bytes: draft → SignRequest → frames → QR strings → aggregate →
@@ -28,12 +37,128 @@ TransferDraft _draft() => TransferDraft(
   tokenContract: usdtTronContract,
 );
 
-Widget _wrap(Widget child) => MaterialApp(
-  locale: const Locale('zh'),
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  supportedLocales: AppLocalizations.supportedLocales,
-  theme: ThemeData(scaffoldBackgroundColor: WalletColors.bg),
-  home: child,
+Widget _wrap(Widget child) {
+  final controller = WalletController(
+    WalletManager(
+      initial: [
+        HotWallet(
+          id: 'airgap-test-wallet',
+          name: '日常钱包',
+          avatarColor: 0xFFF59E0B,
+          addresses: const ChainAddresses(
+            eth: '0x0000000000000000000000000000000000000001',
+            polygon: '0x0000000000000000000000000000000000000001',
+            tron: _testSignerAddress,
+            solana: '11111111111111111111111111111111',
+          ),
+          backedUp: true,
+        ),
+      ],
+    ),
+    allowTestBypass: true,
+  );
+  return MaterialApp(
+    locale: const Locale('zh'),
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    theme: ThemeData(scaffoldBackgroundColor: WalletColors.bg),
+    home: WalletScope(controller: controller, child: child),
+  );
+}
+
+class _TronQuoteService extends LocalTransferService {
+  @override
+  Future<PreparedTronTransfer> prepareTron({
+    required TransferDraft draft,
+    required String from,
+    required String? expectedNetworkIdentity,
+  }) async => PreparedTronTransfer(
+    from: from,
+    recipient: draft.recipient,
+    amountRaw: draft.amount.raw,
+    tokenContract: draft.tokenContract,
+    maximumFeeSun: BigInt.from(1250000),
+    referenceBlockHeight: 42,
+    expiresAt: DateTime.now()
+        .add(const Duration(minutes: 10))
+        .millisecondsSinceEpoch,
+    rawTx: rawTxFor(draft, from: from),
+  );
+}
+
+class _ApprovalQuoteService extends LocalTransferService {
+  @override
+  Future<PreparedEvmTransfer> prepareEvm({
+    required TransferDraft draft,
+    required String from,
+    required int evmChainId,
+  }) async {
+    final unsigned = rawTxFor(
+      draft,
+      from: from,
+      nonce: BigInt.from(7),
+      maxPriorityFeePerGas: BigInt.from(2),
+      maxFeePerGas: BigInt.from(30),
+      gasLimit: BigInt.from(50000),
+      evmChainId: evmChainId,
+    );
+    return PreparedEvmTransfer(
+      chain: draft.chain,
+      evmChainId: evmChainId,
+      coin: Coin.eth,
+      operation: draft.operation,
+      from: from,
+      recipient: draft.recipient,
+      amountRaw: draft.amount.raw,
+      tokenContract: draft.tokenContract,
+      nonce: BigInt.from(7),
+      maxPriorityFeePerGas: BigInt.from(2),
+      maxFeePerGas: BigInt.from(30),
+      gasLimit: BigInt.from(50000),
+      unsignedTx: unsigned,
+    );
+  }
+}
+
+class _SolanaQuoteService extends LocalTransferService {
+  @override
+  Future<PreparedSolanaTransfer> prepareSolana({
+    required TransferDraft draft,
+    required String from,
+    required String? expectedNetworkIdentity,
+  }) async => PreparedSolanaTransfer(
+    from: from,
+    recipient: draft.recipient,
+    amountRaw: draft.amount.raw,
+    tokenMint: draft.tokenContract,
+    tokenProgram: draft.tokenProgram,
+    networkFeeLamports: BigInt.from(5000),
+    rentDepositLamports: BigInt.zero,
+    lastValidBlockHeight: 12345,
+    message: Uint8List.fromList(const [1, 2, 3]),
+  );
+}
+
+TransferDraft _approvalDraft() => TransferDraft(
+  symbol: 'TOK',
+  networkLabel: 'Ethereum',
+  chain: Chain.ethereum,
+  recipient: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  amount: Amount(raw: BigInt.zero, decimals: 18, symbol: 'TOK'),
+  feeTier: 1,
+  tokenContract: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  operation: TxOperation.approvalRevoke,
+);
+
+TransferDraft _solanaTokenDraft() => TransferDraft(
+  symbol: 'USDC',
+  networkLabel: 'Solana',
+  chain: Chain.solana,
+  recipient: '11111111111111111111111111111111',
+  amount: Amount.parse('1', 6, symbol: 'USDC'),
+  feeTier: 1,
+  tokenContract: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  tokenProgram: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
 );
 
 void main() {
@@ -46,7 +171,7 @@ void main() {
         final request = buildSignRequest(
           draft: draft,
           walletId: 'cold',
-          fromAddress: demoFromAddress,
+          fromAddress: _testSignerAddress,
         );
         expect(request.reqId.length, AirgapLimits.reqIdLength);
         expect(request.expiresAt - request.createdAt, signRequestTtlSeconds);
@@ -94,16 +219,16 @@ void main() {
         final request = buildSignRequest(
           draft: _draft(),
           walletId: 'cold',
-          fromAddress: demoFromAddress,
+          fromAddress: _testSignerAddress,
         );
-        final result = buildDemoSignResult(request, signer: demoFromAddress);
+        final result = buildDemoSignResult(request, signer: _testSignerAddress);
         final frames = encodeQrFrames(result, reqId: request.reqId);
 
         final decoded = decodeSignResultFrames(frames, expected: request);
         expect(decoded.reqIdHex, request.reqIdHex);
         expect(decoded.walletId, request.walletId);
         expect(decoded.coin, request.coin);
-        expect(decoded.signer, demoFromAddress);
+        expect(decoded.signer, _testSignerAddress);
         expect(utf8.decode(decoded.signedTx), startsWith('SIGNED-V1:'));
         expect(decoded.txHash, hexEncode(sha256(decoded.signedTx)));
       },
@@ -113,16 +238,16 @@ void main() {
       final a = buildSignRequest(
         draft: _draft(),
         walletId: 'cold',
-        fromAddress: demoFromAddress,
+        fromAddress: _testSignerAddress,
       );
       final b = buildSignRequest(
         draft: _draft(),
         walletId: 'cold',
-        fromAddress: demoFromAddress,
+        fromAddress: _testSignerAddress,
       );
       expect(a.reqIdHex, isNot(b.reqIdHex)); // Random.secure reqIds
       final frames = encodeQrFrames(
-        buildDemoSignResult(a, signer: demoFromAddress),
+        buildDemoSignResult(a, signer: _testSignerAddress),
         reqId: a.reqId,
       );
       expect(
@@ -130,9 +255,130 @@ void main() {
         throwsStateError,
       );
     });
+
+    test('approval revoke request carries exact approve(spender, 0) bytes', () {
+      final draft = _approvalDraft();
+      final request = buildSignRequest(
+        draft: draft,
+        walletId: 'cold',
+        fromAddress: '0x0000000000000000000000000000000000000001',
+        nonce: BigInt.from(7),
+        maxPriorityFeePerGas: BigInt.from(2),
+        maxFeePerGas: BigInt.from(30),
+        gasLimit: BigInt.from(50000),
+        evmChainId: 1,
+      );
+      final parsed = parseUnsignedTransfer(Chain.ethereum, request.rawTx);
+
+      expect(parsed.operation, TxOperation.approvalRevoke);
+      expect(parsed.tokenContract, draft.tokenContract);
+      expect(parsed.to, draft.recipient);
+      expect(parsed.amountRaw, BigInt.zero);
+      expect(request.summary?[SummaryKeys.amount], 'approve(spender, 0)');
+    });
+
+    test('cryptographic gate rejects request chain-domain drift', () async {
+      final tx = Eip1559Tx(
+        chainId: BigInt.from(11155111),
+        nonce: BigInt.zero,
+        maxPriorityFeePerGas: BigInt.one,
+        maxFeePerGas: BigInt.two,
+        gasLimit: BigInt.from(21000),
+        to: Eip1559Tx.addressBytes(
+          '0x000000000000000000000000000000000000dEaD',
+        ),
+        value: BigInt.one,
+        data: Uint8List(0),
+      );
+      final request = SignRequest(
+        reqId: Uint8List.fromList(const [1, 2, 3, 4, 5, 6, 7, 8]),
+        walletId: 'cold',
+        coin: 60,
+        chainId: 1,
+        rawTx: tx.encodeUnsigned(),
+        createdAt: 1000,
+        expiresAt: 1600,
+      );
+      final result = SignResult(
+        reqId: Uint8List.fromList(request.reqId),
+        walletId: request.walletId,
+        coin: request.coin,
+        signedTx: Uint8List.fromList(const [0]),
+        signer: '0x0000000000000000000000000000000000000001',
+        txHash: '0x00',
+      );
+
+      expect(
+        () => verifySignResultCryptographically(
+          result.encode(),
+          expected: request,
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'sign-result transaction chainId mismatch',
+          ),
+        ),
+      );
+    });
   });
 
   group('W6 sign-qr screen', () {
+    testWidgets('does not publish QR or session request before durable save', (
+      tester,
+    ) async {
+      final save = Completer<void>();
+      final session = TransferSession()..draft = _draft();
+      await tester.pumpWidget(
+        _wrap(
+          TransferSessionScope(
+            session: session,
+            child: SignRequestQrScreen(
+              requestPersistence: (_, _, status, _) {
+                expect(status, TxStatus.awaitingSig);
+                return save.future;
+              },
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(KtQrCode), findsNothing);
+      expect(session.request, isNull);
+
+      save.complete();
+      await tester.pump();
+
+      expect(find.byType(KtQrCode), findsOneWidget);
+      expect(session.request, isNotNull);
+    });
+
+    testWidgets('save failure fails closed without publishing signable bytes', (
+      tester,
+    ) async {
+      final session = TransferSession()..draft = _draft();
+      await tester.pumpWidget(
+        _wrap(
+          TransferSessionScope(
+            session: session,
+            child: SignRequestQrScreen(
+              requestPersistence: (_, _, _, _) async {
+                throw StateError('transaction database unavailable');
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(KtQrCode), findsNothing);
+      expect(session.request, isNull);
+      expect(session.localTransactionId, isNull);
+      expect(find.text('无法安全保存待签名交易，签名二维码未生成。请返回后重试。'), findsOneWidget);
+    });
+
     testWidgets(
       'renders a real QR, cycles frames on the timer, shows the real shard count',
       (tester) async {
@@ -196,22 +442,24 @@ void main() {
           _wrap(
             TransferSessionScope(
               session: session,
-              child: const TransferConfirmScreen(isHot: false),
+              child: TransferConfirmScreen(
+                isHot: false,
+                transferService: _TronQuoteService(),
+              ),
             ),
           ),
         );
-        await tester.pump();
+        await tester.pumpAndSettle();
 
         expect(find.text('-88.5 USDT'), findsOneWidget);
         expect(
           find.text('TWd4qCEU…nMxR38uQz'),
           findsOneWidget,
         ); // draft recipient, truncated
-        // A LIVE draft never shows the demo fee schedule: TRON has no real fee
-        // source on this screen yet, so the honest '--' renders instead of the
-        // invented "≈ 27.4 TRX" this used to display.
+        // A LIVE draft never shows the demo schedule. The injected chain quote
+        // is the same exact object later consumed by QR/signing.
         expect(find.text('≈ 27.4 TRX'), findsNothing);
-        expect(find.text('--'), findsWidgets);
+        expect(find.textContaining('1.25 TRX'), findsOneWidget);
         // Fiat likewise: no price source in this bare harness → '--', never a
         // 1:1 "≈ \$88.5" peg.
         expect(find.text('≈ \$88.5'), findsNothing);
@@ -239,6 +487,81 @@ void main() {
         expect(find.text('120.00 USDT'), findsOneWidget);
       },
     );
+
+    testWidgets(
+      'watch revoke review shows allowance change and does not block on token risk',
+      (tester) async {
+        final session = TransferSession()..draft = _approvalDraft();
+        var riskLookups = 0;
+        await tester.pumpWidget(
+          _wrap(
+            TransferSessionScope(
+              session: session,
+              child: TransferConfirmScreen(
+                isHot: false,
+                transferService: _ApprovalQuoteService(),
+                tokenRiskLookup: (_, _) async {
+                  riskLookups++;
+                  throw StateError('revocation must not query token risk');
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(riskLookups, 0);
+        expect(find.text('撤销授权'), findsWidgets);
+        expect(find.text('被授权合约'), findsOneWidget);
+        expect(find.text('approve(spender, 0)'), findsOneWidget);
+        expect(find.text('-0 TOK'), findsNothing);
+        expect(find.text('生成待签名二维码'), findsOneWidget);
+        expect(
+          tester
+              .widget<KtPrimaryButton>(find.byType(KtPrimaryButton))
+              .onPressed,
+          isNotNull,
+        );
+      },
+    );
+
+    testWidgets('Solana token threat uses its exact mint and blocks signing', (
+      tester,
+    ) async {
+      final draft = _solanaTokenDraft();
+      final session = TransferSession()..draft = draft;
+      var lookups = 0;
+      await tester.pumpWidget(
+        _wrap(
+          TransferSessionScope(
+            session: session,
+            child: TransferConfirmScreen(
+              isHot: true,
+              transferService: _SolanaQuoteService(),
+              tokenRiskLookup: (chain, contract) async {
+                lookups++;
+                expect(chain, Coin.solana);
+                expect(contract, draft.tokenContract);
+                return const GatewayTokenRisk(
+                  status: GatewayTokenRiskStatus.unsafe,
+                  category: 'malicious',
+                  source: 'goplus',
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(lookups, 1);
+      expect(find.text('检测到高风险 Token 合约'), findsOneWidget);
+      expect(find.textContaining('本次签名已阻止'), findsOneWidget);
+      expect(
+        tester.widget<KtPrimaryButton>(find.byType(KtPrimaryButton)).onPressed,
+        isNull,
+      );
+    });
   });
 
   group('W7 → W8 decoded result', () {
@@ -388,3 +711,5 @@ void evmRawTxTests() {
     expect(decoded['v'], 1);
   });
 }
+
+const _testSignerAddress = 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa';

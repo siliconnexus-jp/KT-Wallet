@@ -33,13 +33,13 @@ font (PingFang on iOS, Noto on Android), which is correct — Inter has no CJK.
   **only to GitHub Packages** (authenticated); it is **not** on Maven Central,
   and the GitHub release ships no Android `.aar`.
 
-To keep the repo building on Android without credentials, wallet-core is
-**opt-in** on Android via the gradle property `walletCore` (default `false`).
+To keep local Debug and UI-test builds working on Android without credentials,
+wallet-core is **opt-in** via the Gradle property `walletCore` (default `false`).
 When off, an **API-identical fail-closed stub** is compiled in its place:
 key/address/signature operations throw `CRYPTO_UNAVAILABLE`, so no
-wrong-but-plausible crypto can be produced. The production app always calls the
-native bridge and therefore shows its retryable bootstrap error on a clean
-Android install until wallet-core is enabled.
+wrong-but-plausible crypto can be produced. Android **Release builds now fail
+at configuration time** when Wallet Core is disabled, so a non-functional
+signer APK cannot be mistaken for a publishable artifact.
 
 For simulator-only UI acceptance, a deterministic mock may be opted into
 explicitly:
@@ -66,11 +66,77 @@ Never use that define for release artifacts or real assets.
    }
    ```
 
-3. Build with the flag on, e.g. add `walletCore=true` to
-   `apps/<app>/android/gradle.properties` (plus `gpr.user` / `gpr.token` in
-   `~/.gradle/gradle.properties`), then `flutter build apk`.
+3. Build with the flag on, e.g. add `walletCore=true` to the ignored
+   `apps/<app>/android/local.properties` (with `gpr.user` / `gpr.token` there),
+   or put all three values in `~/.gradle/gradle.properties`, then run
+   `flutter build apk`. Inside this monorepo the Cold Signer may reuse the
+   ignored KT Wallet local properties, so credentials never need to be copied
+   into tracked files.
 
 iOS is unaffected by this flag.
+
+## Dependency integrity and vulnerability gate
+
+All three Android projects include the official Gradle 9.1.0 wrapper scripts
+and JAR. `gradle-wrapper.properties` pins the official distribution SHA-256 and
+enables URL validation. Both applications also keep two complementary files:
+
+- `android/app/gradle.lockfile` pins the exact production
+  `releaseRuntimeClasspath` versions.
+- `android/gradle/verification-metadata.xml` pins SHA-256 values for every
+  Maven artifact and metadata file used by the build.
+
+Do not hand-edit the production runtime lock or broadly regenerate verification
+metadata without review. After an intentional runtime dependency update,
+regenerate the release lock and integrity baseline from the standard Flutter
+release state, then review the diff before accepting it:
+
+```sh
+flutter build apk --release
+(cd android && ./gradlew :app:dependencies \
+  --configuration releaseRuntimeClasspath --write-locks)
+(cd android && ./gradlew :app:assembleRelease \
+  --write-verification-metadata sha256)
+```
+
+Run the repository gate afterwards:
+
+```sh
+tool/audit_dependencies.sh
+```
+
+Build/test-only artifacts discovered by strict verification use a narrower
+procedure. Do not accept them with a blanket metadata generation command.
+Compare the artifact against its publisher's official SHA-256 sidecar, a fresh
+download, and the Gradle cache; add only the requested artifact entries to both
+applications; then extend `tool/check_deps.dart` so the exact reviewed artifact
+set, hashes, origins, cardinality, and absence of trust expansion are enforced.
+JUnit 6.1.2 used by `mobile_scanner` tests currently follows this procedure for
+7 Gradle module metadata files and 6 JARs. Verify the aggregate Android test
+graphs as well as the repository gate:
+
+```sh
+(cd apps/kt_wallet/android && ./gradlew testDebugUnitTest --offline)
+(cd apps/cold_signer/android && ./gradlew testDebugUnitTest --offline)
+dart run tool/check_deps.dart
+```
+
+The gate scans the actual Android Release runtime locks rather than treating
+AGP/Flutter test and lint classpaths as APK code. The full verification metadata
+still integrity-pins those build tools. CocoaPods does not currently have a
+native OSV extractor here, so iOS combines checked-in `Podfile.lock`
+versions/spec checksums and `pod install --deployment` with exact upstream tag
+resolution, pinned source-archive checksums, and OSV exact-commit queries. The
+SQLite native-assets release tag/source hashes and final Apple runtime are also
+checked. These gates cover the current known dependency set; they are not a
+claim of complete iOS vulnerability coverage or an external security audit.
+
+Debug, Profile, and Release each use a dedicated Flutter xcconfig that includes
+the matching `Pods-Runner.*.xcconfig`. In particular, do not point Runner's
+Profile configuration back to `Release.xcconfig`: that silently skips
+CocoaPods' Profile-specific settings and makes `pod install` report an invalid
+base configuration. The Apple dependency audit enforces the Profile include,
+the production `FLUTTER_TARGET`, and the Xcode project reference.
 
 ## Release identity and signing
 
@@ -103,6 +169,37 @@ Both builds fail closed: without all four values the release build type gets no
 signing config at all, so Gradle emits an unsigned artifact rather than a
 falsely publishable debug-signed one. Do not commit either keystore or its
 passwords.
+
+After building, verify the exact APK or App Bundle that will leave the build
+machine. The same guard checks all three ABIs, the real Wallet Core bridge,
+SQLite, final merged manifest and permissions, exported components, production
+markers, local E2E canaries, credential patterns, archive paths and signing
+identity:
+
+```sh
+tool/check_release_artifact.sh \
+  apps/kt_wallet/build/app/outputs/flutter-apk/app-release.apk
+tool/check_release_artifact.sh \
+  apps/kt_wallet/build/app/outputs/bundle/release/app-release.aab
+tool/check_release_artifact.sh \
+  apps/cold_signer/build/app/outputs/flutter-apk/app-release.apk
+tool/check_release_artifact.sh \
+  apps/cold_signer/build/app/outputs/bundle/release/app-release.aab
+```
+
+For AAB input, the guard strictly parses the producer version from
+`BundleConfig.pb` and requires it to match
+`tool/android-release-toolchain.lock`. The selected `bundletool` JAR must match
+both that lock's SHA-256 and the app's Gradle verification metadata; every
+runtime JAR used to execute it is also checked against the same metadata. The
+guard then validates the bundle container and reads the final base-module
+protobuf manifest. Do not update the release-toolchain lock merely to make a
+new build pass: review the AGP change, both verification-metadata diffs, fresh
+AAB hashes and all positive/negative guard evidence together.
+
+An unsigned result is reported explicitly as signing pending: it is valid
+evidence for source/artifact review, but it is **not** uploadable or
+distributable until the correct upload key is applied and the guard is rerun.
 
 For iOS, select the SiliconNexus Apple team and the App Store provisioning
 profile in Xcode, then archive `apps/kt_wallet/ios/Runner.xcworkspace`.

@@ -25,6 +25,7 @@ class _FixtureHistoryService extends HistoryService {
     Coin coin,
     String address, {
     int limit = HistoryService.pageSize,
+    String? networkId,
   }) async => results[coin] ?? const HistoryResult.unsupported();
 }
 

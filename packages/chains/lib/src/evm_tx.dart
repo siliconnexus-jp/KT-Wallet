@@ -9,8 +9,8 @@ import 'tx_preview.dart';
 /// EIP-1559 (type 0x02) transaction in its unsigned form — the exact bytes
 /// the offline signer hashes and signs, so the air-gap payload carries a
 /// genuine sign-ready transaction instead of a summary (detailed-design.md
-/// §4.2). The access list is always empty: V1 only builds plain native and
-/// ERC-20 transfers.
+/// §4.2). The access list is always empty: V1 only builds plain native,
+/// ERC-20 transfers, and the exact zero-allowance approval revocation call.
 class Eip1559Tx {
   Eip1559Tx({
     required this.chainId,
@@ -34,6 +34,24 @@ class Eip1559Tx {
     }
     if (maxPriorityFeePerGas > maxFeePerGas) {
       throw ArgumentError('maxPriorityFeePerGas exceeds maxFeePerGas');
+    }
+    // Every scalar in a typed Ethereum transaction is a uint256. RLP itself
+    // can encode arbitrarily large integers, so relying on the serializer
+    // would let a malicious/broken RPC value reach the signing boundary and
+    // produce bytes that no conforming EVM node can accept. Fail before a
+    // digest is created, just as the ERC-20 ABI encoder already does.
+    final uint256Limit = BigInt.one << 256;
+    for (final (name, value) in <(String, BigInt)>[
+      ('chainId', chainId),
+      ('nonce', nonce),
+      ('maxPriorityFeePerGas', maxPriorityFeePerGas),
+      ('maxFeePerGas', maxFeePerGas),
+      ('gasLimit', gasLimit),
+      ('value', value),
+    ]) {
+      if (value >= uint256Limit) {
+        throw ArgumentError('$name exceeds uint256: $value');
+      }
     }
     if (to != null && to.length != 20) {
       throw ArgumentError('to must be a 20-byte address, got ${to.length}');
@@ -80,6 +98,16 @@ class Eip1559Tx {
         to: addressBytes(intent.tokenContract!),
         value: BigInt.zero,
         data: Erc20.transferCalldata(to: intent.to, amount: intent.amount.raw),
+      ),
+      TxOperation.approvalRevoke => Eip1559Tx(
+        chainId: chainId,
+        nonce: nonce,
+        maxPriorityFeePerGas: maxPriorityFeePerGas,
+        maxFeePerGas: maxFeePerGas,
+        gasLimit: gasLimit,
+        to: addressBytes(intent.tokenContract!),
+        value: BigInt.zero,
+        data: Erc20.revokeApprovalCalldata(spender: intent.to),
       ),
     };
   }

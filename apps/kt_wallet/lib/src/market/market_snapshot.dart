@@ -21,6 +21,7 @@ class MarketSnapshot {
     required this.tokenPrices,
     required this.nativeChanges,
     required this.tokenChanges,
+    this.fiatPerUsd = const {'USD': 1},
   });
 
   final String scope;
@@ -31,6 +32,7 @@ class MarketSnapshot {
   final Map<String, double> tokenPrices;
   final Map<Coin, double> nativeChanges;
   final Map<String, double> tokenChanges;
+  final Map<String, double> fiatPerUsd;
 }
 
 abstract interface class MarketSnapshotStore {
@@ -54,7 +56,9 @@ class WalletMarketSnapshotStore implements MarketSnapshotStore {
       final encoded = await _wallets.walletSetting(walletId, _key);
       if (encoded == null || encoded.isEmpty) return null;
       final body = jsonDecode(encoded);
-      if (body is! Map || body['v'] != 1 || body['scope'] != scope) return null;
+      if (body is! Map || body['scope'] != scope) return null;
+      final version = body['v'];
+      if (version != 1 && version != 2) return null;
       final savedAtMs = body['savedAtMs'];
       if (savedAtMs is! int) return null;
       return MarketSnapshot(
@@ -66,6 +70,7 @@ class WalletMarketSnapshotStore implements MarketSnapshotStore {
         tokenPrices: _decodeStringDoubles(body['tokenPrices']),
         nativeChanges: _decodeCoinDoubles(body['nativeChanges']),
         tokenChanges: _decodeStringDoubles(body['tokenChanges']),
+        fiatPerUsd: {'USD': 1, ..._decodeStringDoubles(body['fiatPerUsd'])},
       );
     } catch (_) {
       // Corrupt/older cache data or a transient local-store read failure is
@@ -77,7 +82,7 @@ class WalletMarketSnapshotStore implements MarketSnapshotStore {
   @override
   Future<void> save(String walletId, MarketSnapshot snapshot) async {
     final body = <String, Object?>{
-      'v': 1,
+      'v': 2,
       'scope': snapshot.scope,
       'savedAtMs': snapshot.savedAt.millisecondsSinceEpoch,
       'native': {
@@ -100,6 +105,7 @@ class WalletMarketSnapshotStore implements MarketSnapshotStore {
           entry.key.name: entry.value,
       },
       'tokenChanges': snapshot.tokenChanges,
+      'fiatPerUsd': snapshot.fiatPerUsd,
     };
     await _wallets.putWalletSetting(walletId, _key, jsonEncode(body));
   }

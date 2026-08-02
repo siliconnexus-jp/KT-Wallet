@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 // ignore_for_file: prefer_initializing_formals
 
 import 'package:core_crypto/core_crypto.dart' show Coin;
@@ -9,6 +7,7 @@ import '../state/wallet_controller.dart';
 import '../observability/experience_metrics.dart';
 import 'asset_ref.dart' show AssetDeployment;
 import 'balance_service.dart';
+import 'fiat_math.dart';
 import 'market_snapshot.dart';
 import 'price_service.dart';
 import 'token_balance_service.dart';
@@ -102,7 +101,13 @@ class MarketController extends ChangeNotifier {
   /// Spot USD prices, or null when never fetched successfully this session.
   Map<Coin, double>? get pricesUsd => _pricesUsd;
 
-  double? priceUsd(Coin coin) => _pricesUsd?[coin];
+  /// Spot price for the active deployment of [coin].
+  ///
+  /// A quote is keyed by the mainnet asset symbol, so exposing it for a
+  /// testnet deployment would make worthless faucet funds look valuable.
+  /// Keep this guard at the controller boundary so future screens cannot
+  /// accidentally bypass the portfolio-level fiat checks.
+  double? priceUsd(Coin coin) => _isTestnet(coin) ? null : _pricesUsd?[coin];
 
   /// CoinGecko market movement for the currently selected asset. Testnet
   /// holdings deliberately suppress market data just like their USD value.
@@ -131,15 +136,26 @@ class MarketController extends ChangeNotifier {
     if (result.status != BalanceStatus.ok || amount == null) return null;
     final price = _pricesUsd?[coin];
     if (price == null) return null;
-    return amount.raw.toDouble() /
-        math.pow(10, amount.decimals).toDouble() *
-        price;
+    return fiatValueForDisplay(amount, price);
   }
 
-  double? tokenPriceUsd(String symbol) => _prices.tokenPriceUsd(symbol);
+  /// Token quote scoped to the token's active chain deployment.
+  double? tokenPriceUsdFor(Coin coin, String symbol) =>
+      _isTestnet(coin) ? null : _prices.tokenPriceUsd(symbol);
 
-  double? tokenChange24hPercent(String symbol) =>
-      _prices.tokenChange24hPercent(symbol);
+  /// Token market movement scoped to the token's active chain deployment.
+  double? tokenChange24hPercentFor(Coin coin, String symbol) =>
+      _isTestnet(coin) ? null : _prices.tokenChange24hPercent(symbol);
+
+  double? fiatPerUsd(String currency) => _prices.fiatPerUsd(currency);
+
+  /// Converts a USD display value into the selected fiat only when the live or
+  /// last-good FX rate is known. Missing FX data stays unavailable (`null`).
+  double? convertUsd(double? usd, String currency) {
+    if (usd == null) return null;
+    final rate = fiatPerUsd(currency);
+    return multiplyFiatForDisplay(usd, rate);
+  }
 
   /// USD value of one token's balance, or null when unavailable. Stablecoins
   /// use live market quotes, so a depeg is reflected instead of being forced
@@ -149,11 +165,9 @@ class MarketController extends ChangeNotifier {
     final result = tokenBalanceFor(token.id);
     final amount = result.amount;
     if (result.status != BalanceStatus.ok || amount == null) return null;
-    final price = tokenPriceUsd(token.symbol);
+    final price = tokenPriceUsdFor(token.chain, token.symbol);
     if (price == null) return null;
-    return amount.raw.toDouble() /
-        math.pow(10, amount.decimals).toDouble() *
-        price;
+    return fiatValueForDisplay(amount, price);
   }
 
   /// Balance of one [AssetDeployment], whichever kind it is. Native coins and
@@ -183,6 +197,7 @@ class MarketController extends ChangeNotifier {
       final value = fiatFor(deployment, symbol);
       if (value == null) continue;
       total += value;
+      if (!total.isFinite) return null;
       sawAny = true;
     }
     return sawAny ? total : null;
@@ -195,18 +210,16 @@ class MarketController extends ChangeNotifier {
     final result = tokenBalanceFor(at.tokenId!);
     final amount = result.amount;
     if (result.status != BalanceStatus.ok || amount == null) return null;
-    final price = tokenPriceUsd(symbol);
+    final price = tokenPriceUsdFor(at.coin, symbol);
     if (price == null) return null;
-    return amount.raw.toDouble() /
-        math.pow(10, amount.decimals).toDouble() *
-        price;
+    return fiatValueForDisplay(amount, price);
   }
 
   /// 24h change for a deployment's asset. Native coins are quoted per chain
   /// (an L2's ETH is the same quote as Ethereum's), tokens per symbol.
   double? changeFor(AssetDeployment at, String symbol) => at.tokenId == null
       ? change24hPercent(at.coin)
-      : tokenChange24hPercent(symbol);
+      : tokenChange24hPercentFor(at.coin, symbol);
 
   /// Sum of the computable per-chain and per-token fiat values, or null when
   /// none is computable (a partially failed refresh totals only what's known).
@@ -214,11 +227,19 @@ class MarketController extends ChangeNotifier {
     double? total;
     for (final coin in Coin.values) {
       final value = fiatValueUsd(coin);
-      if (value != null) total = (total ?? 0) + value;
+      if (value != null) {
+        final next = (total ?? 0) + value;
+        if (!next.isFinite) return null;
+        total = next;
+      }
     }
     for (final token in tokens) {
       final value = tokenFiatValueUsd(token);
-      if (value != null) total = (total ?? 0) + value;
+      if (value != null) {
+        final next = (total ?? 0) + value;
+        if (!next.isFinite) return null;
+        total = next;
+      }
     }
     return total;
   }
@@ -238,8 +259,11 @@ class MarketController extends ChangeNotifier {
       if (value == null || change == null || !value.isFinite) return;
       final ratio = 1 + change / 100;
       if (!ratio.isFinite || ratio <= 0) return;
-      current += value;
-      previous += value / ratio;
+      final nextCurrent = current + value;
+      final nextPrevious = previous + value / ratio;
+      if (!nextCurrent.isFinite || !nextPrevious.isFinite) return;
+      current = nextCurrent;
+      previous = nextPrevious;
       covered++;
     }
 
@@ -249,7 +273,7 @@ class MarketController extends ChangeNotifier {
     for (final token in tokens) {
       include(
         tokenFiatValueUsd(token),
-        _isTestnet(token.chain) ? null : tokenChange24hPercent(token.symbol),
+        tokenChange24hPercentFor(token.chain, token.symbol),
       );
     }
     if (covered == 0 || previous == 0) return null;
@@ -322,6 +346,7 @@ class MarketController extends ChangeNotifier {
           tokenUsd: snapshot.tokenPrices,
           nativeChange24h: snapshot.nativeChanges,
           tokenChange24h: snapshot.tokenChanges,
+          fiatPerUsd: snapshot.fiatPerUsd,
         );
         _pricesUsd = snapshot.nativePrices.isEmpty
             ? null
@@ -417,10 +442,17 @@ class MarketController extends ChangeNotifier {
     // A failed price fetch falls back to the session's last good quotes.
     // Mark that state stale too; otherwise fiat values could silently look
     // current while only the native/token balance calls succeeded.
-    if (prices == null && (_pricesUsd != null || _prices.lastGoodUsd != null)) {
+    if (!skipPrices &&
+        prices == null &&
+        (_pricesUsd != null || _prices.lastGoodUsd != null)) {
       retainedStale = true;
     }
-    _pricesUsd = prices ?? _pricesUsd ?? _prices.lastGoodUsd;
+    // In an all-testnet environment a missing quote is intentional, not a
+    // failed refresh. Do not publish the session's mainnet last-good prices
+    // into this generation or persist them under the testnet snapshot scope.
+    _pricesUsd = skipPrices
+        ? null
+        : prices ?? _pricesUsd ?? _prices.lastGoodUsd;
     _refreshing = false;
     _hasRefreshed = true;
     _showingCachedData = retainedStale;
@@ -435,14 +467,17 @@ class MarketController extends ChangeNotifier {
         native: _results,
         tokens: _tokenResults,
         nativePrices: _pricesUsd ?? const {},
-        tokenPrices: _prices.lastGoodTokenUsd ?? const {},
-        nativeChanges: _prices.lastGoodChange24h,
-        tokenChanges: _prices.lastGoodTokenChange24h,
+        tokenPrices: skipPrices
+            ? const {}
+            : _prices.lastGoodTokenUsd ?? const {},
+        nativeChanges: skipPrices ? const {} : _prices.lastGoodChange24h,
+        tokenChanges: skipPrices ? const {} : _prices.lastGoodTokenChange24h,
+        fiatPerUsd: _prices.lastGoodFiatPerUsd,
       );
       _snapshots.save(wallet.id, snapshot).ignore();
     }
     ExperienceMetrics.instance.record(
-      'market.refresh',
+      ExperienceMetricNames.marketRefresh,
       metricStopwatch.elapsed,
       success: liveFetchSucceeded,
     );
@@ -476,6 +511,7 @@ class PortfolioChange24h {
 /// Formats a non-negative USD value as `$1,234.56` (grouped thousands, two
 /// fraction digits) to match the design's fiat strings.
 String formatUsd(double value) {
+  if (!value.isFinite || value < 0) return '--';
   final fixed = value.toStringAsFixed(2);
   final dot = fixed.indexOf('.');
   final intPart = fixed.substring(0, dot);
@@ -488,13 +524,37 @@ String formatUsd(double value) {
   return '\$$buf${fixed.substring(dot)}';
 }
 
+String formatFiat(double value, String currency) {
+  if (!value.isFinite || value < 0) return '--';
+  final normalized = currency.toUpperCase();
+  final decimals = normalized == 'JPY' ? 0 : 2;
+  final fixed = value.toStringAsFixed(decimals);
+  final dot = fixed.indexOf('.');
+  final intPart = dot < 0 ? fixed : fixed.substring(0, dot);
+  final buf = StringBuffer();
+  for (var i = 0; i < intPart.length; i++) {
+    buf.write(intPart[i]);
+    final remaining = intPart.length - 1 - i;
+    if (remaining > 0 && remaining % 3 == 0) buf.write(',');
+  }
+  final suffix = dot < 0 ? '' : fixed.substring(dot);
+  final symbol = switch (normalized) {
+    'USD' => r'$',
+    'CNY' => 'CN¥',
+    'JPY' => 'JP¥',
+    _ => '$normalized ',
+  };
+  return '$symbol$buf$suffix';
+}
+
 String formatChange24h(double? value) {
-  if (value == null) return '';
+  if (value == null || !value.isFinite) return '';
   final normalized = value.abs() < 0.005 ? 0.0 : value;
   return '${normalized >= 0 ? '+' : ''}${normalized.toStringAsFixed(2)}%';
 }
 
 String formatSignedUsd(double value) {
+  if (!value.isFinite) return '--';
   final normalized = value.abs() < 0.005 ? 0.0 : value;
   return '${normalized >= 0 ? '+' : '-'}${formatUsd(normalized.abs())}';
 }

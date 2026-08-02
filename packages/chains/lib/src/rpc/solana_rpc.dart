@@ -21,7 +21,11 @@ class SolanaRpc {
     if (resp is! Map) throw RpcException('malformed response');
     if (resp['error'] != null) {
       final err = resp['error'];
-      throw RpcException(err is Map ? '${err['message']}' : '$err');
+      final code = err is Map && err['code'] is int ? err['code'] as int : null;
+      throw RpcRejectedException(
+        publicRpcRejectionMessage(err is Map ? err['message'] : err),
+        code: code,
+      );
     }
     return resp['result'];
   }
@@ -76,16 +80,41 @@ class SolanaRpc {
     return List.unmodifiable(accounts);
   }
 
-  /// Latest blockhash (needed to build a transaction; short-lived).
-  Future<String> getLatestBlockhash() async {
+  /// Latest blockhash together with the last block height at which it remains
+  /// valid. Callers that persist a submitted transaction must keep both:
+  /// a missing signature is only provably expired after the canonical chain
+  /// advances beyond [SolanaLatestBlockhash.lastValidBlockHeight].
+  Future<SolanaLatestBlockhash> getLatestBlockhashInfo() async {
     final result = await _call('getLatestBlockhash', [
       {'commitment': 'finalized'},
     ]);
     final value = result is Map ? result['value'] : null;
-    if (value is! Map || value['blockhash'] is! String) {
+    if (value is! Map ||
+        value['blockhash'] is! String ||
+        value['lastValidBlockHeight'] is! int) {
       throw RpcException('bad blockhash');
     }
-    return value['blockhash'] as String;
+    return SolanaLatestBlockhash(
+      blockhash: value['blockhash'] as String,
+      lastValidBlockHeight: value['lastValidBlockHeight'] as int,
+    );
+  }
+
+  /// Compatibility helper for callers that do not submit/persist a
+  /// transaction. Production transfer construction uses
+  /// [getLatestBlockhashInfo] so the validity boundary is never discarded.
+  Future<String> getLatestBlockhash() async =>
+      (await getLatestBlockhashInfo()).blockhash;
+
+  /// Current canonical block height at the requested finalized commitment.
+  Future<int> getBlockHeight() async {
+    final result = await _call('getBlockHeight', [
+      {'commitment': 'finalized'},
+    ]);
+    if (result is! int || result < 0) {
+      throw RpcException('bad block height');
+    }
+    return result;
   }
 
   /// Fee in lamports for the exact serialized message.
@@ -102,7 +131,10 @@ class SolanaRpc {
   /// Simulates the exact single-signer legacy transaction with a zeroed
   /// signature. Signature verification is disabled, but every instruction,
   /// account, balance and recent blockhash is checked by the node.
-  Future<void> simulateMessage(Uint8List message) async {
+  Future<SolanaSimulationResult> simulateMessage(
+    Uint8List message, {
+    List<String> accountAddresses = const [],
+  }) async {
     final transaction = Uint8List.fromList([
       1,
       ...List<int>.filled(64, 0),
@@ -115,13 +147,38 @@ class SolanaRpc {
         'sigVerify': false,
         'replaceRecentBlockhash': false,
         'commitment': 'processed',
+        if (accountAddresses.isNotEmpty)
+          'accounts': {'encoding': 'base64', 'addresses': accountAddresses},
       },
     ]);
     final value = result is Map ? result['value'] : null;
     if (value is! Map) throw RpcException('bad simulation response');
     if (value['err'] != null) {
-      throw RpcException('simulation failed: ${value['err']}');
+      throw RpcException('transaction simulation failed');
     }
+    final lamports = <String, BigInt>{};
+    if (accountAddresses.isNotEmpty) {
+      final accounts = value['accounts'];
+      if (accounts is! List || accounts.length != accountAddresses.length) {
+        throw RpcException('simulation account state unavailable');
+      }
+      for (var i = 0; i < accounts.length; i++) {
+        final account = accounts[i];
+        final value = account is Map ? account['lamports'] : null;
+        if (value is! int || value < 0) {
+          throw RpcException('bad simulation account balance');
+        }
+        lamports[accountAddresses[i]] = BigInt.from(value);
+      }
+    }
+    final units = value['unitsConsumed'];
+    if (units != null && (units is! int || units < 0)) {
+      throw RpcException('bad simulation compute units');
+    }
+    return SolanaSimulationResult(
+      accountLamports: Map.unmodifiable(lamports),
+      unitsConsumed: units as int?,
+    );
   }
 
   Future<String> sendTransaction(String base64Tx) async {
@@ -160,6 +217,16 @@ class SolanaRpc {
   }
 }
 
+class SolanaLatestBlockhash {
+  const SolanaLatestBlockhash({
+    required this.blockhash,
+    required this.lastValidBlockHeight,
+  });
+
+  final String blockhash;
+  final int lastValidBlockHeight;
+}
+
 class SolanaSignatureStatus {
   const SolanaSignatureStatus({
     required this.confirmationStatus,
@@ -168,6 +235,16 @@ class SolanaSignatureStatus {
 
   final String confirmationStatus;
   final bool failed;
+}
+
+class SolanaSimulationResult {
+  const SolanaSimulationResult({
+    required this.accountLamports,
+    this.unitsConsumed,
+  });
+
+  final Map<String, BigInt> accountLamports;
+  final int? unitsConsumed;
 }
 
 class SolanaTokenAccount {

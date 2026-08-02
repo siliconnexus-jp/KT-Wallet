@@ -259,6 +259,34 @@ void main() {
   );
 
   test(
+    'non-positive prices and overflowing display values stay unavailable',
+    () async {
+      final negative = MarketController(
+        wallets: _wallets(),
+        balances: FakeBalanceService(_okResults()),
+        prices: FakePriceService({Coin.eth: -2000}),
+      );
+      await negative.refresh();
+      expect(negative.fiatValueUsd(Coin.eth), isNull);
+
+      final extremeBalances = <Coin, BalanceResult>{
+        for (final coin in Coin.values) coin: const BalanceResult.error(),
+        Coin.eth: BalanceResult.ok(
+          Amount(raw: BigInt.one << 4096, decimals: 18, symbol: 'ETH'),
+        ),
+      };
+      final extreme = MarketController(
+        wallets: _wallets(),
+        balances: FakeBalanceService(extremeBalances),
+        prices: FakePriceService(const {Coin.eth: 2000}),
+      );
+      await extreme.refresh();
+      expect(extreme.fiatValueUsd(Coin.eth), isNull);
+      expect(extreme.totalUsd, isNull);
+    },
+  );
+
+  test(
     'refresh reveals a fast chain before the slowest RPC completes',
     () async {
       final balances = ProgressiveBalanceService();
@@ -573,12 +601,22 @@ void main() {
     expect(formatUsd(1234567.891), r'$1,234,567.89');
   });
 
+  test('formatFiat uses explicit currency symbols and JPY precision', () {
+    expect(formatFiat(1234.5, 'USD'), r'$1,234.50');
+    expect(formatFiat(1234.5, 'CNY'), 'CN¥1,234.50');
+    expect(formatFiat(1234.5, 'JPY'), 'JP¥1,235');
+    expect(formatFiat(double.infinity, 'USD'), '--');
+    expect(formatFiat(-1, 'USD'), '--');
+  });
+
   test('market change formatters preserve sign and precision', () {
     expect(formatChange24h(1.234), '+1.23%');
     expect(formatChange24h(-1.234), '-1.23%');
     expect(formatChange24h(null), '');
+    expect(formatChange24h(double.nan), '');
     expect(formatSignedUsd(12.345), r'+$12.35');
     expect(formatSignedUsd(-12.345), r'-$12.35');
+    expect(formatSignedUsd(double.infinity), '--');
   });
 
   test(

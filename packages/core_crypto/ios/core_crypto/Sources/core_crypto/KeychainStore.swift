@@ -13,6 +13,7 @@ enum KeychainStore {
     case unexpectedStatus(OSStatus)
     case corrupted
     case notFound
+    case alreadyExists
   }
 
   private static func accessControl(requireAuth: Bool) throws -> SecAccessControl {
@@ -33,9 +34,10 @@ enum KeychainStore {
     return control
   }
 
-  /// Persists ciphertext for a wallet, replacing any existing value.
+  /// Persists ciphertext into a fresh wallet slot. Existing key material is
+  /// never deleted or replaced: callers must allocate a new random walletId.
   static func save(walletId: String, ciphertext: Data, requireAuth: Bool) throws {
-    try? delete(walletId: walletId)
+    let walletId = try requireValidWalletId(walletId)
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
@@ -44,11 +46,13 @@ enum KeychainStore {
       kSecAttrAccessControl as String: try accessControl(requireAuth: requireAuth),
     ]
     let status = SecItemAdd(query as CFDictionary, nil)
+    if status == errSecDuplicateItem { throw StoreError.alreadyExists }
     guard status == errSecSuccess else { throw StoreError.unexpectedStatus(status) }
   }
 
   /// Reads ciphertext, prompting biometrics via [context] when auth-bound.
   static func load(walletId: String, context: LAContext) throws -> Data {
+    let walletId = try requireValidWalletId(walletId)
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
@@ -71,6 +75,7 @@ enum KeychainStore {
   }
 
   static func exists(walletId: String) -> Bool {
+    guard let walletId = try? requireValidWalletId(walletId) else { return false }
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
@@ -82,6 +87,7 @@ enum KeychainStore {
 
   /// Deletes the item after overwriting its stored value (best-effort scrub).
   static func delete(walletId: String) throws {
+    let walletId = try requireValidWalletId(walletId)
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,

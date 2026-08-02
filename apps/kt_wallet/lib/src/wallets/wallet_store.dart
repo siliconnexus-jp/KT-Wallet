@@ -1,3 +1,4 @@
+import 'package:chains/chains.dart';
 import 'package:core_crypto/core_crypto.dart';
 import 'package:drift/drift.dart';
 import 'package:wallet_data/wallet_data.dart' as db;
@@ -21,12 +22,22 @@ class WalletStore {
   final db.TokensRepository _tokens;
 
   static const _coins = ['eth', 'polygon', 'tron', 'solana'];
+  static const deletionPendingKey = 'wallet.delete.pending.v1';
+  static const _deletionPendingValue = '1';
 
   /// Loads all wallets into a fresh [WalletManager].
   Future<WalletManager> load() async {
     final rows = await _wallets.listAll();
     final domain = <Wallet>[];
     for (final row in rows) {
+      // A durable delete intent is written before native key removal. Never
+      // expose that wallet again while startup finishes the idempotent cleanup;
+      // this also closes the crash window after Keychain/Keystore deletion but
+      // before the Drift cascade commits.
+      if (await _wallets.scoped(row.id).setting(deletionPendingKey) ==
+          _deletionPendingValue) {
+        continue;
+      }
       final accounts = await _wallets.scoped(row.id).accounts();
       domain.add(_toDomain(row, accounts));
     }
@@ -46,6 +57,35 @@ class WalletStore {
   /// Applies domain-level metadata changes back to the wallet row.
   Future<void> updateMetadata(Wallet wallet) =>
       _db.into(_db.wallets).insertOnConflictUpdate(_walletCompanion(wallet));
+
+  /// Commits a complete reorder as one transaction. A process or disk failure
+  /// cannot leave half the wallets with new sortOrder values and half old.
+  Future<void> updateMetadataBatch(Iterable<Wallet> wallets) =>
+      _db.transaction(() async {
+        for (final wallet in wallets) {
+          await _db
+              .into(_db.wallets)
+              .insertOnConflictUpdate(_walletCompanion(wallet));
+        }
+      });
+
+  /// Durably records user-authorized deletion before touching native key
+  /// material. [load] hides marked wallets and bootstrap retries the cleanup.
+  Future<void> markDeletionPending(String walletId) => _wallets
+      .scoped(walletId)
+      .putSetting(deletionPendingKey, _deletionPendingValue);
+
+  Future<List<String>> pendingDeletionIds() async {
+    final rows = await _wallets.listAll();
+    final result = <String>[];
+    for (final row in rows) {
+      if (await _wallets.scoped(row.id).setting(deletionPendingKey) ==
+          _deletionPendingValue) {
+        result.add(row.id);
+      }
+    }
+    return result;
+  }
 
   Future<void> delete(String walletId) => _wallets.deleteWallet(walletId);
 
@@ -88,6 +128,7 @@ class WalletStore {
       if (hash == null ||
           target == null ||
           source.networkId == null ||
+          source.operation == db.TxOperationKind.approvalRevoke ||
           (networkIds != null && !networkIds.contains(source.networkId)) ||
           source.status == db.TxStatus.failed ||
           source.status == db.TxStatus.expired ||
@@ -119,6 +160,10 @@ class WalletStore {
         status: source.status,
         createdAt: source.createdAt,
         broadcastAt: source.broadcastAt,
+        lastCheckedAt: source.lastCheckedAt,
+        referenceBlockHeight: source.referenceBlockHeight,
+        expiresAt: source.expiresAt,
+        lastValidBlockHeight: source.lastValidBlockHeight,
       );
     }
   });
@@ -130,6 +175,7 @@ class WalletStore {
     required Coin coin,
     required String networkId,
     String? contract,
+    db.TxOperationKind operation = db.TxOperationKind.transfer,
     required String from,
     required String to,
     required String amountRaw,
@@ -139,6 +185,10 @@ class WalletStore {
     required db.SignMode signMode,
     required int createdAt,
     int? broadcastAt,
+    int? lastCheckedAt,
+    int? referenceBlockHeight,
+    int? expiresAt,
+    int? lastValidBlockHeight,
     String? nonce,
     String? maxPriorityFeeRaw,
     String? maxFeeRaw,
@@ -156,6 +206,7 @@ class WalletStore {
           coin: coin.name,
           networkId: Value(networkId),
           contract: Value(contract),
+          operation: Value(operation),
           direction: db.TxDirection.outgoing,
           fromAddr: from,
           toAddr: to,
@@ -166,6 +217,10 @@ class WalletStore {
           signMode: signMode,
           createdAt: createdAt,
           broadcastAt: Value(broadcastAt),
+          lastCheckedAt: Value(lastCheckedAt),
+          referenceBlockHeight: Value(referenceBlockHeight),
+          expiresAt: Value(expiresAt),
+          lastValidBlockHeight: Value(lastValidBlockHeight),
           nonce: Value(nonce),
           maxPriorityFeeRaw: Value(maxPriorityFeeRaw),
           maxFeeRaw: Value(maxFeeRaw),
@@ -189,6 +244,10 @@ class WalletStore {
     required db.TxStatus status,
     required int createdAt,
     int? broadcastAt,
+    int? lastCheckedAt,
+    int? referenceBlockHeight,
+    int? expiresAt,
+    int? lastValidBlockHeight,
   }) => _wallets
       .scoped(walletId)
       .upsertTransaction(
@@ -198,6 +257,7 @@ class WalletStore {
           coin: coin.name,
           networkId: Value(networkId),
           contract: Value(contract),
+          operation: const Value(db.TxOperationKind.transfer),
           direction: db.TxDirection.incoming,
           fromAddr: from,
           toAddr: to,
@@ -207,6 +267,10 @@ class WalletStore {
           signMode: db.SignMode.local,
           createdAt: createdAt,
           broadcastAt: Value(broadcastAt),
+          lastCheckedAt: Value(lastCheckedAt),
+          referenceBlockHeight: Value(referenceBlockHeight),
+          expiresAt: Value(expiresAt),
+          lastValidBlockHeight: Value(lastValidBlockHeight),
         ),
       );
 
@@ -216,6 +280,7 @@ class WalletStore {
     required Coin coin,
     required String networkId,
     String? contract,
+    db.TxOperationKind operation = db.TxOperationKind.transfer,
     required String from,
     required String to,
     required String amountRaw,
@@ -237,6 +302,7 @@ class WalletStore {
           coin: coin.name,
           networkId: Value(networkId),
           contract: Value(contract),
+          operation: Value(operation),
           direction: db.TxDirection.outgoing,
           fromAddr: from,
           toAddr: to,
@@ -265,6 +331,9 @@ class WalletStore {
     db.TxStatus status, {
     String? hash,
     int? broadcastAt,
+    int? lastCheckedAt,
+    db.TxCheckOutcome? lastCheckOutcome,
+    bool clearLastCheckOutcome = false,
   }) => _wallets
       .scoped(walletId)
       .updateTransactionStatus(
@@ -272,9 +341,18 @@ class WalletStore {
         status,
         hash: hash,
         broadcastAt: broadcastAt,
+        lastCheckedAt: lastCheckedAt,
+        lastCheckOutcome: lastCheckOutcome,
+        clearLastCheckOutcome: clearLastCheckOutcome,
       );
 
-  Future<bool> acceptEvmReplacement({
+  Future<bool> setTransactionNonceIfAbsent(
+    String walletId,
+    String id,
+    String nonce,
+  ) => _wallets.scoped(walletId).setTransactionNonceIfAbsent(id, nonce);
+
+  Future<bool> recordEvmReplacementBroadcast({
     required String walletId,
     required String originalId,
     required String replacementId,
@@ -282,11 +360,26 @@ class WalletStore {
     required int broadcastAt,
   }) => _wallets
       .scoped(walletId)
-      .acceptEvmReplacement(
+      .recordEvmReplacementBroadcast(
         originalId: originalId,
         replacementId: replacementId,
         hash: hash,
         broadcastAt: broadcastAt,
+      );
+
+  Future<void> settleEvmTransaction({
+    required String walletId,
+    required String id,
+    required db.TxStatus status,
+    String? hash,
+    int? lastCheckedAt,
+  }) => _wallets
+      .scoped(walletId)
+      .settleEvmTransaction(
+        id: id,
+        status: status,
+        hash: hash,
+        lastCheckedAt: lastCheckedAt,
       );
 
   // ---- global address book (Settings → 地址管理) --------------------------
@@ -397,9 +490,9 @@ class WalletStore {
   };
 
   static String _pathFor(String coin) => switch (coin) {
-    'eth' || 'polygon' => "m/44'/60'/0'/0/0",
-    'tron' => "m/44'/195'/0'/0/0",
-    'solana' => "m/44'/501'/0'",
+    'eth' || 'polygon' => evmDefaultDerivationPath,
+    'tron' => tronDefaultDerivationPath,
+    'solana' => solanaDefaultDerivationPath,
     _ => throw ArgumentError('unknown coin $coin'),
   };
 }

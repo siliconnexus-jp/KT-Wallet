@@ -59,6 +59,7 @@ void main() {
           tokenPrices: const {'USDC': 1},
           nativeChanges: const {Coin.eth: 2.5},
           tokenChanges: const {'USDC': -0.01},
+          fiatPerUsd: const {'USD': 1, 'CNY': 7.1, 'JPY': 151},
         ),
       );
 
@@ -72,6 +73,7 @@ void main() {
       expect(restored.tokens['usdc-eth']!.amount!.format(), '2.5');
       expect(restored.nativePrices[Coin.eth], 3200);
       expect(restored.tokenChanges['USDC'], -0.01);
+      expect(restored.fiatPerUsd['CNY'], 7.1);
 
       expect(await snapshots.load(wallet.id, 'eth-sepolia|sol-devnet'), isNull);
     },

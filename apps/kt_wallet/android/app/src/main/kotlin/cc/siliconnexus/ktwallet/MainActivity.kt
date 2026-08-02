@@ -23,17 +23,45 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.annotation.RequiresApi
 import android.widget.TextView
+import com.ktwallet.core_crypto.CoreCryptoAuthLifecycleHost
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+
+internal const val MAX_PICK_FILE_BYTES = 256 * 1024
+
+internal class PickedFileTooLargeException : Exception()
+
+/// Reads at most [maxBytes] from an untrusted document provider. `readBytes()`
+/// cannot be used here: a user can select an arbitrary document and exhaust
+/// the wallet process before Dart gets a chance to validate the backup format.
+internal fun readPickedFileBounded(input: InputStream, maxBytes: Int): ByteArray {
+    require(maxBytes in 1..MAX_PICK_FILE_BYTES)
+    val output = ByteArrayOutputStream(minOf(maxBytes, 8 * 1024))
+    val buffer = ByteArray(8 * 1024)
+    var total = 0
+    while (true) {
+        val count = input.read(buffer)
+        if (count < 0) break
+        total += count
+        if (total > maxBytes) throw PickedFileTooLargeException()
+        output.write(buffer, 0, count)
+    }
+    return output.toByteArray()
+}
 
 // FlutterFragmentActivity (not FlutterActivity): local_auth's BiometricPrompt
 // requires a FragmentActivity host.
-class MainActivity : FlutterFragmentActivity() {
+class MainActivity : FlutterFragmentActivity(), CoreCryptoAuthLifecycleHost {
     private var privacyCover: View? = null
     private var securityChannel: MethodChannel? = null
     private var screenCaptureCallback: Activity.ScreenCaptureCallback? = null
     private var activityResumed = false
+    private lateinit var nativeIncidentStore: NativeIncidentStore
+    private lateinit var nativeAnrWatchdog: NativeAnrWatchdog
+    private val systemAuthPrivacyGuard = SystemAuthPrivacyGuard()
 
     // Overlay copy pushed from Dart. The resource strings resolve against the
     // SYSTEM language, which ignores an in-app language override; these win
@@ -44,6 +72,9 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        nativeIncidentStore = NativeIncidentStore(applicationContext)
+        NativeFatalObserver(nativeIncidentStore).install()
+        nativeAnrWatchdog = NativeAnrWatchdog(nativeIncidentStore)
         // Keep Recents screenshots enabled: onUserLeaveHint installs the
         // branded privacy cover before Android snapshots the task. Disabling
         // task screenshots here would make Android reuse an older app frame
@@ -52,6 +83,23 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "kt/native_observability"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "pendingIncidents" -> result.success(nativeIncidentStore.pendingPayload())
+                "ackIncidents" -> {
+                    val throughId = call.argument<Number>("throughId")?.toLong()
+                    if (throughId == null || !nativeIncidentStore.acknowledge(throughId)) {
+                        result.error("INVALID", "Invalid acknowledgement", null)
+                    } else {
+                        result.success(null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
         // Normal wallet screens remain shareable. Recovery-phrase, import and
         // verification routes raise FLAG_SECURE through this channel before
         // rendering their sensitive content, then clear it when they leave.
@@ -107,8 +155,10 @@ class MainActivity : FlutterFragmentActivity() {
                         }
                         try {
                             result.success(saveToPictures(bytes, name))
-                        } catch (e: Exception) {
-                            result.error("FAILED", e.message, null)
+                        } catch (_: Exception) {
+                            // Provider exceptions can contain content URIs or
+                            // storage paths. Dart only needs the stable code.
+                            result.error("FAILED", "Could not save the image", null)
                         }
                     }
                     else -> result.notImplemented()
@@ -129,7 +179,14 @@ class MainActivity : FlutterFragmentActivity() {
                         }
                         startSaveFile(name, bytes, result)
                     }
-                    "pickFile" -> startPickFile(result)
+                    "pickFile" -> {
+                        val requested = call.argument<Number>("maxBytes")?.toInt()
+                        if (requested == null || requested !in 1..MAX_PICK_FILE_BYTES) {
+                            result.error("INVALID", "Invalid file size limit", null)
+                        } else {
+                            startPickFile(result, requested)
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -137,6 +194,22 @@ class MainActivity : FlutterFragmentActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             "kt/screen_security"
         )
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "kt/system_auth_visibility"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "started" -> {
+                    systemAuthPrivacyGuard.started()
+                    result.success(null)
+                }
+                "finished" -> {
+                    systemAuthPrivacyGuard.finished()
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "kt/device_security"
@@ -180,13 +253,21 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onPause() {
         activityResumed = false
+        nativeAnrWatchdog.setForeground(false)
         refreshPrivacyCover()
         super.onPause()
     }
 
     override fun onUserLeaveHint() {
-        // This callback represents a user-driven Home/app switch. System
-        // overlays and a same-Activity intent do not invoke it.
+        // BiometricPrompt can also cause this callback on some Android builds.
+        // Starting PrivacyActivity then steals the FragmentActivity host and
+        // leaves the authentication future unresolved. The in-window cover is
+        // still installed by onPause if the user genuinely backgrounds the
+        // app while a prompt is open.
+        if (systemAuthPrivacyGuard.suppressesPrivacyActivity()) {
+            super.onUserLeaveHint()
+            return
+        }
         showPrivacyCover()
         startActivity(Intent(this, PrivacyActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
@@ -198,7 +279,21 @@ class MainActivity : FlutterFragmentActivity() {
     override fun onResume() {
         super.onResume()
         activityResumed = true
+        nativeAnrWatchdog.setForeground(true)
         refreshPrivacyCover()
+    }
+
+    override fun onDestroy() {
+        nativeAnrWatchdog.stop()
+        super.onDestroy()
+    }
+
+    override fun onCoreCryptoAuthStarted() {
+        systemAuthPrivacyGuard.started()
+    }
+
+    override fun onCoreCryptoAuthFinished() {
+        systemAuthPrivacyGuard.finished()
     }
 
     // Do not use onWindowFocusChanged here. Pulling the notification shade,
@@ -275,6 +370,7 @@ class MainActivity : FlutterFragmentActivity() {
         val result = pendingFileResult ?: return
         pendingFileResult = null
         pendingFileBytes = null
+        pendingPickMaxBytes = MAX_PICK_FILE_BYTES
         if (error != null) result.error(error.first, error.second, error.third)
         else result.success(value)
     }
@@ -295,17 +391,20 @@ class MainActivity : FlutterFragmentActivity() {
         }
         try {
             startActivityForResult(intent, REQUEST_SAVE_FILE)
-        } catch (e: Exception) {
-            finishFileCall(null, Triple("FAILED", e.message, null))
+        } catch (_: Exception) {
+            finishFileCall(null, Triple("FAILED", "Could not open the file picker", null))
         }
     }
 
-    private fun startPickFile(result: MethodChannel.Result) {
+    private var pendingPickMaxBytes = MAX_PICK_FILE_BYTES
+
+    private fun startPickFile(result: MethodChannel.Result, maxBytes: Int) {
         if (pendingFileResult != null) {
             result.error("FAILED", "Another file operation is in progress", null)
             return
         }
         pendingFileResult = result
+        pendingPickMaxBytes = maxBytes
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             // Everything selectable: the format check lives in Dart, which can
@@ -314,8 +413,8 @@ class MainActivity : FlutterFragmentActivity() {
         }
         try {
             startActivityForResult(intent, REQUEST_PICK_FILE)
-        } catch (e: Exception) {
-            finishFileCall(null, Triple("FAILED", e.message, null))
+        } catch (_: Exception) {
+            finishFileCall(null, Triple("FAILED", "Could not open the file picker", null))
         }
     }
 
@@ -337,7 +436,9 @@ class MainActivity : FlutterFragmentActivity() {
                 // document id, not the folder the user picked.
                 finishFileCall(mapOf("cancelled" to false))
             } else {
-                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                val bytes = contentResolver.openInputStream(uri)?.use {
+                    readPickedFileBounded(it, pendingPickMaxBytes)
+                }
                     ?: throw IllegalStateException("provider refused the read")
                 finishFileCall(
                     mapOf(
@@ -347,8 +448,10 @@ class MainActivity : FlutterFragmentActivity() {
                     )
                 )
             }
-        } catch (e: Exception) {
-            finishFileCall(null, Triple("FAILED", e.message, null))
+        } catch (_: PickedFileTooLargeException) {
+            finishFileCall(null, Triple("FILE_TOO_LARGE", "Selected file is too large", null))
+        } catch (_: Exception) {
+            finishFileCall(null, Triple("FAILED", "Could not complete the file operation", null))
         }
     }
 

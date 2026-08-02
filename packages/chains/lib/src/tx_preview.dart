@@ -2,7 +2,12 @@ import 'address.dart';
 import 'amount.dart';
 
 /// Operation kinds the wallet builds/parses in V1.
-enum TxOperation { nativeTransfer, tokenTransfer }
+///
+/// [approvalRevoke] is intentionally narrow: it means the exact ERC-20 call
+/// `approve(spender, 0)`. Arbitrary approvals and arbitrary contract calls are
+/// not represented by this enum and therefore remain outside the signing
+/// whitelist.
+enum TxOperation { nativeTransfer, tokenTransfer, approvalRevoke }
 
 /// User-entered transfer request, before fees/nonce/blockhash are attached.
 class TransferIntent {
@@ -15,8 +20,22 @@ class TransferIntent {
     this.tokenContract,
     this.tokenSymbol,
   }) {
-    if (operation == TxOperation.tokenTransfer && tokenContract == null) {
-      throw ArgumentError('token transfer requires a contract');
+    if (operation != TxOperation.nativeTransfer && tokenContract == null) {
+      throw ArgumentError('token operation requires a contract');
+    }
+    if (operation == TxOperation.approvalRevoke) {
+      final isEvm =
+          chain == Chain.ethereum ||
+          chain == Chain.polygon ||
+          chain == Chain.base ||
+          chain == Chain.arbitrum ||
+          chain == Chain.avalanche ||
+          chain == Chain.bnb;
+      if (!isEvm || amount.raw != BigInt.zero) {
+        throw ArgumentError(
+          'approval revoke requires an EVM chain and zero amount',
+        );
+      }
     }
   }
 
@@ -62,7 +81,8 @@ class TxPreview {
   final List<String> warnings;
 
   Amount? get totalNativeSpend =>
-      operation == TxOperation.nativeTransfer && amount.decimals == maxFee.decimals
-          ? amount + maxFee
-          : null;
+      operation == TxOperation.nativeTransfer &&
+          amount.decimals == maxFee.decimals
+      ? amount + maxFee
+      : null;
 }

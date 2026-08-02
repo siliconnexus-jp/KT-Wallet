@@ -37,6 +37,110 @@ void main() {
     expect(parsed.gasLimit, BigInt.from(65000));
   });
 
+  test('parses only zero-allowance EVM approval revocation', () {
+    final intent = TransferIntent(
+      chain: Chain.ethereum,
+      operation: TxOperation.approvalRevoke,
+      from: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+      to: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
+      amount: Amount(raw: BigInt.zero, decimals: 6, symbol: 'USDT'),
+      tokenContract: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+    );
+    final raw = Eip1559Tx.forTransfer(
+      intent,
+      chainId: BigInt.one,
+      nonce: BigInt.from(9),
+      maxPriorityFeePerGas: BigInt.from(30),
+      maxFeePerGas: BigInt.from(40),
+      gasLimit: BigInt.from(50000),
+    ).encodeUnsigned();
+
+    final parsed = parseUnsignedTransfer(Chain.ethereum, raw);
+    expect(parsed.operation, TxOperation.approvalRevoke);
+    expect(parsed.to, '0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed');
+    expect(parsed.tokenContract, '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48');
+    expect(parsed.amountRaw, BigInt.zero);
+  });
+
+  test('rejects non-zero approve calldata', () {
+    final intent = TransferIntent(
+      chain: Chain.ethereum,
+      operation: TxOperation.approvalRevoke,
+      from: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+      to: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
+      amount: Amount(raw: BigInt.zero, decimals: 6),
+      tokenContract: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+    );
+    final raw = Eip1559Tx.forTransfer(
+      intent,
+      chainId: BigInt.one,
+      nonce: BigInt.zero,
+      maxPriorityFeePerGas: BigInt.one,
+      maxFeePerGas: BigInt.two,
+      gasLimit: BigInt.from(50000),
+    ).encodeUnsigned();
+    // Last byte is the uint256 amount. Mutating it proves the parser does not
+    // broaden the whitelist to arbitrary approvals.
+    raw[raw.length - 2] = 1;
+    expect(
+      () => parseUnsignedTransfer(Chain.ethereum, raw),
+      throwsFormatException,
+    );
+  });
+
+  test('rejects hidden access-list entries and non-canonical RLP fields', () {
+    final tx = Eip1559Tx(
+      chainId: BigInt.one,
+      nonce: BigInt.one,
+      maxPriorityFeePerGas: BigInt.one,
+      maxFeePerGas: BigInt.two,
+      gasLimit: BigInt.from(21000),
+      to: Eip1559Tx.addressBytes('0x000000000000000000000000000000000000dEaD'),
+      value: BigInt.one,
+      data: Uint8List(0),
+    );
+    List<Uint8List> fields(Uint8List first, Uint8List accessList) => [
+      first,
+      Rlp.encodeBigInt(tx.nonce),
+      Rlp.encodeBigInt(tx.maxPriorityFeePerGas),
+      Rlp.encodeBigInt(tx.maxFeePerGas),
+      Rlp.encodeBigInt(tx.gasLimit),
+      Rlp.encodeBytes(tx.to!),
+      Rlp.encodeBigInt(tx.value),
+      Rlp.encodeBytes(tx.data),
+      accessList,
+    ];
+    Uint8List wire(List<Uint8List> encoded) =>
+        Uint8List.fromList([Eip1559Tx.txType, ...Rlp.encodeList(encoded)]);
+
+    final hiddenAccessList = wire(
+      fields(
+        Rlp.encodeBigInt(tx.chainId),
+        Rlp.encodeList([Rlp.encodeList(const [])]),
+      ),
+    );
+    final listTypedChainId = wire(
+      fields(
+        Rlp.encodeList([Rlp.encodeBigInt(tx.chainId)]),
+        Rlp.encodeList(const []),
+      ),
+    );
+    final leadingZeroChainId = wire(
+      fields(Rlp.encodeBytes(const [0, 1]), Rlp.encodeList(const [])),
+    );
+
+    for (final raw in [
+      hiddenAccessList,
+      listTypedChainId,
+      leadingZeroChainId,
+    ]) {
+      expect(
+        () => parseUnsignedTransfer(Chain.ethereum, raw),
+        throwsFormatException,
+      );
+    }
+  });
+
   test('parses protobuf TRC-20 fields and fee limit', () {
     final intent = TransferIntent(
       chain: Chain.tron,

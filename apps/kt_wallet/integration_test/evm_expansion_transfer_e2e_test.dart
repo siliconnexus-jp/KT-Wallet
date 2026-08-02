@@ -1,3 +1,6 @@
+import 'support/e2e_credential_batch.dart';
+import 'support/e2e_wallet_cleanup.dart';
+
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -41,6 +44,7 @@ const _cases = [
 ];
 
 void main() {
+  requireFreshE2eCredentialBatchIfConfigured();
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
@@ -58,6 +62,7 @@ void main() {
         mnemonic: mnemonic,
         requireAuth: false,
       );
+      registerE2eWalletCleanup(crypto, _walletId);
       final addresses = await crypto.deriveAddresses(_walletId);
       final transport = HttpJsonRpcTransport(
         timeout: const Duration(seconds: 25),
@@ -80,6 +85,20 @@ void main() {
           final usdcBefore = await rpc.erc20Balance(item.usdc, address);
           expect(nativeBefore, greaterThan(BigInt.from(100000000000000)));
           expect(usdcBefore, greaterThanOrEqualTo(BigInt.from(1000000)));
+          final nativeGas = item.chain == Chain.arbitrum ? 100000 : 21000;
+          final tokenGas = item.chain == Chain.arbitrum ? 150000 : 90000;
+          final budgetParams = await params.fetchEvmParams(item.chain, address);
+          final worstCaseBudget =
+              BigInt.from(1000000000000) +
+              budgetParams.fees.standard.maxFeePerGas *
+                  BigInt.from(nativeGas + tokenGas);
+          expect(
+            nativeBefore,
+            greaterThan(worstCaseBudget),
+            reason:
+                '${item.name} must cover the native value and both '
+                'transactions’ worst-case gas before the first broadcast',
+          );
 
           final nativeHash = await _transfer(
             crypto,
@@ -94,7 +113,7 @@ void main() {
             to: _sink,
             value: BigInt.from(1000000000000),
             data: Uint8List(0),
-            gasLimit: item.chain == Chain.arbitrum ? 100000 : 21000,
+            gasLimit: nativeGas,
           );
           final usdcHash = await _transfer(
             crypto,
@@ -112,7 +131,7 @@ void main() {
               to: _sink,
               amount: BigInt.from(1000000),
             ),
-            gasLimit: item.chain == Chain.arbitrum ? 150000 : 90000,
+            gasLimit: tokenGas,
           );
 
           expect(await rpc.getBalance(address), lessThan(nativeBefore));

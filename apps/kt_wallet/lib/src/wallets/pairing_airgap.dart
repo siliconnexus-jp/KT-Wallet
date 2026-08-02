@@ -4,6 +4,8 @@ import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:chains/chains.dart';
 import 'package:core_crypto/core_crypto.dart';
 
+import 'wallet_model.dart';
+
 /// Canonical demo pairing session: the AccountExport payload the offline
 /// signer's C10 export screen emits for the demo watch wallet. The values
 /// match the online app's seeded 主钱包 (WLT-3E8A91) so the paired result is
@@ -16,26 +18,26 @@ final demoAccountExport = AccountExport(
   accounts: [
     AccountRecord(
       coin: 60,
-      address: '0xc71c8B29b3d4b79E19bE1',
-      path: "m/44'/60'/0'/0/0",
+      address: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
+      path: evmDefaultDerivationPath,
       index: 0,
     ),
     AccountRecord(
       coin: 966,
-      address: '0xc71c8B29b3d4b79E19bE1',
-      path: "m/44'/60'/0'/0/0",
+      address: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
+      path: evmDefaultDerivationPath,
       index: 0,
     ),
     AccountRecord(
       coin: 195,
-      address: 'TcPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
-      path: "m/44'/195'/0'/0/0",
+      address: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+      path: tronDefaultDerivationPath,
       index: 0,
     ),
     AccountRecord(
       coin: 501,
-      address: 'cyKpXwMWd4qmDqVr2W',
-      path: "m/44'/501'/0'",
+      address: 'So11111111111111111111111111111111111111112',
+      path: solanaDefaultDerivationPath,
       index: 0,
     ),
   ],
@@ -62,6 +64,21 @@ const pairingChunkSize = 64;
 List<AirgapFrame> demoAccountExportFrames() => Fragmenter(
   chunkSize: pairingChunkSize,
 ).fragment(demoAccountExport.encode(), reqId: demoPairingReqId);
+
+/// Enforces the trust boundary used by the live scanner and import screen.
+///
+/// Real camera traffic always leaves [allowLegacyDemo] false and therefore
+/// requires all eight public keys. The only relaxed path is the explicit
+/// debug/gallery fixture with its fixed wallet id; arbitrary scanned payloads
+/// cannot opt themselves into that exception.
+void validateScannedAccountExport(
+  AccountExport export, {
+  bool allowLegacyDemo = false,
+}) {
+  final isKnownLegacyDemo =
+      allowLegacyDemo && export.walletId == demoAccountExport.walletId;
+  validateAccountExport(export, requireAllChains: !isKnownLegacyDemo);
+}
 
 /// Maps the export's SLIP-44 records onto the app's chain address set.
 ///
@@ -93,23 +110,39 @@ ChainAddresses addressesFromExport(AccountExport export) {
   );
 }
 
+/// Creates the production watch-wallet model from a validated offline export.
+///
+/// Keeping validation and construction in one function prevents a new caller
+/// from persisting QR-provided addresses without first proving their public
+/// keys, derivation paths and shared EVM identity. The returned type has no
+/// local signing capability by construction.
+WatchWallet watchWalletFromAccountExport(
+  AccountExport export, {
+  required String id,
+  required int avatarColor,
+  required int sortOrder,
+  bool allowLegacyDemo = false,
+}) {
+  validateScannedAccountExport(export, allowLegacyDemo: allowLegacyDemo);
+  return WatchWallet(
+    id: id,
+    name: export.walletName,
+    avatarColor: avatarColor,
+    addresses: addressesFromExport(export),
+    sortOrder: sortOrder,
+    coldWalletId: export.walletId,
+    protocolVersion: airgapVersion,
+  );
+}
+
 /// Validates the semantic account set after AIRGAP-V1 schema decoding. The
-/// production camera requires all seven supported chain records; tests and
+/// production camera requires all eight supported chain records; tests and
 /// legacy demo fixtures may opt into the original four-record set.
 void validateAccountExport(
   AccountExport export, {
   bool requireAllChains = true,
 }) {
-  final expectedPaths = <int, String>{
-    60: "m/44'/60'/0'/0/0",
-    966: "m/44'/60'/0'/0/0",
-    8453: "m/44'/60'/0'/0/0",
-    42161: "m/44'/60'/0'/0/0",
-    9000: "m/44'/60'/0'/0/0",
-    714: "m/44'/60'/0'/0/0",
-    195: "m/44'/195'/0'/0/0",
-    501: "m/44'/501'/0'",
-  };
+  const expectedPaths = accountExportDerivationPaths;
   final records = <int, AccountRecord>{};
   for (final account in export.accounts) {
     if (!expectedPaths.containsKey(account.coin) ||
@@ -165,7 +198,7 @@ bool _publicKeyMatchesAddress(
   if (chain == Chain.solana) {
     return publicKey.length == 32 && base58Encode(publicKey) == address;
   }
-  if (publicKey.length != 65 || publicKey.first != 4) return false;
+  if (!isValidSecp256k1PublicKey(publicKey)) return false;
   final body = keccak256(Uint8List.sublistView(publicKey, 1)).sublist(12);
   if (chain == Chain.tron) {
     final payload = Uint8List.fromList([0x41, ...body]);

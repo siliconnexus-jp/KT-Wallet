@@ -60,7 +60,7 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
 
   bool get _canSubmit =>
       !_busy &&
-      _password.text.length >= CoreCryptoValidation.minBackupPasswordLength &&
+      CoreCryptoValidation.backupPasswordIssue(_password.text) == null &&
       _confirm.text.isNotEmpty;
 
   Future<void> _create() async {
@@ -110,9 +110,15 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final tooShort =
-        _password.text.isNotEmpty &&
-        _password.text.length < CoreCryptoValidation.minBackupPasswordLength;
+    final passwordIssue = _password.text.isEmpty
+        ? null
+        : CoreCryptoValidation.backupPasswordIssue(_password.text);
+    final passwordError = switch (passwordIssue) {
+      BackupPasswordIssue.tooShort => l10n.backupPasswordTooShort,
+      BackupPasswordIssue.tooLong => l10n.backupPasswordTooLong,
+      BackupPasswordIssue.predictable => l10n.backupPasswordTooWeak,
+      null => null,
+    };
     // The password is as good as the phrase itself while it is on screen.
     return SecureContent(
       child: KtScreen(
@@ -140,7 +146,7 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
                 _field(
                   controller: _password,
                   label: l10n.backupPasswordLabel,
-                  error: tooShort ? l10n.backupPasswordTooShort : null,
+                  error: passwordError,
                 ),
                 const SizedBox(height: 16),
                 _field(
@@ -203,7 +209,6 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
         autocorrect: false,
         enabled: !_busy,
         decoration: InputDecoration(
-          isDense: true,
           errorText: error,
           border: const OutlineInputBorder(),
         ),
@@ -228,14 +233,18 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   final _password = TextEditingController();
   PickedFile? _picked;
   bool _busy = false;
-  String? _error;
+  String? _fileError;
+  String? _passwordError;
 
   FileExchange get _files => widget.files ?? FileExchange.instance;
 
   @override
   void initState() {
     super.initState();
-    _password.addListener(() => setState(() {}));
+    _password.addListener(() {
+      if (!mounted) return;
+      setState(() => _passwordError = null);
+    });
   }
 
   @override
@@ -246,26 +255,54 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
 
   Future<void> _pick() async {
     final l10n = AppLocalizations.of(context);
-    final picked = await _files.pickFile(
-      extensions: const [WalletBackupFile.fileExtension],
-    );
+    final PickedFile? picked;
+    try {
+      picked = await _files.pickFile(
+        extensions: const [WalletBackupFile.fileExtension],
+        maxBytes: WalletBackupFile.maxFileBytes,
+      );
+    } on FileTooLargeException {
+      if (!mounted) return;
+      _password.clear();
+      setState(() {
+        _picked = null;
+        _fileError = l10n.restoreFileTooLarge;
+        _passwordError = null;
+      });
+      return;
+    } on FilePickException catch (error) {
+      if (!mounted) return;
+      _password.clear();
+      setState(() {
+        _picked = null;
+        _fileError = error.failure == FilePickFailure.unavailable
+            ? l10n.restoreFileUnavailable
+            : l10n.restoreFileReadFailed;
+        _passwordError = null;
+      });
+      return;
+    }
     if (picked == null || !mounted) return;
     // Validate the envelope at pick time so a wrong file is called out before
     // the user types a password that was never going to work.
     try {
-      WalletBackupFile.decode(picked.bytes);
+      WalletBackupFile.decodeEnvelope(picked.bytes);
     } on BackupFormatException catch (e) {
+      _password.clear();
       setState(() {
         _picked = null;
-        _error = e.reason.contains('too new')
+        _fileError = e.reason.contains('too new')
             ? l10n.restoreTooNew
             : l10n.restoreNotABackup;
+        _passwordError = null;
       });
       return;
     }
+    _password.clear();
     setState(() {
       _picked = picked;
-      _error = null;
+      _fileError = null;
+      _passwordError = null;
     });
   }
 
@@ -279,16 +316,18 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     setState(() => _busy = true);
     String? mnemonic;
     try {
+      final decoded = WalletBackupFile.decodeEnvelope(picked.bytes);
       mnemonic = await wallets.crypto.readBackup(
-        blob: WalletBackupFile.decode(picked.bytes),
+        blob: decoded.sealed,
         password: _password.text,
+        format: decoded.cryptoFormat,
       );
     } on BackupFormatException {
-      setState(() => _error = l10n.restoreNotABackup);
+      setState(() => _fileError = l10n.restoreNotABackup);
     } on CoreCryptoException {
       // GCM cannot tell a wrong password from a damaged file, and neither can
       // we — say both rather than guess.
-      setState(() => _error = l10n.restoreWrongPassword);
+      setState(() => _passwordError = l10n.restoreWrongPassword);
     } finally {
       if (mounted && mnemonic == null) setState(() => _busy = false);
     }
@@ -303,7 +342,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = l10n.restoreWrongPassword;
+          _passwordError = l10n.restoreWrongPassword;
         });
       }
       return;
@@ -339,39 +378,81 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
             ),
           ),
           KtCard(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _busy ? null : _pick,
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.folder_open,
-                    size: 20,
-                    color: WalletColors.accent,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      picked == null
-                          ? l10n.restorePickFile
-                          : l10n.backupFileChosen(picked.name),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: WalletColors.text,
+            child: Semantics(
+              button: true,
+              label: l10n.restorePickFile,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _busy ? null : _pick,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.folder_open,
+                        size: 20,
+                        color: WalletColors.accent,
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          picked == null
+                              ? l10n.restorePickFile
+                              : l10n.backupFileChosen(
+                                  picked.name.isEmpty
+                                      ? l10n.restoreSelectedFileFallback
+                                      : picked.name,
+                                ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: WalletColors.text,
+                          ),
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chevron_right,
+                        size: 16,
+                        color: WalletColors.text3,
+                      ),
+                    ],
                   ),
-                  const Icon(
-                    Icons.chevron_right,
-                    size: 16,
-                    color: WalletColors.text3,
-                  ),
-                ],
+                ),
               ),
             ),
           ),
+          if (_fileError case final error?)
+            Semantics(
+              liveRegion: true,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 1),
+                      child: Icon(
+                        Icons.error_outline,
+                        size: 16,
+                        color: WalletColors.red,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        error,
+                        style: const TextStyle(
+                          color: WalletColors.red,
+                          fontSize: 12,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           KtCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -389,10 +470,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                   obscureText: true,
                   enableSuggestions: false,
                   autocorrect: false,
-                  enabled: !_busy,
+                  enabled: picked != null && !_busy,
                   decoration: InputDecoration(
-                    isDense: true,
-                    errorText: _error,
+                    errorText: _passwordError,
                     border: const OutlineInputBorder(),
                   ),
                   style: const TextStyle(

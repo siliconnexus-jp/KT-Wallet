@@ -18,6 +18,7 @@ workspace:
   - packages/wallet_data
 
 dev_dependencies:
+  analyzer: 10.2.0
   # melos is used as a globally-activated CLI (dart pub global activate melos),
   # not a workspace dependency — pinning it here conflicts with drift_dev's
   # cli_util constraint.

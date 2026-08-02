@@ -1,39 +1,35 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# wallet_data
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages).
-
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/tools/pub/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages).
--->
-
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
-
-## Features
-
-TODO: List what your package can do. Maybe include images, gifs, or videos.
-
-## Getting started
-
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
-
-## Usage
-
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
+Drift/SQLite persistence for the online KT Wallet app. It stores public wallet
+metadata, accounts, balances, contacts, custom tokens, signing requests, and
+transaction lifecycle state. Private keys and mnemonics do not belong in this
+database.
 
 ```dart
-const like = 'sample';
+final database = WalletDatabase(queryExecutor);
+final wallets = WalletsRepository(database);
+final current = wallets.scoped('wallet-id');
+final pending = await current.transactions(
+  networkIds: {'eth-sepolia'},
+);
 ```
 
-## Additional information
+## Invariants
 
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+- `WalletRepository` is permanently scoped to one wallet ID and overwrites a
+  caller-supplied foreign wallet ID on writes.
+- transaction queries can be restricted by network instance so mainnet and
+  testnet rows never merge;
+- EVM nonce reservation is atomic per wallet, network, sender, and nonce;
+- replacement lineage and `pending/unknown/confirmed/failed/dropped` evidence
+  survive restart;
+- wallet deletion cascades all wallet-scoped public state.
+
+Schema changes require a migration, preservation tests from every supported
+version, and an updated schema-version comment. Host apps must apply platform
+file protection and backup exclusion; this package cannot enforce OS storage
+policy itself.
+
+Run `dart run build_runner build --delete-conflicting-outputs` after table
+changes and `dart test` before committing generated code. Licensed under
+MPL-2.0; see `LICENSE`.

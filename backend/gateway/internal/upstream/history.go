@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -116,16 +115,16 @@ func (e *Etherscan) accountList(ctx context.Context, chainID int, address string
 	defer cancel()
 	req, err := http.NewRequestWithContext(actx, http.MethodGet, u, nil)
 	if err != nil {
-		return &Unavailable{Upstream: "etherscan", Message: err.Error()}
+		return safeRequestCreationFailure("etherscan")
 	}
 	resp, err := e.client.Do(req)
 	if err != nil {
-		return &Unavailable{Upstream: "etherscan", Message: err.Error()}
+		return safeRequestFailure("etherscan", actx, err)
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	data, err := readBoundedResponse(resp.Body, 8<<20)
 	if err != nil {
-		return &Unavailable{Upstream: "etherscan", Message: err.Error()}
+		return safeResponseReadFailure("etherscan")
 	}
 	if resp.StatusCode != http.StatusOK {
 		return &Unavailable{Upstream: "etherscan", Message: fmt.Sprintf("Etherscan returned HTTP %d", resp.StatusCode)}
@@ -140,22 +139,13 @@ func (e *Etherscan) accountList(ctx context.Context, chainID int, address string
 	}
 	trimmedResult := bytes.TrimSpace(out.Result)
 	if len(trimmedResult) == 0 || bytes.Equal(trimmedResult, []byte("null")) {
-		msg := out.Message
-		if msg == "" {
-			msg = "explorer returned no result"
-		}
-		return &Unavailable{Upstream: "etherscan", Message: msg}
+		return &Unavailable{Upstream: "etherscan", Message: "explorer returned no result"}
 	}
 	if err := json.Unmarshal(out.Result, dest); err != nil {
 		// status "0" + non-array result carries an error string
 		// ("Max rate limit reached", "Invalid API Key", ...). "No transactions
 		// found" still returns an empty array, which parses above.
-		var msg string
-		_ = json.Unmarshal(out.Result, &msg)
-		if msg == "" {
-			msg = out.Message
-		}
-		return &Unavailable{Upstream: "etherscan", Message: msg}
+		return &Unavailable{Upstream: "etherscan", Message: "explorer rejected request"}
 	}
 	return nil
 }
@@ -218,24 +208,24 @@ func (h *Helius) Transfers(ctx context.Context, address string, limit int) ([]He
 		},
 	})
 	if err != nil {
-		return nil, &Unavailable{Upstream: "helius", Message: err.Error()}
+		return nil, &Unavailable{Upstream: "helius", Message: "could not encode upstream request"}
 	}
 
 	actx, cancel := context.WithTimeout(ctx, h.timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(actx, http.MethodPost, u, strings.NewReader(string(body)))
 	if err != nil {
-		return nil, &Unavailable{Upstream: "helius", Message: err.Error()}
+		return nil, safeRequestCreationFailure("helius")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := h.client.Do(req)
 	if err != nil {
-		return nil, &Unavailable{Upstream: "helius", Message: err.Error()}
+		return nil, safeRequestFailure("helius", actx, err)
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	data, err := readBoundedResponse(resp.Body, 8<<20)
 	if err != nil {
-		return nil, &Unavailable{Upstream: "helius", Message: err.Error()}
+		return nil, safeResponseReadFailure("helius")
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, &Unavailable{Upstream: "helius", Message: fmt.Sprintf("Helius returned HTTP %d", resp.StatusCode)}
@@ -252,7 +242,7 @@ func (h *Helius) Transfers(ctx context.Context, address string, limit int) ([]He
 		return nil, &Unavailable{Upstream: "helius", Message: "malformed Helius response"}
 	}
 	if out.Error != nil {
-		return nil, &Unavailable{Upstream: "helius", Message: out.Error.Message}
+		return nil, &Unavailable{Upstream: "helius", Message: "history provider rejected request"}
 	}
 	return out.Result.Data, nil
 }

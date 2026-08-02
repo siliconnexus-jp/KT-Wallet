@@ -1,3 +1,6 @@
+import 'support/e2e_credential_batch.dart';
+import 'support/e2e_wallet_cleanup.dart';
+
 import 'dart:async';
 
 import 'package:chains/chains.dart';
@@ -16,6 +19,7 @@ const _circleUsdcAccount = '6D2ZmPSpbtqPFuze1GKvhtEwJnrP9FpCvQXvQe9t6HQ8';
 const _nativeRecipient = 'PKWh66GhWw5HQW2dDo9LvbuNd6b4EbJ49NmCi1Dsu3A';
 
 void main() {
+  requireFreshE2eCredentialBatchIfConfigured();
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
@@ -29,6 +33,7 @@ void main() {
         mnemonic: mnemonic,
         requireAuth: false,
       );
+      registerE2eWalletCleanup(crypto, _walletId);
       final addresses = await crypto.deriveAddresses(_walletId);
       final transport = HttpJsonRpcTransport(
         timeout: const Duration(seconds: 20),
@@ -75,15 +80,22 @@ void main() {
           tokenMessage,
         );
 
-        expect(await rpc.getBalance(addresses.solana), lessThan(solBefore));
-        expect(
-          await rpc.getTokenBalance(addresses.solana, _usdcMint),
-          usdcBefore - BigInt.from(1000000),
-        );
+        // Public chain evidence is printed before the finalized-balance wait
+        // so a node commitment lag can never hide already-broadcast hashes.
         // ignore: avoid_print
         print('SOLANA_DEVNET_NATIVE_TX=$nativeHash');
         // ignore: avoid_print
         print('SOLANA_DEVNET_USDC_TX=$tokenHash');
+        await _waitForBalance(
+          () => rpc.getBalance(addresses.solana),
+          (balance) => balance < solBefore,
+          description: 'SOL balance to decrease',
+        );
+        await _waitForBalance(
+          () => rpc.getTokenBalance(addresses.solana, _usdcMint),
+          (balance) => balance == usdcBefore - BigInt.from(1000000),
+          description: 'USDC balance to decrease by exactly 1 USDC',
+        );
       } finally {
         transport.close();
       }
@@ -107,9 +119,29 @@ Future<String> _signBroadcastAndConfirm(
   expect(result.status, BroadcastStatus.ok, reason: result.message);
   final signature = result.txHash!;
   for (var attempt = 0; attempt < 30; attempt++) {
-    final status = await rpc.signatureStatus(signature);
-    if (status == 'confirmed' || status == 'finalized') return signature;
+    final status = await rpc.signatureResult(signature);
+    if (status?.failed == true) {
+      fail('Solana transaction was included but failed: $signature');
+    }
+    if (status?.confirmationStatus == 'confirmed' ||
+        status?.confirmationStatus == 'finalized') {
+      return signature;
+    }
     await Future<void>.delayed(const Duration(seconds: 2));
   }
   throw TimeoutException('Solana transaction not confirmed: $signature');
+}
+
+Future<void> _waitForBalance(
+  Future<BigInt> Function() read,
+  bool Function(BigInt) matches, {
+  required String description,
+}) async {
+  BigInt? last;
+  for (var attempt = 0; attempt < 30; attempt++) {
+    last = await read();
+    if (matches(last)) return;
+    await Future<void>.delayed(const Duration(seconds: 2));
+  }
+  fail('Timed out waiting for $description; last value: $last');
 }

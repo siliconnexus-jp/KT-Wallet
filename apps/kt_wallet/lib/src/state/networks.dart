@@ -4,6 +4,21 @@ import 'package:chains/chains.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'endpoint_policy.dart';
+
+bool _isEvmChain(Chain chain) => chain != Chain.tron && chain != Chain.solana;
+
+bool _isValidNetworkIdentity(Chain chain, String? value) {
+  if (_isEvmChain(chain)) return true;
+  if (value == null) return false;
+  final identity = value.trim();
+  return switch (chain) {
+    Chain.tron => RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(identity),
+    Chain.solana => RegExp(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$').hasMatch(identity),
+    _ => true,
+  };
+}
+
 /// Network model: a concrete instance of a protocol family.
 ///
 /// [Chain] stays the protocol family (address format, serialization, signing
@@ -18,6 +33,7 @@ class Network {
     required this.rpcUrl,
     required this.symbol,
     this.evmChainId,
+    this.networkIdentity,
     this.explorerUrl,
     this.faucetUrl,
     this.isTestnet = false,
@@ -42,6 +58,15 @@ class Network {
   /// isolation we want.
   final int? evmChainId;
 
+  /// Pinned non-EVM network identity.
+  ///
+  /// Solana uses `getGenesisHash`; TRON uses block 0's `blockID`. Built-ins
+  /// carry audited constants and custom networks persist the value returned by
+  /// their successful add-network probe. Transfers re-check this value before
+  /// any key operation, so changing an RPC URL behind the same preference
+  /// cannot silently move a transaction onto another network.
+  final String? networkIdentity;
+
   final String? explorerUrl;
 
   /// Where to get test funds; testnet-only affordance in the receive screen.
@@ -59,6 +84,7 @@ class Network {
     'rpcUrl': rpcUrl,
     'symbol': symbol,
     if (evmChainId != null) 'evmChainId': evmChainId,
+    if (networkIdentity != null) 'networkIdentity': networkIdentity,
     if (explorerUrl != null) 'explorerUrl': explorerUrl,
     if (faucetUrl != null) 'faucetUrl': faucetUrl,
     'isTestnet': isTestnet,
@@ -71,11 +97,33 @@ class Network {
     final name = m['name'];
     final rpcUrl = m['rpcUrl'];
     final symbol = m['symbol'];
+    final evmChainId = m['evmChainId'];
+    final networkIdentity = m['networkIdentity'];
     if (chain == null ||
         id is! String ||
         name is! String ||
         rpcUrl is! String ||
-        symbol is! String) {
+        symbol is! String ||
+        id.isEmpty ||
+        name.trim().isEmpty ||
+        symbol.trim().isEmpty ||
+        !EndpointPolicy.isSafeUrl(rpcUrl) ||
+        (evmChainId != null && evmChainId is! int) ||
+        (networkIdentity != null && networkIdentity is! String) ||
+        (_isEvmChain(chain) && (evmChainId is! int || evmChainId <= 0)) ||
+        (!_isEvmChain(chain) &&
+            (networkIdentity is! String ||
+                !_isValidNetworkIdentity(chain, networkIdentity)))) {
+      return null;
+    }
+    final explorerUrl = m['explorerUrl'];
+    if (explorerUrl != null &&
+        (explorerUrl is! String || !EndpointPolicy.isSafeUrl(explorerUrl))) {
+      return null;
+    }
+    final faucetUrl = m['faucetUrl'];
+    if (faucetUrl != null &&
+        (faucetUrl is! String || !EndpointPolicy.isSafeUrl(faucetUrl))) {
       return null;
     }
     return Network(
@@ -84,9 +132,10 @@ class Network {
       name: name,
       rpcUrl: rpcUrl,
       symbol: symbol,
-      evmChainId: m['evmChainId'] as int?,
-      explorerUrl: m['explorerUrl'] as String?,
-      faucetUrl: m['faucetUrl'] as String?,
+      evmChainId: evmChainId as int?,
+      networkIdentity: networkIdentity as String?,
+      explorerUrl: explorerUrl as String?,
+      faucetUrl: faucetUrl as String?,
       isTestnet: m['isTestnet'] == true,
     );
   }
@@ -247,6 +296,8 @@ const tronMainnet = Network(
   name: 'TRON',
   rpcUrl: 'https://api.trongrid.io',
   symbol: 'TRX',
+  networkIdentity:
+      '00000000000000001ebf88508a03865c71d452e25f4d51194196a1d22b6653dc',
   explorerUrl: 'https://tronscan.org',
   builtin: true,
 );
@@ -257,6 +308,8 @@ const tronNile = Network(
   name: 'Nile',
   rpcUrl: 'https://nile.trongrid.io',
   symbol: 'TRX',
+  networkIdentity:
+      '0000000000000000d698d4192c56cb6be724a558448e2684802de4d6cd8690dc',
   explorerUrl: 'https://nile.tronscan.org',
   faucetUrl: 'https://nileex.io/join/getJoinPage',
   isTestnet: true,
@@ -269,6 +322,7 @@ const solanaMainnet = Network(
   name: 'Solana',
   rpcUrl: 'https://api.mainnet-beta.solana.com',
   symbol: 'SOL',
+  networkIdentity: '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d',
   explorerUrl: 'https://explorer.solana.com',
   builtin: true,
 );
@@ -279,6 +333,7 @@ const solanaDevnet = Network(
   name: 'Devnet',
   rpcUrl: 'https://api.devnet.solana.com',
   symbol: 'SOL',
+  networkIdentity: 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG',
   explorerUrl: 'https://explorer.solana.com?cluster=devnet',
   faucetUrl: 'https://faucet.solana.com',
   isTestnet: true,
@@ -330,18 +385,25 @@ const _testnetProfile = {
 
 /// Active-network state: the environment switch (mainnet/testnet), optional
 /// per-chain overrides, and user-added custom networks. Persisted via
-/// shared_preferences with the same defensive style as the other controllers
-/// (silently in-memory when the plugin is unavailable, e.g. widget tests).
+/// one versioned SharedPreferences snapshot. Mutations are serialized and
+/// commit-before-publish: a failed write cannot silently change the chain or
+/// RPC domain used by the running app.
 class NetworkController extends ChangeNotifier {
   NetworkController({
     NetworkEnvironment initialEnvironment = NetworkEnvironment.mainnet,
-  }) : _environment = initialEnvironment;
+    Future<SharedPreferences> Function()? preferencesProvider,
+  }) : _environment = initialEnvironment,
+       _preferencesProvider =
+           preferencesProvider ?? SharedPreferences.getInstance;
 
+  static const snapshotKey = 'network.snapshot.v1';
   static const _keyEnvironment = 'network.environment';
   static const _keyOverrides =
       'network.overrides'; // JSON {chainName: networkId}
   static const _keyCustom = 'network.custom'; // JSON list of Network.toJson
 
+  final Future<SharedPreferences> Function() _preferencesProvider;
+  Future<void> _writes = Future<void>.value();
   NetworkEnvironment _environment;
   final Map<Chain, String> _overrides = {};
   final List<Network> _custom = [];
@@ -377,62 +439,142 @@ class NetworkController extends ChangeNotifier {
   /// amber badge and fiat suppression).
   bool get anyTestnetActive => Chain.values.any((c) => activeFor(c).isTestnet);
 
-  Future<void> load() async {
+  Future<void> load() => _queueMutation(_load);
+
+  Future<void> _load() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final env = prefs.getString(_keyEnvironment);
-      if (env == NetworkEnvironment.testnet.name) {
-        _environment = NetworkEnvironment.testnet;
-      }
-      final custom = prefs.getString(_keyCustom);
-      if (custom != null && custom.isNotEmpty) {
-        final list = json.decode(custom);
-        if (list is List) {
-          _custom
-            ..clear()
-            ..addAll(
-              list
-                  .whereType<Map<String, Object?>>()
-                  .map(Network.fromJson)
-                  .whereType<Network>(),
-            );
+      final prefs = await _preferencesProvider();
+      final hasSnapshot = prefs.containsKey(snapshotKey);
+      final snapshot = _decodeMap(prefs.getString(snapshotKey));
+      final legacy = !hasSnapshot;
+
+      // Once a snapshot key exists, a corrupt or unsupported snapshot must
+      // never fall back to stale legacy keys. Keep the initial safe profile.
+      final envName =
+          snapshot?['environment'] ??
+          (legacy ? prefs.getString(_keyEnvironment) : null);
+      final nextEnvironment = envName == NetworkEnvironment.testnet.name
+          ? NetworkEnvironment.testnet
+          : envName == NetworkEnvironment.mainnet.name
+          ? NetworkEnvironment.mainnet
+          : _environment;
+
+      final customValue =
+          snapshot?['custom'] ??
+          (legacy ? _decodeJson(prefs.getString(_keyCustom)) : null);
+      final nextCustom = <Network>[];
+      if (customValue is List) {
+        for (final value in customValue) {
+          if (value is! Map) continue;
+          final network = Network.fromJson(
+            value.map((key, value) => MapEntry(key.toString(), value)),
+          );
+          if (network != null &&
+              !builtinNetworks.any((item) => item.id == network.id) &&
+              !nextCustom.any((item) => item.id == network.id)) {
+            nextCustom.add(network);
+          }
         }
       }
-      final overrides = prefs.getString(_keyOverrides);
-      if (overrides != null && overrides.isNotEmpty) {
-        final m = json.decode(overrides);
-        if (m is Map) {
-          m.forEach((k, v) {
-            final chain = Chain.values.where((c) => c.name == k).firstOrNull;
-            if (chain != null && v is String) _overrides[chain] = v;
-          });
+
+      final knownNetworks = [...builtinNetworks, ...nextCustom];
+      final overrideValue =
+          snapshot?['overrides'] ??
+          (legacy ? _decodeJson(prefs.getString(_keyOverrides)) : null);
+      final nextOverrides = <Chain, String>{};
+      if (overrideValue is Map) {
+        for (final entry in overrideValue.entries) {
+          final chain = Chain.values
+              .where((item) => item.name == entry.key)
+              .firstOrNull;
+          final id = entry.value;
+          final network = id is String
+              ? knownNetworks.where((item) => item.id == id).firstOrNull
+              : null;
+          if (chain != null && network?.chain == chain) {
+            nextOverrides[chain] = id as String;
+          }
         }
       }
+
+      _environment = nextEnvironment;
+      _custom
+        ..clear()
+        ..addAll(nextCustom);
+      _overrides
+        ..clear()
+        ..addAll(nextOverrides);
       notifyListeners();
+
+      // Migrate legacy three-key storage and sanitize invalid entries. This is
+      // best-effort during read; all future mutations require a successful
+      // snapshot write before they become visible.
+      if (legacy) {
+        try {
+          await _persistSnapshot(
+            environment: nextEnvironment,
+            custom: nextCustom,
+            overrides: nextOverrides,
+          );
+          await prefs.remove(_keyEnvironment);
+          await prefs.remove(_keyCustom);
+          await prefs.remove(_keyOverrides);
+        } on Object {
+          // The already-persisted legacy state remains authoritative.
+        }
+      }
     } catch (_) {
       // No prefs plugin (tests) or corrupt data: stay on defaults.
     }
   }
 
-  Future<void> setEnvironment(NetworkEnvironment env) async {
-    if (env == _environment) return;
-    _environment = env;
-    // An explicit environment switch clears per-chain overrides — the user
-    // asked for "everything mainnet/testnet", stale pins would betray that.
-    _overrides.clear();
-    notifyListeners();
-    await _persist();
-  }
+  Future<void> setEnvironment(NetworkEnvironment env) =>
+      _queueMutation(() async {
+        if (env == _environment && _overrides.isEmpty) return;
+        // An explicit environment switch clears per-chain overrides — the user
+        // asked for "everything mainnet/testnet", stale pins would betray that.
+        await _persistSnapshot(
+          environment: env,
+          custom: _custom,
+          overrides: const {},
+        );
+        _environment = env;
+        _overrides.clear();
+        notifyListeners();
+      });
 
-  Future<void> setOverride(Chain chain, String? networkId) async {
-    if (networkId == null) {
-      _overrides.remove(chain);
-    } else {
-      _overrides[chain] = networkId;
-    }
-    notifyListeners();
-    await _persist();
-  }
+  Future<void> setOverride(Chain chain, String? networkId) =>
+      _queueMutation(() async {
+        if (networkId != null) {
+          final network = byId(networkId);
+          if (network == null || network.chain != chain) {
+            throw ArgumentError.value(
+              networkId,
+              'networkId',
+              'Network does not belong to ${chain.name}',
+            );
+          }
+        }
+        if (_overrides[chain] == networkId ||
+            (networkId == null && !_overrides.containsKey(chain))) {
+          return;
+        }
+        final nextOverrides = {..._overrides};
+        if (networkId == null) {
+          nextOverrides.remove(chain);
+        } else {
+          nextOverrides[chain] = networkId;
+        }
+        await _persistSnapshot(
+          environment: _environment,
+          custom: _custom,
+          overrides: nextOverrides,
+        );
+        _overrides
+          ..clear()
+          ..addAll(nextOverrides);
+        notifyListeners();
+      });
 
   Future<Network> addCustom({
     required Chain chain,
@@ -440,47 +582,109 @@ class NetworkController extends ChangeNotifier {
     required String rpcUrl,
     required String symbol,
     int? evmChainId,
+    String? networkIdentity,
     String? explorerUrl,
     bool isTestnet = true,
-  }) async {
+  }) => _queueMutation(() async {
+    final normalizedName = name.trim();
+    final normalizedSymbol = symbol.trim().toUpperCase();
+    if (normalizedName.isEmpty || normalizedSymbol.isEmpty) {
+      throw const FormatException('Network name and symbol are required');
+    }
+    final normalizedRpcUrl = EndpointPolicy.requireSafeUrl(rpcUrl);
+    final normalizedExplorerUrl =
+        explorerUrl == null || explorerUrl.trim().isEmpty
+        ? null
+        : EndpointPolicy.requireSafeUrl(explorerUrl);
+    if (_isEvmChain(chain) && (evmChainId == null || evmChainId <= 0)) {
+      throw const FormatException('A positive EVM chain id is required');
+    }
+    if (!_isValidNetworkIdentity(chain, networkIdentity)) {
+      throw const FormatException('A valid network identity is required');
+    }
     final network = Network(
       id: 'custom-${DateTime.now().microsecondsSinceEpoch}',
       chain: chain,
-      name: name,
-      rpcUrl: rpcUrl,
-      symbol: symbol,
+      name: normalizedName,
+      rpcUrl: normalizedRpcUrl,
+      symbol: normalizedSymbol,
       evmChainId: evmChainId,
-      explorerUrl: explorerUrl,
+      networkIdentity: networkIdentity,
+      explorerUrl: normalizedExplorerUrl,
       isTestnet: isTestnet,
+    );
+    final nextCustom = [..._custom, network];
+    await _persistSnapshot(
+      environment: _environment,
+      custom: nextCustom,
+      overrides: _overrides,
     );
     _custom.add(network);
     notifyListeners();
-    await _persist();
     return network;
-  }
+  });
 
-  Future<void> removeCustom(String id) async {
-    _custom.removeWhere((n) => n.id == id && !n.builtin);
-    _overrides.removeWhere((_, v) => v == id);
+  Future<void> removeCustom(String id) => _queueMutation(() async {
+    final nextCustom = [
+      for (final network in _custom)
+        if (network.id != id || network.builtin) network,
+    ];
+    if (nextCustom.length == _custom.length) return;
+    final nextOverrides = {..._overrides}
+      ..removeWhere((_, value) => value == id);
+    await _persistSnapshot(
+      environment: _environment,
+      custom: nextCustom,
+      overrides: nextOverrides,
+    );
+    _custom
+      ..clear()
+      ..addAll(nextCustom);
+    _overrides
+      ..clear()
+      ..addAll(nextOverrides);
     notifyListeners();
-    await _persist();
+  });
+
+  Future<void> _persistSnapshot({
+    required NetworkEnvironment environment,
+    required Iterable<Network> custom,
+    required Map<Chain, String> overrides,
+  }) async {
+    final prefs = await _preferencesProvider();
+    final stored = await prefs.setString(
+      snapshotKey,
+      json.encode({
+        'version': 1,
+        'environment': environment.name,
+        'custom': [for (final network in custom) network.toJson()],
+        'overrides': {
+          for (final entry in overrides.entries) entry.key.name: entry.value,
+        },
+      }),
+    );
+    if (!stored) throw StateError('network preference write failed');
   }
 
-  Future<void> _persist() async {
+  Future<T> _queueMutation<T>(Future<T> Function() operation) {
+    final result = _writes.then((_) => operation());
+    _writes = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return result;
+  }
+
+  static Object? _decodeJson(String? source) {
+    if (source == null || source.isEmpty) return null;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyEnvironment, _environment.name);
-      await prefs.setString(
-        _keyCustom,
-        json.encode([for (final n in _custom) n.toJson()]),
-      );
-      await prefs.setString(
-        _keyOverrides,
-        json.encode({for (final e in _overrides.entries) e.key.name: e.value}),
-      );
-    } catch (_) {
-      // Best-effort; in-memory state still applies.
+      return json.decode(source);
+    } on FormatException {
+      return null;
     }
+  }
+
+  static Map<String, Object?>? _decodeMap(String? source) {
+    final value = _decodeJson(source);
+    if (value is! Map || value['version'] != 1) return null;
+    return value.map((key, value) => MapEntry(key.toString(), value));
   }
 }
 

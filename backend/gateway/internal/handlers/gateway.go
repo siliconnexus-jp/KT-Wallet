@@ -19,12 +19,18 @@ import (
 
 // Cache TTLs fixed by the service contract.
 const (
-	pricesTTL      = 30 * time.Second
-	balancesTTL    = 10 * time.Second
-	chainParamsTTL = 5 * time.Second
+	pricesTTL   = 30 * time.Second
+	balancesTTL = 10 * time.Second
 	// History must converge quickly after a broadcast. A 30-second empty-page
 	// cache made a recipient balance update while its record remained absent.
 	historyTTL = 5 * time.Second
+	// External threat intelligence is public contract metadata, but the free
+	// provider is rate limited. Five minutes keeps checks fresh without making
+	// every confirmation tap consume another provider request.
+	tokenRiskTTL = 5 * time.Minute
+	// Approval lists are wallet-specific and change after a revoke. Keep this
+	// local-only cache short; it must never enter the shared Redis cache.
+	tokenApprovalsTTL = 30 * time.Second
 )
 
 // Config wires the gateway. Zero values fall back to production defaults.
@@ -36,6 +42,16 @@ type Config struct {
 	HTTPClient *http.Client
 	// AttemptTimeout bounds a single upstream attempt (default 10s).
 	AttemptTimeout time.Duration
+	// SharedCache enables local-first cross-instance caching. Values remain
+	// bounded by the method TTLs; cache keys are hashed before reaching Store.
+	// Transaction preflight, spendable balances and status are never cached.
+	// Broadcast outcome coordination uses the separate AtomicStore contract.
+	SharedCache cache.Store
+	// BroadcastStore is the fail-closed, cross-instance idempotency store for
+	// signed transaction submission. Production wires the same Redis client as
+	// SharedCache, but the stronger AtomicStore contract is intentionally kept
+	// separate from best-effort read caching.
+	BroadcastStore cache.AtomicStore
 
 	EthURLs       []string
 	PolygonURLs   []string
@@ -76,6 +92,17 @@ type Config struct {
 	HeliusDevnetURL string
 	HeliusKey       string
 
+	// GoPlusURL enables independent token threat intelligence. The provider
+	// receives only a public chain id and token contract, never a wallet
+	// address or transaction. DisableExternalTokenRisk is intended for fully
+	// offline/private deployments and deterministic tests.
+	GoPlusURL                string
+	GoPlusSolanaURL          string
+	GoPlusApprovalURL        string
+	GoPlusAccessToken        string
+	DisableExternalTokenRisk bool
+	DisableExternalApprovals bool
+
 	// EVMHistoryFallbackURLs maps network ids to keyless Etherscan-compatible
 	// explorer endpoints. A nil map uses the production defaults; an empty
 	// non-nil map disables the public fallback (useful for tests/private
@@ -87,12 +114,18 @@ type Config struct {
 	// uses the built-in production list; an explicit empty slice disables all
 	// verification marks. Production may replace it via OFFICIAL_TOKENS_FILE.
 	OfficialTokens []OfficialToken
+
+	// TokenRisks is the operator-controlled denylist for malicious, phishing,
+	// spam, impersonating, honeypot or otherwise suspicious contracts/mints.
+	// It is deliberately independent from display symbols. An explicit risk
+	// entry always wins over an OfficialTokens entry for the same identity.
+	TokenRisks []TokenRisk
 }
 
 // Defaults returns the production upstream configuration.
 func Defaults() Config {
 	return Config{
-		Version:        "1.9.1",
+		Version:        "1.16.8",
 		Clock:          clock.Real{},
 		AttemptTimeout: 10 * time.Second,
 		EthURLs:        []string{"https://eth.llamarpc.com", "https://cloudflare-eth.com"},
@@ -129,7 +162,11 @@ func Defaults() Config {
 		EtherscanURL:      "https://api.etherscan.io/v2/api",
 		HeliusURL:         "https://mainnet.helius-rpc.com",
 		HeliusDevnetURL:   "https://devnet.helius-rpc.com",
+		GoPlusURL:         "https://api.gopluslabs.io/api/v1/token_security",
+		GoPlusSolanaURL:   "https://api.gopluslabs.io/api/v1/solana/token_security",
+		GoPlusApprovalURL: "https://api.gopluslabs.io/api/v2/token_approval_security",
 		OfficialTokens:    defaultOfficialTokens(),
+		TokenRisks:        []TokenRisk{},
 		EVMHistoryFallbackURLs: map[string]string{
 			"eth-mainnet":       "https://eth.blockscout.com/api",
 			"eth-sepolia":       "https://eth-sepolia.blockscout.com/api",
@@ -165,16 +202,28 @@ type Gateway struct {
 	// historyScan contains keyless public explorer clients keyed by network.
 	// The configured Etherscan v2 client above remains preferred when a key is
 	// available because it also covers Polygon Amoy.
-	historyScan map[string]*upstream.Etherscan
-	hel         map[string]*upstream.Helius // sol-mainnet, sol-devnet
+	historyScan            map[string]*upstream.Etherscan
+	hel                    map[string]*upstream.Helius // sol-mainnet, sol-devnet
+	goPlus                 *upstream.GoPlus
+	goPlusSolana           *upstream.GoPlusSolana
+	goPlusApprovals        *upstream.GoPlusApprovals
+	goPlusCircuit          *providerCircuit
+	goPlusSolanaCircuit    *providerCircuit
+	goPlusApprovalsCircuit *providerCircuit
 
-	priceCache   *cache.Cache
-	balanceCache *cache.Cache
-	paramsCache  *cache.Cache
-	historyCache *cache.Cache
+	priceCache          *cache.Cache
+	balanceCache        *cache.Cache
+	historyCache        *cache.Cache
+	tokenRiskCache      *cache.Cache
+	tokenApprovalsCache *cache.Cache
 
-	officialTokens    []OfficialToken
-	officialByNetwork map[string]map[string]tokenMeta
+	officialTokens       []OfficialToken
+	officialByNetwork    map[string]map[string]tokenMeta
+	tokenRisks           map[string]TokenRisk
+	tokenRiskMetrics     tokenRiskProviderMetrics
+	tokenApprovalMetrics tokenApprovalProviderMetrics
+	appDiagnostics       *appDiagnosticMetrics
+	broadcastGuard       *broadcastGuard
 }
 
 // New builds a Gateway from cfg, filling unset fields from Defaults.
@@ -255,11 +304,23 @@ func New(cfg Config) *Gateway {
 	if cfg.HeliusDevnetURL == "" {
 		cfg.HeliusDevnetURL = def.HeliusDevnetURL
 	}
+	if cfg.GoPlusURL == "" {
+		cfg.GoPlusURL = def.GoPlusURL
+	}
+	if cfg.GoPlusSolanaURL == "" {
+		cfg.GoPlusSolanaURL = def.GoPlusSolanaURL
+	}
+	if cfg.GoPlusApprovalURL == "" {
+		cfg.GoPlusApprovalURL = def.GoPlusApprovalURL
+	}
 	if cfg.EVMHistoryFallbackURLs == nil {
 		cfg.EVMHistoryFallbackURLs = def.EVMHistoryFallbackURLs
 	}
 	if cfg.OfficialTokens == nil {
 		cfg.OfficialTokens = def.OfficialTokens
+	}
+	if cfg.TokenRisks == nil {
+		cfg.TokenRisks = def.TokenRisks
 	}
 	if cfg.AlchemyURLs == nil && len(cfg.AlchemyKeys) > 0 {
 		cfg.AlchemyURLs = AlchemyNetworkURLs(cfg.AlchemyKeys)
@@ -270,6 +331,14 @@ func New(cfg Config) *Gateway {
 		// verification marks. The command validates external files before New.
 		cfg.Log.Error("invalid official token catalog", "err", err)
 		officialTokens = []OfficialToken{}
+	}
+	tokenRisks, err := normalizeTokenRisks(cfg.TokenRisks)
+	if err != nil {
+		// Same fail-closed policy as the official catalog: invalid in-process
+		// configuration can never accidentally mark an address safe. The
+		// command validates external files before constructing the Gateway.
+		cfg.Log.Error("invalid token risk registry", "err", err)
+		tokenRisks = map[string]TokenRisk{}
 	}
 
 	clk := cfg.Clock
@@ -330,12 +399,59 @@ func New(cfg Config) *Gateway {
 			"sol-mainnet": upstream.NewHelius(cfg.HeliusURL, cfg.HeliusKey, hc, at),
 			"sol-devnet":  upstream.NewHelius(cfg.HeliusDevnetURL, cfg.HeliusKey, hc, at),
 		},
-		priceCache:        cache.New(clk, pricesTTL),
-		balanceCache:      cache.New(clk, balancesTTL),
-		paramsCache:       cache.New(clk, chainParamsTTL),
-		historyCache:      cache.New(clk, historyTTL),
-		officialTokens:    officialTokens,
-		officialByNetwork: officialTokenIndex(officialTokens),
+		priceCache: cache.NewShared(
+			clk,
+			pricesTTL,
+			cfg.SharedCache,
+			"prices",
+			cache.JSONPointerCodec[cachedPrices](),
+		),
+		balanceCache: cache.NewShared(
+			clk,
+			balancesTTL,
+			cfg.SharedCache,
+			"balances",
+			cache.JSONPointerCodec[balancesResult](),
+		),
+		historyCache: cache.NewShared(
+			clk,
+			historyTTL,
+			cfg.SharedCache,
+			"history",
+			cache.JSONPointerCodec[historyResult](),
+		),
+		tokenRiskCache:      cache.New(clk, tokenRiskTTL),
+		tokenApprovalsCache: cache.New(clk, tokenApprovalsTTL),
+		officialTokens:      officialTokens,
+		officialByNetwork:   officialTokenIndex(officialTokens),
+		tokenRisks:          tokenRisks,
+		appDiagnostics:      newAppDiagnosticMetrics(),
+		broadcastGuard:      newBroadcastGuard(clk, cfg.BroadcastStore),
+	}
+	if !cfg.DisableExternalTokenRisk {
+		g.goPlus = upstream.NewGoPlus(
+			cfg.GoPlusURL,
+			cfg.GoPlusAccessToken,
+			hc,
+			at,
+		)
+		g.goPlusSolana = upstream.NewGoPlusSolana(
+			cfg.GoPlusSolanaURL,
+			cfg.GoPlusAccessToken,
+			hc,
+			at,
+		)
+		g.goPlusCircuit = newProviderCircuit(clk)
+		g.goPlusSolanaCircuit = newProviderCircuit(clk)
+	}
+	if !cfg.DisableExternalApprovals {
+		g.goPlusApprovals = upstream.NewGoPlusApprovals(
+			cfg.GoPlusApprovalURL,
+			cfg.GoPlusAccessToken,
+			hc,
+			at,
+		)
+		g.goPlusApprovalsCircuit = newProviderCircuit(clk)
 	}
 	return g
 }
@@ -377,22 +493,29 @@ func (g *Gateway) Register(s *rpc.Server) {
 	s.Register("kt_getPortfolio", g.GetPortfolio)
 	s.Register("kt_getPrices", g.GetPrices)
 	s.Register("kt_getChainParams", g.GetChainParams)
+	s.Register("kt_simulateEvmTransfer", g.SimulateEVMTransfer)
+	s.Register("kt_estimateEvmGas", g.EstimateEVMGas)
+	s.Register("kt_getEvmSpendableBalances", g.GetEVMSpendableBalances)
 	s.Register("kt_getHistory", g.GetHistory)
 	s.Register("kt_getTransactionStatus", g.GetTransactionStatus)
 	s.Register("kt_searchTokens", g.SearchOfficialTokens)
+	s.Register("kt_checkTokenRisk", g.CheckTokenRisk)
+	s.Register("kt_getEvmTokenApprovals", g.GetEVMTokenApprovals)
+	s.Register("kt_reportDiagnostics", g.ReportAppDiagnostics)
 	s.Register("kt_broadcast", g.Broadcast)
 }
 
-// upstreamError maps upstream client failures onto the contract's -32000
-// error: message carries the node's own words when the node answered, and
-// data always holds {"upstream", "message"}.
+// upstreamError maps upstream failures onto the public contract. Client text
+// is normalized because net/http errors may contain credential-bearing URLs
+// and node messages are untrusted provider input.
 func upstreamError(defaultUpstream string, err error) *rpc.Error {
 	var ne *upstream.NodeError
 	if errors.As(err, &ne) {
+		message := upstream.PublicNodeErrorMessage(ne.Message)
 		return &rpc.Error{
 			Code:    rpc.CodeUpstream,
-			Message: ne.Message,
-			Data:    map[string]string{"upstream": defaultUpstream, "message": ne.Message},
+			Message: message,
+			Data:    map[string]string{"upstream": defaultUpstream, "message": message},
 		}
 	}
 	var ua *upstream.Unavailable
@@ -400,12 +523,12 @@ func upstreamError(defaultUpstream string, err error) *rpc.Error {
 		return &rpc.Error{
 			Code:    rpc.CodeUpstream,
 			Message: "upstream_error",
-			Data:    map[string]string{"upstream": ua.Upstream, "message": ua.Message},
+			Data:    map[string]string{"upstream": defaultUpstream, "message": "upstream temporarily unavailable"},
 		}
 	}
 	return &rpc.Error{
 		Code:    rpc.CodeUpstream,
 		Message: "upstream_error",
-		Data:    map[string]string{"upstream": defaultUpstream, "message": err.Error()},
+		Data:    map[string]string{"upstream": defaultUpstream, "message": "upstream request failed"},
 	}
 }

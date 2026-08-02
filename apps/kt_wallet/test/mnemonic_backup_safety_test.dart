@@ -51,7 +51,7 @@ Future<WalletController> _controller({
   final c = crypto ?? MockCoreCrypto();
   final controller = WalletController(WalletManager(), crypto: c);
   if (store) await c.storeWallet(walletId: 'w1', mnemonic: _mnemonic);
-  controller.add(
+  await controller.add(
     HotWallet(
       id: 'w1',
       name: '日常钱包',
@@ -97,17 +97,33 @@ void expectNoDemoWords() {
 }
 
 void main() {
+  testWidgets(
+    'home backup banner opens the current wallet export, not new-wallet creation',
+    (tester) async {
+      final controller = await _controller();
+      await _pump(tester, controller, '/home');
+
+      await tester.tap(find.text('尚未备份助记词，存在丢失风险'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('钱包详情'), findsOneWidget);
+      expect(find.text('查看助记词'), findsOneWidget);
+      expect(controller.pendingMnemonic, isNull);
+    },
+  );
+
   group('/mnemonic-show', () {
     testWidgets(
-      'existing wallet, no pending mnemonic: refuses, no demo words',
+      'existing wallet, no pending mnemonic: route is rejected, no demo words',
       (tester) async {
-        // Exactly the backup-banner path: home → /create-warn → /mnemonic-show
-        // for a wallet that already exists, so pendingMnemonic is null.
+        // A stale/deep link for an existing wallet has no creation session.
+        // The router rejects it before the sensitive screen is mounted.
         final controller = await _controller();
         await _pump(tester, controller, '/mnemonic-show');
 
         expectNoDemoWords();
-        expect(find.text('无法显示助记词'), findsOneWidget);
+        expect(find.text('添加钱包'), findsOneWidget);
+        expect(find.text('备份助记词'), findsNothing);
         // No way onward to the verify step (and therefore to markBackedUp).
         expect(find.text('我已抄写，去校验'), findsNothing);
       },
@@ -143,17 +159,19 @@ void main() {
   });
 
   group('/mnemonic-verify', () {
-    testWidgets('with no pending mnemonic: refuses, markBackedUp unreachable', (
-      tester,
-    ) async {
-      final controller = await _controller();
-      await _pump(tester, controller, '/mnemonic-verify');
+    testWidgets(
+      'with no pending mnemonic: route rejected, markBackedUp unreachable',
+      (tester) async {
+        final controller = await _controller();
+        await _pump(tester, controller, '/mnemonic-verify');
 
-      expectNoDemoWords();
-      expect(find.text('无法显示助记词'), findsOneWidget);
-      expect(find.text('确认'), findsNothing); // no confirm button at all
-      expect((controller.wallets.single as HotWallet).backedUp, isFalse);
-    });
+        expectNoDemoWords();
+        expect(find.text('添加钱包'), findsOneWidget);
+        expect(find.text('校验备份'), findsNothing);
+        expect(find.text('确认'), findsNothing); // no confirm button at all
+        expect((controller.wallets.single as HotWallet).backedUp, isFalse);
+      },
+    );
 
     testWidgets('create-onboarding: the quiz still gates on the right word', (
       tester,

@@ -6,6 +6,38 @@ import 'package:kt_wallet/src/security/wallet_pin.dart';
 import 'package:kt_wallet/src/state/app_prefs.dart';
 import 'package:kt_wallet/src/state/locale_controller.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class _UnavailablePinStorage implements PinStorage {
+  const _UnavailablePinStorage();
+
+  @override
+  Future<void> delete(String key) =>
+      Future<void>.error(StateError('secure storage unavailable'));
+
+  @override
+  Future<String?> read(String key) =>
+      Future<String?>.error(StateError('secure storage unavailable'));
+
+  @override
+  Future<void> write(String key, String value) =>
+      Future<void>.error(StateError('secure storage unavailable'));
+}
+
+class _WriteUnavailablePinStorage implements PinStorage {
+  const _WriteUnavailablePinStorage();
+
+  @override
+  Future<void> delete(String key) =>
+      Future<void>.error(StateError('secure storage unavailable'));
+
+  @override
+  Future<String?> read(String key) async => null;
+
+  @override
+  Future<void> write(String key, String value) =>
+      Future<void>.error(StateError('secure storage unavailable'));
+}
 
 /// Wallet-mode app lock: with the preference on the gate blocks until the
 /// (fake) biometric prompt passes — or, when biometrics are unavailable or
@@ -139,6 +171,47 @@ void main() {
     expect(find.text('WALLET-HOME'), findsNothing);
   });
 
+  testWidgets('secure storage startup failure keeps the wallet hard locked', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await pumpGate(
+      tester,
+      prefs: AppPrefsController(),
+      auth: const FakeBiometricAuth(BiometricOutcome.success),
+      pin: WalletPin(const _UnavailablePinStorage(), iterations: 1000),
+    );
+
+    expect(find.text('WALLET-HOME'), findsNothing);
+    expect(find.text('安全存储不可用'), findsOneWidget);
+    expect(find.text('重试'), findsOneWidget);
+    await expectLater(
+      find.byType(AppLockGate),
+      matchesGoldenFile('goldens/screens/secure-storage-unavailable.png'),
+    );
+
+    await tester.tap(find.text('重试'));
+    await tester.pumpAndSettle();
+    expect(find.text('WALLET-HOME'), findsNothing);
+    expect(find.text('安全存储不可用'), findsOneWidget);
+  });
+
+  testWidgets('PIN enrollment write failure never unlocks the wallet', (
+    tester,
+  ) async {
+    await pumpGate(
+      tester,
+      prefs: AppPrefsController(),
+      auth: const FakeBiometricAuth(BiometricOutcome.failure, available: false),
+      pin: WalletPin(const _WriteUnavailablePinStorage(), iterations: 1000),
+    );
+
+    await tapPin(tester, '135790135790');
+    expect(find.text('WALLET-HOME'), findsNothing);
+    expect(find.text('安全存储不可用'), findsOneWidget);
+  });
+
   testWidgets(
     'no usable biometrics AND no PIN: enrollment screen, not pass-through',
     (tester) async {
@@ -189,8 +262,9 @@ void main() {
   });
 
   testWidgets('app lock off: straight through', (tester) async {
+    SharedPreferences.setMockInitialValues({});
     final prefs = AppPrefsController();
-    prefs.setAppLock(false).ignore(); // persistence is dead in tests
+    await prefs.setAppLock(false);
     await pumpGate(
       tester,
       prefs: prefs,

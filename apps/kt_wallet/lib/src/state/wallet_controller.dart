@@ -1,5 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:core_crypto/core_crypto.dart';
-import 'package:core_crypto/testing.dart';
 import 'package:flutter/foundation.dart';
 import 'package:wallet_data/wallet_data.dart'
     show
@@ -7,6 +10,8 @@ import 'package:wallet_data/wallet_data.dart'
         CustomToken,
         SignMode,
         Transaction,
+        TxCheckOutcome,
+        TxOperationKind,
         TxReplacementKind,
         TxStatus;
 
@@ -17,25 +22,42 @@ import '../wallets/wallet_store.dart';
 /// App-wide wallet state. Wraps the tested [WalletManager] as a [ChangeNotifier]
 /// so screens rebuild when the current wallet changes (switch/add/rename/etc.).
 ///
-/// Key operations go through [CoreCrypto] (real on iOS; deterministic
-/// [MockCoreCrypto] where wallet-core is unavailable, so every flow is
-/// exercisable). Production wires a [WalletStore] for drift persistence; tests
-/// can omit it (in-memory only).
+/// Key operations go through [CoreCrypto]. The default is always the native
+/// implementation; deterministic test doubles must be injected explicitly by
+/// tests and can never be enabled through a shipped runtime flag. Production
+/// wires a [WalletStore] for drift persistence; tests can omit it.
 class WalletController extends ChangeNotifier {
-  WalletController(this._manager, {CoreCrypto? crypto, WalletStore? store})
-    : _crypto = crypto ?? MockCoreCrypto(),
-      // ignore: prefer_initializing_formals
-      _store = store;
+  WalletController(
+    this._manager, {
+    CoreCrypto? crypto,
+    WalletStore? store,
+    bool allowTestBypass = false,
+    Random? secureRandom,
+  }) : _crypto = crypto ?? MethodChannelCoreCrypto(),
+       _random = secureRandom ?? Random.secure(),
+       // ignore: prefer_initializing_formals
+       _allowTestBypass = allowTestBypass,
+       // ignore: prefer_initializing_formals
+       _store = store;
 
   final WalletManager _manager;
   final CoreCrypto _crypto;
+  final Random _random;
+  final bool _allowTestBypass;
   final WalletStore? _store;
+  Future<void> _metadataWrites = Future<void>.value();
 
   /// Releases the backing store's database connection (no-op for in-memory
   /// controllers). Call when the controller is retired, e.g. when leaving
   /// wallet mode in the combined installer; the controller must not be used
   /// afterwards.
-  Future<void> close() async => _store?.close();
+  Future<void> close() async {
+    // A screen can be removed immediately after initiating a rename/reorder.
+    // Drain the serialized metadata queue before closing Drift, otherwise the
+    // last user-visible change can race a closed database and be lost.
+    await _metadataWrites;
+    await _store?.close();
+  }
 
   /// Mnemonic generated during create-onboarding, held only between the
   /// "create new wallet" tap and the backup-verify confirmation, then dropped.
@@ -54,9 +76,55 @@ class WalletController extends ChangeNotifier {
   List<Wallet> get wallets => _manager.wallets;
   Wallet? get current => _manager.current;
   CoreCrypto get crypto => _crypto;
-  bool get usesDemoCrypto => _crypto is MockCoreCrypto;
+  bool get allowsTestBypass => _allowTestBypass;
   int get count => _manager.count;
   bool get canAddMore => _manager.canAddMore;
+
+  /// Proves that every persisted hot wallet still has native key material and
+  /// that the database addresses belong to that exact key. A transient native
+  /// failure propagates to the bootstrap guard; it never removes or rewrites
+  /// the persisted wallet.
+  Future<void> validateNativeWallets() async {
+    for (final wallet in _manager.wallets.whereType<HotWallet>()) {
+      final derived = await _crypto.deriveAddresses(wallet.id);
+      for (final coin in Coin.values) {
+        final expected = wallet.addresses.forCoin(coin);
+        final actual = derived.forCoin(coin);
+        final matches = switch (coin) {
+          Coin.eth ||
+          Coin.polygon ||
+          Coin.base ||
+          Coin.arbitrum ||
+          Coin.avalanche ||
+          Coin.bnb => expected.toLowerCase() == actual.toLowerCase(),
+          Coin.tron || Coin.solana => expected == actual,
+        };
+        if (!matches) {
+          throw StateError(
+            'persisted wallet address does not match native key: '
+            '${wallet.id}/${coin.name}',
+          );
+        }
+      }
+    }
+  }
+
+  /// Completes user-authorized hot-wallet deletions that were interrupted
+  /// between the native vault operation and the Drift cascade. Pending rows
+  /// are already hidden by [WalletStore.load], so a missing key is the
+  /// expected idempotent state, not a reason to resurrect a broken wallet.
+  Future<void> recoverPendingDeletions() async {
+    final store = _store;
+    if (store == null) return;
+    for (final walletId in await store.pendingDeletionIds()) {
+      try {
+        await _crypto.deleteWallet(walletId);
+      } on WalletNotFoundException {
+        // The process may have died after native deletion already succeeded.
+      }
+      await store.delete(walletId);
+    }
+  }
 
   /// Locally recorded transactions for the current wallet. [networkIds] keeps
   /// only rows recorded on those network instances (callers pass the ACTIVE
@@ -110,6 +178,7 @@ class WalletController extends ChangeNotifier {
     /// Active network instance the transaction belongs to (`Network.id`).
     required String networkId,
     String? contract,
+    TxOperationKind operation = TxOperationKind.transfer,
     required String from,
     required String to,
     required String amountRaw,
@@ -119,6 +188,9 @@ class WalletController extends ChangeNotifier {
     required SignMode signMode,
     required int createdAt,
     int? broadcastAt,
+    int? referenceBlockHeight,
+    int? expiresAt,
+    int? lastValidBlockHeight,
     String? nonce,
     String? maxPriorityFeeRaw,
     String? maxFeeRaw,
@@ -128,7 +200,10 @@ class WalletController extends ChangeNotifier {
     TxReplacementKind? replacementKind,
   }) async {
     final walletId = current?.id;
-    if (walletId == null || _store == null) return;
+    if (walletId == null || _store == null) {
+      if (_allowTestBypass) return;
+      throw StateError('No persistent wallet selected');
+    }
     await _store.upsertTransaction(
       id: id,
       walletId: walletId,
@@ -136,6 +211,7 @@ class WalletController extends ChangeNotifier {
       coin: coin,
       networkId: networkId,
       contract: contract,
+      operation: operation,
       from: from,
       to: to,
       amountRaw: amountRaw,
@@ -145,6 +221,9 @@ class WalletController extends ChangeNotifier {
       signMode: signMode,
       createdAt: createdAt,
       broadcastAt: broadcastAt,
+      referenceBlockHeight: referenceBlockHeight,
+      expiresAt: expiresAt,
+      lastValidBlockHeight: lastValidBlockHeight,
       nonce: nonce,
       maxPriorityFeeRaw: maxPriorityFeeRaw,
       maxFeeRaw: maxFeeRaw,
@@ -171,6 +250,9 @@ class WalletController extends ChangeNotifier {
     required String hash,
     required int createdAt,
     int? broadcastAt,
+    int? referenceBlockHeight,
+    int? expiresAt,
+    int? lastValidBlockHeight,
   }) async {
     final store = _store;
     final senderWalletId = current?.id;
@@ -205,6 +287,9 @@ class WalletController extends ChangeNotifier {
         status: TxStatus.pending,
         createdAt: createdAt,
         broadcastAt: broadcastAt,
+        referenceBlockHeight: referenceBlockHeight,
+        expiresAt: expiresAt,
+        lastValidBlockHeight: lastValidBlockHeight,
       );
       saved = true;
     }
@@ -219,6 +304,7 @@ class WalletController extends ChangeNotifier {
     /// of the nonce-reservation key, so networks cannot block one another.
     required String networkId,
     String? contract,
+    TxOperationKind operation = TxOperationKind.transfer,
     required String from,
     required String to,
     required String amountRaw,
@@ -242,6 +328,7 @@ class WalletController extends ChangeNotifier {
       coin: coin,
       networkId: networkId,
       contract: contract,
+      operation: operation,
       from: from,
       to: to,
       amountRaw: amountRaw,
@@ -263,20 +350,35 @@ class WalletController extends ChangeNotifier {
     TxStatus status, {
     String? hash,
     int? broadcastAt,
+    int? lastCheckedAt,
+    TxCheckOutcome? lastCheckOutcome,
+    bool clearLastCheckOutcome = false,
   }) async {
     final walletId = current?.id;
-    if (walletId == null || _store == null) return;
+    if (walletId == null || _store == null) {
+      if (_allowTestBypass) return;
+      throw StateError('No persistent wallet selected');
+    }
     await _store.updateTransactionStatus(
       walletId,
       id,
       status,
       hash: hash,
       broadcastAt: broadcastAt,
+      lastCheckedAt: lastCheckedAt,
+      lastCheckOutcome: lastCheckOutcome,
+      clearLastCheckOutcome: clearLastCheckOutcome,
     );
     notifyListeners();
   }
 
-  Future<bool> acceptEvmReplacement({
+  Future<bool> setTransactionNonceIfAbsent(String id, String nonce) async {
+    final walletId = current?.id;
+    if (walletId == null || _store == null) return false;
+    return _store.setTransactionNonceIfAbsent(walletId, id, nonce);
+  }
+
+  Future<bool> recordEvmReplacementBroadcast({
     required String originalId,
     required String replacementId,
     required String hash,
@@ -284,7 +386,7 @@ class WalletController extends ChangeNotifier {
   }) async {
     final walletId = current?.id;
     if (walletId == null || _store == null) return false;
-    final accepted = await _store.acceptEvmReplacement(
+    final accepted = await _store.recordEvmReplacementBroadcast(
       walletId: walletId,
       originalId: originalId,
       replacementId: replacementId,
@@ -295,8 +397,45 @@ class WalletController extends ChangeNotifier {
     return accepted;
   }
 
+  /// Persists a receipt-backed EVM terminal result and resolves replacement
+  /// lineage atomically. Do not use this for local auth or broadcast errors.
+  Future<void> settleEvmTransaction({
+    required String id,
+    required TxStatus status,
+    String? hash,
+    int? lastCheckedAt,
+  }) async {
+    final walletId = current?.id;
+    if (walletId == null || _store == null) return;
+    await _store.settleEvmTransaction(
+      walletId: walletId,
+      id: id,
+      status: status,
+      hash: hash,
+      lastCheckedAt: lastCheckedAt,
+    );
+    notifyListeners();
+  }
+
   int _nextColor() => _palette[_manager.count % _palette.length];
-  String _newId() => 'w${DateTime.now().microsecondsSinceEpoch}';
+
+  /// Allocates a new opaque local wallet identifier from 144 bits of secure
+  /// randomness. Wallet IDs bind native key aliases, database rows and AIRGAP
+  /// sessions, so timestamps are both unnecessarily predictable and easier to
+  /// collide under concurrent imports.
+  ///
+  /// Existing timestamp/demo IDs remain readable. New IDs are URL/file-name
+  /// safe for the native vaults. A broken/injected RNG that repeatedly returns
+  /// an existing ID fails closed instead of selecting or overwriting it.
+  String allocateWalletId() {
+    for (var attempt = 0; attempt < 8; attempt++) {
+      final bytes = List<int>.generate(18, (_) => _random.nextInt(256));
+      final encoded = base64UrlEncode(bytes).replaceAll('=', '');
+      final id = 'w_$encoded';
+      if (_manager.byId(id) == null) return id;
+    }
+    throw WalletError('unable to allocate a unique wallet id');
+  }
 
   void select(String id) {
     if (_manager.currentId == id) return;
@@ -304,10 +443,23 @@ class WalletController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Adds an already-built wallet (watch-wallet pairing / seeding) and persists.
-  void add(Wallet wallet) {
+  /// Adds an already-built wallet (watch-wallet pairing / seeding) and
+  /// persists it. A persistence failure rolls the in-memory publication back,
+  /// so the UI never reports a wallet that will disappear after restart.
+  Future<void> add(Wallet wallet) async {
+    final previousCurrentId = _manager.currentId;
     _manager.add(wallet);
-    _store?.save(wallet);
+    try {
+      await _store?.save(wallet);
+    } catch (error, stackTrace) {
+      _manager.remove(wallet.id);
+      if (previousCurrentId != null &&
+          _manager.byId(previousCurrentId) != null) {
+        _manager.select(previousCurrentId);
+      }
+      notifyListeners();
+      Error.throwWithStackTrace(error, stackTrace);
+    }
     notifyListeners();
   }
 
@@ -325,6 +477,10 @@ class WalletController extends ChangeNotifier {
     final mnemonic = _pendingMnemonic;
     if (mnemonic == null) throw StateError('no pending mnemonic to finalize');
     final wallet = await _materialize(name, mnemonic);
+    // A failed materialization has already compensated every native/database
+    // write. Keep the still-uncommitted phrase in memory so transient native
+    // authentication or storage failures remain retryable on the verification
+    // screen; discard it only after the durable wallet commit succeeds.
     _pendingMnemonic = null;
     return wallet;
   }
@@ -337,80 +493,195 @@ class WalletController extends ChangeNotifier {
       _materialize(name, mnemonic.trim());
 
   /// Stores the key in CoreCrypto, derives public addresses, builds the domain
-  /// wallet, adds it to the manager, persists it, and selects it.
+  /// wallet, persists it, then publishes it to the manager and selects it.
   Future<HotWallet> _materialize(String name, String mnemonic) async {
-    final id = _newId();
-    await _crypto.storeWallet(walletId: id, mnemonic: mnemonic);
-    final addresses = await _crypto.deriveAddresses(id);
-    final wallet = HotWallet(
-      id: id,
-      name: name,
-      avatarColor: _nextColor(),
-      addresses: addresses,
-      sortOrder: _manager.count,
-      backedUp: true,
-    );
-    _manager.add(wallet);
-    _manager.select(id);
-    await _store?.save(wallet);
-    notifyListeners();
-    return wallet;
+    if (!_manager.canAddMore) {
+      throw WalletError('wallet limit reached (${WalletManager.maxWallets})');
+    }
+    final id = allocateWalletId();
+    var nativeWalletStored = false;
+    var managerPublished = false;
+    final previousCurrentId = _manager.currentId;
+    try {
+      await _crypto.storeWallet(walletId: id, mnemonic: mnemonic);
+      nativeWalletStored = true;
+      final addresses = await _crypto.deriveAddresses(id);
+      final duplicate = _manager.wallets.whereType<HotWallet>().any(
+        (existing) => Coin.values.every((coin) {
+          final left = existing.addresses.forCoin(coin);
+          final right = addresses.forCoin(coin);
+          return switch (coin) {
+            Coin.eth ||
+            Coin.polygon ||
+            Coin.base ||
+            Coin.arbitrum ||
+            Coin.avalanche ||
+            Coin.bnb => left.toLowerCase() == right.toLowerCase(),
+            Coin.tron || Coin.solana => left == right,
+          };
+        }),
+      );
+      if (duplicate) throw DuplicateWalletError();
+      final wallet = HotWallet(
+        id: id,
+        name: name,
+        avatarColor: _nextColor(),
+        addresses: addresses,
+        sortOrder: _manager.count,
+        backedUp: true,
+      );
+
+      // Drift's wallet + account write is transactional. Do not expose this
+      // wallet to listeners until that durable commit has succeeded.
+      await _store?.save(wallet);
+      _manager.add(wallet);
+      managerPublished = true;
+      _manager.select(id);
+      notifyListeners();
+      return wallet;
+    } catch (error, stackTrace) {
+      Object? cleanupError;
+      StackTrace? cleanupStackTrace;
+      if (nativeWalletStored) {
+        try {
+          await _crypto.deleteWallet(id);
+        } catch (cleanup, cleanupStack) {
+          cleanupError = cleanup;
+          cleanupStackTrace = cleanupStack;
+        }
+      }
+      try {
+        await _store?.delete(id);
+      } catch (cleanup, cleanupStack) {
+        cleanupError ??= cleanup;
+        cleanupStackTrace ??= cleanupStack;
+      }
+      if (managerPublished && _manager.byId(id) != null) {
+        _manager.remove(id);
+        if (previousCurrentId != null &&
+            _manager.byId(previousCurrentId) != null) {
+          _manager.select(previousCurrentId);
+        }
+        notifyListeners();
+      }
+      if (cleanupError != null) {
+        Error.throwWithStackTrace(cleanupError, cleanupStackTrace!);
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
   }
 
   // ---- mutations ---------------------------------------------------------
 
-  void rename(String id, String name) {
+  Future<void> rename(String id, String name) => _queueMetadataWrite(() async {
+    final current = _manager.byId(id);
+    if (current == null) throw WalletError('unknown wallet id: $id');
+    final proposed = switch (current) {
+      HotWallet() => current.copyWith(name: name),
+      WatchWallet() => current.copyWith(name: name),
+    };
+    await _store?.updateMetadata(proposed);
     _manager.rename(id, name);
-    _persistMetadata(id);
     notifyListeners();
-  }
+  });
 
-  void setColor(String id, int color) {
+  Future<void> setColor(String id, int color) => _queueMetadataWrite(() async {
+    final current = _manager.byId(id);
+    if (current == null) throw WalletError('unknown wallet id: $id');
+    final proposed = switch (current) {
+      HotWallet() => current.copyWith(avatarColor: color),
+      WatchWallet() => current.copyWith(avatarColor: color),
+    };
+    await _store?.updateMetadata(proposed);
     _manager.setColor(id, color);
-    _persistMetadata(id);
     notifyListeners();
-  }
+  });
 
   /// Exposes the stored mnemonic for backup/inspection flows. Requires the
   /// wallet's key material to exist in [CoreCrypto] (throws
   /// [CoreCryptoException] otherwise, e.g. for demo-seeded wallets).
   Future<String> exportMnemonic(String id) => _crypto.exportMnemonic(id);
 
-  void markBackedUp(String id) {
+  Future<void> markBackedUp(String id) => _queueMetadataWrite(() async {
+    final current = _manager.byId(id);
+    if (current is! HotWallet) {
+      throw WalletError('watch wallets have no backup state');
+    }
+    final proposed = current.copyWith(backedUp: true);
+    await _store?.updateMetadata(proposed);
     _manager.markBackedUp(id);
-    _persistMetadata(id);
     notifyListeners();
-  }
+  });
 
   Future<void> remove(String id) async {
     final wallet = _manager.byId(id);
-    if (_store != null && wallet is HotWallet) {
-      await _crypto.deleteWallet(id);
+    // Key deletion is a property of the wallet type, not of whether a Drift
+    // store happens to be attached. Keeping the old `_store != null` gate
+    // could remove an in-memory hot wallet while silently leaving its native
+    // Keychain/Keystore secret behind.
+    if (wallet is HotWallet) {
+      final store = _store;
+      // This durable intent closes the otherwise unrecoverable window where
+      // the native key is gone but Drift still presents the wallet on restart.
+      if (store != null) await store.markDeletionPending(id);
+      try {
+        await _crypto.deleteWallet(id);
+      } on WalletNotFoundException {
+        // Explicit deletion is idempotent. A previously interrupted attempt
+        // may already have removed the key while leaving the durable intent.
+        if (store == null && !_allowTestBypass) rethrow;
+      }
+      _manager.remove(id);
+      notifyListeners();
+      if (store != null) {
+        try {
+          await store.delete(id);
+        } catch (_) {
+          // The wallet is already cryptographically deleted and its durable
+          // tombstone prevents resurrection. Bootstrap will retry the cascade.
+        }
+      }
+      return;
     }
-    _manager.remove(id);
+    // Watch wallets have no native secret: commit the Drift deletion before
+    // publishing the in-memory removal, so a storage failure changes nothing.
     await _store?.delete(id);
+    _manager.remove(id);
     notifyListeners();
   }
 
   /// Moves the wallet at [oldIndex] (position in the sorted [wallets] list) to
   /// [newIndex], then persists every wallet's new sortOrder — a drag rewrites
   /// the whole permutation, so all rows are "affected".
-  void reorder(int oldIndex, int newIndex) {
-    final ids = _manager.wallets.map((w) => w.id).toList();
-    final id = ids.removeAt(oldIndex);
-    ids.insert(newIndex, id);
-    _manager.reorder(ids);
-    for (final walletId in ids) {
-      _persistMetadata(walletId);
-    }
-    notifyListeners();
-  }
+  Future<void> reorder(int oldIndex, int newIndex) =>
+      _queueMetadataWrite(() async {
+        final current = _manager.wallets;
+        final ids = current.map((wallet) => wallet.id).toList();
+        final id = ids.removeAt(oldIndex);
+        ids.insert(newIndex, id);
+        final byId = {for (final wallet in current) wallet.id: wallet};
+        final proposed = <Wallet>[
+          for (final (index, walletId) in ids.indexed)
+            switch (byId[walletId]!) {
+              final HotWallet wallet => wallet.copyWith(sortOrder: index),
+              final WatchWallet wallet => wallet.copyWith(sortOrder: index),
+            },
+        ];
+        await _store?.updateMetadataBatch(proposed);
+        _manager.reorder(ids);
+        notifyListeners();
+      });
 
-  void _persistMetadata(String id) {
-    final store = _store;
-    if (store == null) return;
-    final wallet = _manager.wallets.where((w) => w.id == id).firstOrNull;
-    if (wallet != null) store.updateMetadata(wallet);
+  Future<T> _queueMetadataWrite<T>(Future<T> Function() operation) {
+    final completer = Completer<T>();
+    _metadataWrites = _metadataWrites.then((_) async {
+      try {
+        completer.complete(await operation());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
   }
 
   // ---- global address book & custom-token list ---------------------------

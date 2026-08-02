@@ -1940,6 +1940,16 @@ class $TransactionsTable extends Transactions
     requiredDuringInsert: false,
   );
   @override
+  late final GeneratedColumnWithTypeConverter<TxOperationKind, int> operation =
+      GeneratedColumn<int>(
+        'operation',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: Constant(TxOperationKind.transfer.index),
+      ).withConverter<TxOperationKind>($TransactionsTable.$converteroperation);
+  @override
   late final GeneratedColumnWithTypeConverter<TxDirection, int> direction =
       GeneratedColumn<int>(
         'direction',
@@ -2046,6 +2056,60 @@ class $TransactionsTable extends Transactions
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _lastCheckedAtMeta = const VerificationMeta(
+    'lastCheckedAt',
+  );
+  @override
+  late final GeneratedColumn<int> lastCheckedAt = GeneratedColumn<int>(
+    'last_checked_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<TxCheckOutcome?, int>
+  lastCheckOutcome =
+      GeneratedColumn<int>(
+        'last_check_outcome',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<TxCheckOutcome?>(
+        $TransactionsTable.$converterlastCheckOutcomen,
+      );
+  static const VerificationMeta _referenceBlockHeightMeta =
+      const VerificationMeta('referenceBlockHeight');
+  @override
+  late final GeneratedColumn<int> referenceBlockHeight = GeneratedColumn<int>(
+    'reference_block_height',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _expiresAtMeta = const VerificationMeta(
+    'expiresAt',
+  );
+  @override
+  late final GeneratedColumn<int> expiresAt = GeneratedColumn<int>(
+    'expires_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastValidBlockHeightMeta =
+      const VerificationMeta('lastValidBlockHeight');
+  @override
+  late final GeneratedColumn<int> lastValidBlockHeight = GeneratedColumn<int>(
+    'last_valid_block_height',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _nonceMeta = const VerificationMeta('nonce');
   @override
   late final GeneratedColumn<String> nonce = GeneratedColumn<String>(
@@ -2131,6 +2195,7 @@ class $TransactionsTable extends Transactions
     coin,
     networkId,
     contract,
+    operation,
     direction,
     fromAddr,
     toAddr,
@@ -2142,6 +2207,11 @@ class $TransactionsTable extends Transactions
     memo,
     createdAt,
     broadcastAt,
+    lastCheckedAt,
+    lastCheckOutcome,
+    referenceBlockHeight,
+    expiresAt,
+    lastValidBlockHeight,
     nonce,
     maxPriorityFeeRaw,
     maxFeeRaw,
@@ -2260,6 +2330,39 @@ class $TransactionsTable extends Transactions
         ),
       );
     }
+    if (data.containsKey('last_checked_at')) {
+      context.handle(
+        _lastCheckedAtMeta,
+        lastCheckedAt.isAcceptableOrUnknown(
+          data['last_checked_at']!,
+          _lastCheckedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reference_block_height')) {
+      context.handle(
+        _referenceBlockHeightMeta,
+        referenceBlockHeight.isAcceptableOrUnknown(
+          data['reference_block_height']!,
+          _referenceBlockHeightMeta,
+        ),
+      );
+    }
+    if (data.containsKey('expires_at')) {
+      context.handle(
+        _expiresAtMeta,
+        expiresAt.isAcceptableOrUnknown(data['expires_at']!, _expiresAtMeta),
+      );
+    }
+    if (data.containsKey('last_valid_block_height')) {
+      context.handle(
+        _lastValidBlockHeightMeta,
+        lastValidBlockHeight.isAcceptableOrUnknown(
+          data['last_valid_block_height']!,
+          _lastValidBlockHeightMeta,
+        ),
+      );
+    }
     if (data.containsKey('nonce')) {
       context.handle(
         _nonceMeta,
@@ -2338,6 +2441,12 @@ class $TransactionsTable extends Transactions
         DriftSqlType.string,
         data['${effectivePrefix}contract'],
       ),
+      operation: $TransactionsTable.$converteroperation.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}operation'],
+        )!,
+      ),
       direction: $TransactionsTable.$converterdirection.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -2388,6 +2497,28 @@ class $TransactionsTable extends Transactions
         DriftSqlType.int,
         data['${effectivePrefix}broadcast_at'],
       ),
+      lastCheckedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_checked_at'],
+      ),
+      lastCheckOutcome: $TransactionsTable.$converterlastCheckOutcomen.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}last_check_outcome'],
+        ),
+      ),
+      referenceBlockHeight: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reference_block_height'],
+      ),
+      expiresAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}expires_at'],
+      ),
+      lastValidBlockHeight: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_valid_block_height'],
+      ),
       nonce: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}nonce'],
@@ -2426,12 +2557,22 @@ class $TransactionsTable extends Transactions
     return $TransactionsTable(attachedDatabase, alias);
   }
 
+  static JsonTypeConverter2<TxOperationKind, int, int> $converteroperation =
+      const EnumIndexConverter<TxOperationKind>(TxOperationKind.values);
   static JsonTypeConverter2<TxDirection, int, int> $converterdirection =
       const EnumIndexConverter<TxDirection>(TxDirection.values);
   static JsonTypeConverter2<TxStatus, int, int> $converterstatus =
       const EnumIndexConverter<TxStatus>(TxStatus.values);
   static JsonTypeConverter2<SignMode, int, int> $convertersignMode =
       const EnumIndexConverter<SignMode>(SignMode.values);
+  static JsonTypeConverter2<TxCheckOutcome, int, int>
+  $converterlastCheckOutcome = const EnumIndexConverter<TxCheckOutcome>(
+    TxCheckOutcome.values,
+  );
+  static JsonTypeConverter2<TxCheckOutcome?, int?, int?>
+  $converterlastCheckOutcomen = JsonTypeConverter2.asNullable(
+    $converterlastCheckOutcome,
+  );
   static JsonTypeConverter2<TxReplacementKind, int, int>
   $converterreplacementKind = const EnumIndexConverter<TxReplacementKind>(
     TxReplacementKind.values,
@@ -2464,6 +2605,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
   /// disables replacement rather than guessing.
   final String? networkId;
   final String? contract;
+  final TxOperationKind operation;
   final TxDirection direction;
   final String fromAddr;
   final String toAddr;
@@ -2475,6 +2617,29 @@ class Transaction extends DataClass implements Insertable<Transaction> {
   final String? memo;
   final int createdAt;
   final int? broadcastAt;
+
+  /// Epoch milliseconds of the latest hash-specific status lookup attempted
+  /// against the Gateway or an active chain RPC. This is diagnostic evidence,
+  /// not a finality signal: a recent lookup may still have returned unknown.
+  final int? lastCheckedAt;
+
+  /// What the latest hash-specific lookup actually proved. Null means no
+  /// lookup result has been recorded (or the transaction is terminal).
+  final TxCheckOutcome? lastCheckOutcome;
+
+  /// Chain-authoritative validity metadata. These values are captured from
+  /// the same RPC response used to construct the signed transaction:
+  ///
+  /// * TRON stores the TAPOS reference block height and epoch-ms expiration.
+  /// * Solana stores the `lastValidBlockHeight` paired with its recent
+  ///   blockhash.
+  ///
+  /// They stay null for EVM and legacy rows. A status poller may mark a
+  /// missing transaction `expired` only after the active canonical chain has
+  /// advanced beyond the corresponding persisted boundary.
+  final int? referenceBlockHeight;
+  final int? expiresAt;
+  final int? lastValidBlockHeight;
 
   /// EVM replacement metadata. Quantities remain decimal strings so nonce and
   /// fees never lose precision. They are null for TRON, Solana and legacy rows.
@@ -2495,6 +2660,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     required this.coin,
     this.networkId,
     this.contract,
+    required this.operation,
     required this.direction,
     required this.fromAddr,
     required this.toAddr,
@@ -2506,6 +2672,11 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     this.memo,
     required this.createdAt,
     this.broadcastAt,
+    this.lastCheckedAt,
+    this.lastCheckOutcome,
+    this.referenceBlockHeight,
+    this.expiresAt,
+    this.lastValidBlockHeight,
     this.nonce,
     this.maxPriorityFeeRaw,
     this.maxFeeRaw,
@@ -2528,6 +2699,11 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     }
     if (!nullToAbsent || contract != null) {
       map['contract'] = Variable<String>(contract);
+    }
+    {
+      map['operation'] = Variable<int>(
+        $TransactionsTable.$converteroperation.toSql(operation),
+      );
     }
     {
       map['direction'] = Variable<int>(
@@ -2559,6 +2735,23 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     map['created_at'] = Variable<int>(createdAt);
     if (!nullToAbsent || broadcastAt != null) {
       map['broadcast_at'] = Variable<int>(broadcastAt);
+    }
+    if (!nullToAbsent || lastCheckedAt != null) {
+      map['last_checked_at'] = Variable<int>(lastCheckedAt);
+    }
+    if (!nullToAbsent || lastCheckOutcome != null) {
+      map['last_check_outcome'] = Variable<int>(
+        $TransactionsTable.$converterlastCheckOutcomen.toSql(lastCheckOutcome),
+      );
+    }
+    if (!nullToAbsent || referenceBlockHeight != null) {
+      map['reference_block_height'] = Variable<int>(referenceBlockHeight);
+    }
+    if (!nullToAbsent || expiresAt != null) {
+      map['expires_at'] = Variable<int>(expiresAt);
+    }
+    if (!nullToAbsent || lastValidBlockHeight != null) {
+      map['last_valid_block_height'] = Variable<int>(lastValidBlockHeight);
     }
     if (!nullToAbsent || nonce != null) {
       map['nonce'] = Variable<String>(nonce);
@@ -2600,6 +2793,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       contract: contract == null && nullToAbsent
           ? const Value.absent()
           : Value(contract),
+      operation: Value(operation),
       direction: Value(direction),
       fromAddr: Value(fromAddr),
       toAddr: Value(toAddr),
@@ -2615,6 +2809,21 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       broadcastAt: broadcastAt == null && nullToAbsent
           ? const Value.absent()
           : Value(broadcastAt),
+      lastCheckedAt: lastCheckedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastCheckedAt),
+      lastCheckOutcome: lastCheckOutcome == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastCheckOutcome),
+      referenceBlockHeight: referenceBlockHeight == null && nullToAbsent
+          ? const Value.absent()
+          : Value(referenceBlockHeight),
+      expiresAt: expiresAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(expiresAt),
+      lastValidBlockHeight: lastValidBlockHeight == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastValidBlockHeight),
       nonce: nonce == null && nullToAbsent
           ? const Value.absent()
           : Value(nonce),
@@ -2651,6 +2860,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       coin: serializer.fromJson<String>(json['coin']),
       networkId: serializer.fromJson<String?>(json['networkId']),
       contract: serializer.fromJson<String?>(json['contract']),
+      operation: $TransactionsTable.$converteroperation.fromJson(
+        serializer.fromJson<int>(json['operation']),
+      ),
       direction: $TransactionsTable.$converterdirection.fromJson(
         serializer.fromJson<int>(json['direction']),
       ),
@@ -2668,6 +2880,17 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       memo: serializer.fromJson<String?>(json['memo']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       broadcastAt: serializer.fromJson<int?>(json['broadcastAt']),
+      lastCheckedAt: serializer.fromJson<int?>(json['lastCheckedAt']),
+      lastCheckOutcome: $TransactionsTable.$converterlastCheckOutcomen.fromJson(
+        serializer.fromJson<int?>(json['lastCheckOutcome']),
+      ),
+      referenceBlockHeight: serializer.fromJson<int?>(
+        json['referenceBlockHeight'],
+      ),
+      expiresAt: serializer.fromJson<int?>(json['expiresAt']),
+      lastValidBlockHeight: serializer.fromJson<int?>(
+        json['lastValidBlockHeight'],
+      ),
       nonce: serializer.fromJson<String?>(json['nonce']),
       maxPriorityFeeRaw: serializer.fromJson<String?>(
         json['maxPriorityFeeRaw'],
@@ -2691,6 +2914,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       'coin': serializer.toJson<String>(coin),
       'networkId': serializer.toJson<String?>(networkId),
       'contract': serializer.toJson<String?>(contract),
+      'operation': serializer.toJson<int>(
+        $TransactionsTable.$converteroperation.toJson(operation),
+      ),
       'direction': serializer.toJson<int>(
         $TransactionsTable.$converterdirection.toJson(direction),
       ),
@@ -2708,6 +2934,13 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       'memo': serializer.toJson<String?>(memo),
       'createdAt': serializer.toJson<int>(createdAt),
       'broadcastAt': serializer.toJson<int?>(broadcastAt),
+      'lastCheckedAt': serializer.toJson<int?>(lastCheckedAt),
+      'lastCheckOutcome': serializer.toJson<int?>(
+        $TransactionsTable.$converterlastCheckOutcomen.toJson(lastCheckOutcome),
+      ),
+      'referenceBlockHeight': serializer.toJson<int?>(referenceBlockHeight),
+      'expiresAt': serializer.toJson<int?>(expiresAt),
+      'lastValidBlockHeight': serializer.toJson<int?>(lastValidBlockHeight),
       'nonce': serializer.toJson<String?>(nonce),
       'maxPriorityFeeRaw': serializer.toJson<String?>(maxPriorityFeeRaw),
       'maxFeeRaw': serializer.toJson<String?>(maxFeeRaw),
@@ -2727,6 +2960,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     String? coin,
     Value<String?> networkId = const Value.absent(),
     Value<String?> contract = const Value.absent(),
+    TxOperationKind? operation,
     TxDirection? direction,
     String? fromAddr,
     String? toAddr,
@@ -2738,6 +2972,11 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     Value<String?> memo = const Value.absent(),
     int? createdAt,
     Value<int?> broadcastAt = const Value.absent(),
+    Value<int?> lastCheckedAt = const Value.absent(),
+    Value<TxCheckOutcome?> lastCheckOutcome = const Value.absent(),
+    Value<int?> referenceBlockHeight = const Value.absent(),
+    Value<int?> expiresAt = const Value.absent(),
+    Value<int?> lastValidBlockHeight = const Value.absent(),
     Value<String?> nonce = const Value.absent(),
     Value<String?> maxPriorityFeeRaw = const Value.absent(),
     Value<String?> maxFeeRaw = const Value.absent(),
@@ -2752,6 +2991,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     coin: coin ?? this.coin,
     networkId: networkId.present ? networkId.value : this.networkId,
     contract: contract.present ? contract.value : this.contract,
+    operation: operation ?? this.operation,
     direction: direction ?? this.direction,
     fromAddr: fromAddr ?? this.fromAddr,
     toAddr: toAddr ?? this.toAddr,
@@ -2763,6 +3003,19 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     memo: memo.present ? memo.value : this.memo,
     createdAt: createdAt ?? this.createdAt,
     broadcastAt: broadcastAt.present ? broadcastAt.value : this.broadcastAt,
+    lastCheckedAt: lastCheckedAt.present
+        ? lastCheckedAt.value
+        : this.lastCheckedAt,
+    lastCheckOutcome: lastCheckOutcome.present
+        ? lastCheckOutcome.value
+        : this.lastCheckOutcome,
+    referenceBlockHeight: referenceBlockHeight.present
+        ? referenceBlockHeight.value
+        : this.referenceBlockHeight,
+    expiresAt: expiresAt.present ? expiresAt.value : this.expiresAt,
+    lastValidBlockHeight: lastValidBlockHeight.present
+        ? lastValidBlockHeight.value
+        : this.lastValidBlockHeight,
     nonce: nonce.present ? nonce.value : this.nonce,
     maxPriorityFeeRaw: maxPriorityFeeRaw.present
         ? maxPriorityFeeRaw.value
@@ -2783,6 +3036,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       coin: data.coin.present ? data.coin.value : this.coin,
       networkId: data.networkId.present ? data.networkId.value : this.networkId,
       contract: data.contract.present ? data.contract.value : this.contract,
+      operation: data.operation.present ? data.operation.value : this.operation,
       direction: data.direction.present ? data.direction.value : this.direction,
       fromAddr: data.fromAddr.present ? data.fromAddr.value : this.fromAddr,
       toAddr: data.toAddr.present ? data.toAddr.value : this.toAddr,
@@ -2796,6 +3050,19 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       broadcastAt: data.broadcastAt.present
           ? data.broadcastAt.value
           : this.broadcastAt,
+      lastCheckedAt: data.lastCheckedAt.present
+          ? data.lastCheckedAt.value
+          : this.lastCheckedAt,
+      lastCheckOutcome: data.lastCheckOutcome.present
+          ? data.lastCheckOutcome.value
+          : this.lastCheckOutcome,
+      referenceBlockHeight: data.referenceBlockHeight.present
+          ? data.referenceBlockHeight.value
+          : this.referenceBlockHeight,
+      expiresAt: data.expiresAt.present ? data.expiresAt.value : this.expiresAt,
+      lastValidBlockHeight: data.lastValidBlockHeight.present
+          ? data.lastValidBlockHeight.value
+          : this.lastValidBlockHeight,
       nonce: data.nonce.present ? data.nonce.value : this.nonce,
       maxPriorityFeeRaw: data.maxPriorityFeeRaw.present
           ? data.maxPriorityFeeRaw.value
@@ -2825,6 +3092,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ..write('coin: $coin, ')
           ..write('networkId: $networkId, ')
           ..write('contract: $contract, ')
+          ..write('operation: $operation, ')
           ..write('direction: $direction, ')
           ..write('fromAddr: $fromAddr, ')
           ..write('toAddr: $toAddr, ')
@@ -2836,6 +3104,11 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ..write('memo: $memo, ')
           ..write('createdAt: $createdAt, ')
           ..write('broadcastAt: $broadcastAt, ')
+          ..write('lastCheckedAt: $lastCheckedAt, ')
+          ..write('lastCheckOutcome: $lastCheckOutcome, ')
+          ..write('referenceBlockHeight: $referenceBlockHeight, ')
+          ..write('expiresAt: $expiresAt, ')
+          ..write('lastValidBlockHeight: $lastValidBlockHeight, ')
           ..write('nonce: $nonce, ')
           ..write('maxPriorityFeeRaw: $maxPriorityFeeRaw, ')
           ..write('maxFeeRaw: $maxFeeRaw, ')
@@ -2855,6 +3128,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     coin,
     networkId,
     contract,
+    operation,
     direction,
     fromAddr,
     toAddr,
@@ -2866,6 +3140,11 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     memo,
     createdAt,
     broadcastAt,
+    lastCheckedAt,
+    lastCheckOutcome,
+    referenceBlockHeight,
+    expiresAt,
+    lastValidBlockHeight,
     nonce,
     maxPriorityFeeRaw,
     maxFeeRaw,
@@ -2884,6 +3163,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           other.coin == this.coin &&
           other.networkId == this.networkId &&
           other.contract == this.contract &&
+          other.operation == this.operation &&
           other.direction == this.direction &&
           other.fromAddr == this.fromAddr &&
           other.toAddr == this.toAddr &&
@@ -2895,6 +3175,11 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           other.memo == this.memo &&
           other.createdAt == this.createdAt &&
           other.broadcastAt == this.broadcastAt &&
+          other.lastCheckedAt == this.lastCheckedAt &&
+          other.lastCheckOutcome == this.lastCheckOutcome &&
+          other.referenceBlockHeight == this.referenceBlockHeight &&
+          other.expiresAt == this.expiresAt &&
+          other.lastValidBlockHeight == this.lastValidBlockHeight &&
           other.nonce == this.nonce &&
           other.maxPriorityFeeRaw == this.maxPriorityFeeRaw &&
           other.maxFeeRaw == this.maxFeeRaw &&
@@ -2911,6 +3196,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
   final Value<String> coin;
   final Value<String?> networkId;
   final Value<String?> contract;
+  final Value<TxOperationKind> operation;
   final Value<TxDirection> direction;
   final Value<String> fromAddr;
   final Value<String> toAddr;
@@ -2922,6 +3208,11 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
   final Value<String?> memo;
   final Value<int> createdAt;
   final Value<int?> broadcastAt;
+  final Value<int?> lastCheckedAt;
+  final Value<TxCheckOutcome?> lastCheckOutcome;
+  final Value<int?> referenceBlockHeight;
+  final Value<int?> expiresAt;
+  final Value<int?> lastValidBlockHeight;
   final Value<String?> nonce;
   final Value<String?> maxPriorityFeeRaw;
   final Value<String?> maxFeeRaw;
@@ -2937,6 +3228,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.coin = const Value.absent(),
     this.networkId = const Value.absent(),
     this.contract = const Value.absent(),
+    this.operation = const Value.absent(),
     this.direction = const Value.absent(),
     this.fromAddr = const Value.absent(),
     this.toAddr = const Value.absent(),
@@ -2948,6 +3240,11 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.memo = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.broadcastAt = const Value.absent(),
+    this.lastCheckedAt = const Value.absent(),
+    this.lastCheckOutcome = const Value.absent(),
+    this.referenceBlockHeight = const Value.absent(),
+    this.expiresAt = const Value.absent(),
+    this.lastValidBlockHeight = const Value.absent(),
     this.nonce = const Value.absent(),
     this.maxPriorityFeeRaw = const Value.absent(),
     this.maxFeeRaw = const Value.absent(),
@@ -2964,6 +3261,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     required String coin,
     this.networkId = const Value.absent(),
     this.contract = const Value.absent(),
+    this.operation = const Value.absent(),
     required TxDirection direction,
     required String fromAddr,
     required String toAddr,
@@ -2975,6 +3273,11 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.memo = const Value.absent(),
     required int createdAt,
     this.broadcastAt = const Value.absent(),
+    this.lastCheckedAt = const Value.absent(),
+    this.lastCheckOutcome = const Value.absent(),
+    this.referenceBlockHeight = const Value.absent(),
+    this.expiresAt = const Value.absent(),
+    this.lastValidBlockHeight = const Value.absent(),
     this.nonce = const Value.absent(),
     this.maxPriorityFeeRaw = const Value.absent(),
     this.maxFeeRaw = const Value.absent(),
@@ -3000,6 +3303,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Expression<String>? coin,
     Expression<String>? networkId,
     Expression<String>? contract,
+    Expression<int>? operation,
     Expression<int>? direction,
     Expression<String>? fromAddr,
     Expression<String>? toAddr,
@@ -3011,6 +3315,11 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Expression<String>? memo,
     Expression<int>? createdAt,
     Expression<int>? broadcastAt,
+    Expression<int>? lastCheckedAt,
+    Expression<int>? lastCheckOutcome,
+    Expression<int>? referenceBlockHeight,
+    Expression<int>? expiresAt,
+    Expression<int>? lastValidBlockHeight,
     Expression<String>? nonce,
     Expression<String>? maxPriorityFeeRaw,
     Expression<String>? maxFeeRaw,
@@ -3027,6 +3336,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       if (coin != null) 'coin': coin,
       if (networkId != null) 'network_id': networkId,
       if (contract != null) 'contract': contract,
+      if (operation != null) 'operation': operation,
       if (direction != null) 'direction': direction,
       if (fromAddr != null) 'from_addr': fromAddr,
       if (toAddr != null) 'to_addr': toAddr,
@@ -3038,6 +3348,13 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       if (memo != null) 'memo': memo,
       if (createdAt != null) 'created_at': createdAt,
       if (broadcastAt != null) 'broadcast_at': broadcastAt,
+      if (lastCheckedAt != null) 'last_checked_at': lastCheckedAt,
+      if (lastCheckOutcome != null) 'last_check_outcome': lastCheckOutcome,
+      if (referenceBlockHeight != null)
+        'reference_block_height': referenceBlockHeight,
+      if (expiresAt != null) 'expires_at': expiresAt,
+      if (lastValidBlockHeight != null)
+        'last_valid_block_height': lastValidBlockHeight,
       if (nonce != null) 'nonce': nonce,
       if (maxPriorityFeeRaw != null) 'max_priority_fee_raw': maxPriorityFeeRaw,
       if (maxFeeRaw != null) 'max_fee_raw': maxFeeRaw,
@@ -3056,6 +3373,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Value<String>? coin,
     Value<String?>? networkId,
     Value<String?>? contract,
+    Value<TxOperationKind>? operation,
     Value<TxDirection>? direction,
     Value<String>? fromAddr,
     Value<String>? toAddr,
@@ -3067,6 +3385,11 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Value<String?>? memo,
     Value<int>? createdAt,
     Value<int?>? broadcastAt,
+    Value<int?>? lastCheckedAt,
+    Value<TxCheckOutcome?>? lastCheckOutcome,
+    Value<int?>? referenceBlockHeight,
+    Value<int?>? expiresAt,
+    Value<int?>? lastValidBlockHeight,
     Value<String?>? nonce,
     Value<String?>? maxPriorityFeeRaw,
     Value<String?>? maxFeeRaw,
@@ -3083,6 +3406,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       coin: coin ?? this.coin,
       networkId: networkId ?? this.networkId,
       contract: contract ?? this.contract,
+      operation: operation ?? this.operation,
       direction: direction ?? this.direction,
       fromAddr: fromAddr ?? this.fromAddr,
       toAddr: toAddr ?? this.toAddr,
@@ -3094,6 +3418,11 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       memo: memo ?? this.memo,
       createdAt: createdAt ?? this.createdAt,
       broadcastAt: broadcastAt ?? this.broadcastAt,
+      lastCheckedAt: lastCheckedAt ?? this.lastCheckedAt,
+      lastCheckOutcome: lastCheckOutcome ?? this.lastCheckOutcome,
+      referenceBlockHeight: referenceBlockHeight ?? this.referenceBlockHeight,
+      expiresAt: expiresAt ?? this.expiresAt,
+      lastValidBlockHeight: lastValidBlockHeight ?? this.lastValidBlockHeight,
       nonce: nonce ?? this.nonce,
       maxPriorityFeeRaw: maxPriorityFeeRaw ?? this.maxPriorityFeeRaw,
       maxFeeRaw: maxFeeRaw ?? this.maxFeeRaw,
@@ -3125,6 +3454,11 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     }
     if (contract.present) {
       map['contract'] = Variable<String>(contract.value);
+    }
+    if (operation.present) {
+      map['operation'] = Variable<int>(
+        $TransactionsTable.$converteroperation.toSql(operation.value),
+      );
     }
     if (direction.present) {
       map['direction'] = Variable<int>(
@@ -3164,6 +3498,27 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     }
     if (broadcastAt.present) {
       map['broadcast_at'] = Variable<int>(broadcastAt.value);
+    }
+    if (lastCheckedAt.present) {
+      map['last_checked_at'] = Variable<int>(lastCheckedAt.value);
+    }
+    if (lastCheckOutcome.present) {
+      map['last_check_outcome'] = Variable<int>(
+        $TransactionsTable.$converterlastCheckOutcomen.toSql(
+          lastCheckOutcome.value,
+        ),
+      );
+    }
+    if (referenceBlockHeight.present) {
+      map['reference_block_height'] = Variable<int>(referenceBlockHeight.value);
+    }
+    if (expiresAt.present) {
+      map['expires_at'] = Variable<int>(expiresAt.value);
+    }
+    if (lastValidBlockHeight.present) {
+      map['last_valid_block_height'] = Variable<int>(
+        lastValidBlockHeight.value,
+      );
     }
     if (nonce.present) {
       map['nonce'] = Variable<String>(nonce.value);
@@ -3205,6 +3560,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
           ..write('coin: $coin, ')
           ..write('networkId: $networkId, ')
           ..write('contract: $contract, ')
+          ..write('operation: $operation, ')
           ..write('direction: $direction, ')
           ..write('fromAddr: $fromAddr, ')
           ..write('toAddr: $toAddr, ')
@@ -3216,6 +3572,11 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
           ..write('memo: $memo, ')
           ..write('createdAt: $createdAt, ')
           ..write('broadcastAt: $broadcastAt, ')
+          ..write('lastCheckedAt: $lastCheckedAt, ')
+          ..write('lastCheckOutcome: $lastCheckOutcome, ')
+          ..write('referenceBlockHeight: $referenceBlockHeight, ')
+          ..write('expiresAt: $expiresAt, ')
+          ..write('lastValidBlockHeight: $lastValidBlockHeight, ')
           ..write('nonce: $nonce, ')
           ..write('maxPriorityFeeRaw: $maxPriorityFeeRaw, ')
           ..write('maxFeeRaw: $maxFeeRaw, ')
@@ -6362,6 +6723,7 @@ typedef $$TransactionsTableCreateCompanionBuilder =
       required String coin,
       Value<String?> networkId,
       Value<String?> contract,
+      Value<TxOperationKind> operation,
       required TxDirection direction,
       required String fromAddr,
       required String toAddr,
@@ -6373,6 +6735,11 @@ typedef $$TransactionsTableCreateCompanionBuilder =
       Value<String?> memo,
       required int createdAt,
       Value<int?> broadcastAt,
+      Value<int?> lastCheckedAt,
+      Value<TxCheckOutcome?> lastCheckOutcome,
+      Value<int?> referenceBlockHeight,
+      Value<int?> expiresAt,
+      Value<int?> lastValidBlockHeight,
       Value<String?> nonce,
       Value<String?> maxPriorityFeeRaw,
       Value<String?> maxFeeRaw,
@@ -6390,6 +6757,7 @@ typedef $$TransactionsTableUpdateCompanionBuilder =
       Value<String> coin,
       Value<String?> networkId,
       Value<String?> contract,
+      Value<TxOperationKind> operation,
       Value<TxDirection> direction,
       Value<String> fromAddr,
       Value<String> toAddr,
@@ -6401,6 +6769,11 @@ typedef $$TransactionsTableUpdateCompanionBuilder =
       Value<String?> memo,
       Value<int> createdAt,
       Value<int?> broadcastAt,
+      Value<int?> lastCheckedAt,
+      Value<TxCheckOutcome?> lastCheckOutcome,
+      Value<int?> referenceBlockHeight,
+      Value<int?> expiresAt,
+      Value<int?> lastValidBlockHeight,
       Value<String?> nonce,
       Value<String?> maxPriorityFeeRaw,
       Value<String?> maxFeeRaw,
@@ -6448,6 +6821,12 @@ class $$TransactionsTableFilterComposer
   ColumnFilters<String> get contract => $composableBuilder(
     column: $table.contract,
     builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<TxOperationKind, TxOperationKind, int>
+  get operation => $composableBuilder(
+    column: $table.operation,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
   );
 
   ColumnWithTypeConverterFilters<TxDirection, TxDirection, int> get direction =>
@@ -6505,6 +6884,32 @@ class $$TransactionsTableFilterComposer
 
   ColumnFilters<int> get broadcastAt => $composableBuilder(
     column: $table.broadcastAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastCheckedAt => $composableBuilder(
+    column: $table.lastCheckedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<TxCheckOutcome?, TxCheckOutcome, int>
+  get lastCheckOutcome => $composableBuilder(
+    column: $table.lastCheckOutcome,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<int> get referenceBlockHeight => $composableBuilder(
+    column: $table.referenceBlockHeight,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get expiresAt => $composableBuilder(
+    column: $table.expiresAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastValidBlockHeight => $composableBuilder(
+    column: $table.lastValidBlockHeight,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6584,6 +6989,11 @@ class $$TransactionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get operation => $composableBuilder(
+    column: $table.operation,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get direction => $composableBuilder(
     column: $table.direction,
     builder: (column) => ColumnOrderings(column),
@@ -6636,6 +7046,31 @@ class $$TransactionsTableOrderingComposer
 
   ColumnOrderings<int> get broadcastAt => $composableBuilder(
     column: $table.broadcastAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastCheckedAt => $composableBuilder(
+    column: $table.lastCheckedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastCheckOutcome => $composableBuilder(
+    column: $table.lastCheckOutcome,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get referenceBlockHeight => $composableBuilder(
+    column: $table.referenceBlockHeight,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get expiresAt => $composableBuilder(
+    column: $table.expiresAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastValidBlockHeight => $composableBuilder(
+    column: $table.lastValidBlockHeight,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -6702,6 +7137,9 @@ class $$TransactionsTableAnnotationComposer
   GeneratedColumn<String> get contract =>
       $composableBuilder(column: $table.contract, builder: (column) => column);
 
+  GeneratedColumnWithTypeConverter<TxOperationKind, int> get operation =>
+      $composableBuilder(column: $table.operation, builder: (column) => column);
+
   GeneratedColumnWithTypeConverter<TxDirection, int> get direction =>
       $composableBuilder(column: $table.direction, builder: (column) => column);
 
@@ -6734,6 +7172,30 @@ class $$TransactionsTableAnnotationComposer
 
   GeneratedColumn<int> get broadcastAt => $composableBuilder(
     column: $table.broadcastAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lastCheckedAt => $composableBuilder(
+    column: $table.lastCheckedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<TxCheckOutcome?, int> get lastCheckOutcome =>
+      $composableBuilder(
+        column: $table.lastCheckOutcome,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<int> get referenceBlockHeight => $composableBuilder(
+    column: $table.referenceBlockHeight,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get expiresAt =>
+      $composableBuilder(column: $table.expiresAt, builder: (column) => column);
+
+  GeneratedColumn<int> get lastValidBlockHeight => $composableBuilder(
+    column: $table.lastValidBlockHeight,
     builder: (column) => column,
   );
 
@@ -6807,6 +7269,7 @@ class $$TransactionsTableTableManager
                 Value<String> coin = const Value.absent(),
                 Value<String?> networkId = const Value.absent(),
                 Value<String?> contract = const Value.absent(),
+                Value<TxOperationKind> operation = const Value.absent(),
                 Value<TxDirection> direction = const Value.absent(),
                 Value<String> fromAddr = const Value.absent(),
                 Value<String> toAddr = const Value.absent(),
@@ -6818,6 +7281,11 @@ class $$TransactionsTableTableManager
                 Value<String?> memo = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
                 Value<int?> broadcastAt = const Value.absent(),
+                Value<int?> lastCheckedAt = const Value.absent(),
+                Value<TxCheckOutcome?> lastCheckOutcome = const Value.absent(),
+                Value<int?> referenceBlockHeight = const Value.absent(),
+                Value<int?> expiresAt = const Value.absent(),
+                Value<int?> lastValidBlockHeight = const Value.absent(),
                 Value<String?> nonce = const Value.absent(),
                 Value<String?> maxPriorityFeeRaw = const Value.absent(),
                 Value<String?> maxFeeRaw = const Value.absent(),
@@ -6834,6 +7302,7 @@ class $$TransactionsTableTableManager
                 coin: coin,
                 networkId: networkId,
                 contract: contract,
+                operation: operation,
                 direction: direction,
                 fromAddr: fromAddr,
                 toAddr: toAddr,
@@ -6845,6 +7314,11 @@ class $$TransactionsTableTableManager
                 memo: memo,
                 createdAt: createdAt,
                 broadcastAt: broadcastAt,
+                lastCheckedAt: lastCheckedAt,
+                lastCheckOutcome: lastCheckOutcome,
+                referenceBlockHeight: referenceBlockHeight,
+                expiresAt: expiresAt,
+                lastValidBlockHeight: lastValidBlockHeight,
                 nonce: nonce,
                 maxPriorityFeeRaw: maxPriorityFeeRaw,
                 maxFeeRaw: maxFeeRaw,
@@ -6862,6 +7336,7 @@ class $$TransactionsTableTableManager
                 required String coin,
                 Value<String?> networkId = const Value.absent(),
                 Value<String?> contract = const Value.absent(),
+                Value<TxOperationKind> operation = const Value.absent(),
                 required TxDirection direction,
                 required String fromAddr,
                 required String toAddr,
@@ -6873,6 +7348,11 @@ class $$TransactionsTableTableManager
                 Value<String?> memo = const Value.absent(),
                 required int createdAt,
                 Value<int?> broadcastAt = const Value.absent(),
+                Value<int?> lastCheckedAt = const Value.absent(),
+                Value<TxCheckOutcome?> lastCheckOutcome = const Value.absent(),
+                Value<int?> referenceBlockHeight = const Value.absent(),
+                Value<int?> expiresAt = const Value.absent(),
+                Value<int?> lastValidBlockHeight = const Value.absent(),
                 Value<String?> nonce = const Value.absent(),
                 Value<String?> maxPriorityFeeRaw = const Value.absent(),
                 Value<String?> maxFeeRaw = const Value.absent(),
@@ -6889,6 +7369,7 @@ class $$TransactionsTableTableManager
                 coin: coin,
                 networkId: networkId,
                 contract: contract,
+                operation: operation,
                 direction: direction,
                 fromAddr: fromAddr,
                 toAddr: toAddr,
@@ -6900,6 +7381,11 @@ class $$TransactionsTableTableManager
                 memo: memo,
                 createdAt: createdAt,
                 broadcastAt: broadcastAt,
+                lastCheckedAt: lastCheckedAt,
+                lastCheckOutcome: lastCheckOutcome,
+                referenceBlockHeight: referenceBlockHeight,
+                expiresAt: expiresAt,
+                lastValidBlockHeight: lastValidBlockHeight,
                 nonce: nonce,
                 maxPriorityFeeRaw: maxPriorityFeeRaw,
                 maxFeeRaw: maxFeeRaw,

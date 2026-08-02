@@ -11,6 +11,7 @@ import 'package:kt_wallet/src/state/locale_controller.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
 import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 /// Proves the combined single-installer gate: first launch shows the
@@ -77,6 +78,92 @@ Future<DeviceModeController> _pumpRoot(
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  test('mode choice and clear survive a fresh controller', () async {
+    final mode = DeviceModeController();
+    await mode.setMode(DeviceMode.signer);
+
+    final reloaded = DeviceModeController();
+    await reloaded.load();
+    expect(reloaded.mode, DeviceMode.signer);
+
+    await reloaded.clear();
+    final cleared = DeviceModeController();
+    await cleared.load();
+    expect(cleared.mode, isNull);
+  });
+
+  test(
+    'failed persistence never publishes a mode and later writes recover',
+    () async {
+      var offline = true;
+      final mode = DeviceModeController(
+        preferencesProvider: () async {
+          if (offline) throw StateError('storage offline');
+          return SharedPreferences.getInstance();
+        },
+      );
+      var notified = 0;
+      mode.addListener(() => notified++);
+
+      await expectLater(mode.setMode(DeviceMode.wallet), throwsStateError);
+      expect(mode.mode, isNull);
+      expect(notified, 0);
+
+      offline = false;
+      await mode.setMode(DeviceMode.signer);
+      expect(mode.mode, DeviceMode.signer);
+      expect(notified, 1);
+
+      final reloaded = DeviceModeController();
+      await reloaded.load();
+      expect(reloaded.mode, DeviceMode.signer);
+    },
+  );
+
+  test('failed clear keeps the current durable mode visible', () async {
+    final mode = DeviceModeController(
+      initial: DeviceMode.wallet,
+      preferencesProvider: () async => throw StateError('storage offline'),
+    );
+    var notified = 0;
+    mode.addListener(() => notified++);
+
+    await expectLater(mode.clear(), throwsStateError);
+    expect(mode.mode, DeviceMode.wallet);
+    expect(notified, 0);
+  });
+
+  test(
+    'rapid mode intents are serialized and newest intent persists',
+    () async {
+      final mode = DeviceModeController();
+      await Future.wait([
+        mode.setMode(DeviceMode.wallet),
+        mode.setMode(DeviceMode.signer),
+        mode.setMode(DeviceMode.wallet),
+      ]);
+      expect(mode.mode, DeviceMode.wallet);
+
+      final reloaded = DeviceModeController();
+      await reloaded.load();
+      expect(reloaded.mode, DeviceMode.wallet);
+    },
+  );
+
+  test('invalid stored mode is removed and returns to the picker', () async {
+    SharedPreferences.setMockInitialValues({'device.mode': 'corrupt'});
+    final mode = DeviceModeController(initial: DeviceMode.wallet);
+    await mode.load();
+
+    expect(mode.mode, isNull);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.containsKey('device.mode'), isFalse);
+  });
+
   testWidgets('screenshot warning follows the app language override', (
     tester,
   ) async {
@@ -121,6 +208,25 @@ void main() {
     expect(find.text('离线签名器'), findsOneWidget);
   });
 
+  testWidgets('mode picker stays put and explains a save failure', (
+    tester,
+  ) async {
+    tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+    final mode = DeviceModeController(
+      preferencesProvider: () async => throw StateError('storage offline'),
+    );
+    await tester.pumpWidget(RootApp(modeController: mode));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('联网钱包'));
+    await tester.pumpAndSettle();
+
+    expect(mode.mode, isNull);
+    expect(find.text('选择设备模式'), findsOneWidget);
+    expect(find.text('无法保存更改，当前内容未改变，请重试。'), findsOneWidget);
+  });
+
   testWidgets('tapping 联网钱包 boots the wallet home', (tester) async {
     final mode = await _pumpRoot(tester);
 
@@ -157,6 +263,31 @@ void main() {
       expect(find.text('添加钱包'), findsNothing);
     },
   );
+
+  testWidgets('empty-wallet back failure retains wallet mode and reports it', (
+    tester,
+  ) async {
+    tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+    final mode = DeviceModeController(
+      initial: DeviceMode.wallet,
+      preferencesProvider: () async => throw StateError('storage offline'),
+    );
+    await tester.pumpWidget(
+      RootApp(
+        modeController: mode,
+        walletBootstrap: () async => WalletController(WalletManager()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pumpAndSettle();
+
+    expect(mode.mode, DeviceMode.wallet);
+    expect(find.text('添加钱包'), findsOneWidget);
+    expect(find.text('无法保存更改，当前内容未改变，请重试。'), findsOneWidget);
+  });
 
   testWidgets('tapping 离线签名器 requires confirmation, then boots the signer', (
     tester,
@@ -229,6 +360,60 @@ void main() {
 
     expect(mode.mode, isNull);
     expect(find.text('选择设备模式'), findsOneWidget);
+  });
+
+  testWidgets('settings mode exit failure retains wallet mode and reports it', (
+    tester,
+  ) async {
+    tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+    _useScriptedBiometrics();
+    final mode = DeviceModeController(
+      initial: DeviceMode.wallet,
+      preferencesProvider: () async => throw StateError('storage offline'),
+    );
+    await tester.pumpWidget(
+      RootApp(
+        modeController: mode,
+        walletBootstrap: () async => _testWalletController(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _passAppLock(tester);
+
+    await tester.tap(find.text('设置'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('安全设置'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('设备模式'));
+    await tester.tap(find.text('设备模式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认'));
+    await tester.pumpAndSettle();
+
+    expect(mode.mode, DeviceMode.wallet);
+    expect(find.text('选择设备模式'), findsNothing);
+    expect(find.text('无法保存更改，当前内容未改变，请重试。'), findsOneWidget);
+  });
+
+  testWidgets('signer escape failure retains signer mode and reports it', (
+    tester,
+  ) async {
+    tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+    final mode = DeviceModeController(
+      initial: DeviceMode.signer,
+      preferencesProvider: () async => throw StateError('storage offline'),
+    );
+    await tester.pumpWidget(RootApp(modeController: mode));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('切换设备模式'));
+    await tester.pumpAndSettle();
+
+    expect(mode.mode, DeviceMode.signer);
+    expect(find.text('创建新钱包'), findsOneWidget);
+    expect(find.text('无法保存设备模式，当前模式未改变，请重试。'), findsOneWidget);
   });
 
   testWidgets('a failed wallet bootstrap shows a retryable error, not a hang', (

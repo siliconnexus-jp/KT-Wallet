@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
-import 'package:wallet_data/wallet_data.dart' show TxStatus;
+import 'package:wallet_data/wallet_data.dart'
+    show TxCheckOutcome, TxOperationKind, TxStatus;
 
 import '../../l10n/app_localizations.dart';
 import '../market/asset_ref.dart';
@@ -388,12 +389,14 @@ class _HomeTab extends StatelessWidget {
         const SizedBox(height: 24),
         _Balance(
           amount: live
-              ? (testnet || total == null ? '--' : formatUsd(total))
+              ? (testnet || total == null
+                    ? '--'
+                    : formatFiatForContext(context, total))
               : r'$862.40',
           change: live
               ? (portfolioChange == null
                     ? ''
-                    : '${formatSignedUsd(portfolioChange.deltaUsd)} '
+                    : '${formatSignedFiatForContext(context, portfolioChange.deltaUsd)} '
                           '(${formatChange24h(portfolioChange.percent)}) '
                           '${l10n.balanceChangePeriod}')
               : '+\$12.06 (+1.4%) ${l10n.balanceChangePeriod}',
@@ -427,7 +430,11 @@ class _HomeTab extends StatelessWidget {
               ? preferredAssetRows(
                   context,
                   market,
-                  liveAssetRows(market, chainsLabel: l10n.assetOnChains),
+                  liveAssetRows(
+                    market,
+                    chainsLabel: l10n.assetOnChains,
+                    fiatFormatter: (usd) => formatFiatForContext(context, usd),
+                  ),
                 )
               : assets,
           onViewAll: onViewAll,
@@ -487,7 +494,11 @@ class _AssetsTab extends StatelessWidget {
               ? preferredAssetRows(
                   context,
                   market,
-                  liveAssetRows(market, chainsLabel: l10n.assetOnChains),
+                  liveAssetRows(
+                    market,
+                    chainsLabel: l10n.assetOnChains,
+                    fiatFormatter: (usd) => formatFiatForContext(context, usd),
+                  ),
                 )
               : demoAssets,
         ),
@@ -540,6 +551,9 @@ class _RecordsScreenState extends State<RecordsScreen> {
         activeNetworkIds: networks == null
             ? null
             : () => {for (final c in Chain.values) networks.activeFor(c).id},
+        activeNetworkId: networks == null
+            ? null
+            : (coin) => networks.activeFor(chainOf(coin)).id,
         // TronGrid endpoint: persisted RPC override → ACTIVE tron network's
         // rpcUrl (Nile is TronGrid-compatible, same paths) → builtin default;
         // a configured gateway unlocks eth/polygon/solana history too.
@@ -629,14 +643,24 @@ class _RecordsScreenState extends State<RecordsScreen> {
                   ),
                 Builder(
                   builder: (context) {
-                    final local = history.localTransactionForHash(r.hash);
+                    final local = history.localTransactionForRecord(r);
+                    final amount =
+                        local?.operation == TxOperationKind.approvalRevoke
+                        ? l10n.approvalRevoke
+                        : '${r.amountText ?? '--'}${r.assetVerified ? '' : ' ⚠'}';
                     return _RecordRow(
                       key: ValueKey('history-record-${r.id ?? r.hash}'),
                       record: _TxRecord(
                         r.outgoing,
-                        '${r.amountText ?? '--'}${r.assetVerified ? '' : ' ⚠'}',
+                        amount,
                         _formatRecordTime(l10n, r.timestamp),
                         status: local?.status,
+                        statusUnknown:
+                            local != null &&
+                            (local.status == TxStatus.submitted ||
+                                local.status == TxStatus.broadcast ||
+                                local.status == TxStatus.pending) &&
+                            local.lastCheckOutcome == TxCheckOutcome.unknown,
                       ),
                       // A row we broadcast ourselves opens its local record;
                       // one that only exists on chain travels as `extra`.
@@ -962,7 +986,9 @@ class _RecordRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    record.status == null
+                    record.statusUnknown
+                        ? '${record.time} · ${l10n.txStatusUnknown}'
+                        : record.status == null
                         ? record.time
                         : '${record.time} · ${_txStatusLabel(l10n, record.status!)}',
                     style: const TextStyle(
@@ -992,10 +1018,17 @@ class _RecordRow extends StatelessWidget {
 }
 
 class _TxRecord {
-  const _TxRecord(this.outgoing, this.amount, this.time, {this.status});
+  const _TxRecord(
+    this.outgoing,
+    this.amount,
+    this.time, {
+    this.status,
+    this.statusUnknown = false,
+  });
   final bool outgoing;
   final String amount, time;
   final TxStatus? status;
+  final bool statusUnknown;
 }
 
 String _txStatusLabel(AppLocalizations l10n, TxStatus status) =>
@@ -1098,6 +1131,11 @@ List<_SettingsItem> _settingsItems(AppLocalizations l10n) => [
   ),
   _SettingsItem(Icons.shield_outlined, l10n.settingsSecurity, '/security'),
   _SettingsItem(
+    Icons.admin_panel_settings_outlined,
+    l10n.settingsApprovals,
+    '/approvals',
+  ),
+  _SettingsItem(
     Icons.contacts_outlined,
     l10n.settingsAddressBook,
     '/address-book',
@@ -1199,10 +1237,12 @@ AssetRow liveTokenGroupRow(
   MarketController market,
   List<TokenInfo> tokens, {
   String Function(int)? chainsLabel,
+  String Function(double)? fiatFormatter,
 }) => liveAssetGroupRow(
   market,
   AssetRef.tokenGroup(tokens),
   chainsLabel: chainsLabel,
+  fiatFormatter: fiatFormatter,
 );
 
 /// One row for a symbol, however many chains it is deployed on.
@@ -1223,6 +1263,7 @@ AssetRow liveAssetGroupRow(
   /// Localized "N chains" label; the plain count is a fallback for callers
   /// without an l10n handy (demo/gallery paths).
   String Function(int)? chainsLabel,
+  String Function(double)? fiatFormatter,
 }) {
   Amount? total;
   var loaded = 0;
@@ -1256,7 +1297,7 @@ AssetRow liveAssetGroupRow(
     ref.name,
     '${loaded == 0 || total == null ? '--' : total.format(maxFraction: 6)} '
     '${ref.symbol} · $where',
-    anyFiat ? formatUsd(fiat) : '--',
+    anyFiat ? (fiatFormatter?.call(fiat) ?? formatUsd(fiat)) : '--',
     formatChange24h(change),
     (change ?? 0) < 0 ? WalletColors.red : WalletColors.green,
     ref: ref,
@@ -1303,15 +1344,22 @@ Map<String, List<TokenInfo>> tokensBySymbol(List<TokenInfo> tokens) {
 List<AssetRow> liveAssetRows(
   MarketController market, {
   String Function(int)? chainsLabel,
+  String Function(double)? fiatFormatter,
 }) => [
   for (final entry in nativesBySymbol().entries)
     liveAssetGroupRow(
       market,
       AssetRef.group(name: entry.key, symbol: entry.key, group: entry.value),
       chainsLabel: chainsLabel,
+      fiatFormatter: fiatFormatter,
     ),
   for (final group in tokensBySymbol(market.tokens).values)
-    liveTokenGroupRow(market, group, chainsLabel: chainsLabel),
+    liveTokenGroupRow(
+      market,
+      group,
+      chainsLabel: chainsLabel,
+      fiatFormatter: fiatFormatter,
+    ),
 ];
 
 /// Applies the persisted asset preferences without ever hiding an unknown
@@ -1381,6 +1429,7 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final isHot = wallet is HotWallet;
+    final largeText = MediaQuery.textScalerOf(context).scale(14) >= 20;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -1388,49 +1437,85 @@ class _Header extends StatelessWidget {
           child: Row(
             children: [
               Flexible(
-                child: GestureDetector(
-                  onTap: onTapPill,
-                  child: Container(
-                    padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
-                    decoration: BoxDecoration(
-                      color: WalletColors.surface,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _Avatar(
-                          color: Color(wallet.avatarColor),
-                          initial: wallet.name.characters.first,
-                          size: 26,
-                        ),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            wallet.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: WalletColors.text,
-                            ),
+                child: Semantics(
+                  button: true,
+                  label:
+                      '${wallet.name}, ${isHot ? l10n.walletKindHot : l10n.walletKindWatch}',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onTapPill,
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
+                      decoration: BoxDecoration(
+                        color: WalletColors.surface,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _Avatar(
+                            color: Color(wallet.avatarColor),
+                            initial: wallet.name.characters.first,
+                            size: 26,
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        WalletTypeBadge(
-                          kind: isHot ? WalletKind.hot : WalletKind.watch,
-                          label: isHot
-                              ? l10n.walletKindHot
-                              : l10n.walletKindWatch,
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.keyboard_arrow_down,
-                          size: 18,
-                          color: WalletColors.text2,
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          if (largeText)
+                            Flexible(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    wallet.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: WalletColors.text,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  WalletTypeBadge(
+                                    kind: isHot
+                                        ? WalletKind.hot
+                                        : WalletKind.watch,
+                                    label: isHot
+                                        ? l10n.walletKindHot
+                                        : l10n.walletKindWatch,
+                                  ),
+                                ],
+                              ),
+                            )
+                          else ...[
+                            Flexible(
+                              child: Text(
+                                wallet.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: WalletColors.text,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            WalletTypeBadge(
+                              kind: isHot ? WalletKind.hot : WalletKind.watch,
+                              label: isHot
+                                  ? l10n.walletKindHot
+                                  : l10n.walletKindWatch,
+                            ),
+                          ],
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.keyboard_arrow_down,
+                            size: 18,
+                            color: WalletColors.text2,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1443,13 +1528,20 @@ class _Header extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTapSettings,
-          child: const Icon(
-            Icons.settings_outlined,
-            size: 22,
-            color: WalletColors.text2,
+        Semantics(
+          button: true,
+          label: l10n.tabSettings,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTapSettings,
+            child: const SizedBox.square(
+              dimension: 48,
+              child: Icon(
+                Icons.settings_outlined,
+                size: 22,
+                color: WalletColors.text2,
+              ),
+            ),
           ),
         ),
       ],
@@ -1558,43 +1650,91 @@ class _BackupBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final walletId = WalletScope.of(context).current!.id;
+    final largeText = MediaQuery.textScalerOf(context).scale(13) >= 20;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => context.push('/create-warn'),
+      // This banner describes the CURRENT wallet. Starting `/create-warn`
+      // generates a different seed and can never back up this wallet. Open
+      // its authenticated recovery-phrase action instead.
+      onTap: () => context.push('/wallet-detail?id=$walletId'),
       child: Container(
+        constraints: const BoxConstraints(minHeight: 48),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: WalletColors.amber.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.warning_amber_rounded,
-              size: 16,
-              color: WalletColors.amber,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                l10n.backupBannerText,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF9A6503),
-                ),
+        child: largeText
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Icon(
+                          Icons.warning_amber_rounded,
+                          size: 16,
+                          color: WalletColors.amber,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          l10n.backupBannerText,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF9A6503),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      l10n.backupNow,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: WalletColors.amber,
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    size: 16,
+                    color: WalletColors.amber,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      l10n.backupBannerText,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF9A6503),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    l10n.backupNow,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: WalletColors.amber,
+                    ),
+                  ),
+                ],
               ),
-            ),
-            Text(
-              l10n.backupNow,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: WalletColors.amber,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -1616,20 +1756,31 @@ class _Balance extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text(
-              l10n.balanceTitle,
-              style: const TextStyle(fontSize: 13, color: WalletColors.text2),
+            Flexible(
+              child: Text(
+                l10n.balanceTitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13, color: WalletColors.text2),
+              ),
             ),
             const SizedBox(width: 6),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: toggle,
-              child: Icon(
-                hidden
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-                size: 14,
-                color: WalletColors.text3,
+            Semantics(
+              button: true,
+              label: l10n.privacyMode,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: toggle,
+                child: SizedBox.square(
+                  dimension: 48,
+                  child: Icon(
+                    hidden
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    size: 18,
+                    color: WalletColors.text3,
+                  ),
+                ),
               ),
             ),
           ],
@@ -1682,42 +1833,56 @@ class _ActionRow extends StatelessWidget {
             (l10n.actionScanSign, Icons.qr_code_scanner, false, '/scan-result'),
             (l10n.tabRecords, Icons.history, false, '/records'),
           ];
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        for (final (label, icon, primary, route) in actions)
-          _PressScale(
-            onTap: route == null ? onMore : () => context.push(route),
-            semanticLabel: label,
-            child: Column(
-              children: [
-                Container(
-                  width: 54,
-                  height: 54,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: primary ? WalletColors.accent : WalletColors.surface,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    icon,
-                    size: 22,
-                    color: primary ? Colors.white : WalletColors.accent,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: WalletColors.text2,
-                  ),
-                ),
-              ],
+    Widget action((String, IconData, bool, String?) item) {
+      final (label, icon, primary, route) = item;
+      return _PressScale(
+        onTap: route == null ? onMore : () => context.push(route),
+        semanticLabel: label,
+        child: Column(
+          children: [
+            Container(
+              width: 54,
+              height: 54,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: primary ? WalletColors.accent : WalletColors.surface,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                size: 22,
+                color: primary ? Colors.white : WalletColors.accent,
+              ),
             ),
-          ),
-      ],
+            const SizedBox(height: 8),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: WalletColors.text2,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) => Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          for (final item in actions)
+            if (constraints.maxWidth < 300 ||
+                MediaQuery.textScalerOf(context).scale(12) >= 20)
+              Expanded(child: action(item))
+            else
+              action(item),
+        ],
+      ),
     );
   }
 }
@@ -1923,28 +2088,37 @@ class _PressScaleState extends State<_PressScale> {
   }
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    label: widget.semanticLabel,
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: widget.onTap == null ? null : (_) => _setPressed(true),
-      onTapCancel: widget.onTap == null ? null : () => _setPressed(false),
-      onTapUp: widget.onTap == null ? null : (_) => _setPressed(false),
-      onTap: widget.onTap == null
-          ? null
-          : () {
-              HapticFeedback.selectionClick();
-              widget.onTap!();
-            },
-      child: AnimatedScale(
-        scale: _pressed ? 0.97 : 1,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOutCubic,
-        child: widget.child,
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return Semantics(
+      button: true,
+      enabled: widget.onTap != null,
+      label: widget.semanticLabel,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: widget.onTap == null ? null : (_) => _setPressed(true),
+        onTapCancel: widget.onTap == null ? null : () => _setPressed(false),
+        onTapUp: widget.onTap == null ? null : (_) => _setPressed(false),
+        onTap: widget.onTap == null
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                widget.onTap!();
+              },
+        child: AnimatedScale(
+          scale: reduceMotion || !_pressed ? 1 : 0.97,
+          duration: reduceMotion
+              ? Duration.zero
+              : const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+            child: Center(child: widget.child),
+          ),
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _TabBar extends StatelessWidget {
@@ -1961,10 +2135,11 @@ class _TabBar extends StatelessWidget {
       (l10n.tabSettings, Icons.settings),
     ];
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(10) >= 16;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Container(
-        height: 56,
+        height: largeText ? 76 : 60,
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
           color: WalletColors.surface,
@@ -2091,6 +2266,8 @@ class _TabBarItemState extends State<_TabBarItem> {
                   const SizedBox(height: 2),
                   Text(
                     widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.lerp(

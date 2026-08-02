@@ -46,17 +46,17 @@ func (t *Tron) do(ctx context.Context, method, path string, body []byte, out any
 	}
 	req, err := http.NewRequestWithContext(actx, method, t.base+path, rd)
 	if err != nil {
-		return t.unavailable(err.Error())
+		return safeRequestCreationFailure(hostOf(t.base))
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := t.client.Do(req)
 	if err != nil {
-		return t.unavailable(err.Error())
+		return safeRequestFailure(hostOf(t.base), actx, err)
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	data, err := readBoundedResponse(resp.Body, 8<<20)
 	if err != nil {
-		return t.unavailable(err.Error())
+		return safeResponseReadFailure(hostOf(t.base))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return t.unavailable(fmt.Sprintf("TronGrid returned HTTP %d", resp.StatusCode))

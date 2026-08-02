@@ -7,10 +7,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +25,11 @@ import (
 const (
 	FailThreshold = 3
 	OpenDuration  = 30 * time.Second
+
+	// latencyWindowSize bounds the in-memory observability cost per endpoint.
+	// A rolling window is sufficient for operational percentiles while avoiding
+	// unbounded retention of request timing data.
+	latencyWindowSize = 256
 )
 
 // NodeError is a valid JSON-RPC error returned by an upstream node. It does
@@ -32,7 +39,9 @@ type NodeError struct {
 	Message string
 }
 
-func (e *NodeError) Error() string { return fmt.Sprintf("node error %d: %s", e.Code, e.Message) }
+func (e *NodeError) Error() string {
+	return fmt.Sprintf("node error %d: %s", e.Code, PublicNodeErrorMessage(e.Message))
+}
 
 // Unavailable means the upstream(s) could not produce an answer: transport
 // error, 5xx/429, garbage response, or every circuit open.
@@ -41,12 +50,95 @@ type Unavailable struct {
 	Message  string
 }
 
-func (e *Unavailable) Error() string { return e.Upstream + ": " + e.Message }
+// Error is intentionally generic. Callers that need structured diagnostics
+// can inspect the typed fields inside this package, but generic logging must
+// never accidentally serialize a provider hostname, URL-derived identifier,
+// or future unreviewed message.
+func (e *Unavailable) Error() string { return "upstream temporarily unavailable" }
+
+type failureKind string
+
+const (
+	failureRateLimited failureKind = "rate_limited"
+	failureTimeout     failureKind = "timeout"
+	failureMalformed   failureKind = "malformed_response"
+	failureTransport   failureKind = "transport"
+	failureServer      failureKind = "server_error"
+	failureProvider    failureKind = "provider_error"
+	failureOther       failureKind = "other"
+)
+
+type attemptFailure struct {
+	kind failureKind
+	err  error
+}
+
+func (e *attemptFailure) Error() string { return e.err.Error() }
+func (e *attemptFailure) Unwrap() error { return e.err }
+
+type failureCounts struct {
+	rateLimited uint64
+	timeouts    uint64
+	malformed   uint64
+	transport   uint64
+	server      uint64
+	provider    uint64
+	other       uint64
+}
+
+// FailureMetrics classifies failures without retaining request payloads,
+// addresses, transaction data, endpoint URLs, or provider credentials.
+type FailureMetrics struct {
+	RateLimited       uint64 `json:"rateLimited"`
+	Timeouts          uint64 `json:"timeouts"`
+	MalformedResponse uint64 `json:"malformedResponses"`
+	Transport         uint64 `json:"transport"`
+	ServerErrors      uint64 `json:"serverErrors"`
+	ProviderErrors    uint64 `json:"providerErrors"`
+	Other             uint64 `json:"other"`
+}
 
 type endpoint struct {
-	url       string
-	fails     int
-	openUntil time.Time
+	url                string
+	fails              int
+	openUntil          time.Time
+	successes          uint64
+	failures           uint64
+	lastLatencyMs      int64
+	failureCounts      failureCounts
+	latencySamples     [latencyWindowSize]int64
+	latencySampleCount int
+	latencySampleNext  int
+}
+
+// EndpointHealth identifies an endpoint only by its one-based configuration
+// position. Provider URLs are deliberately excluded because they can contain
+// API keys. Operators can correlate the position with their private config.
+type EndpointHealth struct {
+	Position       int            `json:"position"`
+	State          string         `json:"state"`
+	Successes      uint64         `json:"successes"`
+	Failures       uint64         `json:"failures"`
+	FailureMetrics FailureMetrics `json:"failureMetrics"`
+	LastLatencyMs  int64          `json:"lastLatencyMs"`
+	LatencyP50Ms   int64          `json:"latencyP50Ms"`
+	LatencyP95Ms   int64          `json:"latencyP95Ms"`
+	Samples        int            `json:"samples"`
+}
+
+// PoolHealth is a key-safe operational summary. It deliberately exposes no
+// endpoint URL because provider URLs can contain API keys.
+type PoolHealth struct {
+	Endpoints       int              `json:"endpoints"`
+	OpenCircuits    int              `json:"openCircuits"`
+	Successes       uint64           `json:"successes"`
+	Failures        uint64           `json:"failures"`
+	FailureMetrics  FailureMetrics   `json:"failureMetrics"`
+	LastLatencyMs   int64            `json:"lastLatencyMs"`
+	LatencyP50Ms    int64            `json:"latencyP50Ms"`
+	LatencyP95Ms    int64            `json:"latencyP95Ms"`
+	Samples         int              `json:"samples"`
+	EndpointMetrics []EndpointHealth `json:"endpointMetrics"`
 }
 
 // Pool is an ordered list of JSON-RPC endpoints with failover and a
@@ -117,17 +209,9 @@ func newPool(
 // Call performs one JSON-RPC call, failing over between endpoints. The
 // returned error is either *NodeError or *Unavailable.
 func (p *Pool) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
-	if params == nil {
-		params = []any{}
-	}
-	body, err := json.Marshal(map[string]any{
-		"jsonrpc": "2.0",
-		"id":      1,
-		"method":  method,
-		"params":  params,
-	})
+	body, err := rpcRequestBody(method, params)
 	if err != nil {
-		return nil, &Unavailable{Upstream: p.name, Message: "marshal request: " + err.Error()}
+		return nil, &Unavailable{Upstream: p.name, Message: "could not encode upstream request"}
 	}
 
 	var lastErr *Unavailable
@@ -137,32 +221,36 @@ func (p *Pool) Call(ctx context.Context, method string, params any) (json.RawMes
 			continue
 		}
 		attempted = true
+		started := time.Now()
 		result, nodeErr, failure := p.attempt(ctx, ep.url, body)
+		latency := time.Since(started)
 		if failure != nil {
-			p.recordFailure(ep)
-			lastErr = &Unavailable{Upstream: hostOf(ep.url), Message: failure.Error()}
+			kind := failureKindOf(failure)
+			p.recordFailure(ep, latency, kind)
+			lastErr = &Unavailable{Upstream: hostOf(ep.url), Message: publicFailureMessage(kind)}
 			// If the overall context is done there is no point trying more URLs.
 			if ctx.Err() != nil {
 				return nil, lastErr
 			}
 			continue
 		}
-		p.recordSuccess(ep)
 		if nodeErr != nil {
 			// Provider-account routing errors mean the request never reached
-			// the chain. They are safe to fail over even for broadcasts and
+			// the chain. They are safe to fail over for read-only calls and
 			// commonly occur when one key in a multi-key pool has not enabled
 			// a particular network yet.
 			if providerRoutingError(nodeErr) {
-				p.recordFailure(ep)
+				p.recordFailure(ep, latency, failureProvider)
 				lastErr = &Unavailable{
 					Upstream: hostOf(ep.url),
-					Message:  nodeErr.Message,
+					Message:  "provider rejected network routing",
 				}
 				continue
 			}
+			p.recordSuccess(ep, latency)
 			return nil, nodeErr
 		}
+		p.recordSuccess(ep, latency)
 		return result, nil
 	}
 	if !attempted {
@@ -171,12 +259,91 @@ func (p *Pool) Call(ctx context.Context, method string, params any) (json.RawMes
 	return nil, lastErr
 }
 
+// CallOnce performs one JSON-RPC write against exactly one currently eligible
+// endpoint. Endpoints whose circuit was already open are skipped before any
+// request is sent, but a transport error, timeout, HTTP failure, malformed
+// response, or provider-routing error after the attempt starts is returned
+// immediately. This is the irreversible-write boundary used by transaction
+// broadcasts: a lost response can hide an accepted transaction, so trying a
+// second endpoint would violate at-most-one submission semantics.
+func (p *Pool) CallOnce(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	body, err := rpcRequestBody(method, params)
+	if err != nil {
+		return nil, &Unavailable{Upstream: p.name, Message: "could not encode upstream request"}
+	}
+
+	for _, ep := range p.endpointsForCall() {
+		if p.circuitOpen(ep) {
+			continue
+		}
+		started := time.Now()
+		result, nodeErr, failure := p.attempt(ctx, ep.url, body)
+		latency := time.Since(started)
+		if failure != nil {
+			kind := failureKindOf(failure)
+			p.recordFailure(ep, latency, kind)
+			return nil, &Unavailable{
+				Upstream: hostOf(ep.url),
+				Message:  publicFailureMessage(kind),
+			}
+		}
+		if nodeErr != nil {
+			if providerRoutingError(nodeErr) {
+				p.recordFailure(ep, latency, failureProvider)
+				return nil, &Unavailable{
+					Upstream: hostOf(ep.url),
+					Message:  "provider rejected network routing",
+				}
+			}
+			p.recordSuccess(ep, latency)
+			return nil, nodeErr
+		}
+		p.recordSuccess(ep, latency)
+		return result, nil
+	}
+	return nil, &Unavailable{
+		Upstream: p.name,
+		Message:  "all upstreams temporarily unavailable (circuit open)",
+	}
+}
+
+func rpcRequestBody(method string, params any) ([]byte, error) {
+	if params == nil {
+		params = []any{}
+	}
+	return json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  method,
+		"params":  params,
+	})
+}
+
 func providerRoutingError(err *NodeError) bool {
 	message := strings.ToLower(err.Message)
 	return strings.Contains(message, "not enabled for this app") ||
 		strings.Contains(message, "api key is not valid") ||
 		strings.Contains(message, "invalid api key") ||
 		strings.Contains(message, "authentication failed")
+}
+
+func publicFailureMessage(kind failureKind) string {
+	switch kind {
+	case failureRateLimited:
+		return "upstream rate limit reached"
+	case failureTimeout:
+		return "upstream request timed out"
+	case failureMalformed:
+		return "malformed upstream response"
+	case failureTransport:
+		return "upstream request failed"
+	case failureServer:
+		return "upstream server unavailable"
+	case failureProvider:
+		return "provider rejected network routing"
+	default:
+		return "upstream temporarily unavailable"
+	}
 }
 
 func (p *Pool) endpointsForCall() []*endpoint {
@@ -202,21 +369,42 @@ func (p *Pool) attempt(ctx context.Context, u string, body []byte) (result json.
 	defer cancel()
 	req, err := http.NewRequestWithContext(actx, http.MethodPost, u, bytes.NewReader(body))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, &attemptFailure{
+			kind: failureOther,
+			err:  errors.New("could not create upstream request"),
+		}
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, nil, err
+		kind := failureTransport
+		if errors.Is(err, context.DeadlineExceeded) ||
+			errors.Is(actx.Err(), context.DeadlineExceeded) {
+			kind = failureTimeout
+		}
+		return nil, nil, &attemptFailure{kind: kind, err: errors.New(publicFailureMessage(kind))}
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+	if resp.StatusCode == http.StatusTooManyRequests {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		return nil, nil, fmt.Errorf("upstream returned HTTP %d", resp.StatusCode)
+		return nil, nil, &attemptFailure{
+			kind: failureRateLimited,
+			err:  fmt.Errorf("upstream returned HTTP %d", resp.StatusCode),
+		}
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if resp.StatusCode >= 500 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		return nil, nil, &attemptFailure{
+			kind: failureServer,
+			err:  fmt.Errorf("upstream returned HTTP %d", resp.StatusCode),
+		}
+	}
+	data, err := readBoundedResponse(resp.Body, 8<<20)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, &attemptFailure{
+			kind: failureTransport,
+			err:  errors.New(publicFailureMessage(failureTransport)),
+		}
 	}
 	var out struct {
 		Result json.RawMessage `json:"result"`
@@ -226,10 +414,19 @@ func (p *Pool) attempt(ctx context.Context, u string, body []byte) (result json.
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(data, &out); err != nil {
-		return nil, nil, fmt.Errorf("invalid JSON-RPC response (HTTP %d)", resp.StatusCode)
+		return nil, nil, &attemptFailure{
+			kind: failureMalformed,
+			err:  fmt.Errorf("invalid JSON-RPC response (HTTP %d)", resp.StatusCode),
+		}
 	}
 	if out.Error != nil {
 		return nil, &NodeError{Code: out.Error.Code, Message: out.Error.Message}, nil
+	}
+	if out.Result == nil {
+		return nil, nil, &attemptFailure{
+			kind: failureMalformed,
+			err:  fmt.Errorf("JSON-RPC response is missing result and error (HTTP %d)", resp.StatusCode),
+		}
 	}
 	return out.Result, nil, nil
 }
@@ -240,25 +437,172 @@ func (p *Pool) circuitOpen(ep *endpoint) bool {
 	return ep.openUntil.After(p.clk.Now())
 }
 
-func (p *Pool) recordFailure(ep *endpoint) {
+func (p *Pool) recordFailure(ep *endpoint, latency time.Duration, kind failureKind) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	ep.fails++
+	ep.failures++
+	ep.lastLatencyMs = latency.Milliseconds()
+	ep.recordLatency(latency.Milliseconds())
+	ep.failureCounts.increment(kind)
 	if ep.fails >= FailThreshold {
 		ep.openUntil = p.clk.Now().Add(OpenDuration)
 	}
 }
 
-func (p *Pool) recordSuccess(ep *endpoint) {
+func (p *Pool) recordSuccess(ep *endpoint, latency time.Duration) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	ep.fails = 0
 	ep.openUntil = time.Time{}
+	ep.successes++
+	ep.lastLatencyMs = latency.Milliseconds()
+	ep.recordLatency(latency.Milliseconds())
+}
+
+// Health returns an aggregate snapshot suitable for health endpoints and
+// metrics. It never performs network I/O.
+func (p *Pool) Health() PoolHealth {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := PoolHealth{
+		Endpoints:       len(p.eps),
+		EndpointMetrics: make([]EndpointHealth, 0, len(p.eps)),
+	}
+	allLatencies := make([]int64, 0, len(p.eps)*latencyWindowSize)
+	for index, ep := range p.eps {
+		open := ep.openUntil.After(p.clk.Now())
+		if open {
+			out.OpenCircuits++
+		}
+		out.Successes += ep.successes
+		out.Failures += ep.failures
+		out.FailureMetrics.add(ep.failureCounts.snapshot())
+		if ep.lastLatencyMs > out.LastLatencyMs {
+			out.LastLatencyMs = ep.lastLatencyMs
+		}
+		latencies := ep.latencies()
+		allLatencies = append(allLatencies, latencies...)
+		p50, p95 := latencyPercentiles(latencies)
+		out.EndpointMetrics = append(out.EndpointMetrics, EndpointHealth{
+			Position:       index + 1,
+			State:          endpointState(ep, open),
+			Successes:      ep.successes,
+			Failures:       ep.failures,
+			FailureMetrics: ep.failureCounts.snapshot(),
+			LastLatencyMs:  ep.lastLatencyMs,
+			LatencyP50Ms:   p50,
+			LatencyP95Ms:   p95,
+			Samples:        len(latencies),
+		})
+	}
+	out.LatencyP50Ms, out.LatencyP95Ms = latencyPercentiles(allLatencies)
+	out.Samples = len(allLatencies)
+	return out
+}
+
+func failureKindOf(err error) failureKind {
+	var failure *attemptFailure
+	if errors.As(err, &failure) {
+		return failure.kind
+	}
+	return failureOther
+}
+
+func (c *failureCounts) increment(kind failureKind) {
+	switch kind {
+	case failureRateLimited:
+		c.rateLimited++
+	case failureTimeout:
+		c.timeouts++
+	case failureMalformed:
+		c.malformed++
+	case failureTransport:
+		c.transport++
+	case failureServer:
+		c.server++
+	case failureProvider:
+		c.provider++
+	default:
+		c.other++
+	}
+}
+
+func (c failureCounts) snapshot() FailureMetrics {
+	return FailureMetrics{
+		RateLimited:       c.rateLimited,
+		Timeouts:          c.timeouts,
+		MalformedResponse: c.malformed,
+		Transport:         c.transport,
+		ServerErrors:      c.server,
+		ProviderErrors:    c.provider,
+		Other:             c.other,
+	}
+}
+
+func (m *FailureMetrics) add(other FailureMetrics) {
+	m.RateLimited += other.RateLimited
+	m.Timeouts += other.Timeouts
+	m.MalformedResponse += other.MalformedResponse
+	m.Transport += other.Transport
+	m.ServerErrors += other.ServerErrors
+	m.ProviderErrors += other.ProviderErrors
+	m.Other += other.Other
+}
+
+func (e *endpoint) recordLatency(latencyMs int64) {
+	e.latencySamples[e.latencySampleNext] = max(latencyMs, 0)
+	e.latencySampleNext = (e.latencySampleNext + 1) % latencyWindowSize
+	if e.latencySampleCount < latencyWindowSize {
+		e.latencySampleCount++
+	}
+}
+
+func (e *endpoint) latencies() []int64 {
+	out := make([]int64, e.latencySampleCount)
+	if e.latencySampleCount == 0 {
+		return out
+	}
+	start := 0
+	if e.latencySampleCount == latencyWindowSize {
+		start = e.latencySampleNext
+	}
+	for i := range e.latencySampleCount {
+		out[i] = e.latencySamples[(start+i)%latencyWindowSize]
+	}
+	return out
+}
+
+func latencyPercentiles(samples []int64) (p50, p95 int64) {
+	if len(samples) == 0 {
+		return 0, 0
+	}
+	ordered := append([]int64(nil), samples...)
+	slices.Sort(ordered)
+	nearestRank := func(percent int) int64 {
+		// Integer ceil(percent * n / 100), converted to a zero-based index.
+		rank := (percent*len(ordered) + 99) / 100
+		return ordered[max(rank-1, 0)]
+	}
+	return nearestRank(50), nearestRank(95)
+}
+
+func endpointState(ep *endpoint, open bool) string {
+	if open {
+		return "open"
+	}
+	if ep.successes == 0 && ep.failures == 0 {
+		return "unknown"
+	}
+	if ep.fails > 0 || (ep.failures > 0 && ep.failures*10 > ep.successes+ep.failures) {
+		return "degraded"
+	}
+	return "healthy"
 }
 
 func hostOf(raw string) string {
-	if u, err := url.Parse(raw); err == nil && u.Host != "" {
-		return u.Host
+	if u, err := url.Parse(raw); err == nil && u.Hostname() != "" {
+		return u.Hostname()
 	}
-	return raw
+	return "upstream"
 }

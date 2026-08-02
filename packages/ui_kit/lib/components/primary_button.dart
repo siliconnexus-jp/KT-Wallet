@@ -34,6 +34,7 @@ class KtPrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final (background, foreground, radius) = switch (style) {
       KtButtonStyle.wallet => (WalletColors.accent, Colors.white, 14.0),
       KtButtonStyle.signer => (SignerColors.blue, SignerColors.bg, 12.0),
@@ -44,6 +45,8 @@ class KtPrimaryButton extends StatelessWidget {
       ),
     };
     return Semantics(
+      button: true,
+      enabled: onPressed != null && !loading,
       liveRegion: loading,
       label: label,
       child: SizedBox(
@@ -72,30 +75,39 @@ class KtPrimaryButton extends StatelessWidget {
             children: [
               AnimatedOpacity(
                 opacity: loading ? 0 : 1,
-                duration: const Duration(milliseconds: 140),
+                duration: reduceMotion
+                    ? Duration.zero
+                    : const Duration(milliseconds: 140),
                 curve: Curves.easeOutCubic,
-                child: Row(
-                  key: const ValueKey('kt-primary-button-content'),
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (icon != null) ...[
-                      Icon(icon, size: 18),
-                      const SizedBox(width: 8),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    key: const ValueKey('kt-primary-button-content'),
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (icon != null) ...[
+                        Icon(icon, size: 18),
+                        const SizedBox(width: 8),
+                      ],
+                      Text(label),
                     ],
-                    Text(label),
-                  ],
+                  ),
                 ),
               ),
               IgnorePointer(
                 child: AnimatedOpacity(
                   key: const ValueKey('kt-primary-button-loading-layer'),
                   opacity: loading ? 1 : 0,
-                  duration: const Duration(milliseconds: 140),
+                  duration: reduceMotion
+                      ? Duration.zero
+                      : const Duration(milliseconds: 140),
                   curve: Curves.easeOutCubic,
                   child: AnimatedScale(
                     scale: loading ? 1 : 0.96,
-                    duration: const Duration(milliseconds: 140),
+                    duration: reduceMotion
+                        ? Duration.zero
+                        : const Duration(milliseconds: 140),
                     curve: Curves.easeOutCubic,
                     child: TickerMode(
                       enabled: loading,

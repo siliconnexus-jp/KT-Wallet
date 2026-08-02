@@ -12,6 +12,7 @@ import 'package:chains/chains.dart'
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:http/http.dart' as http;
 
+import '../rpc/bounded_http_client.dart';
 import 'balance_service.dart' show RpcEndpointResolver, defaultRpcEndpointFor;
 import 'gateway_client.dart';
 import 'token_balance_service.dart';
@@ -22,10 +23,18 @@ const String defaultTronHistoryApiUrl = 'https://api.trongrid.io';
 /// Per-chain history fetch outcome.
 enum HistoryStatus { loading, ok, error, unsupported }
 
+/// Chain-authoritative execution state for a history row.
+///
+/// `unknown` deliberately remains distinct from `failed`: an indexer can
+/// return a transfer before it has enough finality metadata, or omit status
+/// fields during an outage. Neither case proves that the transaction reverted.
+enum ChainTxStatus { pending, confirmed, failed, unknown }
+
 /// One on-chain transaction, normalized for display.
 class ChainTxRecord {
   const ChainTxRecord({
     required this.coin,
+    this.networkId,
     required this.hash,
     required this.outgoing,
     this.id,
@@ -36,13 +45,34 @@ class ChainTxRecord {
     this.assetSymbol,
     this.assetVerified = true,
     required this.timestamp,
-    required this.confirmed,
-  });
+    ChainTxStatus? status,
+    bool? confirmed,
+  }) : assert(
+         status != null || confirmed != null,
+         'A chain record must carry an explicit execution status.',
+       ),
+       assert(
+         status == null ||
+             confirmed == null ||
+             confirmed == (status == ChainTxStatus.confirmed),
+         'Legacy confirmed and status disagree.',
+       ),
+       status =
+           status ??
+           (confirmed == true ? ChainTxStatus.confirmed : ChainTxStatus.failed);
 
   /// Which chain this record came from. The merged cross-chain list drops the
   /// per-chain grouping, so without it the detail screen could not tell which
   /// explorer a hash belongs to.
   final Coin coin;
+
+  /// Concrete network instance that produced this record (`eth-mainnet`,
+  /// `eth-sepolia`, a custom network id, ...).
+  ///
+  /// Legacy snapshots may not carry it. Callers must then leave network
+  /// labels, explorer links and receipt QR codes unavailable rather than
+  /// guessing from the currently selected environment.
+  final String? networkId;
 
   final String hash;
 
@@ -76,8 +106,32 @@ class ChainTxRecord {
 
   final DateTime timestamp;
 
-  /// Whether the chain reports the transaction as executed successfully.
-  final bool confirmed;
+  /// Exact state reported by the chain/indexer. `unknown` is never rendered or
+  /// persisted as failure.
+  final ChainTxStatus status;
+
+  ChainTxRecord onNetwork(String id) => ChainTxRecord(
+    coin: coin,
+    networkId: id,
+    hash: hash,
+    id: this.id,
+    outgoing: outgoing,
+    fromAddress: fromAddress,
+    toAddress: toAddress,
+    amountText: amountText,
+    assetContract: assetContract,
+    assetSymbol: assetSymbol,
+    assetVerified: assetVerified,
+    timestamp: timestamp,
+    status: status,
+  );
+
+  ChainTxRecord onNetworkIfKnown(String? id) =>
+      id == null ? this : onNetwork(id);
+
+  bool get confirmed => status == ChainTxStatus.confirmed;
+  bool get failed => status == ChainTxStatus.failed;
+  bool get pending => status == ChainTxStatus.pending;
 }
 
 /// Records for one chain, or the reason there aren't any.
@@ -107,7 +161,7 @@ class HistoryService {
     GatewayResolver? gateway,
     TokenRegistryResolver? tokenRegistry,
     this.timeout = const Duration(seconds: 10),
-  }) : _client = client ?? http.Client(),
+  }) : _client = BoundedHttpClient(client ?? http.Client()),
        _endpoints = endpoints ?? defaultRpcEndpointFor,
        _gateway = gateway ?? _noGateway,
        _tokenRegistry = tokenRegistry ?? _mainnetTokenRegistry;
@@ -143,6 +197,7 @@ class HistoryService {
     Coin coin,
     String address, {
     int limit = pageSize,
+    String? networkId,
   }) async {
     final effectiveLimit = limit.clamp(1, 100);
     final gateway = _gateway();
@@ -155,7 +210,8 @@ class HistoryService {
         );
         if (history.unsupported) return const HistoryResult.unsupported();
         final records = [
-          for (final record in history.records) _mapGatewayRecord(coin, record),
+          for (final record in history.records)
+            _mapGatewayRecord(coin, record).onNetworkIfKnown(networkId),
         ]..sort((a, b) => b.timestamp.compareTo(a.timestamp));
         return HistoryResult.ok(
           List.unmodifiable(records.take(effectiveLimit)),
@@ -164,19 +220,22 @@ class HistoryService {
         // Gateway unreachable/erroring: fall through to direct chain APIs.
       }
     }
-    switch (coin) {
-      case Coin.tron:
-        return _fetchTron(address, effectiveLimit);
-      case Coin.eth:
-      case Coin.polygon:
-      case Coin.base:
-      case Coin.arbitrum:
-      case Coin.avalanche:
-      case Coin.bnb:
-        return _fetchEvm(coin, address, effectiveLimit);
-      case Coin.solana:
-        return _fetchSolana(address, effectiveLimit);
-    }
+    final result = switch (coin) {
+      Coin.tron => await _fetchTron(address, effectiveLimit),
+      Coin.eth ||
+      Coin.polygon ||
+      Coin.base ||
+      Coin.arbitrum ||
+      Coin.avalanche ||
+      Coin.bnb => await _fetchEvm(coin, address, effectiveLimit),
+      Coin.solana => await _fetchSolana(address, effectiveLimit),
+    };
+    if (result.status != HistoryStatus.ok || networkId == null) return result;
+    return HistoryResult.ok(
+      List.unmodifiable(
+        result.records.map((record) => record.onNetwork(networkId)),
+      ),
+    );
   }
 
   Future<HistoryResult> _fetchEvm(Coin coin, String address, int limit) async {
@@ -712,7 +771,12 @@ class HistoryService {
       assetSymbol: symbol,
       assetVerified: record.verified,
       timestamp: DateTime.fromMillisecondsSinceEpoch(record.timestampMs),
-      confirmed: !record.failed,
+      status: switch (record.status) {
+        GatewayTransactionStatus.confirmed => ChainTxStatus.confirmed,
+        GatewayTransactionStatus.failed => ChainTxStatus.failed,
+        GatewayTransactionStatus.pending => ChainTxStatus.pending,
+        GatewayTransactionStatus.unknown => ChainTxStatus.unknown,
+      },
     );
   }
 

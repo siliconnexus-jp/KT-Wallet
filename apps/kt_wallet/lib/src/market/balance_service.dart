@@ -64,11 +64,11 @@ class BalanceResult {
 /// `package:chains/rpc.dart` clients over injectable transports (production
 /// defaults to the http-backed ones, which own the request timeouts).
 ///
-/// HONESTY NOTE: today's demo wallets carry MockCoreCrypto-derived placeholder
-/// addresses that are NOT valid on-chain addresses — nodes reject them (or the
-/// request errors), which surfaces here as a graceful [BalanceStatus.error]
-/// per chain, rendered as '--' in the UI. Real derived addresses arrive with
-/// wallet-core; nothing here ever fabricates a "live" number.
+/// HONESTY NOTE: design-gallery wallets carry placeholder addresses that are
+/// NOT valid on-chain addresses — nodes reject them (or the request errors),
+/// which surfaces here as a graceful [BalanceStatus.error] per chain, rendered
+/// as '--' in the UI. Real derived addresses arrive with wallet-core; nothing
+/// here ever fabricates a "live" number.
 class BalanceService {
   BalanceService({
     JsonRpcTransport? jsonRpcTransport,

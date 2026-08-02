@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"sync"
 
@@ -136,7 +135,7 @@ func (g *Gateway) GetBalances(ctx context.Context, params json.RawMessage) (any,
 	// Keyed by network (not chain): a testnet answer must never be served
 	// for a mainnet request or vice versa.
 	key := network + "|" + p.Address + "|" + tokenSetHash(p.Tokens)
-	if v, ok := g.balanceCache.Get(key); ok {
+	if v, ok := g.balanceCache.GetContext(ctx, key); ok {
 		return v, nil
 	}
 
@@ -153,7 +152,7 @@ func (g *Gateway) GetBalances(ctx context.Context, params json.RawMessage) (any,
 	if err != nil {
 		return nil, err
 	}
-	g.balanceCache.Set(key, res)
+	g.balanceCache.SetContext(ctx, key, res)
 	return res, nil
 }
 
@@ -179,7 +178,7 @@ func (g *Gateway) evmBalances(ctx context.Context, chain, network string, meta c
 			if !evmAddressRe.MatchString(t.Contract) {
 				entry.Error = "invalid contract address"
 			} else if bal, err := evm.TokenBalance(ctx, t.Contract, address); err != nil {
-				entry.Error = err.Error()
+				entry.Error = "token balance temporarily unavailable"
 			} else {
 				entry.Raw = bal.String()
 			}
@@ -205,7 +204,7 @@ func (g *Gateway) tronBalances(ctx context.Context, network string, meta chainMe
 			if _, valid := newDecimal(raw); valid {
 				entry.Raw = raw
 			} else {
-				entry.Error = fmt.Sprintf("TronGrid returned a non-numeric balance: %q", raw)
+				entry.Error = "token provider returned a malformed balance"
 			}
 		}
 		res.Tokens = append(res.Tokens, entry)
@@ -232,7 +231,7 @@ func (g *Gateway) solanaBalances(ctx context.Context, network string, meta chain
 			defer func() { <-limit }()
 			entry := tokenBalanceEntry{Contract: t.Contract, Raw: "0", Decimals: t.Decimals, Symbol: t.Symbol}
 			if bal, err := g.sol[network].GetTokenBalance(ctx, address, t.Contract); err != nil {
-				entry.Error = err.Error()
+				entry.Error = "token balance temporarily unavailable"
 			} else {
 				entry.Raw = bal.String()
 			}

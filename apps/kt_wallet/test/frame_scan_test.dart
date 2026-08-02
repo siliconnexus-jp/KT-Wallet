@@ -3,12 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/src/transfer/airgap_codec.dart';
 import 'package:kt_wallet/src/transfer/frame_scan.dart';
 
+const _testSignerAddress = 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa';
+
 /// The scanned-string plumbing behind the live camera screens, unit-level (no
 /// plugin): every QR string a camera would hand over is one base64url
 /// AIRGAP-V1 frame, and feeding them advances the real aggregator.
 void main() {
   SignRequest request() =>
-      buildSignRequest(walletId: demoWalletId, fromAddress: demoFromAddress);
+      buildSignRequest(walletId: demoWalletId, fromAddress: _testSignerAddress);
 
   test('feeding valid frame strings advances the aggregator to done', () {
     final req = request();
@@ -52,6 +54,13 @@ void main() {
     expect(session.anomalies, greaterThanOrEqualTo(2));
   });
 
+  test('oversized camera text is rejected before base64 allocation', () {
+    final session = QrFrameScanSession();
+    session.add('A' * (AirgapFrame.maxQrTextLength + 1));
+    expect(session.anomalies, 1);
+    expect(session.progress.received, 0);
+  });
+
   test('duplicate consecutive frames do not double-count progress', () {
     final req = request();
     final frames = encodeQrFrames(req, reqId: req.reqId);
@@ -64,7 +73,7 @@ void main() {
 
   test('scanned sign-result frames verify against the outstanding request', () {
     final req = request();
-    final result = buildDemoSignResult(req, signer: demoFromAddress);
+    final result = buildDemoSignResult(req, signer: _testSignerAddress);
     final session = QrFrameScanSession();
     for (final frame in encodeQrFrames(result, reqId: req.reqId)) {
       session.add(frame);
@@ -78,7 +87,7 @@ void main() {
     // A result answering a different request is rejected.
     final other = buildSignRequest(
       walletId: demoWalletId,
-      fromAddress: demoFromAddress,
+      fromAddress: _testSignerAddress,
       reqId: randomReqId(),
     );
     expect(

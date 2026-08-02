@@ -20,7 +20,11 @@ void main() {
             publicKey: Uint8List.fromList([4, ...List<int>.filled(64, 1)]),
           ),
           AccountRecord(
-              coin: 195, address: 'Tabc', path: "m/44'/195'/0'/0/0", index: 0),
+            coin: 195,
+            address: 'Tabc',
+            path: "m/44'/195'/0'/0/0",
+            index: 0,
+          ),
         ],
       );
       final decoded = AirgapPayload.decode(payload.encode()) as AccountExport;
@@ -39,9 +43,10 @@ void main() {
       );
       expect(
         () => AccountExport(
-            walletId: 'w',
-            walletName: 'n',
-            accounts: [for (var i = 0; i < 9; i++) rec(i)]),
+          walletId: 'w',
+          walletName: 'n',
+          accounts: [for (var i = 0; i < 9; i++) rec(i)],
+        ),
         throwsA(isA<PayloadError>()),
       );
     });
@@ -54,7 +59,7 @@ void main() {
         2: 'é' * 22,
         3: 'n',
         4: [
-          {0: 60, 1: 'a', 2: 'p', 3: 0}
+          {0: 60, 1: 'a', 2: 'p', 3: 0},
         ],
       });
       expect(() => AirgapPayload.decode(bytes), throwsA(isA<PayloadError>()));
@@ -67,23 +72,53 @@ void main() {
         2: 'x' * 33,
         3: 'n',
         4: [
-          {0: 60, 1: 'a', 2: 'p', 3: 0}
+          {0: 60, 1: 'a', 2: 'p', 3: 0},
         ],
       });
       expect(() => AirgapPayload.decode(bytes), throwsA(isA<PayloadError>()));
+    });
+
+    test('unknown root and nested account fields are rejected', () {
+      final rootUnknown = cborEncode({
+        0: 1,
+        1: 1,
+        2: 'w',
+        3: 'n',
+        4: [
+          {0: 60, 1: 'a', 2: 'p', 3: 0},
+        ],
+        99: 'malleable extension',
+      });
+      final nestedUnknown = cborEncode({
+        0: 1,
+        1: 1,
+        2: 'w',
+        3: 'n',
+        4: [
+          {0: 60, 1: 'a', 2: 'p', 3: 0, 99: 1},
+        ],
+      });
+      expect(
+        () => AirgapPayload.decode(rootUnknown),
+        throwsA(isA<PayloadError>()),
+      );
+      expect(
+        () => AirgapPayload.decode(nestedUnknown),
+        throwsA(isA<PayloadError>()),
+      );
     });
   });
 
   group('SignRequest', () {
     SignRequest build({int created = 1000, int expires = 1600}) => SignRequest(
-          reqId: _reqId(),
-          walletId: 'WLT-3E8A91',
-          coin: 195,
-          rawTx: Uint8List.fromList([0xde, 0xad]),
-          summary: {0: 'to', 1: '120'},
-          createdAt: created,
-          expiresAt: expires,
-        );
+      reqId: _reqId(),
+      walletId: 'WLT-3E8A91',
+      coin: 195,
+      rawTx: Uint8List.fromList([0xde, 0xad]),
+      summary: {0: 'to', 1: '120'},
+      createdAt: created,
+      expiresAt: expires,
+    );
 
     test('roundtrips and exposes reqIdHex', () {
       final decoded = AirgapPayload.decode(build().encode()) as SignRequest;
@@ -114,8 +149,10 @@ void main() {
     });
 
     test('expiresAt before createdAt rejected', () {
-      expect(() => build(created: 100, expires: 50),
-          throwsA(isA<PayloadError>()));
+      expect(
+        () => build(created: 100, expires: 50),
+        throwsA(isA<PayloadError>()),
+      );
     });
 
     test('rawTx over 32KB rejected', () {
@@ -128,6 +165,15 @@ void main() {
           createdAt: 0,
           expiresAt: 10,
         ),
+        throwsA(isA<PayloadError>()),
+      );
+    });
+
+    test('unknown sign-request field is rejected', () {
+      final decoded = cborDecode(build().encode()) as Map<Object?, Object?>;
+      decoded[99] = 1;
+      expect(
+        () => AirgapPayload.decode(cborEncode(decoded)),
         throwsA(isA<PayloadError>()),
       );
     });
@@ -147,6 +193,21 @@ void main() {
       expect(decoded.txHash, '0xhash');
       expect(decoded.signedTx, [1, 2, 3]);
     });
+
+    test('unknown sign-result field is rejected', () {
+      final bytes = cborEncode({
+        0: 1,
+        1: 3,
+        2: _reqId(),
+        3: 'w',
+        4: 501,
+        5: Uint8List.fromList([1]),
+        6: 'signer',
+        7: 'hash',
+        99: 0,
+      });
+      expect(() => AirgapPayload.decode(bytes), throwsA(isA<PayloadError>()));
+    });
   });
 
   group('version and type gating', () {
@@ -161,13 +222,22 @@ void main() {
     });
 
     test('non-map root rejected', () {
-      expect(() => AirgapPayload.decode(cborEncode(42)),
-          throwsA(isA<PayloadError>()));
+      expect(
+        () => AirgapPayload.decode(cborEncode(42)),
+        throwsA(isA<PayloadError>()),
+      );
     });
 
     test('malformed CBOR surfaces as PayloadError', () {
       expect(
         () => AirgapPayload.decode(Uint8List.fromList([0x42, 0x00])),
+        throwsA(isA<PayloadError>()),
+      );
+    });
+
+    test('oversized direct decode input is rejected before CBOR parsing', () {
+      expect(
+        () => AirgapPayload.decode(Uint8List(AirgapLimits.maxPayload + 1)),
         throwsA(isA<PayloadError>()),
       );
     });

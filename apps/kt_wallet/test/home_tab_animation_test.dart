@@ -3,14 +3,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/src/screens/home_screen.dart';
 
+import 'support/test_wallet_scope.dart';
+
 Widget _app({bool reduceMotion = false}) => MaterialApp(
   debugShowCheckedModeBanner: false,
   locale: const Locale('zh'),
   localizationsDelegates: AppLocalizations.localizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,
-  home: MediaQuery(
-    data: MediaQueryData(disableAnimations: reduceMotion),
-    child: const HomeScreen(),
+  home: withTestWalletScope(
+    MediaQuery(
+      data: MediaQueryData(disableAnimations: reduceMotion),
+      child: const HomeScreen(),
+    ),
   ),
 );
 

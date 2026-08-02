@@ -23,16 +23,16 @@ void main() {
   ) => SignerWalletController(
     storage: storage,
     records: records,
-        crypto: crypto,
-        deviceProbe: () async => const DeviceState(
-          networkReachable: false,
-          airplaneMode: true,
-          bluetoothOn: false,
-          devicePasscodeSet: true,
-          biometricEnrolled: true,
-          screenCaptured: false,
-          rootedOrJailbroken: false,
-        ),
+    crypto: crypto,
+    deviceProbe: () async => const DeviceState(
+      networkReachable: false,
+      airplaneMode: true,
+      bluetoothOn: false,
+      devicePasscodeSet: true,
+      biometricEnrolled: true,
+      screenCaptured: false,
+      rootedOrJailbroken: false,
+    ),
     random: Random(42),
     pinIterations: 500,
   );
@@ -53,6 +53,24 @@ void main() {
     }
     await tester.pumpAndSettle();
   }
+
+  test('onboarding persists the caller-localized wallet name', () async {
+    for (final localizedName in const ['Main wallet', 'メインウォレット']) {
+      final storage = InMemoryVaultStorage();
+      final records = InMemorySignRecordPersistence();
+      final crypto = MockCoreCrypto();
+      final wallet = controller(storage, records, crypto);
+
+      final words = await wallet.beginCreate();
+      wallet.markMnemonicVerified(words);
+      await wallet.setPin('135790');
+      await wallet.completeOnboarding(walletName: localizedName);
+
+      expect(wallet.metadata?.name, localizedName);
+      expect(wallet.buildAccountExport().walletName, localizedName);
+      expect(wallet.metadata?.name, isNot('主钱包'));
+    }
+  });
 
   testWidgets('full live loop: create → real PIN → sign → replay blocked', (
     tester,
@@ -126,6 +144,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('钱包创建完成'), findsOneWidget);
     expect(wallet.hasWallet, isTrue);
+    expect(wallet.metadata?.name, '主钱包');
     expect(wallet.pendingMnemonic, isNull, reason: 'mnemonic must not linger');
     expect(storage.values.containsKey(SecureVault.mnemonicKey), isFalse);
     expect(crypto.storedWalletCount, 1);
@@ -216,16 +235,19 @@ void main() {
     final storage = InMemoryVaultStorage();
     final records = InMemorySignRecordPersistence();
     final crypto = MockCoreCrypto();
-    await records.put(
-      const SignatureRecord(
-        reqId: '7f3a2c915ed408b6',
-        date: 1786000000,
-        coin: 'slip44:195',
-        operation: 'transfer',
-        toAddress: 'T',
-        amount: '1',
-        status: RequestStatus.signed,
+    expect(
+      await records.reserve(
+        const SignatureRecord(
+          reqId: '7f3a2c915ed408b6',
+          date: 1786000000,
+          coin: 'slip44:195',
+          operation: 'transfer',
+          toAddress: 'T',
+          amount: '1',
+          status: RequestStatus.scanned,
+        ),
       ),
+      isTrue,
     );
     final wallet = controller(storage, records, crypto);
     await wallet.pinLock.setPin('135790');
@@ -250,7 +272,21 @@ void main() {
       ColdSignerApp(walletController: wallet, initialLocation: '/delete'),
     );
     await tester.pumpAndSettle();
+
+    final deleteButton = find.widgetWithText(FilledButton, '永久删除钱包');
+    expect(tester.widget<FilledButton>(deleteButton).onPressed, isNull);
+    await tester.enterText(
+      find.byKey(const ValueKey('delete-confirmation-input')),
+      '删除钱包',
+    );
+    await tester.pump();
+    expect(tester.widget<FilledButton>(deleteButton).onPressed, isNotNull);
     await tester.tap(find.text('永久删除钱包'));
+    await tester.pumpAndSettle();
+    for (final digit in '135790'.split('')) {
+      await tester.tap(find.byKey(ValueKey('pin-key-$digit')));
+      await tester.pump();
+    }
     await tester.pumpAndSettle();
     await tester.tap(find.text('永久删除钱包').last); // confirm dialog
     await tester.pumpAndSettle();

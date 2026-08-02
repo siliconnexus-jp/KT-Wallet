@@ -1,0 +1,51 @@
+global:
+  resolve_timeout: 5m
+
+# This checked-in policy is intentionally destination-free. It gives the
+# production Alertmanager a durable alert inbox, grouping, inhibition and
+# silencing without committing an operator address or credential. Operators
+# must add an external receiver in a root-owned overlay before claiming that a
+# human is paged.
+route:
+  receiver: local-observation-default
+  group_by: [alertname, service, severity, environment, network]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - receiver: local-observation-untrusted
+      matchers:
+        - 'trust="untrusted-client-report"'
+      group_wait: 2m
+      group_interval: 15m
+      repeat_interval: 12h
+    - receiver: local-observation-critical
+      matchers:
+        - 'severity="critical"'
+      group_wait: 10s
+      group_interval: 2m
+      repeat_interval: 30m
+    - receiver: local-observation-warning
+      matchers:
+        - 'severity="warning"'
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 2h
+
+receivers:
+  - name: local-observation-default
+  - name: local-observation-critical
+  - name: local-observation-warning
+  - name: local-observation-untrusted
+
+inhibit_rules:
+  - source_matchers:
+      - 'severity="critical"'
+    target_matchers:
+      - 'severity=~"warning|info"'
+    equal: [environment, service]
+  - source_matchers:
+      - 'severity="warning"'
+    target_matchers:
+      - 'severity="info"'
+    equal: [environment, service]

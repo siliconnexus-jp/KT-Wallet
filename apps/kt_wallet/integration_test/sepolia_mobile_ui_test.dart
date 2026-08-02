@@ -1,3 +1,6 @@
+import 'support/e2e_credential_batch.dart';
+import 'support/e2e_wallet_cleanup.dart';
+
 import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +14,7 @@ import 'package:kt_wallet/src/wallets/wallet_model.dart';
 const _mnemonic = String.fromEnvironment('SEPOLIA_E2E_MNEMONIC');
 
 void main() {
+  requireFreshE2eCredentialBatchIfConfigured();
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('home displays live funded Sepolia ETH and Test USDT', (
@@ -27,6 +31,7 @@ void main() {
       mnemonic: _mnemonic,
       requireAuth: false,
     );
+    registerE2eWalletCleanup(crypto, walletId);
     final addresses = await crypto.deriveAddresses(walletId);
     final wallets = WalletController(
       WalletManager(

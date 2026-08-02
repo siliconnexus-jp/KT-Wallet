@@ -1,7 +1,7 @@
 name: core_crypto
-description: "A new Flutter plugin project."
+description: Native key storage, authentication, backup encryption, and Wallet Core signing for KT Wallet.
 version: 0.0.1
-homepage:
+repository: https://github.com/siliconnexus-jp/KT-Wallet
 
 environment:
   sdk: ^3.12.2

@@ -55,11 +55,6 @@ func (g *Gateway) GetChainParams(ctx context.Context, params json.RawMessage) (a
 		return nil, rpcErr
 	}
 
-	key := network + "|" + p.Address
-	if v, ok := g.paramsCache.Get(key); ok {
-		return v, nil
-	}
-
 	evm := g.evm[network]
 	nonce, err := evm.TransactionCount(ctx, p.Address)
 	if err != nil {
@@ -78,7 +73,6 @@ func (g *Gateway) GetChainParams(ctx context.Context, params json.RawMessage) (a
 	}
 	res.Fees.Slow, res.Fees.Standard, res.Fees.Fast = tiers[0], tiers[1], tiers[2]
 
-	g.paramsCache.Set(key, res)
 	return res, nil
 }
 

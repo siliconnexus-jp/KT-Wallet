@@ -25,120 +25,142 @@ SignRequest _request({String walletId = _localWallet, int expiresAt = 2000}) =>
 Future<CachedSignRecordStore> _store(SignRecordPersistence p) =>
     CachedSignRecordStore.load(p);
 
+Future<void> _recordSigned(
+  InMemorySignRecordPersistence persistence,
+  SignRequest request,
+) async {
+  final reserved = SignatureRecord(
+    reqId: request.reqIdHex,
+    walletId: request.walletId,
+    date: 1500,
+    coin: 'tron',
+    operation: 'tokenTransfer',
+    toAddress: 'Tabc',
+    amount: '120',
+    status: RequestStatus.scanned,
+  );
+  expect(await persistence.reserve(reserved), isTrue);
+  expect(
+    await persistence.finalizeReservation(
+      SignatureRecord(
+        reqId: request.reqIdHex,
+        walletId: request.walletId,
+        date: 1500,
+        coin: 'tron',
+        operation: 'tokenTransfer',
+        toAddress: 'Tabc',
+        amount: '120',
+        status: RequestStatus.signed,
+      ),
+    ),
+    isTrue,
+  );
+}
+
 SignRequestValidator _validator(
   SignRecordStore records, {
   bool allowed = true,
   int now = 1500,
-}) =>
-    SignRequestValidator(
-      localWalletId: _localWallet,
-      records: records,
-      transactionAllowed: (_) => allowed,
-      clock: () => DateTime.fromMillisecondsSinceEpoch(now * 1000),
-    );
+}) => SignRequestValidator(
+  localWalletId: _localWallet,
+  records: records,
+  transactionAllowed: (_) => allowed,
+  clock: () => DateTime.fromMillisecondsSinceEpoch(now * 1000),
+);
 
 void main() {
-  test('first sign: validates, signs, records signed before result shown',
-      () async {
-    final persistence = InMemorySignRecordPersistence();
-    final req = _request();
+  test(
+    'first sign: validates, signs, records signed before result shown',
+    () async {
+      final persistence = InMemorySignRecordPersistence();
+      final req = _request();
 
-    final result = _validator(await _store(persistence)).validate(req);
-    expect(result.isOk, isTrue);
+      final result = _validator(await _store(persistence)).validate(req);
+      expect(result.isOk, isTrue);
 
-    final session = SignSession();
-    session.dispatch(SignEvent.framesComplete);
-    session.dispatch(SignEvent.validationPassed);
-    session.dispatch(SignEvent.userConfirm);
-    session.dispatch(SignEvent.authOk);
+      final session = SignSession();
+      session.dispatch(SignEvent.framesComplete);
+      session.dispatch(SignEvent.validationPassed);
+      session.dispatch(SignEvent.userConfirm);
+      session.dispatch(SignEvent.authOk);
 
-    // Record BEFORE showing the result QR (crash-safety ordering).
-    await persistence.put(SignatureRecord(
-      reqId: req.reqIdHex,
-      date: 1500,
-      coin: 'tron',
-      operation: 'tokenTransfer',
-      toAddress: 'Tabc',
-      amount: '120',
-      status: RequestStatus.signed,
-    ));
-    session.dispatch(SignEvent.signComplete);
-    expect(session.state, SignState.resultDisplaying);
-  });
+      // Record BEFORE showing the result QR (crash-safety ordering).
+      await _recordSigned(persistence, req);
+      session.dispatch(SignEvent.signComplete);
+      expect(session.state, SignState.resultDisplaying);
+    },
+  );
 
-  test('re-scanning an already-signed request is rejected as duplicate',
-      () async {
-    final persistence = InMemorySignRecordPersistence();
-    final req = _request();
-    await persistence.put(SignatureRecord(
-      reqId: req.reqIdHex,
-      date: 1500,
-      coin: 'tron',
-      operation: 'tokenTransfer',
-      toAddress: 'Tabc',
-      amount: '120',
-      status: RequestStatus.signed,
-    ));
+  test(
+    're-scanning an already-signed request is rejected as duplicate',
+    () async {
+      final persistence = InMemorySignRecordPersistence();
+      final req = _request();
+      await _recordSigned(persistence, req);
 
-    final result = _validator(await _store(persistence)).validate(req);
-    expect(result.code, ValidationCode.duplicate);
-    expect(result.detail, 'signed');
-  });
+      final result = _validator(await _store(persistence)).validate(req);
+      expect(result.code, ValidationCode.duplicate);
+      expect(result.detail, 'signed');
+    },
+  );
 
-  test('a previously-rejected request stays refused (no second chance)',
-      () async {
-    final persistence = InMemorySignRecordPersistence();
-    final req = _request();
-    await persistence.put(SignatureRecord(
-      reqId: req.reqIdHex,
-      date: 1500,
-      coin: 'tron',
-      operation: 'unknown',
-      toAddress: '',
-      amount: '',
-      status: RequestStatus.rejected,
-    ));
-    final result = _validator(await _store(persistence)).validate(req);
-    expect(result.code, ValidationCode.duplicate);
-  });
+  test(
+    'a previously-consumed request stays refused (no second chance)',
+    () async {
+      final persistence = InMemorySignRecordPersistence();
+      final req = _request();
+      expect(
+        await persistence.reserve(
+          SignatureRecord(
+            reqId: req.reqIdHex,
+            walletId: req.walletId,
+            date: 1500,
+            coin: 'tron',
+            operation: 'unknown',
+            toAddress: '',
+            amount: '',
+            status: RequestStatus.scanned,
+          ),
+        ),
+        isTrue,
+      );
+      final result = _validator(await _store(persistence)).validate(req);
+      expect(result.code, ValidationCode.duplicate);
+    },
+  );
 
   test('unsupported transaction never reaches the signed state', () async {
     final persistence = InMemorySignRecordPersistence();
     final req = _request();
-    final result =
-        _validator(await _store(persistence), allowed: false).validate(req);
+    final result = _validator(
+      await _store(persistence),
+      allowed: false,
+    ).validate(req);
     expect(result.code, ValidationCode.unsupportedTransaction);
 
-    // Session mirrors the block and records a rejection.
+    // Session mirrors the block. No key operation or anti-replay mutation is
+    // necessary because validation failed before signing began.
     final session = SignSession();
     session.dispatch(SignEvent.framesComplete);
     session.dispatch(SignEvent.validationRejected);
     expect(session.state, SignState.riskBlocked);
-    await persistence.put(SignatureRecord(
-      reqId: req.reqIdHex,
-      date: 1500,
-      coin: 'tron',
-      operation: 'unknown',
-      toAddress: '',
-      amount: '',
-      status: RequestStatus.rejected,
-    ));
-    // A later re-scan is refused.
-    final again = _validator(await _store(persistence)).validate(req);
-    expect(again.code, ValidationCode.duplicate);
+    expect(await persistence.all(), isEmpty);
   });
 
   test('a foreign-wallet request is rejected', () async {
     final persistence = InMemorySignRecordPersistence();
-    final result = _validator(await _store(persistence))
-        .validate(_request(walletId: 'OTHER'));
+    final result = _validator(
+      await _store(persistence),
+    ).validate(_request(walletId: 'OTHER'));
     expect(result.code, ValidationCode.badWallet);
   });
 
   test('an expired request is rejected', () async {
     final persistence = InMemorySignRecordPersistence();
-    final result = _validator(await _store(persistence), now: 3000)
-        .validate(_request());
+    final result = _validator(
+      await _store(persistence),
+      now: 3000,
+    ).validate(_request());
     expect(result.code, ValidationCode.expired);
   });
 }

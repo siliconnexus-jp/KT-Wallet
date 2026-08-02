@@ -40,6 +40,16 @@ class AirgapFrame {
   static const headerLength = 2 + 1 + 8 + 2 + 2 + 4;
   static const maxTotal = 256;
 
+  /// A QR frame larger than this is not a valid AIRGAP-V1 camera payload.
+  /// The protocol's normal chunk is 400 bytes; 4 KiB leaves ample room for
+  /// field tuning while bounding hostile direct decoder inputs.
+  static const maxChunkLength = 4 * 1024;
+  static const maxWireLength = headerLength + maxChunkLength;
+
+  /// Conservative bound checked before base64 decoding camera text. Base64
+  /// expands bytes by at most 4/3 plus padding.
+  static const maxQrTextLength = ((maxWireLength + 2) ~/ 3) * 4;
+
   Uint8List encode() {
     final out = BytesBuilder();
     out.addByte(magic0);
@@ -64,6 +74,9 @@ class AirgapFrame {
     if (bytes.length < headerLength) {
       throw FragmentError('frame shorter than header');
     }
+    if (bytes.length > maxWireLength) {
+      throw FragmentError('frame exceeds maximum wire length');
+    }
     if (bytes[0] != magic0 || bytes[1] != magic1) {
       throw FragmentError('bad magic');
     }
@@ -83,13 +96,23 @@ class AirgapFrame {
     }
     final chunk = Uint8List.fromList(bytes.sublist(headerLength));
     return AirgapFrame(
-      reqId: reqId, seq: seq, total: total, crc: crc & 0xFFFFFFFF, chunk: chunk);
+      reqId: reqId,
+      seq: seq,
+      total: total,
+      crc: crc & 0xFFFFFFFF,
+      chunk: chunk,
+    );
   }
 }
 
 class Fragmenter {
-  Fragmenter({this.chunkSize = 400})
-      : assert(chunkSize > 0, 'chunkSize must be positive');
+  Fragmenter({this.chunkSize = 400}) {
+    if (chunkSize <= 0 || chunkSize > AirgapFrame.maxChunkLength) {
+      throw FragmentError(
+        'chunkSize must be between 1 and ${AirgapFrame.maxChunkLength}',
+      );
+    }
+  }
 
   /// Chunk payload byte budget per frame. Default calibrated for mid-range
   /// phone scan reliability (DD §3.2); overridable after P7 field tuning.

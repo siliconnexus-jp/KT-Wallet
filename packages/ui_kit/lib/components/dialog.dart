@@ -38,7 +38,10 @@ class KtDialog extends StatelessWidget {
       elevation: 0,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 360),
+        constraints: BoxConstraints(
+          maxWidth: 360,
+          maxHeight: MediaQuery.sizeOf(context).height - 48,
+        ),
         child: Material(
           color: theme.surface,
           clipBehavior: Clip.antiAlias,
@@ -78,14 +81,18 @@ class KtDialog extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                DefaultTextStyle(
-                  style: TextStyle(
-                    fontFamily: KtFonts.ui,
-                    fontSize: 14,
-                    height: 1.55,
-                    color: theme.text2,
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: DefaultTextStyle(
+                      style: TextStyle(
+                        fontFamily: KtFonts.ui,
+                        fontSize: 14,
+                        height: 1.55,
+                        color: theme.text2,
+                      ),
+                      child: content,
+                    ),
                   ),
-                  child: content,
                 ),
                 const SizedBox(height: 22),
                 Row(

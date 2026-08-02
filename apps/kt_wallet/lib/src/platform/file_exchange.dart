@@ -24,6 +24,81 @@ class PickedFile {
   final Uint8List bytes;
 }
 
+const pickedFileDisplayNameMaxRunes = 80;
+
+/// Reduces a provider-controlled document identifier to a safe display name.
+/// The value is presentation only and is never used to reopen the document.
+String sanitizePickedFileName(Object? value) {
+  if (value is! String || value.isEmpty) return '';
+  final slash = value.lastIndexOf('/');
+  final backslash = value.lastIndexOf(r'\');
+  final leaf = value.substring((slash > backslash ? slash : backslash) + 1);
+  final cleaned = <int>[];
+  var previousWasSpace = false;
+  for (final rune in leaf.runes) {
+    final forbidden =
+        rune <= 0x1F ||
+        (rune >= 0x7F && rune <= 0x9F) ||
+        rune == 0x061C ||
+        (rune >= 0x200B && rune <= 0x200F) ||
+        (rune >= 0x2028 && rune <= 0x202E) ||
+        rune == 0x2060 ||
+        (rune >= 0x2066 && rune <= 0x2069) ||
+        rune == 0xFEFF;
+    if (forbidden) continue;
+    final spaceLike =
+        rune == 0x20 ||
+        rune == 0xA0 ||
+        rune == 0x1680 ||
+        (rune >= 0x2000 && rune <= 0x200A) ||
+        rune == 0x202F ||
+        rune == 0x205F ||
+        rune == 0x3000;
+    if (spaceLike) {
+      if (cleaned.isNotEmpty && !previousWasSpace) cleaned.add(0x20);
+      previousWasSpace = true;
+      continue;
+    }
+    cleaned.add(rune);
+    previousWasSpace = false;
+  }
+  while (cleaned.isNotEmpty && cleaned.last == 0x20) {
+    cleaned.removeLast();
+  }
+  if (cleaned.isEmpty) return '';
+  if (cleaned.length > pickedFileDisplayNameMaxRunes) {
+    const suffixRunes = 23;
+    final prefixRunes = pickedFileDisplayNameMaxRunes - suffixRunes - 1;
+    final shortened = <int>[
+      ...cleaned.take(prefixRunes),
+      0x2026,
+      ...cleaned.skip(cleaned.length - suffixRunes),
+    ];
+    return String.fromCharCodes(shortened);
+  }
+  final name = String.fromCharCodes(cleaned);
+  return name == '.' || name == '..' ? '' : name;
+}
+
+/// The selected document exceeded the bounded read requested by the caller.
+/// This is distinct from cancellation so the UI can explain why nothing was
+/// imported without exposing a provider path or diagnostic.
+class FileTooLargeException implements Exception {
+  const FileTooLargeException();
+}
+
+enum FilePickFailure { unavailable, failed }
+
+/// The system document picker could not be opened or could not return the
+/// selected bytes. Cancellation is represented by `null`; keeping failures as
+/// exceptions prevents an iCloud/Drive/provider outage from looking like the
+/// user simply dismissed the sheet.
+class FilePickException implements Exception {
+  const FilePickException(this.failure);
+
+  final FilePickFailure failure;
+}
+
 /// Hands a file to the system document picker and takes one back.
 ///
 /// On iOS this is `UIDocumentPickerViewController`, which is what puts
@@ -75,29 +150,57 @@ class FileExchange {
   /// Presents the system file picker. Returns null when the user cancels.
   ///
   /// [extensions] filters what is selectable; an empty list allows anything.
-  Future<PickedFile?> pickFile({List<String> extensions = const []}) async {
+  Future<PickedFile?> pickFile({
+    List<String> extensions = const [],
+    required int maxBytes,
+  }) async {
+    if (maxBytes <= 0) throw ArgumentError.value(maxBytes, 'maxBytes');
     try {
       final res = await channel.invokeMapMethod<String, Object?>('pickFile', {
         'extensions': extensions,
+        'maxBytes': maxBytes,
       });
-      if (res == null || res['cancelled'] == true) return null;
+      if (res == null) throw const FilePickException(FilePickFailure.failed);
+      if (res['cancelled'] == true) return null;
       final bytes = res['bytes'];
-      if (bytes is! Uint8List) return null;
-      return PickedFile(name: (res['name'] as String?) ?? '', bytes: bytes);
+      if (bytes is! Uint8List) {
+        throw const FilePickException(FilePickFailure.failed);
+      }
+      if (bytes.length > maxBytes) throw const FileTooLargeException();
+      return PickedFile(
+        name: sanitizePickedFileName(res['name']),
+        bytes: bytes,
+      );
     } on MissingPluginException {
-      return null;
-    } on PlatformException {
-      return null;
+      throw const FilePickException(FilePickFailure.unavailable);
+    } on PlatformException catch (error) {
+      if (error.code == 'FILE_TOO_LARGE') {
+        throw const FileTooLargeException();
+      }
+      throw const FilePickException(FilePickFailure.failed);
+    } on FileTooLargeException {
+      rethrow;
+    } on FilePickException {
+      rethrow;
+    } catch (_) {
+      // A native implementation returning the wrong channel shape is a
+      // failure, never cancellation. Do not expose the cast/runtime error.
+      throw const FilePickException(FilePickFailure.failed);
     }
   }
 }
 
 /// Keeps whatever it was handed and replays a scripted pick.
 class FakeFileExchange implements FileExchange {
-  FakeFileExchange({this.saveOutcome = FileExchangeOutcome.done, this.pick});
+  FakeFileExchange({
+    this.saveOutcome = FileExchangeOutcome.done,
+    this.pick,
+    this.pickFailure,
+  });
 
   final FileExchangeOutcome saveOutcome;
   PickedFile? pick;
+  FilePickException? pickFailure;
 
   final List<({String name, Uint8List bytes})> saved = [];
   int pickCount = 0;
@@ -112,8 +215,22 @@ class FakeFileExchange implements FileExchange {
   }
 
   @override
-  Future<PickedFile?> pickFile({List<String> extensions = const []}) async {
+  Future<PickedFile?> pickFile({
+    List<String> extensions = const [],
+    required int maxBytes,
+  }) async {
     pickCount++;
-    return pick;
+    final failure = pickFailure;
+    if (failure != null) throw failure;
+    final selected = pick;
+    if (selected != null && selected.bytes.length > maxBytes) {
+      throw const FileTooLargeException();
+    }
+    return selected == null
+        ? null
+        : PickedFile(
+            name: sanitizePickedFileName(selected.name),
+            bytes: selected.bytes,
+          );
   }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../l10n/app_localizations.dart';
+
 /// Color set for [PinDots] + [PinPad] so the same numpad renders on the
 /// light settings sheets (wallet palette) and the dark lock screen (signer
 /// palette).
@@ -128,9 +130,10 @@ class _PinKeyState extends State<_PinKey> {
   @override
   Widget build(BuildContext context) {
     final empty = widget.value.isEmpty;
+    final l10n = AppLocalizations.of(context);
     return Semantics(
       button: !empty,
-      label: widget.value == 'del' ? 'Delete' : widget.value,
+      label: widget.value == 'del' ? l10n.pinKeyDelete : widget.value,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: empty ? null : (_) => setState(() => _pressed = true),

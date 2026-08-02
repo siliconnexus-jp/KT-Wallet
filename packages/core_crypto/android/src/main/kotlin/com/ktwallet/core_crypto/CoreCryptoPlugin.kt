@@ -1,6 +1,5 @@
 package com.ktwallet.core_crypto
 
-import android.util.Log
 import androidx.annotation.NonNull
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
@@ -25,9 +24,21 @@ class CoreCryptoPlugin :
     private lateinit var channel: MethodChannel
     private val keystore = KeystoreManager()
     private val cipher = EntropyCipher()
+    private val portableBackupCipher = PortableBackupCipher()
     private lateinit var authGate: AuthGate
     private var activity: FragmentActivity? = null
     private lateinit var blobStore: BlobStore
+    private val walletStorageLock = Any()
+
+    private val walletIdMethods = setOf(
+        "storeWallet",
+        "deriveAddresses",
+        "derivePublicKeys",
+        "signTransaction",
+        "exportMnemonic",
+        "createBackup",
+        "deleteWallet",
+    )
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel = MethodChannel(binding.binaryMessenger, "kt/core_crypto")
@@ -51,15 +62,39 @@ class CoreCryptoPlugin :
 
     override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
         try {
+            // Validate before any BiometricPrompt or filesystem/Keychain work.
+            // The Dart API checks too, but the native MethodChannel is a trust
+            // boundary and must not accept path separators or arbitrary IDs.
+            if (call.method in walletIdMethods) {
+                requireValidWalletId(call.argument<Any?>("walletId"))
+            }
             when (call.method) {
                 "generateMnemonic" ->
-                    result.success(WalletCoreBridge.generateMnemonic(call.arg("strength", 128)))
+                    result.success(
+                        WalletCoreBridge.generateMnemonic(
+                            requireMnemonicStrength(call.argument<Any?>("strength")),
+                        ),
+                    )
                 "validateMnemonic" ->
-                    result.success(WalletCoreBridge.isValidMnemonic(call.arg("mnemonic", "")))
+                    result.success(
+                        WalletCoreBridge.isValidMnemonic(
+                            requireMnemonicText(call.argument<Any?>("mnemonic")),
+                        ),
+                    )
                 "validateWord" ->
-                    result.success(WalletCoreBridge.isValidWord(call.arg("word", "")))
-                "suggestWords" ->
-                    result.success(WalletCoreBridge.suggest(call.arg("prefix", "")))
+                    result.success(
+                        WalletCoreBridge.isValidWord(
+                            requireWordText(call.argument<Any?>("word")),
+                        ),
+                    )
+                "suggestWords" -> {
+                    val prefix = requireSuggestionPrefix(call.argument<Any?>("prefix"))
+                    val limit = requireSuggestionLimit(call.argument<Any?>("limit"))
+                    result.success(
+                        if (prefix.isBlank()) emptyList()
+                        else WalletCoreBridge.suggest(prefix).take(limit),
+                    )
+                }
                 // Prompts before writing, and iOS does not — a platform
                 // requirement, not a policy difference, so do NOT "align" them.
                 // The Keystore key is created with
@@ -70,7 +105,12 @@ class CoreCryptoPlugin :
                 // exportMnemonic / signTransaction / deleteWallet always
                 // authenticate.
                 "storeWallet" -> {
-                    if (call.arg("requireAuth", true)) {
+                    val mnemonic = requireMnemonicText(call.argument<Any?>("mnemonic"))
+                    if (!WalletCoreBridge.isValidMnemonic(mnemonic)) {
+                        throw WalletCoreBridge.InvalidMnemonicException()
+                    }
+                    optionalKdfPassword(call.argument<Any?>("kdfPassword"))
+                    if (optionalNativeBoolean(call.argument<Any?>("requireAuth"), true)) {
                         promptThen(result, "Protect wallet") {
                             storeWallet(call)
                             true
@@ -94,8 +134,8 @@ class CoreCryptoPlugin :
                 else -> result.notImplemented()
             }
         } catch (e: Exception) {
-            // Never forward raw exception text (may carry library internals).
-            Log.e("KtCoreCrypto", "${call.method} failed: ${e.javaClass.name}")
+            // Neither logs nor the channel receive exception text: native
+            // crypto failures may carry wallet/transaction context.
             result.error(mapError(e), null, errorDetails(e))
         }
     }
@@ -103,21 +143,46 @@ class CoreCryptoPlugin :
     // ---- operations --------------------------------------------------------
 
     private fun storeWallet(call: MethodCall) {
-        val walletId = call.arg<String>("walletId", "")
-        val mnemonic = call.arg<String>("mnemonic", "")
-        val requireAuth = call.arg("requireAuth", true)
+        val walletId = requireValidWalletId(call.argument<Any?>("walletId"))
+        val mnemonic = requireMnemonicText(call.argument<Any?>("mnemonic"))
+        val requireAuth = optionalNativeBoolean(call.argument<Any?>("requireAuth"), true)
         val entropy = WalletCoreBridge.entropyFromMnemonic(mnemonic)
-        val password = call.argOrNull<String>("kdfPassword")
+        val password = optionalKdfPassword(call.argument<Any?>("kdfPassword"))
         val usesKdf = !password.isNullOrEmpty()
         var inner: ByteArray = entropy
         try {
             // Header byte flags KDF presence so reads fail closed without the
             // password (enforces invariant 5 at the native layer).
-            inner = if (usesKdf) cipher.seal(entropy, password!!) else entropy
+            inner = if (usesKdf) {
+                cipher.seal(entropy, requireNotNull(password))
+            } else {
+                entropy
+            }
             val withHeader = byteArrayOf(if (usesKdf) 1 else 0) + inner
-            val sealed = keystore.seal(walletId, withHeader, requireAuth)
-            withHeader.fill(0)
-            blobStore.write(walletId, sealed)
+            try {
+                synchronized(walletStorageLock) {
+                    if (blobStore.exists(walletId) || keystore.exists(walletId)) {
+                        throw WalletAlreadyExistsException()
+                    }
+                    try {
+                        val sealed = keystore.seal(walletId, withHeader, requireAuth)
+                        try {
+                            blobStore.writeNew(walletId, sealed)
+                        } finally {
+                            sealed.fill(0)
+                        }
+                    } catch (e: Exception) {
+                        // Creating a Keystore key and its ciphertext file cannot be
+                        // one OS transaction. If the file commit fails, remove the
+                        // newly-created key so no stale authentication policy can
+                        // be reused by a later wallet with this id.
+                        runCatching { keystore.deleteKey(walletId) }
+                        throw e
+                    }
+                }
+            } finally {
+                withHeader.fill(0)
+            }
         } finally {
             entropy.fill(0)
             if (inner !== entropy) inner.fill(0)
@@ -125,14 +190,19 @@ class CoreCryptoPlugin :
     }
 
     private fun withEntropy(call: MethodCall, block: (ByteArray) -> Unit) {
-        val walletId = call.arg<String>("walletId", "")
+        val walletId = requireValidWalletId(call.argument<Any?>("walletId"))
         // Auth-bound Keystore reads succeed because promptThen() already ran a
         // BiometricPrompt on this thread; non-auth-bound wallets read directly.
         val stored = keystore.open(walletId, blobStore.read(walletId))
         if (stored.isEmpty()) throw EntropyCipher.OpenFailedException()
-        val flag = stored[0].toInt()
+        val flag = try {
+            requireStoredWalletFlag(stored[0].toInt())
+        } catch (e: Exception) {
+            stored.fill(0)
+            throw e
+        }
         val payload = stored.copyOfRange(1, stored.size)
-        val password = call.argOrNull<String>("kdfPassword")
+        val password = optionalKdfPassword(call.argument<Any?>("kdfPassword"))
         if (flag == 1 && password.isNullOrEmpty()) {
             stored.fill(0); payload.fill(0)
             throw EntropyCipher.OpenFailedException() // KDF wallet, no password
@@ -140,6 +210,7 @@ class CoreCryptoPlugin :
         var entropy = payload
         try {
             entropy = if (flag == 1) cipher.open(payload, password!!) else payload
+            requireEntropySize(entropy)
             block(entropy)
         } finally {
             stored.fill(0)
@@ -161,12 +232,15 @@ class CoreCryptoPlugin :
     }
 
     private fun signTransaction(call: MethodCall, result: Result) {
+        // Decode before opening the system prompt: malformed callers must not
+        // make the user authenticate for an operation that can never run.
+        val coin = requireSupportedCoin(call.argument<Any?>("coin"))
+        val input = requireSigningInput(call.argument<Any?>("signingInput"))
         promptThen(result, "Authorize transaction signing") {
-            val coin = call.arg<String>("coin", "")
-            val input = call.arg<ByteArray>("signingInput", ByteArray(0))
             var signed: WalletCoreBridge.Signed? = null
             withEntropy(call) { signed = WalletCoreBridge.sign(it, coin, input) }
-            mapOf("signedTx" to signed!!.signedTx, "txHash" to signed!!.txHash)
+            val completed = requireNotNull(signed)
+            mapOf("signedTx" to completed.signedTx, "txHash" to completed.txHash)
         }
     }
 
@@ -183,10 +257,10 @@ class CoreCryptoPlugin :
      *  Keystore key that never leaves this device, and its optional KDF layer
      *  may use a different password. */
     private fun createBackup(call: MethodCall, result: Result) {
+        val password = requireBackupPassword(call.argument<Any?>("password"))
         promptThen(result, "Create an encrypted backup") {
-            val password = call.arg<String>("password", "")
             var sealed = ByteArray(0)
-            withEntropy(call) { sealed = cipher.seal(it, password) }
+            withEntropy(call) { sealed = portableBackupCipher.seal(it, password) }
             sealed
         }
     }
@@ -195,9 +269,14 @@ class CoreCryptoPlugin :
      *  device, so the password is the whole gate, and a device prompt would
      *  only inconvenience the owner restoring onto a phone they just set up. */
     private fun readBackup(call: MethodCall): String {
-        val blob = call.arg<ByteArray>("blob", ByteArray(0))
-        val password = call.arg<String>("password", "")
-        val entropy = cipher.open(blob, password)
+        val blob = requireBackupBlob(call.argument<Any?>("blob"))
+        val password = requireBackupPassword(call.argument<Any?>("password"))
+        val formatVersion = requireNativeInt(call.argument<Any?>("formatVersion"))
+        val entropy = openBackupPayload(
+            formatVersion = formatVersion,
+            portableOpen = { portableBackupCipher.open(blob, password) },
+            legacyOpen = { cipher.open(blob, password) },
+        )
         try {
             return WalletCoreBridge.exportMnemonic(entropy)
         } finally {
@@ -207,63 +286,95 @@ class CoreCryptoPlugin :
 
     private fun deleteWallet(call: MethodCall, result: Result) {
         promptThen(result, "Confirm wallet deletion") {
-            val walletId = call.arg<String>("walletId", "")
+            val walletId = requireValidWalletId(call.argument<Any?>("walletId"))
             blobStore.delete(walletId)
             keystore.deleteKey(walletId)
             true
         }
     }
 
-    /** Runs a biometric prompt, then [action] on success. Failures feed the
-     *  AuthGate ladder and surface AUTH_* error codes. */
+    /** Runs a biometric prompt, then [action] on success.
+     *
+     * Terminal provider/device errors never feed the persisted failure
+     * ladder: no hardware, no enrollment, timeout and system lockout do not
+     * prove that the user supplied a wrong credential.
+     */
     private fun promptThen(result: Result, reason: String, action: () -> Any) {
         val act = activity
-        if (act == null) { result.error("SIGN_FAILED", "no activity", null); return }
+        if (act == null) { result.error("SIGN_FAILED", null, null); return }
         try {
             authGate.ensureNotLocked()
         } catch (e: AuthGate.LockedException) {
             result.error("AUTH_LOCKED", null, mapOf("cooldownSec" to e.cooldownSec)); return
         }
+        val lifecycleHost = act as? CoreCryptoAuthLifecycleHost
+        var lifecycleFinished = false
+        fun finishLifecycle() {
+            if (lifecycleFinished) return
+            lifecycleFinished = true
+            runCatching { lifecycleHost?.onCoreCryptoAuthFinished() }
+        }
+        runCatching { lifecycleHost?.onCoreCryptoAuthStarted() }
         val executor: Executor = act.mainExecutor
-        val prompt = BiometricPrompt(
-            act, executor,
-            object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(r: BiometricPrompt.AuthenticationResult) {
-                    authGate.onSuccess()
-                    try {
-                        result.success(action())
-                    } catch (e: Exception) {
-                        result.error(mapError(e), e.message, errorDetails(e))
-                    }
+        val callback = object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(r: BiometricPrompt.AuthenticationResult) {
+                finishLifecycle()
+                authGate.onSuccess()
+                try {
+                    result.success(action())
+                } catch (e: Exception) {
+                    result.error(mapError(e), null, errorDetails(e))
                 }
+            }
 
-                override fun onAuthenticationError(code: Int, msg: CharSequence) {
-                    if (code == BiometricPrompt.ERROR_USER_CANCELED ||
-                        code == BiometricPrompt.ERROR_NEGATIVE_BUTTON
-                    ) {
-                        result.error("AUTH_CANCELLED", null, null); return
-                    }
-                    try {
-                        authGate.onFailure()
-                    } catch (e: AuthGate.LockedException) {
-                        result.error("AUTH_LOCKED", null, mapOf("cooldownSec" to e.cooldownSec)); return
-                    } catch (_: AuthGate.FailedException) {
-                    }
-                    result.error("AUTH_FAILED", null, null)
+            override fun onAuthenticationError(code: Int, msg: CharSequence) {
+                finishLifecycle()
+                when (classifyPromptAuthError(code)) {
+                    PromptAuthDisposition.CANCELLED ->
+                        result.error("AUTH_CANCELLED", null, null)
+                    PromptAuthDisposition.SYSTEM_LOCKED ->
+                        result.error(
+                            "AUTH_LOCKED",
+                            null,
+                            mapOf("cooldownSec" to 0, "systemLockout" to true),
+                        )
+                    PromptAuthDisposition.UNAVAILABLE ->
+                        result.error(
+                            "AUTH_UNAVAILABLE",
+                            null,
+                            mapOf("nativeCode" to code),
+                        )
                 }
+            }
 
-                override fun onAuthenticationFailed() { /* biometric mismatch, retry */ }
-            },
-        )
-        prompt.authenticate(
-            BiometricPrompt.PromptInfo.Builder()
-                .setTitle(reason)
-                .setAllowedAuthenticators(
-                    androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                        androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL,
-                )
-                .build(),
-        )
+            override fun onAuthenticationFailed() {
+                // BiometricPrompt keeps the prompt open and the OS owns
+                // retry/lockout. There is no terminal result to send yet.
+            }
+        }
+        runPromptStart(start = {
+            val prompt = BiometricPrompt(act, executor, callback)
+            prompt.authenticate(
+                BiometricPrompt.PromptInfo.Builder()
+                    .setTitle(reason)
+                    .setAllowedAuthenticators(
+                        androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                            androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL,
+                    )
+                    .build(),
+            )
+        }, onError = { e ->
+            finishLifecycle()
+            // Fragment state, a missing provider Activity, or vendor prompt
+            // setup failures must complete the MethodChannel exactly once.
+            // Throwing here leaves Dart waiting forever and can strand a
+            // signing request after the user already confirmed its details.
+            result.error(
+                "AUTH_UNAVAILABLE",
+                null,
+                null,
+            )
+        })
     }
 
     private fun mapError(e: Exception): String = when (e) {
@@ -272,7 +383,14 @@ class CoreCryptoPlugin :
         is WalletCoreBridge.SignFailedException -> "SIGN_FAILED"
         is WalletCoreBridge.UnavailableException -> "CRYPTO_UNAVAILABLE"
         is WalletNotFoundException -> "WALLET_NOT_FOUND"
+        is WalletAlreadyExistsException -> "WALLET_EXISTS"
+        is WalletStorageException -> "SIGN_FAILED"
+        is StoredWalletCorruptedException -> "STORE_CORRUPTED"
         is EntropyCipher.OpenFailedException -> "STORE_CORRUPTED"
+        is PortableBackupCipher.OpenFailedException -> "STORE_CORRUPTED"
+        is BackupFormatVersionException -> "INVALID_INPUT"
+        is InvalidWalletIdException -> "INVALID_INPUT"
+        is InvalidNativeArgumentException -> "INVALID_INPUT"
         is android.security.keystore.KeyPermanentlyInvalidatedException ->
             "BIOMETRY_CHANGED"
         else -> "SIGN_FAILED"
@@ -282,9 +400,25 @@ class CoreCryptoPlugin :
         if (e is AuthGate.LockedException) mapOf("cooldownSec" to e.cooldownSec) else null
 }
 
-// ---- MethodCall helpers ---------------------------------------------------
+internal class BackupFormatVersionException : Exception("unsupported backup format")
 
-private fun <T> MethodCall.arg(name: String, default: T): T =
-    (argument<T>(name)) ?: default
-
-private fun <T> MethodCall.argOrNull(name: String): T? = argument<T>(name)
+/**
+ * Opens one backup payload without weakening the new portable format.
+ *
+ * Only legacy v1 may fall back to Android's historical Argon2id payload. A v2
+ * file never incurs that 64 MiB KDF and can never be silently reinterpreted as
+ * a different format after authentication fails.
+ */
+internal fun openBackupPayload(
+    formatVersion: Int,
+    portableOpen: () -> ByteArray,
+    legacyOpen: () -> ByteArray,
+): ByteArray = when (formatVersion) {
+    2 -> portableOpen()
+    1 -> try {
+        portableOpen()
+    } catch (_: PortableBackupCipher.OpenFailedException) {
+        legacyOpen()
+    }
+    else -> throw BackupFormatVersionException()
+}

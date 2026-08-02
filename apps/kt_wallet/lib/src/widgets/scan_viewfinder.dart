@@ -62,6 +62,7 @@ class ScanViewfinder extends StatefulWidget {
     this.onSimulatedTap,
     this.onScanned,
     this.availability,
+    this.semanticLabel,
   });
 
   /// Height of the outer viewfinder card (the screens use 360–400).
@@ -78,6 +79,7 @@ class ScanViewfinder extends StatefulWidget {
 
   /// Availability probe override; defaults to [CameraAvailability.instance].
   final CameraAvailability? availability;
+  final String? semanticLabel;
 
   @override
   State<ScanViewfinder> createState() => _ScanViewfinderState();
@@ -201,13 +203,25 @@ class _ScanViewfinderState extends State<ScanViewfinder> {
   Widget build(BuildContext context) {
     final camera = _camera;
     if (!_attempting || camera == null) {
-      return GestureDetector(
-        onTap: isFlutterTestEnv ? widget.onSimulatedTap : null,
-        child: _card(
-          clip: false,
-          child: isFlutterTestEnv
-              ? Center(child: _scanFrame(withIcon: true))
-              : _fallbackContent(context),
+      return Semantics(
+        button: isFlutterTestEnv && widget.onSimulatedTap != null,
+        label: widget.semanticLabel,
+        child: GestureDetector(
+          onTap: isFlutterTestEnv ? widget.onSimulatedTap : null,
+          child: _card(
+            clip: false,
+            child: isFlutterTestEnv
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: _scanFrame(withIcon: true),
+                      ),
+                    ),
+                  )
+                : _fallbackContent(context),
+          ),
         ),
       );
     }
@@ -215,25 +229,38 @@ class _ScanViewfinderState extends State<ScanViewfinder> {
       valueListenable: camera,
       builder: (context, state, _) {
         final live = state.isRunning && state.error == null;
-        return GestureDetector(
-          // While the real camera runs, taps must not inject demo frames into
-          // the same aggregation session; the fallback keeps the demo tap.
-          onTap: live || !isFlutterTestEnv ? null : widget.onSimulatedTap,
-          child: _card(
-            clip: true,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                MobileScanner(
-                  controller: camera,
-                  onDetect: _onDetect,
-                  // Both builders render the simulated viewfinder so a camera
-                  // that never comes up (or dies) degrades to the demo look.
-                  placeholderBuilder: (context) => _fallbackContent(context),
-                  errorBuilder: (context, _) => _fallbackContent(context),
-                ),
-                if (live) Center(child: _scanFrame(withIcon: false)),
-              ],
+        return Semantics(
+          button: !live && isFlutterTestEnv && widget.onSimulatedTap != null,
+          label: widget.semanticLabel,
+          child: GestureDetector(
+            // While the real camera runs, taps must not inject demo frames into
+            // the same aggregation session; the fallback keeps the demo tap.
+            onTap: live || !isFlutterTestEnv ? null : widget.onSimulatedTap,
+            child: _card(
+              clip: true,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  MobileScanner(
+                    controller: camera,
+                    onDetect: _onDetect,
+                    // Both builders render the simulated viewfinder so a camera
+                    // that never comes up (or dies) degrades to the demo look.
+                    placeholderBuilder: (context) => _fallbackContent(context),
+                    errorBuilder: (context, _) => _fallbackContent(context),
+                  ),
+                  if (live)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: _scanFrame(withIcon: false),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         );

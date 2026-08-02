@@ -1,8 +1,12 @@
 import 'package:cold_signer/main.dart';
+import 'package:cold_signer/l10n/app_localizations.dart';
+import 'package:cold_signer/src/screens/signer_signing_screens.dart';
 import 'package:cold_signer/src/signing/demo_airgap.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 Future<void> _open(WidgetTester tester, String galleryEntry) async {
@@ -29,7 +33,58 @@ Future<void> _sendScreenshotEvent(WidgetTester tester) async {
   await tester.pump();
 }
 
+Future<void> _sendCaptureChanged(WidgetTester tester, bool captured) async {
+  await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+    'kt/screen_security',
+    const StandardMethodCodec().encodeMethodCall(
+      MethodCall('screenCaptureChanged', captured),
+    ),
+    (_) {},
+  );
+  await tester.pump();
+}
+
 void main() {
+  testWidgets(
+    'all mnemonic routes hold Android FLAG_SECURE for their lifetime',
+    (tester) async {
+      const channel = MethodChannel('kt/secure_screen');
+      final calls = <bool>[];
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      AndroidScreenshotProtection.resetForTest();
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+        call,
+      ) async {
+        if (call.method == 'setSecure') calls.add(call.arguments as bool);
+        return null;
+      });
+      try {
+        for (final entry in const ['C3 助记词展示', 'C4 助记词校验', 'C13 助记词输入']) {
+          calls.clear();
+          await _open(tester, entry);
+          await tester.idle();
+          expect(calls, contains(true), reason: '$entry must block capture');
+
+          await tester.pumpWidget(const SizedBox());
+          await tester.idle();
+          expect(calls.last, isFalse, reason: '$entry must release protection');
+        }
+
+        calls.clear();
+        await _open(tester, 'C1 欢迎');
+        await tester.idle();
+        expect(calls, isNot(contains(true)));
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        AndroidScreenshotProtection.resetForTest();
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          null,
+        );
+      }
+    },
+  );
+
   testWidgets('screenshot event warns without hiding phrase words', (
     tester,
   ) async {
@@ -44,6 +99,24 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('当前屏幕已被截图，请注意您的钱包安全'), findsOneWidget);
+  });
+
+  testWidgets('active recording conceals phrase until capture stops', (
+    tester,
+  ) async {
+    await _open(tester, 'C3 助记词展示');
+    expect(find.byKey(const Key('mnemonic-word-0')), findsOneWidget);
+
+    try {
+      await _sendCaptureChanged(tester, true);
+      expect(find.byKey(const Key('mnemonic-word-0')), findsNothing);
+      expect(find.text('检测到录屏或投屏'), findsOneWidget);
+
+      await _sendCaptureChanged(tester, false);
+      expect(find.byKey(const Key('mnemonic-word-0')), findsOneWidget);
+    } finally {
+      ScreenSecurity.resetForTest();
+    }
   });
 
   testWidgets('create onboarding: welcome → warn → show → verify → password', (
@@ -187,7 +260,39 @@ void main() {
   testWidgets('result QR: void signature confirms, snackbars, returns home', (
     tester,
   ) async {
-    await _open(tester, 'C9 签名结果二维码');
+    final request = demoSignRequest();
+    final router = GoRouter(
+      initialLocation: '/result-qr',
+      routes: [
+        GoRoute(
+          path: '/result-qr',
+          builder: (_, _) => SignerResultQrScreen(
+            request: request,
+            result: demoSignResult(request),
+            fragmentChunkSize: demoChunkSize,
+          ),
+        ),
+        GoRoute(
+          path: '/home',
+          builder: (_, _) => const Scaffold(body: Text('扫描待签名交易')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      MaterialApp.router(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: ThemeData(
+          brightness: Brightness.dark,
+          scaffoldBackgroundColor: SignerColors.bg,
+        ),
+        routerConfig: router,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('签名完成'), findsOneWidget);
     await tester.tap(find.text('作废本次签名'));
     await tester.pumpAndSettle();
     expect(find.text('作废本次签名？'), findsOneWidget); // confirm dialog
@@ -217,7 +322,7 @@ void main() {
     tester,
   ) async {
     await _open(tester, 'C5 离线首页');
-    await tester.tap(find.text('安全检查通过 · 飞行模式已开启'));
+    await tester.tap(find.byKey(const ValueKey('home-security-status')));
     await tester.pumpAndSettle();
     expect(find.text('离线安全检查'), findsOneWidget); // live C2
     expect(find.text('重新检查'), findsOneWidget);

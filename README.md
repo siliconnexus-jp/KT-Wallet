@@ -112,6 +112,17 @@ Transactions are stored locally as `submitted`, `pending`, `confirmed`,
 pending records with chain history so a newly submitted transaction does not
 temporarily disappear.
 
+Broadcasts are single-shot writes. An explicit node rejection is shown as a
+failure, while a timeout, disconnected response, or malformed reply after the
+request starts is kept as an unknown result. The locally derived transaction
+hash and first-attempt time are persisted before submission, so KT Wallet can
+continue reconciliation without automatically sending the transaction again.
+The production Gateway also atomically claims a SHA-256 fingerprint of the
+chain, network, and signed payload in shared Redis before contacting a node.
+Repeated or concurrent POSTs across CDN, proxy, or Gateway instances reuse the
+first outcome and never submit the same signed transaction twice; raw signed
+bytes are not stored.
+
 Pending EVM transactions support:
 
 - **Speed up** — sends a replacement with the same nonce, recipient, value, and
@@ -129,24 +140,106 @@ therefore distinguishes signing, broadcasting, and chain confirmation.
 - Recovery phrases are committed to the native crypto vault under a random
   wallet ID; production flows do not persist the complete phrase in Dart
   secure storage.
+- Dart security metadata uses platform secure storage without a production
+  memory fallback. If that plugin is unavailable, KT Wallet stays locked and
+  KT Cold Signer blocks onboarding and signing until secure storage recovers.
+  The in-memory implementation is available only to an explicit Flutter test
+  environment.
+- A transient native-key or derivation failure never erases the Cold Signer's
+  durable wallet identifier. Failed onboarding attempts independently clean
+  native key material and every PIN/metadata key; a failure in one cleanup
+  step cannot suppress the remaining compensation steps.
+- KT Wallet hot-wallet creation and import commit the native key, derived
+  addresses, and Drift rows as one compensated operation. A failure never
+  publishes a wallet that disappears after restart, duplicate mnemonics are
+  rejected, and startup verifies every persisted address against its native
+  key before wallet content is shown. Transient creation failures keep the
+  uncommitted phrase only in memory so the same verification flow can retry.
+- Wallet deletion is crash-recoverable across native key storage and the Dart
+  database. Both apps durably record deletion intent before erasing a key,
+  hide any pending-deletion wallet on restart, and idempotently finish metadata,
+  PIN, lockout, transaction, and signer-record cleanup.
+- Wallet names, avatar colors, backup status, and ordering are published to
+  the UI only after durable storage succeeds. Reordering writes every affected
+  wallet in one Drift transaction, so a failure cannot persist a partial order.
+- App Lock, authentication, auto-lock, privacy, approval consent, fiat/asset
+  preferences, Gateway/RPC overrides, environment profiles, and custom
+  networks are serialized and published only after durable storage succeeds.
+  Network configuration uses one versioned snapshot, so a partial write cannot
+  silently move signing or broadcasting to a different chain after restart;
+  every affected screen keeps its prior value and reports a save failure.
+- The combined installer's online-wallet/offline-signer device role follows
+  the same commit-before-publish rule. Selection and exit requests are
+  serialized; a storage failure keeps the current mode on screen, reports the
+  error in the active language, and cannot silently change the role on restart.
+- Manual language overrides in both apps accept only English, Simplified
+  Chinese, or Japanese and are also published only after persistence succeeds;
+  invalid stored values return to the system language instead of rendering an
+  unsupported or inconsistent security UI.
 - BIP-39 words and checksums are validated before import. Failed imports do not
   leave a partial wallet.
 - Each Cold Signer signature requires PIN or biometric authentication. PIN
   retry limits and lockout state persist across restarts.
+- A system-auth cancellation, timeout, lockout, or device error remains a
+  failed authentication. Cold Signer offers the App PIN automatically only
+  when the platform has no credential, enrollment, biometric hardware, or
+  usable authentication plugin.
+- Android system-auth prompts are coordinated with the Recents privacy cover:
+  showing `BiometricPrompt` cannot launch a second privacy Activity and orphan
+  the authentication result, while a real background transition still covers
+  the wallet window before Android snapshots it.
+- The signing boundary freezes the parsed request bytes, rechecks device state
+  and expiry immediately before the native key call, and atomically reserves
+  the request ID in durable storage. Concurrent callbacks, process restarts,
+  storage failures, and failed native signing cannot replay the same request.
+- KT Wallet does not publish an offline-signing request or render its QR bytes
+  until the matching `awaitingSig` transaction row is durably committed. A
+  database failure leaves the session empty and shows a localized blocking
+  error, so the Cold Signer cannot sign a request the online wallet would lose
+  after restart.
+- Hot-wallet EVM, TRON, and Solana sends persist the exact user-authorized
+  transaction intent before native signing, then persist the locally derived
+  transaction hash before the first network broadcast. If the node accepts the
+  bytes but its response is lost, the row remains `submitted` and restart
+  polling resolves it from the chain; the UI does not label it failed or invite
+  a second transfer. A failed intent write performs neither signing nor
+  broadcasting.
 - Offline safety checks use `safe`, `unsafe`, and `unknown`; an unavailable
   probe is never displayed as a successful check.
 - Signing is blocked when the signer detects an online connection, screen
   recording, or a failed device-integrity check.
-- Android Cold Signer uses `FLAG_SECURE`. Android 14+ uses the official screen
-  capture callback; iOS uses the system screenshot notification.
+- Android Cold Signer enables `FLAG_SECURE` only while recovery-phrase show,
+  verification, or import routes are visible; ordinary screens remain
+  capturable and Android 14+ reports successful captures with the official
+  callback. iOS warns after a one-shot screenshot and conceals phrase routes
+  while screen recording or mirroring is actively detected.
+- Reviewing an existing Cold Signer backup first invokes the native strong-auth
+  gate, validates the exported BIP-39 phrase, and passes it only through an
+  ephemeral in-memory route object. Authentication failure and direct deep
+  links reveal no phrase; successful review returns to wallet management.
+- Both Android apps disable cloud backup and device-to-device transfer for all
+  local wallet state. The Cold Signer release artifact is additionally checked
+  after manifest merging and must not contain the `INTERNET` permission;
+  `ACCESS_NETWORK_STATE` is retained only to detect connectivity and block
+  signing.
+- On iOS, app files use Complete Data Protection while the device is locked,
+  and the local Documents/Library state is excluded from system backups.
+  Wallet entropy remains in a passcode-required, this-device-only Keychain
+  item. Recovery is through the explicit encrypted backup or recovery phrase,
+  not an implicit app-data restore.
 - Both apps replace their content with a branded privacy cover when entering
   the background or app switcher. Successful screenshots trigger a
   non-blocking security warning where the operating system supports detection.
 - Production routes do not seed sample wallets, fake balances, or simulated
   successful transactions.
+- Online verification recovers the signer from canonical signed bytes and
+  compares the complete EVM, TRON, or Solana transaction/message with the
+  original request. EVM/TRON high-s malleable signatures are rejected.
 
 Security controls reduce risk but cannot make a compromised device safe. Read
-[Security and Risk](SECURITY_AND_RISK.md) before using real assets.
+[Security and Risk](SECURITY_AND_RISK.md) before using real assets. Suspected
+vulnerabilities must be reported privately using the process and response
+targets in [Security Policy](SECURITY.md), never through a public issue.
 
 ## Reliability and data sources
 
@@ -182,7 +275,21 @@ Run the main test suites:
 (cd packages/wallet_data && flutter test)
 (cd apps/kt_wallet && flutter test)
 (cd apps/cold_signer && flutter test)
+tool/audit_dependencies.sh
 ```
+
+`tool/audit_dependencies.sh` requires Go 1.26.5 through toolchain
+auto-selection, verifies all three official Gradle Wrapper JAR/distribution
+checksums, resolves both locked Android Release runtime graphs, enforces both
+CocoaPods lockfiles in deployment mode, runs the Gateway's call-aware
+`govulncheck`, and scans Dart, npm, Go plus the two Android runtime lockfiles
+with pinned OSV-Scanner 2.2.4. Only public package coordinates and versions are
+queried; wallet data and source files are not uploaded. Because CocoaPods is
+not a natively supported OSV lockfile ecosystem, the gate additionally resolves
+each remote Pod tag to an exact upstream commit, verifies the pinned source
+archive checksum, and queries those commits through OSV. The Dart native-assets
+SQLite release tag, bundled source hashes, and final Apple/Android runtime
+version are checked independently.
 
 Build the applications:
 
@@ -191,12 +298,17 @@ Build the applications:
 (cd apps/kt_wallet && flutter build apk)
 (cd apps/cold_signer && flutter build ios --no-codesign)
 (cd apps/cold_signer && flutter build apk)
+tool/check_release_artifact.sh apps/kt_wallet/build/app/outputs/flutter-apk/app-release.apk
+tool/check_release_artifact.sh apps/cold_signer/build/app/outputs/flutter-apk/app-release.apk
+tool/check_apple_release_artifact.sh apps/kt_wallet/build/ios/iphoneos/Runner.app
+tool/check_apple_release_artifact.sh apps/cold_signer/build/ios/iphoneos/Runner.app
 ```
 
-Android builds without Wallet Core use a fail-closed crypto stub: signing and
-key operations return `CRYPTO_UNAVAILABLE` rather than producing placeholder
-cryptography. See [BUILDING.md](BUILDING.md) for Wallet Core setup, package
-credentials, and release-signing requirements.
+Android Debug/test builds without Wallet Core use a fail-closed crypto stub:
+signing and key operations return `CRYPTO_UNAVAILABLE` rather than producing
+placeholder cryptography. Android Release builds refuse to configure unless
+Wallet Core is enabled. See [BUILDING.md](BUILDING.md) for package credentials
+and release-signing requirements.
 
 Recent device and simulator evidence is available in:
 
@@ -243,5 +355,6 @@ The following are intentionally outside the current release scope:
 ## Disclosures
 
 - [Privacy Policy](PRIVACY_POLICY.md)
+- [Security Policy and private reporting](SECURITY.md)
 - [Security and Risk](SECURITY_AND_RISK.md)
 - [Third-party Notices](THIRD_PARTY_NOTICES.md)

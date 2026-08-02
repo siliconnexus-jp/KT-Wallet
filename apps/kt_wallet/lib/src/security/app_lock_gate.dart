@@ -53,7 +53,14 @@ class AppLockGate extends StatefulWidget {
   State<AppLockGate> createState() => _AppLockGateState();
 }
 
-enum _LockState { resolving, lockedBio, lockedPin, enrollPin, unlocked }
+enum _LockState {
+  resolving,
+  lockedBio,
+  lockedPin,
+  enrollPin,
+  storageUnavailable,
+  unlocked,
+}
 
 class _AppLockGateState extends State<AppLockGate> {
   late final AppPrefsController _prefs = widget.prefs ?? AppPrefsController();
@@ -80,7 +87,12 @@ class _AppLockGateState extends State<AppLockGate> {
       setState(() => _state = _LockState.unlocked);
       return;
     }
-    _pinSet = await _pin.isSet();
+    try {
+      _pinSet = await _pin.isSet();
+    } on Object {
+      if (mounted) setState(() => _state = _LockState.storageUnavailable);
+      return;
+    }
     if (_prefs.authMethod == AuthMethod.password && _pinSet) {
       setState(() => _state = _LockState.lockedPin);
       return;
@@ -135,6 +147,16 @@ class _AppLockGateState extends State<AppLockGate> {
     if (mounted) setState(() => _state = _LockState.unlocked);
   }
 
+  void _onStorageUnavailable() {
+    if (mounted) setState(() => _state = _LockState.storageUnavailable);
+  }
+
+  void _retryStorage() {
+    if (!mounted) return;
+    setState(() => _state = _LockState.resolving);
+    _resolve();
+  }
+
   /// The user just established the app PIN from the enrollment state. There is
   /// now a secret to verify against, so subsequent launches take the numpad
   /// path; this launch continues into the wallet.
@@ -170,16 +192,78 @@ class _AppLockGateState extends State<AppLockGate> {
       case _LockState.lockedPin:
         return _LockScreenApp(
           localeController: widget.localeController,
-          body: (l10n) =>
-              _PinLockBody(l10n: l10n, pin: _pin, onVerified: _onPinVerified),
+          body: (l10n) => _PinLockBody(
+            l10n: l10n,
+            pin: _pin,
+            onVerified: _onPinVerified,
+            onStorageUnavailable: _onStorageUnavailable,
+          ),
         );
       case _LockState.enrollPin:
         return _LockScreenApp(
           localeController: widget.localeController,
+          body: (l10n) => _PinEnrollBody(
+            l10n: l10n,
+            pin: _pin,
+            onEnrolled: _onPinEnrolled,
+            onStorageUnavailable: _onStorageUnavailable,
+          ),
+        );
+      case _LockState.storageUnavailable:
+        return _LockScreenApp(
+          localeController: widget.localeController,
           body: (l10n) =>
-              _PinEnrollBody(l10n: l10n, pin: _pin, onEnrolled: _onPinEnrolled),
+              _StorageUnavailableBody(l10n: l10n, onRetry: _retryStorage),
         );
     }
+  }
+}
+
+/// A secure-storage failure is a hard lock, never a reason to silently create
+/// a new PIN or to reveal the wallet. The retry is intentionally explicit so
+/// a transient platform-service restart can recover without weakening the
+/// authentication boundary.
+class _StorageUnavailableBody extends StatelessWidget {
+  const _StorageUnavailableBody({required this.l10n, required this.onRetry});
+
+  final AppLocalizations l10n;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Icon(
+          Icons.gpp_bad_outlined,
+          size: 52,
+          color: SignerColors.danger,
+        ),
+        const SizedBox(height: 18),
+        Text(
+          l10n.secureStorageUnavailableTitle,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 19,
+            fontWeight: FontWeight.w700,
+            color: SignerColors.text,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          l10n.secureStorageUnavailableDesc,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 13,
+            height: 1.6,
+            color: SignerColors.text2,
+          ),
+        ),
+        const SizedBox(height: 24),
+        KtPrimaryButton(label: l10n.actionRetry, onPressed: onRetry),
+      ],
+    );
   }
 }
 
@@ -297,11 +381,13 @@ class _PinLockBody extends StatefulWidget {
     required this.l10n,
     required this.pin,
     required this.onVerified,
+    required this.onStorageUnavailable,
   });
 
   final AppLocalizations l10n;
   final WalletPin pin;
   final VoidCallback onVerified;
+  final VoidCallback onStorageUnavailable;
 
   @override
   State<_PinLockBody> createState() => _PinLockBodyState();
@@ -321,10 +407,16 @@ class _PinLockBodyState extends State<_PinLockBody> {
   /// A lockout persisted from a previous session shows its message before the
   /// first key is even pressed.
   Future<void> _preflightLockout() async {
-    final remaining = await widget.pin.lockRemaining();
-    if (remaining != null && mounted) {
+    final Duration? remaining;
+    try {
+      remaining = await widget.pin.lockRemaining();
+    } on Object {
+      widget.onStorageUnavailable();
+      return;
+    }
+    if (remaining case final activeLockout? when mounted) {
       setState(
-        () => _error = widget.l10n.pinLockedRetry(remaining.inSeconds + 1),
+        () => _error = widget.l10n.pinLockedRetry(activeLockout.inSeconds + 1),
       );
     }
   }
@@ -345,7 +437,13 @@ class _PinLockBodyState extends State<_PinLockBody> {
     if (_entry.length < 6) return;
 
     setState(() => _verifying = true);
-    final verdict = await widget.pin.verify(_entry);
+    final PinVerdict verdict;
+    try {
+      verdict = await widget.pin.verify(_entry);
+    } on Object {
+      if (mounted) widget.onStorageUnavailable();
+      return;
+    }
     if (!mounted) return;
     if (verdict.isOk) {
       widget.onVerified();
@@ -411,11 +509,13 @@ class _PinEnrollBody extends StatefulWidget {
     required this.l10n,
     required this.pin,
     required this.onEnrolled,
+    required this.onStorageUnavailable,
   });
 
   final AppLocalizations l10n;
   final WalletPin pin;
   final VoidCallback onEnrolled;
+  final VoidCallback onStorageUnavailable;
 
   @override
   State<_PinEnrollBody> createState() => _PinEnrollBodyState();
@@ -458,7 +558,12 @@ class _PinEnrollBodyState extends State<_PinEnrollBody> {
       return;
     }
     setState(() => _saving = true);
-    await widget.pin.setPin(_entry);
+    try {
+      await widget.pin.setPin(_entry);
+    } on Object {
+      if (mounted) widget.onStorageUnavailable();
+      return;
+    }
     if (mounted) widget.onEnrolled();
   }
 

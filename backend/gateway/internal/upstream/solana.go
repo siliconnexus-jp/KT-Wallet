@@ -55,6 +55,8 @@ func NewSolana(urls []string, clk clock.Clock, client *http.Client, attemptTimeo
 	return &Solana{pool: NewPool("solana", urls, clk, client, attemptTimeout)}
 }
 
+func (s *Solana) Health() PoolHealth { return s.pool.Health() }
+
 // GetBalance returns the lamport balance of address.
 func (s *Solana) GetBalance(ctx context.Context, address string) (*big.Int, error) {
 	raw, err := s.pool.Call(ctx, "getBalance", []any{address})
@@ -69,7 +71,7 @@ func (s *Solana) GetBalance(ctx context.Context, address string) (*big.Int, erro
 	}
 	v, ok := new(big.Int).SetString(out.Value.String(), 10)
 	if !ok {
-		return nil, &Unavailable{Upstream: "solana", Message: "malformed getBalance value: " + out.Value.String()}
+		return nil, &Unavailable{Upstream: "solana", Message: "malformed getBalance value"}
 	}
 	return v, nil
 }
@@ -420,7 +422,7 @@ type solanaTokenBalance struct {
 // SendTransaction broadcasts a base64-encoded signed transaction and returns
 // its signature.
 func (s *Solana) SendTransaction(ctx context.Context, payloadBase64 string) (string, error) {
-	raw, err := s.pool.Call(ctx, "sendTransaction", []any{payloadBase64, map[string]string{"encoding": "base64"}})
+	raw, err := s.pool.CallOnce(ctx, "sendTransaction", []any{payloadBase64, map[string]string{"encoding": "base64"}})
 	if err != nil {
 		return "", err
 	}

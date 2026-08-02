@@ -21,11 +21,42 @@ val localProperties = Properties().apply {
     if (file.exists()) file.inputStream().use(::load)
 }
 
+// Both apps live in one workspace. Reuse the main app's ignored local
+// credentials when the independently buildable Cold Signer has no copy;
+// explicit Gradle properties always win and remain the CI/release contract.
+val sharedWalletProperties = Properties().apply {
+    val file = rootProject.file("../../kt_wallet/android/local.properties")
+    if (file.exists()) file.inputStream().use(::load)
+}
+
 val useWalletCore = (
     project.findProperty("walletCore")?.toString()
         ?: localProperties.getProperty("walletCore")
+        ?: sharedWalletProperties.getProperty("walletCore")
         ?: "false"
 ).toBoolean()
+val walletCoreUser = providers.gradleProperty("gpr.user").orNull
+    ?: localProperties.getProperty("gpr.user")
+    ?: sharedWalletProperties.getProperty("gpr.user")
+val walletCoreToken = providers.gradleProperty("gpr.token").orNull
+    ?: localProperties.getProperty("gpr.token")
+    ?: sharedWalletProperties.getProperty("gpr.token")
+val releaseRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+
+if (releaseRequested && !useWalletCore) {
+    throw GradleException(
+        "Android release builds require Trust Wallet Core; set walletCore=true " +
+            "and configure read-only GitHub Packages credentials.",
+    )
+}
+
+if (useWalletCore && (walletCoreUser.isNullOrBlank() || walletCoreToken.isNullOrBlank())) {
+    throw GradleException(
+        "walletCore=true requires gpr.user and a read-only gpr.token.",
+    )
+}
 
 allprojects {
     repositories {
@@ -35,10 +66,8 @@ allprojects {
             maven {
                 url = uri("https://maven.pkg.github.com/trustwallet/wallet-core")
                 credentials {
-                    username = localProperties.getProperty("gpr.user")
-                        ?: providers.gradleProperty("gpr.user").orNull
-                    password = localProperties.getProperty("gpr.token")
-                        ?: providers.gradleProperty("gpr.token").orNull
+                    username = walletCoreUser
+                    password = walletCoreToken
                 }
             }
         }
@@ -78,6 +107,7 @@ android {
 
     defaultConfig {
         minSdk = 24
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     testOptions {
@@ -113,6 +143,13 @@ dependencies {
     //   }
     if (useWalletCore) {
         implementation("com.trustwallet:wallet-core:4.7.0")
+        // Wallet Core 4.7.0 declares protobuf-javalite 3.22.3. Keep the
+        // generated 3.x messages on the supported 3.25 maintenance line while
+        // removing GHSA-735f-pc8j-v9w8 and the later footmitten exposure.
+        // Protobuf guarantees older Java gencode works on a newer runtime in
+        // the same major version; this is also exercised by the native bridge
+        // and release builds below.
+        implementation("com.google.protobuf:protobuf-javalite:3.25.8")
     }
     // Biometric prompt for the AuthGate.
     implementation("androidx.biometric:biometric:1.1.0")
@@ -122,4 +159,6 @@ dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.mockito:mockito-core:5.0.0")
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
 }

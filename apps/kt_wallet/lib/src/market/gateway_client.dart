@@ -1,14 +1,19 @@
 import 'dart:convert';
 
+import 'package:chains/chains.dart' show Amount;
 import 'package:chains/rpc.dart' show GasFeeEstimate, GasFeeEstimateTier;
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:http/http.dart' as http;
 
+import '../rpc/bounded_http_client.dart';
+import 'fiat_math.dart';
+
 /// Thin JSON-RPC 2.0 client for the OPTIONAL KT gateway (`POST {url}/rpc`).
 ///
 /// The gateway is never required: services hold a [GatewayResolver] that
-/// returns null in direct mode, and every gateway failure falls back to the
-/// existing direct chain path (or an honest error where none exists).
+/// returns null in direct mode. Read-only calls may fall back to direct chain
+/// sources. Broadcasts are stricter: only failures proven to occur before an
+/// upstream write may fall back, because a timeout can hide an accepted tx.
 ///
 /// Protocol contract (mirrored by the Go service):
 /// - `kt_health` () → `{"ok": true, "version": "...", "networks": [...]}`
@@ -18,12 +23,25 @@ import 'package:http/http.dart' as http;
 /// - `kt_getPrices` `{symbols}` → `{prices: {SYM: {usd: F}}, cachedAtMs}`
 /// - `kt_getChainParams` `{chain, network?, address}` → decimal nonce +
 ///   3-tier fees
+/// - `kt_simulateEvmTransfer` `{chain, network?, from, to, value, data}` →
+///   exact pending-state `eth_call` return bytes
+/// - `kt_estimateEvmGas` `{chain, network?, from, to, value, data}` →
+///   decimal gas estimate
+/// - `kt_getEvmSpendableBalances`
+///   `{chain, network?, address, tokenContract?}` → uncached pending balances
 /// - `kt_getHistory` `{chain, network?, address, limit?}` → `{status, records}`
 /// - `kt_searchTokens` `{query?, networks?, limit?}` → verified token catalog
+/// - `kt_checkTokenRisk` `{chain, network?, contract}` →
+///   `{status: safe|unsafe|unknown, category?, source}`
+/// - `kt_getEvmTokenApprovals`
+///   `{chain, network?, address, privacyConsent:true}` → outstanding ERC-20
+///   allowances; provider/unsupported failures never become an empty list
 /// - `kt_broadcast` `{chain, network?, payload}` → `{txHash}`
 /// Errors: -32700/-32600/-32601/-32602 protocol, -32000 upstream_error
 /// (data.upstream / data.message carry the node's reason), -32001
-/// rate_limited, -32002 unsupported.
+/// rate_limited, -32002 unsupported, -32003 submission_unknown (a broadcast
+/// may have reached the node, so callers must reconcile by local txHash and
+/// must not submit it again).
 ///
 /// NETWORK SCOPING (release-critical): every chain-scoped method carries the
 /// ACTIVE network id from [networks]. An omitted `network` makes the gateway
@@ -40,7 +58,7 @@ class GatewayClient {
     Set<String>? advertisedNetworks,
     this.timeout = const Duration(seconds: 10),
   }) : baseUrl = _stripTrailingSlash(baseUrl),
-       _client = client ?? http.Client(),
+       _client = BoundedHttpClient(client ?? http.Client()),
        _networks = networks ?? _noNetwork,
        _advertised = advertisedNetworks == null
            ? null
@@ -91,28 +109,41 @@ class GatewayClient {
 
   /// One JSON-RPC 2.0 call (no batches). JSON-RPC errors throw
   /// [GatewayException]; transport failures (non-200, timeout, malformed
-  /// body) throw their native exception types.
+  /// body) throw [GatewayTransportException] without retaining the endpoint
+  /// URL or response body.
   Future<Object?> _call(String method, [Map<String, Object?>? params]) async {
     final id = ++_nextId;
-    final resp = await _client
-        .post(
-          Uri.parse('$baseUrl/rpc'),
-          headers: const {'content-type': 'application/json'},
-          body: jsonEncode({
-            'jsonrpc': '2.0',
-            'id': id,
-            'method': method,
-            'params': ?params,
-          }),
-        )
-        .timeout(timeout);
+    final http.Response resp;
+    try {
+      resp = await _client
+          .post(
+            Uri.parse('$baseUrl/rpc'),
+            headers: const {'content-type': 'application/json'},
+            body: jsonEncode({
+              'jsonrpc': '2.0',
+              'id': id,
+              'method': method,
+              'params': ?params,
+            }),
+          )
+          .timeout(timeout);
+    } on Object {
+      // ClientException includes its URI. A custom gateway URL may contain a
+      // provider credential, so the raw exception must stop here.
+      throw const GatewayTransportException();
+    }
     if (resp.statusCode != 200) {
-      throw http.ClientException(
-        'HTTP ${resp.statusCode}',
-        Uri.parse('$baseUrl/rpc'),
+      throw GatewayTransportException(
+        'gateway returned HTTP ${resp.statusCode}',
       );
     }
-    final decoded = jsonDecode(resp.body);
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(resp.body);
+    } on Object {
+      // FormatException.toString() may include a snippet of the response.
+      throw const GatewayTransportException('invalid gateway response');
+    }
     if (decoded is! Map) {
       throw const FormatException('gateway response is not a JSON object');
     }
@@ -228,13 +259,32 @@ class GatewayClient {
             },
         ],
     });
-    return _parseBalances(result);
+    return _parseBalances(result, chain);
   }
 
-  GatewayBalances _parseBalances(Object? result) {
+  GatewayBalances _parseBalances(Object? result, Coin chain) {
     if (result is! Map) throw const FormatException('bad balances result');
     final native = result['native'];
     if (native is! Map) throw const FormatException('missing native balance');
+    final (expectedDecimals, expectedSymbol) = switch (chain) {
+      Coin.eth => (18, 'ETH'),
+      Coin.polygon => (18, 'POL'),
+      Coin.base => (18, 'ETH'),
+      Coin.arbitrum => (18, 'ETH'),
+      Coin.avalanche => (18, 'AVAX'),
+      Coin.bnb => (18, 'BNB'),
+      Coin.tron => (6, 'TRX'),
+      Coin.solana => (9, 'SOL'),
+    };
+    // Native denomination is a chain protocol constant, not display metadata
+    // the gateway is allowed to redefine. Accepting a mismatched scale can
+    // turn 1 ETH (1e18 wei) into an apparent 1e18 ETH balance before the later
+    // preflight rejects it. Treat the complete chain response as malformed so
+    // callers can use their direct-node fallback instead.
+    if (native['decimals'] != expectedDecimals ||
+        native['symbol'] != expectedSymbol) {
+      throw FormatException('native metadata mismatch for ${chain.name}');
+    }
     final rows = result['tokens'];
     return GatewayBalances(
       native: GatewayNativeBalance(
@@ -310,7 +360,7 @@ class GatewayClient {
         continue;
       }
       try {
-        balances[chain] = _parseBalances(row['result']);
+        balances[chain] = _parseBalances(row['result'], chain);
       } catch (_) {
         failed.add(chain);
       }
@@ -336,17 +386,31 @@ class GatewayClient {
     final changes = <String, double>{};
     for (final entry in prices.entries) {
       final row = entry.value;
-      final usd = row is Map ? row['usd'] : null;
-      if (entry.key is String && usd is num) {
+      final usd = row is Map ? positiveFiniteMarketNumber(row['usd']) : null;
+      if (entry.key is String && usd != null) {
         final symbol = entry.key as String;
-        out[symbol] = usd.toDouble();
+        out[symbol] = usd;
         final change24h = row is Map ? row['change24h'] : null;
-        if (change24h is num) changes[symbol] = change24h.toDouble();
+        final parsedChange = finiteMarketNumber(change24h);
+        if (parsedChange != null) changes[symbol] = parsedChange;
+      }
+    }
+    final rawRates = result['fiatPerUsd'];
+    final rates = <String, double>{'USD': 1};
+    if (rawRates is Map) {
+      for (final entry in rawRates.entries) {
+        final currency = entry.key;
+        final rate = entry.value;
+        final parsedRate = positiveFiniteMarketNumber(rate);
+        if (currency is String && parsedRate != null) {
+          rates[currency.toUpperCase()] = parsedRate;
+        }
       }
     }
     return GatewayPrices(
       usdBySymbol: Map.unmodifiable(out),
       change24hBySymbol: Map.unmodifiable(changes),
+      fiatPerUsd: Map.unmodifiable(rates),
       cachedAtMs: result['cachedAtMs'] is int ? result['cachedAtMs'] as int : 0,
     );
   }
@@ -389,6 +453,125 @@ class GatewayClient {
     );
   }
 
+  /// Exact `eth_call` through the gateway. New transfers use `pending` while
+  /// same-nonce replacements use `latest`, because the replacement is an
+  /// alternative to (not a successor of) the pending candidate.
+  Future<String> simulateEvmTransfer({
+    required Coin chain,
+    required String from,
+    required String to,
+    required BigInt value,
+    required String data,
+    String blockTag = 'pending',
+  }) async {
+    if (blockTag != 'latest' && blockTag != 'pending') {
+      throw ArgumentError.value(blockTag, 'blockTag');
+    }
+    final result = await _evmCall(
+      'kt_simulateEvmTransfer',
+      chain: chain,
+      from: from,
+      to: to,
+      value: value,
+      data: data,
+      blockTag: blockTag,
+    );
+    final returnData = result['returnData'];
+    if (returnData is! String || !_isHexBytes(returnData)) {
+      throw const FormatException('bad EVM simulation result');
+    }
+    return returnData.toLowerCase();
+  }
+
+  /// Exact pending-state `eth_estimateGas` through the gateway.
+  Future<BigInt> estimateEvmGas({
+    required Coin chain,
+    required String from,
+    required String to,
+    required BigInt value,
+    required String data,
+  }) async {
+    final result = await _evmCall(
+      'kt_estimateEvmGas',
+      chain: chain,
+      from: from,
+      to: to,
+      value: value,
+      data: data,
+    );
+    final gas = BigInt.tryParse(_string(result['gas']));
+    if (gas == null || gas <= BigInt.zero) {
+      throw const FormatException('bad EVM gas estimate');
+    }
+    return gas;
+  }
+
+  /// Uncached native and optional ERC-20 balance at the pending state. These
+  /// values authorize a transfer and must not reuse the portfolio cache.
+  Future<GatewayEvmSpendableBalances> getEvmSpendableBalances({
+    required Coin chain,
+    required String address,
+    String? tokenContract,
+  }) async {
+    final network = await _networkParam(chain);
+    final result = await _call('kt_getEvmSpendableBalances', {
+      'chain': chainName(chain),
+      'network': ?network,
+      'address': address,
+      'tokenContract': ?tokenContract,
+    });
+    if (result is! Map) {
+      throw const FormatException('bad EVM spendable balances result');
+    }
+    final native = BigInt.tryParse(
+      _string(result['nativePending'] ?? result['native']),
+    );
+    final nativeLatest = BigInt.tryParse(
+      _string(result['nativeLatest'] ?? result['native']),
+    );
+    final token = tokenContract == null
+        ? null
+        : BigInt.tryParse(_string(result['token']));
+    final pendingAvailable = result['pendingAvailable'];
+    if (native == null ||
+        nativeLatest == null ||
+        native < BigInt.zero ||
+        nativeLatest < BigInt.zero ||
+        (pendingAvailable != null && pendingAvailable is! bool) ||
+        (tokenContract != null && (token == null || token < BigInt.zero))) {
+      throw const FormatException('bad EVM spendable balances result');
+    }
+    return GatewayEvmSpendableBalances(
+      native: native,
+      nativeLatest: nativeLatest,
+      token: token,
+      pendingAvailable: pendingAvailable as bool? ?? true,
+    );
+  }
+
+  Future<Map<Object?, Object?>> _evmCall(
+    String method, {
+    required Coin chain,
+    required String from,
+    required String to,
+    required BigInt value,
+    required String data,
+    String? blockTag,
+  }) async {
+    final network = await _networkParam(chain);
+    final result = await _call(method, {
+      'chain': chainName(chain),
+      'network': ?network,
+      'from': from,
+      'to': to,
+      'value': value.toString(),
+      'data': data,
+      'blockTag': ?blockTag,
+    });
+    if (result is! Map) throw FormatException('bad $method result');
+    return Map<Object?, Object?>.from(result);
+  }
+
   /// `kt_getHistory` — recent transactions of the active network of [chain],
   /// or `unsupported` when the gateway has no indexer for it. Malformed
   /// records are skipped, not fatal.
@@ -418,6 +601,12 @@ class GatewayClient {
       final ts = row['timestampMs'];
       if (hash is! String || ts is! int) continue;
       if (direction != 'in' && direction != 'out') continue;
+      final recordStatus = switch (row['status']) {
+        'ok' || 'confirmed' => GatewayTransactionStatus.confirmed,
+        'failed' => GatewayTransactionStatus.failed,
+        'pending' => GatewayTransactionStatus.pending,
+        _ => GatewayTransactionStatus.unknown,
+      };
       records.add(
         GatewayHistoryRecord(
           id: row['id'] is String ? row['id'] as String : hash,
@@ -435,7 +624,7 @@ class GatewayClient {
               : null,
           verified: row['verified'] == true,
           timestampMs: ts,
-          failed: row['status'] == 'failed',
+          status: recordStatus,
         ),
       );
     }
@@ -500,7 +689,9 @@ class GatewayClient {
           symbol is! String ||
           name is! String ||
           contract is! String ||
-          decimals is! int) {
+          decimals is! int ||
+          decimals < 0 ||
+          decimals > Amount.maxDecimals) {
         continue;
       }
       tokens.add(
@@ -515,6 +706,136 @@ class GatewayClient {
       );
     }
     return List.unmodifiable(tokens);
+  }
+
+  /// `kt_checkTokenRisk` — exact network + contract/mint assessment. A
+  /// transport failure is intentionally NOT converted into `safe`; callers
+  /// catch it and render a distinct unavailable/unknown state.
+  Future<GatewayTokenRisk> checkTokenRisk({
+    required Coin chain,
+    required String contract,
+  }) async {
+    final network = await _networkParam(chain);
+    final result = await _call('kt_checkTokenRisk', {
+      'chain': chainName(chain),
+      'network': ?network,
+      'contract': contract,
+    });
+    if (result is! Map || result['status'] is! String) {
+      throw const FormatException('bad token risk result');
+    }
+    final status = switch (result['status']) {
+      'safe' => GatewayTokenRiskStatus.safe,
+      'unsafe' => GatewayTokenRiskStatus.unsafe,
+      'unknown' => GatewayTokenRiskStatus.unknown,
+      _ => throw const FormatException('unknown token risk status'),
+    };
+    final category = result['category'];
+    final source = result['source'];
+    if (category != null && category is! String) {
+      throw const FormatException('bad token risk category');
+    }
+    if (source is! String || source.isEmpty) {
+      throw const FormatException('missing token risk source');
+    }
+    return GatewayTokenRisk(
+      status: status,
+      category: category as String?,
+      source: source,
+    );
+  }
+
+  /// `kt_getEvmTokenApprovals` — outstanding ERC-20 allowances for [address].
+  /// This call sends the public wallet address and chain to the Gateway's
+  /// configured external approval provider. Callers must obtain explicit
+  /// user consent first; the method keeps that proof visible on the wire.
+  Future<GatewayTokenApprovals> getEvmTokenApprovals({
+    required Coin chain,
+    required String address,
+    required bool privacyConsent,
+  }) async {
+    if (!privacyConsent) {
+      throw ArgumentError.value(
+        privacyConsent,
+        'privacyConsent',
+        'must be true after explicit user consent',
+      );
+    }
+    final network = await _networkParam(chain);
+    final result = await _call('kt_getEvmTokenApprovals', {
+      'chain': chainName(chain),
+      'network': ?network,
+      'address': address,
+      'privacyConsent': true,
+    });
+    if (result is! Map ||
+        result['status'] != 'ok' ||
+        result['source'] is! String ||
+        result['network'] is! String ||
+        result['approvals'] is! List) {
+      throw const FormatException('bad token approvals result');
+    }
+    final rows = <GatewayTokenApproval>[];
+    for (final raw in result['approvals'] as List) {
+      if (raw is! Map) {
+        throw const FormatException('bad token approval row');
+      }
+      final tokenAddress = raw['tokenAddress'];
+      final tokenName = raw['tokenName'];
+      final tokenSymbol = raw['tokenSymbol'];
+      final decimals = raw['decimals'];
+      final balance = raw['balance'];
+      final spender = raw['spender'];
+      final spenderName = raw['spenderName'];
+      final spenderTag = raw['spenderTag'];
+      final spenderTrusted = raw['spenderTrusted'];
+      final amount = raw['amount'];
+      final unlimited = raw['unlimited'];
+      final approvedAt = raw['approvedAt'];
+      final transaction = raw['transaction'];
+      final risk = raw['risk'];
+      if (tokenAddress is! String ||
+          tokenName is! String ||
+          tokenSymbol is! String ||
+          decimals is! int ||
+          balance is! String ||
+          spender is! String ||
+          spenderName is! String ||
+          spenderTag is! String ||
+          spenderTrusted is! bool ||
+          amount is! String ||
+          unlimited is! bool ||
+          approvedAt is! int ||
+          transaction is! String ||
+          (risk != 'unsafe' && risk != 'unknown')) {
+        throw const FormatException('bad token approval row');
+      }
+      rows.add(
+        GatewayTokenApproval(
+          tokenAddress: tokenAddress,
+          tokenName: tokenName,
+          tokenSymbol: tokenSymbol,
+          decimals: decimals,
+          balance: balance,
+          spender: spender,
+          spenderName: spenderName,
+          spenderTag: spenderTag,
+          spenderTrusted: spenderTrusted,
+          amount: amount,
+          unlimited: unlimited,
+          approvedAt: approvedAt,
+          transaction: transaction,
+          risk: risk == 'unsafe'
+              ? GatewayTokenApprovalRisk.unsafe
+              : GatewayTokenApprovalRisk.unknown,
+        ),
+      );
+    }
+    return GatewayTokenApprovals(
+      network: result['network'] as String,
+      source: result['source'] as String,
+      approvals: List.unmodifiable(rows),
+    );
   }
 
   /// `kt_broadcast` — pushes an encoded signed payload (hex for EVM, base64
@@ -564,9 +885,9 @@ class GatewayClient {
 }
 
 /// A JSON-RPC error answered by the gateway. [code] follows the contract
-/// (-32000 upstream_error, -32001 rate_limited, -32002 unsupported, plus the
-/// standard protocol codes); for upstream errors [upstreamMessage] carries the
-/// node's own reason.
+/// (-32000 upstream_error, -32001 rate_limited, -32002 unsupported, -32003
+/// submission_unknown, plus the standard protocol codes); for upstream errors
+/// [upstreamMessage] carries the node's own reason.
 class GatewayException implements Exception {
   const GatewayException({
     required this.code,
@@ -587,13 +908,32 @@ class GatewayException implements Exception {
   /// The contract's "no indexer / not implemented for this chain" code.
   bool get isUnsupported => code == -32002;
 
+  /// Applied by the gateway before an upstream node is contacted.
+  bool get isRateLimited => code == -32001;
+
   /// The contract's "a node accepted the request and rejected it" code.
   bool get isUpstreamError => code == -32000;
+
+  /// The broadcast was attempted but no authoritative node answer survived.
+  bool get isSubmissionUnknown => code == -32003;
 
   @override
   String toString() =>
       'GatewayException($code, $message'
       '${upstreamMessage == null ? '' : ', upstream: $upstreamMessage'})';
+}
+
+/// A privacy-safe gateway transport failure. It never stores the request URL,
+/// response body or the lower-level exception text.
+final class GatewayTransportException implements Exception {
+  const GatewayTransportException([
+    this.message = 'gateway transport unavailable',
+  ]);
+
+  final String message;
+
+  @override
+  String toString() => 'GatewayTransportException: $message';
 }
 
 /// Raised INSTEAD of contacting the gateway when the active network is one it
@@ -701,11 +1041,13 @@ class GatewayPrices {
   const GatewayPrices({
     required this.usdBySymbol,
     required this.change24hBySymbol,
+    required this.fiatPerUsd,
     required this.cachedAtMs,
   });
 
   final Map<String, double> usdBySymbol;
   final Map<String, double> change24hBySymbol;
+  final Map<String, double> fiatPerUsd;
   final int cachedAtMs;
 }
 
@@ -714,6 +1056,34 @@ class GatewayChainParams {
 
   final int nonce;
   final GasFeeEstimate fees;
+}
+
+class GatewayEvmSpendableBalances {
+  const GatewayEvmSpendableBalances({
+    required this.native,
+    required this.nativeLatest,
+    required this.token,
+    this.pendingAvailable = true,
+  });
+
+  /// Pending-state balance after the provider applies known mempool entries.
+  final BigInt native;
+
+  /// Latest mined balance before pending entries are applied.
+  final BigInt nativeLatest;
+  final BigInt? token;
+  final bool pendingAvailable;
+}
+
+bool _isHexBytes(String value) {
+  if (!value.startsWith('0x') || value.length.isOdd) return false;
+  for (final unit in value.codeUnits.skip(2)) {
+    final isDigit = unit >= 48 && unit <= 57;
+    final isLower = unit >= 97 && unit <= 102;
+    final isUpper = unit >= 65 && unit <= 70;
+    if (!isDigit && !isLower && !isUpper) return false;
+  }
+  return true;
 }
 
 class GatewayHistoryRecord {
@@ -729,7 +1099,7 @@ class GatewayHistoryRecord {
     required this.contract,
     required this.verified,
     required this.timestampMs,
-    required this.failed,
+    required this.status,
   });
 
   final String id;
@@ -743,7 +1113,7 @@ class GatewayHistoryRecord {
   final String? contract;
   final bool verified;
   final int timestampMs;
-  final bool failed;
+  final GatewayTransactionStatus status;
 }
 
 class GatewayHistory {
@@ -778,4 +1148,68 @@ class GatewayOfficialToken {
 
   String get identityKey =>
       '$network|${contract.startsWith('0x') ? contract.toLowerCase() : contract}';
+}
+
+enum GatewayTokenRiskStatus { safe, unsafe, unknown }
+
+/// A successful risk-service response. Network/transport failures are not
+/// represented by this type and must stay distinguishable at the UI layer.
+class GatewayTokenRisk {
+  const GatewayTokenRisk({
+    required this.status,
+    required this.source,
+    this.category,
+  });
+
+  final GatewayTokenRiskStatus status;
+  final String source;
+  final String? category;
+}
+
+enum GatewayTokenApprovalRisk { unsafe, unknown }
+
+class GatewayTokenApproval {
+  const GatewayTokenApproval({
+    required this.tokenAddress,
+    required this.tokenName,
+    required this.tokenSymbol,
+    required this.decimals,
+    required this.balance,
+    required this.spender,
+    required this.spenderName,
+    required this.spenderTag,
+    required this.spenderTrusted,
+    required this.amount,
+    required this.unlimited,
+    required this.approvedAt,
+    required this.transaction,
+    required this.risk,
+  });
+
+  final String tokenAddress;
+  final String tokenName;
+  final String tokenSymbol;
+  final int decimals;
+  final String balance;
+  final String spender;
+  final String spenderName;
+  final String spenderTag;
+  final bool spenderTrusted;
+  final String amount;
+  final bool unlimited;
+  final int approvedAt;
+  final String transaction;
+  final GatewayTokenApprovalRisk risk;
+}
+
+class GatewayTokenApprovals {
+  const GatewayTokenApprovals({
+    required this.network,
+    required this.source,
+    required this.approvals,
+  });
+
+  final String network;
+  final String source;
+  final List<GatewayTokenApproval> approvals;
 }

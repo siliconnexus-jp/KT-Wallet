@@ -130,6 +130,18 @@ abstract class AppLocalizations {
   /// **'导入'**
   String get actionImport;
 
+  /// No description provided for @actionValidating.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在校验…'**
+  String get actionValidating;
+
+  /// No description provided for @cameraUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'相机不可用'**
+  String get cameraUnavailable;
+
   /// No description provided for @done.
   ///
   /// In zh, this message translates to:
@@ -298,6 +310,12 @@ abstract class AppLocalizations {
   /// **'导入钱包'**
   String get importWalletTitle;
 
+  /// No description provided for @mnemonicInvalidChecksum.
+  ///
+  /// In zh, this message translates to:
+  /// **'助记词无效，请检查每个单词、单词数量和 BIP-39 校验和。'**
+  String get mnemonicInvalidChecksum;
+
   /// No description provided for @wordCountOption.
   ///
   /// In zh, this message translates to:
@@ -345,6 +363,36 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'启用 Face ID'**
   String get enableFaceId;
+
+  /// No description provided for @biometricUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'此设备尚未设置可用的生物识别或设备认证。'**
+  String get biometricUnavailable;
+
+  /// No description provided for @walletSecureStorageFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包安全存储失败，未保存任何密钥。'**
+  String get walletSecureStorageFailed;
+
+  /// No description provided for @secureStorageUnavailableTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'安全存储不可用'**
+  String get secureStorageUnavailableTitle;
+
+  /// No description provided for @secureStorageUnavailableDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'KT冷钱包无法安全读取钱包、密码和锁定状态，签名功能将保持锁定。请重新启动 App，或从可信来源重新安装。'**
+  String get secureStorageUnavailableDesc;
+
+  /// No description provided for @actionRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试'**
+  String get actionRetry;
 
   /// No description provided for @biometricSkip.
   ///
@@ -417,6 +465,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'安全检查通过 · 飞行模式已开启'**
   String get securityCheckPassed;
+
+  /// No description provided for @offlineStatusConfirmed.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络已断开'**
+  String get offlineStatusConfirmed;
+
+  /// No description provided for @offlineStatusConnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'检测到网络连接'**
+  String get offlineStatusConnected;
+
+  /// No description provided for @offlineStatusUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法确认网络状态'**
+  String get offlineStatusUnknown;
 
   /// No description provided for @scanPendingTx.
   ///
@@ -568,6 +634,96 @@ abstract class AppLocalizations {
   /// **'危险'**
   String get checkLevelBlock;
 
+  /// No description provided for @checkDetailUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法确认状态'**
+  String get checkDetailUnknown;
+
+  /// No description provided for @checkDetailNetworkSafe.
+  ///
+  /// In zh, this message translates to:
+  /// **'未检测到网络连接'**
+  String get checkDetailNetworkSafe;
+
+  /// No description provided for @checkDetailNetworkUnsafe.
+  ///
+  /// In zh, this message translates to:
+  /// **'检测到网络连接'**
+  String get checkDetailNetworkUnsafe;
+
+  /// No description provided for @checkDetailAirplaneSafe.
+  ///
+  /// In zh, this message translates to:
+  /// **'飞行模式已开启'**
+  String get checkDetailAirplaneSafe;
+
+  /// No description provided for @checkDetailAirplaneUnsafe.
+  ///
+  /// In zh, this message translates to:
+  /// **'飞行模式未开启'**
+  String get checkDetailAirplaneUnsafe;
+
+  /// No description provided for @checkDetailBluetoothSafe.
+  ///
+  /// In zh, this message translates to:
+  /// **'蓝牙已关闭'**
+  String get checkDetailBluetoothSafe;
+
+  /// No description provided for @checkDetailBluetoothUnsafe.
+  ///
+  /// In zh, this message translates to:
+  /// **'蓝牙已开启'**
+  String get checkDetailBluetoothUnsafe;
+
+  /// No description provided for @checkDetailPasscodeSafe.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备密码已设置'**
+  String get checkDetailPasscodeSafe;
+
+  /// No description provided for @checkDetailPasscodeUnsafe.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备密码未设置'**
+  String get checkDetailPasscodeUnsafe;
+
+  /// No description provided for @checkDetailBiometricSafe.
+  ///
+  /// In zh, this message translates to:
+  /// **'生物识别可用'**
+  String get checkDetailBiometricSafe;
+
+  /// No description provided for @checkDetailBiometricUnsafe.
+  ///
+  /// In zh, this message translates to:
+  /// **'生物识别不可用'**
+  String get checkDetailBiometricUnsafe;
+
+  /// No description provided for @checkDetailScreenCaptureSafe.
+  ///
+  /// In zh, this message translates to:
+  /// **'未检测到屏幕录制'**
+  String get checkDetailScreenCaptureSafe;
+
+  /// No description provided for @checkDetailScreenCaptureUnsafe.
+  ///
+  /// In zh, this message translates to:
+  /// **'检测到屏幕录制'**
+  String get checkDetailScreenCaptureUnsafe;
+
+  /// No description provided for @checkDetailIntegritySafe.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统完整性检查通过'**
+  String get checkDetailIntegritySafe;
+
+  /// No description provided for @checkDetailIntegrityUnsafe.
+  ///
+  /// In zh, this message translates to:
+  /// **'检测到 root 或越狱'**
+  String get checkDetailIntegrityUnsafe;
+
   /// No description provided for @securityChecking.
   ///
   /// In zh, this message translates to:
@@ -640,6 +796,60 @@ abstract class AppLocalizations {
   /// **'收款地址（To）'**
   String get toAddress;
 
+  /// No description provided for @spenderAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'被授权合约'**
+  String get spenderAddress;
+
+  /// No description provided for @nativeTransferOperation.
+  ///
+  /// In zh, this message translates to:
+  /// **'原生币转账'**
+  String get nativeTransferOperation;
+
+  /// No description provided for @tokenTransferOperation.
+  ///
+  /// In zh, this message translates to:
+  /// **'Token 转账'**
+  String get tokenTransferOperation;
+
+  /// No description provided for @approvalRevokeOperation.
+  ///
+  /// In zh, this message translates to:
+  /// **'撤销 Token 授权'**
+  String get approvalRevokeOperation;
+
+  /// No description provided for @approvalRevokeZeroAllowance.
+  ///
+  /// In zh, this message translates to:
+  /// **'将授权额度设为零'**
+  String get approvalRevokeZeroAllowance;
+
+  /// No description provided for @approvalRevokeSignerNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'这是精确的 ERC-20 approve(被授权合约, 0) 调用，只撤销额度，不会转出 Token。'**
+  String get approvalRevokeSignerNotice;
+
+  /// No description provided for @tokenContractLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'Token 合约'**
+  String get tokenContractLabel;
+
+  /// No description provided for @chainIdLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'Chain ID'**
+  String get chainIdLabel;
+
+  /// No description provided for @maximumFeeBaseUnits.
+  ///
+  /// In zh, this message translates to:
+  /// **'最高网络费（最小单位）'**
+  String get maximumFeeBaseUnits;
+
   /// No description provided for @walletIdLabel.
   ///
   /// In zh, this message translates to:
@@ -688,6 +898,18 @@ abstract class AppLocalizations {
   /// **'该交易包含无法安全解析的内容，KT Cold Signer 已拒绝签名以保护你的资产。'**
   String get signingBlockedDesc;
 
+  /// No description provided for @transactionParseFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法安全解析'**
+  String get transactionParseFailed;
+
+  /// No description provided for @signingFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'签名失败，交易、钱包或认证未通过校验。'**
+  String get signingFailed;
+
   /// No description provided for @unknownContractCallDetected.
   ///
   /// In zh, this message translates to:
@@ -697,7 +919,7 @@ abstract class AppLocalizations {
   /// No description provided for @unknownContractCallDesc.
   ///
   /// In zh, this message translates to:
-  /// **'V1 仅支持原生币和 Token 转账。approve、permit 等授权类调用一律拒绝。'**
+  /// **'仅支持原生币转账、Token 转账和精确的 approve(被授权合约, 0) 撤销。非零 approve、permit 与未知调用一律拒绝。'**
   String get unknownContractCallDesc;
 
   /// No description provided for @authTitle.
@@ -754,6 +976,12 @@ abstract class AppLocalizations {
   /// **'输入 App 密码以完成签名'**
   String get enterPinToSign;
 
+  /// No description provided for @enterPinToDelete.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入 App 密码以继续删除'**
+  String get enterPinToDelete;
+
   /// No description provided for @pinIncorrect.
   ///
   /// In zh, this message translates to:
@@ -795,6 +1023,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'签名已作废'**
   String get signatureVoided;
+
+  /// No description provided for @signResultUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'签名结果不可用'**
+  String get signResultUnavailable;
 
   /// No description provided for @dynamicShard.
   ///
@@ -880,6 +1114,12 @@ abstract class AppLocalizations {
   /// **'定期抽查助记词是否仍能正确抄录'**
   String get mnemonicBackupCheckDesc;
 
+  /// No description provided for @mnemonicReviewFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'认证或助记词校验失败，未显示任何助记词。'**
+  String get mnemonicReviewFailed;
+
   /// No description provided for @deleteWallet.
   ///
   /// In zh, this message translates to:
@@ -889,7 +1129,7 @@ abstract class AppLocalizations {
   /// No description provided for @deleteWalletReqDesc.
   ///
   /// In zh, this message translates to:
-  /// **'需要密码、生物识别和确认文字'**
+  /// **'需要 App 密码和确认文字；已开启系统认证时还必须通过系统认证'**
   String get deleteWalletReqDesc;
 
   /// No description provided for @destroyAllData.
@@ -952,6 +1192,18 @@ abstract class AppLocalizations {
   /// **'截图安全提醒'**
   String get screenCaptureProtection;
 
+  /// No description provided for @screenCaptureBlocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'检测到录屏或投屏'**
+  String get screenCaptureBlocked;
+
+  /// No description provided for @screenCaptureBlockedHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'录屏或投屏期间助记词已隐藏。停止捕获后会自动恢复。'**
+  String get screenCaptureBlockedHint;
+
   /// No description provided for @permanentlyDeleteWallet.
   ///
   /// In zh, this message translates to:
@@ -988,6 +1240,30 @@ abstract class AppLocalizations {
   /// **'请输入「删除钱包」以继续'**
   String get typeToConfirmDelete;
 
+  /// No description provided for @deleteWalletConfirmationPhrase.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除钱包'**
+  String get deleteWalletConfirmationPhrase;
+
+  /// No description provided for @verifyToDeleteWallet.
+  ///
+  /// In zh, this message translates to:
+  /// **'验证以永久删除此钱包'**
+  String get verifyToDeleteWallet;
+
+  /// No description provided for @deleteAuthenticationFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'认证失败，钱包未删除。'**
+  String get deleteAuthenticationFailed;
+
+  /// No description provided for @deleteWalletFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法安全删除钱包，当前钱包未被移除，请重试。'**
+  String get deleteWalletFailed;
+
   /// No description provided for @displayLanguage.
   ///
   /// In zh, this message translates to:
@@ -1012,6 +1288,12 @@ abstract class AppLocalizations {
   /// **'跟随系统'**
   String get languageSystem;
 
+  /// No description provided for @settingsSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法保存设置，当前内容未改变，请重试。'**
+  String get settingsSaveFailed;
+
   /// No description provided for @deviceMode.
   ///
   /// In zh, this message translates to:
@@ -1035,6 +1317,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'切换前请确认本机不再用作签名器。切换后将返回模式选择页。'**
   String get deviceModeSwitchDesc;
+
+  /// No description provided for @deviceModeSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法保存设备模式，当前模式未改变，请重试。'**
+  String get deviceModeSaveFailed;
+
+  /// No description provided for @pinKeyDelete.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除最后一位'**
+  String get pinKeyDelete;
 }
 
 class _AppLocalizationsDelegate

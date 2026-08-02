@@ -21,7 +21,7 @@ void main() {
     final controller = WalletController(WalletManager(), crypto: crypto);
     await crypto.storeWallet(walletId: 'w1', mnemonic: _mnemonic);
     final addresses = await crypto.deriveAddresses('w1');
-    controller.add(
+    await controller.add(
       HotWallet(
         id: 'w1',
         name: '日常钱包',

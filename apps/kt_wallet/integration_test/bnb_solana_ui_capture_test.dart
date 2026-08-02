@@ -1,3 +1,6 @@
+import 'support/e2e_credential_batch.dart';
+import 'support/e2e_wallet_cleanup.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -18,6 +21,7 @@ import 'package:kt_wallet/src/wallets/wallet_model.dart';
 const _walletId = 'bnb-solana-ui-capture-v1';
 
 void main() {
+  requireFreshE2eCredentialBatchIfConfigured();
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
@@ -34,6 +38,7 @@ void main() {
         mnemonic: mnemonic,
         requireAuth: false,
       );
+      registerE2eWalletCleanup(crypto, _walletId);
       final addresses = await crypto.deriveAddresses(_walletId);
       final wallets = WalletController(
         WalletManager(

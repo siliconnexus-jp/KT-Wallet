@@ -22,6 +22,7 @@ allprojects {
             }
         }
     }
+
 }
 
 val newBuildDir: Directory =
@@ -40,4 +41,10 @@ subprojects {
 
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
+}
+
+tasks.register("verifyReleaseRuntimeDependencies") {
+    group = "verification"
+    description = "Resolves the locked, checksum-verified Android release runtime graph."
+    dependsOn(":app:checkReleaseDuplicateClasses", ":app:mergeReleaseNativeLibs")
 }

@@ -1,3 +1,6 @@
+import 'support/e2e_credential_batch.dart';
+import 'support/e2e_wallet_cleanup.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -15,6 +18,7 @@ import 'package:kt_wallet/src/state/networks.dart';
 const _walletId = 'transaction-receipt-ios-e2e-v1';
 
 void main() {
+  requireFreshE2eCredentialBatchIfConfigured();
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
@@ -30,6 +34,7 @@ void main() {
         mnemonic: mnemonic,
         requireAuth: false,
       );
+      registerE2eWalletCleanup(crypto, _walletId);
       final addresses = await crypto.deriveAddresses(_walletId);
       final networks = NetworkController(
         initialEnvironment: NetworkEnvironment.testnet,

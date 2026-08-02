@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -30,8 +31,9 @@ class TransactionStatusNoticeHost extends StatefulWidget {
 class _TransactionStatusNoticeHostState
     extends State<TransactionStatusNoticeHost> {
   TransactionStatusNotice? _notice;
+  final Queue<TransactionStatusNotice> _pending = Queue();
+  final Set<String> _delivered = {};
   Timer? _timer;
-  String? _lastKey;
 
   @override
   void initState() {
@@ -48,22 +50,29 @@ class _TransactionStatusNoticeHostState
   }
 
   void _onController() {
-    final notice = widget.controller.notice;
-    if (notice == null) return;
-    final key = '${notice.hash}:${notice.confirmed}';
-    widget.controller.clearNotice(notice);
-    if (key == _lastKey || !mounted) return;
-    _lastKey = key;
+    for (final notice in widget.controller.takeNotices()) {
+      final key = '${notice.hash}:${notice.confirmed}';
+      if (_delivered.add(key)) _pending.add(notice);
+    }
+    if (_notice != null || _pending.isEmpty || !mounted) return;
+    _showNext();
+  }
+
+  void _showNext() {
+    if (!mounted) return;
     _timer?.cancel();
-    HapticFeedback.mediumImpact();
-    setState(() => _notice = notice);
-    _timer = Timer(const Duration(seconds: 6), _dismiss);
+    final next = _pending.isEmpty ? null : _pending.removeFirst();
+    if (next != null) HapticFeedback.mediumImpact();
+    setState(() => _notice = next);
+    if (next != null) {
+      _timer = Timer(const Duration(seconds: 6), _dismiss);
+    }
   }
 
   void _dismiss() {
     _timer?.cancel();
     _timer = null;
-    if (mounted) setState(() => _notice = null);
+    _showNext();
   }
 
   @override
@@ -108,6 +117,7 @@ class _StatusBanner extends StatelessWidget {
         : l10n.transactionFailedNotice;
     final color = notice.confirmed ? WalletColors.green : WalletColors.red;
     return Semantics(
+      key: ValueKey('transaction-status-notice-${notice.hash}'),
       liveRegion: true,
       label: message,
       child: Material(

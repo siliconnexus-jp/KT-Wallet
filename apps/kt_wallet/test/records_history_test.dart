@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:core_crypto/core_crypto.dart' show ChainAddresses, Coin;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,14 +21,17 @@ class _FakeHistoryService extends HistoryService {
   _FakeHistoryService(this.results);
   final Map<Coin, HistoryResult> results;
   final Map<Coin, int> fetchCounts = {};
+  final Map<Coin, String?> requestedNetworkIds = {};
 
   @override
   Future<HistoryResult> fetch(
     Coin coin,
     String address, {
     int limit = HistoryService.pageSize,
+    String? networkId,
   }) async {
     fetchCounts.update(coin, (count) => count + 1, ifAbsent: () => 1);
+    requestedNetworkIds[coin] = networkId;
     return results[coin]!;
   }
 }
@@ -39,6 +44,7 @@ class _PagedHistoryService extends HistoryService {
     Coin coin,
     String address, {
     int limit = HistoryService.pageSize,
+    String? networkId,
   }) async {
     requestedLimits.add(limit);
     if (coin != Coin.eth) return const HistoryResult.unsupported();
@@ -54,6 +60,22 @@ class _PagedHistoryService extends HistoryService {
           confirmed: true,
         ),
     ]);
+  }
+}
+
+class _DelayedHistoryService extends HistoryService {
+  final started = Completer<void>();
+  final result = Completer<HistoryResult>();
+
+  @override
+  Future<HistoryResult> fetch(
+    Coin coin,
+    String address, {
+    int limit = HistoryService.pageSize,
+    String? networkId,
+  }) {
+    if (!started.isCompleted) started.complete();
+    return result.future;
   }
 }
 
@@ -108,6 +130,24 @@ Widget _app(HistoryController controller) => MaterialApp(
 const _unsupported = HistoryResult.unsupported();
 
 void main() {
+  test(
+    'disposing while explorer requests are in flight drops every late answer',
+    () async {
+      final service = _DelayedHistoryService();
+      final controller = HistoryController(
+        wallets: _wallets(),
+        service: service,
+      );
+
+      final refresh = controller.refresh();
+      await service.started.future;
+      controller.dispose();
+      service.result.complete(const HistoryResult.unsupported());
+
+      await expectLater(refresh, completes);
+    },
+  );
+
   test('history expands its bounded remote window when loading more', () async {
     final service = _PagedHistoryService();
     final controller = HistoryController(wallets: _wallets(), service: service);
@@ -185,6 +225,27 @@ void main() {
     controller.dispose();
     networkChanges.dispose();
   });
+
+  test(
+    'history controller passes the concrete active network per coin',
+    () async {
+      final service = _FakeHistoryService({
+        for (final coin in Coin.values) coin: _unsupported,
+      });
+      final controller = HistoryController(
+        wallets: _wallets(),
+        service: service,
+        activeNetworkId: (coin) => 'active-${coin.name}',
+      );
+      addTearDown(controller.dispose);
+
+      await controller.refresh();
+
+      for (final coin in _wallets().current!.addresses.enabledCoins) {
+        expect(service.requestedNetworkIds[coin], 'active-${coin.name}');
+      }
+    },
+  );
 
   testWidgets('records page shows live TRON rows when the fetch succeeds', (
     tester,

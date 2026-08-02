@@ -4,10 +4,20 @@ import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:test/test.dart';
 
 Uint8List _reqId() => Uint8List.fromList([9, 9, 9, 9, 9, 9, 9, 9]);
-Uint8List _payload(int n) => Uint8List.fromList([for (var i = 0; i < n; i++) i % 256]);
+Uint8List _payload(int n) =>
+    Uint8List.fromList([for (var i = 0; i < n; i++) i % 256]);
 
 void main() {
   group('Fragmenter', () {
+    test('chunk size is runtime-bounded in release builds', () {
+      expect(() => Fragmenter(chunkSize: 0), throwsA(isA<FragmentError>()));
+      expect(() => Fragmenter(chunkSize: -1), throwsA(isA<FragmentError>()));
+      expect(
+        () => Fragmenter(chunkSize: AirgapFrame.maxChunkLength + 1),
+        throwsA(isA<FragmentError>()),
+      );
+    });
+
     test('total frame count is ceil(payload / chunkSize)', () {
       final f = Fragmenter(chunkSize: 100);
       expect(f.fragment(_payload(100), reqId: _reqId()), hasLength(1));
@@ -22,7 +32,9 @@ void main() {
     });
 
     test('every frame carries reqId, total and identical crc', () {
-      final frames = Fragmenter(chunkSize: 50).fragment(_payload(140), reqId: _reqId());
+      final frames = Fragmenter(
+        chunkSize: 50,
+      ).fragment(_payload(140), reqId: _reqId());
       final crc = frames.first.crc;
       for (var i = 0; i < frames.length; i++) {
         expect(frames[i].seq, i);
@@ -33,9 +45,9 @@ void main() {
     });
 
     test('frame header byte layout is exact', () {
-      final frame = Fragmenter(chunkSize: 4)
-          .fragment(_payload(4), reqId: _reqId())
-          .first;
+      final frame = Fragmenter(
+        chunkSize: 4,
+      ).fragment(_payload(4), reqId: _reqId()).first;
       final bytes = frame.encode();
       expect(bytes[0], AirgapFrame.magic0);
       expect(bytes[1], AirgapFrame.magic1);
@@ -68,8 +80,9 @@ void main() {
 
   group('AirgapFrame.decode is total', () {
     test('roundtrips a valid frame', () {
-      final frame = Fragmenter(chunkSize: 10)
-          .fragment(_payload(25), reqId: _reqId())[1];
+      final frame = Fragmenter(
+        chunkSize: 10,
+      ).fragment(_payload(25), reqId: _reqId())[1];
       final decoded = AirgapFrame.decode(frame.encode());
       expect(decoded.seq, 1);
       expect(decoded.chunk, frame.chunk);
@@ -87,6 +100,13 @@ void main() {
       );
     });
 
+    test('oversized individual frame is rejected before chunk allocation', () {
+      expect(
+        () => AirgapFrame.decode(Uint8List(AirgapFrame.maxWireLength + 1)),
+        throwsA(isA<FragmentError>()),
+      );
+    });
+
     test('seq >= total rejected', () {
       final frame = AirgapFrame(
         reqId: _reqId(),
@@ -95,8 +115,10 @@ void main() {
         crc: 0,
         chunk: Uint8List(1),
       );
-      expect(() => AirgapFrame.decode(frame.encode()),
-          throwsA(isA<FragmentError>()));
+      expect(
+        () => AirgapFrame.decode(frame.encode()),
+        throwsA(isA<FragmentError>()),
+      );
     });
   });
 }

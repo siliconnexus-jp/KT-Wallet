@@ -14,6 +14,7 @@ void main() {
     expect(prefs.privacyMode, isFalse);
     expect(prefs.autoLockMinutes, 1);
     expect(prefs.fiat, 'USD');
+    expect(prefs.externalApprovalScanConsent, isFalse);
   });
 
   test('load() on empty storage keeps the defaults', () async {
@@ -60,6 +61,25 @@ void main() {
     await reloaded.toggleFavoriteAsset('ETH');
     expect(reloaded.isFavoriteAsset('ETH'), isFalse);
   });
+
+  test(
+    'external approval scan is opt-in and persists an explicit choice',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = AppPrefsController();
+      expect(prefs.externalApprovalScanConsent, isFalse);
+
+      await prefs.setExternalApprovalScanConsent(true);
+      final reloaded = AppPrefsController();
+      await reloaded.load();
+      expect(reloaded.externalApprovalScanConsent, isTrue);
+
+      await reloaded.setExternalApprovalScanConsent(false);
+      final disabled = AppPrefsController();
+      await disabled.load();
+      expect(disabled.externalApprovalScanConsent, isFalse);
+    },
+  );
 
   test(
     'rpc overrides: null by default, round-trip through storage, reset',
@@ -155,6 +175,60 @@ void main() {
     expect(notified, 1);
   });
 
+  test(
+    'unsafe endpoint setters fail closed without changing preferences',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = AppPrefsController();
+
+      await expectLater(
+        prefs.setGatewayUrl('http://public-rpc.example'),
+        throwsFormatException,
+      );
+      await expectLater(
+        prefs.setRpcOverride(Coin.eth, 'https://user:secret@rpc.example'),
+        throwsFormatException,
+      );
+
+      expect(prefs.gatewayUrl, AppPrefsController.defaultGatewayUrl);
+      expect(prefs.rpcOverride(Coin.eth), isNull);
+      final store = await SharedPreferences.getInstance();
+      expect(store.containsKey(AppPrefsController.gatewayPrefKey), isFalse);
+      expect(
+        store.containsKey(AppPrefsController.rpcPrefKeys[Coin.eth]!),
+        isFalse,
+      );
+    },
+  );
+
+  test(
+    'load evicts legacy unsafe endpoints and restores safe defaults',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        AppPrefsController.gatewayPrefKey: 'http://public-gateway.example',
+        AppPrefsController.rpcPrefKeys[Coin.eth]!: 'javascript:alert(1)',
+        AppPrefsController.rpcPrefKeys[Coin.tron]!: 'https://tron.example',
+      });
+      final prefs = AppPrefsController();
+      await prefs.load();
+
+      expect(prefs.gatewayUrl, AppPrefsController.defaultGatewayUrl);
+      expect(prefs.rpcOverride(Coin.eth), isNull);
+      expect(prefs.rpcOverride(Coin.tron), 'https://tron.example');
+
+      final store = await SharedPreferences.getInstance();
+      expect(store.containsKey(AppPrefsController.gatewayPrefKey), isFalse);
+      expect(
+        store.containsKey(AppPrefsController.rpcPrefKeys[Coin.eth]!),
+        isFalse,
+      );
+      expect(
+        store.getString(AppPrefsController.rpcPrefKeys[Coin.tron]!),
+        'https://tron.example',
+      );
+    },
+  );
+
   test('setters notify listeners', () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = AppPrefsController();
@@ -164,5 +238,85 @@ void main() {
     await prefs.setFiat('CNY'); // no-op: same value
     expect(notified, 1);
     expect(prefs.fiat, 'CNY');
+  });
+
+  test(
+    'write failures never publish preferences and do not poison later writes',
+    () async {
+      final prefs = AppPrefsController(
+        preferencesProvider: () async => throw StateError('storage offline'),
+      );
+      var notified = 0;
+      prefs.addListener(() => notified++);
+
+      final writes = <Future<void>>[
+        prefs.setAppLock(false),
+        prefs.setPrivacyMode(true),
+        prefs.setAutoLockMinutes(5),
+        prefs.setFiat('JPY'),
+        prefs.setAuthMethod(AuthMethod.password),
+        prefs.setHideZeroBalances(true),
+        prefs.toggleFavoriteAsset('ETH'),
+        prefs.setExternalApprovalScanConsent(true),
+        prefs.setRpcOverride(Coin.eth, 'https://rpc.example'),
+        prefs.setGatewayUrl('https://gateway.example'),
+      ];
+      for (final write in writes) {
+        await expectLater(write, throwsStateError);
+      }
+
+      expect(prefs.appLock, isTrue);
+      expect(prefs.privacyMode, isFalse);
+      expect(prefs.autoLockMinutes, 1);
+      expect(prefs.fiat, 'USD');
+      expect(prefs.authMethod, AuthMethod.biometrics);
+      expect(prefs.hideZeroBalances, isFalse);
+      expect(prefs.isFavoriteAsset('ETH'), isFalse);
+      expect(prefs.externalApprovalScanConsent, isFalse);
+      expect(prefs.rpcOverride(Coin.eth), isNull);
+      expect(prefs.gatewayUrl, AppPrefsController.defaultGatewayUrl);
+      expect(notified, 0);
+    },
+  );
+
+  test(
+    'rapid writes are serialized and the newest intent survives restart',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = AppPrefsController();
+
+      await Future.wait([
+        prefs.setPrivacyMode(true),
+        prefs.setPrivacyMode(false),
+        prefs.setPrivacyMode(true),
+      ]);
+      expect(prefs.privacyMode, isTrue);
+
+      final reloaded = AppPrefsController();
+      await reloaded.load();
+      expect(reloaded.privacyMode, isTrue);
+    },
+  );
+
+  test('unsupported enumerated preferences fail closed', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = AppPrefsController();
+
+    await expectLater(prefs.setAutoLockMinutes(99), throwsArgumentError);
+    await expectLater(prefs.setFiat('BTC'), throwsArgumentError);
+    expect(prefs.autoLockMinutes, 1);
+    expect(prefs.fiat, 'USD');
+  });
+
+  test('load rejects invalid legacy option values', () async {
+    SharedPreferences.setMockInitialValues({
+      'prefs.autoLockMinutes': 99,
+      'prefs.fiat': 'BTC',
+    });
+    final prefs = AppPrefsController();
+    await prefs.load();
+
+    expect(prefs.autoLockMinutes, 1);
+    expect(prefs.fiat, 'USD');
   });
 }

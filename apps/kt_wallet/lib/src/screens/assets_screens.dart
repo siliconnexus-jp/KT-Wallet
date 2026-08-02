@@ -115,6 +115,39 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
   ];
   static const _legacyNetworks = ['Ethereum', 'Polygon', 'TRON', 'Solana'];
 
+  Future<void> _setHideZeroBalances(
+    AppPrefsController prefs,
+    bool value,
+  ) async {
+    try {
+      await prefs.setHideZeroBalances(value);
+    } on Object {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context).walletUpdateFailed),
+          ),
+        );
+    }
+  }
+
+  Future<void> _toggleFavorite(AppPrefsController prefs, String symbol) async {
+    try {
+      await prefs.toggleFavoriteAsset(symbol);
+    } on Object {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context).walletUpdateFailed),
+          ),
+        );
+    }
+  }
+
   /// Separator for the networks a multi-chain row spans. The row used to
   /// carry a single '*' sentinel, which matched NO specific filter — so
   /// picking "Polygon" hid every multi-chain token, including the USDT and
@@ -161,6 +194,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
               group: entry.value,
             ),
             chainsLabel: l10n.assetOnChains,
+            fiatFormatter: (usd) => formatFiatForContext(context, usd),
           );
           return (
             row.color,
@@ -183,6 +217,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
             market,
             group,
             chainsLabel: l10n.assetOnChains,
+            fiatFormatter: (usd) => formatFiatForContext(context, usd),
           );
           return (
             row.color,
@@ -234,11 +269,12 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
         title: l10n.tabAssets,
         onBack: () => Navigator.of(context).maybePop(),
         trailing: Icons.add,
+        trailingTooltip: l10n.addTokenTitle,
         onTrailing: () => context.push('/token-manage'),
       ),
       children: [
         Container(
-          height: 44,
+          height: 52,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
             color: WalletColors.surface,
@@ -270,7 +306,8 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
                         color: WalletColors.text,
                       ),
                       decoration: const InputDecoration(
-                        isCollapsed: true,
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(vertical: 14),
                         border: InputBorder.none,
                       ),
                     ),
@@ -316,7 +353,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
                 avatar: const Icon(Icons.visibility_off_outlined, size: 17),
                 onSelected: (value) {
                   HapticFeedback.selectionClick();
-                  prefs.setHideZeroBalances(value);
+                  _setHideZeroBalances(prefs, value);
                 },
               ),
             ],
@@ -358,7 +395,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
                           ? null
                           : () {
                               HapticFeedback.selectionClick();
-                              prefs.toggleFavoriteAsset(results[i].$9!.symbol);
+                              _toggleFavorite(prefs, results[i].$9!.symbol);
                             },
                     ),
                   ),
@@ -390,87 +427,169 @@ class _AssetTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(14) >= 20;
     return Semantics(
       button: true,
       label: '${a.$3}, ${a.$4}, ${a.$5}',
-      child: Row(
-        children: [
-          TokenIcon(
-            symbol: a.$3,
-            size: 40,
-            fallbackColor: a.$1,
-            fallbackInitial: a.$2,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  a.$3,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: WalletColors.text,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: largeText
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TokenIcon(
+                    symbol: a.$3,
+                    size: 40,
+                    fallbackColor: a.$1,
+                    fallbackInitial: a.$2,
                   ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  a.$4,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: WalletColors.text2,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          a.$3,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: WalletColors.text,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          a.$4,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: WalletColors.text2,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          a.$5,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: WalletColors.text,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          a.$6,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: a.$7,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                a.$5,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: WalletColors.text,
-                ),
+                  if (onFavorite != null)
+                    Semantics(
+                      button: true,
+                      label: favorite
+                          ? l10n.assetRemoveFavorite(a.$3)
+                          : l10n.assetAddFavorite(a.$3),
+                      child: IconButton(
+                        tooltip: favorite
+                            ? l10n.assetRemoveFavorite(a.$3)
+                            : l10n.assetAddFavorite(a.$3),
+                        onPressed: onFavorite,
+                        icon: Icon(
+                          favorite
+                              ? Icons.star_rounded
+                              : Icons.star_border_rounded,
+                          size: 20,
+                          color: favorite
+                              ? const Color(0xFFF5A623)
+                              : WalletColors.text3,
+                        ),
+                      ),
+                    ),
+                ],
+              )
+            : Row(
+                children: [
+                  TokenIcon(
+                    symbol: a.$3,
+                    size: 40,
+                    fallbackColor: a.$1,
+                    fallbackInitial: a.$2,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          a.$3,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: WalletColors.text,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          a.$4,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: WalletColors.text2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        a.$5,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: WalletColors.text,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        a.$6,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: a.$7,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (onFavorite != null) ...[
+                    const SizedBox(width: 4),
+                    Semantics(
+                      button: true,
+                      label: favorite
+                          ? l10n.assetRemoveFavorite(a.$3)
+                          : l10n.assetAddFavorite(a.$3),
+                      child: IconButton(
+                        visualDensity: VisualDensity.compact,
+                        tooltip: favorite
+                            ? l10n.assetRemoveFavorite(a.$3)
+                            : l10n.assetAddFavorite(a.$3),
+                        onPressed: onFavorite,
+                        icon: Icon(
+                          favorite
+                              ? Icons.star_rounded
+                              : Icons.star_border_rounded,
+                          size: 20,
+                          color: favorite
+                              ? const Color(0xFFF5A623)
+                              : WalletColors.text3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: 3),
-              Text(
-                a.$6,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: a.$7,
-                ),
-              ),
-            ],
-          ),
-          if (onFavorite != null) ...[
-            const SizedBox(width: 4),
-            Semantics(
-              button: true,
-              label: favorite
-                  ? l10n.assetRemoveFavorite(a.$3)
-                  : l10n.assetAddFavorite(a.$3),
-              child: IconButton(
-                visualDensity: VisualDensity.compact,
-                tooltip: favorite
-                    ? l10n.assetRemoveFavorite(a.$3)
-                    : l10n.assetAddFavorite(a.$3),
-                onPressed: onFavorite,
-                icon: Icon(
-                  favorite ? Icons.star_rounded : Icons.star_border_rounded,
-                  size: 20,
-                  color: favorite
-                      ? const Color(0xFFF5A623)
-                      : WalletColors.text3,
-                ),
-              ),
-            ),
-          ],
-        ],
       ),
     );
   }
@@ -588,11 +707,11 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
         ? _tokenFiat(market, ref)
         : market.fiatValueUsd(ref.coin);
     final price = ref.isToken
-        ? market.tokenPriceUsd(ref.symbol)
-        : market.priceUsd(ref.coin);
+        ? market.tokenPriceUsdFor(actionCoin, ref.symbol)
+        : market.priceUsd(actionCoin);
     final change24h = ref.isToken
-        ? market.tokenChange24hPercent(ref.symbol)
-        : market.change24hPercent(ref.coin);
+        ? market.tokenChange24hPercentFor(actionCoin, ref.symbol)
+        : market.change24hPercent(actionCoin);
 
     final contract = selected?.contract ?? ref.contract;
     final wallet = WalletScope.of(context).current;
@@ -609,6 +728,7 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
         title: ref.name,
         onBack: () => Navigator.of(context).maybePop(),
         trailing: explorer == null ? null : Icons.open_in_new,
+        trailingTooltip: l10n.txViewInExplorer,
         onTrailing: explorer == null
             ? null
             : () async {
@@ -640,7 +760,7 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              fiat == null ? '--' : '≈ ${formatUsd(fiat)}',
+              fiat == null ? '--' : '≈ ${formatFiatForContext(context, fiat)}',
               style: const TextStyle(fontSize: 15, color: WalletColors.text2),
             ),
             const SizedBox(height: 10),
@@ -713,7 +833,7 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
             children: [
               KtDetailRow(
                 label: l10n.price,
-                value: price == null ? '--' : formatUsd(price),
+                value: formatFiatForContext(context, price),
               ),
               const SizedBox(height: 14),
               KtDetailRow(
@@ -929,6 +1049,7 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
         title: 'USDT',
         onBack: () => Navigator.of(context).maybePop(),
         trailing: Icons.open_in_new,
+        trailingTooltip: l10n.txViewInExplorer,
         onTrailing: () async {
           final opened = await ExternalActions.instance.open(
             Uri.parse(
@@ -1331,7 +1452,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           ..showSnackBar(
             SnackBar(
               content: Text(
-                opened ? l10n.faucetOpened : l10n.airdropFailed(e.message),
+                opened ? l10n.faucetOpened : _airdropFailureText(l10n, e.kind),
               ),
             ),
           );
@@ -1351,6 +1472,16 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       ),
     );
   }
+
+  String _airdropFailureText(AppLocalizations l10n, AirdropFailureKind kind) =>
+      switch (kind) {
+        AirdropFailureKind.rateLimited => l10n.airdropRateLimited,
+        AirdropFailureKind.unavailable => l10n.airdropUnavailable,
+        AirdropFailureKind.invalidRequest => l10n.airdropInvalidRequest,
+        AirdropFailureKind.insufficientFunds => l10n.airdropInsufficientFunds,
+        AirdropFailureKind.rejected => l10n.airdropRejected,
+        AirdropFailureKind.malformedResponse => l10n.airdropMalformedResponse,
+      };
 
   /// Testnet-only faucet row under the address card: the action label, an
   /// amber dot + the active network's name (honest about where funds land).
@@ -1600,6 +1731,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     final l10n = AppLocalizations.of(context);
     final chain = _chain;
     final address = _address(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(14) >= 20;
     // Active network for the selected family. Scope-absent (gallery/goldens)
     // falls back to the shared mainnet controller → active is never a testnet
     // → the faucet row does not render → goldens stay byte-identical.
@@ -1609,41 +1741,65 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         title: l10n.actionReceive,
         onBack: () => Navigator.of(context).maybePop(),
         trailing: Icons.ios_share,
+        trailingTooltip: l10n.actionShare,
         onTrailing: _shareAddress,
       ),
       children: [
         Center(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _availableChains.length > 1 ? _pickChain : null,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: WalletColors.surface,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _receiveAssetIcon(chain),
-                  const SizedBox(width: 8),
-                  Text(
-                    _assetLabel,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: WalletColors.text,
-                    ),
-                  ),
-                  if (_availableChains.length > 1) ...[
+          child: Semantics(
+            button: _availableChains.length > 1,
+            label: _assetLabel,
+            image: true,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _availableChains.length > 1 ? _pickChain : null,
+              child: Container(
+                width: largeText ? double.infinity : null,
+                constraints: const BoxConstraints(minHeight: 48),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: WalletColors.surface,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: largeText ? MainAxisSize.max : MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _receiveAssetIcon(chain),
                     const SizedBox(width: 8),
-                    const Icon(
-                      Icons.keyboard_arrow_down,
-                      size: 16,
-                      color: WalletColors.text3,
-                    ),
+                    if (largeText)
+                      Flexible(
+                        child: Text(
+                          _assetLabel,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: WalletColors.text,
+                          ),
+                        ),
+                      )
+                    else
+                      Text(
+                        _assetLabel,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: WalletColors.text,
+                        ),
+                      ),
+                    if (_availableChains.length > 1) ...[
+                      const SizedBox(width: 8),
+                      const Icon(
+                        Icons.keyboard_arrow_down,
+                        size: 16,
+                        color: WalletColors.text3,
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -1687,6 +1843,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                       const SizedBox(height: 12),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           const Icon(
                             Icons.copy_rounded,
@@ -1694,14 +1851,28 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                             color: WalletColors.accent,
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            l10n.actionCopy,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: WalletColors.accent,
+                          if (largeText)
+                            Flexible(
+                              child: Text(
+                                l10n.actionCopy,
+                                maxLines: 2,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: WalletColors.accent,
+                                ),
+                              ),
+                            )
+                          else
+                            Text(
+                              l10n.actionCopy,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: WalletColors.accent,
+                              ),
                             ),
-                          ),
                         ],
                       ),
                     ],
@@ -1810,7 +1981,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                   style: const TextStyle(
                     fontSize: 13,
                     height: 1.5,
-                    color: Color(0xFF9A6503),
+                    color: Color(0xFF7A4E00),
                   ),
                 ),
               ),

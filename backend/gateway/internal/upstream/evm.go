@@ -3,6 +3,7 @@ package upstream
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -53,6 +54,8 @@ func (e *EVM) call(ctx context.Context, method string, params ...any) (json.RawM
 	return e.pool.Call(ctx, method, params)
 }
 
+func (e *EVM) Health() PoolHealth { return e.pool.Health() }
+
 func (e *EVM) quantity(ctx context.Context, method string, params ...any) (*big.Int, error) {
 	raw, err := e.call(ctx, method, params...)
 	if err != nil {
@@ -63,13 +66,67 @@ func (e *EVM) quantity(ctx context.Context, method string, params ...any) (*big.
 
 // GetBalance returns the native balance in wei.
 func (e *EVM) GetBalance(ctx context.Context, address string) (*big.Int, error) {
-	return e.quantity(ctx, "eth_getBalance", address, "latest")
+	return e.GetBalanceAt(ctx, address, "latest")
+}
+
+// GetBalanceAt returns the native balance at a canonical block tag.
+func (e *EVM) GetBalanceAt(
+	ctx context.Context,
+	address, blockTag string,
+) (*big.Int, error) {
+	return e.quantity(ctx, "eth_getBalance", address, blockTag)
 }
 
 // TokenBalance calls balanceOf(holder) on an ERC-20 contract.
 func (e *EVM) TokenBalance(ctx context.Context, contract, holder string) (*big.Int, error) {
+	return e.TokenBalanceAt(ctx, contract, holder, "latest")
+}
+
+// TokenBalanceAt calls balanceOf(holder) at a canonical block tag.
+func (e *EVM) TokenBalanceAt(
+	ctx context.Context,
+	contract, holder, blockTag string,
+) (*big.Int, error) {
 	data := balanceOfSelector + strings.Repeat("0", 24) + strings.ToLower(strings.TrimPrefix(holder, "0x"))
-	return e.quantity(ctx, "eth_call", map[string]string{"to": contract, "data": data}, "latest")
+	return e.quantity(ctx, "eth_call", map[string]string{"to": contract, "data": data}, blockTag)
+}
+
+// SimulateTransaction executes the exact unsigned call against a canonical
+// state tag. Node-side reverts are returned as NodeError and must block signing.
+func (e *EVM) SimulateTransaction(
+	ctx context.Context,
+	from, to, value, data, blockTag string,
+) (string, error) {
+	raw, err := e.call(ctx, "eth_call", map[string]string{
+		"from":  from,
+		"to":    to,
+		"value": value,
+		"data":  data,
+	}, blockTag)
+	if err != nil {
+		return "", err
+	}
+	var result string
+	if err := json.Unmarshal(raw, &result); err != nil || !validHexBytes(result) {
+		return "", &Unavailable{
+			Upstream: e.pool.name,
+			Message:  "malformed eth_call result",
+		}
+	}
+	return strings.ToLower(result), nil
+}
+
+// EstimateGas estimates the exact transaction against the pending state.
+func (e *EVM) EstimateGas(
+	ctx context.Context,
+	from, to, value, data string,
+) (*big.Int, error) {
+	return e.quantity(ctx, "eth_estimateGas", map[string]string{
+		"from":  from,
+		"to":    to,
+		"value": value,
+		"data":  data,
+	}, "pending")
 }
 
 // TransactionCount returns the pending nonce for address.
@@ -146,7 +203,7 @@ func (e *EVM) FeeHistory(ctx context.Context, blockCount int, percentiles []floa
 	for _, h := range out.BaseFeePerGas {
 		v, err := hexToBig(h)
 		if err != nil {
-			return nil, &Unavailable{Upstream: e.pool.name, Message: "malformed baseFeePerGas: " + h}
+			return nil, &Unavailable{Upstream: e.pool.name, Message: "malformed baseFeePerGas"}
 		}
 		res.BaseFeePerGas = append(res.BaseFeePerGas, v)
 	}
@@ -155,7 +212,7 @@ func (e *EVM) FeeHistory(ctx context.Context, blockCount int, percentiles []floa
 		for _, h := range row {
 			v, err := hexToBig(h)
 			if err != nil {
-				return nil, &Unavailable{Upstream: e.pool.name, Message: "malformed reward: " + h}
+				return nil, &Unavailable{Upstream: e.pool.name, Message: "malformed fee reward"}
 			}
 			vals = append(vals, v)
 		}
@@ -167,7 +224,7 @@ func (e *EVM) FeeHistory(ctx context.Context, blockCount int, percentiles []floa
 // SendRawTransaction broadcasts a signed raw transaction (0x-hex) and returns
 // the transaction hash.
 func (e *EVM) SendRawTransaction(ctx context.Context, payload string) (string, error) {
-	raw, err := e.call(ctx, "eth_sendRawTransaction", payload)
+	raw, err := e.pool.CallOnce(ctx, "eth_sendRawTransaction", []any{payload})
 	if err != nil {
 		return "", err
 	}
@@ -181,7 +238,7 @@ func (e *EVM) SendRawTransaction(ctx context.Context, payload string) (string, e
 func parseQuantity(raw json.RawMessage) (*big.Int, error) {
 	var s string
 	if err := json.Unmarshal(raw, &s); err != nil {
-		return nil, &Unavailable{Upstream: "evm", Message: "expected hex quantity, got: " + truncateForError(raw)}
+		return nil, &Unavailable{Upstream: "evm", Message: "expected a hex quantity"}
 	}
 	return hexToBig(s)
 }
@@ -193,15 +250,15 @@ func hexToBig(s string) (*big.Int, error) {
 	}
 	v, ok := new(big.Int).SetString(t, 16)
 	if !ok {
-		return nil, &Unavailable{Upstream: "evm", Message: "invalid hex quantity: " + s}
+		return nil, &Unavailable{Upstream: "evm", Message: "invalid hex quantity"}
 	}
 	return v, nil
 }
 
-func truncateForError(raw []byte) string {
-	const max = 64
-	if len(raw) > max {
-		return string(raw[:max]) + "…"
+func validHexBytes(s string) bool {
+	if !strings.HasPrefix(s, "0x") || len(s)%2 != 0 {
+		return false
 	}
-	return string(raw)
+	_, err := hex.DecodeString(s[2:])
+	return err == nil
 }

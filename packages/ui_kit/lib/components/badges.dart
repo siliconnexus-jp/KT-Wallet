@@ -82,12 +82,15 @@ class NetworkBadge extends StatelessWidget {
             decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
           ),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: dark ? SignerColors.text2 : WalletColors.text2,
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 2,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: dark ? SignerColors.text2 : WalletColors.text2,
+              ),
             ),
           ),
         ],

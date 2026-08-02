@@ -26,8 +26,12 @@ class WalletDatabase extends _$WalletDatabase {
   /// v2: global `contacts` (address book) + `custom_tokens` tables.
   /// v3: EVM nonce/fee metadata and transaction-replacement lineage.
   /// v4: per-transaction network id (mainnet/testnet/custom instance).
+  /// v5: TRON TAPOS/expiration and Solana last-valid-block-height metadata.
+  /// v6: persisted timestamp of the latest hash-specific status lookup.
+  /// v7: persisted pending/unknown outcome of that lookup.
+  /// v8: explicit transfer / ERC-20 approval-revoke transaction operation.
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 8;
 
   /// Backfill map for [Transactions.networkId]: the chain family's MAINNET
   /// network id, keyed by the `coin` column. Kept as literals because
@@ -38,6 +42,7 @@ class WalletDatabase extends _$WalletDatabase {
     'base': 'base-mainnet',
     'arbitrum': 'arbitrum-mainnet',
     'avalanche': 'avalanche-mainnet',
+    'bnb': 'bnb-mainnet',
     'tron': 'tron-mainnet',
     'solana': 'sol-mainnet',
   };
@@ -76,6 +81,20 @@ class WalletDatabase extends _$WalletDatabase {
             [entry.value, entry.key],
           );
         }
+      }
+      if (from < 5) {
+        await m.addColumn(transactions, transactions.referenceBlockHeight);
+        await m.addColumn(transactions, transactions.expiresAt);
+        await m.addColumn(transactions, transactions.lastValidBlockHeight);
+      }
+      if (from < 6) {
+        await m.addColumn(transactions, transactions.lastCheckedAt);
+      }
+      if (from < 7) {
+        await m.addColumn(transactions, transactions.lastCheckOutcome);
+      }
+      if (from < 8) {
+        await m.addColumn(transactions, transactions.operation);
       }
     },
     beforeOpen: (details) async {

@@ -1,3 +1,4 @@
+import 'package:core_crypto/core_crypto.dart';
 import 'package:core_crypto/testing.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,14 +15,23 @@ import 'package:kt_wallet/src/wallets/wallet_model.dart';
 const _mnemonic =
     'abandon ability able about above absent absorb abstract absurd abuse access accident';
 
+class _DeleteFailingCrypto extends MockCoreCrypto {
+  @override
+  Future<void> deleteWallet(String walletId) =>
+      Future<void>.error(const AuthFailedException());
+}
+
 /// Controller with one real hot wallet whose key material lives in the mock
 /// CoreCrypto (so exportMnemonic works like production).
-Future<WalletController> _controller({bool backedUp = false}) async {
-  final crypto = MockCoreCrypto();
+Future<WalletController> _controller({
+  bool backedUp = false,
+  MockCoreCrypto? crypto,
+}) async {
+  crypto ??= MockCoreCrypto();
   final controller = WalletController(WalletManager(), crypto: crypto);
   await crypto.storeWallet(walletId: 'w1', mnemonic: _mnemonic);
   final addresses = await crypto.deriveAddresses('w1');
-  controller.add(
+  await controller.add(
     HotWallet(
       id: 'w1',
       name: '日常钱包',
@@ -136,5 +146,21 @@ void main() {
 
     expect(controller.wallets, isEmpty);
     expect(find.text('已删除「日常钱包」'), findsOneWidget); // snackbar
+  });
+
+  testWidgets('native delete failure keeps the wallet and explains retry', (
+    tester,
+  ) async {
+    final controller = await _controller(crypto: _DeleteFailingCrypto());
+    await _pump(tester, controller, '/wallet-detail?id=w1');
+
+    await tester.tap(find.text('删除钱包').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('kt-dialog-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(controller.wallets, hasLength(1));
+    expect(find.text('无法安全删除钱包，当前内容未被移除，请重试。'), findsOneWidget);
+    expect(find.text('钱包详情'), findsOneWidget);
   });
 }

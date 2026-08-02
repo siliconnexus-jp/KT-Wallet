@@ -6,7 +6,7 @@ import 'package:test/test.dart';
 import 'package:wallet_data/wallet_data.dart';
 
 void main() {
-  test('schemaVersion is 4 and all tables are created', () async {
+  test('schemaVersion is 8 and all tables are created', () async {
     final db = WalletDatabase(NativeDatabase.memory());
     addTearDown(db.close);
 
@@ -21,7 +21,7 @@ void main() {
             .map((r) => r.data['name'] as String)
             .toSet();
 
-    expect(db.schemaVersion, 4);
+    expect(db.schemaVersion, 8);
     for (final expected in [
       'wallets',
       'accounts',
@@ -39,7 +39,7 @@ void main() {
     }
   });
 
-  test('v1 → v4 migration keeps data and adds replacement metadata', () async {
+  test('v1 → v8 migration keeps data and adds operation metadata', () async {
     // Build the two v1 tables touched by later migrations. The old
     // transactions schema deliberately has none of the EVM replacement
     // columns introduced in v3.
@@ -93,7 +93,7 @@ void main() {
         )
       ''')
       ..execute('PRAGMA user_version = 1')
-      ..dispose();
+      ..close();
 
     final db = WalletDatabase(NativeDatabase(file));
     addTearDown(db.close);
@@ -140,6 +140,12 @@ void main() {
     expect(legacy.replacesId, isNull);
     expect(legacy.replacedById, isNull);
     expect(legacy.replacementKind, isNull);
+    expect(legacy.referenceBlockHeight, isNull);
+    expect(legacy.expiresAt, isNull);
+    expect(legacy.lastValidBlockHeight, isNull);
+    expect(legacy.lastCheckedAt, isNull);
+    expect(legacy.lastCheckOutcome, isNull);
+    expect(legacy.operation, TxOperationKind.transfer);
     // v4 backfill: an un-attributed row lands on its chain's mainnet id.
     expect(legacy.networkId, 'eth-mainnet');
 
@@ -147,10 +153,10 @@ void main() {
         .data
         .values
         .first;
-    expect(version, 4);
+    expect(version, 8);
   });
 
-  test('v3 → v4 adds network_id and backfills per chain', () async {
+  test('v3 → v8 adds network, finality and operation metadata', () async {
     final dir = await Directory.systemTemp.createTemp('wallet_data_v3');
     addTearDown(() => dir.delete(recursive: true));
     final file = File('${dir.path}/v3.sqlite');
@@ -235,7 +241,7 @@ void main() {
     }
     raw
       ..execute('PRAGMA user_version = 3')
-      ..dispose();
+      ..close();
 
     final db = WalletDatabase(NativeDatabase(file));
     addTearDown(db.close);
@@ -249,6 +255,12 @@ void main() {
     // ...and gains the chain's mainnet id.
     expect(rows['evm']!.networkId, 'eth-mainnet');
     expect(rows['trx']!.networkId, 'tron-mainnet');
+    expect(rows['trx']!.referenceBlockHeight, isNull);
+    expect(rows['trx']!.expiresAt, isNull);
+    expect(rows['trx']!.lastValidBlockHeight, isNull);
+    expect(rows['trx']!.lastCheckedAt, isNull);
+    expect(rows['trx']!.lastCheckOutcome, isNull);
+    expect(rows['trx']!.operation, TxOperationKind.transfer);
     // An unrecognized coin stays unattributed rather than being guessed.
     expect(rows['unknown']!.networkId, isNull);
 
@@ -263,7 +275,7 @@ void main() {
         .data
         .values
         .first;
-    expect(version, 4);
+    expect(version, 8);
   });
 
   test('concurrent transactions on separate wallets do not corrupt', () async {

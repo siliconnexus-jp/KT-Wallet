@@ -1,39 +1,45 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# chains
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages).
+Chain primitives shared by KT Wallet and KT Cold Signer. The package supports
+Ethereum-compatible networks, TRON, and Solana without depending on app UI or
+storage.
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/tools/pub/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages).
--->
+## Capabilities
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
-
-## Features
-
-TODO: List what your package can do. Maybe include images, gifs, or videos.
-
-## Getting started
-
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
-
-## Usage
-
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
+- strict address validation and exact decimal/base-unit conversion;
+- EIP-1559, TRON protobuf, and Solana message construction/parsing;
+- native transfers, ERC-20/TRC-20/SPL transfers, EVM approval revocation, and
+  Solana Associated Token Account binding;
+- canonical signed-transaction verification and sender/fee-payer recovery,
+  including EVM/TRON high-s rejection and full original-request byte/field
+  equality;
+- typed EVM, TRON, and Solana RPC clients over caller-provided transports;
+- canonical derivation-path declarations for every supported chain.
 
 ```dart
-const like = 'sample';
+import 'package:chains/chains.dart';
+
+final validation = Addresses.validate(
+  Chain.ethereum,
+  '0x1111111111111111111111111111111111111111',
+);
+if (!validation.isValid) throw StateError('invalid recipient');
+
+final amount = Amount.parse('1.25', decimals: 6);
+assert(amount.raw == BigInt.from(1_250_000));
 ```
 
-## Additional information
+Import `package:chains/rpc.dart` only in the online wallet or Gateway-facing
+code. KT Cold Signer deliberately bans that library through the repository
+dependency firewall.
 
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+## Security boundary
+
+Transaction previews must be produced by the parsers in this package, never
+from QR summary text. A successful parse is not permission to broadcast:
+network identity, live fees, balance, simulation, user authentication, native
+signing, canonical wire decoding, signer recovery, and post-signature
+byte/field equality are separate fail-closed gates.
+
+Run `dart test` from this package directory. Licensed under MPL-2.0; see
+`LICENSE`.

@@ -3,7 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../state/flutter_test_env.dart';
@@ -27,15 +27,26 @@ abstract class PinStorage {
 /// Production storage: flutter_secure_storage (Keychain / Keystore).
 ///
 /// Under `flutter test` (widget tests that pump the real app without
-/// injecting [InMemoryPinStorage]) the plugin channel is dead — its futures
-/// never complete — so this degrades to a process-local in-memory map and the
-/// UI keeps working statelessly instead of hanging. On a real device the
-/// plugin is always registered and the fallback never engages.
+/// injecting [InMemoryPinStorage]) the plugin channel is dead, so tests use a
+/// process-local map. Every non-test environment fails closed: a missing or
+/// broken platform plugin is propagated to the caller and can never turn the
+/// PIN or its lockout counter into silently ephemeral state.
 class SecurePinStorage implements PinStorage {
   SecurePinStorage({FlutterSecureStorage? storage})
-    : _storage = storage ?? const FlutterSecureStorage();
+    : this._(storage ?? const FlutterSecureStorage(), null);
+
+  @visibleForTesting
+  SecurePinStorage.withTestEnvironment({
+    FlutterSecureStorage? storage,
+    required bool isTestEnvironment,
+  }) : this._(storage ?? const FlutterSecureStorage(), isTestEnvironment);
+
+  SecurePinStorage._(this._storage, this._testEnvironmentOverride);
 
   final FlutterSecureStorage _storage;
+  final bool? _testEnvironmentOverride;
+
+  bool get _useTestFallback => _testEnvironmentOverride ?? isFlutterTestEnv;
 
   /// Plugin-less fallback (see class doc). Static so every default-constructed
   /// instance in one process shares it, like the real backing store would.
@@ -43,38 +54,26 @@ class SecurePinStorage implements PinStorage {
 
   @override
   Future<String?> read(String key) async {
-    if (isFlutterTestEnv) return _pluginlessFallback[key];
-    try {
-      return await _storage.read(key: key);
-    } on MissingPluginException {
-      return _pluginlessFallback[key];
-    }
+    if (_useTestFallback) return _pluginlessFallback[key];
+    return _storage.read(key: key);
   }
 
   @override
   Future<void> write(String key, String value) async {
-    if (isFlutterTestEnv) {
+    if (_useTestFallback) {
       _pluginlessFallback[key] = value;
       return;
     }
-    try {
-      await _storage.write(key: key, value: value);
-    } on MissingPluginException {
-      _pluginlessFallback[key] = value;
-    }
+    await _storage.write(key: key, value: value);
   }
 
   @override
   Future<void> delete(String key) async {
-    if (isFlutterTestEnv) {
+    if (_useTestFallback) {
       _pluginlessFallback.remove(key);
       return;
     }
-    try {
-      await _storage.delete(key: key);
-    } on MissingPluginException {
-      _pluginlessFallback.remove(key);
-    }
+    await _storage.delete(key: key);
   }
 }
 

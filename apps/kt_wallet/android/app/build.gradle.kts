@@ -65,3 +65,21 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    testImplementation("junit:junit:4.13.2")
+}
+
+// Pin only code shipped in the APK. Locking every AGP/Flutter lint and test
+// configuration makes the runtime audit noisy and currently trips a Gradle
+// 9.1/Kotlin metadata edge case for kotlin-stdlib-common. That module has no
+// standalone runtime artifact; its POM bytes remain checksum-verified.
+configurations.configureEach {
+    if (name == "releaseRuntimeClasspath") {
+        resolutionStrategy.activateDependencyLocking()
+    }
+}
+
+dependencyLocking {
+    ignoredDependencies.add("org.jetbrains.kotlin:kotlin-stdlib-common")
+}

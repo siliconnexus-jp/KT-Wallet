@@ -9,21 +9,54 @@ class TronRpc {
   final RestTransport transport;
 
   /// TRX balance in SUN.
-  Future<BigInt> getTrxBalance(String address) async {
+  Future<BigInt> getTrxBalance(String address) async =>
+      (await getAccountBalances(address)).trx;
+
+  /// Uncached TRX and optional TRC-20 balances from one account response.
+  /// [activated] distinguishes a real zero-balance account from an address
+  /// that does not yet exist and will incur TRON's activation fee.
+  Future<TronAccountBalances> getAccountBalances(
+    String address, {
+    String? tokenContract,
+  }) async {
     final resp = await transport.getJson('$baseUrl/v1/accounts/$address');
     if (resp is! Map) throw RpcException('bad account response');
     final data = resp['data'];
     if (data is! List || data.isEmpty) {
-      return BigInt.zero; // unactivated account
+      return TronAccountBalances(activated: false, trx: BigInt.zero);
     }
     final account = data.first;
     if (account is! Map) throw RpcException('bad account entry');
     final balance = account['balance'];
     // Absent balance = 0 (valid for a fresh account); a present-but-non-int
     // value is a malformed response, not a zero balance.
-    if (balance == null) return BigInt.zero;
-    if (balance is! int) throw RpcException('non-integer balance');
-    return BigInt.from(balance);
+    if (balance != null && balance is! int) {
+      throw RpcException('non-integer balance');
+    }
+    BigInt? token;
+    if (tokenContract != null) {
+      token = BigInt.zero;
+      final rows = account['trc20'];
+      if (rows != null && rows is! List) {
+        throw RpcException('bad trc20 balance list');
+      }
+      if (rows is List) {
+        for (final row in rows) {
+          if (row is! Map || !row.containsKey(tokenContract)) continue;
+          final raw = row[tokenContract];
+          if (raw is! String || !RegExp(r'^[0-9]+$').hasMatch(raw)) {
+            throw RpcException('bad trc20 balance');
+          }
+          token = BigInt.parse(raw);
+          break;
+        }
+      }
+    }
+    return TronAccountBalances(
+      activated: true,
+      trx: balance == null ? BigInt.zero : BigInt.from(balance as int),
+      token: token,
+    );
   }
 
   /// Full-node confirmation result for [txId], or null while the node does not
@@ -54,10 +87,14 @@ class TronRpc {
     final raw = header is Map ? header['raw_data'] : null;
     if (raw is! Map) throw RpcException('bad block header');
     final number = raw['number'];
-    if (number is! int || blockId is! String || blockId.length != 64) {
+    final timestamp = raw['timestamp'];
+    if (number is! int ||
+        timestamp is! int ||
+        blockId is! String ||
+        blockId.length != 64) {
       throw RpcException('missing block fields');
     }
-    return TronBlockRef(number: number, blockId: blockId);
+    return TronBlockRef(number: number, blockId: blockId, timestamp: timestamp);
   }
 
   /// Estimates the TRX that may be burned by a TRC-20 contract call. The
@@ -131,6 +168,88 @@ class TronRpc {
     );
   }
 
+  /// Computes the maximum Bandwidth burn and optional new-account activation
+  /// fee for the exact serialized raw_data. The byte estimate includes one
+  /// 65-byte signature, protobuf framing and transaction result headroom.
+  /// All prices come from current chain parameters; no static mainnet price is
+  /// reused on Nile/Shasta or after a governance update.
+  Future<TronBandwidthEstimate> estimateBandwidthFee({
+    required String owner,
+    required int rawDataLength,
+    required bool activatesRecipient,
+  }) async {
+    if (rawDataLength <= 0) {
+      throw ArgumentError.value(rawDataLength, 'rawDataLength');
+    }
+    final responses = await Future.wait<Object?>([
+      transport.postJson('$baseUrl/wallet/getaccountresource', {
+        'address': owner,
+        'visible': true,
+      }),
+      transport.postJson('$baseUrl/wallet/getchainparameters', {}),
+    ]);
+    final resources = responses[0];
+    final parameters = responses[1];
+    if (resources is! Map || parameters is! Map) {
+      throw RpcException('TRON bandwidth estimation failed');
+    }
+    int nonNegative(String key) {
+      final value = resources[key];
+      if (value == null) return 0;
+      if (value is! int || value < 0) {
+        throw RpcException('bad TRON resource $key');
+      }
+      return value;
+    }
+
+    final staked = (nonNegative('NetLimit') - nonNegative('NetUsed')).clamp(
+      0,
+      nonNegative('NetLimit'),
+    );
+    final free = (nonNegative('freeNetLimit') - nonNegative('freeNetUsed'))
+        .clamp(0, nonNegative('freeNetLimit'));
+    final chainParameters = parameters['chainParameter'];
+    if (chainParameters is! List) {
+      throw RpcException('TRON bandwidth price unavailable');
+    }
+    final values = <String, int>{};
+    for (final entry in chainParameters) {
+      if (entry is Map && entry['key'] is String && entry['value'] is int) {
+        values[entry['key'] as String] = entry['value'] as int;
+      }
+    }
+    final unitPrice = values['getTransactionFee'];
+    final activationFee = values['getCreateNewAccountFeeInSystemContract'];
+    final activationBandwidthFee = values['getCreateAccountFee'];
+    if (unitPrice == null || unitPrice <= 0) {
+      throw RpcException('TRON bandwidth price unavailable');
+    }
+    if (activatesRecipient &&
+        (activationFee == null ||
+            activationFee <= 0 ||
+            activationBandwidthFee == null ||
+            activationBandwidthFee <= 0)) {
+      throw RpcException('TRON activation fee unavailable');
+    }
+
+    // raw_data + protobuf field/length framing + one 65-byte signature +
+    // transaction result. Apply another 20% safety margin because the result
+    // protobuf is produced by the node rather than the local serializer.
+    final framedBytes =
+        rawDataLength + _varintLength(rawDataLength) + 1 + 67 + 32;
+    final required = (framedBytes * 12 + 9) ~/ 10;
+    final bandwidthFee = activatesRecipient
+        ? (staked >= required ? 0 : activationBandwidthFee!)
+        : (staked + free >= required ? 0 : required * unitPrice);
+    return TronBandwidthEstimate(
+      estimatedBandwidth: required,
+      stakedBandwidthAvailable: staked,
+      freeBandwidthAvailable: free,
+      bandwidthFeeSun: bandwidthFee,
+      activationFeeSun: activatesRecipient ? activationFee! : 0,
+    );
+  }
+
   /// Broadcasts a signed transaction. Returns the txid on success.
   ///
   /// Two payload shapes are accepted, and the endpoint follows from the shape:
@@ -159,16 +278,32 @@ class TronRpc {
     // TronGrid reports node-level failures as a top-level `Error` string and
     // contract-level ones as `code` + hex-encoded `message`; without `Error`
     // in this chain the reason came back as a bare `null`, hiding the cause.
-    final message =
-        resp['message'] ?? resp['Error'] ?? resp['code'] ?? 'no reason given';
-    throw RpcException('broadcast rejected: $message');
+    final message = resp['message'] ?? resp['Error'] ?? resp['code'];
+    throw RpcRejectedException(publicRpcRejectionMessage(message));
   }
 }
 
 class TronBlockRef {
-  const TronBlockRef({required this.number, required this.blockId});
+  const TronBlockRef({
+    required this.number,
+    required this.blockId,
+    required this.timestamp,
+  });
   final int number;
   final String blockId;
+  final int timestamp;
+}
+
+class TronAccountBalances {
+  const TronAccountBalances({
+    required this.activated,
+    required this.trx,
+    this.token,
+  });
+
+  final bool activated;
+  final BigInt trx;
+  final BigInt? token;
 }
 
 class TronEnergyEstimate {
@@ -183,4 +318,32 @@ class TronEnergyEstimate {
   final int energyAvailable;
   final int energyPriceSun;
   final int feeLimitSun;
+}
+
+class TronBandwidthEstimate {
+  const TronBandwidthEstimate({
+    required this.estimatedBandwidth,
+    required this.stakedBandwidthAvailable,
+    required this.freeBandwidthAvailable,
+    required this.bandwidthFeeSun,
+    required this.activationFeeSun,
+  });
+
+  final int estimatedBandwidth;
+  final int stakedBandwidthAvailable;
+  final int freeBandwidthAvailable;
+  final int bandwidthFeeSun;
+  final int activationFeeSun;
+
+  BigInt get maximumFeeSun => BigInt.from(bandwidthFeeSun + activationFeeSun);
+}
+
+int _varintLength(int value) {
+  var length = 1;
+  var remaining = value;
+  while (remaining >= 0x80) {
+    remaining >>= 7;
+    length++;
+  }
+  return length;
 }

@@ -1,17 +1,14 @@
-# core_crypto_example
+# core_crypto example
 
-Demonstrates how to use the core_crypto plugin.
+Minimal host application for exercising the `core_crypto` Flutter platform
+plugin on Android and iOS. It exists for plugin development and is not a wallet
+or a distributable KT Wallet build.
 
-## Getting Started
+Run it on a simulator/emulator or physical device from this directory:
 
-This project is a starting point for a Flutter application.
+```sh
+flutter run
+```
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Native key storage and authentication behavior must be verified on physical
+devices before release. Never enter a funded mnemonic in this example app.

@@ -24,6 +24,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get actionImport => 'インポート';
 
   @override
+  String get actionValidating => '検証中…';
+
+  @override
+  String get cameraUnavailable => 'カメラを利用できません';
+
+  @override
   String get done => '完了';
 
   @override
@@ -112,6 +118,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get importWalletTitle => 'ウォレットをインポート';
 
   @override
+  String get mnemonicInvalidChecksum =>
+      'リカバリーフレーズが無効です。各単語、単語数、BIP-39チェックサムを確認してください。';
+
+  @override
   String wordCountOption(int count) {
     return '$count 単語';
   }
@@ -137,6 +147,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get enableFaceId => 'Face IDを有効化';
+
+  @override
+  String get biometricUnavailable => '利用可能な生体認証または端末認証が設定されていません。';
+
+  @override
+  String get walletSecureStorageFailed => 'ウォレットの安全な保存に失敗しました。鍵は保存されていません。';
+
+  @override
+  String get secureStorageUnavailableTitle => 'セキュアストレージを利用できません';
+
+  @override
+  String get secureStorageUnavailableDesc =>
+      'KT Cold Signerはウォレット、パスワード、ロック状態を安全に読み取れないため、署名をロックしたままにします。アプリを再起動するか、信頼できる配布元から再インストールしてください。';
+
+  @override
+  String get actionRetry => '再試行';
 
   @override
   String get biometricSkip => '今は有効にせず、パスワードのみ使用';
@@ -176,6 +202,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get securityCheckPassed => 'セキュリティチェック通過 · 機内モードが有効';
+
+  @override
+  String get offlineStatusConfirmed => 'ネットワークはオフラインです';
+
+  @override
+  String get offlineStatusConnected => 'ネットワーク接続を検出しました';
+
+  @override
+  String get offlineStatusUnknown => 'ネットワーク状態を確認できません';
 
   @override
   String get scanPendingTx => '署名待ち取引をスキャン';
@@ -253,6 +288,51 @@ class AppLocalizationsJa extends AppLocalizations {
   String get checkLevelBlock => '危険';
 
   @override
+  String get checkDetailUnknown => '状態を確認できません';
+
+  @override
+  String get checkDetailNetworkSafe => 'ネットワーク接続は検出されませんでした';
+
+  @override
+  String get checkDetailNetworkUnsafe => 'ネットワーク接続を検出しました';
+
+  @override
+  String get checkDetailAirplaneSafe => '機内モードはオンです';
+
+  @override
+  String get checkDetailAirplaneUnsafe => '機内モードはオフです';
+
+  @override
+  String get checkDetailBluetoothSafe => 'Bluetoothはオフです';
+
+  @override
+  String get checkDetailBluetoothUnsafe => 'Bluetoothはオンです';
+
+  @override
+  String get checkDetailPasscodeSafe => '端末パスコードは設定済みです';
+
+  @override
+  String get checkDetailPasscodeUnsafe => '端末パスコードが設定されていません';
+
+  @override
+  String get checkDetailBiometricSafe => '生体認証を利用できます';
+
+  @override
+  String get checkDetailBiometricUnsafe => '生体認証を利用できません';
+
+  @override
+  String get checkDetailScreenCaptureSafe => '画面録画は検出されませんでした';
+
+  @override
+  String get checkDetailScreenCaptureUnsafe => '画面録画を検出しました';
+
+  @override
+  String get checkDetailIntegritySafe => 'システム完全性チェックに合格しました';
+
+  @override
+  String get checkDetailIntegrityUnsafe => 'root化または脱獄を検出しました';
+
+  @override
   String get securityChecking => 'デバイス状態を確認中…';
 
   @override
@@ -293,6 +373,34 @@ class AppLocalizationsJa extends AppLocalizations {
   String get toAddress => '受取アドレス';
 
   @override
+  String get spenderAddress => '承認先コントラクト';
+
+  @override
+  String get nativeTransferOperation => 'ネイティブ送金';
+
+  @override
+  String get tokenTransferOperation => 'トークン送金';
+
+  @override
+  String get approvalRevokeOperation => 'トークン承認を解除';
+
+  @override
+  String get approvalRevokeZeroAllowance => 'allowance をゼロに設定';
+
+  @override
+  String get approvalRevokeSignerNotice =>
+      'これは正確な ERC-20 approve(spender, 0) 呼び出しです。allowance のみを解除し、トークンは送金しません。';
+
+  @override
+  String get tokenContractLabel => 'トークンコントラクト';
+
+  @override
+  String get chainIdLabel => 'Chain ID';
+
+  @override
+  String get maximumFeeBaseUnits => '最大手数料（最小単位）';
+
+  @override
   String get walletIdLabel => 'ウォレット ID';
 
   @override
@@ -318,13 +426,19 @@ class AppLocalizationsJa extends AppLocalizations {
       'この取引には安全に解析できない内容が含まれます。KT Cold Signerは資産保護のため署名を拒否しました。';
 
   @override
+  String get transactionParseFailed => '安全に解析できません';
+
+  @override
+  String get signingFailed => '署名に失敗しました。取引、ウォレット、または認証が検証を通過していません。';
+
+  @override
   String unknownContractCallDetected(String method) {
     return '未知のコントラクト呼び出しを検出：$method';
   }
 
   @override
   String get unknownContractCallDesc =>
-      'V1はネイティブ通貨とトークンの送金のみ対応します。approve・permit などの承認系呼び出しはすべて拒否します。';
+      'ネイティブ送金、トークン送金、正確な approve(spender, 0) 解除のみ対応します。非ゼロ approve、permit、未知の呼び出しは拒否します。';
 
   @override
   String get authTitle => '本人認証';
@@ -354,6 +468,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get enterPinToSign => '署名を完了するにはアプリパスワードを入力';
 
   @override
+  String get enterPinToDelete => '削除を続行するにはアプリパスワードを入力';
+
+  @override
   String get pinIncorrect => 'パスワードが違います。再試行してください';
 
   @override
@@ -376,6 +493,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get signatureVoided => '署名を無効にしました';
+
+  @override
+  String get signResultUnavailable => '署名結果を利用できません';
 
   @override
   String dynamicShard(int received, int total) {
@@ -426,10 +546,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String get mnemonicBackupCheckDesc => 'フレーズが今も正しく書き写せるか定期的に抜き取り確認します';
 
   @override
+  String get mnemonicReviewFailed => '認証またはフレーズ検証に失敗しました。リカバリーフレーズは表示されていません。';
+
+  @override
   String get deleteWallet => 'ウォレットを削除';
 
   @override
-  String get deleteWalletReqDesc => 'パスワード・生体認証・確認テキストが必要です';
+  String get deleteWalletReqDesc =>
+      'アプリパスワードと確認テキストが必要です。システム認証が有効な場合はその認証も必要です';
 
   @override
   String get destroyAllData => 'すべてのウォレットデータを破棄';
@@ -462,6 +586,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get screenCaptureProtection => 'スクリーンショット安全通知';
 
   @override
+  String get screenCaptureBlocked => '画面収録・ミラーリングを検出しました';
+
+  @override
+  String get screenCaptureBlockedHint =>
+      '収録・ミラーリング中はリカバリーフレーズを非表示にします。停止すると自動的に戻ります。';
+
+  @override
   String get permanentlyDeleteWallet => 'ウォレットを完全に削除';
 
   @override
@@ -481,6 +612,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get typeToConfirmDelete => '続けるには「ウォレットを削除」と入力してください';
 
   @override
+  String get deleteWalletConfirmationPhrase => 'ウォレットを削除';
+
+  @override
+  String get verifyToDeleteWallet => 'このウォレットを完全に削除するために認証';
+
+  @override
+  String get deleteAuthenticationFailed => '認証に失敗しました。ウォレットは削除されていません。';
+
+  @override
+  String get deleteWalletFailed =>
+      'ウォレットを安全に削除できませんでした。現在のウォレットは削除されていません。もう一度お試しください。';
+
+  @override
   String get displayLanguage => '表示言語';
 
   @override
@@ -491,6 +635,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get languageSystem => 'システムに従う';
+
+  @override
+  String get settingsSaveFailed => '設定を保存できませんでした。内容は変更されていません。もう一度お試しください。';
 
   @override
   String get deviceMode => 'デバイスモード';
@@ -504,4 +651,11 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get deviceModeSwitchDesc =>
       '切り替える前に、この端末を署名機として使用しないことを確認してください。切り替えるとモード選択画面に戻ります。';
+
+  @override
+  String get deviceModeSaveFailed =>
+      'デバイスモードを保存できませんでした。現在のモードは変更されていません。もう一度お試しください。';
+
+  @override
+  String get pinKeyDelete => '最後の桁を削除';
 }

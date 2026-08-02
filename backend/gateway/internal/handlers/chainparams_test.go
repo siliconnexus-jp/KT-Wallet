@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/big"
 	"testing"
-	"time"
 
 	"ktwallet/gateway/internal/handlers"
 	"ktwallet/gateway/internal/rpc"
@@ -129,7 +128,7 @@ func TestChainParamsInvalidParams(t *testing.T) {
 	}
 }
 
-func TestChainParamsCache(t *testing.T) {
+func TestChainParamsAlwaysRefreshesPendingNonce(t *testing.T) {
 	node := newRPCFake(t)
 	node.result("eth_getTransactionCount", "0x5")
 	node.result("eth_gasPrice", "0x3b9aca00")
@@ -138,14 +137,9 @@ func TestChainParamsCache(t *testing.T) {
 
 	p := fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf)
 	result(t, e.rpc("kt_getChainParams", p))
-	e.clk.Advance(4 * time.Second)
 	result(t, e.rpc("kt_getChainParams", p))
-	if node.count("eth_getTransactionCount") != 1 {
-		t.Fatalf("second call within 5s TTL must be cached, nonce calls = %d", node.count("eth_getTransactionCount"))
-	}
-	e.clk.Advance(2 * time.Second)
 	result(t, e.rpc("kt_getChainParams", p))
-	if node.count("eth_getTransactionCount") != 2 {
-		t.Fatalf("expected refetch after 5s TTL, nonce calls = %d", node.count("eth_getTransactionCount"))
+	if node.count("eth_getTransactionCount") != 3 {
+		t.Fatalf("pending nonce must be fetched for every quote, calls = %d", node.count("eth_getTransactionCount"))
 	}
 }

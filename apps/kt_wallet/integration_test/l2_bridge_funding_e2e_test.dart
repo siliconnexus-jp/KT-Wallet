@@ -1,3 +1,6 @@
+import 'support/e2e_credential_batch.dart';
+import 'support/e2e_wallet_cleanup.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -19,6 +22,7 @@ const _basePortal = '0x49f53e41452C74589E85cA1677426Ba426459e85';
 const _arbitrumInbox = '0xaAe29B0366299461418F5324a79Afc425BE5ae21';
 
 void main() {
+  requireFreshE2eCredentialBatchIfConfigured();
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
@@ -34,6 +38,7 @@ void main() {
         mnemonic: mnemonic,
         requireAuth: false,
       );
+      registerE2eWalletCleanup(crypto, _walletId);
       final addresses = await crypto.deriveAddresses(_walletId);
       // ignore: avoid_print
       print('BRIDGE_STAGE=balances');

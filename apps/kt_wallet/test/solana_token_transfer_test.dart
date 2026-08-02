@@ -17,9 +17,14 @@ const _mint = '2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo';
 const _jupMint = 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN';
 const _source = 'Bi9EDynRhtGiiG9wDCzhc5w2yGz8TSaamm9AUJhjZ2u5';
 const _blockhash = 'DzfXchZJoLMG3cNftcf2sw7qatkkuwQf4xH15N5wkKAb';
+const _genesisHash = 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG';
 
 class _SolanaTransport implements JsonRpcTransport {
+  _SolanaTransport({this.recipientAtaExists = false});
+
+  final bool recipientAtaExists;
   Uint8List? simulatedMessage;
+  Map<Object?, Object?>? simulationConfig;
 
   @override
   Future<Object?> post(String url, Object body) async {
@@ -28,9 +33,12 @@ class _SolanaTransport implements JsonRpcTransport {
     final params = request['params'] as List;
     Object? result;
     switch (method) {
+      case 'getGenesisHash':
+        result = _genesisHash;
+        break;
       case 'getLatestBlockhash':
         result = {
-          'value': {'blockhash': _blockhash},
+          'value': {'blockhash': _blockhash, 'lastValidBlockHeight': 123456},
         };
         break;
       case 'getTokenAccountsByOwner':
@@ -51,6 +59,25 @@ class _SolanaTransport implements JsonRpcTransport {
                     },
                   },
                 ]
+              : recipientAtaExists && address == _recipient
+              ? [
+                  {
+                    'pubkey': SolanaMessage.associatedTokenAddress(
+                      owner: _recipient,
+                      mint: _mint,
+                      tokenProgram: solanaToken2022Program,
+                    ),
+                    'account': {
+                      'data': {
+                        'parsed': {
+                          'info': {
+                            'tokenAmount': {'amount': '0'},
+                          },
+                        },
+                      },
+                    },
+                  },
+                ]
               : <Object?>[],
         };
         break;
@@ -63,8 +90,16 @@ class _SolanaTransport implements JsonRpcTransport {
       case 'simulateTransaction':
         final wire = base64Decode(params.first as String);
         simulatedMessage = Uint8List.sublistView(wire, 65);
+        simulationConfig = params[1] as Map<Object?, Object?>;
         result = {
-          'value': {'err': null},
+          'value': {
+            'err': null,
+            // 100,000,000 - 5,000 fee - 2,039,280 ATA rent reserve.
+            'accounts': [
+              {'lamports': 97955720},
+            ],
+            'unitsConsumed': 24100,
+          },
         };
         break;
       default:
@@ -122,15 +157,30 @@ void main() {
       tokenProgram: solanaToken2022Program,
     );
 
-    final hash = await service.execute(
+    final prepared = await service.prepareSolana(
+      draft: draft,
+      from: _owner,
+      expectedNetworkIdentity: _genesisHash,
+    );
+    expect(prepared.networkFeeLamports, BigInt.from(5000));
+    expect(prepared.rentDepositLamports, BigInt.from(2039280));
+    expect(prepared.lastValidBlockHeight, 123456);
+    final result = await service.signAndBroadcastSolana(
       wallet: wallet,
       crypto: crypto,
-      draft: draft,
-      evmChainId: 0,
+      prepared: prepared,
+      expectedNetworkIdentity: _genesisHash,
     );
 
-    expect(hash, 'solana-test-signature');
+    expect(result.hash, 'solana-test-signature');
+    expect(result.lastValidBlockHeight, 123456);
+    expect(result.referenceBlockHeight, isNull);
+    expect(result.expiresAt, isNull);
     expect(broadcaster.chain, Chain.solana);
+    expect(transport.simulationConfig?['accounts'], {
+      'encoding': 'base64',
+      'addresses': [_owner],
+    });
     final message = transport.simulatedMessage;
     expect(message, isNotNull);
     final parsed = parseUnsignedTransfer(Chain.solana, message!);
@@ -179,6 +229,7 @@ void main() {
         tokenContract: _jupMint,
       ),
       evmChainId: 0,
+      expectedNetworkIdentity: _genesisHash,
     );
 
     final parsed = parseUnsignedTransfer(
@@ -193,4 +244,66 @@ void main() {
       isNotEmpty,
     );
   });
+
+  test(
+    'existing recipient ATA still carries an idempotent owner binding',
+    () async {
+      final transport = _SolanaTransport(recipientAtaExists: true);
+      final service = LocalTransferService(
+        endpoints: (_) => 'https://solana.test',
+        jsonRpcTransport: transport,
+      );
+      final prepared = await service.prepareSolana(
+        draft: TransferDraft(
+          symbol: 'PYUSD',
+          networkLabel: 'Solana',
+          chain: Chain.solana,
+          recipient: _recipient,
+          amount: Amount.parse('1', 6, symbol: 'PYUSD'),
+          feeTier: 1,
+          tokenContract: _mint,
+          tokenProgram: solanaToken2022Program,
+        ),
+        from: _owner,
+        expectedNetworkIdentity: _genesisHash,
+      );
+
+      final parsed = parseUnsignedTransfer(Chain.solana, prepared.message);
+      expect(parsed.to, _recipient);
+      expect(parsed.tokenContract, _mint);
+      expect(parsed.amountRaw, BigInt.from(1000000));
+    },
+  );
+
+  test(
+    'native SOL quote fails before simulation when amount plus fee is short',
+    () async {
+      final transport = _SolanaTransport();
+      final service = LocalTransferService(
+        endpoints: (_) => 'https://solana.test',
+        jsonRpcTransport: transport,
+      );
+
+      await expectLater(
+        service.prepareSolana(
+          draft: TransferDraft(
+            symbol: 'SOL',
+            networkLabel: 'Solana',
+            chain: Chain.solana,
+            recipient: _recipient,
+            amount: Amount.parse('0.1', 9, symbol: 'SOL'),
+            feeTier: 1,
+          ),
+          from: _owner,
+          expectedNetworkIdentity: _genesisHash,
+        ),
+        throwsA(isA<TransferInsufficientFunds>()),
+      );
+      expect(
+        transport.simulatedMessage,
+        isNull,
+        reason: 'known insufficient balance must not reach simulation/signing',
+      );
+    },
+  );
 }

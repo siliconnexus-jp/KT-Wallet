@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -138,7 +137,7 @@ func (a *Alchemy) transfersFor(
 		"params":  []any{params},
 	})
 	if err != nil {
-		return nil, &Unavailable{Upstream: "alchemy", Message: err.Error()}
+		return nil, &Unavailable{Upstream: "alchemy", Message: "could not encode upstream request"}
 	}
 
 	if len(a.endpoints) == 0 {
@@ -169,17 +168,17 @@ func (a *Alchemy) requestEndpoint(
 	defer cancel()
 	req, err := http.NewRequestWithContext(actx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return nil, &Unavailable{Upstream: "alchemy", Message: err.Error()}
+		return nil, safeRequestCreationFailure("alchemy")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return nil, &Unavailable{Upstream: "alchemy", Message: err.Error()}
+		return nil, safeRequestFailure("alchemy", actx, err)
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	data, err := readBoundedResponse(resp.Body, 8<<20)
 	if err != nil {
-		return nil, &Unavailable{Upstream: "alchemy", Message: err.Error()}
+		return nil, safeResponseReadFailure("alchemy")
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, &Unavailable{
@@ -202,7 +201,7 @@ func (a *Alchemy) requestEndpoint(
 	if out.Error != nil {
 		return nil, &Unavailable{
 			Upstream: "alchemy",
-			Message:  fmt.Sprintf("Alchemy error %d: %s", out.Error.Code, out.Error.Message),
+			Message:  fmt.Sprintf("Alchemy rejected request with code %d", out.Error.Code),
 		}
 	}
 	if out.Result.Transfers == nil {
@@ -262,7 +261,7 @@ func (a *Alchemy) blockTimestamps(
 	}
 	payload, err := json.Marshal(batch)
 	if err != nil {
-		return nil, &Unavailable{Upstream: "alchemy", Message: err.Error()}
+		return nil, &Unavailable{Upstream: "alchemy", Message: "could not encode upstream request"}
 	}
 	if len(a.endpoints) == 0 {
 		return nil, &Unavailable{Upstream: "alchemy", Message: "no Alchemy endpoints configured"}
@@ -293,17 +292,17 @@ func (a *Alchemy) requestBlockTimestamps(
 	defer cancel()
 	req, err := http.NewRequestWithContext(actx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return nil, &Unavailable{Upstream: "alchemy", Message: err.Error()}
+		return nil, safeRequestCreationFailure("alchemy")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return nil, &Unavailable{Upstream: "alchemy", Message: err.Error()}
+		return nil, safeRequestFailure("alchemy", actx, err)
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	data, err := readBoundedResponse(resp.Body, 8<<20)
 	if err != nil {
-		return nil, &Unavailable{Upstream: "alchemy", Message: err.Error()}
+		return nil, safeResponseReadFailure("alchemy")
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, &Unavailable{
@@ -332,7 +331,7 @@ func (a *Alchemy) requestBlockTimestamps(
 		if item.Error != nil {
 			return nil, &Unavailable{
 				Upstream: "alchemy",
-				Message:  fmt.Sprintf("Alchemy error %d: %s", item.Error.Code, item.Error.Message),
+				Message:  fmt.Sprintf("Alchemy rejected request with code %d", item.Error.Code),
 			}
 		}
 		if item.ID <= 0 || item.ID > len(blocks) ||

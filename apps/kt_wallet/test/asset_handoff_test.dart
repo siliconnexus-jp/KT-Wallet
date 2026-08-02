@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/src/market/asset_ref.dart';
+import 'package:kt_wallet/src/market/market_controller.dart';
+import 'package:kt_wallet/src/market/market_scope.dart';
 import 'package:kt_wallet/src/market/token_balance_service.dart';
 import 'package:kt_wallet/src/screens/assets_screens.dart';
 import 'package:kt_wallet/src/screens/home_screen.dart' show nativesBySymbol;
@@ -298,6 +300,88 @@ void main() {
       // point and must keep working.
       expect(find.text('选择资产'), findsOneWidget);
     });
+
+    testWidgets('live scope never exposes fixture balance before refresh', (
+      tester,
+    ) async {
+      final wallets = _wallets();
+      final market = MarketController(wallets: wallets);
+      addTearDown(market.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: WalletScope(
+            controller: wallets,
+            child: MarketScope(
+              controller: market,
+              child: const TransferInputScreen(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.textContaining('3,120.00'), findsNothing);
+      expect(find.textContaining('可用 --'), findsWidgets);
+    });
+
+    testWidgets(
+      'lookalike recipient requires an explicit full-address review',
+      (tester) async {
+        final wallets = _wallets();
+        await wallets.addContact(
+          name: 'Alice',
+          address: '0x1234561111111111111111111111111111abcdef',
+          chain: Chain.ethereum.name,
+        );
+        final market = MarketController(wallets: wallets);
+        addTearDown(market.dispose);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: const Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: WalletScope(
+              controller: wallets,
+              child: MarketScope(
+                controller: market,
+                child: TransferInputScreen(
+                  asset: AssetRef.native(
+                    coin: Coin.eth,
+                    name: 'Ethereum',
+                    symbol: 'ETH',
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byType(TextField).first,
+          '0x1234562222222222222222222222222222abcdef',
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('recipient-lookalike-warning')),
+          findsOneWidget,
+        );
+        expect(find.textContaining('Alice'), findsOneWidget);
+
+        final acknowledge = find.byKey(
+          const ValueKey('recipient-lookalike-acknowledge'),
+        );
+        expect(tester.widget<TextButton>(acknowledge).onPressed, isNotNull);
+        await tester.tap(acknowledge);
+        await tester.pump();
+        expect(tester.widget<TextButton>(acknowledge).onPressed, isNull);
+      },
+    );
   });
 
   group('receive', () {

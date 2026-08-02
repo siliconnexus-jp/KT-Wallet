@@ -1,13 +1,25 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- local_auth: BiometricPrompt-based authentication. (mobile_scanner
          injects its own CAMERA permission via the manifest merge.) -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <uses-permission android:name="android.permission.DETECT_SCREEN_CAPTURE"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- A transitive camera dependency currently contributes INTERNET. Keep
+         debug's explicit permission for Flutter tooling, but remove every
+         library contribution from production/profile manifests. The release
+         APK is verified separately as the source manifest is not sufficient. -->
+    <uses-permission
+        android:name="android.permission.INTERNET"
+        tools:node="remove"/>
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules">
         <activity
             android:name=".PrivacyActivity"
             android:exported="false"

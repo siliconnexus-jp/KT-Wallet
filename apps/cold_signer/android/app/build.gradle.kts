@@ -30,10 +30,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "cc.siliconnexus.ktwallet.coldsigner"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -73,4 +70,22 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    testImplementation("junit:junit:4.13.2")
+}
+
+// Lock the production APK graph, while artifact bytes (including build tools)
+// are independently enforced by dependency verification metadata.
+configurations.configureEach {
+    if (name == "releaseRuntimeClasspath") {
+        resolutionStrategy.activateDependencyLocking()
+    }
+}
+
+dependencyLocking {
+    // Kotlin 2.3 exposes this metadata-only compatibility module as a runtime
+    // constraint but not as a standalone APK artifact.
+    ignoredDependencies.add("org.jetbrains.kotlin:kotlin-stdlib-common")
 }

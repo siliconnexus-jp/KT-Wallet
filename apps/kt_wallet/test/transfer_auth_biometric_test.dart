@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/main.dart';
 import 'package:kt_wallet/src/security/biometric_auth.dart';
 import 'package:kt_wallet/src/security/wallet_pin.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// W30 transfer auth sheet against a fake [BiometricAuth]: success proceeds
 /// to the broadcast result, failure stays on the sheet with a snackbar, and
@@ -15,7 +16,8 @@ void main() {
     WalletPin.instance = originalPin;
   });
 
-  Future<void> pumpAuthSheet(WidgetTester tester) async {
+  Future<void> pumpAuthSheet(WidgetTester tester, {String? authMethod}) async {
+    SharedPreferences.setMockInitialValues({'prefs.authMethod': ?authMethod});
     tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
     addTearDown(tester.platformDispatcher.clearLocalesTestValue);
     await tester.pumpWidget(KtWalletApp(initialLocation: '/transfer-auth'));
@@ -80,6 +82,31 @@ void main() {
   });
 
   testWidgets(
+    'password preference makes PIN the primary action and still gates submission',
+    (tester) async {
+      final pin = WalletPin(InMemoryPinStorage(), iterations: 10);
+      await pin.setPin('123456');
+      WalletPin.instance = pin;
+      BiometricAuth.instance = const FakeBiometricAuth(
+        BiometricOutcome.failure,
+      );
+      await pumpAuthSheet(tester, authMethod: 'password');
+
+      expect(find.text('钱包密码'), findsOneWidget);
+      expect(find.text('人脸 / 生物识别'), findsOneWidget);
+      await tester.tap(find.text('钱包密码'));
+      await tester.pumpAndSettle();
+      for (final digit in '123456'.split('')) {
+        await tester.tap(find.text(digit).last);
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+
+      expect(find.text('交易已提交'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'tapping the dimmed scrim dismisses the auth sheet back to confirm',
     (tester) async {
       BiometricAuth.instance = const FakeBiometricAuth(
@@ -93,6 +120,11 @@ void main() {
       await tester.tap(find.text('确认转账'));
       await tester.pumpAndSettle();
       expect(find.text('验证以确认转账'), findsOneWidget);
+      expect(
+        ModalRoute.of(tester.element(find.text('验证以确认转账')))!.opaque,
+        isFalse,
+        reason: 'auth must preserve the confirmed transaction below its scrim',
+      );
 
       // Tap the dimmed area above the sheet card.
       await tester.tapAt(const Offset(200, 80));

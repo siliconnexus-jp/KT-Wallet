@@ -1,6 +1,6 @@
 # KT Wallet Privacy Policy
 
-Last updated: 2026-07-26
+Last updated: 2026-07-31
 
 KT Wallet is a self-custody wallet. Recovery phrases and private keys are
 processed on the user's device and are not uploaded by KT Wallet. The app does
@@ -30,6 +30,25 @@ Those independent services may observe the IP address and request contents and
 apply their own privacy policies. Offline Signer mode is intended for an
 air-gapped device and blocks signing when a network connection is detected.
 
+KT Wallet keeps a bounded set of privacy-minimal reliability samples on the
+device: one of twelve fixed operation names, a bounded duration, and whether
+the operation succeeded. Exact event times, error messages, stack traces,
+device/session identifiers, wallet data and transaction data are not recorded.
+The About screen can export a redacted local support package for the user to
+review and share.
+
+The About screen also offers a separate, optional **Send anonymous performance
+report** action. Nothing is uploaded in the background. Each upload requires a
+fresh confirmation and is sent once without automatic retries. It contains
+only the app version, platform, broad language (`en`, `zh`, `ja`, or `other`),
+build mode, and aggregate count/success/failure/P50/P95 values for the fixed
+operation names. It never includes a wallet or device ID, address, balance,
+amount, transaction, transaction hash, timestamp, endpoint URL, error text,
+stack trace, key, signature, or recovery phrase. The Gateway converts accepted
+reports directly into fixed-label counters and does not store the request body
+or raw events. Production monitoring currently retains these anonymous
+aggregates for at most 7 days or 512 MB, whichever limit is reached first.
+
 ## Permissions
 
 - Camera: scan pairing and transaction QR codes.
@@ -46,5 +65,8 @@ configuration and signing records associated with that Cold Signer wallet.
 Deleting the app removes remaining local app data according to the operating
 system's normal uninstall behavior.
 
-Questions and security reports can be filed at
-https://github.com/siliconnexus-jp/KT-Wallet/issues.
+General, non-sensitive questions can be filed in the public issue tracker.
+Suspected vulnerabilities must not be posted publicly. Use the private process
+in [SECURITY.md](SECURITY.md). Never include a recovery phrase, private key,
+provider credential, complete transaction payload, or unredacted wallet data in
+a report.

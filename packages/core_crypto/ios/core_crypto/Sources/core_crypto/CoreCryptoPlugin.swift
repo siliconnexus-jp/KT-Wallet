@@ -5,9 +5,14 @@ import WalletCore
 
 /// Channel dispatcher for `kt/core_crypto` (detailed-design.md §2.1).
 ///
-/// The Dart side already validated arguments; here we only decode, route to
-/// the native components, and translate errors into the shared error codes.
+/// Every argument is validated again at this native trust boundary before it
+/// can reach authentication, Keychain, KDF, or Wallet Core.
 public class CoreCryptoPlugin: NSObject, FlutterPlugin {
+  private static let walletIdMethods: Set<String> = [
+    "storeWallet", "deriveAddresses", "derivePublicKeys", "signTransaction",
+    "exportMnemonic", "createBackup", "deleteWallet",
+  ]
+
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
       name: "kt/core_crypto", binaryMessenger: registrar.messenger())
@@ -25,19 +30,27 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
   private func dispatch(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) async {
     let a = args(call)
     do {
+      // Reject malformed identifiers before authentication or native storage.
+      // The Dart wrapper validates too; the MethodChannel remains its own
+      // trust boundary and must be safe when invoked directly.
+      if Self.walletIdMethods.contains(call.method) {
+        _ = try requireValidWalletId(a["walletId"])
+      }
       switch call.method {
       case "generateMnemonic":
-        let strength = Int32(a["strength"] as? Int ?? 128)
-        result(WalletCoreBridge.generateMnemonic(strength: strength))
+        result(try WalletCoreBridge.generateMnemonic(strength: requireMnemonicStrength(a)))
 
       case "validateMnemonic":
-        result(WalletCoreBridge.isValidMnemonic(a["mnemonic"] as? String ?? ""))
+        result(WalletCoreBridge.isValidMnemonic(try requireMnemonicText(a)))
 
       case "validateWord":
-        result(WalletCoreBridge.isValidWord(a["word"] as? String ?? ""))
+        result(WalletCoreBridge.isValidWord(try requireWordText(a)))
 
       case "suggestWords":
-        result(WalletCoreBridge.suggest(a["prefix"] as? String ?? ""))
+        let prefix = try requireSuggestionPrefix(a)
+        let limit = try requireSuggestionLimit(a)
+        result(prefix.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          ? [] : Array(WalletCoreBridge.suggest(prefix).prefix(limit)))
 
       // No AuthGate here, and Android has one — a platform requirement, not a
       // policy difference, so do NOT "align" them. The Keychain access control
@@ -86,32 +99,43 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
       result(bridgeError(e))
     } catch KeychainStore.StoreError.notFound {
       result(FlutterError(code: "WALLET_NOT_FOUND", message: nil, details: nil))
+    } catch KeychainStore.StoreError.alreadyExists {
+      result(FlutterError(code: "WALLET_EXISTS", message: nil, details: nil))
     } catch KeychainStore.StoreError.corrupted {
       result(FlutterError(code: "STORE_CORRUPTED", message: nil, details: nil))
     } catch EntropyCipher.CipherError.openFailed {
-      result(FlutterError(code: "STORE_CORRUPTED", message: "kdf layer failed", details: nil))
+      result(FlutterError(code: "STORE_CORRUPTED", message: nil, details: nil))
+    } catch PortableBackupCipher.CipherError.openFailed {
+      result(FlutterError(code: "STORE_CORRUPTED", message: nil, details: nil))
+    } catch WalletIdValidationError.invalid {
+      result(FlutterError(code: "INVALID_INPUT", message: nil, details: nil))
+    } catch NativeArgumentValidationError.invalid {
+      result(FlutterError(code: "INVALID_INPUT", message: nil, details: nil))
     } catch {
-      result(FlutterError(code: "SIGN_FAILED", message: "\(error)", details: nil))
+      // Never forward raw native exception text. Wallet Core, Keychain and
+      // filesystem errors may contain wallet identifiers or operation data.
+      result(FlutterError(code: "SIGN_FAILED", message: nil, details: nil))
     }
   }
 
   // MARK: - operations
 
   private func storeWallet(_ a: [String: Any]) throws {
-    let walletId = a["walletId"] as! String
-    let mnemonic = a["mnemonic"] as! String
-    let requireAuth = a["requireAuth"] as? Bool ?? true
+    let walletId = try requireValidWalletId(a["walletId"])
+    let mnemonic = try requireMnemonicText(a)
+    let requireAuth = try optionalBoolArgument(a, "requireAuth", default: true)
     var entropy = try WalletCoreBridge.entropy(from: mnemonic)
     defer { entropy.resetBytes(in: 0..<entropy.count) }
 
     // Blob header: first byte flags whether the KDF layer is present, so reads
     // can fail closed when the password is missing (enforces invariant 5 at the
     // native layer instead of trusting the caller).
-    let usesKdf = (a["kdfPassword"] as? String).map { !$0.isEmpty } ?? false
+    let kdfPassword = try optionalKDFPassword(a)
+    let usesKdf = kdfPassword.map { !$0.isEmpty } ?? false
     var body: Data
     if usesKdf {
       body = try EntropyCipher.seal(
-        entropy: entropy, password: a["kdfPassword"] as! String)
+        entropy: entropy, password: kdfPassword!)
     } else {
       body = entropy
     }
@@ -125,13 +149,15 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
   private func withEntropy<T>(
     _ a: [String: Any], context: LAContext, _ body: (Data) throws -> T
   ) throws -> T {
-    let walletId = a["walletId"] as! String
+    let walletId = try requireValidWalletId(a["walletId"])
     var stored = try KeychainStore.load(walletId: walletId, context: context)
     defer { stored.resetBytes(in: 0..<stored.count) }
-    guard let flag = stored.first else { throw KeychainStore.StoreError.corrupted }
+    _ = try requireStoredWalletPayloadSize(stored)
+    guard let first = stored.first else { throw KeychainStore.StoreError.corrupted }
+    let flag = try requireStoredWalletFlag(first)
     let payload = stored.dropFirst()
 
-    let password = a["kdfPassword"] as? String
+    let password = try optionalKDFPassword(a)
     let hasPassword = password.map { !$0.isEmpty } ?? false
     if flag == 0x01 && !hasPassword {
       // KDF-sealed wallet read without its password: fail closed.
@@ -144,6 +170,7 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
       entropy = Data(payload)
     }
     defer { entropy.resetBytes(in: 0..<entropy.count) }
+    _ = try requireEntropySize(entropy)
     return try body(entropy)
   }
 
@@ -168,9 +195,9 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
   }
 
   private func signTransaction(_ a: [String: Any]) async throws -> [String: Any] {
+    let coin = try requireSupportedCoin(a)
+    let input = try requireSigningInput(a)
     let context = try await AuthGate.shared.authenticate(reason: "Authorize transaction signing")
-    let coin = a["coin"] as! String
-    let input = (a["signingInput"] as! FlutterStandardTypedData).data
     let signed = try withEntropy(a, context: context) {
       try WalletCoreBridge.sign(entropy: $0, coin: coin, signingInput: input)
     }
@@ -192,10 +219,10 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
   /// KDF layer under a *different* password, and a backup nobody can open is
   /// worse than no backup.
   private func createBackup(_ a: [String: Any]) async throws -> Data {
+    let password = try requireBackupPassword(a)
     let context = try await AuthGate.shared.authenticate(reason: "Create an encrypted backup")
-    let password = a["password"] as! String
     return try withEntropy(a, context: context) { entropy in
-      try EntropyCipher.seal(entropy: entropy, password: password)
+      try PortableBackupCipher.seal(entropy: entropy, password: password)
     }
   }
 
@@ -203,9 +230,14 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
   /// the password is the whole gate, and a device prompt here would only
   /// inconvenience the owner restoring onto a phone they just set up.
   private func readBackup(_ a: [String: Any]) throws -> String {
-    let blob = (a["blob"] as! FlutterStandardTypedData).data
-    let password = a["password"] as! String
-    var entropy = try EntropyCipher.open(sealed: blob, password: password)
+    let blob = try requireBackupBlob(a)
+    let password = try requireBackupPassword(a)
+    let formatVersion = try requireIntArgument(a, "formatVersion")
+    guard formatVersion == 1 || formatVersion == 2
+    else { throw WalletCoreBridge.BridgeError.invalidInput }
+    // Both historical iOS v1 and portable v2 use this PBKDF2 format. The
+    // Argon2 fallback is Android-only because no released iOS build wrote it.
+    var entropy = try PortableBackupCipher.open(sealed: blob, password: password)
     defer { entropy.resetBytes(in: 0..<entropy.count) }
     guard let wallet = HDWallet(entropy: entropy, passphrase: "") else {
       throw WalletCoreBridge.BridgeError.invalidMnemonic
@@ -215,7 +247,7 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
 
   private func deleteWallet(_ a: [String: Any]) async throws {
     _ = try await AuthGate.shared.authenticate(reason: "Confirm wallet deletion")
-    try KeychainStore.delete(walletId: a["walletId"] as! String)
+    try KeychainStore.delete(walletId: requireValidWalletId(a["walletId"]))
   }
 
   private func bridgeError(_ e: WalletCoreBridge.BridgeError) -> FlutterError {

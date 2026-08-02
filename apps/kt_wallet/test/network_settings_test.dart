@@ -119,6 +119,39 @@ void main() {
     expect(store.getString('rpc.eth'), isNull);
   });
 
+  testWidgets('unsafe RPC override stays in editor and is not persisted', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = AppPrefsController();
+    await prefs.load();
+
+    await tester.pumpWidget(
+      _app(
+        AppPrefsScope(controller: prefs, child: const NetworkSettingsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(defaultEthRpcUrl));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField),
+      'https://user:secret@rpc.example',
+    );
+    await tester.tap(find.text('保存'));
+    await tester.pump();
+
+    expect(
+      find.text('请输入不包含账号凭证的有效 HTTPS 地址。仅 localhost 可使用 HTTP。'),
+      findsOneWidget,
+    );
+    expect(find.byType(TextField), findsOneWidget);
+    expect(prefs.rpcOverride(Coin.eth), isNull);
+    final store = await SharedPreferences.getInstance();
+    expect(store.containsKey('rpc.eth'), isFalse);
+  });
+
   testWidgets(
     'gateway card: production default, URL edit, and direct mode persist',
     (tester) async {
@@ -199,6 +232,36 @@ void main() {
 
     expect(prefs.gatewayUrl, AppPrefsController.defaultGatewayUrl);
     expect(find.text(AppPrefsController.defaultGatewayUrl), findsOneWidget);
+  });
+
+  testWidgets('unsafe Gateway URL stays in editor and is not persisted', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = AppPrefsController();
+    await prefs.load();
+
+    await tester.pumpWidget(
+      _app(
+        AppPrefsScope(controller: prefs, child: const NetworkSettingsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(AppPrefsController.defaultGatewayUrl));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'http://gateway.example');
+    await tester.tap(find.text('保存'));
+    await tester.pump();
+
+    expect(
+      find.text('请输入不包含账号凭证的有效 HTTPS 地址。仅 localhost 可使用 HTTP。'),
+      findsOneWidget,
+    );
+    expect(find.byType(TextField), findsOneWidget);
+    expect(prefs.gatewayUrl, AppPrefsController.defaultGatewayUrl);
+    final store = await SharedPreferences.getInstance();
+    expect(store.containsKey(AppPrefsController.gatewayPrefKey), isFalse);
   });
 
   testWidgets('test connection: kt_health ok → success snackbar', (

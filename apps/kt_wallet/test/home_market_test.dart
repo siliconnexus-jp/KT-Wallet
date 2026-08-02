@@ -16,6 +16,8 @@ import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/test_wallet_scope.dart';
+
 class _FakeBalanceService extends BalanceService {
   _FakeBalanceService(this.results);
   final Map<Coin, BalanceResult> results;
@@ -39,11 +41,13 @@ class _FakePriceService extends PriceService {
     this.tokenPrices = const {'USDT': 0.99, 'USDC': 1.01},
     this.changes = const {},
     this.tokenChanges = const {},
+    this.fiatRates = const {'USD': 1},
   });
   final Map<Coin, double>? prices;
   final Map<String, double> tokenPrices;
   final Map<Coin, double> changes;
   final Map<String, double> tokenChanges;
+  final Map<String, double> fiatRates;
   @override
   Future<Map<Coin, double>?> fetchUsdPrices() async => prices;
   @override
@@ -52,6 +56,10 @@ class _FakePriceService extends PriceService {
   double? change24hPercent(Coin coin) => changes[coin];
   @override
   double? tokenChange24hPercent(String symbol) => tokenChanges[symbol];
+  @override
+  double? fiatPerUsd(String currency) => fiatRates[currency];
+  @override
+  Map<String, double> get lastGoodFiatPerUsd => fiatRates;
 }
 
 class _FakeTokenBalanceService extends TokenBalanceService {
@@ -81,7 +89,9 @@ WalletController _wallets() => WalletController(
   ),
 );
 
-MarketController _liveController() => MarketController(
+MarketController _liveController({
+  Map<String, double> fiatRates = const {'USD': 1},
+}) => MarketController(
   wallets: _wallets(),
   balances: _FakeBalanceService({
     Coin.eth: BalanceResult.ok(
@@ -114,6 +124,7 @@ MarketController _liveController() => MarketController(
       Coin.solana: 10,
     },
     tokenChanges: const {'USDT': 10, 'USDC': 10},
+    fiatRates: fiatRates,
   ),
   tokens: _FakeTokenBalanceService({
     'usdt-eth': BalanceResult.ok(
@@ -145,7 +156,7 @@ Widget _app(Widget home) => MaterialApp(
   locale: const Locale('zh'),
   localizationsDelegates: AppLocalizations.localizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,
-  home: home,
+  home: withTestWalletScope(home),
 );
 
 void main() {
@@ -187,6 +198,29 @@ void main() {
     expect(find.text('0.0842 ETH'), findsNothing);
     // No offline banner in live mode.
     expect(find.text('离线，显示演示数据'), findsNothing);
+    controller.dispose();
+  });
+
+  testWidgets('selected CNY converts all live fiat with the fetched FX rate', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({'prefs.fiat': 'CNY'});
+    final prefs = AppPrefsController();
+    await prefs.load();
+    final controller = _liveController(fiatRates: const {'USD': 1, 'CNY': 7});
+    await tester.pumpWidget(
+      _app(
+        AppPrefsScope(
+          controller: prefs,
+          child: MarketScope(controller: controller, child: const HomeScreen()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('CN¥14,604.45'), findsOneWidget);
+    expect(find.text('CN¥14,000.00'), findsWidgets);
+    expect(find.text(r'$2,086.35'), findsNothing);
     controller.dispose();
   });
 

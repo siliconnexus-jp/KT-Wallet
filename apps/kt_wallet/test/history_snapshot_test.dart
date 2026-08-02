@@ -42,6 +42,7 @@ void main() {
           Coin.eth: HistoryResult.ok([
             ChainTxRecord(
               coin: Coin.eth,
+              networkId: 'eth-mainnet',
               id: '0xabc:log:1',
               hash: '0xabc',
               outgoing: false,
@@ -63,6 +64,7 @@ void main() {
     expect(restored!.savedAt, savedAt);
     final record = restored.results[Coin.eth]!.records.single;
     expect(record.id, '0xabc:log:1');
+    expect(record.networkId, 'eth-mainnet');
     expect(record.amountText, '12.5 USDC');
     expect(record.assetVerified, isTrue);
 

@@ -9,19 +9,21 @@ DeviceState _state({
   bool biometric = true,
   bool capture = false,
   bool rooted = false,
-}) =>
-    DeviceState(
-      networkReachable: network,
-      airplaneMode: airplane,
-      bluetoothOn: bluetooth,
-      devicePasscodeSet: passcode,
-      biometricEnrolled: biometric,
-      screenCaptured: capture,
-      rootedOrJailbroken: rooted,
-    );
+}) => DeviceState(
+  networkReachable: network,
+  airplaneMode: airplane,
+  bluetoothOn: bluetooth,
+  devicePasscodeSet: passcode,
+  biometricEnrolled: biometric,
+  screenCaptured: capture,
+  rootedOrJailbroken: rooted,
+);
 
 CheckLevel _levelOf(SecurityVerdict v, String id) =>
     v.results.firstWhere((r) => r.id == id).level;
+
+DeviceCondition _conditionOf(SecurityVerdict v, String id) =>
+    v.results.firstWhere((r) => r.id == id).condition;
 
 void main() {
   group('security check matrix (DD §7.2)', () {
@@ -50,18 +52,19 @@ void main() {
       expect(v.canSign, isFalse);
     });
 
-    test('bluetooth on / no airplane / no biometric are WARN (non-blocking)', () {
-      final v = SecurityChecks.verdict(_state(
-        bluetooth: true,
-        airplane: false,
-        biometric: false,
-      ));
-      expect(_levelOf(v, 'bluetooth'), CheckLevel.warn);
-      expect(_levelOf(v, 'airplane'), CheckLevel.warn);
-      expect(_levelOf(v, 'biometric'), CheckLevel.warn);
-      expect(v.overall, CheckLevel.warn);
-      expect(v.canSign, isTrue);
-    });
+    test(
+      'bluetooth on / no airplane / no biometric are WARN (non-blocking)',
+      () {
+        final v = SecurityChecks.verdict(
+          _state(bluetooth: true, airplane: false, biometric: false),
+        );
+        expect(_levelOf(v, 'bluetooth'), CheckLevel.warn);
+        expect(_levelOf(v, 'airplane'), CheckLevel.warn);
+        expect(_levelOf(v, 'biometric'), CheckLevel.warn);
+        expect(v.overall, CheckLevel.warn);
+        expect(v.canSign, isTrue);
+      },
+    );
 
     test('rooted/jailbroken is a BLOCK (key-holder compromise)', () {
       final v = SecurityChecks.verdict(_state(rooted: true));
@@ -73,6 +76,17 @@ void main() {
       final v = SecurityChecks.verdict(_state(network: true, bluetooth: true));
       expect(v.overall, CheckLevel.block);
       expect(v.canSign, isFalse);
+    });
+
+    test('unknown stays structured and is never converted to pass', () {
+      final v = SecurityChecks.verdict(const DeviceState.unknown());
+      expect(v.results, hasLength(7));
+      for (final result in v.results) {
+        expect(result.condition, DeviceCondition.unknown);
+        expect(result.level, CheckLevel.warn);
+      }
+      expect(_conditionOf(v, 'network'), DeviceCondition.unknown);
+      expect(v.overall, CheckLevel.warn);
     });
   });
 }

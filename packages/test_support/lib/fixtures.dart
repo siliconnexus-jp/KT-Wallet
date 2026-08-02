@@ -1,18 +1,34 @@
-/// Fixture loading helpers. Tests run with cwd == package root, so fixtures
-/// live at `<package>/test/fixtures/...` (detailed-design.md §9).
+/// Fixture loading helpers for this package's `test/fixtures` directory.
+///
+/// The path is resolved through the Dart package configuration instead of the
+/// process working directory, so the same test behaves identically when run
+/// from this package or from the monorepo root.
 library;
 
 import 'dart:convert';
 import 'dart:io';
 
+Directory _testSupportRoot() {
+  for (final relative in const ['.', 'packages/test_support']) {
+    final candidate = Directory(relative).absolute;
+    if (Directory.fromUri(
+      candidate.uri.resolve('test/fixtures/'),
+    ).existsSync()) {
+      return candidate;
+    }
+  }
+  throw StateError(
+    'Unable to resolve test_support from ${Directory.current.path}',
+  );
+}
+
 /// Reads a fixture file relative to the current package's `test/fixtures/`.
 String readFixture(String relativePath) {
-  final file = File('test/fixtures/$relativePath');
+  final file = File.fromUri(
+    _testSupportRoot().uri.resolve('test/fixtures/$relativePath'),
+  );
   if (!file.existsSync()) {
-    throw ArgumentError(
-      'Fixture not found: ${file.path} (cwd=${Directory.current.path}). '
-      'Run tests from the package root.',
-    );
+    throw ArgumentError('Fixture not found: ${file.path}');
   }
   return file.readAsStringSync();
 }

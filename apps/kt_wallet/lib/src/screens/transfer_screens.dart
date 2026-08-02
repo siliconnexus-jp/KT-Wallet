@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:chains/chains.dart';
-import 'package:chains/rpc.dart';
+import 'package:chains/rpc.dart' show RpcRejectionKind;
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
@@ -18,7 +17,9 @@ import 'package:wallet_data/wallet_data.dart'
         EvmNonceConflict,
         SignMode,
         Transaction,
+        TxCheckOutcome,
         TxDirection,
+        TxOperationKind,
         TxReplacementKind,
         TxStatus;
 
@@ -27,9 +28,16 @@ import 'home_screen.dart' show tokenRowMeta;
 import '../market/balance_service.dart' show BalanceService, BalanceStatus;
 import '../market/asset_ref.dart' show AssetDeployment, AssetRef, chainOf;
 import '../market/explorer_links.dart' show explorerTxUrl;
-import '../market/history_service.dart' show ChainTxRecord;
+import '../market/history_service.dart' show ChainTxRecord, ChainTxStatus;
+import '../market/gateway_client.dart'
+    show GatewayTokenRisk, GatewayTokenRiskStatus;
+import '../market/fiat_math.dart' show fiatValueForDisplay;
 import '../market/market_scope.dart'
-    show MarketScope, effectiveRpcEndpoints, prefsGatewayResolver;
+    show
+        MarketScope,
+        effectiveRpcEndpoints,
+        formatFiatForContext,
+        prefsGatewayResolver;
 import '../market/token_balance_service.dart'
     show
         TokenInfo,
@@ -43,10 +51,11 @@ import '../market/token_balance_service.dart'
         usdtTronToken;
 import '../market/transaction_card.dart';
 import '../market/transaction_status_service.dart';
+import '../observability/experience_metrics.dart';
 import '../platform/external_actions.dart';
 import '../platform/media_gallery.dart';
-import '../rpc/http_transport.dart';
 import '../security/biometric_auth.dart';
+import '../security/transaction_auth.dart';
 import '../security/wallet_pin.dart';
 import '../state/app_prefs.dart' show AppPrefsScope, AuthMethod;
 import '../state/networks.dart' show Network, NetworkScope;
@@ -55,7 +64,9 @@ import '../transfer/broadcast_service.dart';
 import '../transfer/chain_params_service.dart';
 import '../transfer/local_transfer_service.dart';
 import '../transfer/frame_scan.dart';
+import '../transfer/recipient_risk.dart';
 import '../transfer/transaction_confirmation_service.dart';
+import '../transfer/transfer_error_localization.dart';
 import '../transfer/transfer_draft.dart';
 import '../widgets/scan_viewfinder.dart';
 import '../widgets/pin_pad.dart';
@@ -63,18 +74,30 @@ import '../widgets/token_icon.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
 
+bool _isEvmCoinName(String coin) =>
+    coin == 'eth' ||
+    coin == 'polygon' ||
+    coin == 'base' ||
+    coin == 'arbitrum' ||
+    coin == 'avalanche' ||
+    coin == 'bnb';
+
 Future<void> _persistAirgapTransaction(
   BuildContext context,
   TransferSession session,
   TxStatus status, {
   String? hash,
+  SignRequest? requestOverride,
 }) async {
   final draft = session.draft;
-  final request = session.request;
+  final request = requestOverride ?? session.request;
   final wallet = WalletScope.of(context).current;
   if (draft == null || request == null || wallet == null) return;
-  final id = session.localTransactionId ??=
-      'airgap_${request.reqIdHex.toLowerCase()}';
+  // Do not publish the generated id to the in-memory session until the row is
+  // durable. A failed first write must not leave a phantom transaction id that
+  // a later request (with a different reqId) would accidentally reuse.
+  final existingId = session.localTransactionId;
+  final id = existingId ?? 'airgap_${request.reqIdHex.toLowerCase()}';
   await WalletScope.of(context).saveOutgoingTransaction(
     id: id,
     reqId: request.reqIdHex,
@@ -83,6 +106,9 @@ Future<void> _persistAirgapTransaction(
     // WHICH chain instance it belongs to, not just the protocol family.
     networkId: NetworkScope.of(context).activeFor(draft.chain).id,
     contract: draft.tokenContract,
+    operation: draft.operation == TxOperation.approvalRevoke
+        ? TxOperationKind.approvalRevoke
+        : TxOperationKind.transfer,
     from: addressForChain(wallet.addresses, draft.chain),
     to: draft.recipient,
     amountRaw: draft.amount.raw.toString(),
@@ -91,22 +117,17 @@ Future<void> _persistAirgapTransaction(
     signMode: SignMode.airgap,
     createdAt: request.createdAt * 1000,
     broadcastAt:
-        status == TxStatus.pending ||
+        (status == TxStatus.submitted && hash != null) ||
+            status == TxStatus.pending ||
             status == TxStatus.failed ||
             status == TxStatus.dropped
         ? DateTime.now().millisecondsSinceEpoch
         : null,
+    referenceBlockHeight: session.referenceBlockHeight,
+    expiresAt: session.expiresAt,
+    lastValidBlockHeight: session.lastValidBlockHeight,
   );
-}
-
-Uint8List _decodeHex(String input) {
-  if (input.length.isOdd || !RegExp(r'^[0-9a-fA-F]+$').hasMatch(input)) {
-    throw const FormatException('invalid hex');
-  }
-  return Uint8List.fromList([
-    for (var i = 0; i < input.length; i += 2)
-      int.parse(input.substring(i, i + 2), radix: 16),
-  ]);
+  session.localTransactionId ??= id;
 }
 
 bool get _isFlutterTest =>
@@ -137,24 +158,45 @@ double? _unitPriceUsd(
   if (NetworkScope.maybeOf(context)?.activeFor(chain).isTestnet ?? false) {
     return null;
   }
+  final market = MarketScope.maybeOf(context);
+  final coin = rpcCoinForChain(chain);
   if (tokenContract != null) {
-    return MarketScope.maybeOf(context)?.tokenPriceUsd(symbol);
+    return market?.tokenPriceUsdFor(coin, symbol);
   }
-  return MarketScope.maybeOf(context)?.priceUsd(rpcCoinForChain(chain));
+  return market?.priceUsd(coin);
 }
 
-/// `$12.34`, or `--` when [value] is null.
-String _fiatText(double? value) =>
-    value == null ? '--' : '\$${value.toStringAsFixed(2)}';
+/// Selected-fiat value, or `--` when either the USD quote or FX rate is absent.
+String _fiatText(BuildContext context, double? value) =>
+    formatFiatForContext(context, value);
 
 /// The fiat value of [amount] at [unitPrice], or null when either is unknown.
 /// Display-only double math (the same convention as [MarketController]).
 double? _fiatValue(Amount? amount, double? unitPrice) {
-  if (amount == null || unitPrice == null) return null;
-  return amount.raw.toDouble() /
-      math.pow(10, amount.decimals).toDouble() *
-      unitPrice;
+  return fiatValueForDisplay(amount, unitPrice);
 }
+
+String _chainTxStatusLabel(AppLocalizations l10n, ChainTxStatus status) =>
+    switch (status) {
+      ChainTxStatus.confirmed => l10n.txStatusConfirmed,
+      ChainTxStatus.failed => l10n.txStatusFailed,
+      ChainTxStatus.pending => l10n.txStatusPending,
+      ChainTxStatus.unknown => l10n.txStatusUnknown,
+    };
+
+Color _chainTxStatusColor(ChainTxStatus status) => switch (status) {
+  ChainTxStatus.confirmed => WalletColors.green,
+  ChainTxStatus.failed => WalletColors.red,
+  ChainTxStatus.pending => WalletColors.accent,
+  ChainTxStatus.unknown => WalletColors.text3,
+};
+
+TransactionCardTone _chainTxCardTone(ChainTxStatus status) => switch (status) {
+  ChainTxStatus.confirmed => TransactionCardTone.success,
+  ChainTxStatus.failed => TransactionCardTone.failed,
+  ChainTxStatus.pending => TransactionCardTone.pending,
+  ChainTxStatus.unknown => TransactionCardTone.neutral,
+};
 
 Widget _amberWarn(String text) => Container(
   padding: const EdgeInsets.all(12),
@@ -177,7 +219,7 @@ Widget _amberWarn(String text) => Container(
           style: const TextStyle(
             fontSize: 13,
             height: 1.5,
-            color: Color(0xFF9A6503),
+            color: Color(0xFF7A4E00),
           ),
         ),
       ),
@@ -285,6 +327,24 @@ class _TransferAsset {
     decimals,
     value,
     value,
+    color,
+    initial,
+    contract: contract,
+    tokenProgram: tokenProgram,
+    supported: supported,
+  );
+
+  /// Fail-closed state used by the live app before a wallet-scoped market
+  /// snapshot exists. The parsable raw value is zero (so Max/Next cannot
+  /// spend invented funds), while the UI label remains honestly unavailable.
+  _TransferAsset withUnavailableBalance() => _TransferAsset(
+    symbol,
+    network,
+    networkName,
+    chain,
+    decimals,
+    '0',
+    '--',
     color,
     initial,
     contract: contract,
@@ -506,15 +566,15 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
         ? selected
         : selected.forNetwork(network);
     final market = MarketScope.maybeOf(context);
-    // Keep gallery/widget-test fixtures deterministic until their controller
-    // has actually refreshed; the live app replaces demo balances as soon as
-    // the first real balance pass completes.
+    // A missing scope means a gallery/golden fixture and retains the design
+    // values. A mounted production scope must never expose those fixture
+    // balances while its first wallet-scoped refresh is still in flight.
     final wallet = WalletScope.of(context).current;
-    if (market == null ||
-        !market.hasRefreshed ||
+    if (market == null) return networkAsset;
+    if (!market.hasRefreshed ||
         wallet == null ||
         !wallet.addresses.hasExpandedEvm) {
-      return networkAsset;
+      return networkAsset.withUnavailableBalance();
     }
 
     final result = networkAsset.contract == null
@@ -573,6 +633,9 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
   final _addrController = TextEditingController();
   final _amountController = TextEditingController();
   Contact? _selectedContact;
+  List<KnownRecipientAddress> _knownRecipients = const [];
+  bool _recipientRiskRequested = false;
+  String? _acknowledgedRiskAddress;
   int _fee = 1;
 
   /// True in the real app (any live surface mounts a [MarketScope]); false
@@ -582,12 +645,52 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_liveInputInitialized) return;
-    _liveInputInitialized = true;
-    if (!_isLiveContext) {
-      _addrController.text = _demoRecipient;
-      _amountController.text = _demoAmount;
+    if (!_liveInputInitialized) {
+      _liveInputInitialized = true;
+      if (!_isLiveContext) {
+        _addrController.text = _demoRecipient;
+        _amountController.text = _demoAmount;
+      }
     }
+    if (_isLiveContext && !_recipientRiskRequested) {
+      _recipientRiskRequested = true;
+      unawaited(_loadRecipientRiskSources());
+    }
+  }
+
+  Future<void> _loadRecipientRiskSources() async {
+    final controller = WalletScope.of(context);
+    final values = await Future.wait<Object>([
+      controller.loadContacts(),
+      controller.localTransactions(),
+    ]);
+    if (!mounted) return;
+    final contacts = values[0] as List<Contact>;
+    final transactions = values[1] as List<Transaction>;
+    final known = <KnownRecipientAddress>[
+      for (final contact in contacts)
+        KnownRecipientAddress(address: contact.address, label: contact.name),
+      for (final wallet in controller.wallets)
+        for (final coin in Coin.values)
+          KnownRecipientAddress(
+            address: wallet.addresses.forCoin(coin),
+            label: wallet.name,
+          ),
+      for (final transaction in transactions)
+        KnownRecipientAddress(
+          address: transaction.direction == TxDirection.outgoing
+              ? transaction.toAddr
+              : transaction.fromAddr,
+          label: truncateMiddle(
+            transaction.direction == TxDirection.outgoing
+                ? transaction.toAddr
+                : transaction.fromAddr,
+            head: 8,
+            tail: 8,
+          ),
+        ),
+    ];
+    setState(() => _knownRecipients = known);
   }
 
   /// Design-demo literals — gallery/goldens ONLY (see [_addrController]).
@@ -603,6 +706,12 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
 
   AddressValidation get _addrCheck =>
       Addresses.validate(_asset.chain, _addrController.text.trim());
+
+  RecipientLookalikeRisk? get _recipientRisk => detectRecipientLookalike(
+    chain: _asset.chain,
+    candidate: _addrController.text,
+    knownAddresses: _knownRecipients,
+  );
 
   /// The identity badge is shown only while the field still contains exactly
   /// the address chosen from the book and that address remains compatible
@@ -684,6 +793,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
       parsed = Amount(raw: BigInt.zero, decimals: _asset.decimals);
     }
     return _fiatText(
+      context,
       _fiatValue(
         parsed,
         _unitPriceUsd(
@@ -702,6 +812,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     if (text.isNotEmpty) {
       setState(() {
         _selectedContact = null;
+        _acknowledgedRiskAddress = null;
         _addrController.text = text;
       });
     }
@@ -713,6 +824,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     if (scanned != null && mounted) {
       setState(() {
         _selectedContact = null;
+        _acknowledgedRiskAddress = null;
         _addrController.text = scanned;
       });
     }
@@ -899,6 +1011,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     if (selected != null && mounted) {
       setState(() {
         _selectedContact = selected;
+        _acknowledgedRiskAddress = null;
         _addrController.text = selected.address;
       });
     }
@@ -1019,7 +1132,10 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                         )
                       : null,
                   onTap: () {
-                    setState(() => _assetIndex = i);
+                    setState(() {
+                      _assetIndex = i;
+                      _acknowledgedRiskAddress = null;
+                    });
                     Navigator.of(ctx).pop();
                   },
                 ),
@@ -1034,16 +1150,22 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(13) >= 20;
     final isHot = WalletScope.of(context).current is HotWallet;
     final addrCheck = _addrCheck;
     final selectedContact = _visibleContact;
-    final canProceed = addrCheck.isValid && _amount != null;
+    final recipientRisk = _recipientRisk;
+    final riskAcknowledged =
+        recipientRisk == null ||
+        _acknowledgedRiskAddress == recipientRisk.candidate;
+    final canProceed = addrCheck.isValid && riskAcknowledged && _amount != null;
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(
         title: l10n.actionSend,
         onBack: () => Navigator.of(context).maybePop(),
         trailing: Icons.qr_code_scanner,
+        trailingTooltip: l10n.scanAddressTitle,
         onTrailing: _scanAddress,
       ),
       bottom: KtPrimaryButton(
@@ -1079,45 +1201,48 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
             // an inert row that still shows a chevron just invites a tap that
             // does nothing.
             onTap: _options.length > 1 ? _pickAsset : null,
-            child: Row(
-              children: [
-                TokenIcon(
-                  symbol: _asset.symbol,
-                  size: 36,
-                  fallbackColor: _asset.color,
-                  fallbackInitial: _asset.initial,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _asset.symbol,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: WalletColors.text,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _asset.network,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: WalletColors.text2,
-                        ),
-                      ),
-                    ],
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Row(
+                children: [
+                  TokenIcon(
+                    symbol: _asset.symbol,
+                    size: 36,
+                    fallbackColor: _asset.color,
+                    fallbackInitial: _asset.initial,
                   ),
-                ),
-                if (_options.length > 1)
-                  const Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 18,
-                    color: WalletColors.text3,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _asset.symbol,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: WalletColors.text,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _asset.network,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: WalletColors.text2,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-              ],
+                  if (_options.length > 1)
+                    const Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 18,
+                      color: WalletColors.text3,
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -1141,6 +1266,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                     child: TextField(
                       controller: _addrController,
                       onChanged: (value) => setState(() {
+                        _acknowledgedRiskAddress = null;
                         if (_selectedContact?.address != value.trim()) {
                           _selectedContact = null;
                         }
@@ -1162,35 +1288,56 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  GestureDetector(
-                    key: const ValueKey('transfer-address-book'),
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _pickContact,
-                    child: Tooltip(
-                      message: l10n.addressBookTitle,
-                      child: const Icon(
-                        Icons.contacts_outlined,
-                        size: 18,
-                        color: WalletColors.accent,
+                  Semantics(
+                    button: true,
+                    label: l10n.addressBookTitle,
+                    child: GestureDetector(
+                      key: const ValueKey('transfer-address-book'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _pickContact,
+                      child: Tooltip(
+                        message: l10n.addressBookTitle,
+                        child: const SizedBox.square(
+                          dimension: 48,
+                          child: Icon(
+                            Icons.contacts_outlined,
+                            size: 18,
+                            color: WalletColors.accent,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  GestureDetector(
-                    onTap: _paste,
-                    child: const Icon(
-                      Icons.content_paste,
-                      size: 18,
-                      color: WalletColors.accent,
+                  Semantics(
+                    button: true,
+                    label: l10n.pasteOrEnterAddress,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _paste,
+                      child: const SizedBox.square(
+                        dimension: 48,
+                        child: Icon(
+                          Icons.content_paste,
+                          size: 18,
+                          color: WalletColors.accent,
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  GestureDetector(
-                    onTap: _scanAddress,
-                    child: const Icon(
-                      Icons.qr_code_scanner,
-                      size: 18,
-                      color: WalletColors.accent,
+                  Semantics(
+                    button: true,
+                    label: l10n.scanAddressTitle,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _scanAddress,
+                      child: const SizedBox.square(
+                        dimension: 48,
+                        child: Icon(
+                          Icons.qr_code_scanner,
+                          size: 18,
+                          color: WalletColors.accent,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -1259,11 +1406,14 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                       color: WalletColors.green,
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      l10n.addressValidOn(_asset.networkName),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: WalletColors.green,
+                    Expanded(
+                      child: Text(
+                        l10n.addressValidOn(_asset.networkName),
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: WalletColors.green,
+                        ),
                       ),
                     ),
                   ],
@@ -1288,6 +1438,63 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                     ),
                   ],
                 ),
+              if (recipientRisk != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  key: const ValueKey('recipient-lookalike-warning'),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF7E6),
+                    border: Border.all(color: const Color(0xFFF6C453)),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.warning_amber_rounded,
+                            size: 18,
+                            color: Color(0xFFB26A00),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              l10n.recipientLookalikeWarning(
+                                recipientRisk.known.label,
+                              ),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                height: 1.45,
+                                color: Color(0xFF7A4A00),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        key: const ValueKey('recipient-lookalike-acknowledge'),
+                        onPressed: riskAcknowledged
+                            ? null
+                            : () => setState(
+                                () => _acknowledgedRiskAddress =
+                                    recipientRisk.candidate,
+                              ),
+                        icon: Icon(
+                          riskAcknowledged
+                              ? Icons.check_circle
+                              : Icons.fact_check_outlined,
+                          size: 17,
+                        ),
+                        label: Text(l10n.recipientLookalikeReview),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -1307,25 +1514,38 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                       color: WalletColors.text2,
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () => setState(
-                      () => _amountController.text = _asset.available,
-                    ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
+                  Semantics(
+                    button: true,
+                    label: l10n.max,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => setState(
+                        () => _amountController.text = _asset.available,
                       ),
-                      decoration: BoxDecoration(
-                        color: WalletColors.accent.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        l10n.max,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: WalletColors.accent,
+                      child: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: WalletColors.accent.withValues(
+                                alpha: 0.08,
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              l10n.max,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: WalletColors.accent,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -1389,11 +1609,19 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                       );
                     },
                   ),
-                  Text(
-                    l10n.availableBalance(_asset.availableLabel, _asset.symbol),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: WalletColors.text3,
+                  Flexible(
+                    child: Text(
+                      l10n.availableBalance(
+                        _asset.availableLabel,
+                        _asset.symbol,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: WalletColors.text3,
+                      ),
                     ),
                   ),
                 ],
@@ -1406,17 +1634,16 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
+              Builder(
+                builder: (context) {
+                  final feeLabel = Text(
                     l10n.networkFee,
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                       color: WalletColors.text2,
                     ),
-                  ),
+                  );
                   // W31 serves a hardcoded TRON tier list with invented fiat
                   // to every chain. Rather than lie about the fee a live
                   // transfer will pay, it is unreachable outside the gallery:
@@ -1424,18 +1651,41 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                   // and that index resolves to the chain's REAL fee tier
                   // (ChainParamsService.tierFor) on the confirm screen and in
                   // the signed transaction.
-                  if (!_isLiveContext)
-                    GestureDetector(
+                  final customFee = Semantics(
+                    button: true,
+                    label: l10n.feeCustom,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
                       onTap: _customFee,
-                      child: Text(
-                        l10n.feeCustom,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: WalletColors.accent,
+                      child: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: Center(
+                          child: Text(
+                            l10n.feeCustom,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: WalletColors.accent,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                ],
+                  );
+                  final children = [feeLabel, if (!_isLiveContext) customFee];
+                  return largeText
+                      ? Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 12,
+                          runSpacing: 4,
+                          children: children,
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: children,
+                        );
+                },
               ),
               const SizedBox(height: 12),
               KtSegmented(
@@ -1472,12 +1722,19 @@ class _FeeSelectScreenState extends State<FeeSelectScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final liveController = WalletScope.maybeOf(context);
+    if (liveController != null && !liveController.allowsTestBypass) {
+      return const InvalidTransferState();
+    }
     final l10n = AppLocalizations.of(context);
     final tiers = [
       (l10n.feeSlow, l10n.feeEtaSlow, '6.8 TRX', r'$0.94'),
       (l10n.feeStandard, l10n.feeEtaStandard, '13.7 TRX', r'$1.90'),
       (l10n.feeFast, l10n.feeEtaFast, '27.4 TRX', r'$3.80'),
     ];
+    final compactLarge =
+        MediaQuery.sizeOf(context).width < 360 &&
+        MediaQuery.textScalerOf(context).scale(14) >= 20;
     return KtScreen(
       navBar: KtNavBar(
         title: l10n.networkFee,
@@ -1555,31 +1812,52 @@ class _FeeSelectScreenState extends State<FeeSelectScreen> {
                                     color: WalletColors.text3,
                                   ),
                                 ),
+                                if (compactLarge) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    fee,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      fontFamily: KtFonts.mono,
+                                      color: WalletColors.text,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    fiat,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: WalletColors.text3,
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                fee,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  fontFamily: KtFonts.mono,
-                                  color: WalletColors.text,
+                          if (!compactLarge)
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  fee,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: KtFonts.mono,
+                                    color: WalletColors.text,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                fiat,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: WalletColors.text3,
+                                const SizedBox(height: 3),
+                                Text(
+                                  fiat,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: WalletColors.text3,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
                         ],
                       ),
                     );
@@ -1599,21 +1877,15 @@ enum _FeeEstimate {
   /// No live draft: the design's demo schedule backs the gallery/goldens.
   demo,
 
-  /// Live EVM draft, chain-state fetch in flight.
+  /// Live draft, chain-state fetch in flight.
   estimating,
 
-  /// Live EVM draft, real gasLimit x maxFeePerGas available.
+  /// Live draft, exact chain fee available.
   ready,
 
-  /// Live EVM draft, the fee could NOT be fetched — sending is blocked
+  /// Live draft, the fee could NOT be fetched — sending is blocked
   /// rather than showing a number the user would not actually pay.
   failed,
-
-  /// Live non-EVM draft: this screen has no real fee source for TRON/Solana
-  /// yet, so the fee renders '--' instead of an invented figure. The real
-  /// cost is still enforced downstream (TRON energy estimate / Solana
-  /// getFeeForMessage + balance check) before anything is signed.
-  unavailable,
 }
 
 /// Shared confirm layout for W5 (watch) / W29 (hot).
@@ -1632,6 +1904,8 @@ class TransferConfirmScreen extends StatefulWidget {
     super.key,
     required this.isHot,
     this.paramsService,
+    this.transferService,
+    this.tokenRiskLookup,
   });
 
   final bool isHot;
@@ -1639,6 +1913,13 @@ class TransferConfirmScreen extends StatefulWidget {
   /// Injectable chain-params fetcher for tests; production resolves the
   /// prefs/network-aware endpoints.
   final ChainParamsService? paramsService;
+  final LocalTransferService? transferService;
+
+  /// Injectable exact network + contract risk check. Production resolves the
+  /// configured KT Gateway; tests can provide deterministic safe/unsafe/
+  /// unknown results without a network call.
+  final Future<GatewayTokenRisk> Function(Coin chain, String contract)?
+  tokenRiskLookup;
 
   @override
   State<TransferConfirmScreen> createState() => _TransferConfirmScreenState();
@@ -1647,7 +1928,18 @@ class TransferConfirmScreen extends StatefulWidget {
 class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
   _FeeEstimate _state = _FeeEstimate.demo;
   Amount? _networkFee;
+  Amount? _rentReserve;
+  EvmAssetChanges? _evmAssetChanges;
   bool _requested = false;
+  bool _insufficientFunds = false;
+  _TokenRiskUiState _tokenRisk = _TokenRiskUiState.notApplicable;
+  Timer? _quoteRefreshTimer;
+
+  @override
+  void dispose() {
+    _quoteRefreshTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
@@ -1665,27 +1957,81 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
       Chain.bnb => true,
       Chain.tron || Chain.solana => false,
     };
-    if (!isEvm) {
-      _state = _FeeEstimate.unavailable;
+    final network = NetworkScope.maybeOf(context)?.activeFor(draft.chain);
+    final chainId = network?.evmChainId ?? _defaultEvmChainId(draft.chain);
+    if (isEvm && chainId == null) {
+      _state = _FeeEstimate.failed;
       return;
     }
     final wallet = WalletScope.of(context).current;
     final from = wallet == null
-        ? demoFromAddress
+        ? ''
         : addressForChain(wallet.addresses, draft.chain);
-    final service =
-        widget.paramsService ??
-        ChainParamsService(
-          endpoints: effectiveRpcEndpoints(
-            AppPrefsScope.maybeOf(context),
-            NetworkScope.maybeOf(context),
-          ),
-          gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
-        );
+    final prefs = AppPrefsScope.maybeOf(context);
+    final networkScope = NetworkScope.maybeOf(context);
+    final quoteService =
+        widget.transferService ??
+        (widget.paramsService == null
+            ? LocalTransferService(
+                endpoints: effectiveRpcEndpoints(prefs, networkScope),
+                gateway: prefsGatewayResolver(prefs),
+              )
+            : LocalTransferService(params: widget.paramsService));
     _state = _FeeEstimate.estimating;
+    if (draft.tokenContract != null &&
+        draft.operation != TxOperation.approvalRevoke) {
+      _tokenRisk = _TokenRiskUiState.checking;
+      final lookup = widget.tokenRiskLookup;
+      unawaited(
+        _checkTokenRisk(
+          draft,
+          lookup ??
+              (chain, contract) async {
+                if (_isFlutterTest) {
+                  throw StateError('token risk service not injected in test');
+                }
+                final gateway = prefsGatewayResolver(prefs)();
+                if (gateway == null) {
+                  throw StateError('token risk service unavailable');
+                }
+                return gateway.checkTokenRisk(chain: chain, contract: contract);
+              },
+        ),
+      );
+    }
     unawaited(
-      _estimate(service, draft, from: from, symbol: _nativeSymbol(draft.chain)),
+      _estimate(
+        quoteService,
+        draft,
+        from: from,
+        symbol: _nativeSymbol(draft.chain),
+        networkId: network?.id ?? _defaultNetworkId(draft.chain),
+        evmChainId: chainId,
+        expectedNetworkIdentity: network?.networkIdentity,
+      ),
     );
+  }
+
+  Future<void> _checkTokenRisk(
+    TransferDraft draft,
+    Future<GatewayTokenRisk> Function(Coin chain, String contract) lookup,
+  ) async {
+    final contract = draft.tokenContract;
+    if (contract == null) return;
+    try {
+      final result = await lookup(rpcCoinForChain(draft.chain), contract);
+      if (!mounted) return;
+      setState(() {
+        _tokenRisk = switch (result.status) {
+          GatewayTokenRiskStatus.safe => _TokenRiskUiState.verifiedIdentity,
+          GatewayTokenRiskStatus.unsafe => _TokenRiskUiState.unsafe,
+          GatewayTokenRiskStatus.unknown => _TokenRiskUiState.unknown,
+        };
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _tokenRisk = _TokenRiskUiState.unavailable);
+    }
   }
 
   /// Native symbol of the ACTIVE network for [chain] (POL on Polygon, AVAX on
@@ -1701,43 +2047,159 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
         _ => 'ETH',
       };
 
+  int? _defaultEvmChainId(Chain chain) => switch (chain) {
+    Chain.ethereum => 1,
+    Chain.polygon => 137,
+    Chain.base => 8453,
+    Chain.arbitrum => 42161,
+    Chain.avalanche => 43114,
+    Chain.bnb => 56,
+    Chain.tron || Chain.solana => null,
+  };
+
+  String _defaultNetworkId(Chain chain) => switch (chain) {
+    Chain.ethereum => 'eth-mainnet',
+    Chain.polygon => 'polygon-mainnet',
+    Chain.base => 'base-mainnet',
+    Chain.arbitrum => 'arbitrum-mainnet',
+    Chain.avalanche => 'avalanche-mainnet',
+    Chain.bnb => 'bnb-mainnet',
+    Chain.tron => 'tron-mainnet',
+    Chain.solana => 'sol-mainnet',
+  };
+
   /// The same two calls `prepareEvm` makes before signing, so the number shown
   /// here is the number the signed envelope carries.
   Future<void> _estimate(
-    ChainParamsService service,
+    LocalTransferService service,
     TransferDraft draft, {
     required String from,
     required String symbol,
+    required String networkId,
+    required int? evmChainId,
+    required String? expectedNetworkIdentity,
   }) async {
+    final metricStopwatch = Stopwatch()..start();
+    var metricSucceeded = false;
+    final session = TransferSessionScope.maybeOf(context);
+    session
+      ?..preparedEvm = null
+      ..preparedTron = null
+      ..preparedSolana = null
+      ..preparedNetworkId = null
+      ..preparedAtMs = null;
+    _insufficientFunds = false;
+    _rentReserve = null;
+    _evmAssetChanges = null;
     try {
-      final params = await service.fetchEvmParams(draft.chain, from);
-      final tier = params.tierFor(draft.feeTier);
-      final tokenContract = draft.tokenContract;
-      final calldata = tokenContract == null
-          ? Uint8List(0)
-          : Erc20.transferCalldata(
-              to: draft.recipient,
-              amount: draft.amount.raw,
-            );
-      final gasLimit = await service.estimateEvmGas(
-        draft.chain,
-        from: from,
-        to: tokenContract ?? draft.recipient,
-        value: tokenContract == null ? draft.amount.raw : BigInt.zero,
-        data: '0x${hexEncode(calldata)}',
-      );
+      late final Amount fee;
+      PreparedEvmTransfer? evm;
+      EvmAssetChanges? evmAssetChanges;
+      PreparedTronTransfer? tron;
+      PreparedSolanaTransfer? solana;
+      switch (draft.chain) {
+        case Chain.ethereum:
+        case Chain.polygon:
+        case Chain.base:
+        case Chain.arbitrum:
+        case Chain.avalanche:
+        case Chain.bnb:
+          evm = await service.prepareEvm(
+            draft: draft,
+            from: from,
+            evmChainId: evmChainId!,
+          );
+          fee = Amount(
+            raw: evm.maximumFee,
+            decimals: BalanceService.decimalsFor[rpcCoinForChain(draft.chain)]!,
+            symbol: symbol,
+          );
+          evmAssetChanges = decodeEvmAssetChanges(
+            prepared: evm,
+            draft: draft,
+            nativeDecimals:
+                BalanceService.decimalsFor[rpcCoinForChain(draft.chain)]!,
+            nativeSymbol: symbol,
+          );
+        case Chain.tron:
+          tron = await service.prepareTron(
+            draft: draft,
+            from: from,
+            expectedNetworkIdentity: expectedNetworkIdentity,
+          );
+          fee = Amount(
+            raw: tron.maximumFeeSun,
+            decimals: BalanceService.decimalsFor[Coin.tron]!,
+            symbol: symbol,
+          );
+        case Chain.solana:
+          solana = await service.prepareSolana(
+            draft: draft,
+            from: from,
+            expectedNetworkIdentity: expectedNetworkIdentity,
+          );
+          fee = Amount(
+            raw: solana.networkFeeLamports,
+            decimals: BalanceService.decimalsFor[Coin.solana]!,
+            symbol: symbol,
+          );
+      }
+      metricSucceeded = true;
+      if (!mounted) return;
+      final quotedAt = DateTime.now().millisecondsSinceEpoch;
+      setState(() {
+        _networkFee = fee;
+        _evmAssetChanges = evmAssetChanges;
+        _rentReserve =
+            solana == null || solana.rentDepositLamports == BigInt.zero
+            ? null
+            : Amount(
+                raw: solana.rentDepositLamports,
+                decimals: BalanceService.decimalsFor[Coin.solana]!,
+                symbol: symbol,
+              );
+        _state = _FeeEstimate.ready;
+        session
+          ?..preparedEvm = evm
+          ..preparedTron = tron
+          ..preparedSolana = solana
+          ..preparedNetworkId = networkId
+          ..preparedAtMs = quotedAt
+          ..referenceBlockHeight = tron?.referenceBlockHeight
+          ..expiresAt = tron?.expiresAt
+          ..lastValidBlockHeight = solana?.lastValidBlockHeight;
+      });
+      _quoteRefreshTimer?.cancel();
+      _quoteRefreshTimer = Timer(TransferSession.quoteValidity, () {
+        if (!mounted) return;
+        setState(() => _state = _FeeEstimate.estimating);
+        unawaited(
+          _estimate(
+            service,
+            draft,
+            from: from,
+            symbol: symbol,
+            networkId: networkId,
+            evmChainId: evmChainId,
+            expectedNetworkIdentity: expectedNetworkIdentity,
+          ),
+        );
+      });
+    } on TransferInsufficientFunds {
       if (!mounted) return;
       setState(() {
-        _networkFee = Amount(
-          raw: gasLimit * tier.maxFeePerGas,
-          decimals: BalanceService.decimalsFor[rpcCoinForChain(draft.chain)]!,
-          symbol: symbol,
-        );
-        _state = _FeeEstimate.ready;
+        _insufficientFunds = true;
+        _state = _FeeEstimate.failed;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() => _state = _FeeEstimate.failed);
+    } finally {
+      ExperienceMetrics.instance.record(
+        ExperienceMetricNames.transactionPrepare,
+        metricStopwatch.elapsed,
+        success: metricSucceeded,
+      );
     }
   }
 
@@ -1746,7 +2208,15 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
     final isHot = widget.isHot;
     final l10n = AppLocalizations.of(context);
     final draft = TransferSessionScope.maybeOf(context)?.draft;
-    final wallet = WalletScope.of(context).current;
+    final walletController = WalletScope.of(context);
+    final wallet = walletController.current;
+    if (draft == null &&
+        WalletScope.maybeOf(context) != null &&
+        !walletController.allowsTestBypass) {
+      return const InvalidTransferState();
+    }
+    final showUnbackedWarning =
+        isHot && (draft == null || (wallet is HotWallet && !wallet.backedUp));
 
     // Demo defaults (Pencil design literals).
     var headline = '-120.00 USDT';
@@ -1759,17 +2229,26 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
     var totalValue = '120.00 USDT';
 
     if (draft != null) {
+      final isTestnet =
+          NetworkScope.maybeOf(context)?.activeFor(draft.chain).isTestnet ??
+          false;
       final from = wallet == null
-          ? demoFromAddress
+          ? ''
           : addressForChain(wallet.addresses, draft.chain);
       final fee = _networkFee;
       // The chains preview type still frames the amount/addresses; the fee it
       // carries is the demo schedule, so it is deliberately NOT displayed —
       // `fee` above is the live one.
       final preview = previewForDraft(draft, from: from);
-      headline = '-${draft.amountText}';
-      fiat =
-          '≈ ${_fiatText(_fiatValue(draft.amount, _unitPriceUsd(context, chain: draft.chain, symbol: draft.symbol, tokenContract: draft.tokenContract)))}';
+      final revokingApproval = draft.operation == TxOperation.approvalRevoke;
+      headline = revokingApproval
+          ? l10n.approvalRevoke
+          : '-${draft.amountText}';
+      fiat = revokingApproval
+          ? l10n.approvalRevokeBody
+          : isTestnet
+          ? l10n.fiatHiddenTestnet
+          : '≈ ${_fiatText(context, _fiatValue(draft.amount, _unitPriceUsd(context, chain: draft.chain, symbol: draft.symbol, tokenContract: draft.tokenContract)))}';
       networkLabel = draft.networkLabel;
       dotColor = _chainDot(draft.chain);
       fromValue =
@@ -1778,10 +2257,12 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
       toValue = truncateMiddle(preview.to, head: 8, tail: 9);
       feeValue = switch (_state) {
         _FeeEstimate.estimating => l10n.feeEstimating,
+        _FeeEstimate.failed when _insufficientFunds => l10n.insufficientBalance,
         _FeeEstimate.failed => l10n.feeUnavailable,
         _ when fee == null => '--',
+        _ when isTestnet => '≈ $fee',
         _ =>
-          '≈ $fee（${_fiatText(_fiatValue(fee, _unitPriceUsd(context, chain: draft.chain, symbol: fee.symbol, tokenContract: null)))}）',
+          '≈ $fee（${_fiatText(context, _fiatValue(fee, _unitPriceUsd(context, chain: draft.chain, symbol: fee.symbol, tokenContract: null)))}）',
       };
       // Total spend only adds the fee when it is a REAL one and the transfer
       // actually spends the native coin; otherwise it is the amount alone.
@@ -1791,11 +2272,18 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
               draft.amount.decimals == fee.decimals
           ? draft.amount + fee
           : null;
-      totalValue = total == null ? draft.amountText : '$total';
+      totalValue = revokingApproval
+          ? (fee == null ? '--' : '$fee')
+          : total == null
+          ? draft.amountText
+          : '$total';
     }
-    // A live EVM draft whose fee could not be estimated must not be signed:
-    // the user would be approving an unknown cost.
-    final blocked = _state == _FeeEstimate.failed;
+    // Every live chain must have a complete, immutable quote before signing.
+    final riskPendingOrUnsafe =
+        _tokenRisk == _TokenRiskUiState.checking ||
+        _tokenRisk == _TokenRiskUiState.unsafe;
+    final blocked =
+        draft != null && (_state != _FeeEstimate.ready || riskPendingOrUnsafe);
 
     return KtScreen(
       gap: 16,
@@ -1814,7 +2302,13 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
           const SizedBox(height: 10),
           Text(
             blocked
-                ? l10n.feeUnavailableHint
+                ? (_tokenRisk == _TokenRiskUiState.checking
+                      ? l10n.tokenRiskChecking
+                      : _tokenRisk == _TokenRiskUiState.unsafe
+                      ? l10n.tokenRiskBlockedHint
+                      : _insufficientFunds
+                      ? l10n.insufficientBalance
+                      : l10n.feeUnavailableHint)
                 : (isHot ? l10n.hotConfirmHint : l10n.watchConfirmHint),
             style: TextStyle(
               fontSize: 12,
@@ -1854,25 +2348,171 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
               ),
               const SizedBox(height: 14),
               KtDetailRow(
-                label: l10n.recipientAddress,
+                label: draft?.operation == TxOperation.approvalRevoke
+                    ? l10n.approvalSpender
+                    : l10n.recipientAddress,
                 value: toValue,
                 mono: true,
               ),
               const SizedBox(height: 14),
               KtDetailRow(label: l10n.networkFee, value: feeValue),
+              if (_rentReserve case final rent?) ...[
+                const SizedBox(height: 14),
+                KtDetailRow(label: l10n.solanaRentReserve, value: '$rent'),
+              ],
               const SizedBox(height: 14),
               KtDetailRow(
-                label: l10n.totalSpend,
+                label: draft?.operation == TxOperation.approvalRevoke
+                    ? l10n.maximumNetworkFee
+                    : l10n.totalSpend,
                 value: totalValue,
                 valueColor: WalletColors.text,
               ),
             ],
           ),
         ),
-        if (isHot) _amberWarn(l10n.unbackedTransferWarning),
+        if (_evmAssetChanges case final changes?)
+          KtCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(
+                    l10n.expectedAssetChanges,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: WalletColors.text,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                KtDetailRow(
+                  key: const ValueKey('expected-asset-change-outgoing'),
+                  label: draft?.operation == TxOperation.approvalRevoke
+                      ? l10n.approvalRevoke
+                      : l10n.outgoingAsset(changes.outgoing.symbol),
+                  value: draft?.operation == TxOperation.approvalRevoke
+                      ? 'approve(spender, 0)'
+                      : '-${changes.outgoing}',
+                  valueColor: draft?.operation == TxOperation.approvalRevoke
+                      ? WalletColors.accent
+                      : WalletColors.red,
+                ),
+                const SizedBox(height: 14),
+                KtDetailRow(
+                  key: const ValueKey('expected-asset-change-max-fee'),
+                  label: l10n.maximumNetworkFee,
+                  value: l10n.upToNegativeAmount(
+                    changes.maximumNetworkFee.toString(),
+                  ),
+                  valueColor: WalletColors.red,
+                ),
+              ],
+            ),
+          ),
+        if (_tokenRisk != _TokenRiskUiState.notApplicable)
+          _tokenRiskNotice(l10n, _tokenRisk),
+        if (showUnbackedWarning) _amberWarn(l10n.unbackedTransferWarning),
       ],
     );
   }
+}
+
+enum _TokenRiskUiState {
+  notApplicable,
+  checking,
+  verifiedIdentity,
+  unsafe,
+  unknown,
+  unavailable,
+}
+
+Widget _tokenRiskNotice(AppLocalizations l10n, _TokenRiskUiState state) {
+  final (
+    Color color,
+    IconData icon,
+    String title,
+    String body,
+  ) = switch (state) {
+    _TokenRiskUiState.checking => (
+      WalletColors.accent,
+      Icons.shield_outlined,
+      l10n.tokenRiskChecking,
+      l10n.tokenRiskCheckingBody,
+    ),
+    _TokenRiskUiState.verifiedIdentity => (
+      WalletColors.accent,
+      Icons.verified_rounded,
+      l10n.tokenRiskVerifiedTitle,
+      l10n.tokenRiskVerifiedBody,
+    ),
+    _TokenRiskUiState.unsafe => (
+      WalletColors.red,
+      Icons.gpp_bad_rounded,
+      l10n.tokenRiskUnsafeTitle,
+      l10n.tokenRiskUnsafeBody,
+    ),
+    _TokenRiskUiState.unknown => (
+      WalletColors.amber,
+      Icons.help_outline_rounded,
+      l10n.tokenRiskUnknownTitle,
+      l10n.tokenRiskUnknownBody,
+    ),
+    _TokenRiskUiState.unavailable => (
+      WalletColors.amber,
+      Icons.cloud_off_rounded,
+      l10n.tokenRiskUnavailableTitle,
+      l10n.tokenRiskUnavailableBody,
+    ),
+    _TokenRiskUiState.notApplicable => throw StateError('not applicable'),
+  };
+  return Semantics(
+    key: const ValueKey('token-risk-notice'),
+    label: '$title. $body',
+    container: true,
+    child: Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  body,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.45,
+                    color: WalletColors.text2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 /// W6 待签名二维码. Displays a REAL animated AIRGAP-V1 sign-request: the draft
@@ -1881,16 +2521,33 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
 /// as a scannable QR, cycling every ~600ms. The shard label/progress reflect
 /// the actual frame count.
 ///
-/// Live EVM drafts first fetch the sender's real nonce and current fees via
-/// [ChainParamsService] (brief spinner in place of the QR); on failure the
-/// documented demo constants apply and a fallback hint is shown. Demo/gallery
-/// renderings and non-EVM chains build synchronously, exactly as before.
+/// Live EVM drafts consume the exact short-lived quote approved on the
+/// confirmation screen. Production never rebuilds different fees or a
+/// different nonce after confirmation. Injectable Flutter tests retain a
+/// direct chain-parameter path so the QR encoder can be exercised in
+/// isolation. Demo/gallery renderings and non-EVM chains build synchronously.
+typedef SignRequestPersistence =
+    Future<void> Function(
+      BuildContext context,
+      TransferSession session,
+      TxStatus status,
+      SignRequest request,
+    );
+
 class SignRequestQrScreen extends StatefulWidget {
-  const SignRequestQrScreen({super.key, this.paramsService});
+  const SignRequestQrScreen({
+    super.key,
+    this.paramsService,
+    this.requestPersistence,
+  });
 
   /// Injectable chain-params fetcher for tests; defaults to one resolving
   /// the prefs-overridable endpoints.
   final ChainParamsService? paramsService;
+
+  /// Failure-injection seam used by widget tests. Production always uses the
+  /// Drift-backed transaction writer above.
+  final SignRequestPersistence? requestPersistence;
 
   @override
   State<SignRequestQrScreen> createState() => _SignRequestQrScreenState();
@@ -1910,6 +2567,11 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
 
   bool _paramsFailed = false;
 
+  /// A signing QR is a publish boundary: it remains absent until its
+  /// `awaitingSig` transaction row has committed successfully.
+  bool _persistenceFailed = false;
+  int _installGeneration = 0;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -1918,11 +2580,16 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
     _draft = session?.draft;
     final wallet = WalletScope.of(context).current;
     final draft = _draft;
+    final liveController = WalletScope.maybeOf(context);
+    if (draft == null &&
+        liveController != null &&
+        !liveController.allowsTestBypass) {
+      _paramsFailed = true;
+      return;
+    }
     final chain = (draft ?? demoDraft).chain;
-    final walletId = wallet?.id ?? demoWalletId;
-    final from = wallet == null
-        ? demoFromAddress
-        : addressForChain(wallet.addresses, chain);
+    final walletId = wallet?.id ?? (kReleaseMode ? '' : demoWalletId);
+    final from = wallet == null ? '' : addressForChain(wallet.addresses, chain);
     // The ACTIVE network instance for the draft's chain: its evmChainId is
     // the signing domain the raw tx must carry (Sepolia 11155111, ...), and
     // for a testnet its name overrides the summary's network label so the
@@ -1940,8 +2607,41 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
             chain == Chain.polygon ||
             chain == Chain.base ||
             chain == Chain.arbitrum ||
-            chain == Chain.avalanche)) {
-      // Live EVM path: real nonce/fees first, QR after the fetch.
+            chain == Chain.avalanche ||
+            chain == Chain.bnb)) {
+      final approved = network != null && evmChainId != null
+          ? session?.validEvmQuote(
+              forDraft: draft,
+              networkId: network.id,
+              evmChainId: evmChainId,
+              from: from,
+            )
+          : null;
+      if (approved != null) {
+        _install(
+          buildSignRequest(
+            draft: draft,
+            walletId: walletId,
+            fromAddress: from,
+            nonce: approved.nonce,
+            maxPriorityFeePerGas: approved.maxPriorityFeePerGas,
+            maxFeePerGas: approved.maxFeePerGas,
+            gasLimit: approved.gasLimit,
+            evmChainId: approved.evmChainId,
+            networkLabel: networkLabel,
+          ),
+          session,
+        );
+        return;
+      }
+      // A missing/stale quote in production must return to confirmation; it
+      // must never be silently replaced after the user approved it.
+      if (!_isFlutterTest && widget.paramsService == null) {
+        _returnToQuote();
+        return;
+      }
+      // Isolated encoder/widget tests can still inject deterministic chain
+      // parameters without constructing the preceding confirmation screen.
       _building = true;
       final service =
           widget.paramsService ??
@@ -1963,28 +2663,71 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
           networkLabel: networkLabel,
         ),
       );
-    } else if (draft != null && chain == Chain.tron && !_isFlutterTest) {
-      _building = true;
-      unawaited(
-        _buildLiveTron(
+    } else if (draft != null && chain == Chain.tron) {
+      final approved = network == null
+          ? null
+          : session?.validTronQuote(
+              forDraft: draft,
+              networkId: network.id,
+              from: from,
+            );
+      if (approved != null) {
+        _install(
+          buildSignRequest(
+            draft: draft,
+            walletId: walletId,
+            fromAddress: from,
+            networkLabel: networkLabel,
+            preparedRawTx: approved.rawTx,
+          ),
           session,
-          draft,
-          walletId: walletId,
-          from: from,
-          networkLabel: networkLabel,
-        ),
-      );
-    } else if (draft != null && chain == Chain.solana && !_isFlutterTest) {
-      _building = true;
-      unawaited(
-        _buildLiveSolana(
+        );
+      } else if (_isFlutterTest) {
+        // Isolated widget fixtures retain the deterministic synchronous path.
+        _install(
+          buildSignRequest(
+            draft: draft,
+            walletId: walletId,
+            fromAddress: from,
+            networkLabel: networkLabel,
+          ),
           session,
-          draft,
-          walletId: walletId,
-          from: from,
-          networkLabel: networkLabel,
-        ),
-      );
+        );
+      } else {
+        _returnToQuote();
+      }
+    } else if (draft != null && chain == Chain.solana) {
+      final approved = network == null
+          ? null
+          : session?.validSolanaQuote(
+              forDraft: draft,
+              networkId: network.id,
+              from: from,
+            );
+      if (approved != null) {
+        _install(
+          buildSignRequest(
+            draft: draft,
+            walletId: walletId,
+            fromAddress: from,
+            networkLabel: networkLabel,
+            preparedRawTx: approved.message,
+          ),
+          session,
+        );
+      } else if (_isFlutterTest) {
+        _install(
+          buildSignRequest(
+            draft: draft,
+            walletId: walletId,
+            fromAddress: from,
+            networkLabel: networkLabel,
+          ),
+          session,
+        );
+      } else {
+        _returnToQuote();
+      }
     } else {
       _install(
         buildSignRequest(
@@ -1997,6 +2740,15 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
         session,
       );
     }
+  }
+
+  void _returnToQuote() {
+    _paramsFailed = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final wallet = WalletScope.of(context).current;
+      context.go(wallet is HotWallet ? '/confirm-hot' : '/confirm-watch');
+    });
   }
 
   Future<void> _buildLiveEvm(
@@ -2016,18 +2768,33 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
       maxPriority = tier.maxPriorityFeePerGas;
       maxFee = tier.maxFeePerGas;
       final tokenContract = draft.tokenContract;
-      final calldata = tokenContract == null
-          ? Uint8List(0)
-          : Erc20.transferCalldata(
-              to: draft.recipient,
-              amount: draft.amount.raw,
-            );
+      final calldata = switch (draft.operation) {
+        TxOperation.nativeTransfer => Uint8List(0),
+        TxOperation.tokenTransfer => Erc20.transferCalldata(
+          to: draft.recipient,
+          amount: draft.amount.raw,
+        ),
+        TxOperation.approvalRevoke => Erc20.revokeApprovalCalldata(
+          spender: draft.recipient,
+        ),
+      };
+      final callTo = tokenContract ?? draft.recipient;
+      final callValue = tokenContract == null ? draft.amount.raw : BigInt.zero;
+      final callData = '0x${hexEncode(calldata)}';
+      await service.simulateEvmTransfer(
+        draft.chain,
+        from: from,
+        to: callTo,
+        value: callValue,
+        data: callData,
+        tokenTransfer: tokenContract != null,
+      );
       gasLimit = await service.estimateEvmGas(
         draft.chain,
         from: from,
-        to: tokenContract ?? draft.recipient,
-        value: tokenContract == null ? draft.amount.raw : BigInt.zero,
-        data: '0x${hexEncode(calldata)}',
+        to: callTo,
+        value: callValue,
+        data: callData,
       );
     } catch (_) {
       if (!mounted) return;
@@ -2038,206 +2805,87 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
       return;
     }
     if (!mounted) return;
+    _building = false;
+    _install(
+      buildSignRequest(
+        draft: draft,
+        walletId: walletId,
+        fromAddress: from,
+        nonce: nonce,
+        maxPriorityFeePerGas: maxPriority,
+        maxFeePerGas: maxFee,
+        gasLimit: gasLimit,
+        evmChainId: evmChainId,
+        networkLabel: networkLabel,
+      ),
+      session,
+    );
+  }
+
+  /// Persists [request] before registering or rendering it. Until that commit
+  /// succeeds there are no QR bytes on screen and no outstanding request in
+  /// the session, so a disk/database failure cannot create a signable orphan.
+  void _install(SignRequest request, TransferSession? session) {
+    final generation = ++_installGeneration;
+    _timer?.cancel();
+    _request = null;
+    _frames = const [];
+    _frameIndex = 0;
+    _paramsFailed = false;
+    _persistenceFailed = false;
+
+    if (session == null) {
+      _publishRequest(request, null);
+      return;
+    }
+
+    _building = true;
+    unawaited(_persistThenPublish(request, session, generation));
+  }
+
+  Future<void> _persistThenPublish(
+    SignRequest request,
+    TransferSession session,
+    int generation,
+  ) async {
+    try {
+      final persist = widget.requestPersistence;
+      if (persist == null) {
+        await _persistAirgapTransaction(
+          context,
+          session,
+          TxStatus.awaitingSig,
+          requestOverride: request,
+        );
+      } else {
+        await persist(context, session, TxStatus.awaitingSig, request);
+      }
+    } catch (_) {
+      if (!mounted || generation != _installGeneration) return;
+      setState(() {
+        _building = false;
+        _persistenceFailed = true;
+      });
+      return;
+    }
+    if (!mounted || generation != _installGeneration) return;
     setState(() {
       _building = false;
-      _install(
-        buildSignRequest(
-          draft: draft,
-          walletId: walletId,
-          fromAddress: from,
-          nonce: nonce,
-          maxPriorityFeePerGas: maxPriority,
-          maxFeePerGas: maxFee,
-          gasLimit: gasLimit,
-          evmChainId: evmChainId,
-          networkLabel: networkLabel,
-        ),
-        session,
-      );
+      _publishRequest(request, session);
     });
   }
 
-  Future<void> _buildLiveTron(
-    TransferSession? session,
-    TransferDraft draft, {
-    required String walletId,
-    required String from,
-    String? networkLabel,
-  }) async {
-    try {
-      final endpoints = effectiveRpcEndpoints(
-        AppPrefsScope.maybeOf(context),
-        NetworkScope.maybeOf(context),
-      );
-      final rpc = TronRpc(
-        baseUrl: endpoints(Coin.tron),
-        transport: HttpRestTransport(),
-      );
-      final block = await rpc.getNowBlock();
-      final blockId = _decodeHex(block.blockId);
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final intent = TransferIntent(
-        chain: Chain.tron,
-        operation: draft.operation,
-        from: from,
-        to: draft.recipient,
-        amount: draft.amount,
-        tokenContract: draft.tokenContract,
-        tokenSymbol: draft.tokenContract == null ? null : draft.symbol,
-      );
-      int? feeLimit;
-      if (draft.operation == TxOperation.tokenTransfer) {
-        final calldata = Trc20.transferCalldata(
-          to: draft.recipient,
-          amount: draft.amount.raw,
-        );
-        final energy = await rpc.estimateTokenEnergy(
-          owner: from,
-          contract: draft.tokenContract!,
-          parameter: hexEncode(calldata.sublist(4)),
-        );
-        feeLimit = energy.feeLimitSun;
-      }
-      final raw = TronRawTx.forTransfer(
-        intent,
-        refBlockBytes: Uint8List.fromList([
-          (block.number >> 8) & 0xff,
-          block.number & 0xff,
-        ]),
-        refBlockHash: Uint8List.sublistView(blockId, 8, 16),
-        timestamp: now,
-        expiration: now + const Duration(minutes: 10).inMilliseconds,
-        feeLimit: feeLimit,
-      ).encodeRawData();
-      if (!mounted) return;
-      setState(() {
-        _building = false;
-        _install(
-          buildSignRequest(
-            draft: draft,
-            walletId: walletId,
-            fromAddress: from,
-            networkLabel: networkLabel,
-            preparedRawTx: raw,
-          ),
-          session,
-        );
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _building = false;
-        _paramsFailed = true;
-      });
-    }
-  }
-
-  Future<void> _buildLiveSolana(
-    TransferSession? session,
-    TransferDraft draft, {
-    required String walletId,
-    required String from,
-    String? networkLabel,
-  }) async {
-    try {
-      final endpoints = effectiveRpcEndpoints(
-        AppPrefsScope.maybeOf(context),
-        NetworkScope.maybeOf(context),
-      );
-      final rpc = SolanaRpc(
-        url: endpoints(Coin.solana),
-        transport: HttpJsonRpcTransport(),
-      );
-      final blockhash = await rpc.getLatestBlockhash();
-      final SolanaMessage message;
-      if (draft.operation == TxOperation.nativeTransfer) {
-        message = SolanaMessage.systemTransfer(
-          from: from,
-          to: draft.recipient,
-          lamports: draft.amount.raw,
-          recentBlockhash: blockhash,
-        );
-      } else {
-        final mint = draft.tokenContract;
-        if (mint == null) throw StateError('missing SPL mint');
-        final sources = await rpc.getTokenAccounts(from, mint);
-        final destinations = await rpc.getTokenAccounts(draft.recipient, mint);
-        final source = sources
-            .where((account) => account.amount >= draft.amount.raw)
-            .firstOrNull;
-        if (source == null) {
-          throw StateError('insufficient SPL token balance');
-        }
-        final tokenProgram = draft.tokenProgram ?? solanaTokenProgram;
-        final createDestination = destinations.isEmpty;
-        final destination = createDestination
-            ? SolanaMessage.associatedTokenAddress(
-                owner: draft.recipient,
-                mint: mint,
-                tokenProgram: tokenProgram,
-              )
-            : destinations.first.address;
-        message = SolanaMessage.splTransferChecked(
-          source: source.address,
-          destination: destination,
-          owner: from,
-          recipientOwner: draft.recipient,
-          mint: mint,
-          amount: draft.amount.raw,
-          decimals: draft.decimals,
-          recentBlockhash: blockhash,
-          tokenProgram: tokenProgram,
-          createDestination: createDestination,
-        );
-      }
-      final raw = message.serialize();
-      final fee = await rpc.getFeeForMessage(raw);
-      final balance = await rpc.getBalance(from);
-      final nativeSpend = draft.operation == TxOperation.nativeTransfer
-          ? draft.amount.raw
-          : BigInt.zero;
-      if (balance < nativeSpend + fee) {
-        throw StateError('insufficient SOL for fee');
-      }
-      await rpc.simulateMessage(raw);
-      if (!mounted) return;
-      setState(() {
-        _building = false;
-        _install(
-          buildSignRequest(
-            draft: draft,
-            walletId: walletId,
-            fromAddress: from,
-            networkLabel: networkLabel,
-            preparedRawTx: raw,
-          ),
-          session,
-        );
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _building = false;
-        _paramsFailed = true;
-      });
-    }
-  }
-
-  /// Registers [request] as the outstanding one and starts the frame cycle.
-  void _install(SignRequest request, TransferSession? session) {
+  void _publishRequest(SignRequest request, TransferSession? session) {
     _request = request;
-    // This is now the outstanding request the scanned result must answer.
+    // This is now the durable outstanding request the scanned result must
+    // answer. Never expose it earlier than the persistence commit above.
     session
       ?..request = request
       ..result = null;
-    if (session != null) {
-      unawaited(
-        _persistAirgapTransaction(context, session, TxStatus.awaitingSig),
-      );
-    }
     _frames = encodeQrFrames(request, reqId: request.reqId);
     if (_frames.length > 1) {
       _timer = Timer.periodic(_frameInterval, (_) {
+        if (!mounted) return;
         setState(() => _frameIndex = (_frameIndex + 1) % _frames.length);
       });
     }
@@ -2245,6 +2893,7 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
 
   @override
   void dispose() {
+    _installGeneration++;
     _timer?.cancel();
     super.dispose();
   }
@@ -2277,8 +2926,13 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
               height: 280,
               child: Center(
                 child: _paramsFailed
-                    ? const Text(
-                        'Unable to estimate the network fee. Sending is disabled.',
+                    ? Text(
+                        l10n.signRequestBuildFailed,
+                        textAlign: TextAlign.center,
+                      )
+                    : _persistenceFailed
+                    ? Text(
+                        l10n.signRequestSaveFailed,
                         textAlign: TextAlign.center,
                       )
                     : const CircularProgressIndicator(),
@@ -2329,7 +2983,9 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
               const SizedBox(height: 14),
               KtDetailRow(
                 label: l10n.amountLabel,
-                value: draft?.amountText ?? '120.00 USDT',
+                value: draft?.operation == TxOperation.approvalRevoke
+                    ? 'approve(spender, 0)'
+                    : draft?.amountText ?? '120.00 USDT',
               ),
               const SizedBox(height: 14),
               KtDetailRow(
@@ -2390,7 +3046,7 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
       // Signer side of the (simulated) air gap: the paired signer answers with
       // deterministic demo signature bytes for the same reqId.
       final signer = wallet == null
-          ? demoFromAddress
+          ? ''
           : addressForChain(wallet.addresses, chainForCoin(request.coin));
       final frames = encodeQrFrames(
         buildDemoSignResult(request, signer: signer),
@@ -2457,8 +3113,19 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
     final l10n = AppLocalizations.of(context);
     final session = TransferSessionScope.maybeOf(context);
     final wallet = WalletScope.of(context).current;
-    // Demo shard counters until a live scan makes real progress (gallery /
-    // goldens render exactly the design literals).
+    final liveController = WalletScope.maybeOf(context);
+    if (session?.request == null &&
+        liveController != null &&
+        !liveController.allowsTestBypass) {
+      return const InvalidTransferState();
+    }
+    // The gallery keeps its fixed 5/12 design snapshot, but a production
+    // session must not claim that frames were recognized before the camera
+    // has delivered anything. Besides being confusing, that made a stalled
+    // or permission-denied camera look as though a real QR session existed.
+    final fixtureMode =
+        liveController == null || liveController.allowsTestBypass;
+    final showProgress = fixtureMode || _progress != null;
     final received = _progress?.received ?? 5;
     final total = _progress?.total ?? 12;
     return Scaffold(
@@ -2478,30 +3145,37 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            ScanViewfinder(
-              height: 380,
-              frameColor: SignerColors.blue,
-              onSimulatedTap: () => _simulateScan(context, session, wallet),
-              onScanned: _onScanned,
-              availability: widget.availability,
-            ),
-            const SizedBox(height: 24),
-            Text(
-              l10n.recognizedShard(received, total),
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
+            Flexible(
+              child: ScanViewfinder(
+                height: 380,
+                frameColor: SignerColors.blue,
+                semanticLabel: l10n.scanSignResultTitle,
+                onSimulatedTap: kReleaseMode
+                    ? null
+                    : () => _simulateScan(context, session, wallet),
+                onScanned: _onScanned,
+                availability: widget.availability,
               ),
             ),
-            const SizedBox(height: 10),
-            ShardProgressBar(
-              received: received,
-              total: total,
-              color: SignerColors.blue,
-              trackColor: SignerColors.border,
-              width: 240,
-            ),
+            const SizedBox(height: 24),
+            if (showProgress) ...[
+              Text(
+                l10n.recognizedShard(received, total),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 10),
+              ShardProgressBar(
+                received: received,
+                total: total,
+                color: SignerColors.blue,
+                trackColor: SignerColors.border,
+                width: 240,
+              ),
+            ],
           ],
         ),
       ),
@@ -2516,8 +3190,8 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
 ///
 /// The broadcast button pushes the signed bytes through [BroadcastService]:
 /// demo signatures short-circuit to the simulated-success path (never sent to
-/// a node), a real signature goes over the wire, and a rejection surfaces the
-/// node's message here — the broadcastError → failed step; retry stays
+/// a node), a real signature goes over the wire, and a rejection surfaces a
+/// localized bounded reason — the broadcastError → failed step; retry stays
 /// user-explicit (INV-15, no auto-retry).
 class BroadcastConfirmScreen extends StatefulWidget {
   const BroadcastConfirmScreen({super.key, this.broadcaster});
@@ -2533,16 +3207,21 @@ class BroadcastConfirmScreen extends StatefulWidget {
 class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
   bool _busy = false;
 
-  /// Node/transport message of the last failed broadcast, if any.
+  /// Localized, bounded presentation copy for the last failed broadcast.
+  /// Raw exceptions and provider strings must never be assigned here.
   String? _error;
 
   Future<void> _broadcast() async {
     final session = TransferSessionScope.maybeOf(context);
     final result = session?.result;
     if (session == null || result == null) {
-      // Gallery / demo rendering without a decoded result: keep the design's
-      // direct navigation (nothing to broadcast).
-      context.go('/broadcast-result');
+      // Gallery rendering keeps its deterministic transition. A production
+      // deep link has no signed payload and must never manufacture a success.
+      if (WalletScope.of(context).allowsTestBypass) {
+        context.go('/broadcast-result');
+      } else {
+        context.go('/home');
+      }
       return;
     }
     final service =
@@ -2558,12 +3237,21 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
       _busy = true;
       _error = null;
     });
-    await _persistAirgapTransaction(
-      context,
-      session,
-      TxStatus.submitted,
-      hash: result.txHash,
-    );
+    try {
+      await _persistAirgapTransaction(
+        context,
+        session,
+        TxStatus.submitted,
+        hash: result.txHash,
+      );
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = AppLocalizations.of(context).transactionNotSubmitted;
+      });
+      return;
+    }
     if (!mounted) return;
     final outcome = await service.broadcast(
       chainForCoin(result.coin),
@@ -2572,28 +3260,54 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
     if (!mounted) return;
     switch (outcome.status) {
       case BroadcastStatus.ok:
-      case BroadcastStatus.simulated:
-        session.broadcastTxHash = outcome.txHash ?? result.txHash;
-        await _persistAirgapTransaction(
-          context,
-          session,
-          TxStatus.pending,
-          hash: session.broadcastTxHash,
-        );
+        session
+          ..broadcastTxHash = outcome.txHash ?? result.txHash
+          ..broadcastOutcomeUnknown = false;
+        try {
+          await _persistAirgapTransaction(
+            context,
+            session,
+            TxStatus.pending,
+            hash: session.broadcastTxHash,
+          );
+        } catch (_) {
+          // The node accepted the bytes and the submitted row already carries
+          // the recovery hash. Do not invite an unsafe second broadcast only
+          // because the best-effort pending transition could not be stored.
+        }
         if (!mounted) return;
+        context.go('/broadcast-result');
+      case BroadcastStatus.unknown:
+        // The signed bytes may have reached the node. Keep the pre-broadcast
+        // submitted row and locally derived hash, start reconciliation on W9,
+        // and never offer an unsafe second submission.
+        session
+          ..broadcastTxHash = result.txHash
+          ..broadcastOutcomeUnknown = true;
         context.go('/broadcast-result');
       case BroadcastStatus.error:
       case BroadcastStatus.unsupported:
-        await _persistAirgapTransaction(
-          context,
-          session,
-          TxStatus.failed,
-          hash: result.txHash,
-        );
+        try {
+          await _persistAirgapTransaction(
+            context,
+            session,
+            TxStatus.failed,
+            hash: result.txHash,
+          );
+        } catch (_) {
+          // Keep the authoritative node message visible even if the local
+          // failed-state update itself cannot be persisted.
+        }
         if (!mounted) return;
+        final l10n = AppLocalizations.of(context);
         setState(() {
           _busy = false;
-          _error = outcome.message ?? '';
+          _error = outcome.status == BroadcastStatus.error
+              ? localizedRpcRejection(
+                  l10n,
+                  outcome.rejectionKind ?? RpcRejectionKind.rejected,
+                )
+              : l10n.broadcastUnsupported;
         });
     }
   }
@@ -2604,6 +3318,10 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
     final session = TransferSessionScope.maybeOf(context);
     final result = session?.result;
     final request = session?.request;
+    if ((session?.draft == null || result == null || request == null) &&
+        !WalletScope.of(context).allowsTestBypass) {
+      return const InvalidTransferState();
+    }
 
     // Demo defaults (Pencil design literals).
     var headline = '-120.00 USDT';
@@ -2616,7 +3334,9 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
     if (result != null) {
       final summary = request?.summary;
       final chain = chainForCoin(result.coin);
-      headline = '-${summary?[SummaryKeys.amount] ?? ''}';
+      headline = session?.draft?.operation == TxOperation.approvalRevoke
+          ? l10n.approvalRevoke
+          : '-${summary?[SummaryKeys.amount] ?? ''}';
       networkLabel = summary?[SummaryKeys.network] as String? ?? chain.name;
       dotColor = _chainDot(chain);
       final recipient = summary?[SummaryKeys.recipient] as String?;
@@ -2640,22 +3360,31 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
             onPressed: _busy ? null : _broadcast,
           ),
           const SizedBox(height: 12),
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => Navigator.of(context).maybePop(),
-            child: Text(
-              l10n.dontBroadcastYet,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: WalletColors.text2,
+          Semantics(
+            button: true,
+            label: l10n.dontBroadcastYet,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.of(context).maybePop(),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Center(
+                  child: Text(
+                    l10n.dontBroadcastYet,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: WalletColors.text2,
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
         ],
       ),
       children: [
-        // Failed-broadcast state: the node's rejection message, verbatim.
+        // Failed-broadcast state: localized bounded reason only.
         if (_error != null)
           Container(
             padding: const EdgeInsets.all(12),
@@ -2706,7 +3435,7 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF0A7A45),
+                    color: WalletColors.green,
                   ),
                 ),
               ),
@@ -2732,7 +3461,9 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
           child: Column(
             children: [
               KtDetailRow(
-                label: l10n.recipientAddress,
+                label: session?.draft?.operation == TxOperation.approvalRevoke
+                    ? l10n.approvalSpender
+                    : l10n.recipientAddress,
                 value: toValue,
                 mono: true,
               ),
@@ -2756,9 +3487,9 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
   }
 }
 
-/// W9 广播结果. A successfully submitted transaction starts as pending and
-/// this screen reconciles its persistent status and reads the live confirmation
-/// depth while it remains visible.
+/// W9 广播结果. An accepted transaction starts as pending; an attempt whose
+/// response was lost stays submitted with its locally derived hash. This
+/// screen reconciles both states against the chain while visible.
 /// It never retries the broadcast.
 class BroadcastResultScreen extends StatefulWidget {
   const BroadcastResultScreen({
@@ -2783,6 +3514,8 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
   bool _loading = false;
   bool _checkingConfirmations = false;
   int? _confirmations;
+  int? _lastCheckedAt;
+  TxCheckOutcome? _lastCheckOutcome;
 
   @override
   void initState() {
@@ -2800,6 +3533,11 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
     _statusService ??= TransactionStatusService(
       endpoints: endpoints,
       gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
+      onEvmNonceObserved: (transaction, nonce) async {
+        await WalletScope.of(
+          context,
+        ).setTransactionNonceIfAbsent(transaction.id, nonce);
+      },
     );
     _confirmationService ??=
         widget.confirmationService ??
@@ -2815,6 +3553,8 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
     if (!mounted) return;
     setState(() {
       _transaction = transaction;
+      _lastCheckedAt = transaction?.lastCheckedAt;
+      _lastCheckOutcome = transaction?.lastCheckOutcome;
       _loading = false;
     });
     if (transaction != null) _scheduleCheck(transaction, immediately: true);
@@ -2825,6 +3565,13 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
       (tx.status == TxStatus.submitted ||
           tx.status == TxStatus.pending ||
           tx.status == TxStatus.broadcast);
+
+  String _date(int millis) {
+    final value = DateTime.fromMillisecondsSinceEpoch(millis).toLocal();
+    String two(int number) => number.toString().padLeft(2, '0');
+    return '${value.year}-${two(value.month)}-${two(value.day)} '
+        '${two(value.hour)}:${two(value.minute)}';
+  }
 
   void _scheduleCheck(Transaction tx, {bool immediately = false}) {
     _timer?.cancel();
@@ -2838,28 +3585,69 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
   Future<void> _check(Transaction tx) async {
     if (!mounted || !_pending(tx)) return;
     final directStatus = await _readConfirmationDepth();
-    final fallbackStatus = directStatus == null
+    // A direct "pending / 0 confirmations" only means this endpoint cannot
+    // currently find an inclusion. The finality service also knows the exact
+    // TRON expiration / Solana last-valid height, so it must still run before
+    // we decide to keep waiting.
+    final fallbackStatus =
+        directStatus == null || directStatus == TxStatus.pending
         ? await _statusService?.check(tx)
         : null;
     if (!mounted) return;
-    final next =
-        directStatus ??
-        switch (fallbackStatus) {
-          ChainTransactionStatus.confirmed => TxStatus.confirmed,
-          ChainTransactionStatus.failed => TxStatus.failed,
-          ChainTransactionStatus.pending ||
-          ChainTransactionStatus.unknown ||
-          null => null,
-        };
-    if (next == TxStatus.pending) {
-      _scheduleCheck(tx);
+    final finalityStatus = switch (fallbackStatus) {
+      ChainTransactionStatus.confirmed => TxStatus.confirmed,
+      ChainTransactionStatus.failed => TxStatus.failed,
+      ChainTransactionStatus.replaced => TxStatus.replaced,
+      ChainTransactionStatus.expired => TxStatus.expired,
+      ChainTransactionStatus.pending ||
+      ChainTransactionStatus.unknown ||
+      null => null,
+    };
+    final next = finalityStatus ?? directStatus;
+    final outcome = switch (fallbackStatus) {
+      ChainTransactionStatus.unknown => TxCheckOutcome.unknown,
+      ChainTransactionStatus.pending => TxCheckOutcome.pending,
+      _ => directStatus == TxStatus.pending ? TxCheckOutcome.pending : null,
+    };
+    final terminal =
+        finalityStatus == TxStatus.confirmed ||
+        finalityStatus == TxStatus.failed ||
+        finalityStatus == TxStatus.replaced ||
+        finalityStatus == TxStatus.expired;
+    final checkedAt = DateTime.now().millisecondsSinceEpoch;
+    final changed = next != null && next != tx.status;
+    final controller = WalletScope.of(context);
+    final persisted = changed ? next : tx.status;
+    if (_isEvmCoinName(tx.coin) &&
+        changed &&
+        (persisted == TxStatus.confirmed || persisted == TxStatus.failed)) {
+      await controller.settleEvmTransaction(
+        id: tx.id,
+        status: persisted,
+        hash: tx.hash,
+        lastCheckedAt: checkedAt,
+      );
+    } else {
+      await controller.updateTransactionStatus(
+        tx.id,
+        persisted,
+        hash: tx.hash,
+        lastCheckedAt: checkedAt,
+        lastCheckOutcome: outcome,
+        clearLastCheckOutcome: terminal,
+      );
+    }
+    if (!mounted) return;
+    setState(() {
+      _lastCheckedAt = checkedAt;
+      _lastCheckOutcome = terminal ? null : outcome;
+    });
+    if (changed) {
+      await _reload();
       return;
     }
-    if (next != null && next != tx.status) {
-      await WalletScope.of(
-        context,
-      ).updateTransactionStatus(tx.id, next, hash: tx.hash);
-      if (mounted) await _reload();
+    if (next == TxStatus.pending) {
+      _scheduleCheck(tx);
       return;
     }
     _scheduleCheck(tx);
@@ -2916,30 +3704,64 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
     final session = TransferSessionScope.maybeOf(context);
     final fullHash = session?.broadcastTxHash ?? session?.result?.txHash;
     final draft = session?.draft;
+    // Signing is not submission. W9 requires a durable row and a hash plus an
+    // actual broadcast attempt. The hash can be either the node answer or the
+    // locally derived recovery key when the response was lost.
+    final hasSubmissionEvidence =
+        draft != null &&
+        session?.localTransactionId != null &&
+        session?.broadcastTxHash != null;
+    if (!hasSubmissionEvidence && !WalletScope.of(context).allowsTestBypass) {
+      return const InvalidTransferState();
+    }
     final transferLabel = draft == null
         ? '-120.00 USDT · TRON'
+        : draft.operation == TxOperation.approvalRevoke
+        ? '${l10n.approvalRevoke} · ${draft.networkLabel}'
         : '-${draft.amountText} · ${draft.networkLabel}';
     final hashValue = fullHash == null
         ? '8f6d2c…a94e07'
         : truncateMiddle(fullHash, head: 6, tail: 6);
-    final status = _transaction?.status ?? TxStatus.pending;
+    final submissionUnknown = session?.broadcastOutcomeUnknown ?? false;
+    final status =
+        _transaction?.status ??
+        (submissionUnknown ? TxStatus.submitted : TxStatus.pending);
+    final statusUnknown =
+        submissionUnknown ||
+        ((status == TxStatus.submitted ||
+                status == TxStatus.pending ||
+                status == TxStatus.broadcast) &&
+            _lastCheckOutcome == TxCheckOutcome.unknown);
     final failed =
         status == TxStatus.failed ||
         status == TxStatus.dropped ||
         status == TxStatus.expired;
     final confirmed = status == TxStatus.confirmed;
-    final color = failed
+    final replaced = status == TxStatus.replaced;
+    final color = statusUnknown
+        ? WalletColors.text3
+        : failed
         ? WalletColors.red
+        : replaced
+        ? const Color(0xFFF59E0B)
         : confirmed
         ? WalletColors.green
         : WalletColors.accent;
-    final icon = failed
+    final icon = statusUnknown
+        ? Icons.help_outline_rounded
+        : failed
         ? Icons.error_outline_rounded
+        : replaced
+        ? Icons.swap_horiz_rounded
         : confirmed
         ? Icons.check
         : Icons.schedule_rounded;
-    final statusLabel = failed
+    final statusLabel = statusUnknown
+        ? l10n.txStatusUnknown
+        : failed
         ? l10n.txStatusFailed
+        : replaced
+        ? l10n.txStatusReplaced
         : confirmed
         ? l10n.txStatusConfirmed
         : l10n.txStatusPending;
@@ -2972,7 +3794,7 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
         Column(
           children: [
             Text(
-              l10n.txSubmitted,
+              submissionUnknown ? l10n.txSubmissionUnknown : l10n.txSubmitted,
               style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
@@ -2986,6 +3808,35 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
             ),
           ],
         ),
+        if (submissionUnknown)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF7E8),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFFFD58A)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Color(0xFFC56A00),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    l10n.txSubmissionUnknownMessage,
+                    style: const TextStyle(
+                      color: Color(0xFF7A4300),
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         KtCard(
           child: Column(
             children: [
@@ -3004,6 +3855,20 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
                 label: l10n.statusLabel,
                 value: statusLabel,
                 valueColor: color,
+              ),
+              const SizedBox(height: 14),
+              KtDetailRow(
+                label: l10n.txBroadcastTime,
+                value: _transaction?.broadcastAt == null
+                    ? '--'
+                    : _date(_transaction!.broadcastAt!),
+              ),
+              const SizedBox(height: 14),
+              KtDetailRow(
+                label: l10n.txLastStatusCheck,
+                value: _lastCheckedAt == null
+                    ? l10n.txNotCheckedYet
+                    : _date(_lastCheckedAt!),
               ),
             ],
           ),
@@ -3024,6 +3889,7 @@ class TxDetailScreen extends StatefulWidget {
     this.transaction,
     this.chainRecord,
     this.transferService,
+    this.authGate = const LocalTransactionAuthGate(),
     this.tempDirectory,
     this.cardRenderer,
   });
@@ -3038,6 +3904,7 @@ class TxDetailScreen extends StatefulWidget {
   /// Explicit row injection for deterministic widget tests.
   final Transaction? transaction;
   final LocalTransferService? transferService;
+  final TransactionAuthGate authGate;
 
   /// Injectable seams keep export UI tests deterministic. The production
   /// path renders a real high-resolution card and stages it in the platform
@@ -3058,6 +3925,8 @@ class _TxDetailScreenState extends State<TxDetailScreen>
   String? _activeId;
   bool _submitting = false;
   bool _exportingReceipt = false;
+  int? _lastCheckedAt;
+  TxCheckOutcome? _lastCheckOutcome;
   TransactionStatusService? _statusService;
   Timer? _statusTimer;
 
@@ -3077,6 +3946,11 @@ class _TxDetailScreenState extends State<TxDetailScreen>
         NetworkScope.maybeOf(context),
       ),
       gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
+      onEvmNonceObserved: (transaction, nonce) async {
+        await WalletScope.of(
+          context,
+        ).setTransactionNonceIfAbsent(transaction.id, nonce);
+      },
     );
     if (widget.transaction == null && _activeId != null) {
       _transaction ??= _loadTransaction();
@@ -3088,6 +3962,8 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     if (id == null) return null;
     final transaction = await WalletScope.of(context).localTransactionById(id);
     if (transaction != null) {
+      _lastCheckedAt = transaction.lastCheckedAt;
+      _lastCheckOutcome = transaction.lastCheckOutcome;
       _scheduleStatusCheck(transaction, immediately: true);
     }
     return transaction;
@@ -3127,16 +4003,53 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     }
     final status = await service.check(transaction);
     if (!mounted) return;
+    final checkedAt = DateTime.now().millisecondsSinceEpoch;
     final next = switch (status) {
       ChainTransactionStatus.confirmed => TxStatus.confirmed,
       ChainTransactionStatus.failed => TxStatus.failed,
+      ChainTransactionStatus.replaced => TxStatus.replaced,
+      ChainTransactionStatus.expired => TxStatus.expired,
       ChainTransactionStatus.pending || ChainTransactionStatus.unknown => null,
     };
-    if (next != null && next != transaction.status) {
-      await WalletScope.of(
-        context,
-      ).updateTransactionStatus(transaction.id, next, hash: transaction.hash);
-      if (mounted) _reload();
+    final outcome = switch (status) {
+      ChainTransactionStatus.pending => TxCheckOutcome.pending,
+      ChainTransactionStatus.unknown => TxCheckOutcome.unknown,
+      _ => null,
+    };
+    final terminal =
+        status == ChainTransactionStatus.confirmed ||
+        status == ChainTransactionStatus.failed ||
+        status == ChainTransactionStatus.replaced ||
+        status == ChainTransactionStatus.expired;
+    final changed = next != null && next != transaction.status;
+    final controller = WalletScope.of(context);
+    final persisted = changed ? next : transaction.status;
+    if (_isEvmCoinName(transaction.coin) &&
+        changed &&
+        (persisted == TxStatus.confirmed || persisted == TxStatus.failed)) {
+      await controller.settleEvmTransaction(
+        id: transaction.id,
+        status: persisted,
+        hash: transaction.hash,
+        lastCheckedAt: checkedAt,
+      );
+    } else {
+      await controller.updateTransactionStatus(
+        transaction.id,
+        persisted,
+        hash: transaction.hash,
+        lastCheckedAt: checkedAt,
+        lastCheckOutcome: outcome,
+        clearLastCheckOutcome: terminal,
+      );
+    }
+    if (!mounted) return;
+    setState(() {
+      _lastCheckedAt = checkedAt;
+      _lastCheckOutcome = terminal ? null : outcome;
+    });
+    if (changed) {
+      _reload();
       return;
     }
     _scheduleStatusCheck(transaction);
@@ -3181,12 +4094,13 @@ class _TxDetailScreenState extends State<TxDetailScreen>
         chain == Chain.ethereum ||
         chain == Chain.polygon ||
         chain == Chain.base ||
-        chain == Chain.arbitrum ||
         chain == Chain.avalanche ||
         chain == Chain.bnb;
     return isEvm &&
         tx.signMode == SignMode.local &&
         (tx.status == TxStatus.submitted || tx.status == TxStatus.pending) &&
+        tx.lastCheckOutcome != TxCheckOutcome.unknown &&
+        tx.replacedById == null &&
         // A row with no recorded network (pre-v4 legacy) cannot be safely
         // rebuilt: we do not know which chain instance it was broadcast on.
         tx.networkId != null &&
@@ -3218,33 +4132,50 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     return networks.activeFor(chain).id == tx.networkId;
   }
 
-  String _statusLabel(AppLocalizations l10n, TxStatus status) =>
-      switch (status) {
-        TxStatus.submitted => l10n.txStatusSubmitted,
-        TxStatus.pending ||
-        TxStatus.broadcast ||
-        TxStatus.signed ||
-        TxStatus.awaitingSig ||
-        TxStatus.draft => l10n.txStatusPending,
-        TxStatus.confirmed => l10n.txStatusConfirmed,
-        TxStatus.failed || TxStatus.expired => l10n.txStatusFailed,
-        TxStatus.dropped => l10n.txStatusDropped,
-        TxStatus.replaced => l10n.txStatusReplaced,
-      };
+  bool _statusEvidenceUnknown(Transaction transaction) =>
+      _awaitingConfirmation(transaction) &&
+      (_lastCheckOutcome ?? transaction.lastCheckOutcome) ==
+          TxCheckOutcome.unknown;
 
-  Color _statusColor(TxStatus status) => switch (status) {
-    TxStatus.confirmed => WalletColors.green,
-    TxStatus.failed || TxStatus.dropped || TxStatus.expired => WalletColors.red,
-    TxStatus.replaced => WalletColors.text3,
-    _ => WalletColors.accent,
-  };
+  String _statusLabel(AppLocalizations l10n, Transaction transaction) =>
+      _statusEvidenceUnknown(transaction)
+      ? l10n.txStatusUnknown
+      : switch (transaction.status) {
+          TxStatus.submitted => l10n.txStatusSubmitted,
+          TxStatus.pending ||
+          TxStatus.broadcast ||
+          TxStatus.signed ||
+          TxStatus.awaitingSig ||
+          TxStatus.draft => l10n.txStatusPending,
+          TxStatus.confirmed => l10n.txStatusConfirmed,
+          TxStatus.failed || TxStatus.expired => l10n.txStatusFailed,
+          TxStatus.dropped => l10n.txStatusDropped,
+          TxStatus.replaced => l10n.txStatusReplaced,
+        };
 
-  IconData _statusIcon(TxStatus status) => switch (status) {
-    TxStatus.confirmed => Icons.check_circle,
-    TxStatus.failed || TxStatus.dropped || TxStatus.expired => Icons.error,
-    TxStatus.replaced => Icons.swap_horiz_rounded,
-    _ => Icons.schedule_rounded,
-  };
+  Color _statusColor(Transaction transaction) =>
+      _statusEvidenceUnknown(transaction)
+      ? WalletColors.text3
+      : switch (transaction.status) {
+          TxStatus.confirmed => WalletColors.green,
+          TxStatus.failed ||
+          TxStatus.dropped ||
+          TxStatus.expired => WalletColors.red,
+          TxStatus.replaced => WalletColors.text3,
+          _ => WalletColors.accent,
+        };
+
+  IconData _statusIcon(Transaction transaction) =>
+      _statusEvidenceUnknown(transaction)
+      ? Icons.help_outline_rounded
+      : switch (transaction.status) {
+          TxStatus.confirmed => Icons.check_circle,
+          TxStatus.failed ||
+          TxStatus.dropped ||
+          TxStatus.expired => Icons.error,
+          TxStatus.replaced => Icons.swap_horiz_rounded,
+          _ => Icons.schedule_rounded,
+        };
 
   String _short(String value) => value.length <= 24
       ? value
@@ -3269,7 +4200,10 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     return '${amount.format(maxFraction: 8)} $symbol';
   }
 
-  String _displayAmount(Transaction tx) {
+  String _displayAmount(BuildContext context, Transaction tx) {
+    if (tx.operation == TxOperationKind.approvalRevoke) {
+      return AppLocalizations.of(context).approvalRevoke;
+    }
     final token = _tokenFor(tx);
     final amount = token == null
         ? tx.contract == null
@@ -3308,9 +4242,9 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     // the active one is only a fallback for legacy rows without a network.
     final network =
         _rowNetwork(tx) ?? NetworkScope.of(context).activeFor(chain);
-    final opened = await ExternalActions.instance.open(
-      Uri.parse(explorerTxUrl(network, hash)),
-    );
+    final url = explorerTxUrl(network, hash);
+    if (url == null) return;
+    final opened = await ExternalActions.instance.open(Uri.parse(url));
     if (!opened && mounted) {
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
@@ -3322,14 +4256,22 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     }
   }
 
-  TransactionCardTone _receiptTone(TxStatus status) => switch (status) {
-    TxStatus.confirmed => TransactionCardTone.success,
-    TxStatus.failed ||
-    TxStatus.dropped ||
-    TxStatus.expired => TransactionCardTone.failed,
-    TxStatus.replaced => TransactionCardTone.neutral,
-    _ => TransactionCardTone.pending,
-  };
+  Future<void> _copyHash(String hash) async {
+    await Clipboard.setData(ClipboardData(text: hash));
+    if (mounted) _showMessage(AppLocalizations.of(context).txHashCopied);
+  }
+
+  TransactionCardTone _receiptTone(Transaction transaction) =>
+      _statusEvidenceUnknown(transaction)
+      ? TransactionCardTone.neutral
+      : switch (transaction.status) {
+          TxStatus.confirmed => TransactionCardTone.success,
+          TxStatus.failed ||
+          TxStatus.dropped ||
+          TxStatus.expired => TransactionCardTone.failed,
+          TxStatus.replaced => TransactionCardTone.neutral,
+          _ => TransactionCardTone.pending,
+        };
 
   String _nativeSymbolForChain(Chain chain) => switch (chain) {
     Chain.ethereum || Chain.base || Chain.arbitrum => 'ETH',
@@ -3371,6 +4313,8 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     final l10n = AppLocalizations.of(context);
     final network =
         _rowNetwork(tx) ?? NetworkScope.of(context).activeFor(chain);
+    final explorerUrl = explorerTxUrl(network, hash);
+    if (explorerUrl == null) return null;
     final token = _tokenFor(tx);
     final symbol = token?.symbol ?? _nativeSymbolForChain(chain);
     final fields = <TransactionCardField>[
@@ -3402,49 +4346,64 @@ class _TxDetailScreenState extends State<TxDetailScreen>
           value: tx.nonce!,
           mono: true,
         ),
+      if (tx.broadcastAt != null)
+        TransactionCardField(
+          label: l10n.txBroadcastTime,
+          value: _date(tx.broadcastAt!),
+        ),
+      if ((_lastCheckedAt ?? tx.lastCheckedAt) != null)
+        TransactionCardField(
+          label: l10n.txLastStatusCheck,
+          value: _date((_lastCheckedAt ?? tx.lastCheckedAt)!),
+        ),
       TransactionCardField(label: l10n.txHash, value: hash, mono: true),
     ];
     return TransactionCardData(
       title: l10n.transactionReceiptTitle,
-      amount: _displayAmount(tx),
-      direction: tx.direction == TxDirection.outgoing
+      amount: _displayAmount(context, tx),
+      direction: tx.operation == TxOperationKind.approvalRevoke
+          ? l10n.approvalRevoke
+          : tx.direction == TxDirection.outgoing
           ? l10n.txSent
           : l10n.txReceived,
-      status: _statusLabel(l10n, tx.status),
+      status: _statusLabel(l10n, tx),
       transactionTimeLabel: l10n.transactionReceiptTimeLabel,
       transactionTime: _date(tx.createdAt),
       networkName: network.name,
       isTestnet: network.isTestnet,
       testnetLabel: l10n.testnetBadge,
-      explorerUrl: explorerTxUrl(network, hash),
+      explorerUrl: explorerUrl,
       scanLabel: l10n.scanToVerifyOnChain,
       footer: l10n.transactionReceiptFooter,
       fields: fields,
-      tone: _receiptTone(tx.status),
+      tone: _receiptTone(tx),
       tokenIconAsset: TokenIcon.assetFor(symbol),
       networkIconAsset: ChainIcon.assetFor(chain),
     );
   }
 
-  TransactionCardData _receiptForChainRecord(
+  TransactionCardData? _receiptForChainRecord(
     BuildContext context,
     ChainTxRecord record,
   ) {
     final l10n = AppLocalizations.of(context);
     final chain = chainOf(record.coin);
-    final network = NetworkScope.of(context).activeFor(chain);
+    final network = _networkForChainRecord(context, record);
+    if (network == null) return null;
+    final explorerUrl = explorerTxUrl(network, record.hash);
+    if (explorerUrl == null) return null;
     final symbol = record.assetSymbol ?? _nativeSymbolForChain(chain);
     return TransactionCardData(
       title: l10n.transactionReceiptTitle,
       amount: record.amountText ?? '--',
       direction: record.outgoing ? l10n.txSent : l10n.txReceived,
-      status: record.confirmed ? l10n.txStatusConfirmed : l10n.txStatusFailed,
+      status: _chainTxStatusLabel(l10n, record.status),
       transactionTimeLabel: l10n.transactionReceiptTimeLabel,
       transactionTime: _date(record.timestamp.millisecondsSinceEpoch),
       networkName: network.name,
       isTestnet: network.isTestnet,
       testnetLabel: l10n.testnetBadge,
-      explorerUrl: explorerTxUrl(network, record.hash),
+      explorerUrl: explorerUrl,
       scanLabel: l10n.scanToVerifyOnChain,
       footer: l10n.transactionReceiptFooter,
       fields: [
@@ -3473,12 +4432,18 @@ class _TxDetailScreenState extends State<TxDetailScreen>
           mono: true,
         ),
       ],
-      tone: record.confirmed
-          ? TransactionCardTone.success
-          : TransactionCardTone.failed,
+      tone: _chainTxCardTone(record.status),
       tokenIconAsset: TokenIcon.assetFor(symbol),
       networkIconAsset: ChainIcon.assetFor(chain),
     );
+  }
+
+  Network? _networkForChainRecord(BuildContext context, ChainTxRecord record) {
+    final id = record.networkId;
+    if (id == null || id.isEmpty) return null;
+    final network = NetworkScope.of(context).byId(id);
+    if (network == null || network.chain != chainOf(record.coin)) return null;
+    return network;
   }
 
   Future<void> _chooseReceiptExport(TransactionCardData data) async {
@@ -3619,6 +4584,8 @@ class _TxDetailScreenState extends State<TxDetailScreen>
                 label: l10n.amountLabel,
                 value: cancel
                     ? '0 ${_nativeUnit(original)!.$2}'
+                    : original.operation == TxOperationKind.approvalRevoke
+                    ? l10n.approvalRevoke
                     : original.contract != null
                     ? '${original.amountRaw} Token (raw)'
                     : _displayNativeRaw(original.amountRaw, original),
@@ -3631,6 +4598,13 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     );
     if (confirmed != true || !mounted) return;
 
+    final authenticated = await widget.authGate.authenticate(
+      context,
+      method: AppPrefsScope.maybeOf(context)?.authMethod ?? AuthMethod.password,
+      reason: cancel ? l10n.txCancelConfirm : l10n.txSpeedUpConfirm,
+    );
+    if (!authenticated || !mounted) return;
+
     final controller = WalletScope.of(context);
     final wallet = controller.current;
     final chain = _chainFor(original);
@@ -3642,7 +4616,7 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     final maxFee = BigInt.tryParse(original.maxFeeRaw ?? '');
     final gasLimit = BigInt.tryParse(original.gasLimitRaw ?? '');
     if (wallet is! HotWallet ||
-        controller.usesDemoCrypto ||
+        controller.allowsTestBypass ||
         chain == null ||
         network?.evmChainId == null ||
         nonce == null ||
@@ -3673,6 +4647,10 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     final replacementId =
         'replacement_${createdAt}_${cancel ? 'cancel' : 'speed'}';
     var reserved = false;
+    var signedHashPersisted = false;
+    var broadcastAttempted = false;
+    String? localSignedHash;
+    String? broadcastHash;
     try {
       final prepared = await service.prepareEvmReplacement(
         chain: chain,
@@ -3681,6 +4659,9 @@ class _TxDetailScreenState extends State<TxDetailScreen>
         recipient: original.toAddr,
         amountRaw: BigInt.parse(original.amountRaw),
         tokenContract: original.contract,
+        operation: original.operation == TxOperationKind.approvalRevoke
+            ? TxOperation.approvalRevoke
+            : null,
         nonce: nonce,
         previousMaxPriorityFeePerGas: priority,
         previousMaxFeePerGas: maxFee,
@@ -3693,6 +4674,9 @@ class _TxDetailScreenState extends State<TxDetailScreen>
         // The replacement lives on the SAME network as the row it replaces.
         networkId: rowNetwork.id,
         contract: prepared.tokenContract,
+        operation: prepared.operation == TxOperation.approvalRevoke && !cancel
+            ? TxOperationKind.approvalRevoke
+            : TxOperationKind.transfer,
         from: prepared.from,
         to: prepared.recipient,
         amountRaw: prepared.amountRaw.toString(),
@@ -3709,12 +4693,26 @@ class _TxDetailScreenState extends State<TxDetailScreen>
             : TxReplacementKind.speedUp,
       );
       reserved = true;
-      final hash = await service.signAndBroadcastEvm(
+      final signed = await service.signPreparedEvm(
         wallet: wallet,
         crypto: controller.crypto,
         prepared: prepared,
       );
-      final accepted = await controller.acceptEvmReplacement(
+      localSignedHash = signed.txHash;
+      await controller.updateTransactionStatus(
+        replacementId,
+        TxStatus.submitted,
+        hash: signed.txHash,
+        broadcastAt: DateTime.now().millisecondsSinceEpoch,
+      );
+      signedHashPersisted = true;
+      broadcastAttempted = true;
+      final hash = await service.broadcastSigned(
+        prepared.chain,
+        signed.signedTx,
+      );
+      broadcastHash = hash;
+      final accepted = await controller.recordEvmReplacementBroadcast(
         originalId: original.id,
         replacementId: replacementId,
         hash: hash,
@@ -3731,14 +4729,68 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     } on EvmNonceConflict {
       _showMessage(l10n.nonceConflict);
       _reload();
-    } catch (error) {
+    } on EvmPreflightFailed {
+      _showMessage(l10n.transactionSimulationFailed);
+    } on LocalTransferUncertainException {
+      _reload(replacementId);
+      _showMessage(l10n.txSubmissionUnknownMessage);
+    } on LocalTransferRejectedException catch (error) {
       if (reserved) {
-        await controller.updateTransactionStatus(
-          replacementId,
-          TxStatus.failed,
-        );
+        try {
+          await controller.updateTransactionStatus(
+            replacementId,
+            TxStatus.failed,
+            hash: localSignedHash,
+          );
+        } catch (_) {
+          // Preserve the authoritative rejection reason.
+        }
       }
-      if (mounted) _showMessage('$error');
+      _reload(replacementId);
+      _showMessage(localizedRpcRejection(l10n, error.kind));
+    } on LocalTransferUnsupportedException {
+      if (reserved) {
+        try {
+          await controller.updateTransactionStatus(
+            replacementId,
+            TxStatus.failed,
+            hash: localSignedHash,
+          );
+        } catch (_) {
+          // Preserve the unsupported-broadcast reason.
+        }
+      }
+      _reload(replacementId);
+      _showMessage(l10n.broadcastUnsupported);
+    } on Object {
+      if (broadcastHash != null) {
+        // Broadcast already succeeded and the replacement row already holds
+        // its locally derived hash. Reload it instead of inviting another
+        // same-nonce replacement when only the lineage update failed.
+        if (mounted) {
+          _reload(replacementId);
+          _showMessage(l10n.txReplacementSubmitted);
+        }
+        return;
+      }
+      if (broadcastAttempted && signedHashPersisted) {
+        _reload(replacementId);
+        _showMessage(l10n.txSubmissionUnknownMessage);
+        return;
+      }
+      if (reserved) {
+        try {
+          await controller.updateTransactionStatus(
+            replacementId,
+            TxStatus.failed,
+            hash: signedHashPersisted ? localSignedHash : null,
+          );
+        } catch (_) {
+          // Preserve the original preparation/signing failure. The failed
+          // marker is best-effort and no irreversible broadcast occurred.
+        }
+      }
+      if (mounted) _showMessage(l10n.transactionNotSubmitted);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -3759,8 +4811,23 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     final record = widget.chainRecord;
     if (record != null) return _buildChainOnly(context, record);
     // Scope-absent gallery / goldens only: every real row now arrives with an
-    // id or a chain record.
-    if (_activeId == null) return _buildDemo(context);
+    // id or a chain record. Keep the screen fail-closed even when embedded
+    // outside GoRouter so a future route cannot expose the visual fixture.
+    if (_activeId == null) {
+      final controller = WalletScope.maybeOf(context);
+      if (controller == null || controller.allowsTestBypass) {
+        return _buildDemo(context);
+      }
+      return KtScreen(
+        navBar: KtNavBar(
+          title: AppLocalizations.of(context).txDetailTitle,
+          onBack: () => Navigator.of(context).maybePop(),
+        ),
+        children: [
+          Center(child: Text(AppLocalizations.of(context).txNotFound)),
+        ],
+      );
+    }
     return FutureBuilder<Transaction?>(
       future: _transaction,
       builder: (context, snapshot) {
@@ -3792,7 +4859,7 @@ class _TxDetailScreenState extends State<TxDetailScreen>
 
   Widget _buildLive(BuildContext context, Transaction tx) {
     final l10n = AppLocalizations.of(context);
-    final statusColor = _statusColor(tx.status);
+    final statusColor = _statusColor(tx);
     final chain = _chainFor(tx);
     // The row's own network (falling back to its recorded id, then to the
     // active instance for legacy rows) — never relabel a Sepolia transfer
@@ -3811,8 +4878,9 @@ class _TxDetailScreenState extends State<TxDetailScreen>
       navBar: KtNavBar(
         title: l10n.txDetailTitle,
         onBack: () => Navigator.of(context).maybePop(),
-        trailing: tx.hash == null ? null : Icons.open_in_new,
-        onTrailing: tx.hash == null ? null : () => _openExplorer(tx),
+        trailing: receipt == null ? null : Icons.open_in_new,
+        trailingTooltip: l10n.txViewInExplorer,
+        onTrailing: receipt == null ? null : () => _openExplorer(tx),
       ),
       bottom: canReplace
           ? Column(
@@ -3857,11 +4925,11 @@ class _TxDetailScreenState extends State<TxDetailScreen>
                 color: statusColor.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
-              child: Icon(_statusIcon(tx.status), size: 28, color: statusColor),
+              child: Icon(_statusIcon(tx), size: 28, color: statusColor),
             ),
             const SizedBox(height: 10),
             Text(
-              _displayAmount(tx),
+              _displayAmount(context, tx),
               style: const TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.w700,
@@ -3871,7 +4939,7 @@ class _TxDetailScreenState extends State<TxDetailScreen>
             ),
             const SizedBox(height: 6),
             Text(
-              '${_statusLabel(l10n, tx.status)} · ${_date(tx.createdAt)}',
+              '${_statusLabel(l10n, tx)} · ${_date(tx.createdAt)}',
               style: const TextStyle(fontSize: 13, color: WalletColors.text3),
             ),
           ],
@@ -3882,7 +4950,9 @@ class _TxDetailScreenState extends State<TxDetailScreen>
               KtDetailRow(label: l10n.networkRow, value: networkName),
               const SizedBox(height: 14),
               KtDetailRow(
-                label: l10n.recipientAddress,
+                label: tx.operation == TxOperationKind.approvalRevoke
+                    ? l10n.approvalSpender
+                    : l10n.recipientAddress,
                 value: _short(tx.toAddr),
                 mono: true,
               ),
@@ -3910,16 +4980,42 @@ class _TxDetailScreenState extends State<TxDetailScreen>
               ],
               if (tx.hash != null) ...[
                 const SizedBox(height: 14),
-                KtDetailRow(
-                  label: l10n.txHash,
-                  value: _short(tx.hash!),
-                  mono: true,
+                Row(
+                  children: [
+                    Expanded(
+                      child: KtDetailRow(
+                        label: l10n.txHash,
+                        value: _short(tx.hash!),
+                        mono: true,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      key: const ValueKey('copy-transaction-hash'),
+                      tooltip: l10n.txCopyHash,
+                      onPressed: () => _copyHash(tx.hash!),
+                      icon: const Icon(Icons.copy_rounded, size: 19),
+                      color: WalletColors.accent,
+                    ),
+                  ],
                 ),
               ],
               const SizedBox(height: 14),
               KtDetailRow(
+                label: l10n.txBroadcastTime,
+                value: tx.broadcastAt == null ? '--' : _date(tx.broadcastAt!),
+              ),
+              const SizedBox(height: 14),
+              KtDetailRow(
+                label: l10n.txLastStatusCheck,
+                value: (_lastCheckedAt ?? tx.lastCheckedAt) == null
+                    ? l10n.txNotCheckedYet
+                    : _date((_lastCheckedAt ?? tx.lastCheckedAt)!),
+              ),
+              const SizedBox(height: 14),
+              KtDetailRow(
                 label: l10n.statusLabel,
-                value: _statusLabel(l10n, tx.status),
+                value: _statusLabel(l10n, tx),
                 valueColor: statusColor,
               ),
               if (tx.replacesId != null) ...[
@@ -3933,7 +5029,9 @@ class _TxDetailScreenState extends State<TxDetailScreen>
               if (tx.replacedById != null) ...[
                 const SizedBox(height: 14),
                 KtDetailRow(
-                  label: l10n.txReplacedByLabel,
+                  label: tx.status == TxStatus.replaced
+                      ? l10n.txReplacedByLabel
+                      : l10n.txReplacementPendingLabel,
                   value: _short(tx.replacedById!),
                   mono: true,
                 ),
@@ -3941,6 +5039,26 @@ class _TxDetailScreenState extends State<TxDetailScreen>
             ],
           ),
         ),
+        if (receipt != null)
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton.icon(
+              key: const ValueKey('view-transaction-in-explorer'),
+              onPressed: () => _openExplorer(tx),
+              icon: const Icon(Icons.open_in_new_rounded, size: 19),
+              label: Text(l10n.txViewInExplorer),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: WalletColors.accent,
+                side: BorderSide(
+                  color: WalletColors.accent.withValues(alpha: 0.35),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ),
         if (receipt != null)
           _TransactionReceiptPanel(
             exporting: _exportingReceipt,
@@ -3957,25 +5075,30 @@ class _TxDetailScreenState extends State<TxDetailScreen>
   /// unknown is left out rather than filled in.
   Widget _buildChainOnly(BuildContext context, ChainTxRecord record) {
     final l10n = AppLocalizations.of(context);
-    final network = NetworkScope.of(context).activeFor(chainOf(record.coin));
-    final url = explorerTxUrl(network, record.hash);
+    final network = _networkForChainRecord(context, record);
+    final url = network == null ? null : explorerTxUrl(network, record.hash);
     final receipt = _receiptForChainRecord(context, record);
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(
         title: l10n.txDetailTitle,
         onBack: () => Navigator.of(context).maybePop(),
-        trailing: Icons.open_in_new,
-        onTrailing: () async {
-          final opened = await ExternalActions.instance.open(Uri.parse(url));
-          if (!opened && context.mounted) {
-            ScaffoldMessenger.of(context)
-              ..clearSnackBars()
-              ..showSnackBar(
-                SnackBar(content: Text(l10n.externalActionFailed)),
-              );
-          }
-        },
+        trailing: url == null ? null : Icons.open_in_new,
+        trailingTooltip: l10n.txViewInExplorer,
+        onTrailing: url == null
+            ? null
+            : () async {
+                final opened = await ExternalActions.instance.open(
+                  Uri.parse(url),
+                );
+                if (!opened && context.mounted) {
+                  ScaffoldMessenger.of(context)
+                    ..clearSnackBars()
+                    ..showSnackBar(
+                      SnackBar(content: Text(l10n.externalActionFailed)),
+                    );
+                }
+              },
       ),
       children: [
         Column(
@@ -4037,11 +5160,11 @@ class _TxDetailScreenState extends State<TxDetailScreen>
             ],
             const SizedBox(height: 8),
             Text(
-              record.confirmed ? l10n.txStatusConfirmed : l10n.txStatusFailed,
+              _chainTxStatusLabel(l10n, record.status),
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: record.confirmed ? WalletColors.green : WalletColors.red,
+                color: _chainTxStatusColor(record.status),
               ),
             ),
           ],
@@ -4054,7 +5177,8 @@ class _TxDetailScreenState extends State<TxDetailScreen>
                 value: record.outgoing ? l10n.txSent : l10n.txReceived,
               ),
               const SizedBox(height: 14),
-              KtDetailRow(label: l10n.networkRow, value: network.name),
+              if (network != null)
+                KtDetailRow(label: l10n.networkRow, value: network.name),
               if (record.fromAddress != null) ...[
                 const SizedBox(height: 14),
                 KtDetailRow(
@@ -4097,12 +5221,13 @@ class _TxDetailScreenState extends State<TxDetailScreen>
             ],
           ),
         ),
-        _TransactionReceiptPanel(
-          exporting: _exportingReceipt,
-          title: l10n.exportTransactionReceipt,
-          subtitle: l10n.exportTransactionReceiptSubtitle,
-          onTap: () => _chooseReceiptExport(receipt),
-        ),
+        if (receipt != null)
+          _TransactionReceiptPanel(
+            exporting: _exportingReceipt,
+            title: l10n.exportTransactionReceipt,
+            subtitle: l10n.exportTransactionReceiptSubtitle,
+            onTap: () => _chooseReceiptExport(receipt),
+          ),
       ],
     );
   }
@@ -4115,6 +5240,7 @@ class _TxDetailScreenState extends State<TxDetailScreen>
         title: l10n.txDetailTitle,
         onBack: () => Navigator.of(context).maybePop(),
         trailing: Icons.open_in_new,
+        trailingTooltip: l10n.txViewInExplorer,
         onTrailing: () async {
           // Explorer follows the ACTIVE tron network (the displayed demo tx
           // is a TRON transfer): Nile's tronscan under the testnet
@@ -4125,7 +5251,7 @@ class _TxDetailScreenState extends State<TxDetailScreen>
               explorerTxUrl(
                 NetworkScope.of(context).activeFor(Chain.tron),
                 TxDetailScreen._txHash,
-              ),
+              )!,
             ),
           );
           if (!opened && context.mounted) {
@@ -4344,6 +5470,57 @@ class _ReceiptActionTile extends StatelessWidget {
 /// W30 转账身份验证 (bottom sheet). Production submits through native Wallet
 /// Core, whose protected key access supplies the device authentication prompt.
 /// An injected [BiometricAuth] keeps widget tests deterministic.
+class InvalidTransferState extends StatelessWidget {
+  const InvalidTransferState({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Scaffold(
+      backgroundColor: WalletColors.bg,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
+          child: Column(
+            children: [
+              const Spacer(),
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: WalletColors.red.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.shield_outlined,
+                  size: 34,
+                  color: WalletColors.red,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                l10n.signRequestBuildFailed,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  height: 1.55,
+                  fontWeight: FontWeight.w600,
+                  color: WalletColors.text,
+                ),
+              ),
+              const Spacer(),
+              KtPrimaryButton(
+                label: l10n.backToHome,
+                onPressed: () => context.go('/home'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class TransferAuthSheet extends StatelessWidget {
   const TransferAuthSheet({super.key, this.auth, this.transferService});
 
@@ -4353,9 +5530,18 @@ class TransferAuthSheet extends StatelessWidget {
 
   Future<void> _faceId(BuildContext context) async {
     final l10n = AppLocalizations.of(context);
-    // Injected auth keeps widget tests deterministic. Production signing uses
-    // the native CoreCrypto prompt itself, avoiding a misleading auth-only
-    // success path and avoiding two consecutive biometric prompts.
+    final session = TransferSessionScope.maybeOf(context);
+    final controller = WalletScope.of(context);
+    // A real transfer is authenticated by the native CoreCrypto operation
+    // that releases the key for signing. Running local_auth first would show
+    // two consecutive system prompts while only the second protects the key.
+    // Gallery/test flows still use the injectable facade.
+    if (auth == null &&
+        session?.draft != null &&
+        !controller.allowsTestBypass) {
+      await _submitLive(context);
+      return;
+    }
     final outcome = await (auth ?? BiometricAuth.instance).authenticate(
       reason: l10n.authToConfirmTransfer,
     );
@@ -4401,10 +5587,15 @@ class TransferAuthSheet extends StatelessWidget {
     final draft = session?.draft;
     final controller = WalletScope.of(context);
     final wallet = controller.current;
-    // Standalone gallery and legacy widget fixtures have no live transfer;
-    // preserve their navigation-only behavior.
-    if (draft == null || wallet is! HotWallet || controller.usesDemoCrypto) {
+    // Standalone gallery fixtures retain their navigation-only behavior.
+    if (controller.allowsTestBypass) {
       if (context.mounted) context.go('/broadcast-result');
+      return;
+    }
+    // A route/deep-link without the in-memory draft cannot prove what the user
+    // confirmed. Do not sign, broadcast, or render a fabricated success.
+    if (draft == null || wallet is! HotWallet) {
+      if (context.mounted) context.go('/home');
       return;
     }
     final networkScope = NetworkScope.maybeOf(context);
@@ -4420,11 +5611,19 @@ class TransferAuthSheet extends StatelessWidget {
       Chain.tron || Chain.solana => false,
     };
     if (network == null) {
-      _showTransferError(context, 'No active network for ${draft.chain.name}');
+      _showTransferError(
+        context,
+        AppLocalizations.of(
+          context,
+        ).transferNetworkUnavailable(draft.chain.name),
+      );
       return;
     }
     if (isEvm && chainId == null) {
-      _showTransferError(context, 'Missing EVM chain ID');
+      _showTransferError(
+        context,
+        AppLocalizations.of(context).transferChainIdUnavailable,
+      );
       return;
     }
     final prefs = AppPrefsScope.maybeOf(context);
@@ -4439,36 +5638,61 @@ class TransferAuthSheet extends StatelessWidget {
     final coin = rpcCoinForChain(draft.chain);
     final from = addressForChain(wallet.addresses, draft.chain);
     var reserved = false;
+    var signedHashPersisted = false;
+    var broadcastAttempted = false;
+    String? localSignedHash;
+    String? broadcastHash;
     try {
       final String hash;
       if (isEvm) {
-        final prepared = await service.prepareEvm(
-          draft: draft,
-          from: from,
+        final approved = session.validEvmQuote(
+          forDraft: draft,
+          networkId: network.id,
           evmChainId: chainId!,
+          from: from,
         );
+        if (approved == null) {
+          if (context.mounted) {
+            context.go('/confirm-hot');
+          }
+          return;
+        }
         await controller.reserveOutgoingEvmTransaction(
           id: id,
-          coin: prepared.coin,
+          coin: approved.coin,
           networkId: network.id,
-          contract: prepared.tokenContract,
-          from: prepared.from,
-          to: prepared.recipient,
-          amountRaw: prepared.amountRaw.toString(),
-          feeRaw: prepared.maximumFee.toString(),
+          contract: approved.tokenContract,
+          operation: approved.operation == TxOperation.approvalRevoke
+              ? TxOperationKind.approvalRevoke
+              : TxOperationKind.transfer,
+          from: approved.from,
+          to: approved.recipient,
+          amountRaw: approved.amountRaw.toString(),
+          feeRaw: approved.maximumFee.toString(),
           signMode: SignMode.local,
           createdAt: createdAt,
-          nonce: prepared.nonce.toString(),
-          maxPriorityFeeRaw: prepared.maxPriorityFeePerGas.toString(),
-          maxFeeRaw: prepared.maxFeePerGas.toString(),
-          gasLimitRaw: prepared.gasLimit.toString(),
+          nonce: approved.nonce.toString(),
+          maxPriorityFeeRaw: approved.maxPriorityFeePerGas.toString(),
+          maxFeeRaw: approved.maxFeePerGas.toString(),
+          gasLimitRaw: approved.gasLimit.toString(),
         );
         reserved = true;
-        hash = await service.signAndBroadcastEvm(
+        final signed = await service.signPreparedEvm(
           wallet: wallet,
           crypto: controller.crypto,
-          prepared: prepared,
+          prepared: approved,
         );
+        localSignedHash = signed.txHash;
+        await controller.updateTransactionStatus(
+          id,
+          TxStatus.submitted,
+          hash: signed.txHash,
+          broadcastAt: DateTime.now().millisecondsSinceEpoch,
+        );
+        signedHashPersisted = true;
+        broadcastAttempted = true;
+        hash = await service.broadcastSigned(draft.chain, signed.signedTx);
+        broadcastHash = hash;
         await controller.updateTransactionStatus(
           id,
           TxStatus.pending,
@@ -4476,14 +5700,109 @@ class TransferAuthSheet extends StatelessWidget {
           broadcastAt: DateTime.now().millisecondsSinceEpoch,
         );
       } else {
-        hash = await service.execute(
-          wallet: wallet,
-          crypto: controller.crypto,
-          draft: draft,
-          evmChainId: 0,
+        if (draft.chain == Chain.tron) {
+          final approved = session.validTronQuote(
+            forDraft: draft,
+            networkId: network.id,
+            from: from,
+          );
+          if (approved == null) {
+            if (context.mounted) context.go('/confirm-hot');
+            return;
+          }
+          await controller.saveOutgoingTransaction(
+            id: id,
+            coin: coin,
+            networkId: network.id,
+            contract: draft.tokenContract,
+            operation: draft.operation == TxOperation.approvalRevoke
+                ? TxOperationKind.approvalRevoke
+                : TxOperationKind.transfer,
+            from: from,
+            to: draft.recipient,
+            amountRaw: draft.amount.raw.toString(),
+            feeRaw: approved.maximumFeeSun.toString(),
+            status: TxStatus.submitted,
+            signMode: SignMode.local,
+            createdAt: createdAt,
+            referenceBlockHeight: approved.referenceBlockHeight,
+            expiresAt: approved.expiresAt,
+          );
+          reserved = true;
+          session
+            ..referenceBlockHeight = approved.referenceBlockHeight
+            ..expiresAt = approved.expiresAt;
+          final signed = await service.signPreparedTron(
+            wallet: wallet,
+            crypto: controller.crypto,
+            prepared: approved,
+            expectedNetworkIdentity: network.networkIdentity,
+          );
+          localSignedHash = signed.txHash;
+          await controller.updateTransactionStatus(
+            id,
+            TxStatus.submitted,
+            hash: signed.txHash,
+            broadcastAt: DateTime.now().millisecondsSinceEpoch,
+          );
+          signedHashPersisted = true;
+          broadcastAttempted = true;
+          hash = await service.broadcastSigned(Chain.tron, signed.signedTx);
+          broadcastHash = hash;
+        } else {
+          final approved = session.validSolanaQuote(
+            forDraft: draft,
+            networkId: network.id,
+            from: from,
+          );
+          if (approved == null) {
+            if (context.mounted) context.go('/confirm-hot');
+            return;
+          }
+          await controller.saveOutgoingTransaction(
+            id: id,
+            coin: coin,
+            networkId: network.id,
+            contract: draft.tokenContract,
+            operation: TxOperationKind.transfer,
+            from: from,
+            to: draft.recipient,
+            amountRaw: draft.amount.raw.toString(),
+            feeRaw: approved.networkFeeLamports.toString(),
+            status: TxStatus.submitted,
+            signMode: SignMode.local,
+            createdAt: createdAt,
+            lastValidBlockHeight: approved.lastValidBlockHeight,
+          );
+          reserved = true;
+          session.lastValidBlockHeight = approved.lastValidBlockHeight;
+          final signed = await service.signPreparedSolana(
+            wallet: wallet,
+            crypto: controller.crypto,
+            prepared: approved,
+            expectedNetworkIdentity: network.networkIdentity,
+          );
+          localSignedHash = signed.txHash;
+          await controller.updateTransactionStatus(
+            id,
+            TxStatus.submitted,
+            hash: signed.txHash,
+            broadcastAt: DateTime.now().millisecondsSinceEpoch,
+          );
+          signedHashPersisted = true;
+          broadcastAttempted = true;
+          hash = await service.broadcastSigned(Chain.solana, signed.signedTx);
+          broadcastHash = hash;
+        }
+        await controller.updateTransactionStatus(
+          id,
+          TxStatus.pending,
+          hash: hash,
+          broadcastAt: DateTime.now().millisecondsSinceEpoch,
         );
-        await controller.saveOutgoingTransaction(
-          id: id,
+      }
+      if (draft.operation != TxOperation.approvalRevoke) {
+        await controller.saveIncomingForLocalWallets(
           coin: coin,
           networkId: network.id,
           contract: draft.tokenContract,
@@ -4491,34 +5810,119 @@ class TransferAuthSheet extends StatelessWidget {
           to: draft.recipient,
           amountRaw: draft.amount.raw.toString(),
           hash: hash,
-          status: TxStatus.pending,
-          signMode: SignMode.local,
           createdAt: createdAt,
-          broadcastAt: createdAt,
+          broadcastAt: DateTime.now().millisecondsSinceEpoch,
+          referenceBlockHeight: session.referenceBlockHeight,
+          expiresAt: session.expiresAt,
+          lastValidBlockHeight: session.lastValidBlockHeight,
         );
       }
-      await controller.saveIncomingForLocalWallets(
-        coin: coin,
-        networkId: network.id,
-        contract: draft.tokenContract,
-        from: from,
-        to: draft.recipient,
-        amountRaw: draft.amount.raw.toString(),
-        hash: hash,
-        createdAt: createdAt,
-        broadcastAt: DateTime.now().millisecondsSinceEpoch,
-      );
-      session.broadcastTxHash = hash;
+      session
+        ..broadcastTxHash = hash
+        ..broadcastOutcomeUnknown = false;
       if (context.mounted) context.go('/broadcast-result');
     } on EvmNonceConflict {
       if (context.mounted) {
         _showTransferError(context, AppLocalizations.of(context).nonceConflict);
       }
-    } catch (e) {
-      if (reserved) {
-        await controller.updateTransactionStatus(id, TxStatus.failed);
+    } on EvmPreflightFailed {
+      if (context.mounted) {
+        _showTransferError(
+          context,
+          AppLocalizations.of(context).transactionSimulationFailed,
+        );
       }
-      if (context.mounted) _showTransferError(context, '$e');
+    } on LocalTransferUncertainException {
+      // The single network write may have succeeded. The durable local hash
+      // is the only safe recovery key; navigate to reconciliation and never
+      // expose the auth button as an invitation to submit the same action.
+      if (signedHashPersisted && localSignedHash != null) {
+        session
+          ..broadcastTxHash = localSignedHash
+          ..broadcastOutcomeUnknown = true;
+        if (context.mounted) context.go('/broadcast-result');
+      } else if (context.mounted) {
+        _showTransferError(
+          context,
+          AppLocalizations.of(context).txSubmissionUnknownMessage,
+        );
+      }
+    } on LocalTransferRejectedException catch (error) {
+      if (reserved) {
+        try {
+          await controller.updateTransactionStatus(
+            id,
+            TxStatus.failed,
+            hash: localSignedHash,
+          );
+        } catch (_) {
+          // Preserve the authoritative node rejection in the UI.
+        }
+      }
+      if (context.mounted) {
+        _showTransferError(
+          context,
+          localizedRpcRejection(AppLocalizations.of(context), error.kind),
+        );
+      }
+    } on LocalTransferUnsupportedException {
+      if (reserved) {
+        try {
+          await controller.updateTransactionStatus(
+            id,
+            TxStatus.failed,
+            hash: localSignedHash,
+          );
+        } catch (_) {
+          // Preserve the unsupported-broadcast reason in the UI.
+        }
+      }
+      if (context.mounted) {
+        _showTransferError(
+          context,
+          AppLocalizations.of(context).broadcastUnsupported,
+        );
+      }
+    } on Object {
+      if (broadcastHash != null) {
+        // The irreversible boundary succeeded and the pre-broadcast row with
+        // its local hash is already durable. Do not invite a duplicate send
+        // merely because the best-effort pending/mirror update failed.
+        session
+          ..broadcastTxHash = broadcastHash
+          ..broadcastOutcomeUnknown = false;
+        if (context.mounted) context.go('/broadcast-result');
+        return;
+      }
+      // A transport exception after the locally derived hash was persisted
+      // does not prove rejection: the node may have accepted the bytes before
+      // its response was lost. Keep `submitted` so restart polling resolves
+      // the authoritative chain outcome.
+      if (broadcastAttempted && localSignedHash != null) {
+        session
+          ..broadcastTxHash = localSignedHash
+          ..broadcastOutcomeUnknown = true;
+        if (context.mounted) context.go('/broadcast-result');
+        return;
+      }
+      if (reserved) {
+        try {
+          await controller.updateTransactionStatus(
+            id,
+            TxStatus.failed,
+            hash: signedHashPersisted ? localSignedHash : null,
+          );
+        } catch (_) {
+          // Keep the original persistence/signing error. No broadcast was
+          // attempted before a signed hash became durable.
+        }
+      }
+      if (context.mounted) {
+        _showTransferError(
+          context,
+          AppLocalizations.of(context).transactionNotSubmitted,
+        );
+      }
     }
   }
 
@@ -4531,103 +5935,126 @@ class TransferAuthSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final controller = WalletScope.of(context);
+    final draft = TransferSessionScope.maybeOf(context)?.draft;
+    if (!controller.allowsTestBypass &&
+        (draft == null || controller.current is! HotWallet)) {
+      return const InvalidTransferState();
+    }
     final passwordFirst =
         AppPrefsScope.maybeOf(context)?.authMethod == AuthMethod.password;
     return Scaffold(
       backgroundColor: WalletColors.text.withValues(alpha: 0.5),
-      body: GestureDetector(
-        // Tapping the dimmed scrim dismisses the auth sheet (opaque so the
-        // unpainted region above the card still hit-tests here); the inner
-        // detector absorbs taps on the card itself.
-        behavior: HitTestBehavior.opaque,
-        onTap: () => Navigator.of(context).maybePop(),
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: GestureDetector(
-            onTap: () {},
-            child: Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                color: WalletColors.surface,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: SafeArea(
-                top: false,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.sizeOf(context).height * 0.92,
-                  ),
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: WalletColors.border,
-                            borderRadius: BorderRadius.circular(2),
+      body: Semantics(
+        button: true,
+        label: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+        child: GestureDetector(
+          // Tapping the dimmed scrim dismisses the auth sheet (opaque so the
+          // unpainted region above the card still hit-tests here); the inner
+          // detector absorbs taps on the card itself.
+          behavior: HitTestBehavior.opaque,
+          onTap: () => Navigator.of(context).maybePop(),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: GestureDetector(
+              excludeFromSemantics: true,
+              onTap: () {},
+              child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: WalletColors.surface,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.sizeOf(context).height * 0.92,
+                    ),
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: WalletColors.border,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 20),
-                        Container(
-                          width: 88,
-                          height: 88,
-                          decoration: BoxDecoration(
-                            color: WalletColors.accent.withValues(alpha: 0.06),
-                            shape: BoxShape.circle,
+                          const SizedBox(height: 20),
+                          Container(
+                            width: 88,
+                            height: 88,
+                            decoration: BoxDecoration(
+                              color: WalletColors.accent.withValues(
+                                alpha: 0.06,
+                              ),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              passwordFirst
+                                  ? Icons.password_rounded
+                                  : Icons.face,
+                              size: 44,
+                              color: WalletColors.accent,
+                            ),
                           ),
-                          child: Icon(
-                            passwordFirst ? Icons.password_rounded : Icons.face,
-                            size: 44,
-                            color: WalletColors.accent,
+                          const SizedBox(height: 20),
+                          Semantics(
+                            header: true,
+                            child: Text(
+                              l10n.authToConfirmTransfer,
+                              style: const TextStyle(
+                                fontSize: 19,
+                                fontWeight: FontWeight.w700,
+                                color: WalletColors.text,
+                              ),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 20),
-                        Text(
-                          l10n.authToConfirmTransfer,
-                          style: const TextStyle(
-                            fontSize: 19,
-                            fontWeight: FontWeight.w700,
-                            color: WalletColors.text,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          l10n.authEveryTransfer,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: WalletColors.text2,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        KtPrimaryButton(
-                          label: passwordFirst
-                              ? l10n.authPassword
-                              : l10n.useFaceId,
-                          onPressed: () => passwordFirst
-                              ? _usePin(context)
-                              : _faceId(context),
-                        ),
-                        const SizedBox(height: 12),
-                        GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => passwordFirst
-                              ? _faceId(context)
-                              : _usePin(context),
-                          child: Text(
-                            passwordFirst
-                                ? l10n.authBiometrics
-                                : l10n.usePasscode,
+                          const SizedBox(height: 8),
+                          Text(
+                            l10n.authEveryTransfer,
                             style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
                               color: WalletColors.text2,
                             ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 20),
+                          KtPrimaryButton(
+                            label: passwordFirst
+                                ? l10n.authPassword
+                                : l10n.useFaceId,
+                            onPressed: () => passwordFirst
+                                ? _usePin(context)
+                                : _faceId(context),
+                          ),
+                          const SizedBox(height: 12),
+                          TextButton(
+                            onPressed: () => passwordFirst
+                                ? _faceId(context)
+                                : _usePin(context),
+                            style: TextButton.styleFrom(
+                              foregroundColor: WalletColors.text2,
+                              minimumSize: const Size(48, 48),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              textStyle: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            child: Text(
+                              passwordFirst
+                                  ? l10n.authBiometrics
+                                  : l10n.usePasscode,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

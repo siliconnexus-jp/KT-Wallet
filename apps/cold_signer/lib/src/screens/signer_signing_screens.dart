@@ -84,6 +84,13 @@ String _shortAddress(String address) {
   return '${address.substring(0, 7)}…${address.substring(address.length - 6)}';
 }
 
+String _operationLabel(AppLocalizations l10n, TxOperation operation) =>
+    switch (operation) {
+      TxOperation.nativeTransfer => l10n.nativeTransferOperation,
+      TxOperation.tokenTransfer => l10n.tokenTransferOperation,
+      TxOperation.approvalRevoke => l10n.approvalRevokeOperation,
+    };
+
 Uint8List _exportRequestId(String walletId) {
   final hash = crc32Bytes(utf8.encode(walletId));
   return Uint8List.fromList([...hash, ...hash]);
@@ -142,9 +149,16 @@ String _group(String digits) {
 Widget _kv(String k, String v, {bool mono = false, Color? color}) => Row(
   crossAxisAlignment: CrossAxisAlignment.start,
   children: [
-    Text(k, style: const TextStyle(fontSize: 14, color: SignerColors.text2)),
+    Flexible(
+      flex: 2,
+      child: Text(
+        k,
+        style: const TextStyle(fontSize: 14, color: SignerColors.text2),
+      ),
+    ),
     const SizedBox(width: 16),
     Expanded(
+      flex: 3,
       child: Text(
         v,
         textAlign: TextAlign.right,
@@ -168,88 +182,204 @@ Widget _card(Widget child) => Container(
   child: child,
 );
 
+Widget _unavailableSigningState(AppLocalizations l10n, {String? title}) =>
+    KtScreen(
+      theme: _t,
+      navBar: KtNavBar(title: title ?? l10n.signComplete, theme: _t),
+      children: [
+        const SizedBox(height: 80),
+        const Icon(
+          Icons.error_outline_rounded,
+          size: 52,
+          color: SignerColors.danger,
+        ),
+        const SizedBox(height: 18),
+        Text(
+          l10n.signResultUnavailable,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+            color: SignerColors.text,
+          ),
+        ),
+      ],
+    );
+
 /// C5 离线首页.
-class SignerHomeScreen extends StatelessWidget {
-  const SignerHomeScreen({super.key});
+class SignerHomeScreen extends StatefulWidget {
+  const SignerHomeScreen({super.key, this.probe = probeDeviceState});
+
+  /// Injectable for deterministic tests. Production always uses the native
+  /// probe and never paints an unmeasured device state as green.
+  final Future<DeviceState> Function() probe;
+
+  @override
+  State<SignerHomeScreen> createState() => _SignerHomeScreenState();
+}
+
+class _SignerHomeScreenState extends State<SignerHomeScreen>
+    with WidgetsBindingObserver {
+  DeviceState? _deviceState;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_probe());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_probe());
+  }
+
+  Future<void> _probe() async {
+    DeviceState state;
+    try {
+      state = await widget.probe();
+    } on Object {
+      state = const DeviceState.unknown();
+    }
+    if (!mounted) return;
+    setState(() => _deviceState = state);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+    final state = _deviceState;
+    final verdict = state == null ? null : SecurityChecks.verdict(state);
+    final (statusColor, statusIcon, statusLabel) = switch (state?.network) {
+      null => (
+        SignerColors.text2,
+        Icons.shield_outlined,
+        l10n.securityChecking,
+      ),
+      DeviceCondition.safe => (
+        SignerColors.ok,
+        Icons.wifi_off_rounded,
+        l10n.offlineStatusConfirmed,
+      ),
+      DeviceCondition.unsafe => (
+        SignerColors.danger,
+        Icons.wifi_rounded,
+        l10n.offlineStatusConnected,
+      ),
+      DeviceCondition.unknown => (
+        SignerColors.warn,
+        Icons.wifi_find_rounded,
+        l10n.offlineStatusUnknown,
+      ),
+    };
+    final (bannerColor, bannerIcon, bannerLabel) = switch (verdict?.overall) {
+      null => (
+        SignerColors.text2,
+        Icons.shield_outlined,
+        l10n.securityChecking,
+      ),
+      CheckLevel.pass => (
+        SignerColors.ok,
+        Icons.verified_user,
+        l10n.securityOverallPass,
+      ),
+      CheckLevel.warn => (
+        SignerColors.warn,
+        Icons.warning_amber_rounded,
+        l10n.securityOverallWarn,
+      ),
+      CheckLevel.block => (
+        SignerColors.danger,
+        Icons.dangerous_outlined,
+        l10n.securityOverallBlock,
+      ),
+    };
     return KtScreen(
       theme: _t,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l10n.walletMainName,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: SignerColors.text,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.walletMainName,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: SignerColors.text,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      _Dot(statusColor),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          statusLabel,
+                          style: TextStyle(fontSize: 13, color: statusColor),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Semantics(
+              button: true,
+              label: l10n.securitySettingsTitle,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => context.push('/security'),
+                child: const SizedBox.square(
+                  dimension: 48,
+                  child: Icon(
+                    Icons.settings_outlined,
+                    size: 22,
+                    color: SignerColors.text2,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const _Dot(SignerColors.ok),
-                    const SizedBox(width: 6),
-                    Text(
-                      l10n.offlineForDays(42),
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: SignerColors.ok,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => context.push('/security'),
-              child: const Icon(
-                Icons.settings_outlined,
-                size: 22,
-                color: SignerColors.text2,
               ),
             ),
           ],
         ),
         GestureDetector(
+          key: const ValueKey('home-security-status'),
           behavior: HitTestBehavior.opaque,
           onTap: () => context.push('/security-check'),
           child: Container(
+            constraints: const BoxConstraints(minHeight: 48),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: SignerColors.ok.withValues(alpha: 0.06),
+              color: bannerColor.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
-                const Icon(
-                  Icons.verified_user,
-                  size: 18,
-                  color: SignerColors.ok,
-                ),
+                Icon(bannerIcon, size: 18, color: bannerColor),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    l10n.securityCheckPassed,
-                    style: const TextStyle(
+                    bannerLabel,
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
-                      color: SignerColors.ok,
+                      color: bannerColor,
                     ),
                   ),
                 ),
-                const Icon(
-                  Icons.chevron_right,
-                  size: 16,
-                  color: SignerColors.ok,
-                ),
+                Icon(Icons.chevron_right, size: 16, color: bannerColor),
               ],
             ),
           ),
@@ -299,44 +429,97 @@ class SignerHomeScreen extends StatelessWidget {
             ),
           ),
         ),
-        Row(
-          children: [
-            for (final (icon, label, route) in [
-              (Icons.qr_code, l10n.exportAddress, '/export'),
-              (Icons.history, l10n.signRecords, '/records'),
-              (Icons.shield_outlined, l10n.securityCheck, '/security-check'),
-              (Icons.wallet, l10n.walletManage, '/wallet'),
-            ]) ...[
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => context.push(route),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      color: SignerColors.surface,
-                      borderRadius: BorderRadius.circular(12),
+        largeText
+            ? Column(
+                children: [
+                  for (final (icon, label, route) in [
+                    (Icons.qr_code, l10n.exportAddress, '/export'),
+                    (Icons.history, l10n.signRecords, '/records'),
+                    (
+                      Icons.shield_outlined,
+                      l10n.securityCheck,
+                      '/security-check',
                     ),
-                    child: Column(
-                      children: [
-                        Icon(icon, size: 20, color: SignerColors.text),
-                        const SizedBox(height: 8),
-                        Text(
-                          label,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: SignerColors.text2,
+                    (Icons.wallet, l10n.walletManage, '/wallet'),
+                  ])
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: GestureDetector(
+                        onTap: () => context.push(route),
+                        child: Container(
+                          width: double.infinity,
+                          constraints: const BoxConstraints(minHeight: 48),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: SignerColors.surface,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(icon, size: 20, color: SignerColors.text),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  label,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: SignerColors.text2,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
+                ],
+              )
+            : Row(
+                children: [
+                  for (final (icon, label, route) in [
+                    (Icons.qr_code, l10n.exportAddress, '/export'),
+                    (Icons.history, l10n.signRecords, '/records'),
+                    (
+                      Icons.shield_outlined,
+                      l10n.securityCheck,
+                      '/security-check',
+                    ),
+                    (Icons.wallet, l10n.walletManage, '/wallet'),
+                  ]) ...[
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => context.push(route),
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            color: SignerColors.surface,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            children: [
+                              Icon(icon, size: 20, color: SignerColors.text),
+                              const SizedBox(height: 8),
+                              Text(
+                                label,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: SignerColors.text2,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-            ],
-          ],
-        ),
       ],
     );
   }
@@ -408,6 +591,32 @@ class _SignerSecurityCheckScreenState extends State<SignerSecurityCheckScreen> {
     _ => id,
   };
 
+  static String _checkDetail(AppLocalizations l10n, CheckResult result) {
+    if (result.condition == DeviceCondition.unknown) {
+      return l10n.checkDetailUnknown;
+    }
+    final safe = result.condition == DeviceCondition.safe;
+    return switch (result.id) {
+      'network' =>
+        safe ? l10n.checkDetailNetworkSafe : l10n.checkDetailNetworkUnsafe,
+      'airplane' =>
+        safe ? l10n.checkDetailAirplaneSafe : l10n.checkDetailAirplaneUnsafe,
+      'bluetooth' =>
+        safe ? l10n.checkDetailBluetoothSafe : l10n.checkDetailBluetoothUnsafe,
+      'passcode' =>
+        safe ? l10n.checkDetailPasscodeSafe : l10n.checkDetailPasscodeUnsafe,
+      'biometric' =>
+        safe ? l10n.checkDetailBiometricSafe : l10n.checkDetailBiometricUnsafe,
+      'screen_capture' =>
+        safe
+            ? l10n.checkDetailScreenCaptureSafe
+            : l10n.checkDetailScreenCaptureUnsafe,
+      'integrity' =>
+        safe ? l10n.checkDetailIntegritySafe : l10n.checkDetailIntegrityUnsafe,
+      _ => l10n.checkDetailUnknown,
+    };
+  }
+
   Widget _resultRow(AppLocalizations l10n, CheckResult r) {
     final (color, icon, levelLabel) = switch (r.level) {
       CheckLevel.pass => (
@@ -422,43 +631,62 @@ class _SignerSecurityCheckScreenState extends State<SignerSecurityCheckScreen> {
         l10n.checkLevelBlock,
       ),
     };
-    return Row(
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+    final leading = Icon(
+      _checkIcon(r.id),
+      size: 18,
+      color: r.level == CheckLevel.pass ? SignerColors.text2 : color,
+    );
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          _checkIcon(r.id),
-          size: 18,
-          color: r.level == CheckLevel.pass ? SignerColors.text2 : color,
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _checkLabel(l10n, r.id),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: SignerColors.text,
-                ),
-              ),
-              if (r.detail != null) ...[
-                const SizedBox(height: 2),
-                // Engine diagnostics are untranslated; surfaced as-is.
-                Text(
-                  r.detail!,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Color(0xFF5A616C),
-                  ),
-                ),
-              ],
-            ],
+        Text(
+          _checkLabel(l10n, r.id),
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: SignerColors.text,
           ),
         ),
+        const SizedBox(height: 2),
+        Text(
+          _checkDetail(l10n, r),
+          key: ValueKey('security-detail-${r.id}'),
+          style: const TextStyle(fontSize: 11, color: SignerColors.text2),
+        ),
+      ],
+    );
+    final status = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
         Text(levelLabel, style: TextStyle(fontSize: 13, color: color)),
         const SizedBox(width: 8),
         Icon(icon, size: 16, color: color),
+      ],
+    );
+    if (largeText) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              leading,
+              const SizedBox(width: 12),
+              Expanded(child: details),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Padding(padding: const EdgeInsets.only(left: 30), child: status),
+        ],
+      );
+    }
+    return Row(
+      children: [
+        leading,
+        const SizedBox(width: 12),
+        Expanded(child: details),
+        status,
       ],
     );
   }
@@ -554,6 +782,7 @@ class SignerSecurityCheckPreviewScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
     final items = <(IconData, String, String, String)>[
       (Icons.airplanemode_active, l10n.checkAirplaneMode, l10n.statusOn, 'ok'),
       (Icons.wifi_off, 'Wi-Fi', l10n.statusOff, 'ok'),
@@ -626,13 +855,64 @@ class SignerSecurityCheckPreviewScreen extends StatelessWidget {
                 () {
                   final (icon, label, val, s) = items[i];
                   final ok = s == 'ok';
+                  final statusText = Text(
+                    val,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: ok ? SignerColors.ok : SignerColors.warn,
+                    ),
+                  );
+                  final status = Row(
+                    mainAxisSize: largeText
+                        ? MainAxisSize.max
+                        : MainAxisSize.min,
+                    children: [
+                      if (largeText)
+                        Expanded(child: statusText)
+                      else
+                        statusText,
+                      const SizedBox(width: 8),
+                      Icon(
+                        ok ? Icons.check_circle : Icons.error,
+                        size: 16,
+                        color: ok ? SignerColors.ok : SignerColors.warn,
+                      ),
+                    ],
+                  );
+                  final leading = Icon(
+                    icon,
+                    size: 18,
+                    color: ok ? SignerColors.text2 : SignerColors.warn,
+                  );
+                  if (largeText) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        leading,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                label,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: SignerColors.text,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              status,
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  }
                   return Row(
                     children: [
-                      Icon(
-                        icon,
-                        size: 18,
-                        color: ok ? SignerColors.text2 : SignerColors.warn,
-                      ),
+                      leading,
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
@@ -644,19 +924,7 @@ class SignerSecurityCheckPreviewScreen extends StatelessWidget {
                           ),
                         ),
                       ),
-                      Text(
-                        val,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: ok ? SignerColors.ok : SignerColors.warn,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(
-                        ok ? Icons.check_circle : Icons.error,
-                        size: 16,
-                        color: ok ? SignerColors.ok : SignerColors.warn,
-                      ),
+                      status,
                     ],
                   );
                 }(),
@@ -700,17 +968,11 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!kDebugMode || _frames.isNotEmpty) return;
-    final demo = demoSignRequest();
-    final walletId =
-        SignerWalletScope.maybeOf(context)?.localWalletId ?? demo.walletId;
-    final targeted = SignRequest(
-      reqId: demo.reqId,
-      walletId: walletId,
-      coin: demo.coin,
-      rawTx: demo.rawTx,
-      summary: demo.summary,
-      createdAt: demo.createdAt,
-      expiresAt: demo.expiresAt,
+    final controller = SignerWalletScope.maybeOf(context);
+    final metadata = controller?.metadata;
+    final targeted = demoSignRequestForWallet(
+      walletId: controller?.localWalletId ?? demoWalletId,
+      signerAddress: metadata?.addresses['tron'] ?? demoSignerAddress,
     );
     _frames = Fragmenter(
       chunkSize: demoChunkSize,
@@ -750,6 +1012,10 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
 
   Future<void> _onComplete() async {
     final controller = SignerWalletScope.maybeOf(context);
+    if (!kDebugMode && controller?.hasWallet != true) {
+      unawaited(context.push('/risk'));
+      return;
+    }
     // Live flow: the durable drift-backed anti-replay ledger, so a reqId
     // signed once — even before an app restart — routes to /risk as a
     // duplicate. Without a scope (goldens / bare-widget tests) the stateless
@@ -776,8 +1042,14 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
         unawaited(context.push('/risk'));
         return;
       }
+      final validatorWalletId =
+          localWalletId ?? (kDebugMode ? demoWalletId : null);
+      if (validatorWalletId == null) {
+        unawaited(context.push('/risk'));
+        return;
+      }
       verdict = SignRequestValidator(
-        localWalletId: localWalletId ?? demoWalletId,
+        localWalletId: validatorWalletId,
         records: records,
         transactionAllowed: _isStructurallySupported,
       ).validate(request);
@@ -816,12 +1088,14 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            ScanViewfinder(
-              height: 360,
-              frameColor: SignerColors.ok,
-              onSimulatedTap: _captureNext,
-              onScanned: _onScanned,
-              availability: widget.availability,
+            Flexible(
+              child: ScanViewfinder(
+                height: 360,
+                frameColor: SignerColors.ok,
+                onSimulatedTap: _captureNext,
+                onScanned: _onScanned,
+                availability: widget.availability,
+              ),
             ),
             const SizedBox(height: 24),
             Text(
@@ -862,42 +1136,52 @@ class SignerParseScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final req = request;
+    if (req == null && !kDebugMode) {
+      return _unavailableSigningState(l10n, title: l10n.confirmTxContent);
+    }
     final parsed = _parsedRequest(req);
     final controller = SignerWalletScope.maybeOf(context);
-    final testSummary = kDebugMode ? req?.summary ?? const <int, Object?>{} : const <int, Object?>{};
+    final testSummary = kDebugMode
+        ? req?.summary ?? const <int, Object?>{}
+        : const <int, Object?>{};
     final headline = req == null
-        ? 'TRON · Token Transfer（TRC-20）'
+        ? (kDebugMode
+              ? 'TRON · Token Transfer（TRC-20）'
+              : l10n.signResultUnavailable)
         : parsed == null && kDebugMode
         ? '${_coinName(req.coin)} · ${testSummary['op'] ?? 'Transfer'}'
-        : '${_coinName(req.coin)} · '
-              '${parsed?.operation == TxOperation.tokenTransfer ? 'Token Transfer' : 'Native Transfer'}';
-    final reqLabel = req == null ? 'REQ-7F3A2C' : _reqLabel(req.reqId);
+        : '${_coinName(req.coin)} · ${_operationLabel(l10n, parsed!.operation)}';
+    final reqLabel = req == null
+        ? (kDebugMode ? 'REQ-7F3A2C' : '')
+        : _reqLabel(req.reqId);
     final amount = req == null
-        ? '120.00 USDT'
+        ? (kDebugMode ? '120.00 USDT' : '')
         : parsed == null
         ? kDebugMode
               ? '${testSummary['amount'] ?? '?'} ${testSummary['token'] ?? ''}'
-              : '无法解析'
+              : l10n.transactionParseFailed
+        : parsed.operation == TxOperation.approvalRevoke
+        ? l10n.approvalRevokeZeroAllowance
         : '${_group(parsed.amountRaw.toString())} base units';
     final rawAmount = req == null
-        ? '120,000,000'
+        ? (kDebugMode ? '120,000,000' : '')
         : _group(
             parsed?.amountRaw.toString() ??
                 (kDebugMode ? '${testSummary['rawAmount'] ?? '?'}' : '?'),
           );
     final decimals = req == null
-        ? 6
+        ? (kDebugMode ? 6 : 0)
         : parsed == null && kDebugMode && testSummary['decimals'] is int
         ? testSummary['decimals']! as int
         : 0;
     final from = req == null
-        ? 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa'
+        ? (kDebugMode ? demoSignerAddress : '')
         : parsed?.from ??
               (kDebugMode ? '${testSummary['from'] ?? ''}' : null) ??
               controller?.metadata?.addresses[_addressKeyForCoin(req.coin)] ??
               '?';
     final to = req == null
-        ? 'TWd4qCEUYAJgLtSpQ2dK7wY9nMxR38uQz'
+        ? (kDebugMode ? demoToAddress : '')
         : parsed?.to ?? (kDebugMode ? '${testSummary['to'] ?? '?'}' : '?');
     return KtScreen(
       theme: _t,
@@ -988,7 +1272,7 @@ class SignerParseScreen extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 11,
                   fontFamily: KtFonts.mono,
-                  color: Color(0xFF5A616C),
+                  color: SignerColors.text2,
                 ),
               ),
             ],
@@ -1007,14 +1291,25 @@ class SignerParseScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 6),
-              Text(
-                l10n.rawAmountPrecision(rawAmount, decimals),
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontFamily: KtFonts.mono,
-                  color: SignerColors.text2,
+              if (parsed?.operation == TxOperation.approvalRevoke)
+                Text(
+                  l10n.approvalRevokeSignerNotice,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.5,
+                    color: SignerColors.text2,
+                  ),
+                )
+              else
+                Text(
+                  l10n.rawAmountPrecision(rawAmount, decimals),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontFamily: KtFonts.mono,
+                    color: SignerColors.text2,
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -1024,7 +1319,12 @@ class SignerParseScreen extends StatelessWidget {
             children: [
               SignerDetailRow(label: l10n.fromAccount, value: from),
               const SizedBox(height: 16),
-              SignerDetailRow(label: l10n.toAddress, value: to),
+              SignerDetailRow(
+                label: parsed?.operation == TxOperation.approvalRevoke
+                    ? l10n.spenderAddress
+                    : l10n.toAddress,
+                value: to,
+              ),
             ],
           ),
         ),
@@ -1044,16 +1344,20 @@ class SignerParseScreen extends StatelessWidget {
                 _kv(l10n.expiresAtLabel, _fmtEpoch(req.expiresAt), mono: true),
                 if (parsed?.networkId != null) ...[
                   const SizedBox(height: 8),
-                  _kv('Chain ID', '${parsed!.networkId}', mono: true),
+                  _kv(l10n.chainIdLabel, '${parsed!.networkId}', mono: true),
                 ],
                 if (parsed?.tokenContract != null) ...[
                   const SizedBox(height: 8),
-                  _kv('Token / Contract', parsed!.tokenContract!, mono: true),
+                  _kv(
+                    l10n.tokenContractLabel,
+                    parsed!.tokenContract!,
+                    mono: true,
+                  ),
                 ],
                 if (parsed?.maxFeeRaw != null) ...[
                   const SizedBox(height: 8),
                   _kv(
-                    'Maximum fee (base units)',
+                    l10n.maximumFeeBaseUnits,
                     '${parsed!.maxFeeRaw}',
                     mono: true,
                   ),
@@ -1186,12 +1490,17 @@ class SignerRiskScreen extends StatelessWidget {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => _showRawTx(context),
-            child: Text(
-              l10n.viewRawTxData,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: SignerColors.text2,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Center(
+                child: Text(
+                  l10n.viewRawTxData,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: SignerColors.text2,
+                  ),
+                ),
               ),
             ),
           ),
@@ -1303,9 +1612,19 @@ class SignerAuthScreen extends StatelessWidget {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context)
           ..clearSnackBars()
-          ..showSnackBar(const SnackBar(content: Text('签名失败：交易格式、钱包或认证未通过')));
+          ..showSnackBar(
+            SnackBar(content: Text(AppLocalizations.of(context).signingFailed)),
+          );
         return;
       }
+    } else if (!kDebugMode) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context).signingFailed)),
+        );
+      return;
     }
     if (context.mounted) {
       unawaited(context.push('/result-qr', extra: result ?? req));
@@ -1341,7 +1660,13 @@ class SignerAuthScreen extends StatelessWidget {
   Future<void> _passcodeAuth(BuildContext context) async {
     final controller = SignerWalletScope.maybeOf(context);
     if (controller == null || !controller.hasWallet) {
-      return _completeSignature(context);
+      if (kDebugMode) return _completeSignature(context);
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context).signingFailed)),
+        );
+      return;
     }
     final ok = await showModalBottomSheet<bool>(
       context: context,
@@ -1350,7 +1675,7 @@ class SignerAuthScreen extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => _PinEntrySheet(pinLock: controller.pinLock),
+      builder: (ctx) => SignerPinEntrySheet(pinLock: controller.pinLock),
     );
     if (ok == true && context.mounted) await _completeSignature(context);
   }
@@ -1359,16 +1684,25 @@ class SignerAuthScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final req = request;
+    if (req == null && !kDebugMode) {
+      return _unavailableSigningState(l10n, title: l10n.authTitle);
+    }
     final parsed = _parsedRequest(req);
-    final testSummary = kDebugMode ? req?.summary ?? const <int, Object?>{} : const <int, Object?>{};
+    final testSummary = kDebugMode
+        ? req?.summary ?? const <int, Object?>{}
+        : const <int, Object?>{};
     final amount = req == null
-        ? '120.00 USDT'
+        ? (kDebugMode ? '120.00 USDT' : '')
         : parsed == null
         ? kDebugMode
               ? '${testSummary['amount'] ?? '?'} ${testSummary['token'] ?? ''}'
-              : '无法解析'
+              : l10n.transactionParseFailed
+        : parsed.operation == TxOperation.approvalRevoke
+        ? l10n.approvalRevokeZeroAllowance
         : '${_group(parsed.amountRaw.toString())} base units';
-    final reqLabel = req == null ? 'REQ-7F3A2C' : _reqLabel(req.reqId);
+    final reqLabel = req == null
+        ? (kDebugMode ? 'REQ-7F3A2C' : '')
+        : _reqLabel(req.reqId);
     return KtScreen(
       theme: _t,
       gap: 28,
@@ -1391,12 +1725,17 @@ class SignerAuthScreen extends StatelessWidget {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => _passcodeAuth(context),
-            child: Text(
-              l10n.useDevicePasscode,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: SignerColors.text2,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Center(
+                child: Text(
+                  l10n.useDevicePasscode,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: SignerColors.text2,
+                  ),
+                ),
               ),
             ),
           ),
@@ -1455,16 +1794,17 @@ class SignerAuthScreen extends StatelessWidget {
 /// Modal PIN pad for C8: verifies the enrolled app PIN via [PinLock]
 /// (PBKDF2-HMAC-SHA256 + persisted doubling lockout) and pops `true` on
 /// success. Only reachable in the live flow — the gallery never shows it.
-class _PinEntrySheet extends StatefulWidget {
-  const _PinEntrySheet({required this.pinLock});
+class SignerPinEntrySheet extends StatefulWidget {
+  const SignerPinEntrySheet({super.key, required this.pinLock, this.title});
 
   final PinLock pinLock;
+  final String? title;
 
   @override
-  State<_PinEntrySheet> createState() => _PinEntrySheetState();
+  State<SignerPinEntrySheet> createState() => _SignerPinEntrySheetState();
 }
 
-class _PinEntrySheetState extends State<_PinEntrySheet> {
+class _SignerPinEntrySheetState extends State<SignerPinEntrySheet> {
   String _entry = '';
   String? _error;
   bool _verifying = false;
@@ -1520,7 +1860,7 @@ class _PinEntrySheetState extends State<_PinEntrySheet> {
             ),
             const SizedBox(height: 16),
             Text(
-              l10n.enterPinToSign,
+              widget.title ?? l10n.enterPinToSign,
               style: const TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
@@ -1574,36 +1914,47 @@ class _PinEntrySheetState extends State<_PinEntrySheet> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     for (final k in row)
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => _onKey(k),
-                        child: Container(
-                          width: 64,
-                          height: 64,
-                          margin: const EdgeInsets.symmetric(horizontal: 10),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: k.isEmpty || k == 'del'
-                                ? null
-                                : SignerColors.surface2,
-                            shape: BoxShape.circle,
+                      if (k.isEmpty)
+                        const SizedBox(width: 84, height: 64)
+                      else
+                        Semantics(
+                          button: true,
+                          label: k == 'del' ? l10n.pinKeyDelete : k,
+                          excludeSemantics: true,
+                          child: GestureDetector(
+                            key: ValueKey('pin-key-$k'),
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _onKey(k),
+                            child: Container(
+                              width: 64,
+                              height: 64,
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: k.isEmpty || k == 'del'
+                                    ? null
+                                    : SignerColors.surface2,
+                                shape: BoxShape.circle,
+                              ),
+                              child: k == 'del'
+                                  ? const Icon(
+                                      Icons.backspace_outlined,
+                                      size: 20,
+                                      color: SignerColors.text2,
+                                    )
+                                  : Text(
+                                      k,
+                                      style: const TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w500,
+                                        color: SignerColors.text,
+                                      ),
+                                    ),
+                            ),
                           ),
-                          child: k == 'del'
-                              ? const Icon(
-                                  Icons.backspace_outlined,
-                                  size: 20,
-                                  color: SignerColors.text2,
-                                )
-                              : Text(
-                                  k,
-                                  style: const TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.w500,
-                                    color: SignerColors.text,
-                                  ),
-                                ),
                         ),
-                      ),
                   ],
                 ),
               ),
@@ -1619,14 +1970,23 @@ class _PinEntrySheetState extends State<_PinEntrySheet> {
 /// The result answers [request] (same reqId), is fragmented by the real
 /// [Fragmenter], and each frame's wire bytes are base64url-encoded into a
 /// scannable [KtQrCode]; a timer cycles the frames like kt_wallet's receiver
-/// expects. Without a request (dev gallery / direct navigation) the canonical
-/// demo request is answered, so the screen still shows real frames.
+/// expects. A missing result fails closed: direct navigation can never create
+/// a plausible signature QR.
 class SignerResultQrScreen extends StatefulWidget {
-  const SignerResultQrScreen({super.key, this.request, this.result});
+  const SignerResultQrScreen({
+    super.key,
+    this.request,
+    this.result,
+    this.fragmentChunkSize,
+  });
 
   /// The authorized request this result answers; null in the gallery.
   final SignRequest? request;
   final SignResult? result;
+
+  /// Test/preview seam for exercising animated multi-frame output. Production
+  /// leaves this null and uses the protocol default.
+  final int? fragmentChunkSize;
 
   @override
   State<SignerResultQrScreen> createState() => _SignerResultQrScreenState();
@@ -1645,11 +2005,16 @@ class _SignerResultQrScreenState extends State<SignerResultQrScreen> {
   @override
   void initState() {
     super.initState();
-    final result =
-        widget.result ?? demoSignResult(widget.request ?? demoSignRequest());
-    final fragments = widget.result == null
-        ? demoSignResultFrames(result)
-        : Fragmenter().fragment(result.encode(), reqId: result.reqId);
+    final result = widget.result;
+    if (result == null) {
+      _frameData = const [];
+      return;
+    }
+    final chunkSize = widget.fragmentChunkSize;
+    final fragmenter = chunkSize == null
+        ? Fragmenter()
+        : Fragmenter(chunkSize: chunkSize);
+    final fragments = fragmenter.fragment(result.encode(), reqId: result.reqId);
     _frameData = [
       for (final frame in fragments) base64Url.encode(frame.encode()),
     ];
@@ -1693,6 +2058,30 @@ class _SignerResultQrScreenState extends State<SignerResultQrScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    if (_frameData.isEmpty) {
+      return KtScreen(
+        theme: _t,
+        navBar: KtNavBar(title: l10n.signComplete, theme: _t),
+        children: [
+          const SizedBox(height: 80),
+          const Icon(
+            Icons.error_outline_rounded,
+            size: 52,
+            color: SignerColors.danger,
+          ),
+          const SizedBox(height: 18),
+          Text(
+            l10n.signResultUnavailable,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              color: SignerColors.text,
+            ),
+          ),
+        ],
+      );
+    }
     return KtScreen(
       theme: _t,
       gap: 16,
@@ -1708,12 +2097,17 @@ class _SignerResultQrScreenState extends State<SignerResultQrScreen> {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => _confirmVoid(context),
-            child: Text(
-              l10n.voidThisSignature,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: SignerColors.danger,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Center(
+                child: Text(
+                  l10n.voidThisSignature,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: SignerColors.danger,
+                  ),
+                ),
               ),
             ),
           ),
@@ -1778,10 +2172,20 @@ class SignerAddressExportScreen extends StatefulWidget {
 
 class _SignerAddressExportScreenState extends State<SignerAddressExportScreen> {
   static const _addrs = [
-    (ChainColors.ethereum, 'Ethereum', '0x8f3C2a…7E19bE1', "m/44'/60'/0'/0/0"),
-    (ChainColors.polygon, 'Polygon', '0x8f3C2a…7E19bE1', "m/44'/60'/0'/0/0"),
-    (ChainColors.tron, 'TRON', 'TQm9…L3kFa', "m/44'/195'/0'/0/0"),
-    (ChainColors.solana, 'Solana', '6yKp…Vr2W', "m/44'/501'/0'"),
+    (
+      ChainColors.ethereum,
+      'Ethereum',
+      '0x8f3C2a…7E19bE1',
+      evmDefaultDerivationPath,
+    ),
+    (
+      ChainColors.polygon,
+      'Polygon',
+      '0x8f3C2a…7E19bE1',
+      evmDefaultDerivationPath,
+    ),
+    (ChainColors.tron, 'TRON', 'TQm9…L3kFa', tronDefaultDerivationPath),
+    (ChainColors.solana, 'Solana', '6yKp…Vr2W', solanaDefaultDerivationPath),
   ];
 
   int _seg = 0;
@@ -1814,7 +2218,12 @@ class _SignerAddressExportScreenState extends State<SignerAddressExportScreen> {
     if (_prepared) return;
     _prepared = true;
     final controller = SignerWalletScope.maybeOf(context);
-    _preview = controller == null;
+    _preview = kDebugMode && controller == null;
+    if (controller?.hasWallet != true && !kDebugMode) {
+      _export = null;
+      _frameData = const [];
+      return;
+    }
     final export = controller?.hasWallet == true
         ? controller!.buildAccountExport()
         : demoAccountExport();
@@ -1845,10 +2254,10 @@ class _SignerAddressExportScreenState extends State<SignerAddressExportScreen> {
     final l10n = AppLocalizations.of(context);
     final options = [l10n.allAddresses, 'Ethereum', 'Polygon'];
     final export = _export;
-    final realRows = _preview || export == null
+    final realRows = kDebugMode && (_preview || export == null)
         ? _addrs
         : [
-            for (final account in export.accounts)
+            for (final account in export?.accounts ?? const <AccountRecord>[])
               (
                 _colorForCoin(account.coin),
                 _coinName(account.coin),
@@ -1860,8 +2269,11 @@ class _SignerAddressExportScreenState extends State<SignerAddressExportScreen> {
         ? realRows
         : realRows.where((a) => a.$2 == options[_seg]).toList();
     final frames = _frameData;
-    if (frames == null || frames.isEmpty) {
+    if (frames == null) {
       return const Center(child: CircularProgressIndicator());
+    }
+    if (frames.isEmpty) {
+      return _unavailableSigningState(l10n, title: l10n.exportPublicAddress);
     }
     return KtScreen(
       theme: _t,
@@ -1874,7 +2286,11 @@ class _SignerAddressExportScreenState extends State<SignerAddressExportScreen> {
       bottom: KtPrimaryButton(
         label: l10n.done,
         style: KtButtonStyle.signer,
-        onPressed: () => context.go('/home'),
+        onPressed: () {
+          final controller = SignerWalletScope.maybeOf(context);
+          context.go('/home');
+          controller?.finishOnboardingPresentation();
+        },
       ),
       children: [
         KtSegmented(
@@ -1945,18 +2361,21 @@ class _SignerAddressExportScreenState extends State<SignerAddressExportScreen> {
                             style: const TextStyle(
                               fontSize: 11,
                               fontFamily: KtFonts.mono,
-                              color: Color(0xFF5A616C),
+                              color: SignerColors.text2,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    Text(
-                      visible[i].$3,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontFamily: KtFonts.mono,
-                        color: SignerColors.text2,
+                    Flexible(
+                      child: Text(
+                        visible[i].$3,
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontFamily: KtFonts.mono,
+                          color: SignerColors.text2,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),

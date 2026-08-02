@@ -104,6 +104,7 @@ class KtNavBar extends StatelessWidget {
     this.trailing,
     this.onTrailing,
     this.trailingText,
+    this.trailingTooltip,
   });
   final String title;
   final AppTheme theme;
@@ -112,60 +113,87 @@ class KtNavBar extends StatelessWidget {
   final IconData? trailing;
   final VoidCallback? onTrailing;
   final String? trailingText;
+  final String? trailingTooltip;
 
   @override
   Widget build(BuildContext context) {
+    final material = MaterialLocalizations.of(context);
+    final leadingLabel = leading == Icons.close
+        ? material.closeButtonTooltip
+        : material.backButtonTooltip;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         SizedBox(
-          width: 44,
+          width: 48,
           child: onBack == null
               ? const SizedBox()
               : IconButton(
                   onPressed: onBack,
+                  tooltip: leadingLabel,
                   icon: Icon(leading, size: 22, color: theme.text),
                   padding: EdgeInsets.zero,
                   alignment: Alignment.centerLeft,
                 ),
         ),
         Flexible(
-          child: Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              color: theme.text,
+          child: Semantics(
+            header: true,
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                color: theme.text,
+              ),
             ),
           ),
         ),
-        // Min 44 wide (mirrors the leading slot) but grows for longer action
+        // Min 48 wide (mirrors the leading slot and Android accessibility
+        // guidance) but grows for longer action
         // labels ("Reorder", "並べ替え") instead of wrapping them.
         ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 44),
+          constraints: const BoxConstraints(minWidth: 48),
           child: trailingText != null
-              ? GestureDetector(
-                  onTap: onTrailing,
-                  child: Text(
-                    trailingText!,
-                    maxLines: 1,
-                    textAlign: TextAlign.end,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: theme.text2,
+              ? Semantics(
+                  button: true,
+                  enabled: onTrailing != null,
+                  label: trailingText,
+                  child: InkWell(
+                    onTap: onTrailing,
+                    borderRadius: BorderRadius.circular(12),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minHeight: 48,
+                        minWidth: 48,
+                      ),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          trailingText!,
+                          maxLines: 1,
+                          textAlign: TextAlign.end,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: theme.text2,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 )
               : SizedBox(
-                  width: 44,
+                  width: 48,
                   child: Align(
                     alignment: Alignment.centerRight,
                     child: trailing != null
                         ? IconButton(
                             onPressed: onTrailing,
+                            tooltip:
+                                trailingTooltip ?? material.moreButtonTooltip,
                             icon: Icon(trailing, size: 22, color: theme.text2),
                             padding: EdgeInsets.zero,
                           )
@@ -231,8 +259,9 @@ class KtScreen extends StatelessWidget {
                   : content,
             ),
             if (bottom != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              SafeArea(
+                top: false,
+                minimum: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                 child: bottom!,
               ),
           ],
@@ -276,20 +305,28 @@ class KtAvatar extends StatelessWidget {
   final String initial;
   final double size;
   @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    alignment: Alignment.center,
-    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-    child: Text(
-      initial,
-      style: TextStyle(
-        fontSize: size * 0.45,
-        fontWeight: FontWeight.w600,
-        color: Colors.white,
+  Widget build(BuildContext context) {
+    // White only reaches 3:1 against backgrounds at or below ~0.30 relative
+    // luminance. Above that, use the dark brand text so initials remain
+    // readable on amber, yellow, mint, and other user-selectable colors.
+    final foreground = color.computeLuminance() > 0.30
+        ? WalletColors.text
+        : Colors.white;
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      child: Text(
+        initial,
+        style: TextStyle(
+          fontSize: size * 0.45,
+          fontWeight: FontWeight.w600,
+          color: foreground,
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// Segmented pill selector (fee tiers, filters, mnemonic length).
@@ -315,27 +352,33 @@ class KtSegmented extends StatelessWidget {
   /// width and the labels wrapped mid-word — "Ethere/um", "Avalan/che".
   final bool scrollable;
 
-  Widget _segment(int i) => GestureDetector(
-    onTap: onChanged == null ? null : () => onChanged!(i),
-    child: Container(
-      height: 38,
-      alignment: Alignment.center,
-      padding: scrollable ? const EdgeInsets.symmetric(horizontal: 14) : null,
-      decoration: BoxDecoration(
-        color: i == selected ? theme.text : theme.surface,
-        borderRadius: BorderRadius.circular(KtDimens.radiusSm),
-      ),
-      // Only the scrollable variant pins the label to one line — it has the
-      // room to honour it. Forcing it on the even split would trade a wrap for
-      // a fade-out, which is not an improvement.
-      child: Text(
-        options[i],
-        maxLines: scrollable ? 1 : null,
-        softWrap: !scrollable,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-          color: i == selected ? theme.bg : theme.text2,
+  Widget _segment(int i) => Semantics(
+    button: true,
+    selected: i == selected,
+    inMutuallyExclusiveGroup: true,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onChanged == null ? null : () => onChanged!(i),
+      child: Container(
+        height: 48,
+        alignment: Alignment.center,
+        padding: scrollable ? const EdgeInsets.symmetric(horizontal: 14) : null,
+        decoration: BoxDecoration(
+          color: i == selected ? theme.text : theme.surface,
+          borderRadius: BorderRadius.circular(KtDimens.radiusSm),
+        ),
+        // Only the scrollable variant pins the label to one line — it has the
+        // room to honour it. Forcing it on the even split would trade a wrap
+        // for a fade-out, which is not an improvement.
+        child: Text(
+          options[i],
+          maxLines: scrollable ? 1 : null,
+          softWrap: !scrollable,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: i == selected ? theme.bg : theme.text2,
+          ),
         ),
       ),
     ),

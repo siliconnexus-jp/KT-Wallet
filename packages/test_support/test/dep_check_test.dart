@@ -42,10 +42,12 @@ dev_dependencies:
 void main() {
   group('parseDirectDependencies', () {
     test('extracts direct dependencies only', () {
-      expect(
-        parseDirectDependencies(_cleanPubspec),
-        ['flutter', 'core_crypto', 'airgap_protocol', 'cupertino_icons'],
-      );
+      expect(parseDirectDependencies(_cleanPubspec), [
+        'flutter',
+        'core_crypto',
+        'airgap_protocol',
+        'cupertino_icons',
+      ]);
     });
 
     test('ignores dev_dependencies even when banned names appear there', () {
@@ -59,10 +61,10 @@ void main() {
     });
 
     test('http and analytics SDKs are flagged', () {
-      expect(
-        findWhitelistViolations(_dirtyPubspec),
-        ['http', 'firebase_analytics'],
-      );
+      expect(findWhitelistViolations(_dirtyPubspec), [
+        'http',
+        'firebase_analytics',
+      ]);
     });
   });
 
@@ -114,6 +116,90 @@ import 'package:flutter/material.dart';
 ''';
       expect(manifestDeclaresInternet(manifest), isFalse);
     });
+
+    test('does not treat a manifest-merger removal marker as a request', () {
+      const manifest = '''
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+  <uses-permission android:name="android.permission.INTERNET"
+      tools:node="remove" />
+</manifest>
+''';
+      expect(manifestDeclaresInternet(manifest), isFalse);
+    });
+  });
+
+  group('manifestHasFailClosedBackup', () {
+    test('requires opt-out and both generations of extraction rules', () {
+      const secure = '''
+<application android:allowBackup="false"
+    android:fullBackupContent="@xml/backup_rules"
+    android:dataExtractionRules="@xml/data_extraction_rules" />
+''';
+      expect(manifestHasFailClosedBackup(secure), isTrue);
+      expect(
+        manifestHasFailClosedBackup(
+          '<application android:allowBackup="false" />',
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('Apple privacy manifest packaging', () {
+    test('requires CA92.1, no tracking and both package-manager resources', () {
+      const manifest = '''
+<key>NSPrivacyTracking</key><false/>
+<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+<string>CA92.1</string>
+''';
+      expect(privacyManifestDeclaresAppScopedUserDefaults(manifest), isTrue);
+      expect(
+        privacyManifestDeclaresAppScopedUserDefaults(
+          manifest.replaceFirst('CA92.1', 'UNKNOWN'),
+        ),
+        isFalse,
+      );
+
+      const podspec = '''
+s.source_files = 'core_crypto/Sources/core_crypto/**/*.swift'
+s.resource_bundles = {
+  'core_crypto_privacy' => ['core_crypto/Sources/core_crypto/PrivacyInfo.xcprivacy']
+}
+''';
+      const packageSwift = '.process("PrivacyInfo.xcprivacy"),';
+      expect(
+        applePackageMetadataEmbedsPrivacyManifest(
+          podspec: podspec,
+          packageSwift: packageSwift,
+        ),
+        isTrue,
+      );
+      expect(
+        applePackageMetadataEmbedsPrivacyManifest(
+          podspec: podspec.replaceFirst('**/*.swift', '**/*'),
+          packageSwift: packageSwift,
+        ),
+        isFalse,
+      );
+    });
+
+    test('Podfile must declare and propagate the iOS 13 floor', () {
+      const podfile = '''
+platform :ios, '13.0'
+deployment_target = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+if deployment_target && Gem::Version.new(deployment_target) < Gem::Version.new('13.0')
+  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+end
+''';
+      expect(podfileEnforcesIos13Floor(podfile), isTrue);
+      expect(
+        podfileEnforcesIos13Floor(
+          podfile.replaceFirst("platform :ios, '13.0'", ''),
+        ),
+        isFalse,
+      );
+    });
   });
 
   group('socket-symbol firewall', () {
@@ -155,10 +241,258 @@ dependencies:
       final pubspec = File('../../apps/cold_signer/pubspec.yaml');
       if (!pubspec.existsSync()) return; // path differs under some runners
       final yaml = pubspec.readAsStringSync();
-      expect(findWhitelistViolations(yaml), isEmpty,
-          reason: 'a new dependency must be reviewed for network capability');
-      expect(findStaleWhitelistEntries(yaml), isEmpty,
-          reason: 'stale entries are how this firewall rotted before');
+      expect(
+        findWhitelistViolations(yaml),
+        isEmpty,
+        reason: 'a new dependency must be reviewed for network capability',
+      );
+      expect(
+        findStaleWhitelistEntries(yaml),
+        isEmpty,
+        reason: 'stale entries are how this firewall rotted before',
+      );
+    });
+  });
+
+  group('documentation hygiene', () {
+    test('flags stock package templates', () {
+      expect(
+        findDocumentationPlaceholders('TODO: Put a short description here'),
+        ['TODO: Put a short description'],
+      );
+      expect(
+        findDocumentationPlaceholders(
+          'description: A new Flutter plugin project',
+        ),
+        ['A new Flutter plugin project'],
+      );
+    });
+
+    test('accepts an explicit API and security description', () {
+      expect(
+        findDocumentationPlaceholders(
+          '# Package\n\nAPI contract.\n\n## Security boundary\nFail closed.',
+        ),
+        isEmpty,
+      );
+    });
+  });
+
+  group('reviewed Gradle artifact pins', () {
+    const origin = 'Official SHA-256 verified';
+    const reviewed = {
+      'alpha.module':
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      'beta.jar':
+          'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    };
+
+    test('accepts the exact reviewed set', () {
+      const metadata =
+          '''
+<artifact name="alpha.module">
+  <sha256 value="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" origin="$origin"/>
+</artifact>
+<artifact name="beta.jar">
+  <sha256 value="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" origin="$origin"/>
+</artifact>
+''';
+      expect(
+        findReviewedArtifactPinIssues(metadata, reviewed, origin: origin),
+        isEmpty,
+      );
+    });
+
+    test(
+      'rejects hash drift, duplicate pins, missing pins and trust expansion',
+      () {
+        const badMetadata =
+            '''
+<artifact name="alpha.module">
+  <sha256 value="cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" origin="$origin"/>
+</artifact>
+<artifact name="alpha.module">
+  <sha256 value="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" origin="$origin"/>
+</artifact>
+<artifact name="unreviewed.jar">
+  <sha256 value="dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" origin="$origin"/>
+</artifact>
+''';
+        final issues = findReviewedArtifactPinIssues(
+          badMetadata,
+          reviewed,
+          origin: origin,
+        );
+        expect(issues, contains(contains('alpha.module')));
+        expect(issues, contains(contains('beta.jar')));
+        expect(issues, contains(contains('broadened or truncated')));
+      },
+    );
+  });
+
+  group('real E2E credential guard', () {
+    test('rejects a mnemonic-backed entrypoint without batch validation', () {
+      const source = '''
+const mnemonic = String.fromEnvironment('SEPOLIA_E2E_MNEMONIC');
+void main() { runRealTransfer(mnemonic); }
+''';
+      expect(realE2eEntrypointHasCredentialGuard(source), isFalse);
+    });
+
+    test('accepts guarded or credential-free entrypoints', () {
+      const guarded = '''
+const mnemonic = String.fromEnvironment('SEPOLIA_E2E_MNEMONIC');
+void main() {
+  requireFreshE2eCredentialBatchIfConfigured();
+  runRealTransfer(mnemonic);
+}
+''';
+      expect(realE2eEntrypointHasCredentialGuard(guarded), isTrue);
+      expect(realE2eEntrypointHasCredentialGuard('void main() {}'), isTrue);
+    });
+  });
+
+  group('Flutter ARB localization gate', () {
+    test('accepts exact keys, locales and ICU placeholders', () {
+      final issues = findArbCatalogIssues({
+        'en': '''{
+          "@@locale":"en",
+          "title":"Wallet",
+          "count":"{count} assets",
+          "@count":{"placeholders":{"count":{"type":"int"}}}
+        }''',
+        'zh': '''{
+          "@@locale":"zh",
+          "title":"钱包",
+          "count":"{count} 项资产"
+        }''',
+        'ja': '''{
+          "@@locale":"ja",
+          "title":"ウォレット",
+          "count":"資産 {count} 件"
+        }''',
+      });
+      expect(issues, isEmpty);
+    });
+
+    test('rejects locale, key, placeholder and fallback-language drift', () {
+      final issues = findArbCatalogIssues({
+        'en': '{"@@locale":"en","title":"钱包","count":"{count} items"}',
+        'zh': '{"@@locale":"ja","title":"钱包","extra":"额外"}',
+      });
+      expect(issues, contains(contains('@@locale')));
+      expect(issues, contains(contains('missing keys')));
+      expect(issues, contains(contains('extra keys')));
+      expect(issues, contains(contains('English fallback contains CJK')));
+    });
+
+    test(
+      'rejects untranslated fallback copy unless the locale key is reviewed',
+      () {
+        final issues = findArbCatalogIssues(
+          {
+            'en': '{"@@locale":"en","title":"Wallet","chain":"Chain ID"}',
+            'zh': '{"@@locale":"zh","title":"Wallet","chain":"Chain ID"}',
+            'ja': '{"@@locale":"ja","title":"ウォレット","chain":"Chain ID"}',
+          },
+          sameAsDefaultAllowedKeys: {
+            'zh': {'chain'},
+            'ja': {'chain'},
+          },
+        );
+
+        expect(issues, contains('zh:title: value is identical to en'));
+        expect(issues, isNot(contains(contains('zh:chain'))));
+        expect(issues, isNot(contains(contains('ja:chain'))));
+      },
+    );
+
+    test('rejects ASCII prose punctuation beside CJK unless reviewed', () {
+      final issues = findArbCatalogIssues(
+        {
+          'en': '{"@@locale":"en","error":"Failed: retry","call":"Approve"}',
+          'zh': '{"@@locale":"zh","error":"失败,请重试","call":"调用 approve(合约, 0)"}',
+          'ja':
+              '{"@@locale":"ja","error":"失敗:再試行","call":"approve(spender, 0) を呼び出す"}',
+        },
+        cjkAsciiPunctuationAllowedKeys: {
+          'zh': {'call'},
+        },
+      );
+
+      expect(issues, contains('zh:error: ASCII punctuation beside CJK'));
+      expect(issues, contains('ja:error: ASCII punctuation beside CJK'));
+      expect(issues, isNot(contains(contains('zh:call'))));
+    });
+  });
+
+  group('Android native localization gate', () {
+    test('accepts matching fallback, Chinese and Japanese resources', () {
+      final issues = findAndroidStringResourceIssues({
+        'values': '<resources><string name="app">Wallet</string></resources>',
+        'values-zh-rCN':
+            '<resources><string name="app">钱包</string></resources>',
+        'values-ja': '<resources><string name="app">ウォレット</string></resources>',
+      });
+      expect(issues, isEmpty);
+    });
+
+    test('rejects missing keys and CJK fallback text', () {
+      final issues = findAndroidStringResourceIssues({
+        'values': '''<resources>
+          <string name="app">钱包</string>
+          <string name="privacy">Hidden</string>
+        </resources>''',
+        'values-ja': '<resources><string name="app">ウォレット</string></resources>',
+      });
+      expect(issues, contains(contains('missing strings')));
+      expect(issues, contains(contains('fallback contains CJK')));
+    });
+  });
+
+  group('iOS native localization gate', () {
+    const required = {
+      'CFBundleDisplayName',
+      'CFBundleName',
+      'NSCameraUsageDescription',
+    };
+
+    test('accepts complete localized InfoPlist.strings files', () {
+      final issues = findInfoPlistStringsIssues({
+        'en': '''
+          "CFBundleDisplayName" = "Wallet";
+          "CFBundleName" = "Wallet";
+          "NSCameraUsageDescription" = "Scan QR codes.";
+        ''',
+        'zh-Hans': '''
+          "CFBundleDisplayName" = "钱包";
+          "CFBundleName" = "钱包";
+          "NSCameraUsageDescription" = "用于扫描二维码。";
+        ''',
+        'ja': '''
+          "CFBundleDisplayName" = "Wallet";
+          "CFBundleName" = "Wallet";
+          "NSCameraUsageDescription" = "QRコードをスキャンします。";
+        ''',
+      }, requiredKeys: required);
+      expect(issues, isEmpty);
+    });
+
+    test('rejects missing permissions and unexpected native keys', () {
+      final issues = findInfoPlistStringsIssues({
+        'en': '''
+          "CFBundleDisplayName" = "Wallet";
+          "CFBundleName" = "Wallet";
+          "NSCameraUsageDescription" = "Scan QR codes.";
+        ''',
+        'zh-Hans': '''
+          "CFBundleDisplayName" = "钱包";
+          "CFBundleName" = "钱包";
+          "Unexpected" = "值";
+        ''',
+      }, requiredKeys: required);
+      expect(issues, contains(contains('missing InfoPlist keys')));
+      expect(issues, contains(contains('unexpected InfoPlist keys')));
     });
   });
 }

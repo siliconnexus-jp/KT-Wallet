@@ -1,3 +1,6 @@
+import 'support/e2e_credential_batch.dart';
+import 'support/e2e_wallet_cleanup.dart';
+
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -9,6 +12,7 @@ import 'package:integration_test/integration_test.dart';
 const _mnemonic = String.fromEnvironment('SEPOLIA_E2E_MNEMONIC');
 
 void main() {
+  requireFreshE2eCredentialBatchIfConfigured();
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   test('Wallet Core signs TRON raw_data and Solana legacy messages', () async {
@@ -20,6 +24,7 @@ void main() {
       mnemonic: _mnemonic,
       requireAuth: false,
     );
+    registerE2eWalletCleanup(crypto, walletId);
     final addresses = await crypto.deriveAddresses(walletId);
 
     final tronIntent = TransferIntent(

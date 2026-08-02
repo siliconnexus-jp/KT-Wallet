@@ -1,0 +1,6 @@
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"
+#include "Generated.xcconfig"
+
+// flutter test temporarily rewrites Generated.xcconfig to its listener.dart.
+// Profile builds must always package the production application entrypoint.
+FLUTTER_TARGET=lib/main.dart

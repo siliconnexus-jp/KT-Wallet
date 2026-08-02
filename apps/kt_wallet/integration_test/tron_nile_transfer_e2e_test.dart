@@ -1,3 +1,6 @@
+import 'support/e2e_credential_batch.dart';
+import 'support/e2e_wallet_cleanup.dart';
+
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -14,6 +17,7 @@ const _rpcUrl = 'https://nile.trongrid.io';
 const _testUsdt = 'TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf';
 
 void main() {
+  requireFreshE2eCredentialBatchIfConfigured();
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
@@ -27,6 +31,7 @@ void main() {
         mnemonic: mnemonic,
         requireAuth: false,
       );
+      registerE2eWalletCleanup(crypto, _walletId);
       final addresses = await crypto.deriveAddresses(_walletId);
       final rest = HttpRestTransport(timeout: const Duration(seconds: 20));
       final rpc = TronRpc(baseUrl: _rpcUrl, transport: rest);

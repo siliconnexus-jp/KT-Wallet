@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:chains/chains.dart';
 import 'package:core_crypto/core_crypto.dart' show ChainAddresses;
-import 'package:flutter/foundation.dart' show kReleaseMode;
 
 import 'transfer_draft.dart';
 
@@ -145,7 +144,6 @@ final TransferDraft demoDraft = TransferDraft(
 );
 
 const demoWalletId = 'WLT-91A4C7';
-const demoFromAddress = 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa';
 
 /// Fixed demo reqId — its first three bytes render as the design's
 /// `REQ-7F3A2C` label, and being constant keeps the demo QR golden-stable.
@@ -179,18 +177,20 @@ const signRequestTtlSeconds = 600;
 /// Raw transaction bytes for the sign request.
 ///
 /// EVM chains carry a REAL typed transaction: `0x02 || rlp(...)` unsigned
-/// EIP-1559 bytes from the chains package (native transfer or ERC-20
-/// `transfer` calldata) — exactly what a signer hashes and signs. The
+/// EIP-1559 bytes from the chains package (native transfer, ERC-20 `transfer`,
+/// or exact `approve(spender, 0)` revocation calldata) — exactly what a signer
+/// hashes and signs. The
 /// optional [nonce] / [maxPriorityFeePerGas] / [maxFeePerGas] overrides
 /// carry live chain-state parameters (ChainParamsService); when absent the
 /// documented DEMO constants apply, so every demo/golden rendering stays
 /// byte-identical. The optional [evmChainId] carries the ACTIVE network's
 /// signing-domain id (testnets: Sepolia 11155111, Amoy 80002) — absent, the
 /// mainnet [chainIdForChain] constants apply, and a wrong-network signature
-/// is invalid by construction, which is exactly the isolation we want. TRON
-/// (protobuf) and Solana (message v0) still use the canonical-JSON
-/// placeholder pending real-signing integration to validate their encoders
-/// against.
+/// is invalid by construction, which is exactly the isolation we want.
+/// Production TRON and Solana routes must pass [preparedRawTx]: respectively
+/// the canonical `Transaction.raw` protobuf and the exact legacy message from
+/// their immutable quote. The JSON fallback below exists only for isolated
+/// gallery/widget fixtures and is never accepted by a release Cold Signer.
 Uint8List rawTxFor(
   TransferDraft draft, {
   required String from,
@@ -242,9 +242,8 @@ Uint8List rawTxFor(
   return _jsonRawTx(draft, from: from);
 }
 
-/// Deterministic placeholder raw transaction for chains whose real
-/// serialization isn't integrated yet (TRON protobuf, Solana message):
-/// utf8 of the canonical JSON of the transfer intent.
+/// Deterministic JSON fixture for gallery/widget tests that do not construct a
+/// live TRON/Solana quote. Release signing rejects this shape structurally.
 Uint8List _jsonRawTx(TransferDraft draft, {required String from}) =>
     Uint8List.fromList(
       utf8.encode(
@@ -326,7 +325,9 @@ SignRequest buildSignRequest({
     ),
     summary: {
       SummaryKeys.network: networkLabel ?? d.networkLabel,
-      SummaryKeys.amount: d.amountText,
+      SummaryKeys.amount: d.operation == TxOperation.approvalRevoke
+          ? 'approve(spender, 0)'
+          : d.amountText,
       SummaryKeys.recipient: d.recipient,
     },
     createdAt: created,
@@ -428,14 +429,19 @@ Future<SignResult> verifySignResultCryptographically(
   String? expectedSigner,
 }) async {
   final result = verifySignResultPayload(payload, expected: expected);
-  if (BroadcastSignatureMarkers.isDemo(result.signedTx)) {
-    if (kReleaseMode) {
-      throw StateError('simulated signatures are disabled in release builds');
+  final chain = chainForCoin(expected.coin);
+  final parsed = parseUnsignedTransfer(chain, expected.rawTx);
+  final expectedDomain = expected.chainId;
+  if (parsed.networkId == null) {
+    if (expectedDomain != null) {
+      throw StateError('non-EVM sign request must not carry a chainId');
     }
-    return result;
+  } else if (expectedDomain == null ||
+      parsed.networkId != BigInt.from(expectedDomain)) {
+    throw StateError('sign-result transaction chainId mismatch');
   }
   final verified = await verifySignedTransaction(
-    chain: chainForCoin(expected.coin),
+    chain: chain,
     unsignedTx: expected.rawTx,
     signedTx: result.signedTx,
     claimedSigner: result.signer,
@@ -443,25 +449,15 @@ Future<SignResult> verifySignResultCryptographically(
   if (verified.txHash != result.txHash) {
     throw StateError('sign-result transaction hash mismatch');
   }
+  if (parsed.from != null &&
+      !Addresses.equal(chain, parsed.from!, verified.signer)) {
+    throw StateError('sign-result signer does not match transaction sender');
+  }
   if (expectedSigner != null &&
-      verified.signer.toLowerCase() != expectedSigner.toLowerCase()) {
+      !Addresses.equal(chain, verified.signer, expectedSigner)) {
     throw StateError('sign-result signer does not match paired account');
   }
   return result;
-}
-
-/// Shared marker check kept here so both the QR verifier and broadcaster
-/// reject the same test-only envelope without importing one another.
-abstract final class BroadcastSignatureMarkers {
-  static final _demoPrefix = Uint8List.fromList(utf8.encode('SIGNED-V1:'));
-
-  static bool isDemo(Uint8List signedTx) {
-    if (signedTx.length < _demoPrefix.length) return false;
-    for (var i = 0; i < _demoPrefix.length; i++) {
-      if (signedTx[i] != _demoPrefix[i]) return false;
-    }
-    return true;
-  }
 }
 
 // ---- formatting helpers --------------------------------------------------------

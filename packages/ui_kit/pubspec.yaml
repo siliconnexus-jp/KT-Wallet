@@ -1,7 +1,7 @@
 name: ui_kit
-description: "A new Flutter package project."
+description: Accessible shared Flutter components and screen-security UI for KT Wallet.
 version: 0.0.1
-homepage:
+repository: https://github.com/siliconnexus-jp/KT-Wallet
 
 environment:
   sdk: ^3.12.2

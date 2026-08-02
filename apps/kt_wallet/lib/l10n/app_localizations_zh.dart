@@ -27,6 +27,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get actionDelete => '删除';
 
   @override
+  String get pinKeyDelete => '删除最后一位';
+
+  @override
   String get actionNext => '下一步';
 
   @override
@@ -120,6 +123,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get actionMore => '更多';
+
+  @override
+  String get actionShare => '分享';
 
   @override
   String get actionScanSign => '扫签名';
@@ -324,6 +330,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get createWatchWallet => '创建观察钱包';
 
   @override
+  String get invalidOfflineWalletExport => '离线钱包导出数据无效';
+
+  @override
+  String get offlineWalletAlreadyPaired => '此离线钱包已完成配对';
+
+  @override
   String walletIdProtocol(String id, int version) {
     return 'Wallet ID: $id · 协议 v$version';
   }
@@ -345,6 +357,12 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get walletDeleteFailed => '无法安全删除钱包，当前内容未被移除，请重试。';
+
+  @override
+  String get walletUpdateFailed => '无法保存更改，当前内容未改变，请重试。';
+
+  @override
   String get sortAction => '排序';
 
   @override
@@ -357,6 +375,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get walletTypeLabel => '钱包类型';
+
+  @override
+  String get walletIdLabel => '钱包 ID';
+
+  @override
+  String get coldSignerWalletIdLabel => 'KT冷钱包 ID';
 
   @override
   String get standardWallet => '普通钱包';
@@ -412,6 +436,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get addressInvalid => '地址无效';
 
   @override
+  String recipientLookalikeWarning(String label) {
+    return '此地址与“$label”首尾高度相似，但并不相同，可能是剪贴板地址投毒。';
+  }
+
+  @override
+  String get recipientLookalikeReview => '我已核对完整地址';
+
+  @override
   String get amountLabel => '金额';
 
   @override
@@ -430,6 +462,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get networkFee => '网络手续费';
+
+  @override
+  String get expectedAssetChanges => '预计资产变化';
+
+  @override
+  String outgoingAsset(String symbol) {
+    return '转出 $symbol';
+  }
+
+  @override
+  String get maximumNetworkFee => '最高网络手续费';
+
+  @override
+  String upToNegativeAmount(String amount) {
+    return '最多 -$amount';
+  }
+
+  @override
+  String get solanaRentReserve => '可回收账户租金';
 
   @override
   String get feeCustom => '自定义';
@@ -532,6 +583,60 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get transactionNotSubmitted => '交易未提交，请重试。';
+
+  @override
+  String get broadcastUnsupported => '当前网络无法广播这笔签名交易。';
+
+  @override
+  String get rpcRejectInsufficientFunds => '余额不足，无法支付转账金额和最高网络手续费。';
+
+  @override
+  String get rpcRejectNonceTooLow => '交易 nonce 过低，请刷新后重试。';
+
+  @override
+  String get rpcRejectNonceTooHigh => '交易 nonce 过高，请刷新后重试。';
+
+  @override
+  String get rpcRejectReplacementFeeTooLow => '替换交易的网络手续费过低。';
+
+  @override
+  String get rpcRejectFeeTooLow => '网络手续费过低。';
+
+  @override
+  String get rpcRejectGasLimitTooLow => '交易 Gas Limit 过低。';
+
+  @override
+  String get rpcRejectBlockGasLimit => '交易超过当前网络的区块 Gas 上限。';
+
+  @override
+  String get rpcRejectFeeCapBelowBase => '手续费上限低于当前网络基础费。';
+
+  @override
+  String get rpcRejectAlreadyKnown => '网络已收到这笔交易，请查询状态，不要重复发送。';
+
+  @override
+  String get rpcRejectExecutionReverted => '交易执行时被链上合约回退。';
+
+  @override
+  String get rpcRejectInvalidSender => '交易发送地址无效。';
+
+  @override
+  String get rpcRejectExpiredReference => '交易引用的区块信息已过期，请重新构建交易。';
+
+  @override
+  String get rpcRejectAccountInUse => '交易所需账户正在使用中，请稍后重试。';
+
+  @override
+  String get rpcRejectSimulationFailed => '网络拒绝了本次交易预执行。';
+
+  @override
+  String get rpcRejectInvalidSignature => '交易签名无效。';
+
+  @override
+  String get rpcRejectGeneric => '网络拒绝了这笔交易。';
+
+  @override
   String get signatureVerified => '签名已验证 · 签名者与钱包地址一致，交易内容未被篡改';
 
   @override
@@ -545,6 +650,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get txSubmitted => '交易已提交';
+
+  @override
+  String get txSubmissionUnknown => '广播结果待确认';
+
+  @override
+  String get txSubmissionUnknownMessage =>
+      '签名交易可能已经到达网络，请勿再次发送。KT Wallet 将使用本地计算的交易哈希继续查询链上结果。';
 
   @override
   String get txTimeLabel => '时间';
@@ -566,6 +678,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get txStatusFailed => '失败';
+
+  @override
+  String get txStatusUnknown => '状态暂不可用';
 
   @override
   String get txStatusDropped => '已丢弃';
@@ -618,6 +733,52 @@ class AppLocalizationsZh extends AppLocalizations {
   String get feeUnavailableHint => '无法估算网络费，暂时无法发送';
 
   @override
+  String get tokenRiskChecking => '正在检查 Token 身份…';
+
+  @override
+  String get tokenRiskCheckingBody =>
+      'KT Wallet 正在签名前通过验证目录和独立威胁情报核对当前网络与完整合约地址。';
+
+  @override
+  String get tokenRiskVerifiedTitle => '官方 Token 身份已核对';
+
+  @override
+  String get tokenRiskVerifiedBody => '网络与合约地址匹配运营方验证目录。蓝勾仅确认身份，不代表投资安全。';
+
+  @override
+  String get tokenRiskUnsafeTitle => '检测到高风险 Token 合约';
+
+  @override
+  String get tokenRiskUnsafeBody => '已配置的安全数据源发现该完整合约地址存在明确恶意证据。为保护钱包，本次签名已阻止。';
+
+  @override
+  String get tokenRiskUnknownTitle => 'Token 风险状态无法确认';
+
+  @override
+  String get tokenRiskUnknownBody =>
+      '当前没有已配置的数据源能够确认该合约的身份或安全性。继续前请通过项目官方渠道核对完整合约地址。';
+
+  @override
+  String get tokenRiskUnavailableTitle => '暂时无法检查 Token 风险';
+
+  @override
+  String get tokenRiskUnavailableBody =>
+      '风险服务当前不可用。KT Wallet 无法确认该合约安全，请独立核验后再继续。';
+
+  @override
+  String get tokenRiskBlockedHint => '该 Token 合约已被标记为高风险，暂时无法发送。';
+
+  @override
+  String get signRequestBuildFailed => '无法验证链上交易参数，签名已禁用。';
+
+  @override
+  String get signRequestSaveFailed => '无法安全保存待签名交易，签名二维码未生成。请返回后重试。';
+
+  @override
+  String get transactionSimulationFailed =>
+      '交易预执行失败，未进行签名。请检查余额、金额、收款地址或 Token 合约。';
+
+  @override
   String get txNonceLabel => 'Nonce';
 
   @override
@@ -633,6 +794,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get txReplacedByLabel => '已由交易替换';
 
   @override
+  String get txReplacementPendingLabel => '竞争中的替换交易';
+
+  @override
   String get txNotFound => '未找到本地交易记录';
 
   @override
@@ -642,6 +806,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get txDetailTitle => '交易详情';
+
+  @override
+  String get txBroadcastTime => '广播时间';
+
+  @override
+  String get txLastStatusCheck => '最后状态查询';
+
+  @override
+  String get txNotCheckedYet => '尚未查询';
+
+  @override
+  String get txCopyHash => '复制交易 Hash';
+
+  @override
+  String get txHashCopied => '交易 Hash 已复制';
+
+  @override
+  String get txViewInExplorer => '在区块浏览器查看';
 
   @override
   String get confirmedPrefix => '已确认';
@@ -723,10 +905,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get receiveImageSaved => '已保存到相册';
 
   @override
-  String get receiveImageDenied => '未获得相册权限,无法保存';
+  String get receiveImageDenied => '未获得相册权限，无法保存';
 
   @override
-  String get receiveImageUseShare => '此系统版本无法直接保存,请使用右上角分享';
+  String get receiveImageUseShare => '此系统版本无法直接保存，请使用右上角分享';
 
   @override
   String get receiveImageFailed => '生成收款图片失败';
@@ -808,10 +990,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noMatchingContacts => '没有匹配的联系人';
 
   @override
-  String get contactsEmpty => '还没有联系人,点右上角 + 添加';
+  String get contactsEmpty => '还没有联系人，点右上角 + 添加';
 
   @override
-  String get tokensEmpty => '还没有自定义代币,点右上角 + 添加';
+  String get tokensEmpty => '还没有自定义代币，点右上角 + 添加';
 
   @override
   String get contactBobExchange => 'Bob 交易所';
@@ -887,11 +1069,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get screenCaptureBlocked => '检测到录屏或投屏';
 
   @override
-  String get screenCaptureBlockedHint => '为保护助记词,内容已隐藏。停止录屏或断开投屏后会自动恢复。';
+  String get screenCaptureBlockedHint => '为保护助记词，内容已隐藏。停止录屏或断开投屏后会自动恢复。';
 
   @override
   String get screenshotWarning =>
-      '你刚刚截图了助记词。它已存入相册,任何能看到相册的人都能取走你的资产 —— 请立刻把资产转移到新钱包。';
+      '你刚刚截图了助记词。它已存入相册，任何能看到相册的人都能取走你的资产 —— 请立刻把资产转移到新钱包。';
 
   @override
   String get rpcMeasuring => '测量中…';
@@ -1026,7 +1208,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get walletLoadErrorTitle => '钱包加载失败';
 
   @override
-  String get walletLoadErrorDesc => '无法读取本机的钱包数据。请重试;若问题持续,请重新安装应用。';
+  String get walletLoadErrorDesc => '无法读取本机的钱包数据。请重试；若问题持续，请重新安装应用。';
+
+  @override
+  String get walletPersistenceFailed => '无法安全保存钱包，本次未添加任何钱包。请重试。';
+
+  @override
+  String get walletAlreadyExists => '该钱包已存在于本机。';
 
   @override
   String get cryptoUnavailableTitle => '钱包引擎不可用';
@@ -1034,6 +1222,13 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get cryptoUnavailableDesc =>
       '此 Android 构建未包含 Trust Wallet Core。请安装启用了 Wallet Core 的构建；应用不会自动改用模拟密钥。';
+
+  @override
+  String get secureStorageUnavailableTitle => '安全存储不可用';
+
+  @override
+  String get secureStorageUnavailableDesc =>
+      'KT钱包无法安全读取密码和锁定状态，钱包将保持锁定。请重新启动 App，或从可信来源重新安装。';
 
   @override
   String get actionRetry => '重试';
@@ -1094,6 +1289,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setPinDesc => '生物识别不可用时用密码解锁 App。密码仅保存在本机安全区域。';
 
   @override
+  String get changeWalletPin => '修改钱包密码';
+
+  @override
+  String get changeWalletPinDesc => '更换 6 位密码前必须验证当前身份';
+
+  @override
+  String get enterCurrentPin => '请输入当前钱包密码';
+
+  @override
+  String get walletPinChanged => '钱包密码已修改';
+
+  @override
   String get pinMismatch => '两次输入不一致，请重新设置';
 
   @override
@@ -1150,15 +1357,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get probeChecking => '正在探测 RPC…';
 
   @override
-  String get probeOkSave => '探测通过,已保存';
+  String get probeOkSave => '探测通过，已保存';
 
   @override
-  String get rpcProbeFailed => 'RPC 探测失败,请检查地址';
+  String get rpcProbeFailed => 'RPC 探测失败，请检查地址';
+
+  @override
+  String get endpointUrlInvalid =>
+      '请输入不包含账号凭证的有效 HTTPS 地址。仅 localhost 可使用 HTTP。';
 
   @override
   String chainIdMismatch(Object actual) {
-    return 'Chain ID 不匹配:节点返回 $actual';
+    return 'Chain ID 不匹配：节点返回 $actual';
   }
+
+  @override
+  String transferNetworkUnavailable(String network) {
+    return '当前没有可用于 $network 的活动网络。';
+  }
+
+  @override
+  String get transferChainIdUnavailable => '当前选择的 EVM 网络缺少 Chain ID。';
 
   @override
   String get deleteNetwork => '删除网络';
@@ -1190,12 +1409,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get airdropRequesting => '正在请求空投…';
 
   @override
-  String get airdropOk => '空投成功,余额稍后刷新';
+  String get airdropOk => '空投成功，余额稍后刷新';
 
   @override
   String airdropFailed(Object message) {
-    return '空投失败:$message';
+    return '空投失败：$message';
   }
+
+  @override
+  String get airdropRateLimited => '请求过于频繁，请稍后重试';
+
+  @override
+  String get airdropUnavailable => '测试币服务暂时不可用';
+
+  @override
+  String get airdropInvalidRequest => '水龙头拒绝了该地址或请求';
+
+  @override
+  String get airdropInsufficientFunds => '水龙头测试币余额不足';
+
+  @override
+  String get airdropRejected => '水龙头拒绝了请求';
+
+  @override
+  String get airdropMalformedResponse => '测试币服务返回了无效响应';
 
   @override
   String get fiatHiddenTestnet => '测试网资产无市场价格';
@@ -1207,7 +1444,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupEncryptedRow => '加密备份';
 
   @override
-  String get backupEncryptedRowDesc => '把加密副本保存到 iCloud Drive 或文件';
+  String get backupEncryptedRowDesc => '通过系统文件选择器保存加密副本';
 
   @override
   String get backupIntro => '备份文件用你设置的密码加密。同时拿到文件和密码的人，就掌握了这个钱包。';
@@ -1219,13 +1456,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupPasswordConfirm => '再次输入密码';
 
   @override
-  String get backupPasswordTooShort => '至少 8 位';
+  String get backupPasswordTooShort => '请至少输入 14 个字符';
+
+  @override
+  String get backupPasswordTooLong => '最多输入 128 个字符';
+
+  @override
+  String get backupPasswordTooWeak => '请勿使用重复、连续或常见密码';
 
   @override
   String get backupPasswordMismatch => '两次输入的密码不一致';
 
   @override
-  String get backupPasswordWarning => '这个密码无法找回。密码丢了备份就打不开了 —— 请同时保留手抄的助记词。';
+  String get backupPasswordWarning =>
+      '请使用独立且足够长的密码短语。这个密码无法找回，丢失后备份将无法打开；请同时保留手抄的助记词。';
 
   @override
   String get backupCreate => '生成备份';
@@ -1264,6 +1508,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get restoreTooNew => '此备份由更新版本的 App 生成';
 
   @override
+  String get restoreFileTooLarge => '此文件过大，不可能是 KT 钱包备份';
+
+  @override
+  String get restoreFileUnavailable => '此设备无法打开备份文件';
+
+  @override
+  String get restoreFileReadFailed => '无法读取所选文件，请重试';
+
+  @override
+  String get restoreSelectedFileFallback => '备份文件';
+
+  @override
   String get restoreRestored => '钱包已恢复';
 
   @override
@@ -1287,11 +1543,244 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aboutOpenSource => '开源地址';
 
   @override
-  String get aboutOpenSourceDesc => '你的私钥交给了这份代码,它是可以被审阅的';
+  String get aboutOpenSourceDesc => '你的私钥交给了这份代码，它是可以被审阅的';
 
   @override
   String get aboutTagline => '气隙钱包 —— 私钥永不离开你的设备。';
 
   @override
   String get aboutCopiedLink => '链接已复制';
+
+  @override
+  String get aboutTrustTitle => '信任与法律信息';
+
+  @override
+  String get aboutPrivacyPolicy => '隐私政策';
+
+  @override
+  String get aboutPrivacyPolicyDesc => '了解 App 在本地处理及联网发送的数据';
+
+  @override
+  String get aboutSecurityRisk => '安全与风险说明';
+
+  @override
+  String get aboutSecurityRiskDesc => '当前安全保证、已知限制与使用边界';
+
+  @override
+  String get aboutSecurityPolicy => '安全政策';
+
+  @override
+  String get aboutSecurityPolicyDesc => '漏洞范围、安全研究与响应时限';
+
+  @override
+  String get aboutThirdPartyNotices => '开源依赖与许可证';
+
+  @override
+  String get aboutThirdPartyNoticesDesc => '查看随 App 分发的第三方组件说明';
+
+  @override
+  String get aboutReportSecurity => '报告安全问题';
+
+  @override
+  String get aboutReportSecurityDesc => '先阅读私密报告流程与敏感信息要求';
+
+  @override
+  String get aboutNeverShareSecrets => 'KT Wallet 永远不会索要您的助记词或私钥。';
+
+  @override
+  String get diagnosticsTitle => '支持诊断';
+
+  @override
+  String get diagnosticsSubtitle => '导出用于排查问题的隐私安全 JSON 包';
+
+  @override
+  String get diagnosticsConfirmTitle => '导出诊断包？';
+
+  @override
+  String get diagnosticsConfirmBody => '分享前请确认包含和排除的信息。';
+
+  @override
+  String get diagnosticsIncludesTitle => '包含';
+
+  @override
+  String get diagnosticsIncludesBody => 'App 与构建信息、网络模式、服务状态和汇总性能';
+
+  @override
+  String get diagnosticsExcludesTitle => '永不包含';
+
+  @override
+  String get diagnosticsExcludesBody => '地址、余额、金额、交易、密钥、签名、助记词或节点地址';
+
+  @override
+  String get diagnosticsExportAction => '导出并分享';
+
+  @override
+  String get diagnosticsShareSubject => 'KT钱包支持诊断';
+
+  @override
+  String get diagnosticsShareText => '已脱敏的 KT钱包诊断信息。分享前请检查文件。';
+
+  @override
+  String get diagnosticsReady => '诊断包已准备好';
+
+  @override
+  String get diagnosticsFailed => '无法创建诊断包';
+
+  @override
+  String get diagnosticsUploadTitle => '发送匿名性能报告';
+
+  @override
+  String get diagnosticsUploadSubtitle => '审阅后单次发送固定聚合指标；不会在后台自动上传';
+
+  @override
+  String get diagnosticsUploadConfirmTitle => '发送匿名性能报告？';
+
+  @override
+  String get diagnosticsUploadConfirmBody =>
+      '这是一次由您主动发起的上传，不会在后台自动上传，也不会自动重试。服务端只保留匿名汇总指标 7 天。';
+
+  @override
+  String get diagnosticsUploadIncludesBody =>
+      'App 版本、平台、大致语言、构建模式，以及固定性能项的计数、成功/失败数和 P50/P95';
+
+  @override
+  String get diagnosticsUploadExcludesBody =>
+      '钱包或设备标识、地址、余额、金额、交易、txHash、时间戳、错误文本、调用栈、密钥、签名、助记词或节点地址';
+
+  @override
+  String get diagnosticsUploadAction => '同意并发送';
+
+  @override
+  String get diagnosticsUploadSent => '匿名性能报告已发送';
+
+  @override
+  String get diagnosticsUploadAlreadySent => '相同的匿名报告已经发送过';
+
+  @override
+  String get diagnosticsUploadNoSamples => '目前没有可发送的性能样本';
+
+  @override
+  String get diagnosticsUploadFailed => '匿名性能报告发送失败；没有自动重试';
+
+  @override
+  String get diagnosticsUploadGatewayRequired => '直接连接模式不会上传诊断；请先启用 KT Gateway';
+
+  @override
+  String get settingsApprovals => 'Token 授权管理';
+
+  @override
+  String get approvalsTitle => 'Token 授权管理';
+
+  @override
+  String get approvalsSubtitle => '查看哪些合约可以动用您的 ERC-20 Token';
+
+  @override
+  String get approvalPrivacyTitle => '外部授权扫描';
+
+  @override
+  String get approvalPrivacyBody =>
+      '为了查询尚未撤销的授权，KT钱包会通过当前配置的 Gateway，将此钱包的公开地址和所选主网发送给 GoPlus。不会发送密钥、余额或交易内容，您可随时关闭。';
+
+  @override
+  String get approvalEnableAndScan => '允许并开始扫描';
+
+  @override
+  String get approvalDisableScan => '关闭外部扫描';
+
+  @override
+  String get approvalScanAgain => '重新扫描';
+
+  @override
+  String get approvalLoading => '正在检查尚未撤销的授权…';
+
+  @override
+  String get approvalEmptyTitle => '未发现尚未撤销的授权';
+
+  @override
+  String get approvalEmptyBody => '服务已完整完成本次扫描，并确认此钱包在所选网络没有 ERC-20 allowance。';
+
+  @override
+  String get approvalUnavailableTitle => '授权状态暂不可用';
+
+  @override
+  String get approvalUnavailableBody => '服务未能完成扫描，当前授权清单未知；这不代表没有授权。';
+
+  @override
+  String get approvalUnsupportedTitle => '当前网络尚未覆盖';
+
+  @override
+  String get approvalUnsupportedBody =>
+      '授权扫描目前仅支持 Ethereum、Polygon、Base、Arbitrum 与 BNB Smart Chain 主网。';
+
+  @override
+  String get approvalUnlimited => '无限额度授权';
+
+  @override
+  String approvalAmount(String amount) {
+    return '授权额度：$amount';
+  }
+
+  @override
+  String get approvalSpender => '被授权合约';
+
+  @override
+  String get approvalTokenContract => 'Token 合约';
+
+  @override
+  String get approvalApprovedAt => '最后变更时间';
+
+  @override
+  String get approvalRisky => '发现风险信号';
+
+  @override
+  String get approvalIdentityUnknown => '安全性尚未确认';
+
+  @override
+  String get approvalKnownSpender => '服务商已识别标签';
+
+  @override
+  String get approvalReadOnlyNotice =>
+      '热钱包通过精确的零额度交易在本机撤销；观察钱包通过配对的 KT冷钱包完成二维码往返签名。';
+
+  @override
+  String get approvalPrivacyEnabled => '此设备已允许外部授权扫描';
+
+  @override
+  String get approvalNoWallet => '请先选择钱包再检查授权';
+
+  @override
+  String get approvalRevoke => '撤销授权';
+
+  @override
+  String get approvalRevokeTitle => '撤销这项 Token 授权？';
+
+  @override
+  String get approvalRevokeBody =>
+      'KT钱包会向 Token 合约发送 approve(被授权合约, 0)。这只会把授权额度归零，不会转出 Token。';
+
+  @override
+  String get approvalRevokeConfirm => '验证并撤销';
+
+  @override
+  String get approvalRevokePreparing => '正在模拟精确的撤销交易并估算最高网络费…';
+
+  @override
+  String approvalRevokeMaximumFee(String fee) {
+    return '最高网络费：$fee';
+  }
+
+  @override
+  String get approvalRevokeSubmitted => '撤销交易已提交；链上确认前仍显示为 Pending。';
+
+  @override
+  String get approvalRevokePending => '撤销确认中';
+
+  @override
+  String get approvalRevokeFailed => '撤销交易未提交，不会把授权显示为已撤销。';
+
+  @override
+  String get approvalRevokeAuthFailed => '未完成身份验证，没有签名任何内容。';
+
+  @override
+  String get approvalRevokeHotOnly => '当前没有可用于这笔撤销交易的签名钱包。';
 }

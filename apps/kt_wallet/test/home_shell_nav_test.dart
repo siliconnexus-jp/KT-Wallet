@@ -3,9 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/main.dart';
 
 /// Proves the bottom tab bar switches top-level tabs and that the home backup
-/// banner cannot walk an existing wallet through a fake backup. (The quiz
-/// itself is exercised on the create-onboarding path, the only flow that has a
-/// real phrase in hand — see mnemonic_backup_safety_test.dart.)
+/// banner opens the current wallet's authenticated export instead of creating
+/// another seed. (The export states themselves are exercised in
+/// mnemonic_backup_safety_test.dart.)
 Future<void> _openHome(WidgetTester tester) async {
   tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
   addTearDown(tester.platformDispatcher.clearLocalesTestValue);
@@ -45,23 +45,17 @@ void main() {
   );
 
   testWidgets(
-    'backup flow: banner → warn → show refuses for an existing wallet',
+    'backup banner targets the current wallet instead of new-wallet creation',
     (tester) async {
-      // This path has no pending mnemonic (the wallet already exists), so there
-      // is no phrase to display. It used to render the design-gallery constant
-      // and walk the user through "verifying" it, then mark the wallet backed
-      // up — recording a phrase that unlocks nothing.
       await _openHome(tester);
 
       await tester.tap(find.text('立即备份'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('显示助记词'));
-      await tester.pumpAndSettle();
 
-      expect(find.text('无法显示助记词'), findsOneWidget);
-      expect(find.text('stadium'), findsNothing); // demo phrase not rendered
-      // No route onward to the quiz, so markBackedUp cannot be reached.
-      expect(find.text('我已手写备份，开始校验'), findsNothing);
+      expect(find.text('钱包详情'), findsOneWidget);
+      expect(find.text('查看助记词'), findsOneWidget);
+      expect(find.text('创建钱包'), findsNothing);
+      expect(find.text('stadium'), findsNothing);
     },
   );
 }

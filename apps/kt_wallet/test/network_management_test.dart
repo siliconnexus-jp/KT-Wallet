@@ -83,6 +83,23 @@ void main() {
     expect(find.text('Sepolia'), findsNothing);
   });
 
+  testWidgets('network storage failure keeps active chain and shows feedback', (
+    tester,
+  ) async {
+    final net = NetworkController(
+      preferencesProvider: () async => throw StateError('storage offline'),
+    );
+    await tester.pumpWidget(_app(net));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('测试网'));
+    await tester.pumpAndSettle();
+
+    expect(net.environment, NetworkEnvironment.mainnet);
+    expect(find.text('Sepolia'), findsNothing);
+    expect(find.text('无法保存更改，当前内容未改变，请重试。'), findsOneWidget);
+  });
+
   testWidgets(
     'per-chain picker lists built-ins and sets an override; re-picking the '
     'profile default clears it',
@@ -117,7 +134,10 @@ void main() {
 
       expect(net.activeFor(Chain.ethereum).id, 'eth-mainnet');
       final store = await SharedPreferences.getInstance();
-      expect(store.getString('network.overrides'), '{}');
+      final snapshot =
+          jsonDecode(store.getString(NetworkController.snapshotKey)!)
+              as Map<String, dynamic>;
+      expect(snapshot['overrides'], isEmpty);
     },
   );
 
@@ -159,7 +179,7 @@ void main() {
 
     expect(requests, hasLength(1));
     expect(requests.single.url.toString(), 'http://127.0.0.1:8545');
-    expect(find.text('探测通过,已保存'), findsOneWidget);
+    expect(find.text('探测通过，已保存'), findsOneWidget);
     final added = net.customNetworks.single;
     expect(added.chain, Chain.ethereum);
     expect(added.name, 'Local Anvil');
@@ -204,7 +224,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Inline error with the node's ACTUAL id (decimal); sheet stays open.
-      expect(find.text('Chain ID 不匹配:节点返回 1'), findsOneWidget);
+      expect(find.text('Chain ID 不匹配：节点返回 1'), findsOneWidget);
       expect(find.text('添加网络'), findsOneWidget);
       expect(net.customNetworks, isEmpty);
     },
@@ -236,8 +256,46 @@ void main() {
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
-    expect(find.text('RPC 探测失败,请检查地址'), findsOneWidget);
+    expect(find.text('RPC 探测失败，请检查地址'), findsOneWidget);
     expect(find.text('添加网络'), findsOneWidget);
+    expect(net.customNetworks, isEmpty);
+  });
+
+  testWidgets('add network: public HTTP is rejected before any RPC probe', (
+    tester,
+  ) async {
+    final net = NetworkController();
+    await net.load();
+    var requests = 0;
+    final client = MockClient((request) async {
+      requests++;
+      return http.Response(
+        jsonEncode({'jsonrpc': '2.0', 'id': 1, 'result': '0x1'}),
+        200,
+      );
+    });
+    await tester.pumpWidget(_app(net, probeClient: client));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('add-network')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'Unsafe Net');
+    await tester.enterText(
+      find.byType(TextField).at(1),
+      'http://public-rpc.example',
+    );
+    await tester.enterText(find.byType(TextField).at(2), 'ETH');
+    await tester.enterText(find.byType(TextField).at(3), '1');
+    await tester.pump();
+    await tester.ensureVisible(find.text('保存'));
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('请输入不包含账号凭证的有效 HTTPS 地址。仅 localhost 可使用 HTTP。'),
+      findsOneWidget,
+    );
+    expect(requests, 0);
     expect(net.customNetworks, isEmpty);
   });
 
@@ -252,6 +310,7 @@ void main() {
         name: 'My Localnet',
         rpcUrl: 'http://127.0.0.1:8899',
         symbol: 'SOL',
+        networkIdentity: solanaDevnet.networkIdentity,
       );
       await net.setOverride(Chain.solana, custom.id);
       expect(net.activeFor(Chain.solana).id, custom.id);

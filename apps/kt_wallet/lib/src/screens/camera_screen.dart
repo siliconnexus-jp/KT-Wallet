@@ -54,12 +54,15 @@ class KtCameraScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          ScanViewfinder(
-            height: 400,
-            frameColor: SignerColors.blue,
-            onSimulatedTap: onSimulatedScan,
-            onScanned: onScanned,
-            availability: availability,
+          Flexible(
+            child: ScanViewfinder(
+              height: 400,
+              frameColor: SignerColors.blue,
+              semanticLabel: hint,
+              onSimulatedTap: onSimulatedScan,
+              onScanned: onScanned,
+              availability: availability,
+            ),
           ),
           const SizedBox(height: 24),
           Text(
@@ -156,10 +159,16 @@ class ScanAccountCameraScreen extends StatefulWidget {
 
 class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
   /// The frame set the signer's C10 export QR is "displaying" (demo taps).
-  late final List<AirgapFrame> _frames = demoAccountExportFrames();
+  // Do not even materialize the deterministic pairing account in a release
+  // process. The callback below is also null in release; this conditional
+  // lets the compiler remove the fixture payload from that call path.
+  late final List<AirgapFrame> _frames = kReleaseMode
+      ? const []
+      : demoAccountExportFrames();
   final _session = QrFrameScanSession();
   int _received = 0;
   bool _navigated = false;
+  bool _simulatedSession = false;
 
   void _afterFrame(BuildContext context) {
     setState(() => _received = _session.progress.received);
@@ -176,7 +185,14 @@ class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
     }
     if (decoded is AccountExport && context.mounted) {
       try {
-        if (kReleaseMode) validateAccountExport(decoded);
+        // A real camera payload is always held to the complete eight-chain
+        // public-key/address binding, regardless of build mode. Only the
+        // explicit debug-only simulated viewfinder may use the legacy
+        // four-chain fixture without public keys.
+        validateScannedAccountExport(
+          decoded,
+          allowLegacyDemo: _simulatedSession && !kReleaseMode,
+        );
         _navigated = true;
         context.pushReplacement('/import-confirm', extra: decoded);
       } on PayloadError {
@@ -187,6 +203,12 @@ class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
   }
 
   void _onSimulatedScan(BuildContext context) {
+    if (kReleaseMode) return;
+    if (!_simulatedSession && _received != 0) {
+      _session.reset();
+      _received = 0;
+    }
+    _simulatedSession = true;
     // Same simulated capture as the design snapshot: the next demo frame goes
     // through its wire encoding into the aggregator.
     final wire = _frames[_received % _frames.length].encode();
@@ -195,6 +217,11 @@ class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
   }
 
   void _onScanned(String raw) {
+    if (_simulatedSession) {
+      _session.reset();
+      _received = 0;
+      _simulatedSession = false;
+    }
     _session.add(raw); // Invalid strings count silently as anomalies.
     _afterFrame(context);
   }

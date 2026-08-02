@@ -20,10 +20,18 @@ class MethodChannelCoreCrypto implements CoreCrypto {
       }
       return result;
     } on PlatformException catch (e) {
+      // Native exception messages and arbitrary detail maps are not a trusted
+      // data boundary. Wallet Core / Keychain / Keystore failures may contain
+      // file paths, wallet identifiers or transaction material. Preserve only
+      // the one protocol field the Dart API explicitly needs.
+      final cooldownSec = e.code == 'AUTH_LOCKED' && e.details is Map
+          ? (e.details as Map<Object?, Object?>)['cooldownSec']
+          : null;
       throw exceptionFromCode(
         e.code,
-        message: e.message,
-        details: e.details is Map ? e.details as Map<Object?, Object?> : null,
+        details: cooldownSec is int
+            ? <Object?, Object?>{'cooldownSec': cooldownSec}
+            : null,
       );
     }
   }
@@ -42,18 +50,21 @@ class MethodChannelCoreCrypto implements CoreCrypto {
 
   @override
   Future<bool> validateWord(String word) {
+    CoreCryptoValidation.checkWord(word);
     if (word.trim().isEmpty) return Future.value(false);
     return _invoke<bool>('validateWord', {'word': word});
   }
 
   @override
   Future<List<String>> suggestWords(String prefix, {int limit = 3}) async {
+    CoreCryptoValidation.checkSuggestionLimit(limit);
+    CoreCryptoValidation.checkSuggestionPrefix(prefix);
     if (prefix.trim().isEmpty) return const [];
     final words = await _invoke<List<Object?>>('suggestWords', {
       'prefix': prefix,
       'limit': limit,
     });
-    return words.cast<String>();
+    return words.cast<String>().take(limit).toList(growable: false);
   }
 
   @override
@@ -65,6 +76,7 @@ class MethodChannelCoreCrypto implements CoreCrypto {
   }) {
     CoreCryptoValidation.checkWalletId(walletId);
     CoreCryptoValidation.checkMnemonicNotEmpty(mnemonic);
+    CoreCryptoValidation.checkKdfPassword(kdfPassword);
     return _invoke<bool>('storeWallet', {
       'walletId': walletId,
       'mnemonic': mnemonic,
@@ -133,12 +145,17 @@ class MethodChannelCoreCrypto implements CoreCrypto {
   Future<String> readBackup({
     required Uint8List blob,
     required String password,
+    required BackupCipherFormat format,
   }) {
     CoreCryptoValidation.checkBackupBlobNotEmpty(blob);
     // Not checkBackupPassword: an old backup may predate the floor, and
     // refusing to even try would strand it.
-    if (password.isEmpty) throw ArgumentError('password must not be empty');
-    return _invoke<String>('readBackup', {'blob': blob, 'password': password});
+    CoreCryptoValidation.checkRestorePassword(password);
+    return _invoke<String>('readBackup', {
+      'blob': blob,
+      'password': password,
+      'formatVersion': format.wireVersion,
+    });
   }
 
   @override

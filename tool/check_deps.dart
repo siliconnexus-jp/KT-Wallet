@@ -6,6 +6,7 @@
 import 'dart:io';
 
 import 'package:test_support/dep_check.dart';
+import 'package:test_support/e2e_credentials.dart';
 
 void main() {
   final failures = <String>[];
@@ -43,7 +44,8 @@ void main() {
   // manifest is exempt (Flutter hot-reload needs it and never ships).
   for (final variant in ['main', 'profile']) {
     final manifest = File(
-        'apps/cold_signer/android/app/src/$variant/AndroidManifest.xml');
+      'apps/cold_signer/android/app/src/$variant/AndroidManifest.xml',
+    );
     if (manifest.existsSync() &&
         manifestDeclaresInternet(manifest.readAsStringSync())) {
       failures.add('cold_signer $variant AndroidManifest declares INTERNET');
@@ -53,11 +55,873 @@ void main() {
   // The online wallet is the mirror image: it MUST declare INTERNET in the
   // shipping manifest. It shipped without it once, and because debug/profile
   // manifests carry the permission the gap only surfaced in release builds.
-  final walletManifest =
-      File('apps/kt_wallet/android/app/src/main/AndroidManifest.xml');
+  final walletManifest = File(
+    'apps/kt_wallet/android/app/src/main/AndroidManifest.xml',
+  );
   if (walletManifest.existsSync() &&
       !manifestDeclaresInternet(walletManifest.readAsStringSync())) {
     failures.add('kt_wallet main AndroidManifest is missing INTERNET');
+  }
+
+  for (final manifest in [
+    walletManifest,
+    File('apps/cold_signer/android/app/src/main/AndroidManifest.xml'),
+  ]) {
+    if (!manifest.existsSync() ||
+        !manifestHasFailClosedBackup(manifest.readAsStringSync())) {
+      failures.add('${manifest.path} does not fail closed for Android backup');
+    }
+  }
+
+  for (final entitlements in [
+    File('apps/kt_wallet/ios/Runner/Runner.entitlements'),
+    File('apps/cold_signer/ios/Runner/Runner.entitlements'),
+  ]) {
+    final contents = entitlements.existsSync()
+        ? entitlements.readAsStringSync()
+        : '';
+    if (!contents.contains('com.apple.developer.default-data-protection') ||
+        !contents.contains('NSFileProtectionComplete')) {
+      failures.add(
+        '${entitlements.path} does not require complete iOS file protection',
+      );
+    }
+  }
+
+  for (final manifest in [
+    File('apps/kt_wallet/ios/Runner/PrivacyInfo.xcprivacy'),
+    File('apps/cold_signer/ios/Runner/PrivacyInfo.xcprivacy'),
+    File(
+      'packages/core_crypto/ios/core_crypto/Sources/core_crypto/PrivacyInfo.xcprivacy',
+    ),
+  ]) {
+    final contents = manifest.existsSync() ? manifest.readAsStringSync() : '';
+    if (!privacyManifestDeclaresAppScopedUserDefaults(contents)) {
+      failures.add(
+        '${manifest.path} is missing the app-scoped UserDefaults CA92.1 declaration',
+      );
+    }
+  }
+
+  final coreCryptoPodspec = File(
+    'packages/core_crypto/ios/core_crypto.podspec',
+  );
+  final coreCryptoPackageSwift = File(
+    'packages/core_crypto/ios/core_crypto/Package.swift',
+  );
+  if (!applePackageMetadataEmbedsPrivacyManifest(
+    podspec: coreCryptoPodspec.existsSync()
+        ? coreCryptoPodspec.readAsStringSync()
+        : '',
+    packageSwift: coreCryptoPackageSwift.existsSync()
+        ? coreCryptoPackageSwift.readAsStringSync()
+        : '',
+  )) {
+    failures.add(
+      'core_crypto Apple package metadata does not safely embed PrivacyInfo.xcprivacy',
+    );
+  }
+
+  // core_crypto declares Android API 24. The platform only guarantees the
+  // PBKDF2WithHmacSHA256 SecretKeyFactory alias from API 26, so reintroducing
+  // that otherwise-correct JCA call would make backup create/restore fail on
+  // two supported Android releases. The portable implementation must retain
+  // the API-23 HmacSHA256 primitive and explicit UTF-8 password bytes.
+  final androidPortableBackup = File(
+    'packages/core_crypto/android/src/main/kotlin/com/ktwallet/core_crypto/PortableBackupCipher.kt',
+  );
+  final androidPortableSource = androidPortableBackup.existsSync()
+      ? androidPortableBackup.readAsStringSync()
+      : '';
+  if (androidPortableSource.contains(
+        'SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")',
+      ) ||
+      !androidPortableSource.contains('Mac.getInstance("HmacSHA256")') ||
+      !androidPortableSource.contains('toByteArray(Charsets.UTF_8)')) {
+    failures.add(
+      '${androidPortableBackup.path} does not preserve the API-24 portable backup KDF',
+    );
+  }
+
+  // Direct MethodChannel callers must not be able to crash the iOS process
+  // with an unexpected runtime type. `as!` and force-unwrapped HDWallet
+  // construction bypass Swift error handling entirely, so keep both out of
+  // the native crypto boundary even though the Dart wrapper also validates.
+  final appleCoreCryptoSources = Directory(
+    'packages/core_crypto/ios/core_crypto/Sources/core_crypto',
+  );
+  if (!appleCoreCryptoSources.existsSync()) {
+    failures.add('${appleCoreCryptoSources.path} is missing');
+  } else {
+    for (final entity in appleCoreCryptoSources.listSync()) {
+      if (entity is! File || !entity.path.endsWith('.swift')) continue;
+      final source = entity.readAsStringSync();
+      if (source.contains('as!')) {
+        failures.add('${entity.path} contains a crashing Swift force cast');
+      }
+      for (final line in source.split('\n')) {
+        if (line.contains('HDWallet(') && line.trimRight().endsWith('!')) {
+          failures.add('${entity.path} force-unwraps HDWallet construction');
+        }
+      }
+    }
+  }
+  final appleCoreCryptoPlugin = File(
+    'packages/core_crypto/ios/core_crypto/Sources/core_crypto/CoreCryptoPlugin.swift',
+  );
+  final appleCoreCryptoPluginSource = appleCoreCryptoPlugin.existsSync()
+      ? appleCoreCryptoPlugin.readAsStringSync()
+      : '';
+  for (final requiredBoundary in [
+    'requireMnemonicStrength(a)',
+    'requireSuggestionLimit(a)',
+    'requireSupportedCoin(a)',
+    'requireSigningInput(a)',
+    'requireBackupBlob(a)',
+    'requireBackupPassword(a)',
+    'requireStoredWalletPayloadSize(stored)',
+    'requireStoredWalletFlag(first)',
+    'requireEntropySize(entropy)',
+    'catch NativeArgumentValidationError.invalid',
+  ]) {
+    if (!appleCoreCryptoPluginSource.contains(requiredBoundary)) {
+      failures.add(
+        '${appleCoreCryptoPlugin.path} does not preserve native input boundary: '
+        '$requiredBoundary',
+      );
+    }
+  }
+  final appleNativeArguments = File(
+    'packages/core_crypto/ios/core_crypto/Sources/core_crypto/NativeArgumentValidation.swift',
+  );
+  final appleNativeArgumentsSource = appleNativeArguments.existsSync()
+      ? appleNativeArguments.readAsStringSync()
+      : '';
+  for (final resourceBoundary in [
+    'maxMnemonicUTF8Bytes = 512',
+    'maxBackupPasswordUTF8Bytes = 4096',
+    'maxSigningInputBytes = 1024 * 1024',
+    'validBackupBlobSizes: Set<Int> = [60, 68, 76]',
+    'supportedCoins: Set<String>',
+    'validEntropySizes: Set<Int> = [16, 24, 32]',
+    'validStoredWalletPayloadSizes: Set<Int> = [17, 25, 33, 61, 69, 77]',
+  ]) {
+    if (!appleNativeArgumentsSource.contains(resourceBoundary)) {
+      failures.add(
+        '${appleNativeArguments.path} does not preserve native resource bounds: '
+        '$resourceBoundary',
+      );
+    }
+  }
+  final appleKeychainStore = File(
+    'packages/core_crypto/ios/core_crypto/Sources/core_crypto/KeychainStore.swift',
+  );
+  final appleKeychainStoreSource = appleKeychainStore.existsSync()
+      ? appleKeychainStore.readAsStringSync()
+      : '';
+  if (!appleKeychainStoreSource.contains('errSecDuplicateItem') ||
+      !appleKeychainStoreSource.contains('StoreError.alreadyExists') ||
+      appleKeychainStoreSource.contains('try? delete(walletId: walletId)')) {
+    failures.add(
+      '${appleKeychainStore.path} does not preserve create-only wallet storage',
+    );
+  }
+  final androidCoreCryptoPlugin = File(
+    'packages/core_crypto/android/src/main/kotlin/com/ktwallet/core_crypto/CoreCryptoPlugin.kt',
+  );
+  final androidCoreCryptoPluginSource = androidCoreCryptoPlugin.existsSync()
+      ? androidCoreCryptoPlugin.readAsStringSync()
+      : '';
+  for (final requiredBoundary in [
+    'requireMnemonicStrength(call.argument<Any?>("strength"))',
+    'requireSuggestionLimit(call.argument<Any?>("limit"))',
+    'requireSupportedCoin(call.argument<Any?>("coin"))',
+    'requireSigningInput(call.argument<Any?>("signingInput"))',
+    'requireBackupBlob(call.argument<Any?>("blob"))',
+    'requireBackupPassword(call.argument<Any?>("password"))',
+    'requireStoredWalletFlag(stored[0].toInt())',
+    'requireEntropySize(entropy)',
+    'is InvalidNativeArgumentException -> "INVALID_INPUT"',
+  ]) {
+    if (!androidCoreCryptoPluginSource.contains(requiredBoundary)) {
+      failures.add(
+        '${androidCoreCryptoPlugin.path} does not preserve native input boundary: '
+        '$requiredBoundary',
+      );
+    }
+  }
+  final androidNativeArguments = File(
+    'packages/core_crypto/android/src/main/kotlin/com/ktwallet/core_crypto/NativeArgumentValidation.kt',
+  );
+  final androidNativeArgumentsSource = androidNativeArguments.existsSync()
+      ? androidNativeArguments.readAsStringSync()
+      : '';
+  for (final resourceBoundary in [
+    'MAX_MNEMONIC_UTF8_BYTES = 512',
+    'MAX_BACKUP_PASSWORD_UTF8_BYTES = 4096',
+    'MAX_SIGNING_INPUT_BYTES = 1024 * 1024',
+    'VALID_BACKUP_BLOB_SIZES = setOf(60, 68, 76)',
+    'SUPPORTED_COINS = setOf(',
+    'VALID_ENTROPY_SIZES = setOf(16, 24, 32)',
+  ]) {
+    if (!androidNativeArgumentsSource.contains(resourceBoundary)) {
+      failures.add(
+        '${androidNativeArguments.path} does not preserve native resource bounds: '
+        '$resourceBoundary',
+      );
+    }
+  }
+  final androidBlobStore = File(
+    'packages/core_crypto/android/src/main/kotlin/com/ktwallet/core_crypto/BlobStore.kt',
+  );
+  final androidBlobStoreSource = androidBlobStore.existsSync()
+      ? androidBlobStore.readAsStringSync()
+      : '';
+  for (final createOnlyBoundary in [
+    'fun writeNew(',
+    'WalletAlreadyExistsException()',
+    'fd.sync()',
+    'temporary.renameTo(destination)',
+    'VALID_STORED_BLOB_SIZES',
+  ]) {
+    if (!androidBlobStoreSource.contains(createOnlyBoundary)) {
+      failures.add(
+        '${androidBlobStore.path} does not preserve atomic create-only storage: '
+        '$createOnlyBoundary',
+      );
+    }
+  }
+  for (final createOnlyBoundary in [
+    'blobStore.exists(walletId) || keystore.exists(walletId)',
+    'blobStore.writeNew(walletId, sealed)',
+    'is WalletAlreadyExistsException -> "WALLET_EXISTS"',
+  ]) {
+    if (!androidCoreCryptoPluginSource.contains(createOnlyBoundary)) {
+      failures.add(
+        '${androidCoreCryptoPlugin.path} does not preserve create-only storage: '
+        '$createOnlyBoundary',
+      );
+    }
+  }
+
+  // The Gradle configuration rejects release+stub today, and the artifact
+  // guard must independently reject a future mixed build where the native
+  // Wallet Core library is present but the Kotlin fail-closed bridge was
+  // compiled. Keep its exact DEX marker part of the repository contract.
+  const walletCoreStubMarker =
+      'Trust Wallet Core is not linked in this build (walletCore=false)';
+  final androidArtifactGuard = File('tool/check_release_artifact.sh');
+  final androidArtifactGuardSource = androidArtifactGuard.existsSync()
+      ? androidArtifactGuard.readAsStringSync()
+      : '';
+  if (!androidArtifactGuardSource.contains(walletCoreStubMarker)) {
+    failures.add(
+      '${androidArtifactGuard.path} does not reject the Wallet Core stub marker',
+    );
+  }
+  final appleArtifactGuard = File('tool/check_apple_release_artifact.sh');
+  final appleArtifactGuardSource = appleArtifactGuard.existsSync()
+      ? appleArtifactGuard.readAsStringSync()
+      : '';
+  for (final credentialBoundary in [
+    'github_pat_',
+    'alch_',
+    'xox[baprs]-',
+    'sk_(live|test)_',
+    'AIza',
+    'access[_-]?token',
+    'bearer[_-]?token',
+  ]) {
+    if (!androidArtifactGuardSource.contains(credentialBoundary)) {
+      failures.add(
+        '${androidArtifactGuard.path} is missing credential boundary: '
+        '$credentialBoundary',
+      );
+    }
+    if (!appleArtifactGuardSource.contains(credentialBoundary)) {
+      failures.add(
+        '${appleArtifactGuard.path} is missing credential boundary: '
+        '$credentialBoundary',
+      );
+    }
+  }
+  for (final requiredBundleGuard in [
+    '*.aab) artifact_kind="aab"',
+    'BundleConfig.pb',
+    'android-release-toolchain.lock',
+    'read_bundletool_version.dart',
+    'producer toolchain version drift',
+    'runtime dependency hashes verified',
+    'bundletool validates the Android App Bundle',
+    'AAB is intentionally unsigned; upload signing pending',
+    'jar verified.',
+    'incomplete signature metadata',
+    'unsafe path or symbolic link',
+  ]) {
+    if (!androidArtifactGuardSource.contains(requiredBundleGuard)) {
+      failures.add(
+        '${androidArtifactGuard.path} does not preserve AAB guard: $requiredBundleGuard',
+      );
+    }
+  }
+  final androidReleaseToolchain = File('tool/android-release-toolchain.lock');
+  final androidReleaseToolchainSource = androidReleaseToolchain.existsSync()
+      ? androidReleaseToolchain.readAsStringSync()
+      : '';
+  final bundletoolVersionLocks = RegExp(
+    r'^bundletool\.version=[0-9]+\.[0-9]+\.[0-9]+$',
+    multiLine: true,
+  ).allMatches(androidReleaseToolchainSource).length;
+  final bundletoolHashLocks = RegExp(
+    r'^bundletool\.sha256=[0-9a-f]{64}$',
+    multiLine: true,
+  ).allMatches(androidReleaseToolchainSource).length;
+  if (bundletoolVersionLocks != 1 || bundletoolHashLocks != 1) {
+    failures.add(
+      '${androidReleaseToolchain.path} does not pin bundletool version and SHA-256',
+    );
+  }
+  final bundletoolVersionReader = File('tool/read_bundletool_version.dart');
+  final bundletoolVersionReaderSource = bundletoolVersionReader.existsSync()
+      ? bundletoolVersionReader.readAsStringSync()
+      : '';
+  for (final parserBoundary in [
+    'const _maxConfigBytes = 1024 * 1024',
+    'field.number == 1',
+    'field.number == 2',
+    'allowMalformed: false',
+    'protobuf varint overflow',
+  ]) {
+    if (!bundletoolVersionReaderSource.contains(parserBoundary)) {
+      failures.add(
+        '${bundletoolVersionReader.path} does not preserve parser boundary: $parserBoundary',
+      );
+    }
+  }
+  final bundletoolReaderTest = File('tool/test_bundletool_version_reader.sh');
+  final bundletoolReaderTestSource = bundletoolReaderTest.existsSync()
+      ? bundletoolReaderTest.readAsStringSync()
+      : '';
+  for (final negativeVector in [
+    'truncated.pb',
+    'duplicate.pb',
+    'invalid-utf8.pb',
+    'overflow.pb',
+    'unsupported-wire.pb',
+  ]) {
+    if (!bundletoolReaderTestSource.contains(negativeVector)) {
+      failures.add(
+        '${bundletoolReaderTest.path} does not preserve vector: $negativeVector',
+      );
+    }
+  }
+  final dependencyAudit = File('tool/audit_dependencies.sh');
+  if (!dependencyAudit.existsSync() ||
+      !dependencyAudit.readAsStringSync().contains(
+        'test_bundletool_version_reader.sh',
+      )) {
+    failures.add(
+      '${dependencyAudit.path} does not execute the bundletool parser vectors',
+    );
+  }
+
+  // mobile_scanner 7.4.0 currently brings JUnit 6.1.2 into its own Android
+  // unit-test classpath. These are not release-runtime dependencies, but an
+  // unscoped Gradle test must still verify every byte before executing third-
+  // party tests. Each value below was checked against Maven Central's official
+  // SHA-256 sidecar, a fresh download, and the local Gradle cache on 2026-08-03.
+  // Keep this narrow: only the 7 metadata files and 6 JARs the aggregate task
+  // actually consumes are trusted.
+  const junit612Artifacts = <String, String>{
+    'junit-bom-6.1.2.module':
+        '59ce085fd5b7e7d2c4b32ba99a3a3e1efff4179919f1e9d66c2de6ee77556478',
+    'junit-jupiter-api-6.1.2.jar':
+        'e60794b7d94e03c4bca1c0833cfca18762da5eaac0a61b16281cbbb708103e4c',
+    'junit-jupiter-api-6.1.2.module':
+        '29cf7ab684039d6f20b14b59ec8b7bf9c55f60c5ec94acdc5bbfc952ac653d09',
+    'junit-jupiter-engine-6.1.2.jar':
+        '57227ce289ed84ab205136997d2e5117f6cc695a16b7e235d59f70cdf33c3d7a',
+    'junit-jupiter-engine-6.1.2.module':
+        '8a639ab70ba02274bc5dde4f180768c27e30efa41e2d7179ed6af8462c321f6b',
+    'junit-platform-commons-6.1.2.jar':
+        '204894c039d321743ee11e7d1dc8360170d7c64391fbea1211178a645c33a92a',
+    'junit-platform-commons-6.1.2.module':
+        '58cad9d89b062df2cfa04decfbc9e6538a454cb57f56b21d62dfc084a9fab1cd',
+    'junit-platform-engine-6.1.2.jar':
+        '484e90828846ad6b88efe226b6fe014a75941b32b226e914d9a7758802f46f91',
+    'junit-platform-engine-6.1.2.module':
+        '3111841e3759acb6c96e9573d20c80443a905021a42ace89efede086b3549535',
+    'junit-platform-launcher-6.1.2.jar':
+        '858197212c1b2acc257c9eec9b450a31923c61c1bc61e66acf0057d57bbe577a',
+    'junit-platform-launcher-6.1.2.module':
+        'a7770594bda2aca4e0030dbb37ee5066760d719b3e40627ebe52189c50aa49f7',
+    'junit-vintage-engine-6.1.2.jar':
+        'ba1fe9a190b0a0758b342c964758c952674c1c9ad6f599856b3fcd63f66a4e91',
+    'junit-vintage-engine-6.1.2.module':
+        '600b160b9436a2d8ed91cc7d6488d8eaf6ae3c81cb101aae512c7b02b2abf987',
+  };
+  const junitOrigin = 'Maven Central official SHA-256 verified 2026-08-03';
+  for (final metadata in [
+    File('apps/kt_wallet/android/gradle/verification-metadata.xml'),
+    File('apps/cold_signer/android/gradle/verification-metadata.xml'),
+  ]) {
+    final source = metadata.existsSync() ? metadata.readAsStringSync() : '';
+    final issues = findReviewedArtifactPinIssues(
+      source,
+      junit612Artifacts,
+      origin: junitOrigin,
+    );
+    if (issues.isNotEmpty) {
+      failures.add('${metadata.path} JUnit 6.1.2 pin drift: $issues');
+    }
+  }
+
+  for (final podfile in [
+    File('apps/kt_wallet/ios/Podfile'),
+    File('apps/cold_signer/ios/Podfile'),
+  ]) {
+    final contents = podfile.existsSync() ? podfile.readAsStringSync() : '';
+    if (!podfileEnforcesIos13Floor(contents)) {
+      failures.add('${podfile.path} does not enforce the iOS 13 Pod floor');
+    }
+  }
+
+  for (final delegate in [
+    File('apps/kt_wallet/ios/Runner/AppDelegate.swift'),
+    File('apps/cold_signer/ios/Runner/AppDelegate.swift'),
+  ]) {
+    final contents = delegate.existsSync() ? delegate.readAsStringSync() : '';
+    final excludesPersistentDirectories =
+        contents.contains('values.isExcludedFromBackup = true') &&
+        contents.contains('.documentDirectory') &&
+        contents.contains('.libraryDirectory');
+    if (!excludesPersistentDirectories) {
+      failures.add(
+        '${delegate.path} does not exclude local wallet state from iOS backup',
+      );
+    }
+  }
+
+  // Flutter and native localization are one release contract. Keep all three
+  // catalogs structurally aligned and make English the safe fallback for an
+  // unsupported device locale.
+  for (final app in ['kt_wallet', 'cold_signer']) {
+    final appRoot = 'apps/$app';
+    final arbIssues = findArbCatalogIssues(
+      {
+        for (final locale in ['en', 'zh', 'ja'])
+          locale: File('$appRoot/lib/l10n/app_$locale.arb').readAsStringSync(),
+      },
+      sameAsDefaultAllowedKeys: switch (app) {
+        'kt_wallet' => const {
+          'zh': {'txNonceLabel', 'rpcNotMeasured', 'chainIdLabel'},
+          'ja': {'appName', 'txNonceLabel', 'rpcNotMeasured', 'chainIdLabel'},
+        },
+        'cold_signer' => const {
+          'zh': {'chainIdLabel'},
+          'ja': {'appName', 'checkBluetooth', 'chainIdLabel'},
+        },
+        _ => const {},
+      },
+      cjkAsciiPunctuationAllowedKeys: switch (app) {
+        'kt_wallet' => const {
+          'zh': {'approvalRevokeBody'},
+        },
+        'cold_signer' => const {
+          'zh': {'approvalRevokeSignerNotice', 'unknownContractCallDesc'},
+        },
+        _ => const {},
+      },
+    );
+    if (arbIssues.isNotEmpty) {
+      failures.add('$app ARB localization drift: $arbIssues');
+    }
+
+    final androidIssues = findAndroidStringResourceIssues({
+      for (final qualifier in ['values', 'values-zh-rCN', 'values-ja'])
+        qualifier: File(
+          '$appRoot/android/app/src/main/res/$qualifier/strings.xml',
+        ).readAsStringSync(),
+    });
+    if (androidIssues.isNotEmpty) {
+      failures.add('$app Android localization drift: $androidIssues');
+    }
+
+    final requiredInfoPlistKeys = <String>{
+      'CFBundleDisplayName',
+      'CFBundleName',
+      'NSCameraUsageDescription',
+      'NSFaceIDUsageDescription',
+      if (app == 'kt_wallet') 'NSPhotoLibraryAddUsageDescription',
+    };
+    final iosIssues = findInfoPlistStringsIssues({
+      for (final locale in ['en', 'zh-Hans', 'ja'])
+        locale: File(
+          '$appRoot/ios/Runner/$locale.lproj/InfoPlist.strings',
+        ).readAsStringSync(),
+    }, requiredKeys: requiredInfoPlistKeys);
+    if (iosIssues.isNotEmpty) {
+      failures.add('$app iOS localization drift: $iosIssues');
+    }
+  }
+
+  // Design fixtures are intentionally retained for goldens and the debug
+  // screen gallery, but the shipped router must make them unreachable. Keep
+  // the boundary as a repository gate as well as widget tests: a future
+  // refactor must not silently remove the release-mode clamp, pending-flow
+  // checks, wallet identity checks, or camera simulation clamp.
+  final walletRouter = File('apps/kt_wallet/lib/src/app_router.dart');
+  final walletRouterSource = walletRouter.existsSync()
+      ? walletRouter.readAsStringSync()
+      : '';
+  for (final productionBoundary in [
+    'final effectiveGalleryMode = !kReleaseMode && galleryMode;',
+    'required WalletController walletController',
+    'walletController.pendingMnemonic == null',
+    'currentWallet == null',
+    "path == '/splash'",
+    "path == '/wallet-detail'",
+    '!walletController.wallets.any',
+  ]) {
+    if (!walletRouterSource.contains(productionBoundary)) {
+      failures.add(
+        '${walletRouter.path} does not preserve production fixture boundary: '
+        '$productionBoundary',
+      );
+    }
+  }
+  final signerRouter = File('apps/cold_signer/lib/src/signer_router.dart');
+  final signerRouterSource = signerRouter.existsSync()
+      ? signerRouter.readAsStringSync()
+      : '';
+  for (final productionBoundary in [
+    'SignerOnboardingStage.mnemonicReview',
+    'SignerOnboardingStage.pinSetup',
+    'SignerOnboardingStage.biometricSetup',
+    'SignerOnboardingStage.completed',
+    "'/created'",
+    'extra is! WalletMetadata',
+    'extra.walletId != currentWalletId',
+  ]) {
+    if (!signerRouterSource.contains(productionBoundary)) {
+      failures.add(
+        '${signerRouter.path} does not preserve signer onboarding route boundary: '
+        '$productionBoundary',
+      );
+    }
+  }
+  final signerController = File(
+    'apps/cold_signer/lib/src/state/signer_wallet_controller.dart',
+  );
+  final signerControllerSource = signerController.existsSync()
+      ? signerController.readAsStringSync()
+      : '';
+  for (final productionBoundary in [
+    'Future<List<String>>? _beginCreateInFlight',
+    'Future<WalletMetadata>? _completeOnboardingInFlight',
+    'void markMnemonicVerified(List<String> words)',
+    "StateError('a wallet already exists')",
+    'SignerOnboardingStage.biometricSetup',
+  ]) {
+    if (!signerControllerSource.contains(productionBoundary)) {
+      failures.add(
+        '${signerController.path} does not preserve atomic onboarding boundary: '
+        '$productionBoundary',
+      );
+    }
+  }
+  final walletCamera = File(
+    'apps/kt_wallet/lib/src/screens/camera_screen.dart',
+  );
+  final walletCameraSource = walletCamera.existsSync()
+      ? walletCamera.readAsStringSync()
+      : '';
+  if (RegExp(
+        r'onSimulatedScan:\s*kReleaseMode\s*\?\s*null\s*:',
+      ).allMatches(walletCameraSource).length <
+      2) {
+    failures.add(
+      '${walletCamera.path} does not clamp both live simulated scanners in release',
+    );
+  }
+  if (!walletCameraSource.contains('if (kReleaseMode) return;') ||
+      !walletCameraSource.contains('kReleaseMode\n      ? const []')) {
+    failures.add(
+      '${walletCamera.path} materializes or executes the account fixture in release',
+    );
+  }
+  final transferScreens = File(
+    'apps/kt_wallet/lib/src/screens/transfer_screens.dart',
+  );
+  final transferScreensSource = transferScreens.existsSync()
+      ? transferScreens.readAsStringSync()
+      : '';
+  if (!RegExp(
+    r'onSimulatedTap:\s*kReleaseMode\s*\?\s*null\s*:',
+  ).hasMatch(transferScreensSource)) {
+    failures.add(
+      '${transferScreens.path} does not detach simulated signing in release',
+    );
+  }
+  final historyService = File(
+    'apps/kt_wallet/lib/src/market/history_service.dart',
+  );
+  final historyController = File(
+    'apps/kt_wallet/lib/src/market/history_controller.dart',
+  );
+  final historySnapshot = File(
+    'apps/kt_wallet/lib/src/market/history_snapshot.dart',
+  );
+  final historySources = {
+    historyService.path: historyService.existsSync()
+        ? historyService.readAsStringSync()
+        : '',
+    historyController.path: historyController.existsSync()
+        ? historyController.readAsStringSync()
+        : '',
+    historySnapshot.path: historySnapshot.existsSync()
+        ? historySnapshot.readAsStringSync()
+        : '',
+  };
+  for (final boundary in const {
+    'apps/kt_wallet/lib/src/market/history_service.dart': [
+      'final String? networkId;',
+      'String? networkId,',
+      'record.onNetwork(networkId)',
+    ],
+    'apps/kt_wallet/lib/src/market/history_controller.dart': [
+      'networkId: transaction.networkId',
+      'networkId: _activeNetworkId?.call(coin)',
+      'typedef _HistoryIdentity',
+      '_recordIdentity(ChainTxRecord record)',
+      '_transactionIdentity(db.Transaction transaction)',
+      'coin == Coin.solana ? hash : hash.toLowerCase()',
+      'localTransactionForRecord(ChainTxRecord record)',
+      'remoteByIdentity',
+      'remoteIdentities',
+    ],
+    'apps/kt_wallet/lib/src/market/history_snapshot.dart': [
+      "'v': 3",
+      "'networkId': record.networkId",
+      "value['networkId']",
+    ],
+  }.entries) {
+    for (final marker in boundary.value) {
+      if (!(historySources[boundary.key] ?? '').contains(marker)) {
+        failures.add(
+          '${boundary.key} does not preserve history network identity: $marker',
+        );
+      }
+    }
+  }
+  for (final marker in [
+    '_networkForChainRecord(context, record)',
+    'network.chain != chainOf(record.coin)',
+    'final url = network == null ? null : explorerTxUrl(network, record.hash)',
+  ]) {
+    if (!transferScreensSource.contains(marker)) {
+      failures.add(
+        '${transferScreens.path} guesses a network for chain history: $marker',
+      );
+    }
+  }
+  final homeScreen = File('apps/kt_wallet/lib/src/screens/home_screen.dart');
+  final homeScreenSource = homeScreen.existsSync()
+      ? homeScreen.readAsStringSync()
+      : '';
+  if (!homeScreenSource.contains('localTransactionForRecord(r)')) {
+    failures.add(
+      '${homeScreen.path} matches history rows to local transactions by hash only',
+    );
+  }
+  final walletMain = File('apps/kt_wallet/lib/main.dart');
+  final walletMainSource = walletMain.existsSync()
+      ? walletMain.readAsStringSync()
+      : '';
+  for (final productionBoundary in [
+    '_missingProductionController()',
+    'kReleaseMode && controller.allowsTestBypass',
+    'walletController: widget.controller',
+  ]) {
+    if (!walletMainSource.contains(productionBoundary)) {
+      failures.add(
+        '${walletMain.path} does not preserve production controller boundary: '
+        '$productionBoundary',
+      );
+    }
+  }
+
+  // Public-test readiness includes reviewable package contracts. Fail if a
+  // generated Dart/Flutter template is reintroduced in package metadata.
+  for (final entity in Directory('packages').listSync(recursive: true)) {
+    if (entity is! File) continue;
+    final basename = entity.uri.pathSegments.last;
+    final isPackageMetadata =
+        const {
+          'README.md',
+          'CHANGELOG.md',
+          'pubspec.yaml',
+        }.contains(basename) ||
+        basename.endsWith('.podspec');
+    if (!isPackageMetadata) continue;
+    final file = entity;
+    final placeholders = findDocumentationPlaceholders(file.readAsStringSync());
+    if (placeholders.isNotEmpty) {
+      failures.add('${file.path} contains template text: $placeholders');
+    }
+  }
+
+  // When a local funded E2E mnemonic exists, use it as a canary and reject any
+  // exact disclosure in public text artifacts. Error output contains only the
+  // leak category and file path, never the matched secret.
+  final localCredential = File(
+    'apps/kt_wallet/integration_test/.sepolia-e2e.json',
+  );
+  String? localMnemonic;
+  if (localCredential.existsSync()) {
+    final match = RegExp(
+      '"$e2eMnemonicKey"\\s*:\\s*"([^"]+)"',
+    ).firstMatch(localCredential.readAsStringSync());
+    localMnemonic = match?.group(1);
+  }
+  for (final root in [
+    File('README.md'),
+    File('BUILDING.md'),
+    File('PRIVACY_POLICY.md'),
+    File('SECURITY.md'),
+    Directory('docs'),
+    Directory('reports'),
+  ]) {
+    final entities = root is File
+        ? <FileSystemEntity>[root]
+        : root.existsSync()
+        ? (root as Directory).listSync(recursive: true)
+        : const <FileSystemEntity>[];
+    for (final entity in entities) {
+      if (entity.path.endsWith('docs/TESTING_LOCAL.md') ||
+          entity.path.endsWith('docs/BACKEND_DEPLOY_LOCAL.md')) {
+        continue;
+      }
+      if (entity is! File ||
+          !const ['.md', '.html', '.json', '.txt'].any(entity.path.endsWith)) {
+        continue;
+      }
+      final labels = findE2eSecretLeakLabels(
+        entity.readAsStringSync(),
+        mnemonic: localMnemonic,
+      );
+      if (labels.isNotEmpty) {
+        failures.add('${entity.path} contains sensitive material: $labels');
+      }
+    }
+  }
+
+  // Scan every production surface that can be published, deployed or bundled
+  // into a client. Test fixtures deliberately contain fake provider canaries,
+  // so they remain covered by their focused privacy tests instead of being
+  // mistaken for live credentials here.
+  const productionSecretRoots = [
+    '.github',
+    'website',
+    'backend/gateway/cmd',
+    'backend/gateway/config',
+    'backend/gateway/internal',
+    'apps/kt_wallet/lib',
+    'apps/kt_wallet/android/app/src/main',
+    'apps/kt_wallet/ios/Runner',
+    'apps/cold_signer/lib',
+    'apps/cold_signer/android/app/src/main',
+    'apps/cold_signer/ios/Runner',
+  ];
+  const productionTextExtensions = {
+    '.astro',
+    '.dart',
+    '.env',
+    '.go',
+    '.gradle',
+    '.h',
+    '.html',
+    '.js',
+    '.json',
+    '.kt',
+    '.kts',
+    '.m',
+    '.md',
+    '.mm',
+    '.plist',
+    '.properties',
+    '.rs',
+    '.sh',
+    '.swift',
+    '.toml',
+    '.ts',
+    '.txt',
+    '.xcprivacy',
+    '.xml',
+    '.yaml',
+    '.yml',
+  };
+  for (final rootPath in productionSecretRoots) {
+    final root = Directory(rootPath);
+    if (!root.existsSync()) continue;
+    for (final entity in root.listSync(recursive: true, followLinks: false)) {
+      if (entity is! File) continue;
+      final basename = entity.uri.pathSegments.last;
+      final dot = basename.lastIndexOf('.');
+      final extension = dot < 0 ? '' : basename.substring(dot);
+      if (basename != 'Dockerfile' &&
+          !productionTextExtensions.contains(extension)) {
+        continue;
+      }
+      final labels = findE2eSecretLeakLabels(entity.readAsStringSync());
+      if (labels.isNotEmpty) {
+        failures.add(
+          '${entity.path} contains production credential material: $labels',
+        );
+      }
+    }
+  }
+
+  // These local handoff files may contain funded test-key metadata or host
+  // deployment details. Keep the policy in the shared .gitignore rather than
+  // relying on one workstation's .git/info/exclude.
+  final ignoredLocalRunbooks = {
+    for (final line in File('.gitignore').readAsLinesSync()) line.trim(),
+  };
+  for (final path in const [
+    'docs/TESTING_LOCAL.md',
+    'docs/SIMULATOR_RECOVERY_LOCAL.md',
+    'docs/BACKEND_DEPLOY_LOCAL.md',
+  ]) {
+    if (!ignoredLocalRunbooks.contains(path)) {
+      failures.add('$path must remain in the shared .gitignore');
+    }
+  }
+
+  // A developer may invoke an integration test directly and bypass the CLI
+  // preflight. Keep the same freshness check inside every real-key entrypoint.
+  final integrationTests = Directory('apps/kt_wallet/integration_test');
+  for (final entity in integrationTests.listSync(recursive: true)) {
+    if (entity is! File || !entity.path.endsWith('_test.dart')) continue;
+    if (!realE2eEntrypointHasCredentialGuard(entity.readAsStringSync())) {
+      failures.add(
+        '${entity.path} reads the real E2E mnemonic without the batch guard',
+      );
+    }
+  }
+
+  // Real native E2E wallets must not survive a completed test run. Execute
+  // the standalone audit here so the same rule is enforced by the repository
+  // gate used in CI/release review, not only by a remembered manual command.
+  final cleanupAudit = Process.runSync(Platform.resolvedExecutable, [
+    'tool/audit_e2e_wallet_cleanup.dart',
+  ]);
+  if (cleanupAudit.exitCode != 0) {
+    final details = '${cleanupAudit.stderr}'.trim();
+    failures.add(
+      'native E2E wallet cleanup audit failed'
+      '${details.isEmpty ? '' : ': $details'}',
+    );
   }
 
   if (failures.isEmpty) {

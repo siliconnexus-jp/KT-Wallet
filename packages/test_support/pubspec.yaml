@@ -1,7 +1,7 @@
 name: test_support
-description: A starting point for Dart libraries or applications.
+description: Internal fixtures, state-machine checks, and security gates for KT Wallet.
 version: 1.0.0
-# repository: https://github.com/my_org/my_repo
+repository: https://github.com/siliconnexus-jp/KT-Wallet
 
 environment:
   sdk: ^3.12.2

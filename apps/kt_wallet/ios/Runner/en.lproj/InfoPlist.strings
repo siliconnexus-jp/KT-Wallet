@@ -1,2 +1,5 @@
 "CFBundleDisplayName" = "KT Wallet";
 "CFBundleName" = "KT Wallet";
+"NSCameraUsageDescription" = "The camera scans the offline signer's QR codes (account exports and signed transactions) and recipient address QR codes.";
+"NSFaceIDUsageDescription" = "Face ID confirms transfers and unlocks the app when App Lock is enabled.";
+"NSPhotoLibraryAddUsageDescription" = "Saving a receive card writes the QR image to your photo library. KT Wallet never reads your existing photos.";

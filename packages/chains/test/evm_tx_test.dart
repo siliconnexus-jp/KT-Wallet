@@ -25,7 +25,9 @@ void main() {
         maxPriorityFeePerGas: _gwei(2),
         maxFeePerGas: _gwei(120),
         gasLimit: BigInt.from(21000),
-        to: Eip1559Tx.addressBytes('0x70997970C51812dc3A010C7d01b50e0d17dc79C8'),
+        to: Eip1559Tx.addressBytes(
+          '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+        ),
         value: BigInt.parse('1000000000000000000'),
         data: Uint8List(0),
       );
@@ -50,7 +52,9 @@ void main() {
         maxPriorityFeePerGas: _gwei(1),
         maxFeePerGas: _gwei(80),
         gasLimit: BigInt.from(65000),
-        to: Eip1559Tx.addressBytes('0xdAC17F958D2ee523a2206206994597C13D831ec7'),
+        to: Eip1559Tx.addressBytes(
+          '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+        ),
         value: BigInt.zero,
         data: Erc20.transferCalldata(
           to: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
@@ -81,8 +85,17 @@ void main() {
         gasLimit: BigInt.from(1000000),
         to: null,
         value: BigInt.zero,
-        data: Uint8List.fromList(
-            [0x60, 0x01, 0x60, 0x00, 0x54, 0x01, 0x60, 0x00, 0x55]),
+        data: Uint8List.fromList([
+          0x60,
+          0x01,
+          0x60,
+          0x00,
+          0x54,
+          0x01,
+          0x60,
+          0x00,
+          0x55,
+        ]),
       );
       final encoded = _hex(tx.encodeUnsigned());
       expect(
@@ -109,7 +122,8 @@ void main() {
         maxFeePerGas: BigInt.zero,
         gasLimit: BigInt.from(21000),
         to: Eip1559Tx.addressBytes(
-            '0x0000000000000000000000000000000000000001'),
+          '0x0000000000000000000000000000000000000001',
+        ),
         value: BigInt.zero,
         data: Uint8List(0),
       );
@@ -142,21 +156,22 @@ void main() {
   group('Eip1559Tx validation', () {
     Eip1559Tx build({
       BigInt? chainId,
+      BigInt? nonce,
       BigInt? priority,
       BigInt? maxFee,
+      BigInt? gasLimit,
       Uint8List? to,
       BigInt? value,
-    }) =>
-        Eip1559Tx(
-          chainId: chainId ?? BigInt.one,
-          nonce: BigInt.zero,
-          maxPriorityFeePerGas: priority ?? BigInt.zero,
-          maxFeePerGas: maxFee ?? BigInt.zero,
-          gasLimit: BigInt.from(21000),
-          to: to,
-          value: value ?? BigInt.zero,
-          data: Uint8List(0),
-        );
+    }) => Eip1559Tx(
+      chainId: chainId ?? BigInt.one,
+      nonce: nonce ?? BigInt.zero,
+      maxPriorityFeePerGas: priority ?? BigInt.zero,
+      maxFeePerGas: maxFee ?? BigInt.zero,
+      gasLimit: gasLimit ?? BigInt.from(21000),
+      to: to,
+      value: value ?? BigInt.zero,
+      data: Uint8List(0),
+    );
 
     test('rejects a non-positive chainId', () {
       expect(() => build(chainId: BigInt.zero), throwsArgumentError);
@@ -177,11 +192,30 @@ void main() {
       expect(() => build(value: BigInt.from(-1)), throwsArgumentError);
     });
 
+    test('rejects every scalar that exceeds the EVM uint256 domain', () {
+      final overflow = BigInt.one << 256;
+      for (final constructor in <Eip1559Tx Function()>[
+        () => build(chainId: overflow),
+        () => build(nonce: overflow),
+        () => build(priority: overflow, maxFee: overflow),
+        () => build(maxFee: overflow),
+        () => build(gasLimit: overflow),
+        () => build(value: overflow),
+      ]) {
+        expect(
+          constructor,
+          throwsArgumentError,
+          reason: 'an oversized scalar must fail before RLP/signing',
+        );
+      }
+    });
+
     test('addressBytes rejects an EIP-55 checksum mismatch', () {
       // Valid mixed-case address with one letter's case flipped.
       expect(
         () => Eip1559Tx.addressBytes(
-            '0x5aaeb6053F3E94C9b9A09f33669435E7Ef1BeAed'),
+          '0x5aaeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
+        ),
         throwsArgumentError,
       );
     });
@@ -238,10 +272,38 @@ void main() {
       expect(tx.value, BigInt.zero);
       expect(
         _hex(tx.data),
-        _hex(Erc20.transferCalldata(
-          to: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
-          amount: BigInt.from(100000000),
-        )),
+        _hex(
+          Erc20.transferCalldata(
+            to: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
+            amount: BigInt.from(100000000),
+          ),
+        ),
+      );
+    });
+
+    test('approval revoke: to=token and calldata is approve(spender, 0)', () {
+      final intent = TransferIntent(
+        chain: Chain.ethereum,
+        operation: TxOperation.approvalRevoke,
+        from: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+        to: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
+        amount: Amount(raw: BigInt.zero, decimals: 6, symbol: 'USDT'),
+        tokenContract: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+        tokenSymbol: 'USDT',
+      );
+      final tx = Eip1559Tx.forTransfer(
+        intent,
+        chainId: BigInt.one,
+        nonce: fees.nonce,
+        maxPriorityFeePerGas: fees.priority,
+        maxFeePerGas: fees.max,
+        gasLimit: BigInt.from(50000),
+      );
+      expect(_hex(tx.to!), 'a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48');
+      expect(tx.value, BigInt.zero);
+      expect(
+        _hex(tx.data),
+        _hex(Erc20.revokeApprovalCalldata(spender: intent.to)),
       );
     });
 

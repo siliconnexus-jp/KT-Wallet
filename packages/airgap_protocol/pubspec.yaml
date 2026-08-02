@@ -1,7 +1,7 @@
 name: airgap_protocol
-description: A starting point for Dart libraries or applications.
+description: Versioned CBOR and animated-QR protocol for KT Wallet air-gap signing.
 version: 1.0.0
-# repository: https://github.com/my_org/my_repo
+repository: https://github.com/siliconnexus-jp/KT-Wallet
 
 environment:
   sdk: ^3.12.2

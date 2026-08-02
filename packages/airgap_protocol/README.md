@@ -1,39 +1,59 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# airgap_protocol
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages).
+Versioned binary protocol used between KT Wallet and KT Cold Signer. It
+encodes account exports, unsigned signing requests, and signed results as
+bounded CBOR payloads, then fragments them into CRC-protected animated-QR
+frames.
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/tools/pub/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages).
--->
+## Public API
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+- `AccountExport`, `SignRequest`, and `SignResult` are the three protocol
+  payloads.
+- `Fragmenter` converts one payload into bounded `AirgapFrame` values.
+- `FrameAggregator` rejects mixed sessions, duplicates, CRC failures, and
+  oversized input while reporting deterministic progress.
+- `SignRequestValidator` provides expiry, replay, wallet binding, and
+  transaction-policy hooks.
 
-## Features
-
-TODO: List what your package can do. Maybe include images, gifs, or videos.
-
-## Getting started
-
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
-
-## Usage
-
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
+The decoder rejects unknown CBOR fields, payloads larger than 64 KiB,
+individual wire frames larger than the protocol maximum, and QR text that
+cannot fit a legal frame. `Fragmenter` also validates its chunk size at runtime
+so Release builds enforce the same limits as tests.
 
 ```dart
-const like = 'sample';
+import 'dart:typed_data';
+import 'package:airgap_protocol/airgap_protocol.dart';
+
+final request = SignRequest(
+  reqId: Uint8List(8),
+  walletId: 'wallet-1',
+  coin: 60,
+  rawTx: Uint8List.fromList([1, 2, 3]),
+  createdAt: 1_900_000_000,
+  expiresAt: 1_900_000_060,
+);
+final frames = Fragmenter(chunkSize: 120).fragment(
+  request.encode(),
+  reqId: request.reqId,
+);
+final aggregator = FrameAggregator();
+for (final frame in frames) {
+  aggregator.addFrame(AirgapFrame.decode(frame.encode()));
+}
+final decoded = AirgapPayload.decode(aggregator.payload!) as SignRequest;
 ```
 
-## Additional information
+## Security boundary
 
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+This package authenticates framing and enforces protocol limits; it does not
+make an unsigned transaction safe. Callers must parse `rawTx`, derive every
+displayed field from those bytes, bind the sender to the paired public key,
+and cryptographically verify the returned signed transaction before broadcast.
+The optional human-readable `summary` is untrusted. Production replay
+protection must atomically reserve a request ID in durable storage before the
+native key operation; `InMemorySignRecordStore` is suitable only for tests.
+
+Run `dart test` from this package directory. Protocol changes require backward
+compatibility vectors and must not silently reinterpret an existing version.
+
+Licensed under MPL-2.0; see `LICENSE`.

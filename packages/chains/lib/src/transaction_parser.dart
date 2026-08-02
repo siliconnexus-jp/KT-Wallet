@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'address.dart';
 import 'base58.dart';
+import 'evm_tx.dart';
 import 'sha256.dart';
 import 'solana_tx.dart';
 import 'tx_preview.dart';
@@ -70,6 +71,28 @@ ParsedUnsignedTransfer _parseEvm(Chain chain, Uint8List raw) {
   if (destination.length != 20) {
     throw const FormatException('contract creation is unsupported');
   }
+  // Re-encode the exact V1 family and require byte equality. This rejects
+  // non-canonical RLP, list-typed scalar/byte fields, leading-zero integers,
+  // and any non-empty access list before an offline signer displays or signs
+  // a transaction whose hidden wire meaning differs from the preview.
+  final Uint8List canonical;
+  try {
+    canonical = Eip1559Tx(
+      chainId: chainId,
+      nonce: nonce,
+      maxPriorityFeePerGas: maxPriorityFeePerGas,
+      maxFeePerGas: maxFeePerGas,
+      gasLimit: gasLimit,
+      to: destination,
+      value: value,
+      data: data,
+    ).encodeUnsigned();
+  } on Object {
+    throw const FormatException('invalid EIP-1559 scalar values');
+  }
+  if (!_same(canonical, raw)) {
+    throw const FormatException('non-canonical EIP-1559 transaction');
+  }
   final to = '0x${_hex(destination)}';
   if (data.isEmpty) {
     return ParsedUnsignedTransfer(
@@ -85,27 +108,46 @@ ParsedUnsignedTransfer _parseEvm(Chain chain, Uint8List raw) {
       gasLimit: gasLimit,
     );
   }
-  if (value != BigInt.zero ||
-      data.length != 68 ||
-      !_same(data.sublist(0, 4), const [0xa9, 0x05, 0x9c, 0xbb])) {
+  if (value != BigInt.zero || data.length != 68) {
     throw const FormatException('unsupported EVM contract call');
   }
   if (data.sublist(4, 16).any((byte) => byte != 0)) {
-    throw const FormatException('invalid ERC-20 recipient word');
+    throw const FormatException('invalid ERC-20 address word');
   }
-  return ParsedUnsignedTransfer(
-    chain: chain,
-    operation: TxOperation.tokenTransfer,
-    to: '0x${_hex(data.sublist(16, 36))}',
-    amountRaw: _bigInt(data.sublist(36, 68)),
-    tokenContract: to,
-    networkId: chainId,
-    maxFeeRaw: maxFeePerGas * gasLimit,
-    nonce: nonce,
-    maxPriorityFeePerGas: maxPriorityFeePerGas,
-    maxFeePerGas: maxFeePerGas,
-    gasLimit: gasLimit,
-  );
+  if (_same(data.sublist(0, 4), const [0xa9, 0x05, 0x9c, 0xbb])) {
+    return ParsedUnsignedTransfer(
+      chain: chain,
+      operation: TxOperation.tokenTransfer,
+      to: '0x${_hex(data.sublist(16, 36))}',
+      amountRaw: _bigInt(data.sublist(36, 68)),
+      tokenContract: to,
+      networkId: chainId,
+      maxFeeRaw: maxFeePerGas * gasLimit,
+      nonce: nonce,
+      maxPriorityFeePerGas: maxPriorityFeePerGas,
+      maxFeePerGas: maxFeePerGas,
+      gasLimit: gasLimit,
+    );
+  }
+  if (_same(data.sublist(0, 4), const [0x09, 0x5e, 0xa7, 0xb3])) {
+    if (data.sublist(36, 68).any((byte) => byte != 0)) {
+      throw const FormatException('non-zero ERC-20 approval is unsupported');
+    }
+    return ParsedUnsignedTransfer(
+      chain: chain,
+      operation: TxOperation.approvalRevoke,
+      to: '0x${_hex(data.sublist(16, 36))}',
+      amountRaw: BigInt.zero,
+      tokenContract: to,
+      networkId: chainId,
+      maxFeeRaw: maxFeePerGas * gasLimit,
+      nonce: nonce,
+      maxPriorityFeePerGas: maxPriorityFeePerGas,
+      maxFeePerGas: maxFeePerGas,
+      gasLimit: gasLimit,
+    );
+  }
+  throw const FormatException('unsupported EVM contract call');
 }
 
 ParsedUnsignedTransfer _parseTron(Uint8List raw) {
@@ -383,7 +425,12 @@ _Proto _proto(Uint8List input) {
   while (cursor < input.length && shift < 64) {
     final byte = input[cursor++];
     value |= (byte & 0x7f) << shift;
-    if (byte & 0x80 == 0) return (value: value, next: cursor);
+    if (byte & 0x80 == 0) {
+      if (cursor - offset > 1 && byte == 0) {
+        throw const FormatException('non-canonical varint');
+      }
+      return (value: value, next: cursor);
+    }
     shift += 7;
   }
   throw const FormatException('invalid varint');
@@ -396,7 +443,13 @@ _Proto _proto(Uint8List input) {
   while (cursor < input.length && shift <= 14) {
     final byte = input[cursor++];
     value |= (byte & 0x7f) << shift;
-    if (byte & 0x80 == 0) return (value: value, next: cursor);
+    if (byte & 0x80 == 0) {
+      final count = cursor - offset;
+      if ((count > 1 && byte == 0) || (count == 3 && byte > 3)) {
+        throw const FormatException('non-canonical shortvec');
+      }
+      return (value: value, next: cursor);
+    }
     shift += 7;
   }
   throw const FormatException('invalid shortvec');

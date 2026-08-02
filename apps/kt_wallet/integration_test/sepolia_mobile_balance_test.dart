@@ -1,3 +1,6 @@
+import 'support/e2e_credential_batch.dart';
+import 'support/e2e_wallet_cleanup.dart';
+
 import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -9,6 +12,7 @@ import 'package:kt_wallet/src/state/networks.dart';
 const _mnemonic = String.fromEnvironment('SEPOLIA_E2E_MNEMONIC');
 
 void main() {
+  requireFreshE2eCredentialBatchIfConfigured();
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   test(
@@ -28,6 +32,7 @@ void main() {
         mnemonic: _mnemonic,
         requireAuth: false,
       );
+      registerE2eWalletCleanup(crypto, walletId);
       final addresses = await crypto.deriveAddresses(walletId);
       final networks = NetworkController(
         initialEnvironment: NetworkEnvironment.testnet,

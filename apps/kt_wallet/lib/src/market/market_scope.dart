@@ -8,6 +8,7 @@ import '../state/networks.dart';
 import '../state/wallet_controller.dart';
 import 'balance_service.dart';
 import 'gateway_client.dart';
+import 'fiat_math.dart';
 import 'market_controller.dart';
 import 'market_snapshot.dart';
 import 'price_service.dart';
@@ -36,6 +37,26 @@ class MarketScope extends InheritedNotifier<MarketController> {
         .getElementForInheritedWidgetOfExactType<MarketScope>();
     return (element?.widget as MarketScope?)?.notifier;
   }
+}
+
+/// Formats a USD-denominated market value in the user's selected fiat using
+/// the same quote generation as the visible portfolio. Gallery/tests without
+/// preference scope remain USD. Missing CNY/JPY rates stay honest as `--`.
+String formatFiatForContext(BuildContext context, double? usd) {
+  if (usd == null || !usd.isFinite || usd < 0) return '--';
+  final currency = AppPrefsScope.maybeOf(context)?.fiat ?? 'USD';
+  final market = MarketScope.maybeOf(context);
+  final converted = currency == 'USD'
+      ? usd
+      : multiplyFiatForDisplay(usd, market?.fiatPerUsd(currency));
+  return converted == null ? '--' : formatFiat(converted, currency);
+}
+
+String formatSignedFiatForContext(BuildContext context, double usd) {
+  final normalized = usd.abs() < 0.005 ? 0.0 : usd;
+  final formatted = formatFiatForContext(context, normalized.abs());
+  if (formatted == '--') return formatted;
+  return '${normalized >= 0 ? '+' : '-'}$formatted';
 }
 
 /// The [Chain] (protocol family) served by an RPC-endpoint [Coin] slot.

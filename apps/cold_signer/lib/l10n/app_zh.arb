@@ -6,6 +6,8 @@
   "actionCancel": "取消",
   "actionSave": "保存",
   "actionImport": "导入",
+  "actionValidating": "正在校验…",
+  "cameraUnavailable": "相机不可用",
   "done": "完成",
   "later": "稍后再说",
 
@@ -42,6 +44,7 @@
   "verifyWrong": "选择有误，请对照您手写的备份重试",
 
   "importWalletTitle": "导入钱包",
+  "mnemonicInvalidChecksum": "助记词无效，请检查每个单词、单词数量和 BIP-39 校验和。",
   "wordCountOption": "{count} 个单词",
   "@wordCountOption": {
     "placeholders": { "count": { "type": "int" } }
@@ -55,6 +58,11 @@
 
   "biometricTitle": "生物识别",
   "enableFaceId": "启用 Face ID",
+  "biometricUnavailable": "此设备尚未设置可用的生物识别或设备认证。",
+  "walletSecureStorageFailed": "钱包安全存储失败，未保存任何密钥。",
+  "secureStorageUnavailableTitle": "安全存储不可用",
+  "secureStorageUnavailableDesc": "KT冷钱包无法安全读取钱包、密码和锁定状态，签名功能将保持锁定。请重新启动 App，或从可信来源重新安装。",
+  "actionRetry": "重试",
   "biometricSkip": "暂不启用，仅使用密码",
   "biometricDesc": "每次签名前都需要验证身份。启用 Face ID 可以更快完成验证，也可以随时改用设备密码。",
 
@@ -72,6 +80,9 @@
     "placeholders": { "days": { "type": "int" } }
   },
   "securityCheckPassed": "安全检查通过 · 飞行模式已开启",
+  "offlineStatusConfirmed": "网络已断开",
+  "offlineStatusConnected": "检测到网络连接",
+  "offlineStatusUnknown": "无法确认网络状态",
   "scanPendingTx": "扫描待签名交易",
   "scanPendingTxDesc": "扫描联网钱包生成的动态二维码",
   "exportAddress": "导出地址",
@@ -98,6 +109,21 @@
   "checkLevelPass": "通过",
   "checkLevelWarn": "警告",
   "checkLevelBlock": "危险",
+  "checkDetailUnknown": "无法确认状态",
+  "checkDetailNetworkSafe": "未检测到网络连接",
+  "checkDetailNetworkUnsafe": "检测到网络连接",
+  "checkDetailAirplaneSafe": "飞行模式已开启",
+  "checkDetailAirplaneUnsafe": "飞行模式未开启",
+  "checkDetailBluetoothSafe": "蓝牙已关闭",
+  "checkDetailBluetoothUnsafe": "蓝牙已开启",
+  "checkDetailPasscodeSafe": "设备密码已设置",
+  "checkDetailPasscodeUnsafe": "设备密码未设置",
+  "checkDetailBiometricSafe": "生物识别可用",
+  "checkDetailBiometricUnsafe": "生物识别不可用",
+  "checkDetailScreenCaptureSafe": "未检测到屏幕录制",
+  "checkDetailScreenCaptureUnsafe": "检测到屏幕录制",
+  "checkDetailIntegritySafe": "系统完整性检查通过",
+  "checkDetailIntegrityUnsafe": "检测到 root 或越狱",
   "securityChecking": "正在检查设备状态…",
   "securityOverallPass": "检查通过 · 可以签名",
   "securityOverallWarn": "存在风险 · 请谨慎操作",
@@ -118,6 +144,15 @@
   },
   "fromAccount": "转出账户（From）",
   "toAddress": "收款地址（To）",
+  "spenderAddress": "被授权合约",
+  "nativeTransferOperation": "原生币转账",
+  "tokenTransferOperation": "Token 转账",
+  "approvalRevokeOperation": "撤销 Token 授权",
+  "approvalRevokeZeroAllowance": "将授权额度设为零",
+  "approvalRevokeSignerNotice": "这是精确的 ERC-20 approve(被授权合约, 0) 调用，只撤销额度，不会转出 Token。",
+  "tokenContractLabel": "Token 合约",
+  "chainIdLabel": "Chain ID",
+  "maximumFeeBaseUnits": "最高网络费（最小单位）",
   "walletIdLabel": "钱包 ID",
   "createdAtLabel": "创建时间",
   "expiresAtLabel": "有效期至",
@@ -127,11 +162,13 @@
   "viewRawTxData": "查看原始交易数据",
   "signingBlocked": "已禁止签名",
   "signingBlockedDesc": "该交易包含无法安全解析的内容，KT Cold Signer 已拒绝签名以保护你的资产。",
+  "transactionParseFailed": "无法安全解析",
+  "signingFailed": "签名失败，交易、钱包或认证未通过校验。",
   "unknownContractCallDetected": "检测到未知合约调用：{method}",
   "@unknownContractCallDetected": {
     "placeholders": { "method": { "type": "String" } }
   },
-  "unknownContractCallDesc": "V1 仅支持原生币和 Token 转账。approve、permit 等授权类调用一律拒绝。",
+  "unknownContractCallDesc": "仅支持原生币转账、Token 转账和精确的 approve(被授权合约, 0) 撤销。非零 approve、permit 与未知调用一律拒绝。",
 
   "authTitle": "身份验证",
   "useFaceIdVerify": "使用 Face ID 验证",
@@ -142,6 +179,7 @@
   "amountLabel": "金额",
   "requestId": "请求 ID",
   "enterPinToSign": "输入 App 密码以完成签名",
+  "enterPinToDelete": "输入 App 密码以继续删除",
   "pinIncorrect": "密码错误，请重试",
   "pinLockedRetry": "尝试次数过多，请 {seconds} 秒后重试",
   "@pinLockedRetry": {
@@ -153,6 +191,7 @@
   "voidSignatureTitle": "作废本次签名？",
   "voidSignatureDesc": "作废后该签名结果二维码将失效，联网钱包将无法广播这笔交易。",
   "signatureVoided": "签名已作废",
+  "signResultUnavailable": "签名结果不可用",
   "dynamicShard": "动态分片 {received} / {total}",
   "@dynamicShard": {
     "placeholders": { "received": { "type": "int" }, "total": { "type": "int" } }
@@ -179,8 +218,9 @@
   "editWalletName": "修改钱包名称",
   "mnemonicBackupCheck": "助记词备份验证",
   "mnemonicBackupCheckDesc": "定期抽查助记词是否仍能正确抄录",
+  "mnemonicReviewFailed": "认证或助记词校验失败，未显示任何助记词。",
   "deleteWallet": "删除钱包",
-  "deleteWalletReqDesc": "需要密码、生物识别和确认文字",
+  "deleteWalletReqDesc": "需要 App 密码和确认文字；已开启系统认证时还必须通过系统认证",
   "destroyAllData": "销毁全部钱包数据",
   "destroyAllDataDesc": "不可恢复，仅在设备处置前使用",
 
@@ -192,6 +232,8 @@
   "accessSection": "访问",
   "changeAppPassword": "修改 App 密码",
   "screenCaptureProtection": "截图安全提醒",
+  "screenCaptureBlocked": "检测到录屏或投屏",
+  "screenCaptureBlockedHint": "录屏或投屏期间助记词已隐藏。停止捕获后会自动恢复。",
 
   "permanentlyDeleteWallet": "永久删除钱包",
   "stepPassword": "密码",
@@ -199,14 +241,21 @@
   "irreversibleAction": "此操作不可恢复",
   "deleteWalletWarningDesc": "删除后，本机将清除该钱包的全部密钥数据。若助记词未备份或备份遗失，资产将永久无法找回。",
   "typeToConfirmDelete": "请输入「删除钱包」以继续",
+  "deleteWalletConfirmationPhrase": "删除钱包",
+  "verifyToDeleteWallet": "验证以永久删除此钱包",
+  "deleteAuthenticationFailed": "认证失败，钱包未删除。",
+  "deleteWalletFailed": "无法安全删除钱包，当前钱包未被移除，请重试。",
 
   "displayLanguage": "显示语言",
   "settingsTitle": "设置",
   "fiatUnit": "法币单位",
   "languageSystem": "跟随系统",
+  "settingsSaveFailed": "无法保存设置，当前内容未改变，请重试。",
 
   "deviceMode": "设备模式",
   "deviceModeSigner": "离线签名器",
   "deviceModeSwitchTitle": "切换设备模式",
-  "deviceModeSwitchDesc": "切换前请确认本机不再用作签名器。切换后将返回模式选择页。"
+  "deviceModeSwitchDesc": "切换前请确认本机不再用作签名器。切换后将返回模式选择页。",
+  "deviceModeSaveFailed": "无法保存设备模式，当前模式未改变，请重试。",
+  "pinKeyDelete": "删除最后一位"
 }

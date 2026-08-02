@@ -23,6 +23,25 @@ class AddressValidation {
 }
 
 abstract final class Addresses {
+  /// Compares account identities using the chain's actual address rules.
+  ///
+  /// EVM hex addresses are case-insensitive; mixed case is only their EIP-55
+  /// checksum presentation. TRON and Solana use case-sensitive Base58, so
+  /// lowercasing either side would make the comparison incorrect.
+  static bool equal(Chain chain, String left, String right) {
+    final a = left.trim();
+    final b = right.trim();
+    return switch (chain) {
+      Chain.ethereum ||
+      Chain.polygon ||
+      Chain.base ||
+      Chain.arbitrum ||
+      Chain.avalanche ||
+      Chain.bnb => a.toLowerCase() == b.toLowerCase(),
+      Chain.tron || Chain.solana => a == b,
+    };
+  }
+
   static AddressValidation validate(Chain chain, String address) {
     final a = address.trim();
     if (a.isEmpty) return AddressValidation.bad('empty address');

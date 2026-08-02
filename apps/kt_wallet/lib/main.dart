@@ -1,6 +1,5 @@
 import 'package:cold_signer/cold_signer.dart';
 import 'package:core_crypto/core_crypto.dart';
-import 'package:core_crypto/testing.dart';
 import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -9,8 +8,10 @@ import 'package:ui_kit/ui_kit.dart';
 import 'l10n/app_localizations.dart';
 import 'src/app_router.dart';
 import 'src/data/database_provider.dart';
+import 'src/market/market_controller.dart';
 import 'src/market/market_scope.dart';
 import 'src/market/history_scope_host.dart';
+import 'src/observability/experience_metrics.dart';
 import 'src/security/app_lock_gate.dart';
 import 'src/security/secure_screen.dart';
 import 'src/state/app_prefs.dart';
@@ -19,6 +20,7 @@ import 'src/state/locale_controller.dart';
 import 'src/state/networks.dart';
 import 'src/state/wallet_controller.dart';
 import 'src/state/wallet_scope.dart';
+import 'src/transfer/local_transfer_service.dart';
 import 'src/transfer/transfer_draft.dart';
 import 'src/wallets/wallet_manager.dart';
 import 'src/wallets/wallet_model.dart';
@@ -29,7 +31,11 @@ import 'src/wallets/wallet_store.dart';
 /// first-launch mode picker (online wallet vs offline signer), the full
 /// wallet experience, or the embedded Cold Signer experience.
 Future<void> main() async {
+  final startupStopwatch = Stopwatch()..start();
   WidgetsFlutterBinding.ensureInitialized();
+  ExperienceMetrics.instance.installErrorObservers();
+  await ExperienceMetrics.instance.initializePersistence();
+  await ExperienceMetrics.instance.ingestNativeIncidents();
 
   final localeController = LocaleController();
   await localeController.load();
@@ -39,6 +45,13 @@ Future<void> main() async {
   runApp(
     RootApp(localeController: localeController, modeController: modeController),
   );
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    ExperienceMetrics.instance.record(
+      ExperienceMetricNames.appStartup,
+      startupStopwatch.elapsed,
+      success: true,
+    );
+  });
 }
 
 /// Wallet-mode bootstrap (runs only once the user has picked "online wallet"):
@@ -46,19 +59,21 @@ Future<void> main() async {
 /// backed by the native [MethodChannelCoreCrypto], and loads saved wallets
 /// (seeding a starter set on first run, named in the active language).
 ///
-/// A deterministic mock can only be enabled explicitly for simulator UI
-/// acceptance builds with `--dart-define=KT_ALLOW_MOCK_CRYPTO=true`. Normal
-/// debug/release builds fail closed when Trust Wallet Core is not linked.
+/// Production always uses the native implementation. UI and Golden tests
+/// inject their own controllers instead of enabling a runtime build flag; a
+/// shipped binary therefore has no switch that can replace key operations.
 Future<WalletController> _bootstrapWallet() async {
   final db = openWalletDatabase();
-  const requestedMockCrypto = bool.fromEnvironment('KT_ALLOW_MOCK_CRYPTO');
-  final allowMockCrypto = !kReleaseMode && requestedMockCrypto;
-  final CoreCrypto crypto = allowMockCrypto
-      ? MockCoreCrypto()
-      : MethodChannelCoreCrypto();
   final store = WalletStore(db);
   final manager = await store.load();
-  return WalletController(manager, crypto: crypto, store: store);
+  final controller = WalletController(
+    manager,
+    crypto: MethodChannelCoreCrypto(),
+    store: store,
+  );
+  await controller.recoverPendingDeletions();
+  await controller.validateNativeWallets();
+  return controller;
 }
 
 /// Resolves the locale to load [AppLocalizations] for: the manual override if
@@ -75,7 +90,7 @@ ChainAddresses _addr(String seed) => ChainAddresses(
 /// persistence). Demo wallet names stay as fixed literals — this controller
 /// only backs the developer gallery/goldens, never the shipped home. The daily
 /// wallet stays un-backed-up so the backup banner/flow is exercisable.
-WalletController _seedController() => WalletController(
+WalletController _seedController(CoreCrypto? crypto) => WalletController(
   WalletManager(
     initial: [
       HotWallet(
@@ -104,7 +119,32 @@ WalletController _seedController() => WalletController(
       ),
     ],
   ),
+  crypto: crypto,
+  allowTestBypass: true,
 );
+
+Never _missingProductionController() => throw StateError(
+  'A release KtWalletApp must receive its persistent WalletController.',
+);
+
+WalletController _resolveWalletController(
+  WalletController? controller,
+  CoreCrypto? galleryCrypto,
+) {
+  if (controller == null) {
+    if (kReleaseMode) return _missingProductionController();
+    return _seedController(galleryCrypto);
+  }
+  // A test-bypass controller enables fixture signatures and success paths in
+  // several screens. Even an accidental alternate entrypoint must not be able
+  // to inject one into a release process.
+  if (kReleaseMode && controller.allowsTestBypass) {
+    throw StateError(
+      'A release KtWalletApp cannot use a test-bypass WalletController.',
+    );
+  }
+  return controller;
+}
 
 /// Resolves the app's copy for the native privacy overlay and pushes it down.
 /// Loading a delegate is async, so this fires and forgets; the platform keeps
@@ -405,10 +445,33 @@ class ModeSelectApp extends StatelessWidget {
 
 /// First-launch picker: this phone is either the online wallet or the offline
 /// signer. The signer choice is gated behind an air-gap warning dialog.
-class ModeSelectScreen extends StatelessWidget {
+class ModeSelectScreen extends StatefulWidget {
   const ModeSelectScreen({super.key, required this.onSelect});
 
-  final ValueChanged<DeviceMode> onSelect;
+  final Future<void> Function(DeviceMode) onSelect;
+
+  @override
+  State<ModeSelectScreen> createState() => _ModeSelectScreenState();
+}
+
+class _ModeSelectScreenState extends State<ModeSelectScreen> {
+  bool _saving = false;
+
+  Future<void> _select(DeviceMode mode) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await widget.onSelect(mode);
+    } on Object {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context).walletUpdateFailed),
+        ),
+      );
+      setState(() => _saving = false);
+    }
+  }
 
   Future<void> _chooseSigner(BuildContext context) async {
     final l10n = AppLocalizations.of(context);
@@ -424,7 +487,7 @@ class ModeSelectScreen extends StatelessWidget {
         iconColor: SignerColors.ok,
       ),
     );
-    if (confirmed == true) onSelect(DeviceMode.signer);
+    if (confirmed == true) await _select(DeviceMode.signer);
   }
 
   @override
@@ -485,7 +548,7 @@ class ModeSelectScreen extends StatelessWidget {
                 iconColor: SignerColors.blue,
                 title: l10n.modeWalletTitle,
                 description: l10n.modeWalletDesc,
-                onTap: () => onSelect(DeviceMode.wallet),
+                onTap: _saving ? null : () => _select(DeviceMode.wallet),
               ),
               const SizedBox(height: 14),
               _ModeCard(
@@ -493,7 +556,7 @@ class ModeSelectScreen extends StatelessWidget {
                 iconColor: SignerColors.ok,
                 title: l10n.modeSignerTitle,
                 description: l10n.modeSignerDesc,
-                onTap: () => _chooseSigner(context),
+                onTap: _saving ? null : () => _chooseSigner(context),
               ),
               const Spacer(flex: 3),
             ],
@@ -517,7 +580,7 @@ class _ModeCard extends StatelessWidget {
   final Color iconColor;
   final String title;
   final String description;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -584,16 +647,41 @@ class KtWalletApp extends StatefulWidget {
   KtWalletApp({
     super.key,
     WalletController? controller,
+    this.marketController,
+    bool? galleryMode,
     LocaleController? localeController,
     NetworkController? networkController,
     AppPrefsController? prefs,
+    CoreCrypto? galleryCrypto,
+    this.transferService,
+    TransferSession? transferSession,
     this.initialLocation = '/',
-  }) : controller = controller ?? _seedController(),
+  }) : galleryMode = !kReleaseMode && (galleryMode ?? controller == null),
+       controller = _resolveWalletController(controller, galleryCrypto),
        localeController = localeController ?? LocaleController(),
        networkController = networkController ?? NetworkController(),
-       prefs = prefs ?? AppPrefsController();
+       prefs = prefs ?? AppPrefsController(),
+       transferSession = transferSession ?? TransferSession();
 
   final WalletController controller;
+
+  /// Enables the developer screen gallery and its deterministic fixtures.
+  ///
+  /// Production always injects its persistent controller, which makes this
+  /// false. Tests that intentionally construct the app without a controller
+  /// retain the gallery. This distinction also prevents a `/` deep link in a
+  /// shipped build from exposing fixture-only routes.
+  final bool galleryMode;
+
+  /// Optional deterministic market source for integration/widget tests.
+  ///
+  /// Production never supplies this; [MarketScopeHost] builds its live
+  /// gateway/RPC-backed controller. Keeping the seam at the app root lets
+  /// navigation tests prove funded transfer flows without reintroducing
+  /// fabricated balances into production screens.
+  final MarketController? marketController;
+  final LocalTransferService? transferService;
+  final TransferSession transferSession;
   final LocaleController localeController;
   final NetworkController networkController;
 
@@ -614,7 +702,7 @@ class _KtWalletAppState extends State<KtWalletApp> {
 
   /// In-flight transfer flow state (draft → sign-request → decoded result),
   /// shared across the transfer screens via [TransferSessionScope].
-  final TransferSession _transferSession = TransferSession();
+  TransferSession get _transferSession => widget.transferSession;
 
   /// App-wide preferences (RPC endpoint overrides among them), shared between
   /// the settings screens and the market services via [AppPrefsScope].
@@ -627,7 +715,13 @@ class _KtWalletAppState extends State<KtWalletApp> {
   @override
   void initState() {
     super.initState();
-    _router = buildRouter(initialLocation: widget.initialLocation);
+    _router = buildRouter(
+      initialLocation: widget.initialLocation,
+      galleryMode: widget.galleryMode,
+      walletController: widget.controller,
+      transferService: widget.transferService,
+      transferSession: _transferSession,
+    );
     _loadConfiguration();
   }
 
@@ -683,6 +777,7 @@ class _KtWalletAppState extends State<KtWalletApp> {
                   controller: _prefs,
                   child: MarketScopeHost(
                     wallets: widget.controller,
+                    controller: widget.marketController,
                     prefs: _prefs,
                     ready: _marketConfigReady,
                     child: HistoryScopeHost(

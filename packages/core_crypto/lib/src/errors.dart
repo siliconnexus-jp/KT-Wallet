@@ -17,6 +17,14 @@ final class AuthFailedException extends CoreCryptoException {
     : super('AUTH_FAILED', message);
 }
 
+/// Device authentication cannot currently run (no enrollment/hardware, a
+/// provider error, or another non-credential system condition).
+final class AuthUnavailableException extends CoreCryptoException {
+  const AuthUnavailableException([
+    String message = 'device authentication is unavailable',
+  ]) : super('AUTH_UNAVAILABLE', message);
+}
+
 /// Too many failures; auth gate is cooling down.
 final class AuthLockedException extends CoreCryptoException {
   const AuthLockedException(this.cooldownSec)
@@ -33,6 +41,13 @@ final class AuthCancelledException extends CoreCryptoException {
 final class WalletNotFoundException extends CoreCryptoException {
   const WalletNotFoundException(String walletId)
     : super('WALLET_NOT_FOUND', 'wallet not found: $walletId');
+}
+
+/// A native wallet slot is create-only and cannot replace existing key
+/// material. Callers must allocate a fresh random walletId instead.
+final class WalletAlreadyExistsException extends CoreCryptoException {
+  const WalletAlreadyExistsException()
+    : super('WALLET_EXISTS', 'wallet already exists');
 }
 
 final class InvalidMnemonicException extends CoreCryptoException {
@@ -69,14 +84,16 @@ final class BiometryChangedException extends CoreCryptoException {
     : super('BIOMETRY_CHANGED', 'biometric set changed; re-authenticate');
 }
 
-/// Maps a native error code (+ details map) to a typed exception.
+/// Maps an allowlisted native error code (+ narrowly allowlisted details) to a
+/// typed exception. Native message text is deliberately not accepted here:
+/// lower-level exceptions can contain sensitive wallet operation context.
 CoreCryptoException exceptionFromCode(
   String code, {
-  String? message,
   Map<Object?, Object?>? details,
 }) {
   return switch (code) {
-    'AUTH_FAILED' => AuthFailedException(message ?? 'authentication failed'),
+    'AUTH_FAILED' => const AuthFailedException(),
+    'AUTH_UNAVAILABLE' => const AuthUnavailableException(),
     'AUTH_LOCKED' => AuthLockedException(
       (details?['cooldownSec'] as int?) ?? 0,
     ),
@@ -84,14 +101,13 @@ CoreCryptoException exceptionFromCode(
     'WALLET_NOT_FOUND' => WalletNotFoundException(
       (details?['walletId'] as String?) ?? '?',
     ),
+    'WALLET_EXISTS' => const WalletAlreadyExistsException(),
     'INVALID_MNEMONIC' => const InvalidMnemonicException(),
-    'INVALID_INPUT' => InvalidInputException(
-      message ?? 'invalid signing input',
-    ),
-    'SIGN_FAILED' => SignFailedException(message ?? 'signing failed'),
+    'INVALID_INPUT' => const InvalidInputException(),
+    'SIGN_FAILED' => const SignFailedException(),
     'CRYPTO_UNAVAILABLE' => const CryptoUnavailableException(),
     'STORE_CORRUPTED' => const StoreCorruptedException(),
     'BIOMETRY_CHANGED' => const BiometryChangedException(),
-    _ => SignFailedException('unknown native error $code: $message'),
+    _ => const SignFailedException('unknown native failure'),
   };
 }

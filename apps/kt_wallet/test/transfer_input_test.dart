@@ -1,4 +1,5 @@
 import 'package:airgap_protocol/airgap_protocol.dart';
+import 'package:chains/chains.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/l10n/app_localizations.dart';
@@ -10,6 +11,8 @@ import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import 'support/test_wallet_scope.dart';
+
 /// Opens W4 through the router but WITHOUT any live scope — the standalone
 /// design-gallery path, which is the only place the Pencil demo literals
 /// (recipient + 120.00) are still seeded and the only place the demo 自定义
@@ -17,12 +20,18 @@ import 'package:ui_kit/ui_kit.dart';
 Future<void> _openGallery(WidgetTester tester) async {
   tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
   addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+  final controller = buildTestWalletController();
   await tester.pumpWidget(
     MaterialApp.router(
       locale: const Locale('zh'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      routerConfig: buildRouter(initialLocation: '/transfer'),
+      routerConfig: buildRouter(
+        initialLocation: '/transfer',
+        walletController: controller,
+      ),
+      builder: (context, child) =>
+          withTestWalletScope(child!, controller: controller),
     ),
   );
   await tester.pumpAndSettle();
@@ -143,13 +152,13 @@ void main() {
       walletName: '主钱包',
       accounts: [
         for (final (coin, address, path) in const [
-          (60, eth, "m/44'/60'/0'/0/0"),
-          (966, eth, "m/44'/60'/0'/0/0"),
-          (8453, eth, "m/44'/60'/0'/0/0"),
-          (42161, eth, "m/44'/60'/0'/0/0"),
-          (9000, eth, "m/44'/60'/0'/0/0"),
-          (195, 'TcPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa', "m/44'/195'/0'/0/0"),
-          (501, 'cyKpXwMWd4qmDqVr2W', "m/44'/501'/0'"),
+          (60, eth, evmDefaultDerivationPath),
+          (966, eth, evmDefaultDerivationPath),
+          (8453, eth, evmDefaultDerivationPath),
+          (42161, eth, evmDefaultDerivationPath),
+          (9000, eth, evmDefaultDerivationPath),
+          (195, 'TcPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa', tronDefaultDerivationPath),
+          (501, 'cyKpXwMWd4qmDqVr2W', solanaDefaultDerivationPath),
         ])
           AccountRecord(coin: coin, address: address, path: path, index: 0),
       ],
@@ -226,6 +235,11 @@ void main() {
     await _openGallery(tester);
     expect(tester.widget<KtSegmented>(find.byType(KtSegmented)).selected, 1);
 
+    // The accessibility-sized action may sit below the 600 px default widget
+    // test viewport. Exercise the same scroll-to-action behavior a user gets
+    // instead of sending a pointer event to an off-screen render object.
+    await tester.ensureVisible(find.text('自定义'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('自定义'));
     await tester.pumpAndSettle();
     expect(find.text('确认手续费'), findsOneWidget);

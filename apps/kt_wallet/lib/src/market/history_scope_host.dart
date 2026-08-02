@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import '../state/app_prefs.dart';
 import '../state/networks.dart';
 import '../state/wallet_controller.dart';
+import 'asset_ref.dart';
 import 'history_controller.dart';
 import 'history_service.dart';
 import 'history_snapshot.dart';
@@ -41,6 +42,7 @@ class _HistoryScopeHostState extends State<HistoryScopeHost> {
     activeNetworkIds: () => {
       for (final chain in Chain.values) widget.networks.activeFor(chain).id,
     },
+    activeNetworkId: (coin) => widget.networks.activeFor(chainOf(coin)).id,
     service: HistoryService(
       endpoints: effectiveRpcEndpoints(widget.prefs, widget.networks),
       gateway: prefsGatewayResolver(widget.prefs, widget.networks),

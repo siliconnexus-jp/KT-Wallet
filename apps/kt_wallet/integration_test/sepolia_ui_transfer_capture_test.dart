@@ -1,3 +1,6 @@
+import 'support/e2e_credential_batch.dart';
+import 'support/e2e_wallet_cleanup.dart';
+
 import 'dart:async';
 
 import 'package:core_crypto/core_crypto.dart';
@@ -18,6 +21,7 @@ const _mnemonic = String.fromEnvironment('SEPOLIA_E2E_MNEMONIC');
 const _walletId = 'sepolia-ui-transfer-capture-v1';
 
 void main() {
+  requireFreshE2eCredentialBatchIfConfigured();
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
@@ -38,6 +42,7 @@ void main() {
         mnemonic: _mnemonic,
         requireAuth: false,
       );
+      registerE2eWalletCleanup(crypto, _walletId);
       final addresses = await crypto.deriveAddresses(_walletId);
       final wallet = HotWallet(
         id: _walletId,

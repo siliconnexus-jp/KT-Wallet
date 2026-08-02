@@ -66,12 +66,20 @@ final class AuthGate {
       throw GateError(code: "AUTH_FAILED", cooldownSec: 0)
     } catch let laError as LAError {
       switch laError.code {
-      case .userCancel, .appCancel, .systemCancel:
+      case .userCancel, .userFallback, .appCancel, .systemCancel:
         throw GateError(code: "AUTH_CANCELLED", cooldownSec: 0)
-      case .biometryLockout, .authenticationFailed:
+      case .authenticationFailed:
         return try registerFailureAndThrow()
+      case .biometryLockout:
+        // iOS owns this lockout and decides when credentials may be retried.
+        // It is not another wrong attempt in KT Wallet's persisted ladder.
+        throw GateError(code: "AUTH_LOCKED", cooldownSec: 0)
       default:
-        throw GateError(code: "AUTH_FAILED", cooldownSec: 0)
+        // Missing passcode/enrollment/hardware, a non-interactive app, or a
+        // provider/runtime failure is not evidence of a wrong credential.
+        // Counting these errors can lock out an innocent user without one
+        // failed authentication attempt.
+        throw GateError(code: "AUTH_UNAVAILABLE", cooldownSec: 0)
       }
     }
   }

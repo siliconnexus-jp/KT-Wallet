@@ -5,7 +5,17 @@ import 'package:airgap_protocol/airgap_protocol.dart';
 /// (detailed-design.md §5.1 sign_records, §13.5). Holds ONLY non-sensitive
 /// fields — never keys, mnemonics or seed.
 class SignatureRecord {
-  const SignatureRecord({required this.reqId, required this.date, required this.coin, required this.operation, required this.toAddress, required this.amount, required this.status, this.txHash, this.walletId});
+  const SignatureRecord({
+    required this.reqId,
+    required this.date,
+    required this.coin,
+    required this.operation,
+    required this.toAddress,
+    required this.amount,
+    required this.status,
+    this.txHash,
+    this.walletId,
+  });
 
   final String reqId;
   final int date; // epoch seconds
@@ -26,7 +36,18 @@ class SignatureRecord {
 /// see data/signer_database.dart). Kept as an interface so the anti-replay
 /// logic is testable without a database.
 abstract class SignRecordPersistence {
-  Future<void> put(SignatureRecord record);
+  /// Atomically consumes a request before native signing starts.
+  ///
+  /// Returns false when [record.reqId] already exists. Implementations must
+  /// never overwrite an existing row: this is the final anti-replay boundary,
+  /// not a best-effort scan-time cache.
+  Future<bool> reserve(SignatureRecord record);
+
+  /// Replaces this process' [RequestStatus.scanned] reservation with the final
+  /// signed outcome. Returns false if the reservation is absent, belongs to a
+  /// different wallet, or is no longer in the reserved state.
+  Future<bool> finalizeReservation(SignatureRecord record);
+
   Future<SignatureRecord?> get(String reqIdHex);
   Future<List<SignatureRecord>> all();
 
@@ -39,7 +60,39 @@ class InMemorySignRecordPersistence implements SignRecordPersistence {
   final Map<String, SignatureRecord> _rows = {};
 
   @override
-  Future<void> put(SignatureRecord record) async => _rows[record.reqId] = record;
+  Future<bool> reserve(SignatureRecord record) async {
+    if (record.status != RequestStatus.scanned) {
+      throw ArgumentError.value(
+        record.status,
+        'record.status',
+        'reservation must use RequestStatus.scanned',
+      );
+    }
+    if (_rows.containsKey(record.reqId)) return false;
+    // There is no await between the check and write. On a Dart isolate this is
+    // one atomic turn, so concurrent callers cannot both reserve the reqId.
+    _rows[record.reqId] = record;
+    return true;
+  }
+
+  @override
+  Future<bool> finalizeReservation(SignatureRecord record) async {
+    if (record.status != RequestStatus.signed) {
+      throw ArgumentError.value(
+        record.status,
+        'record.status',
+        'final outcome must use RequestStatus.signed',
+      );
+    }
+    final reserved = _rows[record.reqId];
+    if (reserved == null ||
+        reserved.status != RequestStatus.scanned ||
+        reserved.walletId != record.walletId) {
+      return false;
+    }
+    _rows[record.reqId] = record;
+    return true;
+  }
 
   @override
   Future<SignatureRecord?> get(String reqIdHex) async => _rows[reqIdHex];
@@ -55,10 +108,9 @@ class InMemorySignRecordPersistence implements SignRecordPersistence {
 /// validator needs, by caching the loaded status set. Load once per scan
 /// session before validating.
 ///
-/// This is a point-in-time snapshot. The Cold Signer is single-user and does
-/// NOT run concurrent scan sessions, so a reqId recorded elsewhere cannot
-/// appear mid-session; if that assumption ever changes, reload before each
-/// validate or query the store directly (TOCTOU).
+/// This is intentionally only an early, point-in-time UX check. The final
+/// signing boundary must still call [SignRecordPersistence.reserve] because
+/// authentication can outlive the scan session and callbacks can race.
 class CachedSignRecordStore implements SignRecordStore {
   CachedSignRecordStore(this._cache);
   final Map<String, RequestStatus> _cache;

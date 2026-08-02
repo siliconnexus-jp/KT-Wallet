@@ -39,7 +39,9 @@ class WalletHistorySnapshotStore implements HistorySnapshotStore {
       final encoded = await _wallets.walletSetting(walletId, _key);
       if (encoded == null || encoded.isEmpty) return null;
       final body = jsonDecode(encoded);
-      if (body is! Map || body['v'] != 1 || body['scope'] != scope) return null;
+      if (body is! Map || body['scope'] != scope) return null;
+      final version = body['v'];
+      if (version != 1 && version != 2 && version != 3) return null;
       final savedAtMs = body['savedAtMs'];
       final rows = body['results'];
       if (savedAtMs is! int || rows is! Map) return null;
@@ -70,7 +72,7 @@ class WalletHistorySnapshotStore implements HistorySnapshotStore {
   @override
   Future<void> save(String walletId, HistorySnapshot snapshot) async {
     final body = <String, Object?>{
-      'v': 1,
+      'v': 3,
       'scope': snapshot.scope,
       'savedAtMs': snapshot.savedAt.millisecondsSinceEpoch,
       'results': {
@@ -86,6 +88,7 @@ class WalletHistorySnapshotStore implements HistorySnapshotStore {
 
   static Map<String, Object?> _encodeRecord(ChainTxRecord record) => {
     'id': record.id,
+    'networkId': record.networkId,
     'hash': record.hash,
     'outgoing': record.outgoing,
     'from': record.fromAddress,
@@ -95,7 +98,7 @@ class WalletHistorySnapshotStore implements HistorySnapshotStore {
     'symbol': record.assetSymbol,
     'verified': record.assetVerified,
     'timestampMs': record.timestamp.millisecondsSinceEpoch,
-    'confirmed': record.confirmed,
+    'status': record.status.name,
   };
 
   static ChainTxRecord? _decodeRecord(Coin coin, Object? value) {
@@ -103,16 +106,29 @@ class WalletHistorySnapshotStore implements HistorySnapshotStore {
     final hash = value['hash'];
     final outgoing = value['outgoing'];
     final timestampMs = value['timestampMs'];
-    final confirmed = value['confirmed'];
+    final rawStatus = value['status'];
+    final legacyConfirmed = value['confirmed'];
     if (hash is! String ||
         hash.isEmpty ||
         outgoing is! bool ||
-        timestampMs is! int ||
-        confirmed is! bool) {
+        timestampMs is! int) {
       return null;
     }
+    final status = rawStatus is String
+        ? ChainTxStatus.values
+              .where((item) => item.name == rawStatus)
+              .firstOrNull
+        : legacyConfirmed is bool
+        ? (legacyConfirmed ? ChainTxStatus.confirmed : ChainTxStatus.failed)
+        : null;
+    if (status == null) return null;
     return ChainTxRecord(
       coin: coin,
+      networkId:
+          value['networkId'] is String &&
+              (value['networkId'] as String).isNotEmpty
+          ? value['networkId'] as String
+          : null,
       id: value['id'] is String ? value['id'] as String : null,
       hash: hash,
       outgoing: outgoing,
@@ -127,7 +143,7 @@ class WalletHistorySnapshotStore implements HistorySnapshotStore {
           ? value['verified'] as bool
           : true,
       timestamp: DateTime.fromMillisecondsSinceEpoch(timestampMs),
-      confirmed: confirmed,
+      status: status,
     );
   }
 }

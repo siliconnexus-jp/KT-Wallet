@@ -1,0 +1,234 @@
+groups:
+  - name: kt-wallet-gateway
+    rules:
+      - alert: KTWalletGatewayTargetDown
+        expr: up{job="kt-wallet-gateway"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: kt-wallet-gateway
+        annotations:
+          summary: KT Wallet Gateway target is down
+          description: Prometheus has been unable to scrape a Gateway instance for 2 minutes.
+
+      - alert: KTWalletGatewayNoUsableNetwork
+        expr: kt_gateway_ready == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: kt-wallet-gateway
+        annotations:
+          summary: KT Wallet Gateway has no usable JSON-RPC network
+          description: Every configured JSON-RPC network has exhausted or open-circuit endpoints.
+
+      - alert: KTWalletGatewayNetworkUnavailable
+        expr: kt_gateway_network_available == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: kt-wallet-gateway
+        annotations:
+          summary: KT Wallet Gateway network is unavailable
+          description: Network {{ $labels.network }} has had no endpoint outside an open circuit for 5 minutes.
+
+      - alert: KTWalletGatewayHighUpstreamFailureRatio
+        expr: |
+          (
+            sum by (network) (rate(kt_gateway_upstream_attempts_total{outcome="failure"}[10m]))
+            /
+            clamp_min(sum by (network) (rate(kt_gateway_upstream_attempts_total[10m])), 0.001)
+          ) > 0.20
+          and
+          sum by (network) (rate(kt_gateway_upstream_attempts_total[10m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          service: kt-wallet-gateway
+        annotations:
+          summary: KT Wallet Gateway upstream failure ratio is high
+          description: More than 20% of upstream attempts for {{ $labels.network }} have failed for 10 minutes.
+
+      - alert: KTWalletGatewayHighUpstreamP95Latency
+        expr: |
+          max by (network) (
+            kt_gateway_upstream_latency_seconds{percentile="p95"}
+          ) > 5
+          and
+          sum by (network) (rate(kt_gateway_upstream_attempts_total[10m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          service: kt-wallet-gateway
+        annotations:
+          summary: KT Wallet Gateway upstream latency is high
+          description: Rolling upstream P95 for {{ $labels.network }} has exceeded 5 seconds for 10 minutes.
+
+      - alert: KTWalletGatewaySharedCacheErrors
+        expr: |
+          sum by (cache) (
+            increase(kt_gateway_shared_cache_operations_total{outcome="error"}[10m])
+          ) >= 5
+        for: 5m
+        labels:
+          severity: warning
+          service: kt-wallet-gateway
+        annotations:
+          summary: KT Wallet Gateway shared cache is failing
+          description: Shared cache {{ $labels.cache }} recorded at least 5 errors in 10 minutes; local fallback should be active.
+
+      - alert: KTWalletGatewayBroadcastGuardDisabled
+        expr: kt_gateway_broadcast_guard_enabled == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: kt-wallet-gateway
+        annotations:
+          summary: KT Wallet atomic broadcast guard is disabled
+          description: A Gateway instance has no shared atomic broadcast guard; irreversible submissions are not protected across instances.
+
+      - alert: KTWalletGatewayBroadcastGuardErrors
+        expr: |
+          sum by (outcome) (
+            increase(kt_gateway_broadcast_guard_operations_total{
+              outcome=~"unavailable|persist_error"
+            }[10m])
+          ) >= 1
+        for: 1m
+        labels:
+          severity: warning
+          service: kt-wallet-gateway
+        annotations:
+          summary: KT Wallet broadcast guard operation failed
+          description: Broadcast guard outcome {{ $labels.outcome }} occurred; submissions may be blocked or require hash-based reconciliation.
+
+      - alert: KTWalletGatewayBroadcastGuardCorruptRecord
+        expr: increase(kt_gateway_broadcast_guard_operations_total{outcome="corrupt_record"}[10m]) >= 1
+        labels:
+          severity: critical
+          service: kt-wallet-gateway
+        annotations:
+          summary: KT Wallet broadcast guard found a corrupt record
+          description: A shared idempotency record violated its schema and was rejected before any chain write. Investigate Redis integrity and deployment compatibility.
+
+      - alert: KTWalletGatewayTokenRiskProviderErrors
+        expr: increase(kt_gateway_token_risk_provider_operations_total{outcome="error"}[15m]) >= 5
+        for: 5m
+        labels:
+          severity: warning
+          service: kt-wallet-gateway
+        annotations:
+          summary: KT Wallet token-risk provider is failing
+          description: Threat-intelligence lookups have repeatedly failed; clients should display an unknown risk state.
+
+      - alert: KTWalletGatewayApprovalProviderErrors
+        expr: increase(kt_gateway_token_approval_provider_operations_total{outcome="error"}[15m]) >= 5
+        for: 5m
+        labels:
+          severity: warning
+          service: kt-wallet-gateway
+        annotations:
+          summary: KT Wallet approval provider is failing
+          description: Token-approval lookups have repeatedly failed; clients must not display an empty clean list.
+
+      - alert: KTWalletGatewaySecurityProviderCircuitOpen
+        expr: kt_gateway_external_provider_circuit_open == 1
+        for: 2m
+        labels:
+          severity: warning
+          service: kt-wallet-gateway
+        annotations:
+          summary: KT Wallet security-provider circuit is open
+          description: Security provider {{ $labels.provider }} remains unavailable; affected checks fail closed and clients must not display a safe or empty result.
+
+      # Mobile diagnostics are optional, explicitly consented and anonymous.
+      # They are intentionally unauthenticated and therefore untrusted trend
+      # signals: these alerts must prompt investigation, never paging or a
+      # population-level crash-rate claim.
+      - alert: KTWalletClientReliabilityIncidentsReported
+        expr: |
+          sum by (platform) (
+            increase(kt_gateway_app_diagnostic_samples_total{
+              metric=~"app.nativeFatal|app.nativeAnr",
+              outcome="failure"
+            }[15m])
+          ) >= 3
+        for: 5m
+        labels:
+          severity: info
+          service: kt-wallet-client
+          trust: untrusted-client-report
+        annotations:
+          summary: Multiple anonymous client reliability incidents were reported
+          description: Optional {{ $labels.platform }} reports contain at least 3 crash/hang signals in 15 minutes. Treat this unauthenticated signal as a prompt to investigate, not as a crash rate.
+
+      - alert: KTWalletClientBroadcastFailureReportsHigh
+        expr: |
+          (
+            sum by (platform) (
+              increase(kt_gateway_app_diagnostic_samples_total{
+                metric="transaction.broadcast",
+                outcome="failure"
+              }[30m])
+            )
+            /
+            clamp_min(
+              sum by (platform) (
+                increase(kt_gateway_app_diagnostic_samples_total{
+                  metric="transaction.broadcast"
+                }[30m])
+              ),
+              1
+            )
+          ) > 0.25
+          and
+          sum by (platform) (
+            increase(kt_gateway_app_diagnostic_samples_total{
+              metric="transaction.broadcast"
+            }[30m])
+          ) >= 10
+        for: 10m
+        labels:
+          severity: info
+          service: kt-wallet-client
+          trust: untrusted-client-report
+        annotations:
+          summary: Anonymous client broadcast failure reports are elevated
+          description: More than 25% of at least 10 optional {{ $labels.platform }} broadcast samples failed in 30 minutes. Validate against Gateway and chain evidence before acting.
+
+      # Prometheus scrapes its own loopback metrics so the delivery pipeline is
+      # fail-visible. These rules do not replace external black-box paging: an
+      # Alertmanager outage can prevent the same Alertmanager from receiving
+      # the alert, but the state remains visible in Prometheus and diagnostics.
+      - alert: KTWalletAlertmanagerUndiscovered
+        expr: prometheus_notifications_alertmanagers_discovered < 1
+        for: 2m
+        labels:
+          severity: critical
+          service: kt-wallet-monitoring
+        annotations:
+          summary: KT Wallet Prometheus cannot discover Alertmanager
+          description: Prometheus has had no active Alertmanager target for 2 minutes; alerts are not being delivered.
+
+      - alert: KTWalletAlertDeliveryErrors
+        expr: sum(increase(prometheus_notifications_errors_total[10m])) >= 1
+        for: 1m
+        labels:
+          severity: warning
+          service: kt-wallet-monitoring
+        annotations:
+          summary: KT Wallet alert delivery is failing
+          description: Prometheus recorded at least one Alertmanager delivery error in 10 minutes. Inspect the loopback Alertmanager target and notification queue.
+
+      - alert: KTWalletAlertQueueSaturated
+        expr: |
+          prometheus_notifications_queue_length
+          /
+          clamp_min(prometheus_notifications_queue_capacity, 1)
+          > 0.80
+        for: 5m
+        labels:
+          severity: warning
+          service: kt-wallet-monitoring
+        annotations:
+          summary: KT Wallet alert notification queue is saturated
+          description: More than 80% of the Prometheus notification queue has been occupied for 5 minutes.

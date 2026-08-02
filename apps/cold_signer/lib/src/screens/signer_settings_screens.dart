@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../security/biometric_auth.dart';
+import 'signer_signing_screens.dart' show SignerPinEntrySheet;
 import '../state/locale_controller.dart';
 import '../state/signer_wallet_controller.dart';
 
@@ -109,9 +112,16 @@ Future<void> _pickLanguage(BuildContext context) async {
               trailing: (locale?.languageCode == current)
                   ? const Icon(Icons.check, size: 20, color: SignerColors.ok)
                   : null,
-              onTap: () {
-                controller.setLocale(locale);
-                Navigator.of(ctx).pop();
+              onTap: () async {
+                try {
+                  await controller.setLocale(locale);
+                  if (ctx.mounted) Navigator.of(ctx).pop();
+                } on Object {
+                  if (!ctx.mounted) return;
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(content: Text(l10n.settingsSaveFailed)),
+                  );
+                }
               },
             ),
           const SizedBox(height: 12),
@@ -141,7 +151,15 @@ Future<void> _confirmDeviceModeSwitch(
       iconColor: SignerColors.warn,
     ),
   );
-  if (confirmed == true) scope.exitMode();
+  if (confirmed != true) return;
+  try {
+    await scope.exitMode();
+  } on Object {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.deviceModeSaveFailed)));
+  }
 }
 
 /// C18 签名记录.
@@ -200,6 +218,9 @@ class _SignerRecordsScreenState extends State<SignerRecordsScreen> {
     final rows = _filter == 0
         ? all
         : all.where((r) => r.$5 == options[_filter]).toList();
+    final compactLarge =
+        MediaQuery.sizeOf(context).width < 360 &&
+        MediaQuery.textScalerOf(context).scale(12) >= 20;
     return KtScreen(
       theme: _t,
       gap: 16,
@@ -253,34 +274,55 @@ class _SignerRecordsScreenState extends State<SignerRecordsScreen> {
                               style: const TextStyle(
                                 fontSize: 11,
                                 fontFamily: KtFonts.mono,
-                                color: Color(0xFF5A616C),
+                                color: SignerColors.text2,
+                              ),
+                            ),
+                            if (compactLarge) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                amt,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontFamily: KtFonts.mono,
+                                  color: SignerColors.text,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                state,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: color,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (!compactLarge)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              amt,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontFamily: KtFonts.mono,
+                                color: SignerColors.text,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              state,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: color,
                               ),
                             ),
                           ],
                         ),
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            amt,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontFamily: KtFonts.mono,
-                              color: SignerColors.text,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            state,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: color,
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   );
                 }(),
@@ -302,8 +344,9 @@ class SignerWalletManageScreen extends StatefulWidget {
 }
 
 class _SignerWalletManageScreenState extends State<SignerWalletManageScreen> {
-  /// In-memory rename (the demo signer is stateless); null → localized default.
+  /// Gallery-only rename fallback when no live wallet controller is present.
   String? _name;
+  bool _reviewingBackup = false;
 
   Widget _row(
     IconData icon,
@@ -314,41 +357,44 @@ class _SignerWalletManageScreenState extends State<SignerWalletManageScreen> {
   }) => GestureDetector(
     behavior: HitTestBehavior.opaque,
     onTap: onTap,
-    child: Row(
-      children: [
-        Icon(
-          icon,
-          size: 19,
-          color: danger ? SignerColors.danger : SignerColors.text2,
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: danger ? SignerColors.danger : SignerColors.text,
-                ),
-              ),
-              if (sub.isNotEmpty) ...[
-                const SizedBox(height: 2),
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 19,
+            color: danger ? SignerColors.danger : SignerColors.text2,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Text(
-                  sub,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF5A616C),
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: danger ? SignerColors.danger : SignerColors.text,
                   ),
                 ),
+                if (sub.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    sub,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: SignerColors.text2,
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
-        ),
-        const Icon(Icons.chevron_right, size: 16, color: Color(0xFF5A616C)),
-      ],
+          const Icon(Icons.chevron_right, size: 16, color: SignerColors.text2),
+        ],
+      ),
     ),
   );
 
@@ -400,13 +446,58 @@ class _SignerWalletManageScreenState extends State<SignerWalletManageScreen> {
       ),
     );
     if (result != null && result.isNotEmpty && mounted) {
-      setState(() => _name = result);
+      final wallet = SignerWalletScope.maybeOf(context);
+      if (wallet?.hasWallet ?? false) {
+        await wallet!.renameWallet(result);
+      } else {
+        setState(() => _name = result);
+      }
     }
+  }
+
+  Future<void> _reviewBackup() async {
+    if (_reviewingBackup) return;
+    final wallet = SignerWalletScope.maybeOf(context);
+    if (wallet == null || !wallet.hasWallet) {
+      // Explicit debug gallery snapshot only.
+      await context.push('/mnemonic-show');
+      return;
+    }
+    setState(() => _reviewingBackup = true);
+    try {
+      final flow = await wallet.exportMnemonicForReview();
+      if (!mounted) return;
+      await context.push('/mnemonic-show', extra: flow);
+    } catch (_) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(l10n.mnemonicReviewFailed)));
+    } finally {
+      if (mounted) setState(() => _reviewingBackup = false);
+    }
+  }
+
+  String _walletIdLabel(String? walletId) {
+    if (walletId == null || walletId.isEmpty) return 'WLT-3E8A91';
+    if (walletId.length <= 14) return walletId;
+    return '${walletId.substring(0, 8)}…${walletId.substring(walletId.length - 4)}';
+  }
+
+  String _createdDate(int? epochSeconds) {
+    if (epochSeconds == null) return '2026-06-07';
+    return DateFormat('yyyy-MM-dd').format(
+      DateTime.fromMillisecondsSinceEpoch(epochSeconds * 1000).toLocal(),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final wallet = SignerWalletScope.maybeOf(context);
+    final metadata = wallet?.metadata;
+    final largeText = MediaQuery.textScalerOf(context).scale(12) >= 20;
     return KtScreen(
       theme: _t,
       gap: 16,
@@ -438,7 +529,7 @@ class _SignerWalletManageScreenState extends State<SignerWalletManageScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _name ?? l10n.walletMainName,
+                      _name ?? metadata?.name ?? l10n.walletMainName,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -447,34 +538,60 @@ class _SignerWalletManageScreenState extends State<SignerWalletManageScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'WLT-3E8A91 · ${l10n.walletCreatedOn('2026-06-07')}',
+                      '${_walletIdLabel(metadata?.walletId)} · '
+                      '${l10n.walletCreatedOn(_createdDate(metadata?.createdAt))}',
                       style: const TextStyle(
                         fontSize: 12,
                         fontFamily: KtFonts.mono,
-                        color: Color(0xFF5A616C),
+                        color: SignerColors.text2,
                       ),
                     ),
+                    if (largeText) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: SignerColors.ok.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            l10n.backedUp,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: SignerColors.ok,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: SignerColors.ok.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  l10n.backedUp,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: SignerColors.ok,
+              if (!largeText)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: SignerColors.ok.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    l10n.backedUp,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: SignerColors.ok,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         ),
@@ -487,8 +604,10 @@ class _SignerWalletManageScreenState extends State<SignerWalletManageScreen> {
               _row(
                 Icons.checklist,
                 l10n.mnemonicBackupCheck,
-                l10n.mnemonicBackupCheckDesc,
-                onTap: () => context.push('/mnemonic-show'),
+                _reviewingBackup
+                    ? l10n.authTitle
+                    : l10n.mnemonicBackupCheckDesc,
+                onTap: _reviewingBackup ? null : _reviewBackup,
               ),
               const SizedBox(height: 16),
               _row(
@@ -574,7 +693,11 @@ class _SignerSecuritySettingsScreenState
     } else {
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
-        ..showSnackBar(const SnackBar(content: Text('此设备没有可用的生物识别')));
+        ..showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context).biometricUnavailable),
+          ),
+        );
     }
   }
 
@@ -583,6 +706,7 @@ class _SignerSecuritySettingsScreenState
     final l10n = AppLocalizations.of(context);
     final localeController = LocaleScope.of(context);
     final modeScope = DeviceModeScope.maybeOf(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
     Widget toggleRow(
       IconData icon,
       String label,
@@ -594,37 +718,41 @@ class _SignerSecuritySettingsScreenState
       key: key,
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: Row(
-        children: [
-          Icon(icon, size: 19, color: SignerColors.text2),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: SignerColors.text,
-                  ),
-                ),
-                if (sub.isNotEmpty) ...[
-                  const SizedBox(height: 2),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: Row(
+          children: [
+            Icon(icon, size: 19, color: SignerColors.text2),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    sub,
+                    label,
                     style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF5A616C),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: SignerColors.text,
                     ),
                   ),
+                  if (sub.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      sub,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF5A616C),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-          _switch(on),
-        ],
+            _switch(on),
+          ],
+        ),
       ),
     );
     return KtScreen(
@@ -689,26 +817,33 @@ class _SignerSecuritySettingsScreenState
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => context.push('/set-password'),
-                child: Row(
-                  children: [
-                    const Icon(Icons.lock, size: 19, color: SignerColors.text2),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        l10n.changeAppPassword,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: SignerColors.text,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.lock,
+                        size: 19,
+                        color: SignerColors.text2,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          l10n.changeAppPassword,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: SignerColors.text,
+                          ),
                         ),
                       ),
-                    ),
-                    const Icon(
-                      Icons.chevron_right,
-                      size: 16,
-                      color: Color(0xFF5A616C),
-                    ),
-                  ],
+                      const Icon(
+                        Icons.chevron_right,
+                        size: 16,
+                        color: SignerColors.text2,
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -743,37 +878,81 @@ class _SignerSecuritySettingsScreenState
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => _pickLanguage(context),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.language,
-                      size: 19,
-                      color: SignerColors.text2,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        l10n.displayLanguage,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: SignerColors.text,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: largeText
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.language,
+                                  size: 19,
+                                  color: SignerColors.text2,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    l10n.displayLanguage,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: SignerColors.text,
+                                    ),
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.chevron_right,
+                                  size: 16,
+                                  color: SignerColors.text2,
+                                ),
+                              ],
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.only(left: 31, top: 6),
+                              child: Text(
+                                _languageLabel(l10n, localeController.locale),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: SignerColors.text2,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            const Icon(
+                              Icons.language,
+                              size: 19,
+                              color: SignerColors.text2,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                l10n.displayLanguage,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: SignerColors.text,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              _languageLabel(l10n, localeController.locale),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: SignerColors.text2,
+                              ),
+                            ),
+                            const Icon(
+                              Icons.chevron_right,
+                              size: 16,
+                              color: SignerColors.text2,
+                            ),
+                          ],
                         ),
-                      ),
-                    ),
-                    Text(
-                      _languageLabel(l10n, localeController.locale),
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: SignerColors.text2,
-                      ),
-                    ),
-                    const Icon(
-                      Icons.chevron_right,
-                      size: 16,
-                      color: Color(0xFF5A616C),
-                    ),
-                  ],
                 ),
               ),
               // Only when embedded in the combined single-installer app: switch
@@ -783,37 +962,40 @@ class _SignerSecuritySettingsScreenState
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => _confirmDeviceModeSwitch(context, modeScope),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.devices_outlined,
-                        size: 19,
-                        color: SignerColors.text2,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          l10n.deviceMode,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: SignerColors.text,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        l10n.deviceModeSigner,
-                        style: const TextStyle(
-                          fontSize: 13,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.devices_outlined,
+                          size: 19,
                           color: SignerColors.text2,
                         ),
-                      ),
-                      const Icon(
-                        Icons.chevron_right,
-                        size: 16,
-                        color: Color(0xFF5A616C),
-                      ),
-                    ],
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            l10n.deviceMode,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: SignerColors.text,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          l10n.deviceModeSigner,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: SignerColors.text2,
+                          ),
+                        ),
+                        const Icon(
+                          Icons.chevron_right,
+                          size: 16,
+                          color: SignerColors.text2,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -826,15 +1008,94 @@ class _SignerSecuritySettingsScreenState
 }
 
 /// C21 删除钱包.
-class SignerDeleteScreen extends StatelessWidget {
-  const SignerDeleteScreen({super.key});
+class SignerDeleteScreen extends StatefulWidget {
+  const SignerDeleteScreen({super.key, this.auth});
+
+  final BiometricAuth? auth;
+
+  @override
+  State<SignerDeleteScreen> createState() => _SignerDeleteScreenState();
+}
+
+class _SignerDeleteScreenState extends State<SignerDeleteScreen> {
+  final _confirmationController = TextEditingController();
+  bool _pinVerified = false;
+  bool _deviceVerified = false;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _confirmationController.dispose();
+    super.dispose();
+  }
+
+  bool _phraseMatches(AppLocalizations l10n) =>
+      _confirmationController.text.trim() ==
+      l10n.deleteWalletConfirmationPhrase;
+
+  Future<bool> _verifyPin(SignerWalletController controller) async {
+    final l10n = AppLocalizations.of(context);
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: SignerColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SignerPinEntrySheet(
+        pinLock: controller.pinLock,
+        title: l10n.enterPinToDelete,
+      ),
+    );
+    if (!mounted || ok != true) return false;
+    setState(() => _pinVerified = true);
+    return true;
+  }
+
+  Future<bool> _verifyDevice(SignerWalletController controller) async {
+    if (!controller.biometricEnabled) return true;
+    final l10n = AppLocalizations.of(context);
+    final outcome = await (widget.auth ?? BiometricAuth.instance).authenticate(
+      reason: l10n.verifyToDeleteWallet,
+    );
+    if (!mounted) return false;
+    if (outcome != BiometricOutcome.success) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(content: Text(l10n.deleteAuthenticationFailed)),
+        );
+      return false;
+    }
+    setState(() => _deviceVerified = true);
+    return true;
+  }
 
   /// Destructive confirmation. In the live flow the confirm wipes the secure
   /// vault (mnemonic, metadata, PIN, lockout) and the anti-replay records;
   /// without a scope (gallery/goldens) it just returns to onboarding.
-  Future<void> _confirmDelete(BuildContext context) async {
+  Future<void> _confirmDelete() async {
     final l10n = AppLocalizations.of(context);
-    final controller = SignerWalletScope.maybeOf(context);
+    final scopedController = SignerWalletScope.maybeOf(context);
+    final controller = scopedController?.hasWallet == true
+        ? scopedController
+        : null;
+    if (controller != null) {
+      if (!_phraseMatches(l10n) || _busy) return;
+      setState(() => _busy = true);
+      final pinOk = await _verifyPin(controller);
+      if (!mounted) return;
+      if (!pinOk) {
+        setState(() => _busy = false);
+        return;
+      }
+      final deviceOk = await _verifyDevice(controller);
+      if (!mounted) return;
+      if (!deviceOk) {
+        setState(() => _busy = false);
+        return;
+      }
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => KtConfirmDialog(
@@ -848,14 +1109,38 @@ class SignerDeleteScreen extends StatelessWidget {
         destructive: true,
       ),
     );
-    if (confirmed != true) return;
-    if (controller != null) await controller.deleteWallet();
-    if (context.mounted) context.go('/welcome');
+    if (!mounted) return;
+    if (confirmed != true) {
+      if (controller != null) setState(() => _busy = false);
+      return;
+    }
+    if (controller != null) {
+      try {
+        await controller.deleteWallet();
+      } catch (_) {
+        if (!mounted) return;
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(content: Text(l10n.deleteWalletFailed)));
+        return;
+      }
+    }
+    if (!mounted) return;
+    context.go('/welcome');
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+    final scopedController = SignerWalletScope.maybeOf(context);
+    final controller = scopedController?.hasWallet == true
+        ? scopedController
+        : null;
+    final live = controller != null;
+    final phraseMatches = _phraseMatches(l10n);
+    final requiresDeviceAuth = controller?.biometricEnabled ?? false;
     return KtScreen(
       theme: _t,
       gap: 20,
@@ -870,7 +1155,9 @@ class SignerDeleteScreen extends StatelessWidget {
             width: double.infinity,
             height: 52,
             child: FilledButton.icon(
-              onPressed: () => _confirmDelete(context),
+              onPressed: live && (!phraseMatches || _busy)
+                  ? null
+                  : _confirmDelete,
               icon: const Icon(
                 Icons.delete_outline,
                 size: 18,
@@ -896,25 +1183,38 @@ class SignerDeleteScreen extends StatelessWidget {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => Navigator.of(context).maybePop(),
-            child: Text(
-              l10n.actionCancel,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: SignerColors.text2,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Center(
+                child: Text(
+                  l10n.actionCancel,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: SignerColors.text2,
+                  ),
+                ),
               ),
             ),
           ),
         ],
       ),
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: largeText ? 12 : 0,
+          runSpacing: 8,
           children: [
             for (final (label, done, n) in [
-              (l10n.stepPassword, true, '1'),
-              (l10n.checkBiometric, true, '2'),
-              (l10n.stepConfirmText, false, '3'),
+              (l10n.stepPassword, _pinVerified, '1'),
+              if (requiresDeviceAuth)
+                (l10n.checkBiometric, _deviceVerified, '2'),
+              (
+                l10n.stepConfirmText,
+                phraseMatches,
+                requiresDeviceAuth ? '3' : '2',
+              ),
             ]) ...[
               Row(
                 children: [
@@ -942,17 +1242,29 @@ class SignerDeleteScreen extends StatelessWidget {
                           ),
                   ),
                   const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: done ? SignerColors.ok : SignerColors.text2,
+                  if (largeText)
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: done ? SignerColors.ok : SignerColors.text2,
+                        ),
+                      ),
+                    )
+                  else
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: done ? SignerColors.ok : SignerColors.text2,
+                      ),
                     ),
-                  ),
                 ],
               ),
-              if (n != '3')
+              if (!largeText && n != (requiresDeviceAuth ? '3' : '2'))
                 Container(
                   width: 20,
                   height: 1.5,
@@ -979,12 +1291,14 @@ class SignerDeleteScreen extends StatelessWidget {
                     color: SignerColors.danger,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    l10n.irreversibleAction,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: SignerColors.danger,
+                  Expanded(
+                    child: Text(
+                      l10n.irreversibleAction,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: SignerColors.danger,
+                      ),
                     ),
                   ),
                 ],
@@ -1013,19 +1327,37 @@ class SignerDeleteScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            Container(
-              height: 50,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              alignment: Alignment.centerLeft,
-              decoration: BoxDecoration(
-                color: SignerColors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: SignerColors.danger, width: 1.5),
+            TextField(
+              key: const ValueKey('delete-confirmation-input'),
+              controller: _confirmationController,
+              enabled: live && !_busy,
+              autocorrect: false,
+              enableSuggestions: false,
+              style: const TextStyle(fontSize: 15, color: SignerColors.text),
+              decoration: InputDecoration(
+                hintText: l10n.deleteWalletConfirmationPhrase,
+                filled: true,
+                fillColor: SignerColors.surface,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: SignerColors.danger),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: SignerColors.danger,
+                    width: 1.5,
+                  ),
+                ),
               ),
-              child: const Text(
-                '删除钱',
-                style: TextStyle(fontSize: 15, color: SignerColors.text),
-              ),
+              onChanged: (_) => setState(() {
+                _pinVerified = false;
+                _deviceVerified = false;
+              }),
             ),
           ],
         ),

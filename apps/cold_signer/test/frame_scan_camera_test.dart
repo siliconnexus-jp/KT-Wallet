@@ -30,26 +30,39 @@ void main() {
     expect(AirgapPayload.decode(session.payload!), isA<SignRequest>());
   });
 
-  testWidgets('C6 renders the simulated viewfinder when no camera is available',
-      (tester) async {
-    tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
-    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
-    await tester.pumpWidget(MaterialApp(
-      locale: const Locale('zh'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: const SignerScanScreen(availability: FakeCameraAvailability(false)),
-    ));
-    await tester.pumpAndSettle();
-
-    expect(find.byIcon(Icons.qr_code_2), findsOneWidget);
-    expect(find.byType(MobileScanner), findsNothing);
-
-    // The simulated tap loop still captures demo frames.
-    final total = demoSignRequestFrames().length;
-    expect(find.text('接收分片 0 / $total'), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.qr_code_2));
-    await tester.pump();
-    expect(find.text('接收分片 1 / $total'), findsOneWidget);
+  test('oversized camera text is rejected before base64 allocation', () {
+    final session = QrFrameScanSession();
+    session.add('A' * (AirgapFrame.maxQrTextLength + 1));
+    expect(session.anomalies, 1);
+    expect(session.progress.received, 0);
   });
+
+  testWidgets(
+    'C6 renders the simulated viewfinder when no camera is available',
+    (tester) async {
+      tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+      addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const SignerScanScreen(
+            availability: FakeCameraAvailability(false),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.qr_code_2), findsOneWidget);
+      expect(find.byType(MobileScanner), findsNothing);
+
+      // The simulated tap loop still captures demo frames.
+      final total = demoSignRequestFrames().length;
+      expect(find.text('接收分片 0 / $total'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.qr_code_2));
+      await tester.pump();
+      expect(find.text('接收分片 1 / $total'), findsOneWidget);
+    },
+  );
 }

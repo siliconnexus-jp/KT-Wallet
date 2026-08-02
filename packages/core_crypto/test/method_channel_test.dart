@@ -78,13 +78,39 @@ void main() {
       expect(state.failCount, 5);
       expect(state.cooldownSec, 42);
     });
+
+    test(
+      'readBackup binds the payload to its declared format version',
+      () async {
+        late MethodCall received;
+        mockNative((call) async {
+          received = call;
+          return 'word1 word2';
+        });
+
+        await api.readBackup(
+          blob: Uint8List(60),
+          password: 'correct horse',
+          format: BackupCipherFormat.portableV2,
+        );
+
+        expect(received.method, 'readBackup');
+        expect(received.arguments, {
+          'blob': Uint8List(60),
+          'password': 'correct horse',
+          'formatVersion': 2,
+        });
+      },
+    );
   });
 
   group('error code → typed exception mapping (DD §2.1)', () {
     final cases = <String, Matcher>{
       'AUTH_FAILED': isA<AuthFailedException>(),
+      'AUTH_UNAVAILABLE': isA<AuthUnavailableException>(),
       'AUTH_CANCELLED': isA<AuthCancelledException>(),
       'WALLET_NOT_FOUND': isA<WalletNotFoundException>(),
+      'WALLET_EXISTS': isA<WalletAlreadyExistsException>(),
       'INVALID_MNEMONIC': isA<InvalidMnemonicException>(),
       'INVALID_INPUT': isA<InvalidInputException>(),
       'SIGN_FAILED': isA<SignFailedException>(),
@@ -130,9 +156,84 @@ void main() {
         throwsA(isA<SignFailedException>()),
       );
     });
+
+    test(
+      'native exception text and unapproved details never cross into Dart',
+      () async {
+        const canary =
+            'abandon ability able about above absent absorb abstract absurd abuse access accident';
+        mockNative((call) async {
+          throw PlatformException(
+            code: 'SIGN_FAILED',
+            message: 'wallet w-secret failed while handling $canary',
+            details: const {'walletId': 'w-secret', 'rawTransaction': canary},
+          );
+        });
+
+        Object? thrown;
+        try {
+          await api.exportMnemonic('w1');
+        } on Object catch (error) {
+          thrown = error;
+        }
+
+        expect(thrown, isA<SignFailedException>());
+        expect(thrown.toString(), isNot(contains(canary)));
+        expect(thrown.toString(), isNot(contains('w-secret')));
+      },
+    );
+
+    test('AUTH_LOCKED keeps only the allowlisted cooldown detail', () async {
+      const canary = 'private-native-diagnostic-canary';
+      mockNative((call) async {
+        throw PlatformException(
+          code: 'AUTH_LOCKED',
+          message: canary,
+          details: const {'cooldownSec': 45, 'nativeException': canary},
+        );
+      });
+
+      Object? thrown;
+      try {
+        await api.exportMnemonic('w1');
+      } on Object catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown, isA<AuthLockedException>());
+      expect((thrown! as AuthLockedException).cooldownSec, 45);
+      expect(thrown.toString(), isNot(contains(canary)));
+    });
   });
 
   group('local validation happens before the channel', () {
+    test('new backup passwords reject offline-guessable patterns', () {
+      expect(
+        CoreCryptoValidation.backupPasswordIssue('short pass'),
+        BackupPasswordIssue.tooShort,
+      );
+      expect(
+        CoreCryptoValidation.backupPasswordIssue('1234123412341234'),
+        BackupPasswordIssue.predictable,
+      );
+      expect(
+        CoreCryptoValidation.backupPasswordIssue('abcdefghijklmn'),
+        BackupPasswordIssue.predictable,
+      );
+      expect(
+        CoreCryptoValidation.backupPasswordIssue('correct horse battery'),
+        isNull,
+      );
+      expect(
+        CoreCryptoValidation.backupPasswordIssue('安全备份密码甲乙丙丁戊己庚辛壬癸'),
+        isNull,
+      );
+      expect(
+        CoreCryptoValidation.backupPasswordIssue(List.filled(129, 'x').join()),
+        BackupPasswordIssue.tooLong,
+      );
+    });
+
     test('invalid walletId never reaches native', () async {
       var nativeCalled = false;
       mockNative((call) async {
@@ -153,6 +254,22 @@ void main() {
         return <String>[];
       });
       expect(await api.suggestWords('  '), isEmpty);
+      expect(nativeCalled, isFalse);
+    });
+
+    test('suggestion limit is enforced before and after native', () async {
+      var nativeCalled = false;
+      mockNative((call) async {
+        nativeCalled = true;
+        expect(call.method, 'suggestWords');
+        expect(call.arguments, {'prefix': 'ab', 'limit': 2});
+        return <String>['abandon', 'ability', 'able'];
+      });
+
+      expect(await api.suggestWords('ab', limit: 2), ['abandon', 'ability']);
+      expect(nativeCalled, isTrue);
+      nativeCalled = false;
+      expect(() => api.suggestWords('ab', limit: 21), throwsArgumentError);
       expect(nativeCalled, isFalse);
     });
   });

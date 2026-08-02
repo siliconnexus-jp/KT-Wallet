@@ -1,5 +1,7 @@
 import 'package:cold_signer/l10n/app_localizations.dart';
+import 'package:cold_signer/src/screens/signer_signing_screens.dart';
 import 'package:cold_signer/src/signer_router.dart';
+import 'package:cold_signer/src/signing/demo_airgap.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -14,17 +16,32 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
-      await tester.pumpWidget(MaterialApp(
-        debugShowCheckedModeBanner: false,
-        locale: const Locale('zh'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        theme: ThemeData(brightness: Brightness.dark, scaffoldBackgroundColor: SignerColors.bg),
-        home: Builder(builder: entry.value.$2),
-      ));
+      final demoRequest = demoSignRequest();
+      await tester.pumpWidget(
+        MaterialApp(
+          debugShowCheckedModeBanner: false,
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: ThemeData(
+            brightness: Brightness.dark,
+            scaffoldBackgroundColor: SignerColors.bg,
+          ),
+          home: entry.key == 'C9 签名结果二维码'
+              ? SignerResultQrScreen(
+                  request: demoRequest,
+                  result: demoSignResult(demoRequest),
+                  fragmentChunkSize: demoChunkSize,
+                )
+              : Builder(builder: entry.value.$2),
+        ),
+      );
       await tester.pump();
 
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/screens/$slug.png'));
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile('goldens/screens/$slug.png'),
+      );
     });
   }
 }

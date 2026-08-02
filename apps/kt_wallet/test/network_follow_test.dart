@@ -29,6 +29,8 @@ import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/test_wallet_scope.dart';
+
 // ---- fakes ------------------------------------------------------------------
 
 /// 按 URL 分发 JSON-RPC 请求的假传输层。
@@ -82,12 +84,24 @@ class _CountingBalanceService extends BalanceService {
 class _CountingPriceService extends PriceService {
   int calls = 0;
   final Map<Coin, double>? quotes;
-  _CountingPriceService([this.quotes]);
+  final Map<String, double> tokenQuotes;
+  final Map<String, double> tokenChanges;
+  _CountingPriceService({
+    this.quotes,
+    this.tokenQuotes = const {},
+    this.tokenChanges = const {},
+  });
   @override
   Future<Map<Coin, double>?> fetchUsdPrices() async {
     calls++;
     return quotes;
   }
+
+  @override
+  double? tokenPriceUsd(String symbol) => tokenQuotes[symbol];
+
+  @override
+  double? tokenChange24hPercent(String symbol) => tokenChanges[symbol];
 }
 
 /// 链上参数拉取总是失败的测试替身——驱动 W6 的回退路径。
@@ -141,7 +155,7 @@ Widget _app(Widget home) => MaterialApp(
   locale: const Locale('zh'),
   localizationsDelegates: AppLocalizations.localizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,
-  home: home,
+  home: withTestWalletScope(home),
 );
 
 void main() {
@@ -317,7 +331,17 @@ void main() {
 
   group('测试网价格抑制', () {
     test('全测试网时完全跳过价格拉取,法币价值为 null', () async {
-      final prices = _CountingPriceService({Coin.eth: 2000.0});
+      final prices =
+          _CountingPriceService(
+            quotes: {Coin.eth: 2000.0},
+            tokenQuotes: const {'USDT': 1.0},
+            tokenChanges: const {'USDT': 0.1},
+          )..restoreLastGood(
+            nativeUsd: const {Coin.eth: 2000.0},
+            tokenUsd: const {'USDT': 1.0},
+            nativeChange24h: const {Coin.eth: 2.5},
+            tokenChange24h: const {'USDT': 0.1},
+          );
       final controller = MarketController(
         wallets: _wallets(),
         balances: _CountingBalanceService(),
@@ -328,17 +352,23 @@ void main() {
       await controller.refresh();
       expect(prices.calls, 0); // 无可定价资产 → 连询价都不发
       expect(controller.pricesUsd, isNull);
+      expect(controller.showingCachedData, isFalse);
       for (final coin in Coin.values) {
         expect(controller.fiatValueUsd(coin), isNull, reason: '$coin');
+        expect(controller.priceUsd(coin), isNull, reason: '$coin price');
       }
+      expect(controller.tokenPriceUsdFor(Coin.eth, 'USDT'), isNull);
+      expect(controller.tokenChange24hPercentFor(Coin.eth, 'USDT'), isNull);
       expect(controller.totalUsd, isNull);
       controller.dispose();
     });
 
     test('混合环境仍拉取一次价格,但测试网链的法币价值保持 null', () async {
-      final prices = _CountingPriceService({
-        for (final c in Coin.values) c: 1.0,
-      });
+      final prices = _CountingPriceService(
+        quotes: {for (final c in Coin.values) c: 1.0},
+        tokenQuotes: const {'USDT': 0.99},
+        tokenChanges: const {'USDT': -0.25},
+      );
       final controller = MarketController(
         wallets: _wallets(),
         balances: _CountingBalanceService(),
@@ -350,6 +380,12 @@ void main() {
       expect(prices.calls, 1);
       expect(controller.fiatValueUsd(Coin.eth), isNull); // 测试网 → 抑制
       expect(controller.fiatValueUsd(Coin.tron), isNotNull); // 主网 → 正常
+      expect(controller.priceUsd(Coin.eth), isNull);
+      expect(controller.priceUsd(Coin.tron), 1.0);
+      expect(controller.tokenPriceUsdFor(Coin.eth, 'USDT'), isNull);
+      expect(controller.tokenChange24hPercentFor(Coin.eth, 'USDT'), isNull);
+      expect(controller.tokenPriceUsdFor(Coin.tron, 'USDT'), 0.99);
+      expect(controller.tokenChange24hPercentFor(Coin.tron, 'USDT'), -0.25);
       controller.dispose();
     });
   });
@@ -359,7 +395,7 @@ void main() {
       wallets: _wallets(),
       balances: _CountingBalanceService(),
       prices: _CountingPriceService(
-        testnet ? null : {for (final c in Coin.values) c: 1.0},
+        quotes: testnet ? null : {for (final c in Coin.values) c: 1.0},
       ),
       tokens: _FakeTokenService(const {}),
       isTestnet: (_) => testnet,
@@ -399,7 +435,7 @@ void main() {
       controller.dispose();
     });
 
-    testWidgets('无作用域时首页与从前逐字节一致(演示常量,无徽章)', (tester) async {
+    testWidgets('显式测试钱包保持主网画廊布局', (tester) async {
       await tester.pumpWidget(_app(const HomeScreen()));
       await tester.pumpAndSettle();
       expect(find.text(r'$862.40'), findsOneWidget); // 已知演示字符串
@@ -464,10 +500,7 @@ void main() {
       await tester.pump();
 
       expect(session.request, isNull);
-      expect(
-        find.text('Unable to estimate the network fee. Sending is disabled.'),
-        findsOneWidget,
-      );
+      expect(find.text('无法验证链上交易参数，签名已禁用。'), findsOneWidget);
     });
 
     test('buildSignRequest 把活动网络的 chainId 与名称写进协议字段', () {
@@ -515,7 +548,7 @@ void main() {
         explorerTxUrl(solanaDevnet, 'sig'),
         'https://explorer.solana.com/tx/sig?cluster=devnet',
       );
-      // 无 explorerUrl 的自定义网络回退到该链的主网浏览器。
+      // 未配置 explorer 的私链/测试链不能伪造为同协议主网链接。
       const custom = Network(
         id: 'custom-1',
         chain: Chain.ethereum,
@@ -525,7 +558,15 @@ void main() {
         evmChainId: 11155111,
         isTestnet: true,
       );
-      expect(explorerTxUrl(custom, '0xabc'), 'https://etherscan.io/tx/0xabc');
+      expect(explorerTxUrl(custom, '0xabc'), isNull);
+    });
+
+    test('交易标识只作为一个路径段，不能注入 query 或 fragment', () {
+      expect(
+        explorerTxUrl(ethSepolia, '0xabc?redirect=https://evil.example/#x'),
+        'https://sepolia.etherscan.io/tx/'
+        '0xabc%3Fredirect%3Dhttps%3A%2F%2Fevil.example%2F%23x',
+      );
     });
 
     testWidgets('交易详情打开的链接使用活动 TRON 网络(Nile 覆盖)', (tester) async {

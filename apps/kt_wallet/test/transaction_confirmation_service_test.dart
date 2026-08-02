@@ -104,7 +104,7 @@ void main() {
       rest.responses['/wallet/getnowblock'] = {
         'blockID': List<String>.filled(32, '00').join(),
         'block_header': {
-          'raw_data': {'number': 102},
+          'raw_data': {'number': 102, 'timestamp': 1780000000000},
         },
       };
       final confirmed = await service.check(Chain.tron, 'hash');

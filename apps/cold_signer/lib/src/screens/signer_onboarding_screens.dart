@@ -6,7 +6,9 @@ import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../security/biometric_auth.dart';
+import '../security/secure_vault.dart' show WalletMetadata, isFlutterTestEnv;
 import '../signing/mnemonic_quiz.dart';
+import '../signing/mnemonic_review.dart';
 import '../state/signer_wallet_controller.dart';
 
 const _t = AppTheme.signer;
@@ -39,58 +41,64 @@ Widget _signerBtn(
   onPressed: onPressed ?? () {},
 );
 
-Widget _wordGrid(List<String> words) => Column(
-  children: [
-    for (var r = 0; r < (words.length / 2).ceil(); r++)
-      Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Row(
-          children: [
-            for (var c = 0; c < 2; c++) ...[
-              if (c > 0) const SizedBox(width: 10),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: SignerColors.surface,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        (r * 2 + c + 1).toString().padLeft(2, '0'),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontFamily: KtFonts.mono,
-                          color: Color(0xFF5A616C),
+Widget _wordGrid(BuildContext context, List<String> words) {
+  final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+  final columns = largeText ? 1 : 2;
+  return Column(
+    children: [
+      for (var r = 0; r < (words.length / columns).ceil(); r++)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
+            children: [
+              for (var c = 0; c < columns; c++) ...[
+                if (c > 0) const SizedBox(width: 10),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: SignerColors.surface,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          (r * 2 + c + 1).toString().padLeft(2, '0'),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontFamily: KtFonts.mono,
+                            color: SignerColors.text2,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      // Keyed so flow tests can read the (possibly generated)
-                      // word at each position; keys never affect rendering.
-                      Text(
-                        words[r * 2 + c],
-                        key: Key('mnemonic-word-${r * 2 + c}'),
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          fontFamily: KtFonts.mono,
-                          color: SignerColors.text,
+                        const SizedBox(width: 10),
+                        // Keyed so flow tests can read the (possibly generated)
+                        // word at each position; keys never affect rendering.
+                        Expanded(
+                          child: Text(
+                            words[r * columns + c],
+                            key: Key('mnemonic-word-${r * columns + c}'),
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              fontFamily: KtFonts.mono,
+                              color: SignerColors.text,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
-  ],
-);
+    ],
+  );
+}
 
 /// C11 启动页.
 class SignerSplashScreen extends StatelessWidget {
@@ -227,7 +235,16 @@ class SignerWelcomeScreen extends StatelessWidget {
           if (modeScope != null) ...[
             const SizedBox(height: 4),
             TextButton(
-              onPressed: modeScope.exitMode,
+              onPressed: () async {
+                try {
+                  await modeScope.exitMode();
+                } on Object {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(l10n.deviceModeSaveFailed)),
+                  );
+                }
+              },
               child: Text(
                 l10n.deviceModeSwitchTitle,
                 style: const TextStyle(fontSize: 13, color: SignerColors.text2),
@@ -394,11 +411,11 @@ class SignerMnemonicWarnScreen extends StatelessWidget {
 
 /// C3 助记词展示.
 class SignerMnemonicShowScreen extends StatelessWidget {
-  const SignerMnemonicShowScreen({super.key, this.words});
+  const SignerMnemonicShowScreen({super.key, this.flow});
 
-  /// The real generated mnemonic (live create flow, via the router override);
-  /// null renders the canned demo list — the gallery/golden baseline.
-  final List<String>? words;
+  /// Real ephemeral words in a live flow. Null is reserved for the explicit
+  /// debug gallery/golden snapshot.
+  final MnemonicReviewFlow? flow;
 
   @override
   Widget build(BuildContext context) {
@@ -414,7 +431,7 @@ class SignerMnemonicShowScreen extends StatelessWidget {
       ),
       bottom: _signerBtn(
         l10n.mnemonicShowConfirmBtn,
-        onPressed: () => context.push('/mnemonic-verify'),
+        onPressed: () => context.push('/mnemonic-verify', extra: flow),
       ),
       children: [
         Text(
@@ -453,7 +470,7 @@ class SignerMnemonicShowScreen extends StatelessWidget {
             ],
           ),
         ),
-        _wordGrid(words ?? _mnemonic),
+        _wordGrid(context, flow?.words ?? _mnemonic),
       ],
     );
   }
@@ -461,7 +478,9 @@ class SignerMnemonicShowScreen extends StatelessWidget {
 
 /// C4 助记词校验.
 class SignerMnemonicVerifyScreen extends StatefulWidget {
-  const SignerMnemonicVerifyScreen({super.key, this.challenge});
+  const SignerMnemonicVerifyScreen({super.key, this.flow, this.challenge});
+
+  final MnemonicReviewFlow? flow;
 
   /// The live challenge over the real generated mnemonic (router override);
   /// null falls back to the fixed demo challenge — the golden baseline.
@@ -497,7 +516,23 @@ class _SignerMnemonicVerifyScreenState
     final l10n = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     if (_selected == _correct) {
-      context.push('/set-password');
+      final flow = widget.flow;
+      if (flow?.purpose == MnemonicReviewPurpose.onboarding) {
+        final controller = SignerWalletScope.maybeOf(context);
+        try {
+          controller?.markMnemonicVerified(flow!.words);
+        } on Object {
+          messenger.showSnackBar(
+            SnackBar(content: Text(l10n.walletSecureStorageFailed)),
+          );
+          return;
+        }
+      }
+      context.go(
+        flow?.purpose == MnemonicReviewPurpose.backup
+            ? '/wallet'
+            : '/set-password',
+      );
     } else {
       setState(() => _selected = null);
       messenger.showSnackBar(SnackBar(content: Text(l10n.verifyWrong)));
@@ -652,7 +687,9 @@ class _SignerMnemonicImportScreenState
     if (!mounted) return;
     setState(() => _busy = false);
     if (!valid) {
-      setState(() => _error = '助记词无效，请检查单词、数量与 BIP-39 校验和');
+      setState(
+        () => _error = AppLocalizations.of(context).mnemonicInvalidChecksum,
+      );
       return;
     }
     unawaited(context.push('/set-password'));
@@ -673,7 +710,7 @@ class _SignerMnemonicImportScreenState
         onBack: () => Navigator.of(context).maybePop(),
       ),
       bottom: _signerBtn(
-        _busy ? '正在校验…' : l10n.actionImport,
+        _busy ? l10n.actionValidating : l10n.actionImport,
         onPressed: _busy ? null : _import,
       ),
       children: [
@@ -800,6 +837,8 @@ Widget _mnemonicImportPreview(BuildContext context, AppLocalizations l10n) {
     '',
     '',
   ];
+  final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+  final columns = largeText ? 1 : 2;
   return KtScreen(
     theme: _t,
     gap: 18,
@@ -824,16 +863,16 @@ Widget _mnemonicImportPreview(BuildContext context, AppLocalizations l10n) {
       ),
       Column(
         children: [
-          for (var r = 0; r < 6; r++)
+          for (var r = 0; r < (typed.length / columns).ceil(); r++)
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Row(
                 children: [
-                  for (var c = 0; c < 2; c++) ...[
+                  for (var c = 0; c < columns; c++) ...[
                     if (c > 0) const SizedBox(width: 10),
                     Expanded(
                       child: () {
-                        final idx = r * 2 + c;
+                        final idx = r * columns + c;
                         final active = idx == 7;
                         return Container(
                           padding: const EdgeInsets.symmetric(
@@ -857,17 +896,19 @@ Widget _mnemonicImportPreview(BuildContext context, AppLocalizations l10n) {
                                 style: const TextStyle(
                                   fontSize: 12,
                                   fontFamily: KtFonts.mono,
-                                  color: Color(0xFF5A616C),
+                                  color: SignerColors.text2,
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              Text(
-                                typed[idx],
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                  fontFamily: KtFonts.mono,
-                                  color: SignerColors.text,
+                              Expanded(
+                                child: Text(
+                                  typed[idx],
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: KtFonts.mono,
+                                    color: SignerColors.text,
+                                  ),
                                 ),
                               ),
                             ],
@@ -887,7 +928,11 @@ Widget _mnemonicImportPreview(BuildContext context, AppLocalizations l10n) {
 
 /// C14 设置密码 (numpad). Two-phase: enter 6 digits, then re-enter to confirm.
 class SignerSetPasswordScreen extends StatefulWidget {
-  const SignerSetPasswordScreen({super.key});
+  const SignerSetPasswordScreen({super.key, this.preview = false});
+
+  /// Explicit gallery/golden mode. Production routes always use false so a
+  /// missing onboarding stage cannot be converted into a no-op PIN success.
+  final bool preview;
   @override
   State<SignerSetPasswordScreen> createState() =>
       _SignerSetPasswordScreenState();
@@ -938,7 +983,9 @@ class _SignerSetPasswordScreenState extends State<SignerSetPasswordScreen> {
       // Live flow: enroll the real PIN (PBKDF2 hash into the secure vault)
       // before moving on. Without a scope (goldens) this is a pure no-op and
       // the screen behaves exactly like the design snapshot.
-      if (controller != null) await controller.setPin(_entry);
+      if (!widget.preview && controller != null) {
+        await controller.setPin(_entry);
+      }
       if (!mounted) return;
       unawaited(context.push('/biometric'));
     } else {
@@ -1028,36 +1075,46 @@ class _SignerSetPasswordScreenState extends State<SignerSetPasswordScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     for (final k in row)
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => _onKey(k),
-                        child: Container(
-                          width: 72,
-                          height: 72,
-                          margin: const EdgeInsets.symmetric(horizontal: 10),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: k.isEmpty || k == 'del'
-                                ? null
-                                : SignerColors.surface,
-                            shape: BoxShape.circle,
+                      if (k.isEmpty)
+                        const SizedBox(width: 92, height: 72)
+                      else
+                        Semantics(
+                          button: true,
+                          label: k == 'del' ? l10n.pinKeyDelete : k,
+                          excludeSemantics: true,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _onKey(k),
+                            child: Container(
+                              width: 72,
+                              height: 72,
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: k.isEmpty || k == 'del'
+                                    ? null
+                                    : SignerColors.surface,
+                                shape: BoxShape.circle,
+                              ),
+                              child: k == 'del'
+                                  ? const Icon(
+                                      Icons.backspace_outlined,
+                                      size: 22,
+                                      color: SignerColors.text2,
+                                    )
+                                  : Text(
+                                      k,
+                                      style: const TextStyle(
+                                        fontSize: 26,
+                                        fontWeight: FontWeight.w500,
+                                        color: SignerColors.text,
+                                      ),
+                                    ),
+                            ),
                           ),
-                          child: k == 'del'
-                              ? const Icon(
-                                  Icons.backspace_outlined,
-                                  size: 22,
-                                  color: SignerColors.text2,
-                                )
-                              : Text(
-                                  k,
-                                  style: const TextStyle(
-                                    fontSize: 26,
-                                    fontWeight: FontWeight.w500,
-                                    color: SignerColors.text,
-                                  ),
-                                ),
                         ),
-                      ),
                   ],
                 ),
               ),
@@ -1074,24 +1131,41 @@ class SignerBiometricScreen extends StatelessWidget {
 
   Future<void> _finish(BuildContext context, {required bool biometric}) async {
     final controller = SignerWalletScope.maybeOf(context);
+    final l10n = AppLocalizations.of(context);
     try {
       if (biometric && !await BiometricAuth.instance.canAuthenticate()) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context)
           ..clearSnackBars()
-          ..showSnackBar(const SnackBar(content: Text('此设备尚未设置可用的生物识别')));
+          ..showSnackBar(SnackBar(content: Text(l10n.biometricUnavailable)));
         return;
       }
-      await controller?.completeOnboarding();
+      // A previous tap may have committed the wallet and then failed while
+      // persisting the biometric preference. Retry that preference without
+      // attempting a second wallet creation; otherwise a missing pending
+      // phrase is a hard error inside completeOnboarding.
+      WalletMetadata? completedWallet;
+      if (controller != null && !controller.hasWallet) {
+        if (controller.pendingMnemonic != null) {
+          completedWallet = await controller.completeOnboarding(
+            walletName: l10n.walletMainName,
+          );
+        } else if (!isFlutterTestEnv) {
+          throw StateError('no wallet onboarding is active');
+        }
+      }
       if (biometric) {
         await controller?.setBiometricEnabled(true);
       }
-      if (context.mounted) unawaited(context.push('/created'));
+      completedWallet ??= controller?.metadata;
+      if (context.mounted) {
+        unawaited(context.push('/created', extra: completedWallet));
+      }
     } catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
-        ..showSnackBar(const SnackBar(content: Text('钱包安全存储失败，未保存任何密钥')));
+        ..showSnackBar(SnackBar(content: Text(l10n.walletSecureStorageFailed)));
     }
   }
 
@@ -1113,12 +1187,17 @@ class SignerBiometricScreen extends StatelessWidget {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => _finish(context, biometric: false),
-            child: Text(
-              l10n.biometricSkip,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: SignerColors.text2,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Center(
+                child: Text(
+                  l10n.biometricSkip,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: SignerColors.text2,
+                  ),
+                ),
               ),
             ),
           ),
@@ -1189,13 +1268,22 @@ class _SignerCreatedScreenState extends State<SignerCreatedScreen> {
           // "Later" skips address export and lands on the offline home.
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => context.go('/home'),
-            child: Text(
-              l10n.later,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: SignerColors.text2,
+            onTap: () {
+              final controller = SignerWalletScope.maybeOf(context);
+              context.go('/home');
+              controller?.finishOnboardingPresentation();
+            },
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Center(
+                child: Text(
+                  l10n.later,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: SignerColors.text2,
+                  ),
+                ),
               ),
             ),
           ),
@@ -1271,22 +1359,37 @@ class _KvRow extends StatelessWidget {
   final String k, v;
   final bool ok;
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Text(k, style: const TextStyle(fontSize: 13, color: SignerColors.text2)),
-      const SizedBox(width: 16),
-      Expanded(
-        child: Text(
-          v,
-          textAlign: TextAlign.right,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: ok ? SignerColors.ok : SignerColors.text,
-          ),
-        ),
+  Widget build(BuildContext context) {
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+    final label = Text(
+      k,
+      style: const TextStyle(fontSize: 13, color: SignerColors.text2),
+    );
+    final value = Text(
+      v,
+      textAlign: largeText ? TextAlign.left : TextAlign.right,
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+        color: ok ? SignerColors.ok : SignerColors.text,
       ),
-    ],
-  );
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (largeText || constraints.maxWidth < 280) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [label, const SizedBox(height: 6), value],
+          );
+        }
+        return Row(
+          children: [
+            label,
+            const SizedBox(width: 16),
+            Expanded(child: value),
+          ],
+        );
+      },
+    );
+  }
 }

@@ -6,11 +6,13 @@ import 'package:core_crypto/core_crypto.dart';
 
 import '../market/balance_service.dart' show RpcEndpointResolver;
 import '../market/gateway_client.dart';
+import '../observability/experience_metrics.dart';
 import '../rpc/http_transport.dart';
 import '../wallets/wallet_model.dart';
 import 'airgap_codec.dart';
 import 'broadcast_service.dart';
 import 'chain_params_service.dart';
+import 'network_identity.dart';
 import 'transfer_draft.dart';
 
 class LocalTransferException implements Exception {
@@ -18,6 +20,26 @@ class LocalTransferException implements Exception {
   final String message;
   @override
   String toString() => message;
+}
+
+/// The node explicitly rejected a syntactically valid broadcast request.
+class LocalTransferRejectedException extends LocalTransferException {
+  LocalTransferRejectedException(this.kind)
+    : super(publicRpcRejectionMessage(kind));
+
+  final RpcRejectionKind kind;
+}
+
+/// A broadcast request began but no authoritative answer reached the app.
+/// The signed transaction may already be on-chain and must not be re-sent.
+class LocalTransferUncertainException extends LocalTransferException {
+  const LocalTransferUncertainException(super.message);
+}
+
+/// This app cannot submit the signed payload on the selected network.
+class LocalTransferUnsupportedException extends LocalTransferException {
+  const LocalTransferUnsupportedException()
+    : super('Broadcast is unsupported on this network');
 }
 
 class EvmNonceAlreadyConsumed extends LocalTransferException {
@@ -33,37 +55,34 @@ class EvmNonceAlreadyConsumed extends LocalTransferException {
   final int confirmedNonce;
 }
 
-/// An exact EIP-1559 envelope ready for native signing. Persist these fields
-/// before signing/broadcasting so a restart can safely accelerate or cancel
-/// the transaction with the same nonce.
-class PreparedEvmTransfer {
-  PreparedEvmTransfer({
-    required this.chain,
-    required this.coin,
-    required this.from,
-    required this.recipient,
-    required this.amountRaw,
-    required this.tokenContract,
-    required this.nonce,
-    required this.maxPriorityFeePerGas,
-    required this.maxFeePerGas,
-    required this.gasLimit,
-    required Uint8List unsignedTx,
-  }) : unsignedTx = Uint8List.fromList(unsignedTx);
+class EvmPreflightFailed extends LocalTransferException {
+  const EvmPreflightFailed(String reason)
+    : super('Transaction simulation failed: $reason');
+}
 
-  final Chain chain;
-  final Coin coin;
-  final String from;
-  final String recipient;
-  final BigInt amountRaw;
-  final String? tokenContract;
-  final BigInt nonce;
-  final BigInt maxPriorityFeePerGas;
-  final BigInt maxFeePerGas;
-  final BigInt gasLimit;
-  final Uint8List unsignedTx;
+class TransferInsufficientFunds extends LocalTransferException {
+  const TransferInsufficientFunds(this.asset)
+    : super('Insufficient $asset balance for amount and maximum network fee');
 
-  BigInt get maximumFee => gasLimit * maxFeePerGas;
+  final String asset;
+}
+
+class EvmInsufficientFunds extends TransferInsufficientFunds {
+  const EvmInsufficientFunds(super.asset);
+}
+
+class NonEvmTransferResult {
+  const NonEvmTransferResult({
+    required this.hash,
+    this.referenceBlockHeight,
+    this.expiresAt,
+    this.lastValidBlockHeight,
+  });
+
+  final String hash;
+  final int? referenceBlockHeight;
+  final int? expiresAt;
+  final int? lastValidBlockHeight;
 }
 
 /// Real hot-wallet path shared by the production auth sheet and integration
@@ -77,6 +96,7 @@ class LocalTransferService {
     GatewayResolver? gateway,
     JsonRpcTransport? jsonRpcTransport,
     RestTransport? restTransport,
+    NetworkIdentityVerifier? identityVerifier,
   }) : _params =
            params ??
            ChainParamsService(
@@ -94,36 +114,49 @@ class LocalTransferService {
            ),
        _endpoints = endpoints,
        _jsonRpc = jsonRpcTransport ?? HttpJsonRpcTransport(),
-       _rest = restTransport ?? HttpRestTransport();
+       _rest = restTransport ?? HttpRestTransport(),
+       _identity =
+           identityVerifier ??
+           (endpoints == null
+               ? null
+               : RpcNetworkIdentityVerifier(
+                   jsonRpcTransport: jsonRpcTransport,
+                   restTransport: restTransport,
+                   endpoints: endpoints,
+                 ));
 
   final ChainParamsService _params;
   final BroadcastService _broadcaster;
   final RpcEndpointResolver? _endpoints;
   final JsonRpcTransport _jsonRpc;
   final RestTransport _rest;
+  final NetworkIdentityVerifier? _identity;
 
   Future<String> execute({
     required HotWallet wallet,
     required CoreCrypto crypto,
     required TransferDraft draft,
     required int evmChainId,
+    String? expectedNetworkIdentity,
   }) async {
     final from = addressForChain(wallet.addresses, draft.chain);
     if (draft.chain == Chain.tron) {
-      return _executeTron(
+      return (await _executeTron(
         wallet: wallet,
         crypto: crypto,
         draft: draft,
         from: from,
-      );
+        expectedNetworkIdentity: expectedNetworkIdentity,
+      )).hash;
     }
     if (draft.chain == Chain.solana) {
-      return _executeSolana(
+      return (await _executeSolana(
         wallet: wallet,
         crypto: crypto,
         draft: draft,
         from: from,
-      );
+        expectedNetworkIdentity: expectedNetworkIdentity,
+      )).hash;
     }
     final prepared = await prepareEvm(
       draft: draft,
@@ -137,25 +170,145 @@ class LocalTransferService {
     );
   }
 
+  /// Executes a TRON or Solana transfer and returns the validity boundary
+  /// paired with the exact raw transaction. Production callers persist this
+  /// result together with the local Pending row.
+  Future<NonEvmTransferResult> executeNonEvm({
+    required HotWallet wallet,
+    required CoreCrypto crypto,
+    required TransferDraft draft,
+    String? expectedNetworkIdentity,
+  }) {
+    final from = addressForChain(wallet.addresses, draft.chain);
+    return switch (draft.chain) {
+      Chain.tron => _executeTron(
+        wallet: wallet,
+        crypto: crypto,
+        draft: draft,
+        from: from,
+        expectedNetworkIdentity: expectedNetworkIdentity,
+      ),
+      Chain.solana => _executeSolana(
+        wallet: wallet,
+        crypto: crypto,
+        draft: draft,
+        from: from,
+        expectedNetworkIdentity: expectedNetworkIdentity,
+      ),
+      _ => throw ArgumentError('executeNonEvm only supports TRON and Solana'),
+    };
+  }
+
   Future<PreparedEvmTransfer> prepareEvm({
     required TransferDraft draft,
     required String from,
     required int evmChainId,
   }) async {
     _requireEvm(draft.chain);
+    await _identity?.verifyEvm(draft.chain, evmChainId);
     final params = await _params.fetchEvmParams(draft.chain, from);
     final fees = params.tierFor(draft.feeTier);
     final tokenContract = draft.tokenContract;
-    final calldata = tokenContract == null
-        ? Uint8List(0)
-        : Erc20.transferCalldata(to: draft.recipient, amount: draft.amount.raw);
-    final gasLimit = await _params.estimateEvmGas(
-      draft.chain,
-      from: from,
-      to: tokenContract ?? draft.recipient,
-      value: tokenContract == null ? draft.amount.raw : BigInt.zero,
-      data: '0x${_hexEncodeBytes(calldata)}',
-    );
+    final calldata = switch (draft.operation) {
+      TxOperation.nativeTransfer => Uint8List(0),
+      TxOperation.tokenTransfer => Erc20.transferCalldata(
+        to: draft.recipient,
+        amount: draft.amount.raw,
+      ),
+      TxOperation.approvalRevoke => Erc20.revokeApprovalCalldata(
+        spender: draft.recipient,
+      ),
+    };
+    final callTo = tokenContract ?? draft.recipient;
+    final callValue = tokenContract == null ? draft.amount.raw : BigInt.zero;
+    final callData = '0x${_hexEncodeBytes(calldata)}';
+    EvmNonceState? nonceState;
+    Future<EvmNonceState> verifiedEmptyPendingQueue() async {
+      final state = nonceState ??= await _params.fetchEvmNonceState(
+        draft.chain,
+        from,
+      );
+      if (state.confirmed != state.pending || params.nonce != state.confirmed) {
+        throw const EvmPreflightFailed(
+          'Pending state unavailable while queued transactions exist',
+        );
+      }
+      return state;
+    }
+
+    try {
+      await _params.simulateEvmTransfer(
+        draft.chain,
+        from: from,
+        to: callTo,
+        value: callValue,
+        data: callData,
+        tokenTransfer: tokenContract != null,
+      );
+    } on RpcException catch (error) {
+      if (!isEvmPendingStateUnavailable(error)) {
+        throw EvmPreflightFailed(error.message);
+      }
+      try {
+        // A few otherwise-valid EVM nodes expose pending nonce but not a
+        // pending block state. Falling back to latest is safe only when this
+        // same node proves there is no known queued nonce at all.
+        await verifiedEmptyPendingQueue();
+        await _params.simulateEvmTransfer(
+          draft.chain,
+          from: from,
+          to: callTo,
+          value: callValue,
+          data: callData,
+          tokenTransfer: tokenContract != null,
+          blockTag: 'latest',
+        );
+      } on EvmPreflightFailed {
+        rethrow;
+      } on RpcException catch (latestError) {
+        throw EvmPreflightFailed(latestError.message);
+      }
+    }
+    late final BigInt gasLimit;
+    late final EvmSpendableBalances balances;
+    try {
+      gasLimit = await _params.estimateEvmGas(
+        draft.chain,
+        from: from,
+        to: callTo,
+        value: callValue,
+        data: callData,
+      );
+      balances = await _params.fetchEvmSpendableBalances(
+        draft.chain,
+        address: from,
+        tokenContract: draft.operation == TxOperation.tokenTransfer
+            ? tokenContract
+            : null,
+      );
+    } on RpcException catch (error) {
+      throw EvmPreflightFailed(error.message);
+    }
+    if (!balances.pendingAvailable) {
+      try {
+        await verifiedEmptyPendingQueue();
+      } on RpcException catch (error) {
+        throw EvmPreflightFailed(error.message);
+      }
+    }
+    final maximumFee = gasLimit * fees.maxFeePerGas;
+    if (balances.native < maximumFee + callValue) {
+      throw EvmInsufficientFunds(switch (draft.chain) {
+        Chain.polygon => 'POL',
+        Chain.avalanche => 'AVAX',
+        Chain.bnb => 'BNB',
+        _ => 'ETH',
+      });
+    }
+    if (draft.operation == TxOperation.tokenTransfer &&
+        (balances.token == null || balances.token! < draft.amount.raw)) {
+      throw EvmInsufficientFunds(draft.symbol);
+    }
     final unsigned = rawTxFor(
       draft,
       from: from,
@@ -167,7 +320,9 @@ class LocalTransferService {
     );
     return PreparedEvmTransfer(
       chain: draft.chain,
+      evmChainId: evmChainId,
       coin: rpcCoinForChain(draft.chain),
+      operation: draft.operation,
       from: from,
       recipient: draft.recipient,
       amountRaw: draft.amount.raw,
@@ -185,12 +340,30 @@ class LocalTransferService {
     required CoreCrypto crypto,
     required PreparedEvmTransfer prepared,
   }) async {
-    final signed = await wallet.sign(
-      crypto,
-      coin: prepared.coin,
-      signingInput: prepared.unsignedTx,
+    final signed = await signPreparedEvm(
+      wallet: wallet,
+      crypto: crypto,
+      prepared: prepared,
     );
-    return _broadcast(prepared.chain, signed.signedTx);
+    return broadcastSigned(prepared.chain, signed.signedTx);
+  }
+
+  /// Signs without broadcasting so callers can durably store the locally
+  /// derived transaction hash before making the irreversible network call.
+  Future<SignedTransaction> signPreparedEvm({
+    required HotWallet wallet,
+    required CoreCrypto crypto,
+    required PreparedEvmTransfer prepared,
+  }) async {
+    _requirePreparedSender(wallet, prepared.chain, prepared.from);
+    return ExperienceMetrics.instance.measure(
+      ExperienceMetricNames.transactionSign,
+      () => wallet.sign(
+        crypto,
+        coin: prepared.coin,
+        signingInput: prepared.unsignedTx,
+      ),
+    );
   }
 
   /// Rebuilds [original] with the same nonce and an EIP-1559 fee bump. A speed
@@ -204,6 +377,7 @@ class LocalTransferService {
     required String recipient,
     required BigInt amountRaw,
     required String? tokenContract,
+    TxOperation? operation,
     required BigInt nonce,
     required BigInt previousMaxPriorityFeePerGas,
     required BigInt previousMaxFeePerGas,
@@ -211,6 +385,7 @@ class LocalTransferService {
     required bool cancel,
   }) async {
     _requireEvm(chain);
+    await _identity?.verifyEvm(chain, evmChainId);
     final nonceState = await _params.fetchEvmNonceState(chain, from);
     if (nonceState.confirmed > nonce.toInt()) {
       throw EvmNonceAlreadyConsumed(
@@ -233,12 +408,46 @@ class LocalTransferService {
     final replacementRecipient = cancel ? from : recipient;
     final replacementContract = cancel ? null : tokenContract;
     final replacementAmount = cancel ? BigInt.zero : amountRaw;
-    final calldata = replacementContract == null
-        ? Uint8List(0)
-        : Erc20.transferCalldata(
-            to: replacementRecipient,
-            amount: replacementAmount,
-          );
+    final originalOperation =
+        operation ??
+        (tokenContract == null
+            ? TxOperation.nativeTransfer
+            : TxOperation.tokenTransfer);
+    final replacementOperation = cancel
+        ? TxOperation.nativeTransfer
+        : originalOperation;
+    final calldata = switch (replacementOperation) {
+      TxOperation.nativeTransfer => Uint8List(0),
+      TxOperation.tokenTransfer => Erc20.transferCalldata(
+        to: replacementRecipient,
+        amount: replacementAmount,
+      ),
+      TxOperation.approvalRevoke => Erc20.revokeApprovalCalldata(
+        spender: replacementRecipient,
+      ),
+    };
+    final callTo = replacementContract ?? replacementRecipient;
+    final callValue = replacementContract == null
+        ? replacementAmount
+        : BigInt.zero;
+    final callData = '0x${_hexEncodeBytes(calldata)}';
+    try {
+      await _params.simulateEvmTransfer(
+        chain,
+        from: from,
+        to: callTo,
+        value: callValue,
+        data: callData,
+        tokenTransfer: replacementContract != null,
+        // A replacement competes with the pending candidate at the same
+        // nonce. Simulating it after that candidate is semantically wrong and
+        // unsupported by some nodes (notably Avalanche's pending block view).
+        // Pending/latest balance checks below still cover queued liabilities.
+        blockTag: 'latest',
+      );
+    } on RpcException catch (error) {
+      throw EvmPreflightFailed(error.message);
+    }
     final gasLimit = cancel
         ? await _params.estimateEvmGas(
             chain,
@@ -248,6 +457,42 @@ class LocalTransferService {
             data: '0x',
           )
         : previousGasLimit;
+    late final EvmSpendableBalances balances;
+    try {
+      balances = await _params.fetchEvmSpendableBalances(chain, address: from);
+    } on RpcException catch (error) {
+      throw EvmPreflightFailed(error.message);
+    }
+    if (!balances.pendingAvailable && nonceState.confirmed != nonce.toInt()) {
+      throw const EvmPreflightFailed(
+        'Pending balance state unavailable for queued replacement',
+      );
+    }
+    final replacementLiability =
+        gasLimit * maxFee +
+        (replacementContract == null ? replacementAmount : BigInt.zero);
+    final originalLiability =
+        previousGasLimit * previousMaxFeePerGas +
+        (originalOperation == TxOperation.nativeTransfer
+            ? amountRaw
+            : BigInt.zero);
+    final incrementalLiability = replacementLiability > originalLiability
+        ? replacementLiability - originalLiability
+        : BigInt.zero;
+    // `latest` proves the account can fund the complete winning transaction;
+    // `pending` proves it can fund the extra liability after the node applies
+    // the original candidate. Nodes that explicitly lack a pending state may
+    // use latest only when this is the current confirmed nonce, so there can
+    // be no unknown lower-nonce liability ahead of the replacement.
+    if (balances.nativeLatest < replacementLiability ||
+        balances.native < incrementalLiability) {
+      throw EvmInsufficientFunds(switch (chain) {
+        Chain.polygon => 'POL',
+        Chain.avalanche => 'AVAX',
+        Chain.bnb => 'BNB',
+        _ => 'ETH',
+      });
+    }
     final tx = Eip1559Tx(
       chainId: BigInt.from(evmChainId),
       nonce: nonce,
@@ -260,7 +505,9 @@ class LocalTransferService {
     );
     return PreparedEvmTransfer(
       chain: chain,
+      evmChainId: evmChainId,
       coin: rpcCoinForChain(chain),
+      operation: replacementOperation,
       from: from,
       recipient: replacementRecipient,
       amountRaw: replacementAmount,
@@ -281,16 +528,52 @@ class LocalTransferService {
         _ => throw const LocalTransferException('Missing RPC endpoint'),
       };
 
-  Future<String> _executeTron({
+  Future<NonEvmTransferResult> _executeTron({
     required HotWallet wallet,
     required CoreCrypto crypto,
     required TransferDraft draft,
     required String from,
+    required String? expectedNetworkIdentity,
   }) async {
+    final prepared = await prepareTron(
+      draft: draft,
+      from: from,
+      expectedNetworkIdentity: expectedNetworkIdentity,
+    );
+    return signAndBroadcastTron(
+      wallet: wallet,
+      crypto: crypto,
+      prepared: prepared,
+      expectedNetworkIdentity: expectedNetworkIdentity,
+    );
+  }
+
+  Future<PreparedTronTransfer> prepareTron({
+    required TransferDraft draft,
+    required String from,
+    required String? expectedNetworkIdentity,
+  }) async {
+    if (draft.chain != Chain.tron) {
+      throw ArgumentError('prepareTron requires a TRON draft');
+    }
+    if (draft.operation == TxOperation.approvalRevoke) {
+      throw ArgumentError('approval revoke is only supported on EVM chains');
+    }
+    final identity = _requiredIdentity(Chain.tron, expectedNetworkIdentity);
+    if (identity != null) await _identity!.verifyTron(identity);
     final rpc = TronRpc(baseUrl: _endpoint(Coin.tron), transport: _rest);
+    final tokenContract = draft.tokenContract;
+    final balancesFuture = rpc.getAccountBalances(
+      from,
+      tokenContract: tokenContract,
+    );
+    final recipientFuture = tokenContract == null
+        ? rpc.getAccountBalances(draft.recipient)
+        : null;
     final block = await rpc.getNowBlock();
     final blockId = _hexDecode(block.blockId);
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = block.timestamp;
+    final expiresAt = now + const Duration(minutes: 10).inMilliseconds;
     final intent = TransferIntent(
       chain: Chain.tron,
       operation: draft.operation,
@@ -301,14 +584,14 @@ class LocalTransferService {
       tokenSymbol: draft.tokenContract == null ? null : draft.symbol,
     );
     int? feeLimit;
-    if (draft.operation == TxOperation.tokenTransfer) {
+    if (tokenContract != null) {
       final calldata = Trc20.transferCalldata(
         to: draft.recipient,
         amount: draft.amount.raw,
       );
       final energy = await rpc.estimateTokenEnergy(
         owner: from,
-        contract: draft.tokenContract!,
+        contract: tokenContract,
         parameter: _hexEncodeBytes(calldata.sublist(4)),
       );
       feeLimit = energy.feeLimitSun;
@@ -321,26 +604,110 @@ class LocalTransferService {
       ]),
       refBlockHash: Uint8List.sublistView(blockId, 8, 16),
       timestamp: now,
-      expiration: now + const Duration(minutes: 10).inMilliseconds,
+      expiration: expiresAt,
       feeLimit: feeLimit,
     ).encodeRawData();
-    final signed = await wallet.sign(
-      crypto,
-      coin: Coin.tron,
-      signingInput: raw,
+    final recipient = await recipientFuture;
+    final activatesRecipient = tokenContract == null && !recipient!.activated;
+    final bandwidth = await rpc.estimateBandwidthFee(
+      owner: from,
+      rawDataLength: raw.length,
+      activatesRecipient: activatesRecipient,
     );
-    return _broadcast(Chain.tron, signed.signedTx);
+    final maximumFee = bandwidth.maximumFeeSun + BigInt.from(feeLimit ?? 0);
+    final balances = await balancesFuture;
+    final nativeSpend = tokenContract == null ? draft.amount.raw : BigInt.zero;
+    if (balances.trx < nativeSpend + maximumFee) {
+      throw const TransferInsufficientFunds('TRX');
+    }
+    if (tokenContract != null &&
+        (balances.token == null || balances.token! < draft.amount.raw)) {
+      throw TransferInsufficientFunds(draft.symbol);
+    }
+    return PreparedTronTransfer(
+      from: from,
+      recipient: draft.recipient,
+      amountRaw: draft.amount.raw,
+      tokenContract: tokenContract,
+      maximumFeeSun: maximumFee,
+      referenceBlockHeight: block.number,
+      expiresAt: expiresAt,
+      rawTx: raw,
+    );
   }
 
-  Future<String> _executeSolana({
+  Future<NonEvmTransferResult> signAndBroadcastTron({
+    required HotWallet wallet,
+    required CoreCrypto crypto,
+    required PreparedTronTransfer prepared,
+    required String? expectedNetworkIdentity,
+  }) async {
+    final signed = await signPreparedTron(
+      wallet: wallet,
+      crypto: crypto,
+      prepared: prepared,
+      expectedNetworkIdentity: expectedNetworkIdentity,
+    );
+    return NonEvmTransferResult(
+      hash: await broadcastSigned(Chain.tron, signed.signedTx),
+      referenceBlockHeight: prepared.referenceBlockHeight,
+      expiresAt: prepared.expiresAt,
+    );
+  }
+
+  Future<SignedTransaction> signPreparedTron({
+    required HotWallet wallet,
+    required CoreCrypto crypto,
+    required PreparedTronTransfer prepared,
+    required String? expectedNetworkIdentity,
+  }) async {
+    _requirePreparedSender(wallet, Chain.tron, prepared.from);
+    final identity = _requiredIdentity(Chain.tron, expectedNetworkIdentity);
+    if (identity != null) await _identity!.verifyTron(identity);
+    return ExperienceMetrics.instance.measure(
+      ExperienceMetricNames.transactionSign,
+      () => wallet.sign(crypto, coin: Coin.tron, signingInput: prepared.rawTx),
+    );
+  }
+
+  Future<NonEvmTransferResult> _executeSolana({
     required HotWallet wallet,
     required CoreCrypto crypto,
     required TransferDraft draft,
     required String from,
+    required String? expectedNetworkIdentity,
   }) async {
+    final prepared = await prepareSolana(
+      draft: draft,
+      from: from,
+      expectedNetworkIdentity: expectedNetworkIdentity,
+    );
+    return signAndBroadcastSolana(
+      wallet: wallet,
+      crypto: crypto,
+      prepared: prepared,
+      expectedNetworkIdentity: expectedNetworkIdentity,
+    );
+  }
+
+  Future<PreparedSolanaTransfer> prepareSolana({
+    required TransferDraft draft,
+    required String from,
+    required String? expectedNetworkIdentity,
+  }) async {
+    if (draft.chain != Chain.solana) {
+      throw ArgumentError('prepareSolana requires a Solana draft');
+    }
+    if (draft.operation == TxOperation.approvalRevoke) {
+      throw ArgumentError('approval revoke is only supported on EVM chains');
+    }
+    final identity = _requiredIdentity(Chain.solana, expectedNetworkIdentity);
+    if (identity != null) await _identity!.verifySolana(identity);
     final rpc = SolanaRpc(url: _endpoint(Coin.solana), transport: _jsonRpc);
-    final blockhash = await rpc.getLatestBlockhash();
+    final latest = await rpc.getLatestBlockhashInfo();
+    final blockhash = latest.blockhash;
     final SolanaMessage message;
+    String? tokenProgram;
     if (draft.operation == TxOperation.nativeTransfer) {
       message = SolanaMessage.systemTransfer(
         from: from,
@@ -354,7 +721,6 @@ class LocalTransferService {
         throw const LocalTransferException('Missing SPL token mint');
       }
       final sources = await rpc.getTokenAccounts(from, mint);
-      final destinations = await rpc.getTokenAccounts(draft.recipient, mint);
       final source = sources
           .where((account) => account.amount >= draft.amount.raw)
           .firstOrNull;
@@ -363,15 +729,19 @@ class LocalTransferService {
           'No SPL token account has enough balance',
         );
       }
-      final tokenProgram = draft.tokenProgram ?? solanaTokenProgram;
-      final createDestination = destinations.isEmpty;
-      final destination = createDestination
-          ? SolanaMessage.associatedTokenAddress(
-              owner: draft.recipient,
-              mint: mint,
-              tokenProgram: tokenProgram,
-            )
-          : destinations.first.address;
+      tokenProgram = draft.tokenProgram ?? solanaTokenProgram;
+      // Always use the recipient's canonical ATA and prepend the Associated
+      // Token Program's idempotent create instruction. Besides closing the
+      // race where the ATA appears after preparation, this is a security
+      // property for air-gapped signing: the raw message now carries the
+      // recipient owner, mint and token program even when the ATA already
+      // exists. The offline signer can therefore recompute the ATA and show
+      // the wallet address the user intended, without trusting QR summary.
+      final destination = SolanaMessage.associatedTokenAddress(
+        owner: draft.recipient,
+        mint: mint,
+        tokenProgram: tokenProgram,
+      );
       message = SolanaMessage.splTransferChecked(
         source: source.address,
         destination: destination,
@@ -382,7 +752,7 @@ class LocalTransferService {
         decimals: draft.decimals,
         recentBlockhash: blockhash,
         tokenProgram: tokenProgram,
-        createDestination: createDestination,
+        createDestination: true,
       );
     }
     final serialized = message.serialize();
@@ -392,33 +762,136 @@ class LocalTransferService {
         ? draft.amount.raw
         : BigInt.zero;
     if (solBalance < nativeSpend + fee) {
+      throw const TransferInsufficientFunds('SOL');
+    }
+    final simulation = await rpc.simulateMessage(
+      serialized,
+      accountAddresses: [from],
+    );
+    final postBalance = simulation.accountLamports[from];
+    if (postBalance == null || postBalance > solBalance) {
       throw const LocalTransferException(
-        'Insufficient SOL for the transfer and network fee',
+        'Solana simulation did not return a valid fee-payer balance',
       );
     }
-    await rpc.simulateMessage(serialized);
-    final signed = await wallet.sign(
-      crypto,
-      coin: Coin.solana,
-      signingInput: serialized,
+    final totalDebit = solBalance - postBalance;
+    final minimumDebit = nativeSpend + fee;
+    if (totalDebit < minimumDebit) {
+      throw const LocalTransferException(
+        'Solana simulation returned an inconsistent fee-payer debit',
+      );
+    }
+    final rentDeposit = totalDebit - minimumDebit;
+    return PreparedSolanaTransfer(
+      from: from,
+      recipient: draft.recipient,
+      amountRaw: draft.amount.raw,
+      tokenMint: draft.tokenContract,
+      tokenProgram: tokenProgram,
+      networkFeeLamports: fee,
+      rentDepositLamports: rentDeposit,
+      lastValidBlockHeight: latest.lastValidBlockHeight,
+      message: serialized,
     );
-    return _broadcast(Chain.solana, signed.signedTx);
   }
+
+  Future<NonEvmTransferResult> signAndBroadcastSolana({
+    required HotWallet wallet,
+    required CoreCrypto crypto,
+    required PreparedSolanaTransfer prepared,
+    required String? expectedNetworkIdentity,
+  }) async {
+    final signed = await signPreparedSolana(
+      wallet: wallet,
+      crypto: crypto,
+      prepared: prepared,
+      expectedNetworkIdentity: expectedNetworkIdentity,
+    );
+    return NonEvmTransferResult(
+      hash: await broadcastSigned(Chain.solana, signed.signedTx),
+      lastValidBlockHeight: prepared.lastValidBlockHeight,
+    );
+  }
+
+  Future<SignedTransaction> signPreparedSolana({
+    required HotWallet wallet,
+    required CoreCrypto crypto,
+    required PreparedSolanaTransfer prepared,
+    required String? expectedNetworkIdentity,
+  }) async {
+    _requirePreparedSender(wallet, Chain.solana, prepared.from);
+    final identity = _requiredIdentity(Chain.solana, expectedNetworkIdentity);
+    if (identity != null) await _identity!.verifySolana(identity);
+    return ExperienceMetrics.instance.measure(
+      ExperienceMetricNames.transactionSign,
+      () => wallet.sign(
+        crypto,
+        coin: Coin.solana,
+        signingInput: prepared.message,
+      ),
+    );
+  }
+
+  /// Irreversible network boundary. Callers that need crash recovery should
+  /// persist [SignedTransaction.txHash] before invoking this method.
+  Future<String> broadcastSigned(Chain chain, Uint8List signedTx) =>
+      _broadcast(chain, signedTx);
 
   Future<String> _broadcast(Chain chain, Uint8List signedTx) async {
     final outcome = await _broadcaster.broadcast(chain, signedTx);
-    if (outcome.status != BroadcastStatus.ok || outcome.txHash == null) {
-      throw LocalTransferException(
-        outcome.message ?? 'The network rejected the transaction',
-      );
+    switch (outcome.status) {
+      case BroadcastStatus.ok:
+        final txHash = outcome.txHash;
+        if (txHash == null || txHash.isEmpty) {
+          throw const LocalTransferUncertainException(
+            'The node accepted the request but returned no transaction hash',
+          );
+        }
+        return txHash;
+      case BroadcastStatus.error:
+        throw LocalTransferRejectedException(
+          outcome.rejectionKind ?? RpcRejectionKind.rejected,
+        );
+      case BroadcastStatus.unknown:
+        throw LocalTransferUncertainException(
+          outcome.message ?? 'The broadcast result is unknown',
+        );
+      case BroadcastStatus.unsupported:
+        throw const LocalTransferUnsupportedException();
     }
-    return outcome.txHash!;
   }
 
   static void _requireEvm(Chain chain) {
     if (chain == Chain.tron || chain == Chain.solana) {
       throw ArgumentError('not an EVM chain: $chain');
     }
+  }
+
+  static void _requirePreparedSender(
+    HotWallet wallet,
+    Chain chain,
+    String preparedFrom,
+  ) {
+    final walletAddress = addressForChain(wallet.addresses, chain);
+    final matches = switch (chain) {
+      Chain.tron || Chain.solana => walletAddress == preparedFrom,
+      _ => walletAddress.toLowerCase() == preparedFrom.toLowerCase(),
+    };
+    if (!matches) {
+      throw const LocalTransferException(
+        'The approved transaction sender does not belong to this wallet',
+      );
+    }
+  }
+
+  String? _requiredIdentity(Chain chain, String? expected) {
+    if (_identity == null) return null;
+    if (expected == null || expected.isEmpty) {
+      throw LocalTransferException(
+        'Missing pinned network identity for ${chain.name}',
+      );
+    }
+    return expected;
   }
 }
 

@@ -1,6 +1,11 @@
+import 'dart:convert';
+
 import 'package:chains/rpc.dart';
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:kt_wallet/src/market/gateway_client.dart';
 import 'package:kt_wallet/src/market/transaction_status_service.dart';
 import 'package:wallet_data/wallet_data.dart';
 
@@ -20,22 +25,32 @@ class _JsonRpc implements JsonRpcTransport {
 }
 
 class _Rest implements RestTransport {
-  _Rest(this.response);
+  _Rest(this.response) : onPost = null;
+  _Rest.onPost(this.onPost) : response = null;
 
   final Object? response;
+  final Object? Function(String url, Object body)? onPost;
 
   @override
   Future<Object?> getJson(String url) async => response;
 
   @override
-  Future<Object?> postJson(String url, Object body) async => response;
+  Future<Object?> postJson(String url, Object body) async =>
+      onPost?.call(url, body) ?? response;
 }
 
-Transaction _tx(String coin, String hash) => Transaction(
+Transaction _tx(
+  String coin,
+  String hash, {
+  String? nonce,
+  int? expiresAt,
+  int? lastValidBlockHeight,
+}) => Transaction(
   id: 'tx',
   walletId: 'wallet',
   coin: coin,
   networkId: '$coin-mainnet',
+  operation: TxOperationKind.transfer,
   direction: TxDirection.outgoing,
   fromAddr: 'from',
   toAddr: 'to',
@@ -44,6 +59,9 @@ Transaction _tx(String coin, String hash) => Transaction(
   status: TxStatus.pending,
   signMode: SignMode.local,
   createdAt: 1,
+  nonce: nonce,
+  expiresAt: expiresAt,
+  lastValidBlockHeight: lastValidBlockHeight,
 );
 
 void main() {
@@ -67,7 +85,109 @@ void main() {
   test('EVM known transaction without receipt remains pending', () async {
     final rpc = _JsonRpc({
       'eth_getTransactionReceipt': null,
-      'eth_getTransactionByHash': {'hash': '0xhash'},
+      'eth_getTransactionByHash': {
+        'hash': '0xhash',
+        'from': 'from',
+        'nonce': '0x7',
+      },
+    });
+    String? observedNonce;
+    final service = TransactionStatusService(
+      endpoints: (_) => 'https://rpc.example',
+      jsonRpcTransport: rpc,
+      restTransport: _Rest(null),
+      onEvmNonceObserved: (transaction, nonce) async {
+        observedNonce = nonce;
+      },
+    );
+
+    expect(
+      await service.check(_tx(Coin.bnb.name, '0xhash')),
+      ChainTransactionStatus.pending,
+    );
+    expect(observedNonce, '7');
+  });
+
+  test(
+    'gateway pending EVM backfills missing nonce from direct evidence',
+    () async {
+      final gateway = GatewayClient(
+        baseUrl: 'https://gateway.example',
+        client: MockClient((request) async {
+          final body = jsonDecode(request.body) as Map<String, Object?>;
+          return http.Response(
+            jsonEncode({
+              'jsonrpc': '2.0',
+              'id': body['id'],
+              'result': {'status': 'pending'},
+            }),
+            200,
+          );
+        }),
+      );
+      final rpc = _JsonRpc({
+        'eth_getTransactionReceipt': null,
+        'eth_getTransactionByHash': {
+          'hash': '0xhash',
+          'from': 'from',
+          'nonce': '0x9',
+        },
+      });
+      String? observedNonce;
+      final service = TransactionStatusService(
+        endpoints: (_) => 'https://rpc.example',
+        gateway: () => gateway,
+        jsonRpcTransport: rpc,
+        restTransport: _Rest(null),
+        onEvmNonceObserved: (transaction, nonce) async {
+          observedNonce = nonce;
+        },
+      );
+
+      expect(
+        await service.check(_tx(Coin.eth.name, '0xhash')),
+        ChainTransactionStatus.pending,
+      );
+      expect(observedNonce, '9');
+      expect(rpc.methods, [
+        'eth_getTransactionReceipt',
+        'eth_getTransactionByHash',
+      ]);
+    },
+  );
+
+  test(
+    'EVM remote nonce mismatch is unknown and never overwrites evidence',
+    () async {
+      final rpc = _JsonRpc({
+        'eth_getTransactionReceipt': null,
+        'eth_getTransactionByHash': {
+          'hash': '0xhash',
+          'from': 'from',
+          'nonce': '0x7',
+        },
+      });
+      var callbackCalled = false;
+      final service = TransactionStatusService(
+        endpoints: (_) => 'https://rpc.example',
+        jsonRpcTransport: rpc,
+        restTransport: _Rest(null),
+        onEvmNonceObserved: (transaction, nonce) async {
+          callbackCalled = true;
+        },
+      );
+
+      expect(
+        await service.check(_tx(Coin.eth.name, '0xhash', nonce: '8')),
+        ChainTransactionStatus.unknown,
+      );
+      expect(callbackCalled, isFalse);
+    },
+  );
+
+  test('EVM malformed receipt status is unknown, never failed', () async {
+    final rpc = _JsonRpc({
+      'eth_getTransactionReceipt': {'status': null},
     });
     final service = TransactionStatusService(
       endpoints: (_) => 'https://rpc.example',
@@ -76,9 +196,48 @@ void main() {
     );
 
     expect(
-      await service.check(_tx(Coin.bnb.name, '0xhash')),
-      ChainTransactionStatus.pending,
+      await service.check(_tx(Coin.eth.name, '0xhash')),
+      ChainTransactionStatus.unknown,
     );
+  });
+
+  test(
+    'missing EVM hash is replaced only after confirmed nonce advances',
+    () async {
+      final rpc = _JsonRpc({
+        'eth_getTransactionReceipt': null,
+        'eth_getTransactionByHash': null,
+        'eth_getTransactionCount': '0x8',
+      });
+      final service = TransactionStatusService(
+        endpoints: (_) => 'https://rpc.example',
+        jsonRpcTransport: rpc,
+        restTransport: _Rest(null),
+      );
+
+      expect(
+        await service.check(_tx(Coin.eth.name, '0xold', nonce: '7')),
+        ChainTransactionStatus.replaced,
+      );
+    },
+  );
+
+  test('missing EVM hash without nonce evidence remains unknown', () async {
+    final rpc = _JsonRpc({
+      'eth_getTransactionReceipt': null,
+      'eth_getTransactionByHash': null,
+    });
+    final service = TransactionStatusService(
+      endpoints: (_) => 'https://rpc.example',
+      jsonRpcTransport: rpc,
+      restTransport: _Rest(null),
+    );
+
+    expect(
+      await service.check(_tx(Coin.eth.name, '0xmaybe')),
+      ChainTransactionStatus.unknown,
+    );
+    expect(rpc.methods, isNot(contains('eth_getTransactionCount')));
   });
 
   test('Solana execution error is failed, not confirmed', () async {
@@ -104,6 +263,52 @@ void main() {
     );
   });
 
+  test(
+    'missing Solana signature expires only beyond persisted block height',
+    () async {
+      final rpc = _JsonRpc({
+        'getSignatureStatuses': {
+          'value': [null],
+        },
+        'getBlockHeight': 101,
+      });
+      final service = TransactionStatusService(
+        endpoints: (_) => 'https://rpc.example',
+        jsonRpcTransport: rpc,
+        restTransport: _Rest(null),
+      );
+
+      expect(
+        await service.check(
+          _tx(Coin.solana.name, 'signature', lastValidBlockHeight: 100),
+        ),
+        ChainTransactionStatus.expired,
+      );
+      expect(rpc.methods, ['getSignatureStatuses', 'getBlockHeight']);
+    },
+  );
+
+  test('Solana remains unknown at its last valid block height', () async {
+    final rpc = _JsonRpc({
+      'getSignatureStatuses': {
+        'value': [null],
+      },
+      'getBlockHeight': 100,
+    });
+    final service = TransactionStatusService(
+      endpoints: (_) => 'https://rpc.example',
+      jsonRpcTransport: rpc,
+      restTransport: _Rest(null),
+    );
+
+    expect(
+      await service.check(
+        _tx(Coin.solana.name, 'signature', lastValidBlockHeight: 100),
+      ),
+      ChainTransactionStatus.unknown,
+    );
+  });
+
   test('TRON full-node receipt confirms without TronGrid history', () async {
     final service = TransactionStatusService(
       endpoints: (_) => 'https://tron.example',
@@ -117,6 +322,51 @@ void main() {
     expect(
       await service.check(_tx(Coin.tron.name, 'hash')),
       ChainTransactionStatus.confirmed,
+    );
+  });
+
+  test('missing TRON hash expires against canonical block time', () async {
+    final service = TransactionStatusService(
+      endpoints: (_) => 'https://tron.example',
+      jsonRpcTransport: _JsonRpc(const {}),
+      restTransport: _Rest.onPost((url, body) {
+        if (url.endsWith('/wallet/gettransactioninfobyid')) return {};
+        if (url.endsWith('/wallet/getnowblock')) {
+          return {
+            'blockID': List<String>.filled(32, '00').join(),
+            'block_header': {
+              'raw_data': {'number': 99, 'timestamp': 2001},
+            },
+          };
+        }
+        throw StateError(url);
+      }),
+    );
+
+    expect(
+      await service.check(_tx(Coin.tron.name, 'hash', expiresAt: 2000)),
+      ChainTransactionStatus.expired,
+    );
+  });
+
+  test('missing TRON hash remains unknown before expiration', () async {
+    final service = TransactionStatusService(
+      endpoints: (_) => 'https://tron.example',
+      jsonRpcTransport: _JsonRpc(const {}),
+      restTransport: _Rest.onPost((url, body) {
+        if (url.endsWith('/wallet/gettransactioninfobyid')) return {};
+        return {
+          'blockID': List<String>.filled(32, '00').join(),
+          'block_header': {
+            'raw_data': {'number': 99, 'timestamp': 2000},
+          },
+        };
+      }),
+    );
+
+    expect(
+      await service.check(_tx(Coin.tron.name, 'hash', expiresAt: 2000)),
+      ChainTransactionStatus.unknown,
     );
   });
 }

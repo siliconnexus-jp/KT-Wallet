@@ -82,6 +82,7 @@ class _PagedHistory extends HistoryService {
     Coin coin,
     String address, {
     int limit = HistoryService.pageSize,
+    String? networkId,
   }) async {
     if (coin != Coin.eth) return const HistoryResult.unsupported();
     return HistoryResult.ok([
@@ -111,6 +112,7 @@ class _FailingHistory extends HistoryService {
     Coin coin,
     String address, {
     int limit = HistoryService.pageSize,
+    String? networkId,
   }) async => const HistoryResult.error();
 }
 

@@ -195,8 +195,15 @@ void main() {
         },
       );
 
-      final result = await service.fetch(Coin.tron, _me);
+      final result = await service.fetch(
+        Coin.tron,
+        _me,
+        networkId: 'tron-nile',
+      );
       expect(result.status, HistoryStatus.ok);
+      expect(result.records.map((record) => record.networkId).toSet(), {
+        'tron-nile',
+      });
       // Merged newest-first; the TRC-20 wrapper is not a second transfer.
       expect(result.records.map((r) => r.hash), [
         'tx-out-usdt',

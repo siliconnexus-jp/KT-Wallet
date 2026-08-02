@@ -1,3 +1,6 @@
+import 'support/e2e_credential_batch.dart';
+import 'support/e2e_wallet_cleanup.dart';
+
 import 'dart:typed_data';
 
 import 'package:chains/chains.dart';
@@ -8,6 +11,7 @@ import 'package:kt_wallet/src/transfer/airgap_codec.dart';
 import 'package:kt_wallet/src/transfer/transfer_draft.dart';
 
 void main() {
+  requireFreshE2eCredentialBatchIfConfigured();
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('Wallet Core signs Sepolia native and ERC-20 type-2 envelopes', (
@@ -28,6 +32,7 @@ void main() {
       mnemonic: mnemonic,
       requireAuth: false,
     );
+    registerE2eWalletCleanup(crypto, walletId);
     final addresses = await crypto.deriveAddresses(walletId);
     // Public address only. The generated mnemonic never leaves native
     // Keystore-backed storage and is never written to the repository.

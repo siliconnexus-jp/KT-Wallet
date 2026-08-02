@@ -207,6 +207,7 @@ type env struct {
 	t   *testing.T
 	clk *clock.Fake
 	srv *rpc.Server
+	gw  *handlers.Gateway
 }
 
 func discardLog() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
@@ -217,30 +218,34 @@ func newEnv(t *testing.T, mutate func(cfg *handlers.Config)) *env {
 	t.Helper()
 	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
 	cfg := handlers.Config{
-		Version:                "9.9.9-test",
-		Log:                    discardLog(),
-		Clock:                  clk,
-		AttemptTimeout:         2 * time.Second,
-		EthURLs:                []string{unreachable},
-		PolygonURLs:            []string{unreachable},
-		BaseURLs:               []string{unreachable},
-		ArbitrumURLs:           []string{unreachable},
-		AvalancheURLs:          []string{unreachable},
-		SolanaURLs:             []string{unreachable},
-		TronURL:                unreachable,
-		EthSepoliaURLs:         []string{unreachable},
-		PolygonAmoyURLs:        []string{unreachable},
-		BaseSepoliaURLs:        []string{unreachable},
-		ArbitrumSepoliaURLs:    []string{unreachable},
-		AvalancheFujiURLs:      []string{unreachable},
-		SolanaDevnetURLs:       []string{unreachable},
-		TronNileURL:            unreachable,
-		CoinGeckoURL:           unreachable,
-		CoinGeckoInterval:      time.Millisecond,
-		EtherscanURL:           unreachable,
-		HeliusURL:              unreachable,
-		HeliusDevnetURL:        unreachable,
-		EVMHistoryFallbackURLs: map[string]string{},
+		Version:                  "9.9.9-test",
+		Log:                      discardLog(),
+		Clock:                    clk,
+		AttemptTimeout:           2 * time.Second,
+		EthURLs:                  []string{unreachable},
+		PolygonURLs:              []string{unreachable},
+		BaseURLs:                 []string{unreachable},
+		ArbitrumURLs:             []string{unreachable},
+		AvalancheURLs:            []string{unreachable},
+		BNBURLs:                  []string{unreachable},
+		SolanaURLs:               []string{unreachable},
+		TronURL:                  unreachable,
+		EthSepoliaURLs:           []string{unreachable},
+		PolygonAmoyURLs:          []string{unreachable},
+		BaseSepoliaURLs:          []string{unreachable},
+		ArbitrumSepoliaURLs:      []string{unreachable},
+		AvalancheFujiURLs:        []string{unreachable},
+		BNBTestnetURLs:           []string{unreachable},
+		SolanaDevnetURLs:         []string{unreachable},
+		TronNileURL:              unreachable,
+		CoinGeckoURL:             unreachable,
+		CoinGeckoInterval:        time.Millisecond,
+		EtherscanURL:             unreachable,
+		HeliusURL:                unreachable,
+		HeliusDevnetURL:          unreachable,
+		DisableExternalTokenRisk: true,
+		DisableExternalApprovals: true,
+		EVMHistoryFallbackURLs:   map[string]string{},
 	}
 	if mutate != nil {
 		mutate(&cfg)
@@ -249,7 +254,7 @@ func newEnv(t *testing.T, mutate func(cfg *handlers.Config)) *env {
 	// Generous inbound limiter so ordinary tests never trip it.
 	srv := rpc.NewServer(cfg.Log, ratelimit.New(clk, 100000, 100000), 25*time.Second)
 	g.Register(srv)
-	return &env{t: t, clk: clk, srv: srv}
+	return &env{t: t, clk: clk, srv: srv, gw: g}
 }
 
 // do posts a raw body to the JSON-RPC endpoint.

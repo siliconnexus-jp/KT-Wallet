@@ -35,7 +35,7 @@ void main() {
     final controller = WalletController(WalletManager(), crypto: crypto);
     await crypto.storeWallet(walletId: 'w1', mnemonic: _mnemonic);
     final addresses = await crypto.deriveAddresses('w1');
-    controller.add(
+    await controller.add(
       HotWallet(
         id: 'w1',
         name: '日常钱包',
@@ -111,10 +111,10 @@ void main() {
 
     expect(requests, hasLength(1));
     expect(requests.single.url.toString(), 'https://api.devnet.solana.com');
-    expect(find.text('空投成功,余额稍后刷新'), findsOneWidget);
+    expect(find.text('空投成功，余额稍后刷新'), findsOneWidget);
   });
 
-  testWidgets('devnet: airdrop failure surfaces the node message', (
+  testWidgets('devnet: airdrop failure classifies and hides the node message', (
     tester,
   ) async {
     final (wallets, _) = await makeWallet();
@@ -126,7 +126,11 @@ void main() {
         jsonEncode({
           'jsonrpc': '2.0',
           'id': 1,
-          'error': {'code': -32602, 'message': 'airdrop limit reached'},
+          'error': {
+            'code': -32005,
+            'message':
+                'airdrop limit reached; provider=alch_airdrop_canary_secret',
+          },
         }),
         200,
       ),
@@ -141,9 +145,41 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('faucet-action')));
     await tester.pumpAndSettle();
 
-    expect(find.text('空投失败:airdrop limit reached'), findsOneWidget);
-    expect(find.text('空投成功,余额稍后刷新'), findsNothing);
+    expect(find.text('请求过于频繁，请稍后重试'), findsOneWidget);
+    expect(find.textContaining('alch_airdrop_canary_secret'), findsNothing);
+    expect(find.text('空投成功，余额稍后刷新'), findsNothing);
   });
+
+  testWidgets(
+    'devnet: airdrop transport failure hides credential-bearing URL',
+    (tester) async {
+      final (wallets, _) = await makeWallet();
+      final net = NetworkController();
+      await net.setEnvironment(NetworkEnvironment.testnet);
+
+      final client = MockClient((request) async {
+        throw http.ClientException(
+          'connection failed',
+          Uri.parse('https://rpc.example/alch_airdrop_transport_secret'),
+        );
+      });
+
+      await tester.pumpWidget(app(wallets, net, airdropClient: client));
+      await tester.pumpAndSettle();
+      await switchToSolana(tester);
+
+      await tester.ensureVisible(find.byKey(const ValueKey('faucet-action')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('faucet-action')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('测试币服务暂时不可用'), findsOneWidget);
+      expect(
+        find.textContaining('alch_airdrop_transport_secret'),
+        findsNothing,
+      );
+    },
+  );
 
   testWidgets('Nile (TRON testnet): tap opens the faucet in the browser', (
     tester,

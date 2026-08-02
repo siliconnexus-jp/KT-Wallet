@@ -5,12 +5,18 @@ abstract final class WalletColors {
   static const bg = Color(0xFFF5F6F8);
   static const surface = Color(0xFFFFFFFF);
   static const text = Color(0xFF0C1220);
-  static const text2 = Color(0xFF626B7A);
-  static const text3 = Color(0xFF9AA3B2);
+  static const text2 = Color(0xFF566274);
+  // Small supporting text must remain readable on both bg and surface.
+  // #667085 keeps the tertiary hierarchy while clearing WCAG AA (4.60:1 on
+  // bg, 4.97:1 on white) instead of the previous 2.35:1 gray.
+  // Remains comfortably above WCAG AA on both the neutral surface and the
+  // tinted warning cards used by the recovery flow. The previous #667085
+  // landed at 4.46:1 on the red-tinted card after alpha compositing.
+  static const text3 = Color(0xFF5F6B7A);
   static const accent = Color(0xFF2557E8);
-  static const green = Color(0xFF0E9F5B);
+  static const green = Color(0xFF06713F);
   static const red = Color(0xFFDF3E42);
-  static const amber = Color(0xFFE8930C);
+  static const amber = Color(0xFFB54708);
   static const border = Color(0xFFE7E9EE);
 }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:core_crypto/testing.dart';
 import 'package:kt_wallet/main.dart';
 
 /// Proves the add-wallet and delete-wallet paths mutate the live controller so
@@ -7,7 +8,7 @@ import 'package:kt_wallet/main.dart';
 Future<void> _openHome(WidgetTester tester) async {
   tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
   addTearDown(tester.platformDispatcher.clearLocalesTestValue);
-  await tester.pumpWidget(KtWalletApp());
+  await tester.pumpWidget(KtWalletApp(galleryCrypto: MockCoreCrypto()));
   await tester.pumpAndSettle();
   await tester.scrollUntilVisible(find.text('W1/W20 首页'), 200);
   await tester.tap(find.text('W1/W20 首页'));

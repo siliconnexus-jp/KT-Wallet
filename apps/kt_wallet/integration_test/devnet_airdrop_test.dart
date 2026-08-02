@@ -5,6 +5,8 @@ import 'package:kt_wallet/src/market/airdrop_service.dart';
 import 'package:kt_wallet/src/market/balance_service.dart';
 import 'package:kt_wallet/src/state/networks.dart';
 
+import 'support/e2e_wallet_cleanup.dart';
+
 /// The testnet money shot: REAL test funds land in the app's service layer.
 ///
 /// Real wallet-core derives a real Solana address; a REAL devnet airdrop is
@@ -25,6 +27,7 @@ void main() {
       mnemonic: await crypto.generateMnemonic(),
       requireAuth: false,
     );
+    registerE2eWalletCleanup(crypto, id);
     final addrs = await crypto.deriveAddresses(id);
     // ignore: avoid_print
     print('DEVNET addr=${addrs.solana}');
@@ -44,9 +47,9 @@ void main() {
       // still proven by the request being ACCEPTED-shaped or rejected by the
       // real node. Mark and bail without failing the suite.
       // ignore: avoid_print
-      print('AIRDROP-RATE-LIMITED: ${e.message}');
+      print('AIRDROP-UNAVAILABLE: ${e.kind.name}');
       markTestSkipped(
-        'Solana public Devnet faucet rejected the request: ${e.message}',
+        'Solana public Devnet faucet unavailable: ${e.kind.name}',
       );
       return;
     }

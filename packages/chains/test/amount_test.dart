@@ -41,6 +41,12 @@ void main() {
       expect(Amount.parse('1', 9).raw, BigInt.from(1000000000));
       expect(Amount.parse('1', 18).raw, BigInt.parse('1000000000000000000'));
     });
+
+    test('preserves values beyond IEEE-754 precision exactly', () {
+      final amount = Amount.parse('9007199254740993.000000000000000001', 18);
+      expect(amount.raw, BigInt.parse('9007199254740993000000000000000001'));
+      expect(amount.format(), '9007199254740993.000000000000000001');
+    });
   });
 
   group('Amount.format', () {
@@ -111,6 +117,10 @@ void main() {
     test('unreasonable decimals rejected', () {
       expect(
         () => Amount(raw: BigInt.one, decimals: 99),
+        throwsA(isA<AmountError>()),
+      );
+      expect(
+        () => Amount(raw: BigInt.one, decimals: Amount.maxDecimals + 1),
         throwsA(isA<AmountError>()),
       );
     });

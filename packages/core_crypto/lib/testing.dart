@@ -202,10 +202,15 @@ class MockCoreCrypto implements CoreCrypto {
   }
 
   @override
-  Future<bool> validateWord(String word) async => mockWordlist.contains(word);
+  Future<bool> validateWord(String word) async {
+    CoreCryptoValidation.checkWord(word);
+    return mockWordlist.contains(word);
+  }
 
   @override
   Future<List<String>> suggestWords(String prefix, {int limit = 3}) async {
+    CoreCryptoValidation.checkSuggestionLimit(limit);
+    CoreCryptoValidation.checkSuggestionPrefix(prefix);
     if (prefix.trim().isEmpty) return const [];
     return mockWordlist.where((w) => w.startsWith(prefix)).take(limit).toList();
   }
@@ -218,8 +223,12 @@ class MockCoreCrypto implements CoreCrypto {
     String? kdfPassword,
   }) async {
     CoreCryptoValidation.checkWalletId(walletId);
+    CoreCryptoValidation.checkKdfPassword(kdfPassword);
     if (!await validateMnemonic(mnemonic)) {
       throw const InvalidMnemonicException();
+    }
+    if (_wallets.containsKey(walletId)) {
+      throw const WalletAlreadyExistsException();
     }
     _wallets[walletId] = _StoredWallet(
       mnemonic,
@@ -327,11 +336,12 @@ class MockCoreCrypto implements CoreCrypto {
   Future<String> readBackup({
     required Uint8List blob,
     required String password,
+    required BackupCipherFormat format,
   }) async {
     CoreCryptoValidation.checkBackupBlobNotEmpty(blob);
     // Not checkBackupPassword: an old backup may predate the length floor,
     // and refusing to even try would strand it. Matches the channel.
-    if (password.isEmpty) throw ArgumentError('password must not be empty');
+    CoreCryptoValidation.checkRestorePassword(password);
     try {
       final decoded = jsonDecode(utf8.decode(blob));
       if (decoded is! Map ||

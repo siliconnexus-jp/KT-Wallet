@@ -31,22 +31,29 @@ class EvmRpc {
     if (resp is! Map) throw RpcException('malformed response');
     if (resp['error'] != null) {
       final err = resp['error'];
-      final msg = err is Map ? '${err['message']}' : '$err';
       final code = err is Map && err['code'] is int ? err['code'] as int : null;
-      throw RpcException(msg, code: code);
+      throw RpcRejectedException(
+        publicRpcRejectionMessage(err is Map ? err['message'] : err),
+        code: code,
+      );
     }
     return resp['result'];
   }
 
   static BigInt _hexToBigInt(Object? v) {
     if (v is! String || !v.startsWith('0x')) {
-      throw RpcException('expected hex quantity, got $v');
+      throw RpcException('expected hex quantity');
     }
     return BigInt.parse(v.substring(2), radix: 16);
   }
 
-  Future<BigInt> getBalance(String address) async =>
-      _hexToBigInt(await _call('eth_getBalance', [address, 'latest']));
+  Future<BigInt> getBalance(
+    String address, {
+    String blockTag = 'latest',
+  }) async {
+    _requireBlockTag(blockTag);
+    return _hexToBigInt(await _call('eth_getBalance', [address, blockTag]));
+  }
 
   Future<BigInt> getBlockNumber() async =>
       _hexToBigInt(await _call('eth_blockNumber', const []));
@@ -97,14 +104,52 @@ class EvmRpc {
     ]),
   );
 
+  /// Executes the exact transfer call against the node's pending state.
+  ///
+  /// A successful response may be `0x` (native transfers and non-standard
+  /// ERC-20 contracts) or ABI-encoded return data. RPC execution errors are
+  /// surfaced as [RpcException] and must stop signing.
+  Future<String> call({
+    required String from,
+    required String to,
+    required BigInt value,
+    required String data,
+    String blockTag = 'pending',
+  }) async {
+    if (blockTag != 'latest' && blockTag != 'pending') {
+      throw ArgumentError.value(blockTag, 'blockTag');
+    }
+    final result = await _call('eth_call', [
+      {
+        'from': from,
+        'to': to,
+        'value': '0x${value.toRadixString(16)}',
+        'data': data,
+      },
+      blockTag,
+    ]);
+    if (result is! String ||
+        !result.startsWith('0x') ||
+        result.length.isOdd ||
+        !RegExp(r'^[0-9a-fA-F]*$').hasMatch(result.substring(2))) {
+      throw RpcException('malformed eth_call result');
+    }
+    return result;
+  }
+
   /// ERC-20 balanceOf via eth_call.
-  Future<BigInt> erc20Balance(String contract, String owner) async {
+  Future<BigInt> erc20Balance(
+    String contract,
+    String owner, {
+    String blockTag = 'latest',
+  }) async {
+    _requireBlockTag(blockTag);
     // balanceOf(address) selector 70a08231 + padded owner.
     final data = '0x70a08231${'0' * 24}${_strip0x(owner)}';
     return _hexToBigInt(
       await _call('eth_call', [
         {'to': contract, 'data': data},
-        'latest',
+        blockTag,
       ]),
     );
   }
@@ -156,6 +201,12 @@ class EvmRpc {
   }
 
   static String _strip0x(String s) => s.startsWith('0x') ? s.substring(2) : s;
+
+  static void _requireBlockTag(String blockTag) {
+    if (blockTag != 'latest' && blockTag != 'pending') {
+      throw ArgumentError.value(blockTag, 'blockTag');
+    }
+  }
 }
 
 /// One EVM fee tier.

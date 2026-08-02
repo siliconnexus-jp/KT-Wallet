@@ -184,6 +184,26 @@ void main() {
   });
 
   group('EVM nonce reservation and replacement', () {
+    test('observed nonce backfill is write-once', () async {
+      final repo = wallets.scoped('A');
+      await repo.upsertTransaction(
+        _tx(
+          'legacy-pending',
+          'A',
+        ).copyWith(status: const Value(TxStatus.pending)),
+      );
+
+      expect(
+        await repo.setTransactionNonceIfAbsent('legacy-pending', '7'),
+        isTrue,
+      );
+      expect(
+        await repo.setTransactionNonceIfAbsent('legacy-pending', '8'),
+        isFalse,
+      );
+      expect((await repo.transactionById('legacy-pending'))?.nonce, '7');
+    });
+
     test(
       'racing transaction with the same nonce is rejected atomically',
       () async {
@@ -259,7 +279,7 @@ void main() {
       );
     });
 
-    test('accepted replacement updates both rows transactionally', () async {
+    test('node acceptance keeps both nonce competitors pending', () async {
       final repo = wallets.scoped('A');
       await repo.reserveEvmTransaction(
         _evmTx('original', 'A'),
@@ -284,7 +304,7 @@ void main() {
       );
 
       expect(
-        await repo.acceptEvmReplacement(
+        await repo.recordEvmReplacementBroadcast(
           originalId: 'original',
           replacementId: 'replacement',
           hash: '0xnew',
@@ -295,12 +315,182 @@ void main() {
 
       final original = await repo.transactionById('original');
       final replacement = await repo.transactionById('replacement');
-      expect(original!.status, TxStatus.replaced);
+      expect(original!.status, TxStatus.pending);
       expect(original.replacedById, 'replacement');
       expect(replacement!.status, TxStatus.pending);
       expect(replacement.hash, '0xnew');
       expect(replacement.broadcastAt, 2000);
     });
+
+    test('confirmed replacement atomically settles the original', () async {
+      final repo = wallets.scoped('A');
+      await repo.reserveEvmTransaction(
+        _evmTx('original', 'A'),
+        coin: 'eth',
+        networkId: 'eth-mainnet',
+        from: '0xfrom',
+        nonce: '7',
+      );
+      await repo.updateTransactionStatus('original', TxStatus.pending);
+      await repo.reserveEvmTransaction(
+        _evmTx(
+          'replacement',
+          'A',
+          replacesId: 'original',
+          replacementKind: TxReplacementKind.speedUp,
+        ),
+        coin: 'eth',
+        networkId: 'eth-mainnet',
+        from: '0xfrom',
+        nonce: '7',
+        replacesId: 'original',
+      );
+      await repo.recordEvmReplacementBroadcast(
+        originalId: 'original',
+        replacementId: 'replacement',
+        hash: '0xnew',
+        broadcastAt: 2000,
+      );
+
+      await repo.settleEvmTransaction(
+        id: 'replacement',
+        status: TxStatus.confirmed,
+        hash: '0xnew',
+        lastCheckedAt: 3000,
+      );
+
+      final original = await repo.transactionById('original');
+      final replacement = await repo.transactionById('replacement');
+      expect(original!.status, TxStatus.replaced);
+      expect(original.replacedById, 'replacement');
+      expect(replacement!.status, TxStatus.confirmed);
+      expect(replacement.lastCheckedAt, 3000);
+    });
+
+    test('confirmed original atomically settles its replacement', () async {
+      final repo = wallets.scoped('A');
+      await repo.reserveEvmTransaction(
+        _evmTx('original', 'A'),
+        coin: 'eth',
+        networkId: 'eth-mainnet',
+        from: '0xfrom',
+        nonce: '7',
+      );
+      await repo.updateTransactionStatus('original', TxStatus.pending);
+      await repo.reserveEvmTransaction(
+        _evmTx(
+          'replacement',
+          'A',
+          replacesId: 'original',
+          replacementKind: TxReplacementKind.cancel,
+        ),
+        coin: 'eth',
+        networkId: 'eth-mainnet',
+        from: '0xfrom',
+        nonce: '7',
+        replacesId: 'original',
+      );
+      await repo.recordEvmReplacementBroadcast(
+        originalId: 'original',
+        replacementId: 'replacement',
+        hash: '0xnew',
+        broadcastAt: 2000,
+      );
+
+      await repo.settleEvmTransaction(
+        id: 'original',
+        status: TxStatus.confirmed,
+        hash: '0xold',
+      );
+
+      final original = await repo.transactionById('original');
+      final replacement = await repo.transactionById('replacement');
+      expect(original!.status, TxStatus.confirmed);
+      expect(replacement!.status, TxStatus.replaced);
+      expect(replacement.replacedById, 'original');
+    });
+
+    test('local replacement failure never settles the original', () async {
+      final repo = wallets.scoped('A');
+      await repo.reserveEvmTransaction(
+        _evmTx('original', 'A'),
+        coin: 'eth',
+        networkId: 'eth-mainnet',
+        from: '0xfrom',
+        nonce: '7',
+      );
+      await repo.updateTransactionStatus('original', TxStatus.pending);
+      await repo.reserveEvmTransaction(
+        _evmTx(
+          'replacement',
+          'A',
+          replacesId: 'original',
+          replacementKind: TxReplacementKind.speedUp,
+        ),
+        coin: 'eth',
+        networkId: 'eth-mainnet',
+        from: '0xfrom',
+        nonce: '7',
+        replacesId: 'original',
+      );
+
+      await repo.updateTransactionStatus('replacement', TxStatus.failed);
+
+      expect(
+        (await repo.transactionById('original'))!.status,
+        TxStatus.pending,
+      );
+      expect(
+        (await repo.transactionById('replacement'))!.status,
+        TxStatus.failed,
+      );
+    });
+
+    test(
+      'status lookup time persists without inventing a final state',
+      () async {
+        final repo = wallets.scoped('A');
+        await repo.reserveEvmTransaction(
+          _evmTx('pending-diagnostic', 'A'),
+          coin: 'eth',
+          networkId: 'eth-mainnet',
+          from: '0xfrom',
+          nonce: '7',
+        );
+
+        await repo.updateTransactionStatus(
+          'pending-diagnostic',
+          TxStatus.submitted,
+          lastCheckedAt: 123456789,
+          lastCheckOutcome: TxCheckOutcome.unknown,
+        );
+
+        final row = await repo.transactionById('pending-diagnostic');
+        expect(row!.status, TxStatus.submitted);
+        expect(row.lastCheckedAt, 123456789);
+        expect(row.lastCheckOutcome, TxCheckOutcome.unknown);
+
+        await repo.updateTransactionStatus(
+          'pending-diagnostic',
+          TxStatus.pending,
+          lastCheckedAt: 123456999,
+          lastCheckOutcome: TxCheckOutcome.pending,
+        );
+        final recovered = await repo.transactionById('pending-diagnostic');
+        expect(recovered!.status, TxStatus.pending);
+        expect(recovered.lastCheckOutcome, TxCheckOutcome.pending);
+
+        await repo.updateTransactionStatus(
+          'pending-diagnostic',
+          TxStatus.failed,
+          clearLastCheckOutcome: true,
+        );
+        expect(
+          (await repo.transactionById('pending-diagnostic'))!.lastCheckOutcome,
+          isNull,
+        );
+      },
+    );
 
     test('the nonce conflict key is scoped per network', () async {
       final repo = wallets.scoped('A');

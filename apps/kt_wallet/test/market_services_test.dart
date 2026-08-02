@@ -194,11 +194,16 @@ void main() {
       final service = PriceService(
         client: MockClient((request) async {
           expect(request.url.path, '/api/v3/simple/price');
-          expect(request.url.queryParameters['vs_currencies'], 'usd');
+          expect(request.url.queryParameters['vs_currencies'], 'usd,cny,jpy');
           expect(request.url.queryParameters['include_24hr_change'], 'true');
           return http.Response(
             jsonEncode({
-              'ethereum': {'usd': 2500.0, 'usd_24h_change': 2.5},
+              'ethereum': {
+                'usd': 2500.0,
+                'cny': 17500.0,
+                'jpy': 375000.0,
+                'usd_24h_change': 2.5,
+              },
               'polygon-ecosystem-token': {'usd': 0.4, 'usd_24h_change': -3.0},
               'tron': {'usd': 0.12, 'usd_24h_change': null},
               'solana': {'usd': 150, 'usd_24h_change': 1},
@@ -224,6 +229,8 @@ void main() {
       expect(service.change24hPercent(Coin.tron), isNull);
       expect(service.tokenChange24hPercent('USDT'), -0.1);
       expect(service.tokenChange24hPercent('USDC'), 0.05);
+      expect(service.fiatPerUsd('CNY'), 7);
+      expect(service.fiatPerUsd('JPY'), 150);
     });
 
     test('non-200 → null, keeping the previous last-good cache', () async {
@@ -246,6 +253,34 @@ void main() {
       fail = true;
       expect(await service.fetchUsdPrices(), isNull);
       expect(service.lastGoodUsd![Coin.eth], 2000.0);
+    });
+
+    test('direct quotes omit non-positive prices and their changes', () async {
+      final service = PriceService(
+        client: MockClient(
+          (_) async => http.Response(
+            jsonEncode({
+              'ethereum': {
+                'usd': -2000,
+                'cny': -14000,
+                'jpy': 0,
+                'usd_24h_change': 4,
+              },
+              'tron': {'usd': 0.12, 'usd_24h_change': -1.25},
+              'tether': {'usd': 0, 'usd_24h_change': 2},
+            }),
+            200,
+          ),
+        ),
+      );
+
+      final prices = await service.fetchUsdPrices();
+      expect(prices, {Coin.tron: 0.12});
+      expect(service.change24hPercent(Coin.eth), isNull);
+      expect(service.change24hPercent(Coin.tron), -1.25);
+      expect(service.tokenPriceUsd('USDT'), isNull);
+      expect(service.tokenChange24hPercent('USDT'), isNull);
+      expect(service.lastGoodFiatPerUsd, {'USD': 1});
     });
 
     test('timeout → null', () async {

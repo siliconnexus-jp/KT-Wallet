@@ -1,0 +1,58 @@
+rule_files:
+  - kt-wallet-gateway-alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: alertmanager discovery is fail-visible
+    interval: 1m
+    input_series:
+      - series: prometheus_notifications_alertmanagers_discovered
+        values: 0+0x5
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: KTWalletAlertmanagerUndiscovered
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: kt-wallet-monitoring
+            exp_annotations:
+              summary: KT Wallet Prometheus cannot discover Alertmanager
+              description: Prometheus has had no active Alertmanager target for 2 minutes; alerts are not being delivered.
+
+  - name: alert notification errors are visible
+    interval: 1m
+    input_series:
+      - series: prometheus_notifications_errors_total{alertmanager="http://127.0.0.1:9098/api/v2/alerts"}
+        values: 0 0 1 1 1
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: KTWalletAlertDeliveryErrors
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: kt-wallet-monitoring
+            exp_annotations:
+              summary: KT Wallet alert delivery is failing
+              description: Prometheus recorded at least one Alertmanager delivery error in 10 minutes. Inspect the loopback Alertmanager target and notification queue.
+
+  - name: notification queue saturation waits five minutes
+    interval: 1m
+    input_series:
+      - series: prometheus_notifications_queue_capacity
+        values: 100+0x10
+      - series: prometheus_notifications_queue_length
+        values: 90+0x10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: KTWalletAlertQueueSaturated
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: KTWalletAlertQueueSaturated
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: kt-wallet-monitoring
+            exp_annotations:
+              summary: KT Wallet alert notification queue is saturated
+              description: More than 80% of the Prometheus notification queue has been occupied for 5 minutes.

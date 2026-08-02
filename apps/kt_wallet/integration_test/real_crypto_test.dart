@@ -3,6 +3,8 @@ import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
+import 'support/e2e_wallet_cleanup.dart';
+
 /// On-device proof that the REAL Trust Wallet Core bridge works end to end on
 /// iOS: mnemonic generation, Keychain-backed storage, and BIP-44 derivation —
 /// with every derived address validated by our own chain validators
@@ -28,6 +30,7 @@ void main() {
         mnemonic: mnemonic,
         requireAuth: false,
       );
+      registerE2eWalletCleanup(crypto, walletId);
       final addrs = await crypto.deriveAddresses(walletId);
 
       // Our own validators must accept what wallet-core derived.
@@ -81,11 +84,13 @@ void main() {
         mnemonic: mnemonic,
         requireAuth: false,
       );
+      registerE2eWalletCleanup(crypto, 'itest-det-a');
       await crypto.storeWallet(
         walletId: 'itest-det-b',
         mnemonic: mnemonic,
         requireAuth: false,
       );
+      registerE2eWalletCleanup(crypto, 'itest-det-b');
       final a = await crypto.deriveAddresses('itest-det-a');
       final b = await crypto.deriveAddresses('itest-det-b');
       expect(b.eth, a.eth);

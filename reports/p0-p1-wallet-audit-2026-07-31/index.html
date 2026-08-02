@@ -1,0 +1,1064 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>KT Wallet 国际钱包差距与 P0/P1 验收报告</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%230b1220'/%3E%3Cpath d='M18 18h8v11l12-11h10L34 31l15 15H38L26 34v12h-8z' fill='%238fb0ff'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      color-scheme: light;
+      --ink:#101828; --muted:#667085; --line:#e4e7ec; --paper:#fff;
+      --wash:#f6f7fb; --blue:#2357e6; --green:#067647; --amber:#b54708;
+      --red:#b42318; --navy:#0b1220;
+    }
+    * { box-sizing:border-box }
+    body { margin:0; background:var(--wash); color:var(--ink);
+      font:15px/1.65 Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif }
+    a { color:var(--blue); text-decoration:none }
+    a:hover { text-decoration:underline }
+    .hero { background:var(--navy); color:white; padding:72px 24px 104px }
+    .wrap { width:min(1120px,calc(100% - 32px)); margin:auto }
+    .eyebrow { color:#8fb0ff; text-transform:uppercase; letter-spacing:.14em;
+      font-size:12px; font-weight:800 }
+    h1 { font-size:clamp(38px,6vw,70px); line-height:1.03; letter-spacing:-.055em;
+      margin:18px 0 22px; max-width:900px }
+    .lead { color:#c7d2e5; font-size:18px; max-width:780px; margin:0 }
+    .stamp { display:flex; flex-wrap:wrap; gap:10px; margin-top:28px }
+    .stamp span { border:1px solid #33405a; border-radius:999px; padding:7px 12px;
+      color:#d9e2f2; font-size:13px }
+    main { margin-top:-58px; padding-bottom:72px }
+    section { background:var(--paper); border:1px solid var(--line);
+      box-shadow:0 12px 34px rgba(16,24,40,.055); border-radius:24px;
+      margin-bottom:18px; padding:clamp(22px,4vw,42px) }
+    h2 { font-size:28px; letter-spacing:-.035em; margin:0 0 18px }
+    h3 { margin:28px 0 10px; font-size:18px }
+    p { margin:9px 0 }
+    .verdict { display:grid; grid-template-columns:220px 1fr; gap:28px; align-items:center }
+    .score { aspect-ratio:1; display:grid; place-content:center; text-align:center;
+      border-radius:50%; background:conic-gradient(var(--blue) 0 79%,#e9edfa 79%);
+      position:relative }
+    .score:after { content:""; position:absolute; inset:14px; background:white; border-radius:50% }
+    .score strong,.score span { position:relative; z-index:1 }
+    .score strong { font-size:52px; letter-spacing:-.06em; line-height:1 }
+    .score span { color:var(--muted); font-size:12px }
+    .callout { border-left:4px solid var(--amber); background:#fffaeb; padding:14px 16px;
+      border-radius:0 12px 12px 0; margin-top:18px }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px }
+    .card { border:1px solid var(--line); border-radius:16px; padding:18px }
+    .card strong { display:block; font-size:17px; margin-bottom:4px }
+    .card small,.muted { color:var(--muted) }
+    .meter { height:8px; background:#edf0f6; border-radius:10px; overflow:hidden; margin-top:12px }
+    .meter i { display:block; height:100%; background:var(--blue); border-radius:inherit }
+    table { width:100%; border-collapse:collapse; font-size:14px }
+    th,td { text-align:left; border-bottom:1px solid var(--line); padding:13px 10px;
+      vertical-align:top }
+    th { color:var(--muted); font-size:12px; letter-spacing:.04em; text-transform:uppercase }
+    .pass,.partial,.blocked,.todo { font-weight:750 }
+    td { overflow-wrap:anywhere }
+    .pass { color:var(--green) } .partial { color:var(--amber) }
+    .blocked { color:var(--red) } .todo { color:var(--muted) }
+    code { background:#f2f4f7; padding:2px 6px; border-radius:6px; font-size:12px }
+    .tests { display:grid; grid-template-columns:repeat(4,1fr); gap:12px }
+    .metric { background:#f8f9fc; border-radius:16px; padding:18px }
+    .metric strong { font-size:28px; display:block; letter-spacing:-.04em }
+    .shots { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px }
+    figure { margin:0; border:1px solid var(--line); border-radius:18px; overflow:hidden;
+      background:#f4f6fa }
+    figure img { width:100%; display:block; aspect-ratio:9/19.5; object-fit:cover; object-position:top }
+    figcaption { padding:10px 12px; background:white; color:var(--muted); font-size:12px }
+    ol,ul { padding-left:21px }
+    .priority li { margin:10px 0 }
+    .foot { text-align:center; color:var(--muted); padding:22px 0 }
+    @media (max-width:780px) {
+      .hero { padding-top:48px }
+      .verdict { grid-template-columns:1fr }
+      .score { width:190px }
+      .grid,.tests { grid-template-columns:1fr 1fr }
+      .shots { grid-template-columns:1fr 1fr }
+      .scroll { overflow-x:auto }
+    }
+    @media (max-width:500px) {
+      .grid,.tests,.shots { grid-template-columns:1fr }
+      section { border-radius:18px }
+      .scroll { overflow:visible }
+      .scroll table,.scroll tbody,.scroll tr,.scroll td { display:block; width:100% }
+      .scroll thead { display:none }
+      .scroll tr { margin:0 0 12px; padding:14px; border:1px solid var(--line);
+        border-radius:14px; background:#fbfcfe }
+      .scroll tr:last-child { margin-bottom:0 }
+      .scroll td { padding:5px 0; border:0; overflow-wrap:anywhere }
+      .scroll td:first-child { padding:0 0 9px; margin-bottom:4px;
+        border-bottom:1px solid var(--line); font-size:15px; font-weight:800 }
+      .scroll td.pass,.scroll td.partial,.scroll td.blocked,.scroll td.todo {
+        padding-top:9px }
+      code { word-break:break-all }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <div class="eyebrow">KT Wallet · Engineering acceptance</div>
+      <h1>离国际一线 Wallet，还有多远？</h1>
+      <p class="lead">结论不是“功能数量”比较，而是以资产安全、交易真实性、弱网可靠性、
+        双端质量、生态完整度和外部保证为标准，对当前代码与真实测试网证据做审慎评估。</p>
+      <div class="stamp">
+        <span>2026-08-03</span><span>基线 1da1b1f + 本轮工作区修复</span>
+        <span>iOS Simulator 26.2</span><span>Android 15 / API 35</span>
+        <span>不包含任何私钥或助记词</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section>
+      <div class="verdict">
+        <div class="score"><strong>80</strong><span>/ 100 工程判断</span></div>
+        <div>
+          <h2>强测试版基础钱包，还不是国际成熟钱包</h2>
+          <p>与“可靠的多链基础钱包”相比，当前大约完成 <b>80–85%</b>；
+            与 OKX Wallet、MetaMask、Trust Wallet 这类包含 DApp、Swap、NFT、
+            硬件钱包、风险情报和全球运营体系的完整产品相比，大约为 <b>42–52%</b>。</p>
+          <p>优势是：八链热钱包签名基础已经相当扎实、失败闭合意识正确、双端 UI
+            自动化覆盖高。主要差距不在再画几个页面，而在外部审计、真机安全、
+            全链离线签名闭环、跨地域 RPC/索引可靠性、运营保障与生态能力。</p>
+          <div class="callout"><b>发布判断：</b>适合继续 TestFlight / 内测；
+            暂不建议以“达到国际一线钱包安全等级”对外宣传，也不建议承载大额主网资产。</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>差距雷达</h2>
+      <div class="grid">
+        <div class="card"><strong>密钥与签名 · 92%</strong><small>Wallet Core 原生签名、
+          PIN/生物识别错误分类、Cold Signer 架构已有；Ethereum、Base、Arbitrum、
+          Avalanche、BNB、TRON、Solana 已完成 iOS/Android 原生币与 Token 双端离线
+          广播闭环。外部密码学审计、Polygon 和物理摄像头闭环仍缺。</small>
+          <div class="meter"><i style="width:92%"></i></div></div>
+        <div class="card"><strong>交易正确性 · 91%</strong><small>动态费用、链上状态、
+          网络身份锁定、Pending 持久化、地址投毒提示已增强；TRON 与 Solana
+          过期边界已持久化并失败闭合；EVM、TRON、Solana 的确认页与签名均使用
+          同一份短期不可变报价；Sepolia、Base、Fuji 与 BNB 的真实 speed-up/cancel
+          已通过；EVM 授权撤销在热钱包及观察钱包 + Cold Signer 路径均保持精确
+          calldata 与 operation 语义；Amoy 待补燃料，Arbitrum 按 sequencer 语义明确
+          不提供 replacement。</small>
+          <div class="meter"><i style="width:91%"></i></div></div>
+        <div class="card"><strong>数据可靠性 · 84%</strong><small>可信缓存、Gateway fallback、
+          请求合并、节点熔断、错误链拦截、交易预执行代理及匿名 endpoint
+          P50/P95/失败分桶已具备；生产已建立单主机双实例、共享 Redis、主动健康切换与
+          Prometheus 与 loopback Alertmanager 收件箱，外部值班接收方和跨地域 SLA 尚未建立。签名前可发送余额读取链上实时状态；
+          Solana ATA rent 与 TRON Energy/Bandwidth/激活费均进入确认报价；测试网
+          原生币与 Token 不会复用主网法币价格或 24h 涨跌。</small>
+          <div class="meter"><i style="width:84%"></i></div></div>
+        <div class="card"><strong>核心 UX · 84%</strong><small>中英日、缓存首屏、交易与资产页面
+          已接近消费级；Pending 在回到前台后立即续查，多个状态变化按队列一次性通知。
+          KT Wallet 34 页与独立 Cold Signer 21 页均已通过自动语义标签、双平台触控尺寸、
+          WCAG 对比度和小屏/横屏溢出门禁；两个 App 的 200% 动态字体门禁也全部通过。
+          Android API 35 已使用系统 TalkBack 跑通真实 Solana Devnet 转账；iOS
+          VoiceOver、物理设备逐页读屏/大字、极端弱网与全量真机矩阵仍不足。</small>
+          <div class="meter"><i style="width:84%"></i></div></div>
+        <div class="card"><strong>安全保证 · 35%</strong><small>内部测试不等于安全认证。
+          缺独立移动端审计、密码学审计、漏洞赏金、真机 root/jailbreak 失败闭合证据。</small>
+          <div class="meter"><i style="width:35%"></i></div></div>
+        <div class="card"><strong>生态与覆盖 · 25%</strong><small>尚未覆盖 BTC 等关键原生链，
+          且本阶段明确排除 WalletConnect、DApp、Swap、NFT、质押。</small>
+          <div class="meter"><i style="width:25%"></i></div></div>
+      </div>
+      <p class="muted">百分比是基于当前仓库与本轮证据的工程判断，不是第三方认证或安全评分。</p>
+    </section>
+
+    <section>
+      <h2>“国际成熟钱包”基线怎么定</h2>
+      <p>本报告没有只比较链和 Token 数量。成熟钱包还应在交易前解释真实资产变化、
+        识别恶意地址与合约、管理授权，并支持独立签名设备和持续安全运营。官方资料显示：</p>
+      <ul>
+        <li><a href="https://support.metamask.io/configure/wallet/how-to-enable-automatic-security-checks-mobile">MetaMask 安全提醒</a>
+          已覆盖信任标记、恶意地址/网站/Token 情报与交易模拟。</li>
+        <li><a href="https://support.metamask.io/manage-crypto/transactions/simulations/">MetaMask 资产变化预测</a>
+          会在确认前展示合约交互可能造成的 Token/NFT 变化，并在价格不可用时诚实显示不可用。</li>
+        <li><a href="https://support.metamask.io/more-web3/wallets/hardware-wallet-hub">MetaMask 硬件钱包</a>
+          支持直连与二维码隔离设备；这类生态兼容度高于 KT Wallet 当前只验证自有 Cold Signer 的状态。</li>
+        <li><a href="https://support.metamask.io/more-web3/learn/how-to-revoke-smart-contract-allowances-token-approvals/">MetaMask 授权管理</a>
+          支持检查和撤销 Token allowance；KT Wallet 已完成五条 EVM 主网的授权扫描、
+          风险分级与热/观察钱包撤销；生产 Gateway 只读 API 已上线，但尚未完成真实主网撤销验收。</li>
+        <li><a href="https://web3.okx.com/help/okx-web3-wallet-has-updated-approval-management">OKX Wallet 授权管理</a>
+          会汇总历史授权并过滤恶意授权投毒；这说明成熟产品的基线还包括持续扫描、
+          风险运营和历史覆盖，而不仅是能生成一笔撤销交易。</li>
+        <li><a href="https://docs.gopluslabs.io/reference/tokensecurityusingget_1">GoPlus Token Security API</a>
+          按 chain id 与完整 Token 合约返回动态风险数据；官方文档标明公共服务限额为
+          <a href="https://docs.gopluslabs.io/reference/support">30 次/分钟</a>，因此 Gateway
+          使用短时缓存且把限流保留为“无法检查”。</li>
+        <li><a href="https://docs.gopluslabs.io/reference/solanatokensecurityusingget">GoPlus Solana Token Security API</a>
+          使用独立 Beta endpoint；其<a href="https://docs.gopluslabs.io/reference/response-detail-1">官方响应定义</a>
+          明确区分普通 mint/freeze/metadata 能力与 authority 的 malicious-address 证据。
+          Gateway 因此只对明确恶意创建者、Hook 或特权 authority 阻止签名，不把 USDC
+          的合法管理权限误报为恶意。</li>
+      </ul>
+      <p class="muted">这些链接只用于校准产品基线，不代表对第三方实现作独立安全背书。</p>
+    </section>
+
+    <section>
+      <h2>本轮已经真正改进的部分</h2>
+      <div class="grid">
+        <div class="card"><strong>链状态不再猜</strong><small>索引器空结果、429 或超时不再把
+          Pending 误判为 dropped；只有 receipt / 链节点明确结果才改变最终状态。</small></div>
+        <div class="card"><strong>认证错误语义闭合</strong><small>未录入生物识别、设备不可用、
+          系统取消和系统锁定不会错误累计为攻击失败次数；热钱包删除始终触发原生密钥删除，
+          删除认证失败时不会先移除钱包元数据。</small></div>
+        <div class="card"><strong>安全存储异常失败闭合</strong><small>两款 App 的 PIN、锁定状态与
+          签名器元数据不再在设备端插件缺失时静默退回进程内 Map；内存实现只允许显式测试。
+          KT Wallet 保持锁定，KT Cold Signer 阻止创建、导入与签名；中英日阻断页可重试，
+          但不会绕过真实安全存储。启动时原生派生暂时失败也不再擦除 walletId/PIN；
+          onboarding 提交失败会独立补偿原生密钥与全部 Dart 状态。</small></div>
+        <div class="card"><strong>热钱包创建与恢复原子化</strong><small>KT Wallet 只有在原生密钥、
+          全链地址派生和 Drift 事务全部成功后才发布新钱包。失败会补偿清理密钥与数据库
+          半成品，重复助记词被拒绝；启动时重新派生并核对所有持久化地址，缺失或错配保持
+          阻断且不擦除用户数据。新建、导入与在线配对的本地 walletId 现由系统安全随机数
+          生成 144-bit URL-safe 值，不再暴露可预测微秒时间；Android/iOS 原生边界也会在
+          认证和存储前拒绝路径分隔符、Unicode、空白与超长 ID。</small></div>
+        <div class="card"><strong>删除崩溃窗口已闭合</strong><small>两款 App 均在删除原生密钥前
+          持久化删除墓碑；Keychain/Keystore 与 Dart 数据库之间发生异常或进程退出时，
+          下次启动会隐藏该钱包并幂等续做，不能复活成只有地址、没有密钥的损坏状态。</small></div>
+        <div class="card"><strong>原生输入错误不再终止 App</strong><small>Core Crypto 的 iOS
+          MethodChannel 已移除所有助记词、签名和备份参数的 <code>as!</code> 与 HDWallet
+          强制解包；Android 同步采用精确类型解码。非法强度、缺失或错误类型会在系统认证、
+          KDF 和密钥存储前固定返回 <code>INVALID_INPUT</code>。</small></div>
+        <div class="card"><strong>重复 walletId 不再覆盖密钥</strong><small>双原生 wallet slot
+          改为只创建：iOS 由 Keychain 原子拒绝 duplicate，不再先删旧 item；Android 对
+          blob 与 Keystore alias 同时检查，密文经临时文件 fsync 后 rename，提交失败会
+          补偿新 key。重复调用固定返回 <code>WALLET_EXISTS</code>，旧密钥和认证策略保持不变。</small></div>
+        <div class="card"><strong>损坏密钥 envelope 不进入 Wallet Core</strong><small>设备本地
+          header 只接受 0/1，解密后只接受 16/24/32-byte BIP-39 entropy；Android 私有
+          blob 与 iOS Keychain payload 都在读取/解析前限制为精确合法尺寸。未知 header、
+          截断、超长或 GCM 失败统一返回 <code>STORE_CORRUPTED</code>。</small></div>
+        <div class="card"><strong>生产深链不再借用设计状态</strong><small>Release Router 绑定
+          唯一真实 WalletController；无钱包、缺少 pending mnemonic、错误 walletId 或缺失
+          交易会话均在页面构建前拒绝。设计 Splash、模拟扫码与 test-bypass controller
+          在 Release 不可达。首页未备份横幅现在打开当前钱包的强认证助记词导出，不再
+          错误生成另一套新种子。</small></div>
+        <div class="card"><strong>Cold Signer 创建流程改为状态机</strong><small>创建、助记词
+          精确核对、PIN、生物识别选择和完成页只能按顺序推进；已有钱包不能重新进入创建或
+          导入。完成页还必须携带与当前 walletId 一致的真实 metadata，并发创建或提交只执行
+          一次原生操作。Gallery 密码页使用显式 preview，不污染生产 controller 状态。</small></div>
+        <div class="card"><strong>钱包设置提交后才生效</strong><small>名称、头像颜色与备份状态先
+          持久化再更新 UI；排序将完整钱包 permutation 放在同一 Drift 事务内，数据库中途
+          失败时当前页面和重启后都保持旧值，不再出现假成功或半排序。</small></div>
+        <div class="card"><strong>签名 QR 提交后才发布</strong><small>在线端先持久化与 reqId
+          对应的 awaitingSig 交易，再把 SignRequest 放入会话并渲染 QR。写入期间没有
+          可扫描字节；数据库失败时 request、QR 与本地交易 ID 均为空，并显示三语阻断提示，
+          离线端不能签署一笔在线端重启后无法恢复的孤儿交易。</small></div>
+        <div class="card"><strong>广播不可逆边界可恢复</strong><small>EVM、TRON、Solana
+          热钱包发送先持久化完整意图，再原生签名；本地派生 txHash 提交后才进行首次广播。
+          节点已接收但回包丢失时保留 submitted 供重启续查，不误标失败、不诱导重复转账；
+          初始数据库写入失败时签名和广播调用均为 0。</small></div>
+        <div class="card"><strong>广播只提交一次，未知结果不重发</strong><small>节点明确拒绝
+          才显示失败；请求开始后的超时、断连与畸形回包均进入 unknown。EVM、Solana 与
+          TRON 写请求不做 endpoint failover；Gateway 内部 EVM/Solana 广播同样只选一个
+          eligible endpoint，并以 -32003 保留丢失回答；App 只在能够证明尚未转发时允许直连。
+          热钱包、AIRGAP、replacement 与授权撤销统一保留本地 hash 并继续对账。生产
+          1.16.4 还会用 Redis 原子 claim 跨实例去重同一签名 payload，并拒绝字段损坏的共享记录；原始交易不入 Redis，防重异常有匿名指标与告警。
+          HAProxy retries 0 已上线。</small></div>
+        <div class="card"><strong>真实法币与一致快照</strong><small>USD/CNY/JPY 读取实时 FX；
+          首页和发送页共用 MarketController generation，未知值统一显示 --。测试网价格、
+          24h 涨跌与总估值在数据模型边界按链隔离，不能从主网 last-good 缓存泄漏。</small></div>
+        <div class="card"><strong>弱网、Gateway 与网络身份</strong><small>同一 JSON-RPC 读请求并发合并；
+          只有显式只读/模拟 allowlist 可以 failover，未知方法默认单端点单次请求。App
+          直连备用节点在收到钱包地址或原请求 metadata 前先校验 EVM chainId、Solana
+          genesis hash 或 TRON block-0 identity，错链节点直接跳过；Gateway 继续负责
+          endpoint 熔断与 readiness。当前只读探针来自东京网络，不代表中国大陆多运营商
+          已验收；Solana Devnet 当前无合格直连备用。</small></div>
+        <div class="card"><strong>端点配置失败闭合</strong><small>Gateway、RPC 覆盖和自定义网络
+          统一执行 URL 安全策略：公开地址只允许 HTTPS，HTTP 仅限 loopback；带账号凭证、
+          fragment、非法 URL 和跨链 network override 均不会落盘。旧污染配置加载时丢弃并
+          恢复安全默认；中英日 UI 会保留编辑页并解释错误。</small></div>
+        <div class="card"><strong>多实例共享缓存与广播幂等 · 生产已启用</strong><small>Gateway Redis
+          local-first 缓存已经在生产双实例通过：第二实例可命中第一实例写入的数据。
+          key 使用 namespace + SHA-256 指纹；远程 Redis 强制 TLS；状态、预执行与
+          spendable balance 永不进入读缓存。广播仅保存 24 小时 SHA-256 claim 与结果三态，
+          不保存签名 bytes。严审后旧有链参数缓存也已移除，pending nonce 每次
+          报价都重新读取。Redis 故障会快速回退本地 miss；单主机双实例切换已通过，
+          但尚未覆盖跨主机或跨地域。</small></div>
+        <div class="card"><strong>Gateway 发布状态 · 1.16.8 已上线</strong><small>2026-08-02
+          通过 SHA 校验、原子软链接、secondary → primary 滚动和自动回滚门禁部署；生产返回
+          <code>version=1.16.8</code>、16 个网络、<code>/readyz=200</code>，
+          <code>kt_getEvmSpendableBalances</code> 已返回 pending/latest 真实余额。
+          HAProxy 8118 主动检查两个 Gateway，Redis 6388 共享缓存，Prometheus 9099
+          监控两实例及自身，Alertmanager 9098 接收/分组/静默告警；全部只监听 loopback。
+          中国大陆多运营商真机与跨地域可达性仍需
+          独立验收。</small></div>
+        <div class="card" id="gateway-log-privacy"><strong>隐私安全的 RPC 可观测性</strong><small>Gateway 现在按网络与匿名
+          endpoint 位置保留最多 256 次尝试，输出 P50/P95、成功/失败、熔断以及
+          429、超时、畸形响应、传输、5xx 和 provider 错误分桶；kt_health 与
+          Prometheus /metrics 均不暴露 URL、API key、地址、余额或交易 payload；1.16.7
+          默认关闭 metrics，公网无凭证返回 404，只有至少 32-byte Bearer Token 可访问。
+          广播防重只暴露固定 outcome，不含 fingerprint、hash、地址或交易。RPC 日志的
+          method 仅允许服务端注册值，chain/network 仅允许固定内置值；公网 canary 原文
+          命中为 0，非法输入只记录 unknown/invalid。生产 3/3 target UP、17/17 规则健康；
+          配置值、测试地址及近期日志泄漏扫描均为 0。</small></div>
+        <div class="card" id="gateway-error-privacy"><strong>上游错误凭证脱敏 · 双层失败闭合</strong><small>
+          严审确认 Go <code>net/http</code> 传输错误会包含完整 provider URL，而 Alchemy、
+          Helius 与 Etherscan 的 key 位于 path/query。1.16.7 在 Pool、CoinGecko、Etherscan、
+          Helius、Alchemy、TronGrid 与三类 GoPlus 客户端丢弃底层 request/transport/read
+          error，并把 provider 响应和畸形值归一为固定词汇；JSON-RPC read/broadcast 边界
+          再独立固定 upstream 与 message。常见 nonce、余额不足、费用、blockhash、签名
+          拒绝仍可操作，但未知 provider 文字不会反射。跨八类客户端与边界 canary 自动化
+          通过；本地真实候选使用 credential-bearing URL 制造连接失败，响应中 canary、端口
+          与 URL path 均为 0 命中。</small></div>
+        <div class="card"><strong>HTTP 完整性边界 · 1.16.8 生产启用</strong><small>
+          严审发现旧的精确 <code>LimitReader(max)</code> 只能截断，不能证明 body 已完整
+          读完；合法 JSON 后追加超大空白仍可能执行 handler 或被当作有效上游响应。现在
+          入站 JSON-RPC 与 Alchemy、Etherscan、Helius、TronGrid、CoinGecko、GoPlus、
+          通用 EVM/Solana RPC 均读取上限 + 1 字节，任何超限在解析、缓存和业务处理前
+          整体拒绝。公网与 8119/8120 的 4 MiB+ canary 均返回
+          <code>-32600/id=null</code>；异常上游超限仍由确定性测试证明，不冒充供应商
+          真实发送过该响应。</small></div>
+        <div class="card"><strong>隐私安全的支持诊断</strong><small>About 页新增显式确认后的
+          版本化 JSON 导出。精确 schema allowlist 只允许 App/构建、网络模式、服务状态与
+          聚合 P50/P95；钱包地址、余额、金额、交易、txHash、密钥、签名、助记词及 RPC/
+          Gateway URL 无法进入文件，系统分享返回后清理临时文件。</small></div>
+        <div class="card"><strong>匿名指标跨重启保留</strong><small>App 使用固定 12 项
+          allowlist 记录首帧、Flutter/Platform 错误计数、市场/历史刷新，以及 prepare、
+          sign、broadcast、finality、原生 fatal/ANR 的时长或失败状态。最多保留 100 条并
+          版本化本机持久化，
+          不保存准确事件时间、错误文字、stack、地址、金额、Hash、请求参数或返回值；畸形
+          payload 整包拒绝，存储失败不影响钱包。Android 两款 App 已接入前台 ANR 看门狗
+          与进程 fatal 观察器，iOS 两款 App 已接入 MetricKit crash/hang 汇总。</small></div>
+        <div class="card"><strong>主动同意的匿名可靠性报告</strong><small>About 页将本地
+          JSON 导出与远程发送拆分；远程发送每次都要求确认，不后台上传、不自动重试。
+          closed schema 只允许 App 版本、平台、大致语言、构建模式与固定 12 项指标的
+          count/success/failure/P50/P95；没有设备/会话 ID、准确时间、地址、交易、错误
+          文字或 stack。Gateway 1.16.8 不保留 request body/raw event，Prometheus
+          保留 7 天/512 MB；客户端告警标记为未认证趋势信号，不能冒充可信崩溃率。</small></div>
+        <div class="card"><strong>地址投毒防护</strong><small>与联系人、本地钱包或历史地址
+          高度相似但不一致时展示风险说明并要求显式确认。</small></div>
+        <div class="card"><strong>独立 Token 威胁情报 · 生产只读启用</strong><small>Gateway 1.16.8
+          在运营方紧急风险表之后接入 GoPlus：六条 EVM 主网、TRON 主网及独立 Solana
+          Token Security endpoint 只提交公开 chain id/完整合约或 mint。明确 honeypot、
+          fake-token、malicious-address、gas-abuse、恶意 Solana creator/Hook/特权 authority
+          覆盖官方身份目录并阻止签名；USDC 合法 mint/freeze 权限不误杀，无证据 unknown，
+          429/超时显示“无法检查”。5 分钟缓存、HTTPS/凭证/重定向门禁、匿名指标、App
+          Solana mint 精确传递及实时 USDC API 已通过；生产 Ethereum USDC 返回
+          <code>official_catalog+goplus</code>。EVM Token、Solana Token 与 EVM Approval
+          供应商使用相互隔离的 3-failure/30-second 熔断和单一半开探针，并接入独立
+          Prometheus 告警与运维 runbook；本地 Alertmanager 路由/收件箱已上线，外部值班
+          接收方、长期 SLA 与误报申诉仍待完成。</small></div>
+        <div class="card"><strong>EVM 授权中心 · 生产 API 启用</strong><small>Gateway 1.16.8
+          通过明确隐私同意查询 Ethereum、Polygon、Base、Arbitrum 与 BNB 主网授权；
+          页面区分无限/有限/高风险/未知授权。热钱包使用精确
+          <code>approve(spender, 0)</code>，观察钱包走 KT Cold Signer QR、原始字节解析、
+          原生签名和在线逐字段验签；Pending 恢复、历史、加速与取消保留操作语义。
+          生产已证明无同意拒绝、显式同意后调用 GoPlus；仍未做小额主网撤销验收。</small></div>
+        <div class="card"><strong>公开测试披露入口</strong><small>新增 SECURITY.md 与
+          3/7/14 天响应目标；Privacy Policy 不再引导用户公开提交漏洞细节。About 页
+          直接提供隐私、风险、Security Policy、第三方许可证与安全报告流程，并明确
+          永不索要助记词或私钥。2026-08-03 GitHub 官方 API 回读仍为
+          <code>enabled=false</code>；当前浏览器与本机 HTTPS Git 凭证均无
+          Administration(write)，官方启用接口返回 404。仓库私密漏洞报告功能当前
+          尚未启用，不能宣称已有可用的私密收件渠道。</small></div>
+        <div class="card"><strong>Pending 恢复与通知</strong><small>App 回到前台后立即续查
+          未决交易；同一轮多个确认或失败事件依次展示，并按交易哈希和状态去重，
+          避免遗漏或重复打扰。</small></div>
+        <div class="card"><strong>Ethereum 双端离线链上闭环</strong><small>iOS Simulator 26.2
+          和隔离 Android API 35 分别使用真实 Wallet Core 与系统认证，从八链
+          AccountExport 公钥绑定、观察钱包配对、AIRGAP-V1 请求/结果帧、原始交易解析、
+          签名和在线密码学验签，一直走到 Sepolia 广播、receipt 与 Gateway 历史。
+          ETH/Test USDT 四笔跨端交易均为 status=1；不把自动帧传输冒充成物理摄像头扫描。</small></div>
+        <div class="card"><strong>链族过期规则</strong><small>数据库 v5 保存 TRON TAPOS、
+          链时间 expiration 与 Solana lastValidBlockHeight。只有同一条规范链明确越界且
+          仍查不到交易时才转为 expired；RPC 错误、边界相等或索引器空结果继续保持 unknown。</small></div>
+        <div class="card"><strong>EVM 签名前精确预执行</strong><small>热钱包和 Cold Signer
+          QR 生成前使用完全一致的 from/to/value/data 执行 eth_call 与 estimateGas；
+          Gateway 按活动网络代理，失败才回退直连。合约 revert、畸形返回与 ERC-20 false
+          均阻止签名，状态相关结果不缓存。</small></div>
+        <div class="card"><strong>确认与签名使用同一报价</strong><small>热钱包与观察钱包
+          确认页现在生成 30 秒有效的不可变 EVM 报价，绑定 network id、chainId、
+          收付款地址、金额、Token、nonce、gas 和费用。热钱包认证层与 Cold Signer
+          请求二维码都只能消费用户刚确认的同一份 envelope；报价过期、网络切换或
+          字段漂移均失败闭合并返回确认页，不能静默重建另一笔交易。</small></div>
+        <div class="card"><strong>EVM 原始交易资产变化</strong><small>确认页从最终待签名
+          EIP-1559 unsignedTx 反解原生币或 ERC-20 转出量，并把原生币最大网络费单独列出；
+          chainId、nonce、recipient、Token contract、amount、gas 与不可变报价任一不一致
+          都会失败闭合。双端截图同时发现并修复了已备份钱包仍显示备份警告的问题。</small></div>
+        <div class="card"><strong>Pending 可发送余额核验</strong><small>报价阶段通过
+          Gateway 或已验证网络的直连 RPC 读取未缓存的 pending 原生币与 ERC-20
+          余额；原生转账需覆盖金额与最大费用，Token 转账同时验证 Token 数量和
+          gas 资产。余额 RPC 不可确认时禁止签名。</small></div>
+        <div class="card"><strong>EVM replacement 不再提前结算</strong><small>节点接收
+          replacement 只表示它加入 nonce 竞争；原交易与替换交易均保持
+          Pending，只有 receipt 确认获胜者后才原子地将竞争者标为 replaced。
+          加速前同时核验 latest 完整负债与 pending 增量负债；本地签名/认证/
+          广播失败不会误终结原交易。</small></div>
+        <div class="card"><strong>TRON / Solana 精确报价</strong><small>TRON 使用实时
+          TRX/TRC-20 余额、Energy、Bandwidth、动态链参数和新账户激活费构造同一份
+          TAPOS raw_data；Solana 使用最新 blockhash、getFeeForMessage 与同一 message
+          的模拟后置余额，单独展示可回收 ATA rent。两者的热签名和离线 QR 都只消费
+          用户确认的原始字节，错误钱包、报价过期或字段漂移都会失败闭合。</small></div>
+        <div class="card"><strong>旧 Pending nonce 证据回填</strong><small>Gateway 返回
+          pending 时，缺 nonce 的旧 EVM 记录仍会向链节点核验 hash/from/nonce 并执行
+          write-once 回填；不一致或节点已遗忘则保持 unknown，不伪造 dropped。</small></div>
+        <div class="card"><strong>Release 原生密码学硬门禁</strong><small>生产根路由不开放 Gallery，
+          模拟广播成功路径已删除；KT Wallet 与独立 KT Cold Signer 的三个 Android ABI
+          都包含 Trust Wallet Core，六类 Mock/demo/fixture 标记均为零。显式关闭 Wallet
+          Core 的 Release 构建会在 Gradle 配置阶段失败。</small></div>
+        <div class="card"><strong>签名结果按 canonical wire 验证</strong><small>EVM 从最终
+          signed transaction 恢复发送地址并逐字段核对 chainId、nonce、费用、gas、to、
+          value 与 data；TRON 核对完整 canonical protobuf raw_data；Solana 核对
+          compact-u16 message、fee payer 与 ed25519 签名。EVM/TRON 高-s 签名被拒绝。
+          Android API 35 已用真实 Wallet Core 临时钱包跑通 EVM/TRON 签名与强化验签，
+          测试结束后经系统认证删除密钥。</small></div>
+        <div class="card"><strong>真实离线账户配对边界</strong><small>AccountExport 严格绑定
+          八链地址、公钥、派生路径与随机 walletId；相机和最终导入页双重校验。缺链、重复
+          coin、错误路径、篡改公钥、secp256k1 非曲线点和 EVM key 不一致均失败闭合。
+          两端现共享同一派生路径常量，并按 Wallet Core 4.7.0 默认 Solana 路径修复协议漂移。</small></div>
+        <div class="card"><strong>设备状态不再默认绿色</strong><small>Cold Signer 首页会在启动和
+          恢复时执行带 2 秒上限的原生安全探测；未完成、超时或失败显示检查中/无法确认，联网显示红色阻断，
+          只有测得离线且其他检查通过才显示绿色。删除了固定“安全检查通过”和“离线 42 天”假状态。</small></div>
+        <div class="card"><strong>已有钱包助记词复核不再回退演示数据</strong><small>钱包管理页先调用
+          原生强认证导出，并再次验证 BIP-39 词数和有效性；词表只通过不可序列化、不可修改的
+          内存对象进入受保护路由。认证失败或 show/verify 深链缺少状态时不显示任何词，验证成功
+          回到钱包管理而不是重新设置密码。固定 Wallet ID、创建日和助记词只保留于显式 Gallery，
+          报告不保存或截图任何真实恢复短语。</small></div>
+        <div class="card"><strong>异步页面生命周期闭合</strong><small>资产详情离开后仍在途的
+          历史索引请求会按 generation 丢弃；控制器销毁后不再 notifyListeners，避免慢网
+          请求在返回时触发已释放对象异常。延迟响应回归测试已覆盖。</small></div>
+        <div class="card"><strong>认证设置保持 fail-closed</strong><small>关闭 App 锁、
+          切换钱包密码/生物识别和修改 PIN 都必须验证当前身份；启用生物识别会执行真实
+          可用性检查与认证请求。无 PIN 且生物识别不可用的旧安装状态不再自动降低保护。
+          App 层流程已在 iOS Simulator 与 Android API 35 独立执行。</small></div>
+        <div class="card"><strong>系统认证与任务卡保护兼容</strong><small>部分 Android
+          系统会在 BiometricPrompt 出现时触发 onUserLeaveHint；旧实现因此启动第二个
+          PrivacyActivity 并中断认证。两款 App 现统一协调 local_auth 与原生 Wallet Core
+          的认证生命周期，同时保留 onPause 同窗口隐私封面。真实系统指纹 prompt、
+          Home → Recents 保护和恢复 MainActivity 已在 API 35 分别验证。</small></div>
+        <div class="card"><strong>生产敏感路由不再伪造成功</strong><small>直接进入
+          导入确认、交易确认、签名、broadcast-confirm 或 broadcast-result 时，必须具有
+          对应的 AccountExport、draft、request、验签结果及广播证据。签名成功不等于广播
+          成功；W9 只有同时持有持久化本地交易 ID 和节点返回的 broadcast txHash 才能显示
+          “交易已提交”。组件级也已收紧：交易详情、地址簿和 Token 管理只有显式 Gallery
+          bypass 才能加载 fixture；生产控制器即使缺失 Store 也只显示真实空状态。</small></div>
+        <div class="card"><strong>删除事务自动化证据</strong><small>热钱包删除先调用原生
+          密钥删除，失败时保留钱包；Wallet Data 级联清除账户、Token、余额、Pending、
+          历史、地址簿与设置；Cold Signer 清除 vault、PIN、lockout 与防重放记录。
+          真机 Keychain/Keystore 物理删除仍单独列为待验收。</small></div>
+        <div class="card"><strong>Cold Signer 删除认证不再是摆设</strong><small>生产钱包必须
+          先输入当前语言的完整确认文字，再验证当前 App PIN；启用系统认证时还必须通过
+          生物识别或设备凭据，才会进入最终不可恢复确认。错误 PIN、系统认证失败和空确认
+          文字均保持钱包不变。设备安全检查及关键助记词、密钥、解析、签名错误也已按中英日
+          结构化翻译，不再混入硬编码中文。</small></div>
+        <div class="card"><strong>生产文案门禁</strong><small>KT Wallet 与 KT Cold Signer 的
+          生产 Dart 源码新增静态扫描门禁，阻止直接写入用户可见的中日韩文字和未批准固定英文。
+          本轮同时修复离线配对错误、钱包标识、相机失败提示及 Cold Signer 默认钱包名称；默认
+          名称现在跟随当前语言进入持久化与 AccountExport。进一步加入 ARB 键/ICU placeholder、
+          Android 原生 strings 及 iOS InfoPlist 权限说明三层一致性门禁；两款最终 iOS Simulator
+          App bundle 和 Android Debug APK 资源表均读到中英日资源。真机权限弹窗、生命周期保护页
+          和全部路由的人工三语语义复核仍未完成。</small></div>
+        <div class="card"><strong>交易状态证据可持久化</strong><small>本地交易数据库 v7
+          持久化最后查询时间及 pending / unknown 证据；交易详情同时显示原交易网络、
+          广播时间、最后查询、当前状态和可复制的完整 hash，并按记录自己的网络打开
+          区块浏览器。节点或索引服务无法给出权威结果时明确显示“状态暂不可用”，不会
+          伪造成失败或继续误报“确认中”，仍在后台轮询；重新证明 Pending 后自动恢复，
+          unknown 期间隐藏加速与取消。</small></div>
+        <div class="card"><strong>关键转账链路可访问性</strong><small>首页动作、导航返回、标题、
+          确认明细和认证操作提供明确语义；200% 字体时明细纵向重排，底部操作避让系统安全区，
+          主/备用认证触控目标达到 48 px。减少动态效果时按压缩放与加载装饰动效归零。
+          Android API 35 已启用真实系统 TalkBack 与触摸探索，使用 Wallet Core 完成
+          Solana Devnet 转账、系统指纹认证与链上 finalized；iOS VoiceOver 和物理设备
+          读屏仍待验收。</small></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>真实测试网交易证据</h2>
+      <p>全部使用本地受控测试账户与真实 Wallet Core 签名。测试凭证没有写入本报告。</p>
+      <div class="callout"><b>2026-08-03 安全轮换：</b>2026-08-02 批次因一次终端脱敏字段
+        未匹配而立即作废；其 host 凭据已删除，任何离线签名结果都不再作为“当前批次”证据。
+        唯一 iOS Simulator 恢复后，原生 Wallet Core 已生成新的 14 天批次
+        <code>batch_20260802_3eb2631a3683a40c</code>，公开地址为 EVM
+        <code>0xfa1B78714280c3DCF70Af6Dc6b4F5D56fB52aD11</code>、TRON
+        <code>TRn5vEZomUM4MHbvyoRCuxngTWGaFCWJqj</code>、Solana
+        <code>4Frj8584f3yv5ZAAVRs6yNXV5bXkVJR91EFPuA3p5q3S</code>。host 文件为 0600 且
+        credential guard 通过；设备私密 JSON 已删除，iOS provisioning 临时 native
+        walletId 仍等待一次 Face ID 清理确认。当前批次已在 Android API 35 以真实系统
+        指纹逐次授权重跑 16 条 Wallet Core 签名、AIRGAP-V1 往返和密码学验签，并在
+        teardown 删除 Android 临时原生钱包；尚未完成当前批次 iOS/独立 Cold Signer
+        矩阵。当前 EVM 地址经 Gateway 与独立 Amoy RPC 交叉读取均为 0 POL / 0 USDC，
+        尚未广播。下表浏览器链接仅属于更早批次的
+        历史回归证据，不能冒充新一轮验收。</div>
+      <div class="scroll"><table>
+        <thead><tr><th>网络</th><th>原生币</th><th>Token</th><th>结论</th></tr></thead>
+        <tbody>
+          <tr><td>Ethereum Sepolia</td>
+            <td><a href="https://sepolia.etherscan.io/tx/0x26e78ef63d99ee4c3fce3f37fcb3fe00d8a780e7db55b749d534c92c31b1cacc">ETH</a></td>
+            <td><a href="https://sepolia.etherscan.io/tx/0xfdd56bae674fdb2ffc66ac54c69e50859e42375a879bf9b996faedcceb90a8c2">Test USDT</a></td>
+            <td class="pass">通过</td></tr>
+          <tr><td>Polygon Amoy</td>
+            <td><a href="https://amoy.polygonscan.com/tx/0xf9543deb2069043ba8e64f5246cd7fcb5a72ff3ea1eac448a78bb16744dc8fb7">POL</a></td>
+            <td>USDC：未广播，燃料不足</td><td class="partial">部分通过</td></tr>
+          <tr><td>Base Sepolia</td>
+            <td><a href="https://sepolia.basescan.org/tx/0x2ec8a9c2bcaf87cc8ab18dd92099121dd782402aa87e80416a20affda2ffbb84">ETH</a></td>
+            <td><a href="https://sepolia.basescan.org/tx/0x252079736adfdb3dd5bfbaab428470cccaed0b0dfff8a852d2deacab48b80967">USDC</a></td>
+            <td class="pass">通过</td></tr>
+          <tr><td>Arbitrum Sepolia</td>
+            <td><a href="https://sepolia.arbiscan.io/tx/0xe9126236f12850eb177ba8c9d5856a2500d503557afa38178250e6f43796eff1">ETH</a></td>
+            <td><a href="https://sepolia.arbiscan.io/tx/0x182ce0bc2511eec1518036f487139a50e0cea08de53a791da4bcde6727da5119">USDC</a></td>
+            <td class="pass">通过</td></tr>
+          <tr><td>Avalanche Fuji</td>
+            <td><a href="https://testnet.snowtrace.io/tx/0xcf1e313e7063d7050605d518120d8f83100caa2aa001af8cd9e69bc1d00d7199">AVAX</a></td>
+            <td><a href="https://testnet.snowtrace.io/tx/0x400fb11d76d04a283782e81f802b2760fe2098142de24b0a471a5da1bfed77e9">USDC</a></td>
+            <td class="pass">通过</td></tr>
+          <tr><td>BNB Smart Chain Testnet</td>
+            <td><a href="https://testnet.bscscan.com/tx/0xbf20e38a4c5c74021df240edd08cfa22a707e33aefa9625a3913d6f4c3ea83a2">BNB</a></td>
+            <td><a href="https://testnet.bscscan.com/tx/0x236119856bd42fbcb793767e8ec9a3dea98c39a8d24c941e49275d3f7903bf68">BUSD</a></td>
+            <td class="pass">通过</td></tr>
+          <tr><td>TRON Nile</td>
+            <td><a href="https://nile.tronscan.org/#/transaction/a17e3ed4d272ce68d7bbcbff03ae301a2b35c0b322f93a77bd3625cb62acc237">TRX</a></td>
+            <td><a href="https://nile.tronscan.org/#/transaction/b88ea7a53ee462ff734233abdb284e1c96fbbcf75697e6de25c31fbfd5e7f294">Test USDT</a></td>
+            <td class="pass">通过</td></tr>
+          <tr><td>Solana Devnet</td>
+            <td><a href="https://solscan.io/tx/rnzf6Fwoosz7B6MAozt54rZAxpW4Ar9ZkrGQrzpZouiFE6Ues1vcuqysXTRw7aHn4Nd8KVWjjenSkRtS5Y2yzs7?cluster=devnet">SOL</a></td>
+            <td><a href="https://solscan.io/tx/2Egct3i2qstotXrFUTTKU1y5nsF6j8FRdrv5osLWiirug9DRE9SidMjr83o9JFzjdXkg7vXt8pkGTFGVtXCKbaAB?cluster=devnet">Circle USDC</a><br>
+              <a href="https://solscan.io/tx/4m7Jn8QJT8BRwSWXvVapxVr6pcY97fJ413SGooJxBSRnfL1NtC51vj36bUf5EALTcHdX6bWc6X1wkYQZCSYXUQxU?cluster=devnet">PYUSD Token-2022 + 新 ATA</a></td>
+            <td class="pass">通过</td></tr>
+        </tbody>
+      </table></div>
+      <div class="callout"><b>Android 系统 TalkBack 真实链路：</b>API 35 模拟器启用系统
+        TalkBack 与触摸探索，使用真实 Wallet Core 钱包完成首页、转账输入、确认、
+        App 认证选择、系统指纹认证、广播与链上确认。新转账
+        <a href="https://explorer.solana.com/tx/23J1Vn2WniBbsdmGYVgoViGhZmrgErjUKbaQ1eikWEhiW4KjTAVjNL6ZwmuYtWro8L1oXxyPBGAJwAUCEgXvzzbX?cluster=devnet"><code>23J1Vn…XvzzbX</code></a>
+        已由 Solana 官方 RPC 独立验证为 <code>finalized</code>、<code>err=null</code>、
+        slot <code>480534314</code>。该证据不替代 Android 零售真机或 iOS VoiceOver 验收。</div>
+      <div class="callout"><b>Polygon 说明：</b>原生交易确认后，账户仅剩约
+        0.000585315 POL，节点拒绝 USDC 交易所需的最坏费用预算。本轮修复已改为在
+        第一笔广播前校验两笔交易总预算，避免将来再次出现半完成；补足至少约 0.003
+        POL 后仍需重跑 USDC。</div>
+      <div class="callout"><b>Ethereum 完整 AIRGAP-V1 链上闭环：</b>
+        iOS 原生 ETH
+        <a href="https://sepolia.etherscan.io/tx/0x660dfe10729e0e647259a16ce5a51a93617272734f302c4644a468ec0e2ac0f5"><code>0x660dfe…c0f5</code></a>
+        与 Test USDT
+        <a href="https://sepolia.etherscan.io/tx/0xdcd773ab53ca7f4b1d1991b7311e7e6447bd4880ca94e4c91717aee6e67f3761"><code>0xdcd773…f376</code></a>；
+        Android 原生 ETH
+        <a href="https://sepolia.etherscan.io/tx/0x88119a83fb3b5dc69508e0dfad1807ecb3dcae8240c1f56b21fa40974a239b68"><code>0x88119a…9b68</code></a>
+        与 Test USDT
+        <a href="https://sepolia.etherscan.io/tx/0x44c485baa13f4b3abb1e9b4e8584b0a6736bd7805e0c0cc6771ee8830243295d"><code>0x44c485…295d</code></a>
+        经独立 RPC 复核均为 <code>status=0x1</code>。每端都执行“公钥账户导出 →
+        观察钱包配对 → 实时预执行/费率 → 请求 QR → 系统认证与原生签名 → 结果 QR →
+        在线验签 → 广播 → receipt → Gateway 历史”；历史中精确出现
+        <code>1000000000000 wei</code> 与 <code>1000000</code> USDT 基础单位。</div>
+      <h3>EVM 扩展链完整 AIRGAP-V1 双端证据</h3>
+      <p>以下 16 笔全部执行与 Ethereum 相同的生产协议路径，并同时通过独立 RPC
+        receipt 与生产 Gateway 历史确认。链接是本轮全新交易，不复用旧热钱包证据。</p>
+      <div class="scroll"><table>
+        <thead><tr><th>网络</th><th>iOS 原生币</th><th>iOS Token</th><th>Android 原生币</th><th>Android Token</th></tr></thead>
+        <tbody>
+          <tr><td>Base Sepolia</td>
+            <td><a href="https://sepolia.basescan.org/tx/0x1732a034240d48aad89c906ed662d8fffd3dae08312f3ebc50a85b3a4533a17d">ETH</a></td>
+            <td><a href="https://sepolia.basescan.org/tx/0x027971584a1f8e3926acec22910ad05fa60c0419701322b98bb6c2304013e94f">USDC</a></td>
+            <td><a href="https://sepolia.basescan.org/tx/0xf15886adb4e244eb36c61b34fde29116edd4081f5fd37a685189b2aba5ae2d4d">ETH</a></td>
+            <td><a href="https://sepolia.basescan.org/tx/0x1943e1e56cb87853782107fb88bdb8f7afadd72e538fb03df9d75cc3b60de859">USDC</a></td></tr>
+          <tr><td>Arbitrum Sepolia</td>
+            <td><a href="https://sepolia.arbiscan.io/tx/0x57117423d263d15eb18ab42f2791724f94e76b21cef8ff2e4476a300cec99afc">ETH</a></td>
+            <td><a href="https://sepolia.arbiscan.io/tx/0x068894631e3801b74093cee34c6be6e7723a217e018bc2b0e82de56375adadf6">USDC</a></td>
+            <td><a href="https://sepolia.arbiscan.io/tx/0x8c3590d3cc127b784488c247dbfedf6c6a96795ff20bade7b2765eeec2dd5d60">ETH</a></td>
+            <td><a href="https://sepolia.arbiscan.io/tx/0x1056d14636a722d107ce652239706c9a155ede56e0e212c970396a50ebc191c8">USDC</a></td></tr>
+          <tr><td>Avalanche Fuji</td>
+            <td><a href="https://testnet.snowtrace.io/tx/0xf118d6cccff2285616308de10ce09181ec068ae9d34ddf27d329f93937e73125">AVAX</a></td>
+            <td><a href="https://testnet.snowtrace.io/tx/0x97189ce7eb0371f3d8f516f5bcf782207f4bf24701a3f290eaf44888648a3708">USDC</a></td>
+            <td><a href="https://testnet.snowtrace.io/tx/0xc286876fa9bae42640ee512a7afb53cafb2038a3536db65900984a905314e827">AVAX</a></td>
+            <td><a href="https://testnet.snowtrace.io/tx/0xf71cbb62dee0f25aaf6c012ec0797d1e840aad926c4b2e2d3290cfe5cf427c61">USDC</a></td></tr>
+          <tr><td>BNB Smart Chain Testnet</td>
+            <td><a href="https://testnet.bscscan.com/tx/0x4ca4e028eb05c83be640cef8dc280b3a88d898faf8ff58a3b3438113fde016cf">BNB</a></td>
+            <td><a href="https://testnet.bscscan.com/tx/0x2f914c853eeff838ebf79c1cf927be3f5e65625d1afb7120d1f55fc49af8f45e">BUSD</a></td>
+            <td><a href="https://testnet.bscscan.com/tx/0x60c889030c38e0a0158aa30bed9f6e04ef13066b85cd04b8566425a0d2595b29">BNB</a></td>
+            <td><a href="https://testnet.bscscan.com/tx/0x0b5ebb7724d159b00acf535bcc70f6f021d4fbfa6119e233935329b7af8b245c">BUSD</a></td></tr>
+        </tbody>
+      </table></div>
+      <div class="callout"><b>Avalanche 普通发送兼容：</b>节点明确不提供 pending block
+        state 时，App 不会直接盲目退回 latest；只有同一节点证明 confirmed nonce、
+        pending nonce 与本次 nonce 三者相同，才允许 latest 预执行与余额回退。iOS 和
+        Android 的 AVAX/USDC 四笔真实交易已经覆盖这条路径。</div>
+      <h3>TRON / Solana 完整 AIRGAP-V1 双端证据</h3>
+      <div class="scroll"><table>
+        <thead><tr><th>网络</th><th>iOS 原生币</th><th>iOS Token</th><th>Android 原生币</th><th>Android Token</th></tr></thead>
+        <tbody>
+          <tr><td>TRON Nile</td>
+            <td><a href="https://nile.tronscan.org/#/transaction/b17e14cd08ba0bf4ca7f64c36da3030e3608e84ee91e19bbd640645451bfa0e0">TRX</a></td>
+            <td><a href="https://nile.tronscan.org/#/transaction/e9634e6792aab57d1281a7d34160e1d5960fb109e687c81416c71287f8e1ed92">Test USDT</a></td>
+            <td><a href="https://nile.tronscan.org/#/transaction/374c69f47effa2ba506e647865a2d46c806fa73ad44d682fb99f4c1dccb4e525">TRX</a></td>
+            <td><a href="https://nile.tronscan.org/#/transaction/7b321ae5e54f95d3c617fe77140cc05ff9f911a297c544abd6f78f784afab3d6">Test USDT</a></td></tr>
+          <tr><td>Solana Devnet</td>
+            <td><a href="https://solscan.io/tx/5ZhthgGfm9kir6hWJt9dz6tt8eq2EmeqLDVUGEH5Rg9AfYoFsWpLM9KbY2DD6vNfiVck9SmQt1dtyFMzpD7mCHzn?cluster=devnet">SOL</a></td>
+            <td><a href="https://solscan.io/tx/4Ms239u1RvLEjdaWDwYafx99vumU5h5j1GJzkCkbJdDB94kFipGnHrKGLNH5v8QUqyJhUD2NUexX6ZtQ64SZzFUp?cluster=devnet">USDC</a></td>
+            <td><a href="https://solscan.io/tx/eQ5CjHNiMhb3xXMKywZ49U57DZjNLCgjC2erxXAi5EbMK2EeHqyRb8TYXPag1pCsags64QmwpwSmUSBSgVrM3Ht?cluster=devnet">SOL</a></td>
+            <td><a href="https://solscan.io/tx/4JAcVNsK1SXvk3tfKWwV3ypLqRMqtGpD8cCPRZCdfqLZ9KuD5bAfKG21WcMHQzxm6YEZZ9h8hgBBpwJy4QNqZfwL?cluster=devnet">USDC</a></td></tr>
+        </tbody>
+      </table></div>
+      <div class="callout"><b>Solana 收款人绑定修复：</b>真实闭环首次揭示“ATA 已存在时，
+        单条 SPL 指令只能解析出 Token Account、无法离线证明 owner”的缺口。生产构造
+        现在始终加入 Associated Token Program 的 CreateIdempotent 指令：ATA 不存在时
+        创建，已存在时无副作用；两种情况下原始字节都携带 owner、mint 与 token program，
+        Cold Signer 可重算 ATA 并显示真正收款人，不读取、不信任 summary。上表四笔
+        Solana 交易均使用修复后路径。</div>
+      <div class="callout"><b>Sepolia speed-up 真实验收：</b>使用 iOS 原生 Wallet Core
+        并逐次通过 Face ID。1 wei 原始候选
+        <a href="https://sepolia.etherscan.io/tx/0x20db737f4efa9fe7cf6daee0b039d6e86a695b1566652503b080a4f4c2b3a5f8"><code>0x20db73…a5f8</code></a>
+        无 receipt；同 nonce 提费候选
+        <a href="https://sepolia.etherscan.io/tx/0xc8fa48d646f0507d4f60114fb681a46f8db5f22ff9b1b652e10316583ee58a4a"><code>0xc8fa48…8a4a</code></a>
+        在区块 <code>0xadcfce</code> 以 <code>status=0x1</code> 获胜，链上
+        <code>nonce=0x30</code>、<code>value=1 wei</code>，证明加速保持原交易内容。</div>
+      <div class="callout"><b>Sepolia cancel 真实验收：</b>另一笔 1 wei 原始候选
+        <a href="https://sepolia.etherscan.io/tx/0x95ce8fc71a0725124687b69e370a4bb0286dd80a4571fcda159eb012b3453a4b"><code>0x95ce8f…3a4b</code></a>
+        无 receipt；同 nonce 取消候选
+        <a href="https://sepolia.etherscan.io/tx/0x160a55d959939c9625dd23e0aeefeb50f461d2eb914a7a2e57bd26b7f85df9f1"><code>0x160a55…f9f1</code></a>
+        在区块 <code>0xadcfcf</code> 以 <code>status=0x1</code> 获胜。RPC 独立复核
+        <code>nonce=0x32</code>、from/to 均为发送者本人且 <code>value=0</code>，
+        证明取消没有重复转出原金额。解除两组 nonce gap 的 filler 分别为
+        <a href="https://sepolia.etherscan.io/tx/0xbac48c2b08259e26f8c22c1ed42e566eec6043e69ac666c21fc0567d0b81fee0"><code>0xbac48c…fee0</code></a>
+        和
+        <a href="https://sepolia.etherscan.io/tx/0x4fdbf1768286373e4934b23d6daf0dc9bfe2ad8009ae5fd28b9c7510aa14a4f1"><code>0x4fdbf1…a4f1</code></a>。</div>
+      <div class="callout"><b>Base Sepolia replacement：</b>speed-up 获胜交易
+        <a href="https://sepolia.basescan.org/tx/0xb9af6f09eea67d7355ff68843e6fe067378e851014f46dcd1caddb000163d52b"><code>0xb9af6f…d52b</code></a>
+        在区块 <code>0x2acc091</code> 保持 <code>value=1 wei</code>；cancel 获胜交易
+        <a href="https://sepolia.basescan.org/tx/0x4a11a14dfa67b7798a969aae0ee7897e03a6852d1b4b82c1f411c3b6f8c74a90"><code>0x4a11a1…4a90</code></a>
+        在区块 <code>0x2acc094</code> 为 <code>value=0</code> 自转。两个原候选均无 receipt。</div>
+      <div class="callout"><b>Avalanche Fuji replacement：</b>节点明确不提供 pending block
+        state，因此 App 对 replacement 使用 latest 预执行，并只在 confirmed nonce 无前序
+        未知负债时允许回退。普通发送也只有在同一节点证明 confirmed nonce、pending nonce
+        与本次 nonce 三者相同时，才允许 latest 预执行和余额回退。speed-up
+        <a href="https://testnet.snowtrace.io/tx/0x1c6f0b2d798ed68e0f59f87a5fc2ad28a3d8259192f9708e085acf8b3dceb267"><code>0x1c6f0b…b267</code></a>
+        与 cancel
+        <a href="https://testnet.snowtrace.io/tx/0xc3220c789996cc206553657f87f6d9f2c6318c6a0b12add56afa38db871bd874"><code>0xc3220c…d874</code></a>
+        分别在区块 <code>0x36d1a15</code> / <code>0x36d1a18</code> 成功；低费候选均无 receipt。</div>
+      <div class="callout"><b>BNB Testnet replacement：</b>speed-up
+        <a href="https://testnet.bscscan.com/tx/0x430c9d796799b76f30dc766451d7d98412756be815b8a408e71c1340708d8889"><code>0x430c9d…8889</code></a>
+        与 cancel
+        <a href="https://testnet.bscscan.com/tx/0x2772ac664687e4d87ea14cc2e1f0b8100c0c5093d67bca7ee91bb9099923d0f2"><code>0x2772ac…d0f2</code></a>
+        均为 <code>status=0x1</code>；独立 RPC 复核原候选无 receipt，获胜内容分别为
+        1 wei 与 0 BNB 自转。</div>
+      <div class="callout"><b>Arbitrum 边界：</b>官方 Nitro 设计说明 sequencer 按
+        first-come-first-served 排序；真实竞态只会立即确认一个候选，另一个返回
+        <code>nonce too low</code>，无法形成可复核的 replacement。App 已隐藏该网络的
+        加速/取消，而不是把竞态中的任一成功误报为替换成功。参见
+        <a href="https://docs.arbitrum.io/nitro-whitepaper.pdf">Arbitrum Nitro whitepaper</a>。</div>
+    </section>
+
+    <section>
+      <h2>八链原生 Cold Signer 签名矩阵</h2>
+      <p>本轮新增的是<strong>真实原生签名与在线验签</strong>证据，不是模拟签名。
+        iOS Simulator 26.2 与 Android API 35 分别使用 Wallet Core 执行 16 条相同路径；
+        每笔签名都触发系统认证。请求和结果均通过 AIRGAP-V1 QR 分片、聚合及解码，
+        在线端随后重新解析原始交易并做密码学验签。</p>
+      <div class="scroll"><table>
+        <thead><tr><th>链</th><th>原生币</th><th>Token</th><th>iOS</th><th>Android</th></tr></thead>
+        <tbody>
+          <tr><td>Ethereum Sepolia</td><td>ETH</td><td>ERC-20</td><td class="pass">通过</td><td class="pass">通过</td></tr>
+          <tr><td>Polygon Amoy</td><td>POL</td><td>ERC-20</td><td class="pass">通过</td><td class="pass">通过</td></tr>
+          <tr><td>Base Sepolia</td><td>ETH</td><td>ERC-20</td><td class="pass">通过</td><td class="pass">通过</td></tr>
+          <tr><td>Arbitrum Sepolia</td><td>ETH</td><td>ERC-20</td><td class="pass">通过</td><td class="pass">通过</td></tr>
+          <tr><td>Avalanche Fuji</td><td>AVAX</td><td>ERC-20</td><td class="pass">通过</td><td class="pass">通过</td></tr>
+          <tr><td>BNB Smart Chain Testnet</td><td>BNB</td><td>ERC-20</td><td class="pass">通过</td><td class="pass">通过</td></tr>
+          <tr><td>TRON</td><td>TRX</td><td>TRC-20</td><td class="pass">通过</td><td class="pass">通过</td></tr>
+          <tr><td>Solana</td><td>SOL</td><td>SPL + 新 ATA</td><td class="pass">通过</td><td class="pass">通过</td></tr>
+        </tbody>
+      </table></div>
+      <div class="callout"><b>边界：</b>这些是确定性、未广播交易的本地 signed transaction
+        hash，无法作为区块浏览器链接。本证据证明“原生密钥签名 + QR 往返 + 在线验签”；
+        这一矩阵本身不证明测试网广播、链上确认或双端历史。Ethereum、Base、
+        Arbitrum、Avalanche、BNB、TRON、Solana 已用上文另行的双端实时交易补足
+        这些证据；Polygon Amoy 尚未补齐。</div>
+    </section>
+
+    <section>
+      <h2>自动化与构建结果</h2>
+      <div class="tests">
+        <div class="metric"><strong>1458</strong><span>KT Wallet tests 通过</span></div>
+        <div class="metric"><strong>568</strong><span>KT Cold Signer tests 通过</span></div>
+        <div class="metric"><strong>389</strong><span>共享 packages tests 通过</span></div>
+        <div class="metric"><strong>0</strong><span>静态分析问题</span></div>
+      </div>
+      <div class="scroll"><table>
+        <tbody>
+          <tr><td>Gateway</td><td><code>make audit</code> + <code>go test -race ./...</code>：vet、普通/race 测试及固定版本 govulncheck</td><td class="pass">Go 1.26.5；可达已知漏洞 0</td></tr>
+          <tr><td>Gateway 供应链</td><td>首次扫描发现 Go 1.26.1 有 9 个代码可达标准库漏洞；现将 go.mod 最低工具链、Go 构建镜像和 Distroless 运行镜像固定到已复核版本/内容摘要。OSV-Scanner 2.2.4 扫描 Dart 147、npm 293、Go 4 个依赖及最终容器镜像</td><td class="pass">当前已知问题 0；每个发布候选必须重扫</td></tr>
+          <tr><td>双端运行时供应链</td><td>Android Wrapper、Release runtime lock 与制品哈希已固定，protobuf-javalite 提升至 3.25.8。Apple 旧 SQLite 3.52.0 精确 commit 扫描命中 4 个 CVE（含与 FTS5 编译路径相关的高危项），已迁移到 sqlite3 native assets / SQLite 3.53.3；两个远程 Pod 与 SQLite 均固定 tag commit、spec/archive/source SHA-256，并查询 exact-commit OSV</td><td class="partial">Android runtime：KT 135、Signer 134 个坐标，OSV 为 0；Apple 三个上游 commit 为 0，双 App 最终 framework 为 3.53.3。构建工具告警、初始基线 provenance、正式签名与外部审计仍待闭合</td></tr>
+          <tr><td>公开发布秘密泄漏门禁</td><td>报告扫描新增 Etherscan、Helius、GoPlus、metrics bearer、完整 GitHub family、Alchemy、Slack、Stripe、Google 与私钥模式；同一检查覆盖两款 App 生产源码/原生资源、Gateway、网站和 CI。Android APK/AAB 与 iOS app 最终制品门禁同步扩展；三份本地测试/部署手册必须留在共享 gitignore</td><td class="pass">Provider 负例先红后绿，7/7 类命中；当前短期助记词 canary 扫描 28 份文档/报告，0 泄漏；check_deps、脚本语法、test_support 49/49、共享 packages 389/389 与静态分析通过。无前缀 opaque key 和历史 commit 仍需专用 secret scanner / push protection</td></tr>
+          <tr><td>Gateway 生产发布</td><td>1.16.8 Go 1.26.5 已通过 diff/gofmt/module、普通 329/329、race/vet/govulncheck 和自动回滚门禁；Linux amd64 静态制品 SHA-256 <code>c6d14f…6e41d2</code>；secondary → primary 滚动完成，生产返回 16 个网络和 <code>/readyz=200</code>，匿名诊断无 consent 失败闭合</td><td class="partial">双实例滚动上线与公网 smoke 通过；中国大陆多运营商和跨地域网络待验收</td></tr>
+          <tr><td>Gateway 错误隐私</td><td>上游 transport/request/read 错误不保留完整 URL；provider body、routing 与畸形值使用固定文案；JSON-RPC read/broadcast 边界再固定 upstream/message；未知 NodeError 不反射，常见交易拒绝映射为有限操作提示</td><td class="pass">八类客户端 + 边界 canary、真实进程 credential-bearing URL 故障注入通过；响应中 secret/URL/port 均 0 命中</td></tr>
+          <tr><td>Gateway HTTP 完整性边界</td><td>1.16.8 对 4 MiB 入站请求及 1/2/8 MiB 上游响应读取上限 + 1 字节；超限时丢弃整体，在 JSON 解析、handler、缓存或 provider 结果处理前失败闭合</td><td class="pass">先红后绿 3 项；Gateway 329/329、race/vet/govulncheck/HAProxy guard；公网与两个直连实例 4 MiB+ canary 均为 -32600/id=null</td></tr>
+          <tr><td>Gateway 入站资源限流边界</td><td>2026-08-03 源码把按客户端身份归因的限流移动到请求体读取与 JSON 解析之前；配额耗尽时完全不读取 body，畸形 JSON 同样消耗令牌，已知 Content-Length 超过 4 MiB 时零读取拒绝。早期拒绝无法可信解析调用方 id，因此固定返回 id=null，日志只使用固定 unknown/空路由标签</td><td class="partial">3 项先红后绿；Gateway 336/336、race 及完整 make audit 通过，govulncheck 可达漏洞 0；8,700,066-byte Linux amd64 静态候选 <code>bf7407…c4dee</code> 已生成但未部署。生产 1.16.8 仍待双实例滚动与公网限流/大 body canary</td></tr>
+          <tr><td>移动端 HTTP 响应硬上限</td><td>KT Wallet 的 Gateway、EVM/Solana JSON-RPC、TRON REST、区块浏览器历史、CoinGecko、Solana Faucet、自定义 RPC 探测和匿名诊断回执统一经过 8 MiB <code>BoundedHttpClient</code>。声明 Content-Length 超限时在缓冲前取消；未知长度、chunked 或解压后正文跨越上限时立即失败，固定错误不保留 URL 或正文。静态门禁覆盖生产全部 <code>http.Client()</code> 所有权点；Cold Signer 仍无联网依赖</td><td class="pass">先红后绿 4 项流式/结构回归；联网定向 120/120、静态分析 0、KT Wallet 全量 1446/1446</td></tr>
+          <tr><td>新钱包随机 walletId 与原生路径边界</td><td>KT Wallet 热钱包创建/导入和扫码配对的本地观察钱包统一使用系统安全随机数生成 18 字节、144-bit URL-safe ID；旧 ID 兼容读取。内存连续碰撞 8 次失败闭合，数据库主键冲突不会 upsert 覆盖旧钱包，热钱包事务失败会补偿删除新原生密钥。Android/iOS MethodChannel 在认证和 Keychain/Keystore 访问前独立限制 ASCII <code>[A-Za-z0-9_-]{1,64}</code>；Android BlobStore 组装文件名时再次校验，不能利用直接原生调用实施路径穿越</td><td class="pass">Dart 格式/唯一性/碰撞/配对与原子回滚 15/15；Core Crypto Dart 41/41、Android JVM 24/24；唯一 iPhone 17 Pro 定向原生 XCTest 通过，KT Wallet build-for-testing 与 KT Cold Signer Simulator 构建成功；全量 1446/1446、静态分析 0</td></tr>
+          <tr><td>原生 wallet slot 只创建</td><td>重复 walletId 不能替换既有密钥或改变认证策略。iOS 不再先删除 Keychain item，直接用 <code>SecItemAdd</code> 原子拒绝 duplicate；Android 在同一临界区核对 blob 与 Keystore alias，密文写入私有临时文件、flush + fsync 后同目录 rename，文件提交失败补偿刚创建的 key。Dart、Mock 与双原生层统一返回 <code>WALLET_EXISTS</code></td><td class="pass">覆盖尝试后旧助记词/密文字节保持不变；Core Crypto 41/41、Android JVM 24/24、真实 Wallet Core Kotlin 编译；唯一 iPhone 17 Pro 签名 XCTest 真实验证 Keychain duplicate + 原值读取；双 App iOS 构建与全量回归通过</td></tr>
+          <tr><td>设备本地密钥 envelope 闭合</td><td>header 只允许 0（直接熵）/1（设备 KDF），最终只接受 16/24/32-byte BIP-39 entropy。Android 私有 Keystore blob 在读入前只接受 45/53/61/89/97/105 bytes，GCM tag/block 失败固定为损坏；iOS Keychain payload 只接受 17/25/33/61/69/77 bytes。未知 header、截断、超长和错误熵长度不会进入 Wallet Core</td><td class="pass">Android 合法尺寸、44-byte 损坏文件、未知 flag 和错误熵长度负例，JVM 24/24；真实 Wallet Core 编译；唯一 iPhone 17 Pro 原生 XCTest 覆盖未知 flag 与错误 payload/entropy 尺寸；双 App iOS 构建通过</td></tr>
+          <tr><td>Core Crypto 原生参数与资源闭合</td><td>iOS 不再对助记词、coin、签名 typed data、备份 blob/密码执行 <code>as!</code>，也不强制解包任意强度的 HDWallet；Android 同步精确解码。助记词强度只允许 128/192/256，补全 limit 为 1–20。双原生层在认证前进一步限制助记词 512 UTF-8 bytes、单词/前缀 64 bytes、设备 KDF 密码 1024 bytes、备份密码 4096 bytes、签名输入 1 MiB，并只接受 60/68/76-byte 真实备份 payload 与八链 coin allowlist。空、超限、错误尺寸和未知 coin 固定为 <code>INVALID_INPUT</code>，不会弹认证框、进入昂贵 KDF/Wallet Core 或终止进程</td><td class="pass">Core Crypto Dart 41/41、Android JVM 24/24、真实 Wallet Core Kotlin 编译；唯一 iPhone 17 Pro 覆盖错误类型、非法强度/limit、空/超限输入、错误备份尺寸与未知 coin；双 App iOS 构建、KT Wallet 1446/1446、Cold Signer 568/568 通过；check_deps 固定关键边界</td></tr>
+          <tr><td>当前批次 Android 八链离线矩阵</td><td><code>batch_20260802_3eb2631a3683a40c</code> 在 Android API 35 通过真实系统指纹逐次授权，执行 Ethereum、Polygon、Base、Arbitrum、Avalanche、BNB 的原生币/Token，以及 TRON/TRC-20、Solana/SPL-ATA 共 16 条 Wallet Core 签名；每条均完成 AIRGAP-V1 多帧聚合、原始交易解析、在线密码学验签与 signer 核对。测试不访问 RPC、不广播，结束时再次经系统指纹删除 Android 临时原生钱包</td><td class="pass">集成测试 1/1；16/16 operation/hash/signer 证据完整。边界：当前批次 iOS、独立 KT Cold Signer、物理相机 QR 与链上广播尚未验收</td></tr>
+          <tr><td>原生 E2E 钱包清理真实性</td><td>仓库门禁使用 Analyzer AST 逐个核对原生 storeWallet 的 CoreCrypto 实例、walletId 与控制流；只接受同实例/同 ID 的紧邻认证 teardown，或覆盖创建点且不吞异常的 finally。统一 helper 本身也必须真实 addTearDown，并调用同实例 deleteWallet(walletId).timeout(timeout)，只允许忽略钱包已不存在。注释、错 ID、错实例、普通路径删除、第二钱包遗漏、空 helper 和捕获删除超时均不能伪装成已清理</td><td class="pass">站点与 helper 绕过先红后绿；真实发现并修复 Sepolia replacement 生命周期，EVM replacement 同步移除静默超时。两款 App integration tests 共 30 个原生 store 站点、0 清理债务；check_deps、分析 0、KT Wallet 1455/1455 通过。设备实际 Face ID/PIN 仍由 E2E 运行证明</td></tr>
+          <tr><td>金额、原生币单位与市场展示精度</td><td>用户十进制金额到链上 base unit 全程使用 BigInt；超 Token decimals 不截断，逗号歧义输入拒绝。EIP-1559 的 chainId、nonce、priority/max fee、gas limit 与 value 在 RLP/哈希前必须小于 2^256。Gateway 不能以响应 metadata 改写 ETH/POL/AVAX/BNB/TRX/SOL 的协议固定 decimals 或 symbol；不一致时整链失败并进入直连回退。运营方 verified Token decimals 只接受 0–36。展示层只接受正且有限的币价/FX 与有限涨跌；BigInt 转法币、换算或合计溢出时显示 --</td><td class="pass">错误 ETH 单位、Portfolio 隔离、六类 EVM 超域标量、255-decimal 官方 Token、负/零市场报价及 4096-bit 极端余额均先红后绿；超过 IEEE-754 的链上金额仍精确往返。chains 178/178、内置 Token 精度 35/35、KT Wallet 1458/1458、分析 0、check_deps 通过。法币 double 仅展示，不进入余额授权或签名</td></tr>
+          <tr><td>移动端错误隐私边界</td><td>Core Crypto 的 Android/iOS 原生层不再返回 Throwable、localizedDescription 或认证 Provider 文字；Dart MethodChannel 只保留固定错误码及锁定秒数。Gateway Client、直连 RPC、Solana 水龙头与 EVM/TRON/Solana Provider 错误统一丢弃完整 URI、任意 body 和未知节点文案；广播拒绝再以 16 类结构化原因进入 UI</td><td class="pass">先用助记词、私钥、Provider key、完整 URL、中文混排与异常 canary 证明旧路径；修复后 Core Crypto 20/20、HTTP/Gateway/广播 46/46、chains RPC 34/34、水龙头 10/10、三语映射 16/16、Wallet 860/860 通过，静态隐私门禁已纳入依赖审计</td></tr>
+          <tr><td>交易拒绝三语一致性</td><td>在线签名广播、热钱包发送、EVM 加速/取消及授权撤销不再显示安全层的固定英文或任意异常；余额、nonce、费用、Gas、过期引用、签名等 16 类原因由枚举跨层传递，在 UI 层映射中英日。未知本地失败仅显示“交易未提交”</td><td class="pass">先红后绿；三语 16/16、定向 19/19、chains 176/176、Wallet 860/860；英文拒绝页 Golden 人工检查无方块字和 Debug 水印</td></tr>
+          <tr><td>预签网络错误三语边界</td><td>严格复查发现“无活动网络”和“EVM 网络缺少 Chain ID”曾把固定英文直接送入 Snackbar。两条路径现由中英日 ARB 生成；生产文案门禁新增 error/message helper 扫描，带插值的英文错误也不能再以动态字符串名义绕过</td><td class="pass">初次红测捕获固定英文；插值 helper 夹具证明动态路径同样会被拒绝；三语精确回归与文案门禁 4/4、静态分析 0、check_deps、KT Wallet 全量 1446/1446</td></tr>
+          <tr><td>PIN 删除键三语读屏语义</td><td>严格复查发现 KT Wallet 共享 PIN 键盘的删除键视觉上只有图标，但三元表达式中的 <code>Semantics.label</code> 固定为英文 <code>Delete</code>。现按当前 App 语言输出“Delete last digit / 删除最后一位 / 最後の桁を削除”；生产文案门禁同步扫描 named UI 属性三元表达式，防止图标按钮的隐藏读屏文案绕过</td><td class="pass">门禁先红并精确指出真实路径；三语 Semantics 与门禁 6/6、静态分析 0、check_deps、KT Wallet 全量 1446/1446</td></tr>
+          <tr><td>Gateway 可观测性</td><td>生产 healthz、readyz、kt_health 与认证 Prometheus metrics 已验证；Prometheus 3.12.0 只监听 loopback，30 秒抓取两个 Gateway 和自身，保留 7 天/512 MB；P50/P95、7 类失败分桶和 17 条告警不含 endpoint URL/API key。新增广播 guard、三类 Alertmanager 投递管线告警，两条客户端趋势告警显式标为 untrusted；metrics 未认证时公网 404。Alertmanager 0.32.1 固定官方 digest，只监听 9098，使用 UTF-8 strict、四类 route、严重度抑制、5 天保留和 silence 上限</td><td class="partial">3/3 target UP、17/17 rule health=ok、Prometheus 发现 1 个 Alertmanager；临时 critical canary 经真实 notification queue 到达后恢复正式规则。外部邮件/Webhook/值班接收方及长期阈值校准待完成</td></tr>
+          <tr><td>匿名诊断闭环</td><td>用户每次主动确认 → App fixed-schema 聚合 → 安全 HTTPS Gateway → 无 raw event 固定标签计数 → Prometheus 7d/512MB；重复 digest 不重发、直接模式不上传、失败不自动重试。公网合成 debug 样本不含钱包/交易数据</td><td class="pass">客户端/隐私/UI 21/21；Android+iOS 定向 UI；公网 accepted=true，抓取后 counter=1</td></tr>
+          <tr><td>Gateway 多实例与代理限流</td><td>生产 Cloudflare → FluxGate → HAProxy 8118 → Gateway 8119/8120，两个实例共享 Redis 6388；服务只监听 loopback。FluxGate clean source 只执行一次 Hyper request，HAProxy 设置 retries 0 并移除 redispatch/retry-on。Cloudflare 官方仍允许多源站特定 52x <a href="https://developers.cloudflare.com/fundamentals/security/protect-your-origin-server/#zero-downtime-failover">Zero-Downtime Failover</a>，因此 Gateway 1.16.4 在链请求前用 Redis SET NX 原子 claim 去重同一签名交易，并对共享结果执行字段不变量校验；读 RPC failover 仍在 Gateway 内。200 个同 XFF 并发请求 90 成功、110 限流，新客户端仍成功</td><td class="partial">公网相同无效 Sepolia payload 连续请求两次：claim +1、replay_rejected +1、endpoint attempt +1；跨主机/跨地域容灾未验收</td></tr>
+          <tr><td>FluxGate / Gateway 客户身份与 hop-by-hop 边界</td><td>修正后的 FluxGate 会在 HTTP/WebSocket 两条路径删除客户端原始 <code>Forwarded</code>、XFF、X-Real-IP、X-Client-IP、True-Client-IP 与 CF-Connecting-IP，只向 Gateway 添加一个由可信 socket peer / Cloudflare edge 计算的 XFF。代理遍历全部 <code>Connection</code>/<code>Upgrade</code> field-line 并精确匹配逗号 token，拒绝伪 Upgrade 子串；请求、普通响应和 101 响应都删除固定及动态 hop-by-hop 字段、Proxy-Connection 与 TE，WebSocket 两跳只重新生成规范的 <code>Connection: Upgrade</code> / <code>Upgrade: websocket</code>。握手请求还必须满足 GET、唯一有效 Key 与 version 13；上游非法 101 固定失败为 502。HAProxy 的 <code>option forwardfor</code> 会在现有列表末尾追加自身 XFF，因此 Gateway 按线序展开逗号值和重复 field，完整校验后从右向左跳过可信代理；空、畸形、超长 XFF 与重复 X-Real-IP 退回 socket peer，无效 XFF 不降级读取第二身份头</td><td class="partial">用户确认的真实 FluxGate 目录已重跑：4 项单元边界 + 4 项真实 HTTP/WebSocket 双向回读，admin 118/118、workspace 206 项实际测试通过（9 ignored），fmt、全 target/feature 严格 Clippy、Release 构建及 300 包 OSV 扫描通过；Gateway 6 项身份边界用例、vet 与完整 race suite 通过。本地候选尚未部署，仍需生产普通 HTTP 与 WebSocket 上游回读 canary</td></tr>
+          <tr><td>FluxGate 数据面、日志容量与供应链审计</td><td>独立 FluxGate 0.1.12 源码确认数据面仅有一次 Hyper upstream request、无应用层 retry；本地候选删除失败日志中的完整 URL/query 与 connector error。旧 HTTPS accept-all verifier 已替换为 Mozilla WebPKI 根、证书链与请求主机名强校验；可信链通过，错误主机名和未受信链拒绝。生产只读核对发现进程常驻约 5.27 GB、access JSONL 达 6.0 GB：旧小时保留会整文件读取、复制、拼接并造成 writer stall。候选改成 O(cap) 流式尾部恢复；独立 compactor 整理稳定前缀时 writer 继续实时追加，完成后仅合并快照后的新增尾部、持久化并原子替换，再重开 append 句柄。畸形行、不完整尾行保留，失败不覆盖原文件；并发回归证明整理期间 200 条追加全部保留。PEM/JWT/MaxMind 迁移及精确 CI OSV gate 均已加入；<a href="https://google.github.io/osv-scanner/github-action/">OSV Scanner 官方 workflow</a>固定到 v2.3.8 tag commit，300 个 Rust 包扫描为 0</td><td class="partial">用户确认的真实目录重跑格式、全 target/feature 严格 Clippy、Release、workspace 206 项实际测试通过（9 ignored），OSV 已知问题 0；Linux amd64 static-pie 候选仍为 <code>e05013…7b466a</code>。生产仍为旧 <code>2c802f…c4d925</code>，本地候选尚未提交/部署，5.27 GB 常驻内存问题仍在线；KT 当前 loopback HTTP 路径不受 TLS 行为变化影响</td></tr>
+          <tr><td>独立 Token 威胁情报</td><td>GoPlus 仅接收 chain id + 公开合约或 Solana mint；运营方风险表与外部明确恶意证据均高于官方身份目录；Solana creator/Hook/特权 authority 的 malicious-address 会阻止签名，USDC 普通 mint/freeze/metadata 权限不误杀；无证据 unknown，服务失败 unavailable；5 分钟缓存、HTTPS 与禁止凭证/重定向、匿名指标；三个安全 provider 使用独立熔断、单一半开探针和固定标签指标</td><td class="partial">1.16.8 已上线；2026-08-02 八主网官方 Token 生产只读 smoke 8/8 返回 official_catalog+goplus，失败闭合正负例进入 make audit；外部接收方、长期 SLA、恶意/未知样本与误报申诉待完成</td></tr>
+          <tr><td>EVM Token 授权中心</td><td>五条 EVM 主网授权查询需显式隐私同意；无限/有限/高风险/未知分级；热钱包与观察钱包 + KT Cold Signer 均构造精确 approve(spender,0)，并覆盖验签、Pending 恢复、历史、speed-up 与 cancel 语义</td><td class="partial">生产无同意拒绝与显式同意 GoPlus 查询通过；真实小额主网撤销待验收</td></tr>
+          <tr><td>App 端点配置安全边界</td><td>Gateway/RPC/自定义网络仅接受安全 URL；公开 HTTP、内嵌凭证、fragment、非法旧配置、跨链 override 均失败闭合；中英日错误提示不关闭编辑页</td><td class="pass">10 项端点回归 + 全量套件通过</td></tr>
+          <tr><td>自定义网络浏览器真实性</td><td>自定义 EVM、Solana 或 TRON 网络只有显式配置区块浏览器时才显示交易、地址、Token 外链和交易凭证二维码；缺少配置不再回退到同协议主网，避免生成外观有效但链错误的链接。交易哈希、地址与 Token 标识均编码为单一路径段，不能以 query/fragment 改写目标</td><td class="pass">两条单元负例先红后绿；无浏览器 Widget 负例及相关网络/Pending/Token/交易详情 53/53；KT Wallet 1448/1448、flutter analyze 0。第三方浏览器内容与真机分享面板仍属外部/待人工边界</td></tr>
+          <tr><td>历史记录原网络真实性</td><td>Gateway/直连历史、本地 Pending 与 v3 显示缓存都保留产生记录的具体 networkId；详情页只按该 ID 解析网络并验证链家族，不再读取用户此刻选择的网络。旧缓存、已删除网络或跨家族 ID 保守隐藏网络名、浏览器入口及交易凭证二维码</td><td class="pass">模型/服务/快照红测先失败；跨环境详情精确显示 Sepolia 并生成 Sepolia 链接，旧记录与 TRON→Ethereum 负例失败闭合；相关 44/44、KT Wallet 1451/1451、完整分析 0、check_deps 通过。旧 v1/v2 缓存需成功刷新后恢复外链</td></tr>
+          <tr><td>跨链历史身份隔离</td><td>历史合并、终态同步和本地详情定位统一使用 coin + networkId + normalized txHash；EVM/TRON 哈希大小写不敏感，Solana 签名保持大小写敏感。未知数据库 coin 失败闭合，不再伪装为 Ethereum</td><td class="pass">先复现 Ethereum confirmed 错误确认并隐藏同 hash 的 Polygon Pending；修复后两行独立、本地状态和详情归属正确。EVM/Solana 正负例及相关 46/46、KT Wallet 1453/1453、完整分析 0、check_deps 通过</td></tr>
+          <tr><td>App 直连备用节点身份与重试边界</td><td>备用 RPC 必须先以不含钱包地址的探针校验链身份，随后才允许发送原只读请求；EVM 使用 chainId，Solana 使用 genesis hash，TRON 使用 block 0 ID。仅显式只读/模拟 allowlist 允许 failover，未知 JSON-RPC 方法和未知 TRON POST 路径默认单端点单次请求</td><td class="partial">传输层定向 16/16、相关网络/市场/费用/状态/广播回归 106/106；东京网络只读验证 Amoy、BNB 主网/测试网、Solana 主网、TRON 主网/Nile 候选，失效候选已移除。中国大陆多运营商与 Solana Devnet 直连备用尚未验收</td></tr>
+          <tr><td>安全偏好与网络快照一致性</td><td>App Lock、认证、自动锁定、隐私、授权同意、资产偏好及 Gateway/RPC 均串行落盘后发布；网络环境、自定义网络和逐链覆盖以单一 version=1 快照提交；失败保持旧 UI 并提示，快速操作保留最后意图，关闭控制器前排空 metadata 队列</td><td class="pass">新增失败/并发/非法值/关库竞态 11 项；偏好/授权 30/30、网络 44/44、全量 860/860</td></tr>
+          <tr><td>设备模式提交一致性</td><td>组合安装器的联网钱包/离线签名器选择、钱包设置退出、空钱包返回与签名器退出均串行等待 SharedPreferences 成功后才切换；损坏旧值回到选择页，失败保持当前模式并显示中英日提示</td><td class="pass">新增持久化/重启/失败/并发/四入口 UI 负例 9 项；定向 19/19、全量 850/850</td></tr>
+          <tr><td>双 App 语言提交一致性</td><td>KT Wallet 与 KT Cold Signer 仅接受 en/zh/ja，语言覆盖串行落盘后再重建 UI；非法旧值回到系统语言，写入失败保持当前语言和选择页并显示本地化重试</td><td class="pass">新增双端控制器/UI 负例 12 项；Wallet 定向 7/7、Signer 6/6；全量 850/850、226/226</td></tr>
+          <tr><td>待签名 QR 持久化边界</td><td>awaitingSig 交易行提交成功后才发布 SignRequest/QR；写入期间无可扫描字节，失败时 session request 与 local transaction id 保持为空，且三语提示不会把失败冒充成功</td><td class="pass">新增异步屏障/数据库异常 2 项；AIRGAP 17/17、全量 850/850</td></tr>
+          <tr><td>热钱包广播前持久化边界</td><td>EVM、TRON、Solana 先保存用户意图，原生签名后再保存本地派生 txHash，最后才跨越广播边界；TRON TAPOS/expiry 与 Solana lastValidBlockHeight 同行保存。回包丢失保留 submitted 续查，初始落盘失败不签名、不广播；replacement 与授权撤销同样先保存本地 hash</td><td class="pass">三链数据库失败/响应丢失故障注入 6/6；KT Wallet 850/850，静态分析与依赖门禁通过</td></tr>
+          <tr><td>广播三态与单次提交</td><td>accepted、明确 rejected、结果 unknown 分离；App 直连与 Gateway 内部 EVM/Solana JSON-RPC、TRON REST 广播均固定单端点单次提交，超时或回包丢失不 failover、不自动重发；App 端所有尚未分类的 JSON-RPC/TRON POST 也默认单次提交，只有显式只读 allowlist 可 failover。Gateway 用 -32003 保留提交结果未知。四类入口在首次提交前持久化本地 hash 与广播尝试时间；1.16.4 对 canonical signed payload 增加 24 小时跨实例 Redis 原子 claim，重复请求复用首次结果且不保存签名字节；损坏共享记录失败闭合且可观测</td><td class="pass">Flutter 广播/恢复/认证定向 64/64；App 传输层定向 16/16；Gateway 7 项单次提交 + 13 项跨实例幂等/并发/精度/损坏记录/可观测性负例，full 326/326、race/vet/govulncheck 全通过；生产公网两次相同安全无效请求只增加 1 次 endpoint attempt；Wallet 全量结果见本报告最新测试轮次</td></tr>
+          <tr><td>平台数据保护与离线权限</td><td>两款 Android App 的最终合并 Manifest 均关闭云备份与设备迁移；Cold Signer Release 显式移除 ML Kit 传递注入的 INTERNET，artifact guard 直接检查 APK 与 AAB base Manifest；iOS 两款 App 设置 NSFileProtectionComplete，密钥熵继续使用 WhenPasscodeSetThisDeviceOnly Keychain，并把 Documents/Library 排除系统备份</td><td class="partial">Android 最终 APK/AAB 通过；iOS Simulator 四个目录实测 backup-exclude xattr，Simulator + unsigned device Release 编译通过；正式签名 APK/AAB/IPA entitlement 待验收</td></tr>
+          <tr><td>生产扫码状态真实性</td><td>签名结果扫码页在收到真实 QR 帧前不再显示 Gallery 固定的 5/12；相机不可用不会制造“已识别分片”状态，模拟点击继续仅限 flutter test 环境</td><td class="pass">生产作用域负例 + 相机/AIRGAP 回归通过</td></tr>
+          <tr><td>AIRGAP 输入边界</td><td>单帧 chunk 最大 4 KiB、payload 最大 64 KiB、相机文本在 base64 前限长；AccountExport、账户、SignRequest、SignResult 的未知 CBOR 字段失败闭合</td><td class="pass">Airgap 65/65；双 App 超长相机输入负例通过</td></tr>
+          <tr><td>Cold Signer 最终签名边界</td><td>冻结请求字节；原生密钥前重查过期/时钟偏差/设备状态；持久化事务原子预留 reqId，失败后不释放；生产数据库失败不回退内存</td><td class="pass">16 并发仅 1 个进入；重启、失败签名、存储故障负例 + Signer 226/226</td></tr>
+          <tr><td>Cold Signer 备份复核边界</td><td>原生强认证导出真实词表；Dart 重新校验 BIP-39；一次性不可修改内存路由；无状态深链、认证失败和错误输出全部失败闭合；成功后回到钱包管理</td><td class="pass">导出精确性、不可变内存、成功复核、失败认证与深链负例 + 全量 226/226</td></tr>
+          <tr><td>加密备份文件输入与 Provider 边界</td><td>原生最多读取 256 KiB + 1 字节；Dart 严格核对 v1/v2 闭合 schema、KDF、cipher、UTC、payload format 与 payload；只有显式 cancelled=true 才静默返回。文件名只显示净化 basename，移除控制/Bidi/零宽字符并限制 80 code points；文件错误与密码错误分离，换文件失败清除旧密码</td><td class="partial">定向 33/33、Android 原生边界通过、iOS build-for-testing 通过；当轮 Simulator SpringBoard 异常退出，iOS XCTest 与物理 Provider 待复验</td></tr>
+          <tr><td>跨平台加密备份格式</td><td>backup-v2 在 Android/iOS 统一为 PBKDF2-HMAC-SHA256 210000 rounds + AES-256-GCM，固定 salt16/nonce12/tag16 和 payload 布局；设备本地 Argon2id 与可移植备份分离。Android v1 仅在 portable 认证失败后兼容旧 Argon2id，v2 不允许降级。严审又发现 Android 原实现使用只保证 API 26+ 的 PBKDF2 SecretKeyFactory 别名，与 minSdk 24 冲突；现改由 API 23+ HmacSHA256 按 RFC 8018 直接计算同一 PBKDF2 block，显式使用 UTF-8，文件字节不变，并由依赖门禁防回归</td><td class="partial">Dart 33/33；Android 独立 Unicode key/blob、篡改与格式选择 JVM 7/7，其中新 KDF 定向 3/3；API 35 Unicode portable 向量与真实旧 v1 恢复 2/2；生产 Swift 源码直接编译执行同一向量和负例通过。API 24/25 与 iOS XCTest 当轮未运行，物理双向交叉恢复待验收；<a href="https://developer.android.com/reference/javax/crypto/SecretKeyFactory">Android 官方算法表</a>为兼容性边界依据</td></tr>
+          <tr><td>离线备份密码强度</td><td>新建文件要求 14–128 Unicode scalar，拒绝低多样性、1–4 字符周期重复、单调连续和明确常见模式；三语区分过短、过长与可预测。旧文件恢复不套用新规则，避免安全升级锁死历史备份</td><td class="pass">英文/中日韩短语正例与短、超长、重复、连续、常见模式负例；MethodChannel 前失败闭合，W32 Golden 人工复核；Wallet 1424/1424、Core Crypto 39/39</td></tr>
+          <tr><td>测试凭证批次门禁</td><td>版本化批次 ID、UTC 创建/过期时间、最长 14 天、0600、非 symlink、公开 BIP-39 vector 拒绝；交互式输入关闭回显，报告扫描使用本地助记词 canary 且不回显秘密；23 个真实助记词 E2E 入口内置同一门禁</td><td class="partial">当前 14 天批次已由 iOS 原生 Wallet Core 生成，host 文件为 0600；Android 八链 16 条离线矩阵及认证删除通过。iOS provisioning 临时钱包仍等待一次 Simulator Face ID 认证删除，且待注资后重跑真实广播矩阵</td></tr>
+          <tr><td>E2E 原生密钥清理纪律</td><td>仓库级门禁枚举两个 App 的所有 <code>storeWallet</code> 测试；新增原生位置必须显式认证删除。共享 teardown 复用生产 <code>deleteWallet</code> 系统认证，超时直接令测试失败，仅容忍场景已主动删除后的 WALLET_NOT_FOUND，不存在未认证测试后门。仅使用已知 <code>MockCoreCrypto</code> 且无 MethodChannel 的纯内存 UI 测试明确排除，未知实现不豁免</td><td class="pass">6 个分类正负例、仓库门禁和 KT Wallet 1446/1446 通过；初始 24 个原始命中中，23 个真实原生测试已接入认证清理、1 个纯内存 Mock 被精确排除，原生技术债与未跟踪位置均为 0。当前批次 provisioning 遗留 wallet 是门禁建立前失败运行的已知现场，仍需 Face ID 单独删除</td></tr>
+          <tr><td>Package 公开测试文档</td><td>六个共享 package、Core Crypto podspec 与 example 均说明 API、示例、测试、许可证及安全边界；递归门禁禁止默认 TODO、示例公司/域名和 Flutter 模板描述回归；test_support fixture 从仓库根目录和包目录均可运行</td><td class="pass">文档门禁 + packages 389/389 通过</td></tr>
+          <tr><td>Core Crypto Privacy Manifest</td><td>AuthGate 的 app-scoped UserDefaults 以 CA92.1 独立声明；CocoaPods resource bundle 与 SwiftPM resource 同时启用，源码 glob 不再吞入 xcprivacy；两份 Podfile 固定并向传递依赖传播 iOS 13 下限</td><td class="pass">podspec lint、21 项门禁定向测试、两款 Simulator 构建及最终 framework bundle 读取通过；相关两类 Xcode 警告为 0</td></tr>
+          <tr><td>三语发布门禁</td><td>两款 App 的 ARB 用户键与 ICU placeholder 中英日严格一致；非英文值不得无审阅地与英文 fallback 完全相同，品牌、Nonce、Chain ID、Bluetooth 与占位破折号按 App、语言、key 精确放行；CJK 文案相邻的半角逗号、冒号和分号默认失败，仅代码调用可按 App、语言、key 精确放行；Android default / zh-rCN / ja 原生 strings 同键；iOS 显示名、相机、Face ID 与照片写入权限完整本地化</td><td class="pass">未翻译英文与半角标点门禁均先红后绿；修正 13 条中文及 2 条日文生产文案；真实双 App ARB、check_deps、KT Wallet 1446/1446、test_support 49/49、共享 packages 389/389 通过；既有两款 iOS Simulator 与两份 Android Debug APK 最终资源表证据保持有效</td></tr>
+          <tr><td>HTML 报告浏览器验收</td><td>2026-08-03 使用真实 Chromium 重新以 1280px 桌面与 390×844 移动视口加载 HTTP 报告，并检查 113 张图片、横向溢出、AAB 制品/工具链行及控制台日志；移动端三列表格从被挤成逐字换行修正为纵向证据卡片</td><td class="pass">两端均无横向溢出，113/113 图片可解码，broken image 为 0，控制台 warning/error 为 0；移动截图中两款 APK/AAB 大小、哈希、门禁、producer/lock/runtime 依赖结果与未签名边界可连续阅读</td></tr>
+          <tr><td>Android Core Crypto</td><td>12 个原生认证分类与 prompt 启动闭合测试；同步启动异常必须完成 MethodChannel，不能抛出后让 Dart 悬挂</td><td class="pass">12/12 通过</td></tr>
+          <tr><td>Android 原生聚合测试边界</td><td>mobile_scanner 的 JUnit 6.1.2 测试 classpath 共 7 个 Gradle module metadata 与 6 个 JAR，逐项比对 <a href="https://repo.maven.apache.org/maven2/org/junit/">Maven Central 官方 SHA-256</a>、全新下载和本机缓存后，以精确哈希和来源加入两款 App；仓库门禁会拒绝缺失、重复、哈希漂移或信任扩张。KT Wallet 与 KT Cold Signer 的根级 <code>testDebugUnitTest --offline</code> 分别通过 298 与 252 个 actionable tasks</td><td class="pass">根级聚合测试已恢复；JUnit 6 仅为测试依赖。JUnit Vintage、built-in Kotlin 与 Mockito agent 仍为上游 warning，provenance 核验不等同安全审计</td></tr>
+          <tr><td>Android AGP 9 / Kotlin 迁移</td><td>两个 App 自身均未应用 KGP；移除 <code>android.builtInKotlin=false</code> 后分别执行真实 Debug 构建，Flutter 3.44.2 因当前最新 <code>mobile_scanner 7.4.0</code> 仍条件应用 <code>kotlin-android</code> 而自动写回兼容开关。普通 AGP deprecation warning 同时来自 Core Crypto 与多个 Flutter plugin，但 Flutter 当前明确的未来 hard-fail 列表只点名 mobile_scanner</td><td class="partial">两份 APK 构建通过；未来 Flutter 会阻断，待插件生态完成内建 Kotlin 迁移后关闭告警</td></tr>
+          <tr><td>Cold Signer 系统认证错误语义</td><td>只有无凭据、未录入、无硬件或插件缺失允许自动进入 App PIN；取消、超时、锁定、系统/设备错误和未知错误全部失败闭合</td><td class="pass">分类与 UI 21/21；完整 Signer 226/226</td></tr>
+          <tr><td>Android 系统认证/隐私页边界</td><td>两款 App 的 local_auth 真系统指纹；KT Wallet 的真实 Wallet Core EVM/TRON canonical 签名、在线强化验签与临时钱包删除；认证期间不启动第二个 PrivacyActivity，真实切后台仍覆盖当前窗口</td><td class="pass">设备集成 3/3；App guard JVM 3/3；恢复 MainActivity 正常</td></tr>
+          <tr><td>EVM replacement 矩阵</td><td>iOS 原生 Wallet Core + 系统 Face ID；Sepolia、Base Sepolia、Avalanche Fuji、BNB Testnet 分别验证 speed-up/cancel，原候选无 receipt，获胜内容保持 1 wei 或取消为 0 自转</td><td class="pass">四链八组真实链上通过</td></tr>
+          <tr><td>Ethereum 离线完整闭环</td><td>iOS 26.2 + Android API 35；八链 AccountExport 严格配对、AIRGAP-V1 请求/结果帧、系统认证、原生 Wallet Core、在线验签、Sepolia 广播/receipt/Gateway 历史</td><td class="pass">ETH + Test USDT 双端四笔通过</td></tr>
+          <tr><td>EVM 扩展链离线完整闭环</td><td>Base、Arbitrum、Avalanche、BNB；每链原生币 + 官方测试 Token，iOS 26.2 与隔离 Android API 35 分别执行完整 AIRGAP-V1、系统认证、原生签名、在线验签、广播、receipt 与 Gateway 历史</td><td class="pass">四链双端 16 笔全新交易通过</td></tr>
+          <tr><td>TRON / Solana 离线完整闭环</td><td>TRON Nile 动态 Bandwidth/Energy/TAPOS + Solana Devnet blockhash/fee/simulation/幂等 ATA owner 绑定；iOS 与 Android 分别执行 AIRGAP-V1、原生签名、验签、广播、确认与 Gateway 历史</td><td class="pass">双链双端 8 笔全新交易通过</td></tr>
+          <tr><td>Arbitrum replacement 边界</td><td>官方 first-come-first-served sequencer + 真实并发广播；无法形成 pending 竞争，App 按链隐藏加速/取消</td><td class="pass">明确 unsupported，不误报</td></tr>
+          <tr><td>原生 Cold Signer 矩阵</td><td>八链 × 原生币/Token，共 16 条；真实 Wallet Core、每次系统认证、QR 往返和在线验签</td><td class="partial">iOS/Android 模拟器通过；未广播</td></tr>
+          <tr><td>发送者绑定负例</td><td>外来 TRON owner 与 Solana fee payer 在调用原生密钥前被拒绝</td><td class="pass">通过</td></tr>
+          <tr><td>账户导出与配对</td><td>八链地址/公钥/path 严格绑定；非曲线点、篡改、缺链、重复 coin 与错误 Solana 路径负例</td><td class="pass">通过</td></tr>
+          <tr><td>Cold Signer 首页安全状态</td><td>检查中、离线、联网、unknown 与 probe 异常；没有固定绿色或虚构离线天数</td><td class="pass">通过</td></tr>
+          <tr><td>Cold Signer 删除认证</td><td>本地化确认文字 → 当前 App PIN → 按设置执行系统认证；错误 PIN、系统认证失败和空确认文字均无法进入最终删除</td><td class="pass">Widget 与双端模拟器通过</td></tr>
+          <tr><td>Cold Signer 安全检查本地化</td><td>设备状态保持结构化 safe / unsafe / unknown，在 UI 层输出中英日；关键助记词、密钥、解析与签名错误不再硬编码中文</td><td class="pass">关键路径与静态门禁通过</td></tr>
+          <tr><td>生产文案静态门禁</td><td>双 App 生产 Dart 源码禁止直接 CJK/固定 UI 文案；离线配对错误、钱包 ID、相机失败、Cold 默认钱包名称及原生权限文案完成中英日结构回归</td><td class="partial">Widget、源码门禁与最终构建资源通过；真机系统弹窗和全部路由仍待人工复核</td></tr>
+          <tr><td>支持诊断包</td><td>未知字段、任意 URL/标识符、地址、RPC 与 Gateway 凭证负例；导出前包含/排除披露、取消不落盘、分享后清理、中英日和小屏滚动</td><td class="pass">Widget、隐私 schema 与双端模拟器通过</td></tr>
+          <tr><td>App 匿名运行指标</td><td>固定 12 项名称 allowlist；首帧、Flutter/Platform 错误、市场/历史、交易阶段及原生 fatal/ANR；Android 两款 App 使用前台 10 秒 ANR 看门狗与进程 fatal 观察器，iOS 两款 App 使用 MetricKit；原生桥仅允许单调 ID + fatal/anr，32 条上限，App 先持久化高水位再确认</td><td class="partial">主动同意远程汇总、7 天留存和 info 趋势告警已上线；仍需 iOS/Android 真机故障注入和可信安装基数</td></tr>
+          <tr><td>KT Wallet Android Release</td><td>本轮 APK 137,034,241 bytes / SHA-256 <code>394b00…996f</code>；AAB 100,313,693 bytes / SHA-256 <code>e418c4…6982</code>。两者三个 ABI 均含 libTrustWalletCore.so 与 SQLite 3.53.3；全制品 Demo/Mock/凭证/stub 扫描为空，明文流量与备份关闭；AAB producer 与审阅工具链均为 bundletool 1.18.3</td><td class="partial">本轮 APK 与 bundletool AAB guard 通过；<code>walletCore=false</code> 的 assemble/bundle Release 配置负例、真实 stub DEX 和危险 ZIP 符号链接负例均拒绝；APK/AAB 未签名，不能分发或上传</td></tr>
+          <tr><td>KT Cold Signer Android Release</td><td>本轮 APK 127,037,785 bytes / SHA-256 <code>259cbf…ba1b</code>；此前同工作区 AAB 91,536,306 bytes / SHA-256 <code>d315ee…937</code>。三个 ABI 均含 libTrustWalletCore.so 与 SQLite 3.53.3；stub、Demo、Mock、本地 E2E 助记词和 provider 凭证标记不存在，无 INTERNET、明文流量与备份关闭</td><td class="partial">本轮 APK guard 通过；此前 AAB 与 bundletool guard 通过。<code>walletCore=false</code> 的 assemble/bundle Release 配置负例拒绝；APK/AAB 未签名，不能分发或上传</td></tr>
+          <tr><td>iOS</td><td>两款 App 的 Simulator、iphoneos Profile 与 Release 无签名 device build；Profile 已使用独立 xcconfig 并包含对应 CocoaPods Profile 设置，门禁会拒绝错误回退到 Release Pod 配置。bundle ID、标准加密声明、Privacy Manifest、NSFileProtectionComplete、WalletCore.framework 与 SQLite 3.53.3 已核对；Release guard 拒绝 Debug snapshot 和旧 SQLite。本轮 KT Wallet Runner.app 为 72.6 MB</td><td class="partial">本轮 KT Wallet iphoneos Release 与最终 App guard 通过；唯一且关机状态的 iPhone 17 Pro Simulator 上 Wallet XCTest 1/1、Signer XCTest 3/3 通过；正式签名 IPA entitlement / provisioning 待验收</td></tr>
+          <tr><td>非 EVM 动态报价 UI</td><td>TRON TRC-20 与 Solana Token-2022 / ATA；iOS、Android 独立执行</td><td class="pass">双端通过</td></tr>
+          <tr><td>测试网法币隔离 UI</td><td>首页、BNB Testnet BUSD 详情、Sepolia 确认页；iOS、Android 独立执行</td><td class="pass">双端通过</td></tr>
+          <tr><td>认证设置与生产路由防绕过 UI</td><td>密码设置、当前 PIN、转账认证；缺少 AccountExport/draft/request/result/broadcast hash 的生产深链全部失败闭合；无 Store 的生产组件不会生成联系人、Token 或交易 fixture</td><td class="pass">839 项 Widget、iOS 与 Android 模拟器通过</td></tr>
+          <tr><td>安全存储与钱包创建原子性</td><td>设备端 MissingPluginException/读写失败不退回进程内状态；Wallet 保持锁定，Signer 阻止 onboarding/签名；两款 App 的创建提交失败均补偿原生密钥与持久化半成品。KT Wallet 额外拒绝重复助记词、回滚观察钱包失败发布，并在启动时核对原生密钥与全部持久化地址</td><td class="pass">包装层 4/4、启动/PIN 3/3、双 App 原子性 13/13、iOS 原生宿主截图 2/2</td></tr>
+          <tr><td>交易状态证据与诊断 UI</td><td>数据库 v7 持久化 pending / unknown、最后查询时间与完整 Hash；unknown 明确显示“状态暂不可用”、持续轮询并禁用 replacement，节点重新证明 Pending 后恢复</td><td class="pass">Widget + iOS/Android 独立模拟器通过</td></tr>
+          <tr><td>关键链路可访问性</td><td>语义树、200% 动态字体、减少动态效果、44/48 px 触控目标与底部安全区；Android API 35 另启用系统 TalkBack 与触摸探索执行真实转账</td><td class="partial">Android 系统 TalkBack 已完成真实 SOL Devnet finalized 链路；iOS VoiceOver 与物理设备待验收</td></tr>
+          <tr><td>全页面自动无障碍门禁</td><td>KT Wallet 34 页与独立 Cold Signer 21 页在 320×568、390×844、844×390 三视口及 en/zh/ja 环境逐页检查语义标签、Android/iOS 触控尺寸、默认字号 WCAG 文字对比度和布局溢出；默认字号与 200% 字体均执行全部路由并保留 13 个英文大字证据 Golden</td><td class="pass">Wallet 612/612、Signer 378/378，共 990 个语言/视口/字号屏幕场景通过；全页面物理设备读屏仍待验收</td></tr>
+          <tr><td>EVM 资产变化确认 UI</td><td>从同一待签名 EIP-1559 原始字节解码 ETH/ERC-20 转出和原生币最大网络费；iOS、Android 独立执行</td><td class="pass">双端模拟器通过</td></tr>
+          <tr><td>Token 风险三态 UI</td><td>完整合约地址命中高风险时阻止签名；服务不可用保持未知且不显示安全；iOS、Android 独立执行</td><td class="pass">双端模拟器通过</td></tr>
+          <tr><td>公开测试披露 UI</td><td>隐私、风险、Security Policy、第三方许可证与安全报告流程入口；敏感信息提醒；iOS、Android 独立执行</td><td class="partial">双端模拟器通过；私密提交渠道待启用</td></tr>
+          <tr><td>钱包删除自动化</td><td>两款 App 在原生密钥删除前持久化删除墓碑；数据库/安全存储故障或进程中断后隐藏失效钱包并于启动续做；Wallet Data 级联、Cold Signer vault/PIN/lockout/防重放全部纳入恢复</td><td class="partial">新增故障与 UI 负例 7/7，完整套件通过；真机强制终止待验收</td></tr>
+          <tr><td>钱包 metadata 提交一致性</td><td>名称、颜色、备份标记按顺序先持久化后发布；拖拽排序以单一 Drift 事务提交完整 permutation；失败保持当前与重启状态一致并显示三语重试；关闭控制器前排空写队列</td><td class="pass">故障注入与关库竞态 3/3、定向回归通过、完整 1424/1424</td></tr>
+          <tr><td>Golden</td><td>完整套件内人工复核后的基线</td><td class="pass">通过</td></tr>
+          <tr><td>Release guard</td><td>完整解压 APK/AAB、全部 ABI 扫描 Demo、Mock、模拟签名、屏幕库、固定账户、本地助记词 canary 与 provider 凭证；同时检查压缩展开上限、安全 ZIP 路径、Bundle 结构、包名、最终 Manifest、权限、导出组件、ABI 原生库与 APK/AAB 签名状态</td><td class="pass">两款 APK + AAB 正例通过；注入禁止标记、错包名、Wallet Core stub、Release 关闭 Wallet Core、危险符号链接、不完整 AAB 签名与 Android Debug 签名负例均被拒绝；临时非 Debug JAR 签名正例通过</td></tr>
+          <tr><td>AAB 验证工具链完整性</td><td>严格 protobuf reader 从 BundleConfig 读取 producer version；独立 release-toolchain lock 固定 bundletool 1.18.3 与 SHA-256 <code>ccad18…0171</code>，主 JAR 同时匹配两款 App 的 Gradle verification metadata；执行所需 16 个 runtime JAR 逐项核对哈希，aapt2-proto 精确绑定 AGP 9.0.1</td><td class="pass">两款 AAB 正例通过；producer 1.18.1 漂移、注入错误 bundletool JAR 和截断 protobuf 三类负例分别以 1/2/65 失败闭合，不再选择全局缓存最高版本</td></tr>
+          <tr><td>生产夹具与深链隔离</td><td>移除 WalletScope 隐式演示钱包；Release 禁止 seed/test-bypass controller、设计 Splash、模拟账户/签名扫码，以及无钱包、缺 pending mnemonic、错误 walletId、缺 AccountExport/交易会话的深链。未备份横幅打开当前 walletId 的强认证导出，不生成新种子。Cold Signer 的助记词核对、PIN、生物识别与完成页由易失状态机顺序约束；已有钱包、错误阶段或伪造完成 metadata 均拒绝。Gallery/Golden/Widget 只能通过显式测试夹具或 preview 渲染</td><td class="pass">Wallet 生产路由定向 37/37 + Wallet 全量 1446/1446；Cold Signer 路由/竞态负例 + 全量 568/568；静态分析 0、check_deps、Android APK/AAB 与 iOS Release 产物门禁通过</td></tr>
+        </tbody>
+      </table></div>
+      <p class="muted">完整 KT Wallet 1458/1458 与 KT Cold Signer 568/568 套件均已包含并通过
+        默认字号、200% 字体及 Golden 门禁。共享 packages 为
+        389 项通过（包含 AIRGAP 严格解码、canonical 交易验签、Manifest/备份安全、跨平台备份向量、备份密码门禁、凭证批次防绕过、Apple Privacy Manifest、
+        三语 ARB/原生资源结构门禁与 package 文档门禁）。
+        Gateway 通过 <code>go vet ./...</code> 与 <code>go test -race ./...</code>；两份
+        Release APK 与 AAB 再次通过完整二进制、Bundle、Manifest、权限、ABI、凭证和签名状态门禁；
+        Android Core Crypto 原生认证/启动闭合测试 12/12、备份向量/格式选择 JVM 7/7、API 35 portable 向量与旧 v1 恢复 2/2、双 App 隐私 guard JVM 3/3、
+        真系统指纹与真实 Wallet Core 设备集成 3/3 通过。iOS 原生 XCTest 为
+        Wallet 1/1、Signer 3/3。</p>
+    </section>
+
+    <section>
+      <h2>iOS / Android UI 证据</h2>
+      <p>相同场景在两个模拟器执行：可信缓存首屏、资产偏好、离线诚实状态、缓存历史、
+        加载更多、展开记录、TRON / Solana 的不可变动态报价确认页，以及测试网法币
+        数据域隔离。离线场景没有
+        用固定余额冒充链上数据；新增报价截图由链形态可控测试服务提供确定性数据，
+        用于验证确认页展示与状态绑定，不冒充测试网广播证据。认证截图使用可注入的
+        确定性认证器，只证明 App 层交互与路由门禁，不替代真机系统生物识别提示。
+        可访问性截图使用 200% 动态字体并启用减少动态效果；仅证明视觉重排，不替代真实读屏操作。
+        EVM 资产变化截图来自确定性原始交易，不冒充链上广播。Token 风险截图使用
+        可注入的确定性 Gateway 响应验证 fail-closed 交互，不冒充实时威胁情报命中。
+        新增原生认证截图只证明系统认证确实出现；系统认证弹窗或助记词受保护路由的
+        Android 黑屏只证明当时的系统/路由级捕获保护，不代表普通页面持续启用
+        <code>FLAG_SECURE</code>。Cold Signer 安全检查截图使用显式注入且全部安全的确定性
+        设备状态，只验证本地化与状态渲染，不冒充真机安全探测。删除截图使用内存测试钱包，
+        不含用户私钥或助记词。新增本地化截图使用固定公开地址与内存观察钱包，只证明语言选择、
+        错误闭合和 UI 呈现，不证明真实二维码配对。诊断包截图来自无钱包 Scope 的
+        确定性 About 页面，只证明隐私披露、布局和操作可达；schema 负例才证明敏感字段
+        无法进入文件。生产路由截图来自真实 iOS/Android 模拟器，证明缺少节点广播证据时
+        不显示提交成功，不代表任何链上交易。Pending replacement 截图使用
+        确定性本地交易行验证 UI 状态；其链上成功仅由上文独立的 Sepolia txHash/receipt
+        证据支持。新增授权中心 Golden 为确定性 Widget 渲染，只证明隐私同意、风险分级
+        与操作可达，不冒充生产 GoPlus 响应或主网撤销。备份 Provider 故障图同样是
+        确定性 Widget 注入，只证明失败与取消已分离、错误文本和布局正确，不冒充
+        iCloud Drive 或 Android 文档 Provider 真机故障。报告共引用 113 张截图。</p>
+      <h3>备份 Provider 故障失败闭合 UI</h3>
+      <p class="muted">系统文件选择器返回稳定读取失败时，页面保留在恢复流程并给出可操作的
+        固定提示；不会静默当作取消，也不会显示 Provider 路径或异常文本。</p>
+      <div class="shots">
+        <figure><img src="screenshots/fixes-2026-08-02/backup-provider-read-failed-en.png" alt="Backup provider read failure retry UI"><figcaption>英文 390×844 Golden：文件错误紧邻选择控件；密码字段保持中性且禁用，恢复按钮不可用，不会误用未读取的文件</figcaption></figure>
+      </div>
+      <h3>KT Wallet 全路由 200% 字号自动证据（抽样 7 / 34）</h3>
+      <p class="muted">以下为 390×844 英文确定性 Widget 渲染，不冒充系统模拟器或真机截图；
+        它们与三视口逐页异常、语义标签、Android/iOS 触控尺寸门禁共同证明三语言/视口
+        306/306 自动验收。小屏和横屏新增发现的问题已全部修复，下面覆盖 7 类代表布局。</p>
+      <div class="shots">
+        <figure><img src="screenshots/large-text-import-confirm.png" alt="Import confirmation at 200 percent text"><figcaption>导入确认：网络名称与地址纵向重排</figcaption></figure>
+        <figure><img src="screenshots/large-text-home.png" alt="Home at 200 percent text"><figcaption>首页：内容可滚动，底部导航自适应增高</figcaption></figure>
+        <figure><img src="screenshots/large-text-assets.png" alt="Assets at 200 percent text"><figcaption>资产：名称、网络、余额与涨跌纵向展示</figcaption></figure>
+        <figure><img src="screenshots/large-text-receive.png" alt="Receive at 200 percent text"><figcaption>收款：链选择与复制操作在窄屏保持可达</figcaption></figure>
+        <figure><img src="screenshots/large-text-transfer.png" alt="Transfer at 200 percent text"><figcaption>转账：费用标题与自定义操作自动换行</figcaption></figure>
+        <figure><img src="screenshots/large-text-address-book.png" alt="Address book at 200 percent text"><figcaption>地址簿：联系人、网络标识与操作不碰撞</figcaption></figure>
+        <figure><img src="screenshots/large-text-security.png" alt="Security settings at 200 percent text"><figcaption>安全设置：标签与当前值改为上下布局</figcaption></figure>
+      </div>
+      <h3>EVM 授权中心确定性 UI 证据</h3>
+      <p class="muted">以下为英文 Widget Golden。隐私页证明第三方查询前有明确选择；
+        风险页证明授权数量、spender、风险标签与撤销操作在窄屏可达。它们不替代生产
+        Gateway、主网交易或第三方数据质量验收。</p>
+      <div class="shots">
+        <figure><img src="screenshots/approvals-privacy-en.png" alt="Approval privacy consent"><figcaption>首次查询：说明会提交公开钱包地址并允许拒绝</figcaption></figure>
+        <figure><img src="screenshots/approvals-risk-en.png" alt="Approval risk list"><figcaption>风险授权：无限额度、spender 与撤销操作同屏可读</figcaption></figure>
+      </div>
+      <h3>KT Cold Signer 全路由 200% 字号自动证据（抽样 6 / 21）</h3>
+      <p class="muted">同样是 390×844 英文确定性 Widget 渲染。首次严格审计仅 17/42
+        场景通过；修复助记词和 PIN 语义、低对比度文字、小触控目标，以及大字布局后，
+        本轮扩展到 en/zh/ja 与三种视口后，默认字号与 200% 字体共 378/378 通过。</p>
+      <div class="shots">
+        <figure><img src="screenshots/cold-large-text-mnemonic-show.png" alt="Cold Signer mnemonic at 200 percent text"><figcaption>助记词：大字改为单列，完整单词不截断</figcaption></figure>
+        <figure><img src="screenshots/cold-large-text-home.png" alt="Cold Signer home at 200 percent text"><figcaption>离线首页：状态与入口改为可滚动纵向布局</figcaption></figure>
+        <figure><img src="screenshots/cold-large-text-security-check.png" alt="Cold Signer security check at 200 percent text"><figcaption>安全检查：状态说明和值分层展示</figcaption></figure>
+        <figure><img src="screenshots/cold-large-text-export.png" alt="Cold Signer export at 200 percent text"><figcaption>地址导出：二维码、派生路径与完整地址保持可达</figcaption></figure>
+        <figure><img src="screenshots/cold-large-text-security.png" alt="Cold Signer security settings at 200 percent text"><figcaption>安全设置：语言和值不再横向碰撞</figcaption></figure>
+        <figure><img src="screenshots/cold-large-text-delete.png" alt="Cold Signer delete wallet at 200 percent text"><figcaption>删除钱包：步骤、警告、确认和取消操作完整可见</figcaption></figure>
+      </div>
+      <h3>广播结果未知 · 确定性故障注入</h3>
+      <div class="shots">
+        <figure><img src="assets/localized-broadcast-rejection-en.png" alt="Localized bounded broadcast rejection"><figcaption>节点明确拒绝：底层任意文本先映射为结构化 nonce 原因，再由英文 UI 输出可操作提示；截图已经人工检查，无方块字和 Debug 水印。中日文由同一 16 类枚举的逐项测试覆盖。本图不冒充链上成功。</figcaption></figure>
+        <figure><img src="assets/broadcast-unknown-recovery-en.png" alt="Broadcast result unknown recovery UI"><figcaption>节点响应丢失：页面明确显示结果未知、保留本地交易 hash、禁止再次发送并继续对账。图中广播时间为测试夹具未注入数据库记录时的 --；生产路径会在首次请求前持久化尝试时间。本图不冒充测试网链上确认。</figcaption></figure>
+      </div>
+      <h3>iOS</h3>
+      <div class="shots">
+        <figure><img src="screenshots/ios-secure-storage-wallet-locked.png" alt="KT Wallet secure storage failure remains locked"><figcaption>KT Wallet：安全存储插件异常时保持锁定，只允许重新检查，不展示钱包内容</figcaption></figure>
+        <figure><img src="screenshots/ios-secure-storage-signer-locked.png" alt="KT Cold Signer secure storage failure blocks signing"><figcaption>KT Cold Signer：安全存储异常时阻止创建、导入和签名，绝不退回临时内存状态</figcaption></figure>
+        <figure><img src="screenshots/ios-01-cached-home.png" alt="iOS cached home"><figcaption>缓存首屏 + 后台刷新</figcaption></figure>
+        <figure><img src="screenshots/ios-02-assets-preferences.png" alt="iOS assets"><figcaption>资产与显示偏好</figcaption></figure>
+        <figure><img src="screenshots/ios-03-offline-honest-assets.png" alt="iOS offline"><figcaption>离线时保留可信状态</figcaption></figure>
+        <figure><img src="screenshots/ios-04-cached-history.png" alt="iOS history"><figcaption>缓存交易历史</figcaption></figure>
+        <figure><img src="screenshots/ios-05-history-load-more.png" alt="iOS load more"><figcaption>历史分页</figcaption></figure>
+        <figure><img src="screenshots/ios-06-history-expanded.png" alt="iOS expanded"><figcaption>交易展开信息</figcaption></figure>
+        <figure><img src="screenshots/ios-07-tron-live-quote.png" alt="iOS TRON immutable quote"><figcaption>TRON TRC-20：动态资源最大费用</figcaption></figure>
+        <figure><img src="screenshots/ios-08-solana-ata-quote.png" alt="iOS Solana ATA quote"><figcaption>Solana Token-2022：网络费与可回收 ATA 租金</figcaption></figure>
+        <figure><img src="screenshots/ios-09-testnet-home-no-fiat.png" alt="iOS testnet home without fiat"><figcaption>全测试网：首页总估值与资产估值不复用主网价格</figcaption></figure>
+        <figure><img src="screenshots/ios-10-testnet-busd-no-fiat.png" alt="iOS BUSD testnet detail without fiat"><figcaption>BNB Testnet BUSD：价格与 24h 涨跌保持未知</figcaption></figure>
+        <figure><img src="screenshots/fixes-2026-08-02/ios-testnet-confirm-explicit-fiat.png" alt="iOS Sepolia confirmation with explicit testnet fiat state"><figcaption>Sepolia 确认页：明确说明测试网资产无市场价格；手续费仅显示真实 ETH 数量，不再出现空括号</figcaption></figure>
+        <figure><img src="screenshots/ios-12-password-security-settings.png" alt="iOS password security settings"><figcaption>安全设置：钱包密码已启用，可验证后修改</figcaption></figure>
+        <figure><img src="screenshots/ios-13-current-pin-required.png" alt="iOS current PIN required"><figcaption>修改 PIN：先验证当前钱包密码</figcaption></figure>
+        <figure><img src="screenshots/fixes-2026-08-02/ios-transfer-auth-layered.png" alt="iOS password transfer authentication over its previous page"><figcaption>转账认证：真实透明路由覆盖在原安全页之上；密码为主操作并保留生物识别，不再用黑色空页充当底层</figcaption></figure>
+        <figure><img src="screenshots/ios-15-production-route-guard.png" alt="iOS production route guard"><figcaption>生产深链缺少交易证据：签名失败闭合</figcaption></figure>
+        <figure><img src="screenshots/ios-16-transaction-diagnostics.png" alt="iOS transaction diagnostics"><figcaption>交易诊断：广播与最后查询时间、复制 Hash、原网络浏览器入口</figcaption></figure>
+        <figure><img src="screenshots/ios-17-large-text-confirm.png" alt="iOS transfer confirmation at 200 percent text"><figcaption>200% 动态字体：确认明细纵向重排并保留主操作</figcaption></figure>
+        <figure><img src="screenshots/ios-18-large-text-auth.png" alt="iOS authentication at 200 percent text"><figcaption>200% 动态字体：主/备用认证操作与安全区</figcaption></figure>
+        <figure><img src="screenshots/ios-19-evm-native-asset-changes.png" alt="iOS EVM native asset changes"><figcaption>EVM 原生币：从待签名原始交易解码 ETH 转出与最大网络费</figcaption></figure>
+        <figure><img src="screenshots/ios-20-evm-token-asset-changes.png" alt="iOS ERC-20 asset changes"><figcaption>ERC-20：USDT 转出与 ETH 最大网络费分离展示</figcaption></figure>
+        <figure><img src="screenshots/ios-21-token-risk-unsafe.png" alt="iOS unsafe token risk"><figcaption>Token 风险：完整合约命中高风险后阻止签名</figcaption></figure>
+        <figure><img src="screenshots/ios-22-token-risk-unavailable.png" alt="iOS unavailable token risk"><figcaption>风险服务不可用：明确无法确认安全，不误报绿色</figcaption></figure>
+        <figure><img src="screenshots/ios-23-trust-legal-security.png" alt="iOS trust and legal disclosures"><figcaption>About：隐私、风险、许可证、安全政策与报告流程</figcaption></figure>
+        <figure><img src="screenshots/ios-24-native-cold-signer-auth.png" alt="iOS native Cold Signer Face ID"><figcaption>真实 Wallet Core 签名前触发系统 Face ID；16 条矩阵中的一笔</figcaption></figure>
+        <figure><img src="screenshots/ios-cold-security-localized-en.png" alt="iOS localized Cold Signer security check"><figcaption>Cold Signer 英文安全检查：确定性安全状态只用于验证无中文混排</figcaption></figure>
+        <figure><img src="screenshots/ios-cold-delete-pin-required.png" alt="iOS Cold Signer deletion PIN gate"><figcaption>删除认证：确认文字后仍强制输入当前 App PIN</figcaption></figure>
+        <figure><img src="screenshots/fixes-2026-08-02/ios-wallet-detail-ja-fixed.png" alt="iOS Japanese wallet identifier labels without duplicate status bar"><figcaption>日文钱包详情：只保留 iOS 系统状态栏，不再叠加设计稿的 9:41；Wallet ID 文案继续跟随当前语言</figcaption></figure>
+        <figure><img src="screenshots/ios/ios-26-invalid-export-en.png" alt="iOS English invalid offline export"><figcaption>英文无效离线导出：失败闭合且不混入中文</figcaption></figure>
+        <figure><img src="screenshots/ios/ios-27-duplicate-export-ja.png" alt="iOS Japanese duplicate pairing"><figcaption>日文重复配对：保留既有钱包并显示本地化错误</figcaption></figure>
+        <figure><img src="screenshots/ios/ios-28-diagnostics-privacy-review.png" alt="iOS privacy-safe diagnostic export review"><figcaption>支持诊断：导出前明确列出包含项与永不包含项，按钮保持可达</figcaption></figure>
+        <figure><img src="screenshots/observability-2026-08-02/ios-anonymous-diagnostics-consent.png" alt="iOS anonymous diagnostics consent"><figcaption>匿名性能报告：iOS 系统级截图验证一次性主动同意、7 天留存与精确包含/排除项</figcaption></figure>
+        <figure><img src="screenshots/ios/ios-29-production-route-evidence-required.png" alt="iOS production route requires broadcast evidence"><figcaption>生产广播结果深链：只有签名、没有节点 hash 时明确禁止展示“已提交”</figcaption></figure>
+        <figure><img src="screenshots/ios-pending-ui-01-details.png" alt="iOS pending EVM transaction details"><figcaption>EVM Pending：持久化 nonce/费率/gas 完整时提供加速与取消</figcaption></figure>
+        <figure><img src="screenshots/ios-pending-ui-02-speed-confirm.png" alt="iOS speed-up confirmation"><figcaption>加速确认：明示相同 nonce、原收款地址/金额不变</figcaption></figure>
+        <figure><img src="screenshots/ios-pending-ui-03-cancel-confirm.png" alt="iOS cancel confirmation"><figcaption>取消确认：明示为同 nonce 向自己发送 0 ETH</figcaption></figure>
+        <figure><img src="screenshots/ios-pending-ui-04-competing-replacement.png" alt="iOS competing replacement"><figcaption>Replacement 已广播：仍为确认中，显示竞争候选且禁止再次替换</figcaption></figure>
+        <figure><img src="screenshots/ios-pending-ui-05-confirmed-guard.png" alt="iOS confirmed replacement guard"><figcaption>交易已确认：不再提供加速/取消</figcaption></figure>
+        <figure><img src="screenshots/ios-pending-ui-06-missing-params.png" alt="iOS missing replacement parameters guard"><figcaption>旧记录缺少完整签名参数：保持 Pending 但不允许猜测重建</figcaption></figure>
+        <figure><img src="screenshots/ios-pending-ui-07-unknown-evidence.png" alt="iOS unavailable transaction status evidence"><figcaption>权威状态不可用：明确显示未知、保持轮询并隐藏加速/取消</figcaption></figure>
+      </div>
+      <h3>Android</h3>
+      <div class="shots">
+        <figure><img src="screenshots/android-01-cached-home.png" alt="Android cached home"><figcaption>缓存首屏 + 后台刷新</figcaption></figure>
+        <figure><img src="screenshots/android-02-assets-preferences.png" alt="Android assets"><figcaption>资产与显示偏好</figcaption></figure>
+        <figure><img src="screenshots/android-03-offline-honest-assets.png" alt="Android offline"><figcaption>离线时保留可信状态</figcaption></figure>
+        <figure><img src="screenshots/android-04-cached-history.png" alt="Android history"><figcaption>缓存交易历史</figcaption></figure>
+        <figure><img src="screenshots/android-05-history-load-more.png" alt="Android load more"><figcaption>历史分页</figcaption></figure>
+        <figure><img src="screenshots/android-06-history-expanded.png" alt="Android expanded"><figcaption>交易展开信息</figcaption></figure>
+        <figure><img src="screenshots/android-07-tron-live-quote.png" alt="Android TRON immutable quote"><figcaption>TRON TRC-20：动态资源最大费用</figcaption></figure>
+        <figure><img src="screenshots/android-08-solana-ata-quote.png" alt="Android Solana ATA quote"><figcaption>Solana Token-2022：网络费与可回收 ATA 租金</figcaption></figure>
+        <figure><img src="screenshots/android-09-testnet-home-no-fiat.png" alt="Android testnet home without fiat"><figcaption>全测试网：首页总估值与资产估值不复用主网价格</figcaption></figure>
+        <figure><img src="screenshots/android-10-testnet-busd-no-fiat.png" alt="Android BUSD testnet detail without fiat"><figcaption>BNB Testnet BUSD：价格与 24h 涨跌保持未知</figcaption></figure>
+        <figure><img src="screenshots/fixes-2026-08-02/android-testnet-confirm-explicit-fiat.png" alt="Android Sepolia confirmation with explicit testnet fiat state"><figcaption>Sepolia 确认页：明确说明测试网资产无市场价格；手续费仅显示真实 ETH 数量，不再出现空括号</figcaption></figure>
+        <figure><img src="screenshots/android-12-password-security-settings.png" alt="Android password security settings"><figcaption>安全设置：钱包密码已启用；Android 不再错误显示 iCloud</figcaption></figure>
+        <figure><img src="screenshots/android-13-current-pin-required.png" alt="Android current PIN required"><figcaption>修改 PIN：先验证当前钱包密码</figcaption></figure>
+        <figure><img src="screenshots/fixes-2026-08-02/android-transfer-auth-layered.png" alt="Android password transfer authentication over its previous page"><figcaption>转账认证：真实透明路由覆盖在原安全页之上；密码为主操作并保留生物识别，不再用黑色空页充当底层</figcaption></figure>
+        <figure><img src="screenshots/android-15-production-route-guard.png" alt="Android production route guard"><figcaption>生产深链缺少交易证据：签名失败闭合</figcaption></figure>
+        <figure><img src="screenshots/android-16-transaction-diagnostics.png" alt="Android transaction diagnostics"><figcaption>交易诊断：广播与最后查询时间、复制 Hash、原网络浏览器入口</figcaption></figure>
+        <figure><img src="screenshots/android-17-large-text-confirm.png" alt="Android transfer confirmation at 200 percent text"><figcaption>200% 动态字体：确认明细纵向重排，内容可滚动</figcaption></figure>
+        <figure><img src="screenshots/android-18-large-text-auth.png" alt="Android authentication at 200 percent text"><figcaption>200% 动态字体：主/备用认证操作与安全区</figcaption></figure>
+        <figure><img src="screenshots/android-19-evm-native-asset-changes.png" alt="Android EVM native asset changes"><figcaption>EVM 原生币：从待签名原始交易解码 ETH 转出与最大网络费</figcaption></figure>
+        <figure><img src="screenshots/android-20-evm-token-asset-changes.png" alt="Android ERC-20 asset changes"><figcaption>ERC-20：USDT 转出与 ETH 最大网络费分离展示</figcaption></figure>
+        <figure><img src="screenshots/android-21-token-risk-unsafe.png" alt="Android unsafe token risk"><figcaption>Token 风险：完整合约命中高风险后阻止签名</figcaption></figure>
+        <figure><img src="screenshots/android-22-token-risk-unavailable.png" alt="Android unavailable token risk"><figcaption>风险服务不可用：明确无法确认安全，不误报绿色</figcaption></figure>
+        <figure><img src="screenshots/android-23-trust-legal-security.png" alt="Android trust and legal disclosures"><figcaption>About：隐私、风险、许可证、安全政策与报告流程</figcaption></figure>
+        <figure><img src="screenshots/android-24-native-cold-signer-flag-secure.png" alt="Android system authentication protected capture"><figcaption>系统凭据认证期间捕获为黑屏；UIAutomator 独立确认原生认证提示存在，不作为普通页全局 FLAG_SECURE 证据</figcaption></figure>
+        <figure><img src="assets/android-security/kt-wallet-recents-protection.png" alt="KT Wallet branded Android Recents protection"><figcaption>KT Wallet：Home → Recents 只显示完整品牌保护页，内部钱包内容不可见</figcaption></figure>
+        <figure><img src="assets/android-security/kt-cold-signer-recents-protection.png" alt="Historical KT Cold Signer Android FLAG_SECURE Recents placeholder"><figcaption>历史策略对照：旧全局 FLAG_SECURE 任务卡为空白；当前仅助记词展示/校验/导入路由启用，普通页任务卡仍待零售真机重新验收</figcaption></figure>
+        <figure><img src="screenshots/android-cold-security-localized-en.png" alt="Android localized Cold Signer security check"><figcaption>Cold Signer 英文安全检查：确定性安全状态只用于验证无中文混排</figcaption></figure>
+        <figure><img src="screenshots/android-cold-delete-phrase-gate.png" alt="Android Cold Signer deletion phrase gate"><figcaption>删除认证：未输入完整确认文字前永久删除按钮保持禁用</figcaption></figure>
+        <figure><img src="screenshots/android-cold-delete-pin-required.png" alt="Android Cold Signer deletion PIN gate"><figcaption>删除认证：确认文字后仍强制输入当前 App PIN</figcaption></figure>
+        <figure><img src="screenshots/fixes-2026-08-02/android-wallet-detail-ja-fixed.png" alt="Android Japanese wallet identifier labels without duplicate status bar"><figcaption>日文钱包详情：只保留系统状态栏，不再叠加设计稿的 9:41；Wallet ID 文案继续跟随当前语言</figcaption></figure>
+        <figure><img src="screenshots/android/android-26-invalid-export-en.png" alt="Android English invalid offline export"><figcaption>英文无效离线导出：失败闭合且不混入中文</figcaption></figure>
+        <figure><img src="screenshots/android/android-27-duplicate-export-ja.png" alt="Android Japanese duplicate pairing"><figcaption>日文重复配对：保留既有钱包并显示本地化错误</figcaption></figure>
+        <figure><img src="screenshots/android/android-28-diagnostics-privacy-review.png" alt="Android privacy-safe diagnostic export review"><figcaption>支持诊断：系统级模拟器截图验证隐私披露、布局与操作可达</figcaption></figure>
+        <figure><img src="screenshots/observability-2026-08-02/android-anonymous-diagnostics-consent.png" alt="Android anonymous diagnostics consent"><figcaption>匿名性能报告：Android API 35 验证不后台上传、不自动重试及敏感字段排除</figcaption></figure>
+        <figure><img src="screenshots/android/android-29-production-route-evidence-required.png" alt="Android production route requires broadcast evidence"><figcaption>生产广播结果深链：缺少本地交易 ID 与节点 hash，签名成功不会冒充广播成功</figcaption></figure>
+        <figure><img src="screenshots/android-pending-ui-01-details.png" alt="Android pending EVM transaction details"><figcaption>EVM Pending：持久化 nonce/费率/gas 完整时提供加速与取消</figcaption></figure>
+        <figure><img src="screenshots/android-pending-ui-02-speed-confirm.png" alt="Android speed-up confirmation"><figcaption>加速确认：相同 nonce、原收款地址/金额不变，明细与操作可达</figcaption></figure>
+        <figure><img src="screenshots/android-pending-ui-03-cancel-confirm.png" alt="Android cancel confirmation"><figcaption>取消确认：同 nonce、0 金额自转的明确说明</figcaption></figure>
+        <figure><img src="screenshots/android-pending-ui-04-competing-replacement.png" alt="Android competing replacement"><figcaption>Replacement 已广播：仍为确认中，显示竞争候选且隐藏加速/取消</figcaption></figure>
+        <figure><img src="screenshots/android-pending-ui-05-confirmed-guard.png" alt="Android confirmed replacement guard"><figcaption>交易已确认：不再提供加速/取消</figcaption></figure>
+        <figure><img src="screenshots/android-pending-ui-06-missing-params.png" alt="Android missing replacement parameters guard"><figcaption>旧记录缺少完整签名参数：保持 Pending 但禁止替换</figcaption></figure>
+        <figure><img src="screenshots/android-pending-ui-07-unknown-evidence.png" alt="Android unavailable transaction status evidence"><figcaption>权威状态不可用：明确显示未知、保持轮询并隐藏加速/取消</figcaption></figure>
+        <figure><img src="screenshots/android-talkback-05-funded-testnet-home.png" alt="Android system TalkBack focused funded Solana testnet home"><figcaption>系统 TalkBack + 触摸探索：首页真实 Solana Devnet 余额与绿色读屏焦点</figcaption></figure>
+        <figure><img src="screenshots/android-talkback-07-sol-transfer-filled.png" alt="Android TalkBack Solana Devnet transfer input"><figcaption>TalkBack 转账输入：真实 Devnet 地址、0.001 SOL 与可用余额</figcaption></figure>
+        <figure><img src="screenshots/android-talkback-08-sol-confirm-focus.png" alt="Android TalkBack Solana transfer confirmation"><figcaption>TalkBack 确认页：网络、账户、收款地址、费用与总支出可读</figcaption></figure>
+        <figure><img src="screenshots/android-talkback-09-transfer-auth-focus.png" alt="Android TalkBack transfer authentication sheet"><figcaption>TalkBack 认证层：生物识别主操作与密码备用操作均可达</figcaption></figure>
+        <figure><img src="screenshots/android-talkback-10-system-auth-secure.png" alt="Android system authentication secure black capture"><figcaption>系统指纹认证由平台保护为黑屏；UIAutomator 语义树另证实应用名、签名授权说明与 PIN 备用入口</figcaption></figure>
+        <figure><img src="screenshots/android-talkback-11-sol-submitted.png" alt="Android TalkBack real Solana Devnet transaction confirmed"><figcaption>真实链上结果：23J1Vn…XvzzbX 已确认；官方 RPC 为 finalized、err=null</figcaption></figure>
+        <figure><img src="screenshots/production-prometheus-targets-2026-08-02.png" alt="Production Prometheus Gateway targets"><figcaption>生产监控目标：primary 8119 与 secondary 8120 均为 UP</figcaption></figure>
+        <figure><img src="screenshots/production-prometheus-3-targets-2026-08-02.jpg" alt="Production Prometheus Gateway and self-monitoring targets"><figcaption>当前生产监控：两个 Gateway 与 Prometheus 自抓取共 3/3 target UP；自抓取用于 Alertmanager 未发现、通知错误与队列饱和规则</figcaption></figure>
+        <figure><img src="screenshots/production-alertmanager-status-2026-08-02.jpg" alt="Production loopback Alertmanager status"><figcaption>生产 Alertmanager 0.32.1：loopback 单节点刻意禁用 cluster 端口，UTF-8 strict 路由配置已加载；页面不含通知凭证或钱包数据</figcaption></figure>
+        <figure><img src="screenshots/production-prometheus-rules-2026-08-02.png" alt="Production Prometheus Gateway baseline rule health"><figcaption>1.16.0 历史基线：当时 11 条规则全部 health=OK；保留该截图用于版本演进对照，不代表当前规则总数</figcaption></figure>
+        <figure><img src="screenshots/production-broadcast-guard-alerts-2026-08-02.png" alt="Production broadcast guard alert rules"><figcaption>1.16.4 历史生产广播防重告警：未配置、运行/持久化错误与损坏记录三条规则均为绿色健康；该截图当时合计 14/14，当前生产已演进为 17/17</figcaption></figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>2026-08-02 UI 证据纠错 · 2026-08-03 回归加固</h2>
+      <p class="note"><strong>结论：</strong>用户指出的三处均已核对。测试网估值是安全隔离策略，但旧的
+        <code>≈ --</code> 表达不清；认证黑底来自测试直接以透明 Sheet 为首路由；双状态栏来自
+        测试宿主遗漏 <code>KtDeviceChrome(mockStatusBar: false)</code>。三项 Android API 35
+        定向集成测试与截图均已重跑通过。2026-08-03 又补充实现级门禁：测试网明确
+        文案不得退化为 <code>≈ --</code>、认证 Route 必须保持
+        <code>opaque=false</code>、生产设备 chrome 必须隐藏设计稿的 <code>9:41</code>。
+        定向 Widget 40/40 与共享 packages 389/389 通过。</p>
+      <ul>
+        <li>测试网确认页：改为明确的“测试网资产无市场价格”，手续费移除 <code>（--）</code>。</li>
+        <li>认证 Sheet：证据测试现在从安全设置页推入非不透明路由，验证底层页面仍存在并正确变暗。</li>
+        <li>钱包详情：测试宿主关闭设计稿状态栏，只保留 Android/iOS 系统状态栏。</li>
+        <li>iPhone 17 Pro 曾因 SpringBoard 显示初始化异常退出；日志证明不是 Runner/App
+          崩溃。无损冷启动后 SpringBoard 恢复并通过截图验证。为控制磁盘占用，其余模拟器
+          已按用户要求删除，后续 iOS 测试只串行复用这一台。</li>
+      </ul>
+      <div class="grid">
+        <figure><img src="screenshots/ios-simulator-springboard-recovered-2026-08-03.png" alt="Recovered sole iPhone 17 Pro Simulator home screen"><figcaption>唯一保留的 iPhone 17 Pro（iOS 26.2）无损恢复后：SpringBoard 为 running，<code>simctl io screenshot</code> 成功；未创建或擦除模拟器</figcaption></figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>距离国际成熟钱包最近的 8 个阻断项</h2>
+      <ol class="priority">
+        <li><b>外部安全保证：</b>完成移动端、原生密钥层、QR 协议和密码学验签的独立审计，
+          启用真正可用的私密漏洞报告渠道，并建立漏洞赏金。SECURITY.md 与公开测试期
+          响应目标已经完成，但 2026-08-03 GitHub API 仍显示私密漏洞报告功能关闭，
+          且当前会话无仓库管理权限。</li>
+        <li><b>八链离线闭环：</b>严格八链 AccountExport 配对、16 条双端原生签名、QR
+          往返与在线验签矩阵已经通过；Ethereum、Base、Arbitrum、Avalanche、BNB、TRON、Solana
+          又完成双端原生币/Token“实时 chain state → 广播 → 链上确认 → Gateway 历史”。
+          当前全部链都必须使用轮换后的 14 天短期批次重新验收。2026-08-03 原生
+          Wallet Core 已生成 <code>batch_20260802_3eb2631a3683a40c</code>，凭据文件
+          为 0600 且门禁验证通过，公开 EVM 地址为
+          <code>0xfa1B…aD11</code>；Android API 35 当前批次 16 条未广播矩阵已通过且
+          Android 临时钱包已删除；Gateway 与独立 Amoy RPC 均读到 0 POL / 0 USDC，
+          尚未广播。设备侧私密 JSON 已消费删除；iOS provisioning 临时 native walletId 的最终删除仍等待
+          一次 Simulator Face ID 确认，不能把超时描述为完整清理通过。旧 Polygon 地址虽有约 0.000585 POL / 16 USDC，也不得绕过
+          批次门禁继续充当新结果；Polygon 两笔测试按当前最大费用最坏预算约
+          0.002977 POL。</li>
+        <li><b>真机安全矩阵：</b>iOS/Android 真机验证锁屏、App Switcher、录屏、
+          root/jailbreak、设备无密码与系统生物识别锁定。</li>
+        <li><b>EVM 最终状态与替换：</b>Sepolia、Base、Fuji、BNB 的真实 speed-up/cancel
+          已在旧批次通过；Arbitrum 按官方 sequencer 语义明确隐藏该操作。节点无法证明最终状态、
+          或旧记录缺少 nonce 时，数据库 v7 现在会持久化 unknown、继续轮询且禁止猜测
+          replacement；新短期批次需要为所有支持 replacement 的测试网补充 gas 后复验，
+          Amoy 还从未完成同等级真实验收。</li>
+        <li><b>密钥删除与恢复验收：</b>双端验证删除钱包后原生密钥、PIN、认证设置、
+          Pending 与签名记录全部清除，并覆盖导入迁移和灾难恢复。</li>
+        <li><b>生产可观测性：</b>Gateway 的 P50/P95、失败分桶、Prometheus 指标和
+          结构化日志已经完成；1.16.5 起不再记录完整或截断钱包地址，并把未经信任的
+          method/chain/network 收敛为服务端固定标签；1.16.7 又阻止传输/供应商错误把
+          URL、API key 或任意 provider 文本反射给客户端。生产现已启用
+          HAProxy 后的两个 Gateway、共享 Redis 和 Prometheus 采集，单实例/Redis 故障、
+          公网切换、代理限流及恢复演练通过；3/3 target 与 17/17 规则健康，Prometheus
+          → loopback Alertmanager critical canary 已实际送达。
+          仍需外部邮件/Webhook/值班接收方、阈值长期校准、跨主机/多地域演练和中国大陆多运营商
+          验收，不能把单物理主机冗余描述为地域级 SLA。
+          App 脱敏诊断包、12 项匿名指标、Android 原生 fatal/前台 ANR 和 iOS MetricKit
+          crash/hang 的版本化本机持久化，以及每次主动同意的匿名远程汇总、7 天留存和
+          info 级趋势告警已经完成；仍缺物理设备故障注入、外部告警接收方与可信安装基数。</li>
+        <li><b>风险与授权：</b>EVM 直接转账已从原始字节展示资产变化，Gateway 运营方
+          风险注册表、GoPlus 独立 Token 情报和三态 UI 已在 1.12.0 源码完成；1.16.5 起
+          又完成五条 EVM 主网的授权扫描、无限授权提示、热钱包撤销与观察钱包 + Cold
+          Signer QR 撤销；Solana 独立 Token 情报也已按明确恶意 creator/Hook/authority
+          证据接入，三个安全 provider 已有隔离熔断、生产告警规则和 runbook。仍需
+          小额主网真实撤销、外部告警接收方、长期供应商 SLA/版本监测和误报申诉流程，以及
+          任意合约交互的通用模拟资产变化。</li>
+        <li><b>可访问性与运营：</b>两款 App 共 55 个页面、990 个三语言/三视口/字号场景的自动语义、触控尺寸、对比度、
+          小屏/横屏溢出及 200% 字体门禁已经完成；Android API 35 系统 TalkBack 已完成真实
+          Solana Devnet 转账，仍需 iOS VoiceOver、物理设备 TalkBack/VoiceOver 逐页
+          200% 字体、原生崩溃/ANR 的物理设备故障注入、
+          发布合规与完整用户支持体系。</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>不可宣称的能力</h2>
+      <ul>
+        <li>不能宣称经过第三方安全审计或达到 Ledger / OKX / MetaMask 的安全等级。</li>
+        <li>不能宣称当前短期批次的八条链 Cold Signer 完整生产闭环已经通过；轮换后的
+          当前批次仅在 Android API 35 组合 App 重跑 16 条离线签名/验签矩阵，当前批次
+          iOS、独立 KT Cold Signer 与两台物理设备的真实摄像头往返仍未验收；已作废批次
+          的结果不能移植为当前证据，更早七链链上结果也只是历史回归证据。</li>
+        <li>不能宣称新批次任何链已完成广播，也不能宣称 Polygon Amoy USDC 曾完整通过。</li>
+        <li>不能宣称 Android/iOS 所有真机系统安全场景已验收；当前 UI 截图来自模拟器。</li>
+        <li>不能把 Android API 35 模拟器上的系统 TalkBack 完整转账链路扩大为 Android
+          零售真机逐页验收，也不能据此宣称 iOS VoiceOver 已通过。</li>
+        <li>不能把删除事务自动化测试描述为真机 Keychain/Keystore 已完成物理删除验收。</li>
+        <li>不能把“Android/Apple Release 运行时门禁及 exact-commit OSV 为 0”扩大为第三方供应链或二进制安全审计；构建工具告警、初始哈希基线 provenance、CocoaPods 非原生 OSV 生态与正式签名仍未闭合。</li>
+        <li>不能把通过 bundletool 与制品门禁的未签名 AAB 描述为可上传或可分发；正式 upload key、Play App Signing 连续性及商店生成 split APK 的安装/升级仍未验收。</li>
+        <li>不能把 JUP ATA 身份派生验证描述为 JUP 主网转账。</li>
+        <li>不能把 Gateway 1.16.8 的生产只读 GoPlus smoke、自动熔断和 Prometheus
+          规则描述为所有链的完整实时恶意 Token/合约保护或授权撤销闭环；真实主网撤销、
+          外部 Alertmanager 接收方、长期供应商 SLA/版本监测和误报申诉尚未完成。</li>
+        <li>不能把生产单主机双实例、共享 Redis 和 HAProxy 故障切换描述为跨机房、
+          跨地域容灾或全球 SLA；外部通知接收方和中国大陆多运营商验收仍未完成。</li>
+        <li>不能把匿名、未认证的客户端诊断计数描述为可信崩溃率、活跃安装数或用户级
+          遥测，也不能用它替代 iOS/Android 真机故障注入和商店侧崩溃数据。</li>
+        <li>不能宣称安全报告私密渠道已经可用；2026-07-31 GitHub API 返回
+          <code>private-vulnerability-reporting.enabled=false</code>，需仓库管理员启用或
+          配置并验证专用安全邮箱。</li>
+      </ul>
+    </section>
+  </main>
+  <footer class="foot">KT Wallet P0/P1 audit · Generated locally · No secrets included</footer>
+</body>
+</html>

@@ -27,6 +27,10 @@ class QrFrameScanSession {
   /// Feeds one scanned string; returns the aggregation progress afterwards.
   AggregatorProgress add(String raw) {
     if (isDone || isFailed) return aggregator.progress;
+    if (raw.length > AirgapFrame.maxQrTextLength) {
+      _undecodable++;
+      return aggregator.progress;
+    }
     final AirgapFrame frame;
     try {
       frame = AirgapFrame.decode(base64Url.decode(raw));

@@ -17,6 +17,11 @@ enum WalletType { hot, watch }
 
 enum TxDirection { incoming, outgoing }
 
+/// Semantic operation represented by a transaction row. Keeping this
+/// separate from `amountRaw` prevents an ERC-20 `approve(spender, 0)` revoke
+/// from being rendered or exported as a zero-value token transfer.
+enum TxOperationKind { transfer, approvalRevoke }
+
 enum TxStatus {
   draft,
   awaitingSig,
@@ -42,6 +47,16 @@ enum TxStatus {
 enum SignMode { local, airgap }
 
 enum TxReplacementKind { speedUp, cancel }
+
+/// Result of the latest hash-specific, chain-authoritative status lookup for
+/// a transaction that is still locally live.
+///
+/// This is deliberately separate from [TxStatus]: an unavailable RPC or a
+/// node that no longer remembers a hash must not terminally fail/drop a
+/// transaction, but the UI must also not keep claiming that it is definitely
+/// pending. A later successful lookup can move this evidence back to
+/// [pending] or settle the transaction normally.
+enum TxCheckOutcome { pending, unknown }
 
 class Wallets extends Table {
   TextColumn get id => text()();
@@ -119,6 +134,9 @@ class Transactions extends Table {
   /// disables replacement rather than guessing.
   TextColumn get networkId => text().nullable()();
   TextColumn get contract => text().nullable()();
+  IntColumn get operation => intEnum<TxOperationKind>().withDefault(
+    Constant(TxOperationKind.transfer.index),
+  )();
   IntColumn get direction => intEnum<TxDirection>()();
   TextColumn get fromAddr => text()();
   TextColumn get toAddr => text()();
@@ -130,6 +148,29 @@ class Transactions extends Table {
   TextColumn get memo => text().nullable()();
   IntColumn get createdAt => integer()();
   IntColumn get broadcastAt => integer().nullable()();
+
+  /// Epoch milliseconds of the latest hash-specific status lookup attempted
+  /// against the Gateway or an active chain RPC. This is diagnostic evidence,
+  /// not a finality signal: a recent lookup may still have returned unknown.
+  IntColumn get lastCheckedAt => integer().nullable()();
+
+  /// What the latest hash-specific lookup actually proved. Null means no
+  /// lookup result has been recorded (or the transaction is terminal).
+  IntColumn get lastCheckOutcome => intEnum<TxCheckOutcome>().nullable()();
+
+  /// Chain-authoritative validity metadata. These values are captured from
+  /// the same RPC response used to construct the signed transaction:
+  ///
+  /// * TRON stores the TAPOS reference block height and epoch-ms expiration.
+  /// * Solana stores the `lastValidBlockHeight` paired with its recent
+  ///   blockhash.
+  ///
+  /// They stay null for EVM and legacy rows. A status poller may mark a
+  /// missing transaction `expired` only after the active canonical chain has
+  /// advanced beyond the corresponding persisted boundary.
+  IntColumn get referenceBlockHeight => integer().nullable()();
+  IntColumn get expiresAt => integer().nullable()();
+  IntColumn get lastValidBlockHeight => integer().nullable()();
 
   /// EVM replacement metadata. Quantities remain decimal strings so nonce and
   /// fees never lose precision. They are null for TRON, Solana and legacy rows.

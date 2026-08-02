@@ -24,6 +24,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get actionImport => 'Import';
 
   @override
+  String get actionValidating => 'Validating…';
+
+  @override
+  String get cameraUnavailable => 'Camera unavailable';
+
+  @override
   String get done => 'Done';
 
   @override
@@ -122,6 +128,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get importWalletTitle => 'Import wallet';
 
   @override
+  String get mnemonicInvalidChecksum =>
+      'Invalid recovery phrase. Check every word, the word count, and the BIP-39 checksum.';
+
+  @override
   String wordCountOption(int count) {
     return '$count words';
   }
@@ -147,6 +157,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get enableFaceId => 'Enable Face ID';
+
+  @override
+  String get biometricUnavailable =>
+      'No usable biometric or device authentication is set up.';
+
+  @override
+  String get walletSecureStorageFailed =>
+      'Secure wallet storage failed. No key was saved.';
+
+  @override
+  String get secureStorageUnavailableTitle => 'Secure storage unavailable';
+
+  @override
+  String get secureStorageUnavailableDesc =>
+      'KT Cold Signer cannot safely read wallet, password, or lockout state. Signing remains locked. Restart the app or reinstall it from a trusted source.';
+
+  @override
+  String get actionRetry => 'Retry';
 
   @override
   String get biometricSkip => 'Not now — use password only';
@@ -187,6 +215,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get securityCheckPassed => 'Security check passed · airplane mode on';
+
+  @override
+  String get offlineStatusConfirmed => 'Network offline';
+
+  @override
+  String get offlineStatusConnected => 'Network connection detected';
+
+  @override
+  String get offlineStatusUnknown => 'Network status unavailable';
 
   @override
   String get scanPendingTx => 'Scan pending transaction';
@@ -264,6 +301,51 @@ class AppLocalizationsEn extends AppLocalizations {
   String get checkLevelBlock => 'Blocked';
 
   @override
+  String get checkDetailUnknown => 'Status unavailable';
+
+  @override
+  String get checkDetailNetworkSafe => 'No network connection detected';
+
+  @override
+  String get checkDetailNetworkUnsafe => 'Network connection detected';
+
+  @override
+  String get checkDetailAirplaneSafe => 'Airplane mode is on';
+
+  @override
+  String get checkDetailAirplaneUnsafe => 'Airplane mode is off';
+
+  @override
+  String get checkDetailBluetoothSafe => 'Bluetooth is off';
+
+  @override
+  String get checkDetailBluetoothUnsafe => 'Bluetooth is on';
+
+  @override
+  String get checkDetailPasscodeSafe => 'Device passcode is set';
+
+  @override
+  String get checkDetailPasscodeUnsafe => 'Device passcode is not set';
+
+  @override
+  String get checkDetailBiometricSafe => 'Biometrics are available';
+
+  @override
+  String get checkDetailBiometricUnsafe => 'Biometrics are unavailable';
+
+  @override
+  String get checkDetailScreenCaptureSafe => 'No screen recording detected';
+
+  @override
+  String get checkDetailScreenCaptureUnsafe => 'Screen recording detected';
+
+  @override
+  String get checkDetailIntegritySafe => 'System integrity check passed';
+
+  @override
+  String get checkDetailIntegrityUnsafe => 'Root or jailbreak detected';
+
+  @override
   String get securityChecking => 'Checking device status…';
 
   @override
@@ -304,6 +386,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get toAddress => 'Recipient address';
 
   @override
+  String get spenderAddress => 'Authorized spender';
+
+  @override
+  String get nativeTransferOperation => 'Native transfer';
+
+  @override
+  String get tokenTransferOperation => 'Token transfer';
+
+  @override
+  String get approvalRevokeOperation => 'Revoke token approval';
+
+  @override
+  String get approvalRevokeZeroAllowance => 'Set allowance to zero';
+
+  @override
+  String get approvalRevokeSignerNotice =>
+      'This is the exact ERC-20 approve(spender, 0) call. It revokes allowance and does not transfer tokens.';
+
+  @override
+  String get tokenContractLabel => 'Token contract';
+
+  @override
+  String get chainIdLabel => 'Chain ID';
+
+  @override
+  String get maximumFeeBaseUnits => 'Maximum fee (base units)';
+
+  @override
   String get walletIdLabel => 'Wallet ID';
 
   @override
@@ -329,13 +439,20 @@ class AppLocalizationsEn extends AppLocalizations {
       'This transaction contains content that can\'t be safely parsed. KT Cold Signer refused to sign to protect your assets.';
 
   @override
+  String get transactionParseFailed => 'Unable to parse safely';
+
+  @override
+  String get signingFailed =>
+      'Signing failed. The transaction, wallet, or authentication did not pass validation.';
+
+  @override
   String unknownContractCallDetected(String method) {
     return 'Unknown contract call detected: $method';
   }
 
   @override
   String get unknownContractCallDesc =>
-      'V1 supports only native-coin and token transfers. Authorization calls like approve and permit are always rejected.';
+      'Only native transfers, token transfers, and the exact approve(spender, 0) revocation are supported. Non-zero approve, permit, and unknown calls are rejected.';
 
   @override
   String get authTitle => 'Authentication';
@@ -366,6 +483,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get enterPinToSign => 'Enter app PIN to complete signing';
 
   @override
+  String get enterPinToDelete => 'Enter app PIN to continue deletion';
+
+  @override
   String get pinIncorrect => 'Incorrect PIN, try again';
 
   @override
@@ -388,6 +508,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get signatureVoided => 'Signature voided';
+
+  @override
+  String get signResultUnavailable => 'Signing result unavailable';
 
   @override
   String dynamicShard(int received, int total) {
@@ -440,11 +563,15 @@ class AppLocalizationsEn extends AppLocalizations {
       'Periodically spot-check that the phrase still transcribes correctly';
 
   @override
+  String get mnemonicReviewFailed =>
+      'Authentication or phrase validation failed. No recovery phrase was shown.';
+
+  @override
   String get deleteWallet => 'Delete wallet';
 
   @override
   String get deleteWalletReqDesc =>
-      'Requires password, biometrics, and confirmation text';
+      'Requires the app PIN and confirmation text; system authentication is also required when enabled';
 
   @override
   String get destroyAllData => 'Destroy all wallet data';
@@ -478,6 +605,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get screenCaptureProtection => 'Screenshot safety alerts';
 
   @override
+  String get screenCaptureBlocked => 'Screen recording detected';
+
+  @override
+  String get screenCaptureBlockedHint =>
+      'The recovery phrase is hidden while recording or mirroring is active. Stop capture to restore it.';
+
+  @override
   String get permanentlyDeleteWallet => 'Permanently delete wallet';
 
   @override
@@ -497,6 +631,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get typeToConfirmDelete => 'Type “Delete wallet” to continue';
 
   @override
+  String get deleteWalletConfirmationPhrase => 'Delete wallet';
+
+  @override
+  String get verifyToDeleteWallet => 'Verify to permanently delete this wallet';
+
+  @override
+  String get deleteAuthenticationFailed =>
+      'Authentication failed. The wallet was not deleted.';
+
+  @override
+  String get deleteWalletFailed =>
+      'The wallet could not be deleted safely. Nothing was removed; try again.';
+
+  @override
   String get displayLanguage => 'Language';
 
   @override
@@ -507,6 +655,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get languageSystem => 'System default';
+
+  @override
+  String get settingsSaveFailed =>
+      'The setting could not be saved. Nothing was changed; try again.';
 
   @override
   String get deviceMode => 'Device mode';
@@ -520,4 +672,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get deviceModeSwitchDesc =>
       'Before switching, make sure this device is no longer used as a signer. You will return to the mode selection screen.';
+
+  @override
+  String get deviceModeSaveFailed =>
+      'The device mode could not be saved. Nothing was changed; try again.';
+
+  @override
+  String get pinKeyDelete => 'Delete last digit';
 }

@@ -5,6 +5,8 @@ import 'package:kt_wallet/src/market/balance_service.dart';
 import 'package:kt_wallet/src/market/market_scope.dart';
 import 'package:kt_wallet/src/state/networks.dart';
 
+import 'support/e2e_wallet_cleanup.dart';
+
 /// On-device proof of the live-balance pipeline with REAL crypto: a freshly
 /// derived (real) address is queried against the real public RPC endpoints.
 /// A brand-new wallet must report ZERO balances with `ok` status — reaching
@@ -27,6 +29,7 @@ void main() {
         mnemonic: await crypto.generateMnemonic(),
         requireAuth: false,
       );
+      registerE2eWalletCleanup(crypto, id);
       final addrs = await crypto.deriveAddresses(id);
 
       final networks = NetworkController(

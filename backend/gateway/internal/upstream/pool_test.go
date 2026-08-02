@@ -1,11 +1,13 @@
 package upstream
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -13,6 +15,12 @@ import (
 
 	"ktwallet/gateway/internal/clock"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 // fakeNode is a scriptable JSON-RPC endpoint that counts hits.
 type fakeNode struct {
@@ -70,6 +78,110 @@ func TestFailoverOn500(t *testing.T) {
 	}
 }
 
+func TestCallOnceDoesNotFailOverAfterWriteAttempt(t *testing.T) {
+	dead := newFakeNode(t, respondStatus(503))
+	alive := newFakeNode(t, nil)
+	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+	p := NewPool("eth", []string{dead.srv.URL, alive.srv.URL}, clk, nil, time.Second)
+
+	_, err := p.CallOnce(context.Background(), "eth_sendRawTransaction", []any{"0x00"})
+	var unavailable *Unavailable
+	if !errors.As(err, &unavailable) {
+		t.Fatalf("expected result-unknown Unavailable, got %v", err)
+	}
+	if dead.hits.Load() != 1 || alive.hits.Load() != 0 {
+		t.Fatalf("write must hit one endpoint only, got %d/%d", dead.hits.Load(), alive.hits.Load())
+	}
+}
+
+func TestTransportFailureDoesNotExposeCredentialBearingURL(t *testing.T) {
+	const secret = "provider-key-must-never-leave-gateway"
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return nil, errors.New(`Post "` + req.URL.String() + `": connection refused`)
+	})}
+	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+	p := NewPool(
+		"eth",
+		[]string{"https://eth-mainnet.example.invalid/v2/" + secret},
+		clk,
+		client,
+		time.Second,
+	)
+
+	_, err := p.CallOnce(context.Background(), "eth_sendRawTransaction", []any{"0x00"})
+	var unavailable *Unavailable
+	if !errors.As(err, &unavailable) {
+		t.Fatalf("expected Unavailable, got %v", err)
+	}
+	if strings.Contains(err.Error(), secret) || strings.Contains(unavailable.Message, secret) {
+		t.Fatalf("transport failure exposed provider credential: %v", err)
+	}
+}
+
+func TestCallOnceProviderRoutingErrorIsUnknownWithoutFailover(t *testing.T) {
+	disabled := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"error":{
+			"code":-32000,"message":"network is not enabled for this app"
+		}}`))
+	})
+	enabled := newFakeNode(t, nil)
+	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+	p := NewPool("eth", []string{disabled.srv.URL, enabled.srv.URL}, clk, nil, time.Second)
+
+	_, err := p.CallOnce(context.Background(), "eth_sendRawTransaction", []any{"0x00"})
+	var unavailable *Unavailable
+	if !errors.As(err, &unavailable) {
+		t.Fatalf("provider routing failure must remain result-unknown, got %v", err)
+	}
+	if disabled.hits.Load() != 1 || enabled.hits.Load() != 0 {
+		t.Fatalf("write must not fail over after provider response, got %d/%d", disabled.hits.Load(), enabled.hits.Load())
+	}
+}
+
+func TestCallOncePreservesExplicitNodeRejection(t *testing.T) {
+	rejecting := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"nonce too low"}}`))
+	})
+	second := newFakeNode(t, nil)
+	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+	p := NewPool("eth", []string{rejecting.srv.URL, second.srv.URL}, clk, nil, time.Second)
+
+	_, err := p.CallOnce(context.Background(), "eth_sendRawTransaction", []any{"0x00"})
+	var nodeErr *NodeError
+	if !errors.As(err, &nodeErr) || nodeErr.Message != "nonce too low" {
+		t.Fatalf("expected explicit node rejection, got %v", err)
+	}
+	if rejecting.hits.Load() != 1 || second.hits.Load() != 0 {
+		t.Fatalf("node rejection must not fail over, got %d/%d", rejecting.hits.Load(), second.hits.Load())
+	}
+}
+
+func TestCallOnceMaySelectNextEndpointOnlyWhenEarlierCircuitWasAlreadyOpen(t *testing.T) {
+	dead := newFakeNode(t, respondStatus(503))
+	alive := newFakeNode(t, nil)
+	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+	p := NewPool("eth", []string{dead.srv.URL, alive.srv.URL}, clk, nil, time.Second)
+
+	for range FailThreshold {
+		if _, err := p.Call(context.Background(), "eth_blockNumber", nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if dead.hits.Load() != FailThreshold || alive.hits.Load() != FailThreshold {
+		t.Fatalf("read setup must open the first circuit, got %d/%d", dead.hits.Load(), alive.hits.Load())
+	}
+
+	result, err := p.CallOnce(context.Background(), "eth_sendRawTransaction", []any{"0x00"})
+	if err != nil || string(result) != `"ok"` {
+		t.Fatalf("eligible endpoint should accept the single write: result=%s err=%v", result, err)
+	}
+	if dead.hits.Load() != FailThreshold || alive.hits.Load() != FailThreshold+1 {
+		t.Fatalf("open endpoint must be skipped before submission, got %d/%d", dead.hits.Load(), alive.hits.Load())
+	}
+}
+
 func TestFailoverOn429(t *testing.T) {
 	limited := newFakeNode(t, respondStatus(429))
 	alive := newFakeNode(t, nil)
@@ -81,6 +193,11 @@ func TestFailoverOn429(t *testing.T) {
 	}
 	if limited.hits.Load() != 1 || alive.hits.Load() != 1 {
 		t.Fatalf("want 1/1 hits, got %d/%d", limited.hits.Load(), alive.hits.Load())
+	}
+	health := p.Health()
+	if health.FailureMetrics.RateLimited != 1 ||
+		health.FailureMetrics.ServerErrors != 0 {
+		t.Fatalf("429 must have its own failure bucket: %+v", health.FailureMetrics)
 	}
 }
 
@@ -169,6 +286,9 @@ func TestFailoverWhenProviderKeyHasNotEnabledNetwork(t *testing.T) {
 	if disabled.hits.Load() != 1 || enabled.hits.Load() != 1 {
 		t.Fatalf("want disabled/enabled hits 1/1, got %d/%d", disabled.hits.Load(), enabled.hits.Load())
 	}
+	if got := p.Health().FailureMetrics.ProviderErrors; got != 1 {
+		t.Fatalf("provider routing failure count = %d, want 1", got)
+	}
 }
 
 func TestCircuitOpensAfterThreeFailuresAndRecloses(t *testing.T) {
@@ -192,6 +312,11 @@ func TestCircuitOpensAfterThreeFailuresAndRecloses(t *testing.T) {
 	}
 	if dead.hits.Load() != 3 {
 		t.Fatalf("dead endpoint hit while its circuit was open (hits=%d)", dead.hits.Load())
+	}
+	health := p.Health()
+	if health.Endpoints != 2 || health.OpenCircuits != 1 ||
+		health.Failures != 3 || health.Successes != 4 {
+		t.Fatalf("unexpected health snapshot while circuit is open: %+v", health)
 	}
 
 	// Just before the window closes it stays skipped...
@@ -263,6 +388,104 @@ func TestGarbageResponseFailsOver(t *testing.T) {
 	}
 	if alive.hits.Load() != 1 {
 		t.Fatal("second endpoint should have answered")
+	}
+	if got := p.Health().FailureMetrics.MalformedResponse; got != 1 {
+		t.Fatalf("malformed response count = %d, want 1", got)
+	}
+}
+
+func TestMissingJSONRPCResultFailsOverAsMalformed(t *testing.T) {
+	missing := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1}`))
+	})
+	alive := newFakeNode(t, nil)
+	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+	p := NewPool("eth", []string{missing.srv.URL, alive.srv.URL}, clk, nil, time.Second)
+	if _, err := p.Call(context.Background(), "eth_gasPrice", nil); err != nil {
+		t.Fatalf("missing result must fail over: %v", err)
+	}
+	if got := p.Health().FailureMetrics.MalformedResponse; got != 1 {
+		t.Fatalf("malformed response count = %d, want 1", got)
+	}
+}
+
+func TestTimeoutHasDedicatedFailureBucket(t *testing.T) {
+	slow := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(25 * time.Millisecond)
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":"late"}`))
+	})
+	alive := newFakeNode(t, nil)
+	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+	p := NewPool("eth", []string{slow.srv.URL, alive.srv.URL}, clk, nil, 5*time.Millisecond)
+	if _, err := p.Call(context.Background(), "eth_gasPrice", nil); err != nil {
+		t.Fatalf("timeout must fail over: %v", err)
+	}
+	health := p.Health()
+	if health.FailureMetrics.Timeouts != 1 ||
+		health.FailureMetrics.Transport != 0 {
+		t.Fatalf("timeout must not be grouped as transport: %+v", health.FailureMetrics)
+	}
+}
+
+func TestHealthPublishesBoundedLatencyPercentilesAndAnonymousEndpoints(t *testing.T) {
+	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+	p := NewPool(
+		"eth",
+		[]string{"https://secret-key@example.invalid/v2/private"},
+		clk,
+		nil,
+		time.Second,
+	)
+	ep := p.eps[0]
+	for _, latency := range []time.Duration{
+		10 * time.Millisecond,
+		20 * time.Millisecond,
+		30 * time.Millisecond,
+		40 * time.Millisecond,
+		100 * time.Millisecond,
+	} {
+		p.recordSuccess(ep, latency)
+	}
+
+	health := p.Health()
+	if health.LatencyP50Ms != 30 || health.LatencyP95Ms != 100 ||
+		health.Samples != 5 {
+		t.Fatalf("unexpected aggregate latency metrics: %+v", health)
+	}
+	if len(health.EndpointMetrics) != 1 {
+		t.Fatalf("endpoint metrics = %d, want 1", len(health.EndpointMetrics))
+	}
+	endpoint := health.EndpointMetrics[0]
+	if endpoint.Position != 1 || endpoint.State != "healthy" ||
+		endpoint.LatencyP50Ms != 30 || endpoint.LatencyP95Ms != 100 {
+		t.Fatalf("unexpected anonymous endpoint metrics: %+v", endpoint)
+	}
+	encoded, err := json.Marshal(health)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"secret-key", "example.invalid", "/v2/private"} {
+		if string(encoded) == secret || bytes.Contains(encoded, []byte(secret)) {
+			t.Fatalf("health metrics leaked endpoint material %q: %s", secret, encoded)
+		}
+	}
+}
+
+func TestLatencyWindowIsBoundedToMostRecentSamples(t *testing.T) {
+	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+	p := NewPool("eth", []string{"https://example.invalid"}, clk, nil, time.Second)
+	ep := p.eps[0]
+	for i := range latencyWindowSize + 20 {
+		p.recordSuccess(ep, time.Duration(i)*time.Millisecond)
+	}
+
+	health := p.Health()
+	if health.Samples != latencyWindowSize {
+		t.Fatalf("samples = %d, want bounded window %d", health.Samples, latencyWindowSize)
+	}
+	// The first 20 samples were evicted, so the rolling window spans 20..275.
+	if health.LatencyP50Ms != 147 || health.LatencyP95Ms != 263 {
+		t.Fatalf("unexpected rolling percentiles: p50=%d p95=%d", health.LatencyP50Ms, health.LatencyP95Ms)
 	}
 }
 

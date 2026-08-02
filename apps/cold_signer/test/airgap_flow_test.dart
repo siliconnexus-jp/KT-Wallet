@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:airgap_protocol/airgap_protocol.dart';
+import 'package:chains/chains.dart';
 import 'package:cold_signer/l10n/app_localizations.dart';
 import 'package:cold_signer/main.dart';
 import 'package:cold_signer/src/screens/signer_signing_screens.dart';
@@ -27,8 +28,9 @@ void main() {
     final aggregator = FrameAggregator();
     for (var i = 0; i < frames.length; i++) {
       // Round-trip each frame through its wire bytes, as a camera read would.
-      final progress =
-          aggregator.addFrame(AirgapFrame.decode(frames[i].encode()));
+      final progress = aggregator.addFrame(
+        AirgapFrame.decode(frames[i].encode()),
+      );
       expect(progress.received, i + 1);
       expect(progress.total, frames.length);
       expect(progress.duplicates, 0);
@@ -88,11 +90,18 @@ void main() {
     expect(res.signedTx.sublist(0, request.rawTx.length), request.rawTx);
   });
 
-  testWidgets('scan: each tap feeds one frame; the last decodes into parse',
-      (tester) async {
+  testWidgets('scan: each tap feeds one frame; the last decodes into parse', (
+    tester,
+  ) async {
     tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
     addTearDown(tester.platformDispatcher.clearLocalesTestValue);
-    await tester.pumpWidget(ColdSignerApp(initialLocation: '/scan'));
+    await tester.pumpWidget(ColdSignerApp());
+    await tester.pumpAndSettle();
+    final scanEntry = find.text('C6 扫描交易');
+    await tester.scrollUntilVisible(scanEntry, 200);
+    await Scrollable.ensureVisible(tester.element(scanEntry), alignment: 0.5);
+    await tester.pumpAndSettle();
+    await tester.tap(scanEntry);
     await tester.pumpAndSettle();
 
     final total = demoSignRequestFrames().length;
@@ -127,8 +136,9 @@ void main() {
     final aggregator = FrameAggregator();
     for (var i = 0; i < frames.length; i++) {
       // Round-trip each frame through its wire bytes, as a camera read would.
-      final progress =
-          aggregator.addFrame(AirgapFrame.decode(frames[i].encode()));
+      final progress = aggregator.addFrame(
+        AirgapFrame.decode(frames[i].encode()),
+      );
       expect(progress.received, i + 1);
       expect(progress.total, frames.length);
       expect(progress.duplicates, 0);
@@ -152,26 +162,35 @@ void main() {
     }
     // Spot-check the seeded watch-wallet values survive the wire.
     expect(exp.accounts[0].coin, 60);
-    expect(exp.accounts[0].address, '0xc71c8B29b3d4b79E19bE1');
-    expect(exp.accounts[0].path, "m/44'/60'/0'/0/0");
+    expect(
+      exp.accounts[0].address,
+      '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
+    );
+    expect(exp.accounts[0].path, evmDefaultDerivationPath);
     expect(exp.accounts[1].coin, 966);
     expect(exp.accounts[1].address, exp.accounts[0].address);
     expect(exp.accounts[2].coin, 195);
-    expect(exp.accounts[2].address, 'TcPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa');
+    expect(exp.accounts[2].address, 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t');
     expect(exp.accounts[3].coin, 501);
-    expect(exp.accounts[3].address, 'cyKpXwMWd4qmDqVr2W');
-    expect(exp.accounts[3].path, "m/44'/501'/0'");
+    expect(
+      exp.accounts[3].address,
+      'So11111111111111111111111111111111111111112',
+    );
+    expect(exp.accounts[3].path, solanaDefaultDerivationPath);
   });
 
-  testWidgets('export QR: renders real frames, cycles them, counter matches',
-      (tester) async {
+  testWidgets('export QR: renders real frames, cycles them, counter matches', (
+    tester,
+  ) async {
     final expected = demoAccountExportFrames().length;
-    await tester.pumpWidget(MaterialApp(
-      locale: const Locale('zh'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: const SignerAddressExportScreen(),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const SignerAddressExportScreen(),
+      ),
+    );
     await tester.pump();
 
     expect(expected, greaterThan(1));
@@ -179,8 +198,9 @@ void main() {
     final firstFrame = tester.widget<KtQrCode>(find.byType(KtQrCode)).data;
     // Frame payloads are the base64url wire bytes of real AirgapFrames,
     // stamped with the export session's walletId-hash reqId.
-    final parsed =
-        AirgapFrame.decode(Uint8List.fromList(base64Url.decode(firstFrame)));
+    final parsed = AirgapFrame.decode(
+      Uint8List.fromList(base64Url.decode(firstFrame)),
+    );
     expect(parsed.total, expected);
     expect(parsed.reqId, demoExportReqId());
 
@@ -195,24 +215,34 @@ void main() {
     expect(find.text('动态分片 1 / $expected'), findsOneWidget);
   });
 
-  testWidgets('result QR: renders real frames, cycles them, counter matches',
-      (tester) async {
-    final expected =
-        demoSignResultFrames(demoSignResult(demoSignRequest())).length;
-    await tester.pumpWidget(MaterialApp(
-      locale: const Locale('zh'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: const SignerResultQrScreen(),
-    ));
+  testWidgets('result QR: renders real frames, cycles them, counter matches', (
+    tester,
+  ) async {
+    final expected = demoSignResultFrames(
+      demoSignResult(demoSignRequest()),
+    ).length;
+    final request = demoSignRequest();
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: SignerResultQrScreen(
+          request: request,
+          result: demoSignResult(request),
+          fragmentChunkSize: demoChunkSize,
+        ),
+      ),
+    );
     await tester.pump();
 
     expect(expected, greaterThan(1));
     expect(find.text('动态分片 1 / $expected'), findsOneWidget);
     final firstFrame = tester.widget<KtQrCode>(find.byType(KtQrCode)).data;
     // Frame payloads are the base64url wire bytes of real AirgapFrames.
-    final parsed =
-        AirgapFrame.decode(Uint8List.fromList(base64Url.decode(firstFrame)));
+    final parsed = AirgapFrame.decode(
+      Uint8List.fromList(base64Url.decode(firstFrame)),
+    );
     expect(parsed.total, expected);
     expect(parsed.reqId, demoReqId);
 
@@ -225,5 +255,22 @@ void main() {
     // And wraps around after a full cycle.
     await tester.pump(Duration(milliseconds: 600 * (expected - 1)));
     expect(find.text('动态分片 1 / $expected'), findsOneWidget);
+  });
+
+  testWidgets('result QR: direct navigation fails closed without a result', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const SignerResultQrScreen(),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('签名结果不可用'), findsOneWidget);
+    expect(find.byType(KtQrCode), findsNothing);
   });
 }

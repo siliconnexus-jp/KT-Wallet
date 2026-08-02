@@ -14,6 +14,60 @@ import 'history_snapshot.dart';
 import 'token_balance_service.dart';
 import 'transaction_status_service.dart';
 
+bool _isEvmCoinName(String coin) =>
+    coin == Coin.eth.name ||
+    coin == Coin.polygon.name ||
+    coin == Coin.base.name ||
+    coin == Coin.arbitrum.name ||
+    coin == Coin.avalanche.name ||
+    coin == Coin.bnb.name;
+
+typedef _HistoryIdentity = ({
+  Coin coin,
+  String networkId,
+  String normalizedHash,
+});
+
+Coin? _coinForName(String name) {
+  for (final coin in Coin.values) {
+    if (coin.name == name) return coin;
+  }
+  return null;
+}
+
+String _normalizeHistoryHash(Coin coin, String hash) =>
+    coin == Coin.solana ? hash : hash.toLowerCase();
+
+_HistoryIdentity? _recordIdentity(ChainTxRecord record) {
+  final networkId = record.networkId;
+  if (networkId == null || networkId.isEmpty || record.hash.isEmpty) {
+    return null;
+  }
+  return (
+    coin: record.coin,
+    networkId: networkId,
+    normalizedHash: _normalizeHistoryHash(record.coin, record.hash),
+  );
+}
+
+_HistoryIdentity? _transactionIdentity(db.Transaction transaction) {
+  final coin = _coinForName(transaction.coin);
+  final networkId = transaction.networkId;
+  final hash = transaction.hash;
+  if (coin == null ||
+      networkId == null ||
+      networkId.isEmpty ||
+      hash == null ||
+      hash.isEmpty) {
+    return null;
+  }
+  return (
+    coin: coin,
+    networkId: networkId,
+    normalizedHash: _normalizeHistoryHash(coin, hash),
+  );
+}
+
 /// Live transaction history for the current wallet, per chain. Mirrors the
 /// [MarketController] lifecycle patterns (generation-guarded refresh, wallet
 /// switch listener) but is owned by the history surface, not `main.dart` — it
@@ -25,6 +79,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     HistoryService? service,
     TransactionStatusService? statusService,
     Set<String> Function()? activeNetworkIds,
+    String? Function(Coin coin)? activeNetworkId,
     Listenable? networkChanges,
     bool Function()? canRefresh,
     HistorySnapshotStore? snapshots,
@@ -32,8 +87,15 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     this.pollInterval = const Duration(seconds: 8),
   }) : _wallets = wallets,
        _service = service ?? HistoryService(),
-       _statusService = statusService ?? TransactionStatusService(),
+       _statusService =
+           statusService ??
+           TransactionStatusService(
+             onEvmNonceObserved: (transaction, nonce) async {
+               await wallets.setTransactionNonceIfAbsent(transaction.id, nonce);
+             },
+           ),
        _activeNetworkIds = activeNetworkIds,
+       _activeNetworkId = activeNetworkId,
        _networkChanges = networkChanges,
        _canRefresh = canRefresh ?? _alwaysRefresh,
        _snapshots = snapshots,
@@ -54,6 +116,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   /// selected) must not appear in this list. Null (older wiring, tests
   /// injecting their own controller) keeps every network, as before.
   final Set<String> Function()? _activeNetworkIds;
+  final String? Function(Coin coin)? _activeNetworkId;
   final Listenable? _networkChanges;
   final bool Function() _canRefresh;
   final HistorySnapshotStore? _snapshots;
@@ -61,6 +124,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   static bool _alwaysRefresh() => true;
   static String _defaultSnapshotScope() => 'default';
   bool _refreshRequested = false;
+  bool _disposed = false;
 
   Future<List<db.Transaction>> _loadLocalTransactions() =>
       _wallets.localTransactions(networkIds: _activeNetworkIds?.call());
@@ -74,7 +138,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   bool _loadingMore = false;
   DateTime? _lastUpdatedAt;
   int _remoteLimit = HistoryService.pageSize;
-  TransactionStatusNotice? _notice;
+  final List<TransactionStatusNotice> _notices = [];
   Timer? _pollTimer;
   List<db.Transaction> _localTransactions = const [];
 
@@ -91,10 +155,23 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   bool get isLoadingMore => _loadingMore;
   bool get showingCachedData => _showingCachedData;
   DateTime? get lastUpdatedAt => _lastUpdatedAt;
-  TransactionStatusNotice? get notice => _notice;
+  TransactionStatusNotice? get notice =>
+      _notices.isEmpty ? null : _notices.first;
 
   void clearNotice(TransactionStatusNotice notice) {
-    if (identical(_notice, notice)) _notice = null;
+    _notices.remove(notice);
+  }
+
+  /// Atomically drains every status transition produced by the latest poll.
+  ///
+  /// A refresh can settle several transactions concurrently. A single
+  /// nullable notice silently discarded all but the last one; consumers now
+  /// receive the complete ordered batch and can present it sequentially.
+  List<TransactionStatusNotice> takeNotices() {
+    if (_notices.isEmpty) return const [];
+    final notices = List<TransactionStatusNotice>.unmodifiable(_notices);
+    _notices.clear();
+    return notices;
   }
 
   /// True while at least one chain filled the current result window. Increasing
@@ -121,9 +198,11 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   /// Every supported chain errored (for example, the RPC is unavailable).
   bool get isError => !isLoading && !hasLiveRecords && !allUnsupported;
 
-  db.Transaction? localTransactionForHash(String hash) {
+  db.Transaction? localTransactionForRecord(ChainTxRecord record) {
+    final identity = _recordIdentity(record);
+    if (identity == null) return null;
     for (final transaction in _localTransactions) {
-      if (transaction.hash == hash) return transaction;
+      if (_transactionIdentity(transaction) == identity) return transaction;
     }
     return null;
   }
@@ -134,10 +213,17 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
       for (final result in _results.values)
         if (result.status == HistoryStatus.ok) ...result.records,
     ];
-    final remoteHashes = {for (final record in merged) record.hash};
+    final remoteIdentities = <_HistoryIdentity>{};
+    for (final record in merged) {
+      final identity = _recordIdentity(record);
+      if (identity != null) remoteIdentities.add(identity);
+    }
     for (final transaction in _localTransactions) {
       final hash = transaction.hash;
-      if (hash == null || remoteHashes.contains(hash)) continue;
+      final coin = _coinForName(transaction.coin);
+      if (hash == null || hash.isEmpty || coin == null) continue;
+      final identity = _transactionIdentity(transaction);
+      if (identity != null && remoteIdentities.contains(identity)) continue;
       if (transaction.status == db.TxStatus.failed ||
           transaction.status == db.TxStatus.expired ||
           transaction.status == db.TxStatus.dropped ||
@@ -147,10 +233,8 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
       merged.add(
         ChainTxRecord(
           // Rows written by this app store the coin as its enum name.
-          coin: Coin.values.firstWhere(
-            (c) => c.name == transaction.coin,
-            orElse: () => Coin.eth,
-          ),
+          coin: coin,
+          networkId: transaction.networkId,
           hash: hash,
           outgoing: transaction.direction == db.TxDirection.outgoing,
           fromAddress: transaction.fromAddr,
@@ -158,7 +242,17 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
           amountText: _localAmountText(transaction),
           assetContract: transaction.contract,
           timestamp: DateTime.fromMillisecondsSinceEpoch(transaction.createdAt),
-          confirmed: transaction.status == db.TxStatus.confirmed,
+          status: switch (transaction.status) {
+            db.TxStatus.confirmed => ChainTxStatus.confirmed,
+            db.TxStatus.failed || db.TxStatus.expired => ChainTxStatus.failed,
+            db.TxStatus.submitted ||
+            db.TxStatus.broadcast ||
+            db.TxStatus.pending =>
+              transaction.lastCheckOutcome == db.TxCheckOutcome.unknown
+                  ? ChainTxStatus.unknown
+                  : ChainTxStatus.pending,
+            _ => ChainTxStatus.unknown,
+          },
         ),
       );
     }
@@ -167,6 +261,9 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   String? _localAmountText(db.Transaction transaction) {
+    if (transaction.operation == db.TxOperationKind.approvalRevoke) {
+      return null;
+    }
     final raw = BigInt.tryParse(transaction.amountRaw);
     final coin = Coin.values
         .where((candidate) => candidate.name == transaction.coin)
@@ -211,6 +308,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// First-build refresh: no-op if one already ran or is running.
   void refreshIfNeeded() {
+    if (_disposed) return;
     if (!_canRefresh()) {
       _refreshRequested = true;
       return;
@@ -220,6 +318,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void configurationReady() {
+    if (_disposed) return;
     if (!_canRefresh() || !_refreshRequested) return;
     _refreshRequested = false;
     refreshIfNeeded();
@@ -229,6 +328,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   /// A refresh superseded by a newer one (wallet switched mid-flight)
   /// discards its results.
   Future<void> refresh({bool loadingMore = false}) async {
+    if (_disposed) return;
     if (!_canRefresh()) {
       _refreshRequested = true;
       return;
@@ -280,7 +380,12 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     final historyFuture = Future.wait([
       for (final coin in coins)
         _service
-            .fetch(coin, wallet.addresses.forCoin(coin), limit: _remoteLimit)
+            .fetch(
+              coin,
+              wallet.addresses.forCoin(coin),
+              limit: _remoteLimit,
+              networkId: _activeNetworkId?.call(coin),
+            )
             .then((result) {
               if (generation == _generation) {
                 final previous = _results[coin];
@@ -320,42 +425,57 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     };
     _localTransactions = await _loadLocalTransactions();
     if (generation != _generation) return;
-    final remoteByHash = {
-      for (final result in _results.values)
-        if (result.status == HistoryStatus.ok)
-          for (final record in result.records) record.hash: record,
-    };
+    final remoteByIdentity = <_HistoryIdentity, ChainTxRecord>{};
+    for (final result in _results.values) {
+      if (result.status != HistoryStatus.ok) continue;
+      for (final record in result.records) {
+        final identity = _recordIdentity(record);
+        if (identity != null) remoteByIdentity[identity] = record;
+      }
+    }
     for (final local in _localTransactions) {
       final hash = local.hash;
-      final remote = hash == null ? null : remoteByHash[hash];
-      if (remote == null) {
-        final submittedAt = local.broadcastAt ?? local.createdAt;
-        final stale =
-            DateTime.now().millisecondsSinceEpoch - submittedAt >
-            const Duration(hours: 24).inMilliseconds;
-        if (stale && local.status == db.TxStatus.pending) {
-          await _wallets.updateTransactionStatus(
-            local.id,
-            db.TxStatus.dropped,
-            hash: hash,
-          );
-        }
+      final identity = _transactionIdentity(local);
+      final remote = identity == null ? null : remoteByIdentity[identity];
+      // Account-history absence is never finality evidence. An indexer can be
+      // delayed, rate-limited or temporarily incomplete, so only the
+      // hash-specific status service or an explicit terminal history status
+      // may settle a local row.
+      if (remote == null ||
+          local.status == db.TxStatus.confirmed ||
+          local.status == db.TxStatus.failed) {
         continue;
       }
-      if (local.status == db.TxStatus.confirmed) continue;
+      final next = switch (remote.status) {
+        ChainTxStatus.confirmed => db.TxStatus.confirmed,
+        ChainTxStatus.failed => db.TxStatus.failed,
+        ChainTxStatus.pending || ChainTxStatus.unknown => null,
+      };
+      if (next == null) continue;
       final confirmedHash = hash!;
-      await _wallets.updateTransactionStatus(
-        local.id,
-        remote.confirmed ? db.TxStatus.confirmed : db.TxStatus.failed,
-        hash: confirmedHash,
-      );
-      _notice = TransactionStatusNotice(
-        hash: confirmedHash,
-        coin: Coin.values.firstWhere(
-          (coin) => coin.name == local.coin,
-          orElse: () => Coin.eth,
+      if (_isEvmCoinName(local.coin)) {
+        await _wallets.settleEvmTransaction(
+          id: local.id,
+          status: next,
+          hash: confirmedHash,
+        );
+      } else {
+        await _wallets.updateTransactionStatus(
+          local.id,
+          next,
+          hash: confirmedHash,
+          clearLastCheckOutcome: true,
+        );
+      }
+      _enqueueNotice(
+        TransactionStatusNotice(
+          hash: confirmedHash,
+          coin: Coin.values.firstWhere(
+            (coin) => coin.name == local.coin,
+            orElse: () => Coin.eth,
+          ),
+          confirmed: next == db.TxStatus.confirmed,
         ),
-        confirmed: remote.confirmed,
       );
     }
     _localTransactions = await _loadLocalTransactions();
@@ -383,7 +503,9 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
           .ignore();
     }
     ExperienceMetrics.instance.record(
-      loadingMore ? 'history.loadMore' : 'history.refresh',
+      loadingMore
+          ? ExperienceMetricNames.historyLoadMore
+          : ExperienceMetricNames.historyRefresh,
       metricStopwatch.elapsed,
       success: liveFetchSucceeded,
     );
@@ -393,6 +515,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   /// Gateway remain bounded at 100 records so a tap cannot fan out into an
   /// unbounded explorer crawl.
   Future<void> loadMore() async {
+    if (_disposed) return;
     if (!canLoadMore) return;
     _remoteLimit = math.min(100, _remoteLimit + HistoryService.pageSize);
     await refresh(loadingMore: true);
@@ -413,26 +536,70 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
       for (final transaction in pending)
         _statusService.check(transaction).then((status) async {
           if (generation != _generation) return;
+          final checkedAt = DateTime.now().millisecondsSinceEpoch;
           final next = switch (status) {
             ChainTransactionStatus.confirmed => db.TxStatus.confirmed,
             ChainTransactionStatus.failed => db.TxStatus.failed,
             ChainTransactionStatus.pending => db.TxStatus.pending,
+            ChainTransactionStatus.replaced => db.TxStatus.replaced,
+            ChainTransactionStatus.expired => db.TxStatus.expired,
             ChainTransactionStatus.unknown => null,
           };
-          if (next != null && next != transaction.status) {
+          final outcome = switch (status) {
+            ChainTransactionStatus.pending => db.TxCheckOutcome.pending,
+            ChainTransactionStatus.unknown => db.TxCheckOutcome.unknown,
+            _ => null,
+          };
+          final terminal =
+              status == ChainTransactionStatus.confirmed ||
+              status == ChainTransactionStatus.failed ||
+              status == ChainTransactionStatus.replaced ||
+              status == ChainTransactionStatus.expired;
+          final changed = next != null && next != transaction.status;
+          final persisted = changed ? next : transaction.status;
+          if (_isEvmCoinName(transaction.coin) &&
+              changed &&
+              (persisted == db.TxStatus.confirmed ||
+                  persisted == db.TxStatus.failed)) {
+            await _wallets.settleEvmTransaction(
+              id: transaction.id,
+              status: persisted,
+              hash: transaction.hash,
+              lastCheckedAt: checkedAt,
+            );
+          } else {
             await _wallets.updateTransactionStatus(
               transaction.id,
-              next,
+              persisted,
               hash: transaction.hash,
+              lastCheckedAt: checkedAt,
+              lastCheckOutcome: outcome,
+              clearLastCheckOutcome: terminal,
             );
-            if (next == db.TxStatus.confirmed || next == db.TxStatus.failed) {
-              _notice = TransactionStatusNotice(
-                hash: transaction.hash!,
-                coin: Coin.values.firstWhere(
-                  (coin) => coin.name == transaction.coin,
-                  orElse: () => Coin.eth,
+          }
+          if (changed) {
+            if (next == db.TxStatus.confirmed ||
+                next == db.TxStatus.failed ||
+                next == db.TxStatus.expired) {
+              final startedAt =
+                  transaction.broadcastAt ?? transaction.createdAt;
+              final elapsedMs = checkedAt - startedAt;
+              if (elapsedMs >= 0) {
+                ExperienceMetrics.instance.record(
+                  ExperienceMetricNames.transactionFinality,
+                  Duration(milliseconds: elapsedMs),
+                  success: next == db.TxStatus.confirmed,
+                );
+              }
+              _enqueueNotice(
+                TransactionStatusNotice(
+                  hash: transaction.hash!,
+                  coin: Coin.values.firstWhere(
+                    (coin) => coin.name == transaction.coin,
+                    orElse: () => Coin.eth,
+                  ),
+                  confirmed: next == db.TxStatus.confirmed,
                 ),
-                confirmed: next == db.TxStatus.confirmed,
               );
             }
           }
@@ -440,7 +607,17 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     ]);
   }
 
+  void _enqueueNotice(TransactionStatusNotice notice) {
+    if (_disposed) return;
+    final duplicate = _notices.any(
+      (queued) =>
+          queued.hash == notice.hash && queued.confirmed == notice.confirmed,
+    );
+    if (!duplicate) _notices.add(notice);
+  }
+
   void _schedulePoll() {
+    if (_disposed) return;
     _pollTimer?.cancel();
     final hasPending = _localTransactions.any(
       (transaction) =>
@@ -453,6 +630,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _pollPending() async {
+    if (_disposed) return;
     if (_refreshing) {
       _schedulePoll();
       return;
@@ -470,6 +648,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_disposed) return;
     if (state == AppLifecycleState.resumed) {
       if (_hasRefreshed) {
         _pollPending();
@@ -482,6 +661,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _onWalletsChanged() {
+    if (_disposed) return;
     final id = _wallets.current?.id;
     if (id == _walletId) return;
     if (id != null) {
@@ -491,6 +671,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _onNetworkChanged() {
+    if (_disposed) return;
     if (_wallets.current != null) {
       _generation++;
       _refreshing = false;
@@ -501,11 +682,23 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    // Invalidates every async refresh/poll callback before the notifier is
+    // disposed. Explorer and RPC futures cannot be cancelled, but their late
+    // answers must never publish into a route that has already gone away.
+    _generation++;
     WidgetsBinding.instance.removeObserver(this);
     _pollTimer?.cancel();
     _wallets.removeListener(_onWalletsChanged);
     _networkChanges?.removeListener(_onNetworkChanged);
     super.dispose();
+  }
+
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
   }
 }
 

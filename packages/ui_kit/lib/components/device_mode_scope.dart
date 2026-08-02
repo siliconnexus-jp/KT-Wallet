@@ -15,7 +15,7 @@ class DeviceModeScope extends InheritedWidget {
   });
 
   /// Leaves the current mode and returns to the device-mode picker.
-  final VoidCallback exitMode;
+  final Future<void> Function() exitMode;
 
   /// The enclosing scope, or `null` when running standalone.
   static DeviceModeScope? maybeOf(BuildContext context) =>

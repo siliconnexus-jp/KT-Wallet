@@ -14,4 +14,11 @@ library;
 export 'src/database.dart';
 export 'src/repositories.dart';
 export 'src/tables.dart'
-    show WalletType, TxDirection, TxStatus, SignMode, TxReplacementKind;
+    show
+        WalletType,
+        TxDirection,
+        TxOperationKind,
+        TxStatus,
+        TxCheckOutcome,
+        SignMode,
+        TxReplacementKind;

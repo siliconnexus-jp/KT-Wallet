@@ -23,7 +23,11 @@ func newCoinGeckoFake(t *testing.T, table map[string]float64) *restFake {
 		out := map[string]map[string]float64{}
 		for _, id := range strings.Split(r.URL.Query().Get("ids"), ",") {
 			if usd, ok := table[id]; ok {
-				out[id] = map[string]float64{"usd": usd}
+				out[id] = map[string]float64{
+					"usd": usd,
+					"cny": usd * 7,
+					"jpy": usd * 150,
+				}
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -40,9 +44,9 @@ func TestPricesInclude24HourChangeAndPreserveUnknown(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
-			"ethereum":{"usd":2000,"usd_24h_change":3.25},
-			"tether":{"usd":0.999,"usd_24h_change":-0.08},
-			"usd-coin":{"usd":1.001,"usd_24h_change":null}
+			"ethereum":{"usd":2000,"cny":14000,"jpy":300000,"usd_24h_change":3.25},
+			"tether":{"usd":0.999,"cny":6.993,"jpy":149.85,"usd_24h_change":-0.08},
+			"usd-coin":{"usd":1.001,"cny":7.007,"jpy":150.15,"usd_24h_change":null}
 		}`))
 	})
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.CoinGeckoURL = f.srv.URL })
@@ -53,6 +57,7 @@ func TestPricesInclude24HourChangeAndPreserveUnknown(t *testing.T) {
 		"USDT":{"usd":0.999,"change24h":-0.08},
 		"USDC":{"usd":1.001}
 	}`, res["prices"])
+	assertJSONEq(t, `{"USD":1,"CNY":7,"JPY":150}`, res["fiatPerUsd"])
 }
 
 func TestPricesStablecoinsUseMarketQuotes(t *testing.T) {
@@ -101,8 +106,8 @@ func TestPricesMixedFetch(t *testing.T) {
 		!strings.Contains(ids, "avalanche-2") {
 		t.Fatalf("expected ethereum+solana+avalanche in ids, got %q", ids)
 	}
-	if u.Query().Get("vs_currencies") != "usd" {
-		t.Fatalf("vs_currencies must be usd, got %q", u.Query().Get("vs_currencies"))
+	if u.Query().Get("vs_currencies") != "usd,cny,jpy" {
+		t.Fatalf("vs_currencies must be usd,cny,jpy, got %q", u.Query().Get("vs_currencies"))
 	}
 	if u.Query().Get("include_24hr_change") != "true" {
 		t.Fatalf("include_24hr_change must be true, got %q", u.Query().Get("include_24hr_change"))

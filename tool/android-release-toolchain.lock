@@ -1,0 +1,4 @@
+# Reviewed Android App Bundle verifier. Update only together with an AGP
+# upgrade, fresh AABs, Gradle verification metadata and release guard evidence.
+bundletool.version=1.18.3
+bundletool.sha256=ccad18514fd97db010856b2bbed40f481f8ba9349368c97ae54d72e3567d0171

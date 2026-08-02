@@ -139,6 +139,23 @@ Map<String, Object?> _native(String raw, int decimals, String symbol) => {
   'native': {'raw': raw, 'decimals': decimals, 'symbol': symbol},
 };
 
+Map<String, Object?> _zeroNative(Coin coin, {List<Object?>? tokens}) {
+  final (decimals, symbol) = switch (coin) {
+    Coin.eth => (18, 'ETH'),
+    Coin.polygon => (18, 'POL'),
+    Coin.base => (18, 'ETH'),
+    Coin.arbitrum => (18, 'ETH'),
+    Coin.avalanche => (18, 'AVAX'),
+    Coin.bnb => (18, 'BNB'),
+    Coin.tron => (6, 'TRX'),
+    Coin.solana => (9, 'SOL'),
+  };
+  return {
+    'native': {'raw': '0', 'decimals': decimals, 'symbol': symbol},
+    'tokens': ?tokens,
+  };
+}
+
 void main() {
   group('BalanceService gateway mode', () {
     test('one kt_getBalances per chain, direct transports untouched', () async {
@@ -226,34 +243,33 @@ void main() {
     test(
       'one call per chain with its registry tokens; per-token errors map',
       () async {
+        final tokenRows = <Object?>[
+          {
+            'contract': '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+            'raw': '120500000',
+            'decimals': 6,
+            'symbol': 'USDT',
+          },
+          {
+            'contract': '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
+            'raw': '99000000',
+            'decimals': 6,
+            'symbol': 'USDC',
+          },
+          {
+            'contract': 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+            'raw': '0',
+            'decimals': 6,
+            'symbol': 'USDT',
+            'error': 'account not found',
+          },
+        ];
         final gateway = _FakeGateway(
           results: {
-            'kt_getBalances': {
-              // Same shape works for every chain in this test: the USDT/USDC
-              // contract rows are matched per chain below.
-              'native': {'raw': '0', 'decimals': 18, 'symbol': 'X'},
-              'tokens': [
-                {
-                  'contract': '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-                  'raw': '120500000',
-                  'decimals': 6,
-                  'symbol': 'USDT',
-                },
-                {
-                  'contract': '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
-                  'raw': '99000000',
-                  'decimals': 6,
-                  'symbol': 'USDC',
-                },
-                {
-                  'contract': 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
-                  'raw': '0',
-                  'decimals': 6,
-                  'symbol': 'USDT',
-                  'error': 'account not found',
-                },
-              ],
-            },
+            'kt_getBalances': [
+              for (final coin in Coin.values)
+                _zeroNative(coin, tokens: tokenRows),
+            ],
           },
         );
         final service = TokenBalanceService(
@@ -372,6 +388,7 @@ void main() {
                 'USDT': {'usd': 0.998, 'change24h': -0.1},
                 'USDC': {'usd': 1.001, 'change24h': 0.05},
               },
+              'fiatPerUsd': {'USD': 1, 'CNY': 7, 'JPY': 150},
               'cachedAtMs': 1753000000000,
             },
           },
@@ -399,6 +416,8 @@ void main() {
         expect(service.change24hPercent(Coin.tron), isNull);
         expect(service.tokenChange24hPercent('USDT'), -0.1);
         expect(service.tokenChange24hPercent('USDC'), 0.05);
+        expect(service.fiatPerUsd('CNY'), 7);
+        expect(service.fiatPerUsd('JPY'), 150);
         expect(gateway.paramsOf('kt_getPrices').single, {
           'symbols': [
             'ETH',
@@ -785,13 +804,45 @@ void main() {
         Uint8List.fromList([0x02, 0x01]),
       );
       expect(outcome.status, BroadcastStatus.error);
-      expect(outcome.message, 'nonce too low');
+      expect(outcome.message, 'transaction nonce is too low');
       expect(outcome.txHash, isNull);
       expect(gateway.calls, hasLength(1));
     });
 
+    test('-32003 submission unknown: preserve local reconciliation and never '
+        'direct re-post', () async {
+      final gateway = _FakeGateway(
+        errors: {
+          'kt_broadcast': {
+            'code': -32003,
+            'message': 'submission_unknown',
+            'data': {
+              'upstream': 'eth-node',
+              'message': 'upstream returned HTTP 503',
+            },
+          },
+        },
+      );
+      final direct = _FakeJsonRpc(
+        (url, body) async => _rpcResult('0xmust-not-be-used'),
+      );
+      final service = BroadcastService(
+        jsonRpcTransport: direct,
+        gateway: () => gateway.client,
+      );
+
+      final outcome = await service.broadcast(
+        Chain.ethereum,
+        Uint8List.fromList([0x02, 0x01]),
+      );
+      expect(outcome.status, BroadcastStatus.unknown);
+      expect(outcome.txHash, isNull);
+      expect(gateway.calls, hasLength(1));
+      expect(direct.calls, isEmpty);
+    });
+
     test(
-      'gateway unreachable / unsupported: direct fallback posts the tx',
+      'gateway response loss is unknown; preflight unsupported falls back',
       () async {
         final direct = _FakeJsonRpc(
           (url, body) async => _rpcResult('0xdirecthash'),
@@ -804,12 +855,9 @@ void main() {
           Chain.ethereum,
           Uint8List.fromList([0x02, 0x01]),
         );
-        expect(outcome.status, BroadcastStatus.ok);
-        expect(outcome.txHash, '0xdirecthash');
-        expect(direct.calls.single, (
-          defaultEthRpcUrl,
-          'eth_sendRawTransaction',
-        ));
+        expect(outcome.status, BroadcastStatus.unknown);
+        expect(outcome.txHash, isNull);
+        expect(direct.calls, isEmpty);
 
         // -32002 unsupported: the gateway never reached a node — direct is safe.
         final gateway = _FakeGateway(
@@ -874,6 +922,14 @@ void main() {
                 'decimals': 18,
                 'verified': false,
               },
+              {
+                'network': 'eth-mainnet',
+                'symbol': 'BROKEN',
+                'name': 'Invalid precision',
+                'contract': '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+                'decimals': 255,
+                'verified': true,
+              },
             ],
           },
         },
@@ -895,6 +951,60 @@ void main() {
         'networks': ['eth-mainnet'],
         'limit': 50,
       });
+    });
+  });
+
+  group('Token risk assessment', () {
+    test('parses safe, unsafe and unknown without elevating unknown', () async {
+      final gateway = _FakeGateway(
+        results: {
+          'kt_checkTokenRisk': {
+            'status': 'unsafe',
+            'category': 'phishing',
+            'source': 'operator_registry',
+          },
+        },
+      );
+
+      final risk = await gateway.client.checkTokenRisk(
+        chain: Coin.eth,
+        contract: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      );
+      expect(risk.status, GatewayTokenRiskStatus.unsafe);
+      expect(risk.category, 'phishing');
+      expect(risk.source, 'operator_registry');
+      expect(gateway.paramsOf('kt_checkTokenRisk').single, {
+        'chain': 'eth',
+        'contract': '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      });
+
+      gateway.results['kt_checkTokenRisk'] = {
+        'status': 'unknown',
+        'source': 'operator_registry',
+      };
+      final unknown = await gateway.client.checkTokenRisk(
+        chain: Coin.solana,
+        contract: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+      );
+      expect(unknown.status, GatewayTokenRiskStatus.unknown);
+      expect(unknown.category, isNull);
+    });
+
+    test('malformed and unsupported service answers fail closed', () async {
+      for (final response in <Map<String, Object?>>[
+        {'status': 'safe'},
+        {'status': 'green', 'source': 'operator_registry'},
+        {'status': 'safe', 'source': 42},
+      ]) {
+        final gateway = _FakeGateway(results: {'kt_checkTokenRisk': response});
+        await expectLater(
+          gateway.client.checkTokenRisk(
+            chain: Coin.eth,
+            contract: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          ),
+          throwsA(isA<FormatException>()),
+        );
+      }
     });
   });
 
@@ -948,7 +1058,11 @@ void main() {
         );
         final rest = _FakeRest(onGet: (url) async => {'data': <Object?>[]});
         final gateway = _FakeGateway(
-          results: {'kt_getBalances': _native('0', 18, 'ETH')},
+          results: {
+            'kt_getBalances': [
+              for (final coin in _addresses.enabledCoins) _zeroNative(coin),
+            ],
+          },
         );
         final service = BalanceService(
           jsonRpcTransport: direct,

@@ -11,6 +11,7 @@ const int airgapVersion = 1;
 
 /// Field-length / count limits (DD §3.1). Enforced on decode.
 class AirgapLimits {
+  static const maxPayload = 64 * 1024;
   static const maxWalletId = 32;
   static const maxWalletName = 64;
   static const maxAddress = 128;
@@ -32,11 +33,11 @@ enum PayloadType {
   final int wire;
 
   static PayloadType fromWire(int v) => switch (v) {
-        1 => PayloadType.accountExport,
-        2 => PayloadType.signRequest,
-        3 => PayloadType.signResult,
-        _ => throw PayloadError('unknown payload type $v'),
-      };
+    1 => PayloadType.accountExport,
+    2 => PayloadType.signRequest,
+    3 => PayloadType.signResult,
+    _ => throw PayloadError('unknown payload type $v'),
+  };
 }
 
 class PayloadError implements Exception {
@@ -53,6 +54,9 @@ sealed class AirgapPayload {
   /// Decodes and validates any AIRGAP-V1 payload. Throws [PayloadError] on any
   /// schema violation or unknown/mismatched version.
   static AirgapPayload decode(Uint8List bytes) {
+    if (bytes.length > AirgapLimits.maxPayload) {
+      throw PayloadError('payload exceeds ${AirgapLimits.maxPayload} bytes');
+    }
     final Object? root;
     try {
       root = cborDecode(bytes);
@@ -75,6 +79,18 @@ sealed class AirgapPayload {
 }
 
 // ---- helpers ---------------------------------------------------------------
+
+void _requireKnownKeys(
+  Map<Object?, Object?> map,
+  Set<int> allowed,
+  String name,
+) {
+  for (final key in map.keys) {
+    if (key is! int || !allowed.contains(key)) {
+      throw PayloadError('$name contains unknown field $key');
+    }
+  }
+}
 
 int _int(Map<Object?, Object?> m, int key, String name) {
   final v = m[key];
@@ -155,23 +171,24 @@ class AccountExport extends AirgapPayload {
 
   @override
   Uint8List encode() => cborEncode({
-        0: airgapVersion,
-        1: type.wire,
-        2: walletId,
-        3: walletName,
-        4: [
-          for (final a in accounts)
-            {
-              0: a.coin,
-              1: a.address,
-              2: a.path,
-              3: a.index,
-              if (a.publicKey != null) 4: a.publicKey,
-            },
-        ],
-      });
+    0: airgapVersion,
+    1: type.wire,
+    2: walletId,
+    3: walletName,
+    4: [
+      for (final a in accounts)
+        {
+          0: a.coin,
+          1: a.address,
+          2: a.path,
+          3: a.index,
+          if (a.publicKey != null) 4: a.publicKey,
+        },
+    ],
+  });
 
   static AccountExport _fromMap(Map<Object?, Object?> m) {
+    _requireKnownKeys(m, const {0, 1, 2, 3, 4}, 'account export');
     final rawAccounts = m[4];
     if (rawAccounts is! List) throw PayloadError('accounts must be a list');
     if (rawAccounts.length < AirgapLimits.minAccounts ||
@@ -185,7 +202,7 @@ class AccountExport extends AirgapPayload {
         for (final a in rawAccounts)
           if (a is Map)
             AccountRecord(
-              coin: _int(a, 0, 'coin'),
+              coin: _validatedAccountCoin(a),
               address: _text(a, 1, 'address', AirgapLimits.maxAddress),
               path: _text(a, 2, 'path', AirgapLimits.maxPath),
               index: _int(a, 3, 'index'),
@@ -196,6 +213,11 @@ class AccountExport extends AirgapPayload {
       ],
     );
   }
+}
+
+int _validatedAccountCoin(Map<Object?, Object?> account) {
+  _requireKnownKeys(account, const {0, 1, 2, 3, 4}, 'account');
+  return _int(account, 0, 'coin');
 }
 
 // ---- sign-request ----------------------------------------------------------
@@ -244,19 +266,20 @@ class SignRequest extends AirgapPayload {
 
   @override
   Uint8List encode() => cborEncode({
-        0: airgapVersion,
-        1: type.wire,
-        2: reqId,
-        3: walletId,
-        4: coin,
-        if (chainId != null) 5: chainId,
-        6: rawTx,
-        if (summary != null) 7: summary,
-        8: createdAt,
-        9: expiresAt,
-      });
+    0: airgapVersion,
+    1: type.wire,
+    2: reqId,
+    3: walletId,
+    4: coin,
+    if (chainId != null) 5: chainId,
+    6: rawTx,
+    if (summary != null) 7: summary,
+    8: createdAt,
+    9: expiresAt,
+  });
 
   static SignRequest _fromMap(Map<Object?, Object?> m) {
+    _requireKnownKeys(m, const {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, 'sign request');
     final summary = m[7];
     if (summary != null && summary is! Map) {
       throw PayloadError('summary must be a map');
@@ -308,22 +331,25 @@ class SignResult extends AirgapPayload {
 
   @override
   Uint8List encode() => cborEncode({
-        0: airgapVersion,
-        1: type.wire,
-        2: reqId,
-        3: walletId,
-        4: coin,
-        5: signedTx,
-        6: signer,
-        7: txHash,
-      });
+    0: airgapVersion,
+    1: type.wire,
+    2: reqId,
+    3: walletId,
+    4: coin,
+    5: signedTx,
+    6: signer,
+    7: txHash,
+  });
 
-  static SignResult _fromMap(Map<Object?, Object?> m) => SignResult(
-        reqId: _bytes(m, 2, 'reqId', AirgapLimits.reqIdLength),
-        walletId: _text(m, 3, 'walletId', AirgapLimits.maxWalletId),
-        coin: _int(m, 4, 'coin'),
-        signedTx: _bytes(m, 5, 'signedTx', AirgapLimits.maxSignedTx),
-        signer: _text(m, 6, 'signer', AirgapLimits.maxAddress),
-        txHash: _text(m, 7, 'txHash', AirgapLimits.maxAddress),
-      );
+  static SignResult _fromMap(Map<Object?, Object?> m) {
+    _requireKnownKeys(m, const {0, 1, 2, 3, 4, 5, 6, 7}, 'sign result');
+    return SignResult(
+      reqId: _bytes(m, 2, 'reqId', AirgapLimits.reqIdLength),
+      walletId: _text(m, 3, 'walletId', AirgapLimits.maxWalletId),
+      coin: _int(m, 4, 'coin'),
+      signedTx: _bytes(m, 5, 'signedTx', AirgapLimits.maxSignedTx),
+      signer: _text(m, 6, 'signer', AirgapLimits.maxAddress),
+      txHash: _text(m, 7, 'txHash', AirgapLimits.maxAddress),
+    );
+  }
 }

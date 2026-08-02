@@ -402,7 +402,7 @@ func TestPolygonHistoryUsesChainID137(t *testing.T) {
 	}
 }
 
-func TestEthHistoryEtherscanErrorSurfaces(t *testing.T) {
+func TestEthHistoryEtherscanErrorIsNormalized(t *testing.T) {
 	scan := newRESTFake(t)
 	scan.routeJSON("/", `{"status":"0","message":"NOTOK","result":"Max rate limit reached"}`)
 	e := newEnv(t, func(cfg *handlers.Config) {
@@ -411,8 +411,8 @@ func TestEthHistoryEtherscanErrorSurfaces(t *testing.T) {
 	})
 	resp := e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf))
 	errObj := assertErrCode(t, resp, rpc.CodeUpstream)
-	if d := errData(t, errObj); d["message"] != "Max rate limit reached" {
-		t.Fatalf("Etherscan error text must surface, got %v", d)
+	if d := errData(t, errObj); d["message"] != "upstream temporarily unavailable" {
+		t.Fatalf("provider error text must not cross the public boundary, got %v", d)
 	}
 }
 

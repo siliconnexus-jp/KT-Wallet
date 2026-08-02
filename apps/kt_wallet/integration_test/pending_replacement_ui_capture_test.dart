@@ -13,10 +13,13 @@ Transaction _transaction({
   TxStatus status = TxStatus.pending,
   String? gasLimitRaw = '21000',
   String? replacedById,
+  TxCheckOutcome? lastCheckOutcome,
 }) => Transaction(
   id: 'pending-ui-original',
   walletId: 'pending-ui-wallet',
   coin: 'eth',
+  networkId: 'eth-sepolia',
+  operation: TxOperationKind.transfer,
   direction: TxDirection.outgoing,
   fromAddr: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
   toAddr: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
@@ -27,6 +30,8 @@ Transaction _transaction({
   signMode: SignMode.local,
   createdAt: 1785031200000,
   broadcastAt: 1785031205000,
+  lastCheckedAt: 1785031210000,
+  lastCheckOutcome: lastCheckOutcome,
   nonce: '7',
   maxPriorityFeeRaw: '2000000000',
   maxFeeRaw: '2000000000',
@@ -66,7 +71,13 @@ Future<void> _captureStage(
   await File(path).writeAsBytes(png, flush: true);
   // ignore: avoid_print
   print('$marker FILE=$path');
-  await tester.runAsync(() => Future<void>.delayed(const Duration(seconds: 8)));
+  const holdSeconds = int.fromEnvironment(
+    'CAPTURE_HOLD_SECONDS',
+    defaultValue: 8,
+  );
+  await tester.runAsync(
+    () => Future<void>.delayed(const Duration(seconds: holdSeconds)),
+  );
 }
 
 void main() {
@@ -79,6 +90,23 @@ void main() {
       addTearDown(tester.platformDispatcher.clearLocalesTestValue);
       if (Platform.isAndroid) {
         await binding.convertFlutterSurfaceToImage();
+      }
+
+      const captureOnlyUnknown = bool.fromEnvironment('CAPTURE_ONLY_UNKNOWN');
+      if (captureOnlyUnknown) {
+        await tester.pumpWidget(
+          _app(_transaction(lastCheckOutcome: TxCheckOutcome.unknown)),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('状态暂不可用'), findsWidgets);
+        expect(find.text('确认中'), findsNothing);
+        await _captureStage(
+          binding,
+          tester,
+          'PENDING_UI_CAPTURE_07_UNKNOWN_EVIDENCE',
+          'pending-ui-07-unknown-evidence',
+        );
+        return;
       }
 
       await tester.pumpWidget(_app(_transaction()));
@@ -119,6 +147,20 @@ void main() {
 
       await tester.tap(find.text('取消').last);
       await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        _app(_transaction(replacedById: 'pending-ui-replacement')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('竞争中的替换交易'), findsOneWidget);
+      expect(find.text('加速交易'), findsNothing);
+      expect(find.text('取消交易'), findsNothing);
+      await _captureStage(
+        binding,
+        tester,
+        'PENDING_UI_CAPTURE_04_COMPETING_REPLACEMENT',
+        'pending-ui-04-competing-replacement',
+      );
+
       await tester.pumpWidget(_app(_transaction(status: TxStatus.confirmed)));
       await tester.pumpAndSettle();
       expect(find.text('已确认'), findsOneWidget);
@@ -127,8 +169,8 @@ void main() {
       await _captureStage(
         binding,
         tester,
-        'PENDING_UI_CAPTURE_04_CONFIRMED_GUARD',
-        'pending-ui-04-confirmed-guard',
+        'PENDING_UI_CAPTURE_05_CONFIRMED_GUARD',
+        'pending-ui-05-confirmed-guard',
       );
 
       await tester.pumpWidget(_app(_transaction(gasLimitRaw: null)));
@@ -139,8 +181,23 @@ void main() {
       await _captureStage(
         binding,
         tester,
-        'PENDING_UI_CAPTURE_05_MISSING_PARAMS_GUARD',
-        'pending-ui-05-missing-params',
+        'PENDING_UI_CAPTURE_06_MISSING_PARAMS_GUARD',
+        'pending-ui-06-missing-params',
+      );
+
+      await tester.pumpWidget(
+        _app(_transaction(lastCheckOutcome: TxCheckOutcome.unknown)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('状态暂不可用'), findsWidgets);
+      expect(find.text('确认中'), findsNothing);
+      expect(find.text('加速交易'), findsNothing);
+      expect(find.text('取消交易'), findsNothing);
+      await _captureStage(
+        binding,
+        tester,
+        'PENDING_UI_CAPTURE_07_UNKNOWN_EVIDENCE',
+        'pending-ui-07-unknown-evidence',
       );
     },
     timeout: const Timeout(Duration(minutes: 3)),

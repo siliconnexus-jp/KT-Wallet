@@ -1,3 +1,6 @@
+import 'support/e2e_credential_batch.dart';
+import 'support/e2e_wallet_cleanup.dart';
+
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -7,6 +10,7 @@ import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:kt_wallet/src/rpc/http_transport.dart';
+import 'package:kt_wallet/src/state/networks.dart' show solanaDevnet;
 import 'package:kt_wallet/src/transfer/local_transfer_service.dart';
 import 'package:kt_wallet/src/transfer/transfer_draft.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
@@ -26,9 +30,10 @@ const _jupMainnetMint = 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN';
 // so both runs can prove the "ATA absent before, created in the transfer"
 // branch instead of observing the account created by the first platform.
 const _androidRecipient = '2KW2XRd9kwqet15Aha2oK3tYvd3nWbTFH1MBiRAv1BE1';
-const _iosRecipient = 'GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB';
+const _iosRecipient = 'LwgkEga9yD5W1MBqWgW1XJJtBuvJEa8q71hM3VkiXnK';
 
 void main() {
+  requireFreshE2eCredentialBatchIfConfigured();
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
@@ -54,6 +59,7 @@ void main() {
         mnemonic: mnemonic,
         requireAuth: false,
       );
+      registerE2eWalletCleanup(crypto, _walletId);
       // ignore: avoid_print
       print('E2E_STAGE=DERIVE_ADDRESSES');
       final addresses = await crypto.deriveAddresses(_walletId);
@@ -202,6 +208,7 @@ void main() {
               tokenProgram: solanaToken2022Program,
             ),
             evmChainId: 0,
+            expectedNetworkIdentity: solanaDevnet.networkIdentity,
           );
           // ignore: avoid_print
           print('E2E_STAGE=PYUSD_CONFIRM');

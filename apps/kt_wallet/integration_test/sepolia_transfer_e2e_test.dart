@@ -1,3 +1,6 @@
+import 'support/e2e_credential_batch.dart';
+import 'support/e2e_wallet_cleanup.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -19,6 +22,7 @@ const _testUsdt = '0xc4DCC311c028e341fd8602D8eB89c5de94625927';
 const _sink = '0x000000000000000000000000000000000000dEaD';
 
 void main() {
+  requireFreshE2eCredentialBatchIfConfigured();
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
@@ -38,6 +42,7 @@ void main() {
         mnemonic: mnemonic,
         requireAuth: false,
       );
+      registerE2eWalletCleanup(crypto, _walletId);
       final addresses = await crypto.deriveAddresses(_walletId);
       final transport = HttpJsonRpcTransport(
         timeout: const Duration(seconds: 20),

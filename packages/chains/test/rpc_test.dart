@@ -88,6 +88,80 @@ void main() {
       expect(call['data'], startsWith('0x70a08231'));
     });
 
+    test('spendable balance reads use the pending block tag', () async {
+      final transport = FakeJsonRpc((method, params) {
+        if (method == 'eth_getBalance') return _ok('0x2a');
+        if (method == 'eth_call') return _ok('0x64');
+        throw StateError('unexpected $method');
+      });
+      final rpc = EvmRpc(url: 'x', transport: transport);
+
+      expect(
+        await rpc.getBalance('0xowner', blockTag: 'pending'),
+        BigInt.from(42),
+      );
+      expect(
+        await rpc.erc20Balance(
+          '0xtoken',
+          '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
+          blockTag: 'pending',
+        ),
+        BigInt.from(100),
+      );
+      expect(transport.requests[0]['params'], ['0xowner', 'pending']);
+      expect((transport.requests[1]['params'] as List).last, 'pending');
+    });
+
+    test(
+      'eth_call simulates the exact transfer against pending state',
+      () async {
+        late String method;
+        late List<Object?> params;
+        final rpc = EvmRpc(
+          url: 'x',
+          transport: FakeJsonRpc((m, p) {
+            method = m;
+            params = p;
+            return _ok('0x');
+          }),
+        );
+
+        expect(
+          await rpc.call(
+            from: '0xfrom',
+            to: '0xto',
+            value: BigInt.from(42),
+            data: '0xabcdef',
+          ),
+          '0x',
+        );
+        expect(method, 'eth_call');
+        expect(params[1], 'pending');
+        expect(params[0], {
+          'from': '0xfrom',
+          'to': '0xto',
+          'value': '0x2a',
+          'data': '0xabcdef',
+        });
+      },
+    );
+
+    test('eth_call rejects malformed return bytes', () async {
+      final rpc = EvmRpc(
+        url: 'x',
+        transport: FakeJsonRpc((m, p) => _ok('not-hex')),
+      );
+      expect(
+        () => rpc.call(
+          from: '0xfrom',
+          to: '0xto',
+          value: BigInt.zero,
+          data: '0x',
+        ),
+        throwsA(isA<RpcException>()),
+      );
+    });
+
     test('feeHistory yields slow<=standard<=fast tiers', () async {
       final rpc = EvmRpc(
         url: 'x',
@@ -122,8 +196,44 @@ void main() {
       );
       expect(
         () => rpc.getNonce('0xabc'),
-        throwsA(isA<RpcException>().having((e) => e.code, 'code', -32000)),
+        throwsA(
+          isA<RpcException>()
+              .having((e) => e.code, 'code', -32000)
+              .having(
+                (e) => e.message,
+                'message',
+                'transaction nonce is too low',
+              ),
+        ),
       );
+    });
+
+    test('untrusted node error text is never retained', () async {
+      const canary = 'https://malicious-rpc.example/private-provider-key';
+      final rpc = EvmRpc(
+        url: 'x',
+        transport: FakeJsonRpc(
+          (m, p) => {
+            'jsonrpc': '2.0',
+            'id': 1,
+            'error': {'code': -32000, 'message': canary},
+          },
+        ),
+      );
+
+      Object? thrown;
+      try {
+        await rpc.getNonce('0xabc');
+      } on Object catch (error) {
+        thrown = error;
+      }
+      expect(thrown, isA<RpcRejectedException>());
+      expect(
+        (thrown! as RpcRejectedException).message,
+        'transaction rejected by network',
+      );
+      expect((thrown as RpcRejectedException).kind, RpcRejectionKind.rejected);
+      expect(thrown.toString(), isNot(contains('private-provider-key')));
     });
 
     test('non-hex quantity throws instead of returning garbage', () async {
@@ -184,6 +294,17 @@ void main() {
         ),
       );
       expect(await rpc.getLatestBlockhash(), 'HASH123');
+      final latest = await rpc.getLatestBlockhashInfo();
+      expect(latest.blockhash, 'HASH123');
+      expect(latest.lastValidBlockHeight, 100);
+    });
+
+    test('getBlockHeight requires a non-negative canonical height', () async {
+      final rpc = SolanaRpc(
+        url: 'x',
+        transport: FakeJsonRpc((m, p) => _ok(123456)),
+      );
+      expect(await rpc.getBlockHeight(), 123456);
     });
 
     test('signatureStatus null when unknown', () async {
@@ -217,6 +338,59 @@ void main() {
         'simulateTransaction',
       ]);
     });
+
+    test(
+      'simulation returns requested post-transaction account balances',
+      () async {
+        final transport = FakeJsonRpc((method, params) {
+          expect(method, 'simulateTransaction');
+          final config = params[1] as Map;
+          expect(config['accounts'], {
+            'encoding': 'base64',
+            'addresses': ['fee-payer'],
+          });
+          return _ok({
+            'value': {
+              'err': null,
+              'accounts': [
+                {'lamports': 12345},
+              ],
+              'unitsConsumed': 721,
+            },
+          });
+        });
+        final result = await SolanaRpc(url: 'x', transport: transport)
+            .simulateMessage(
+              Uint8List.fromList([1, 2, 3]),
+              accountAddresses: const ['fee-payer'],
+            );
+
+        expect(result.accountLamports, {'fee-payer': BigInt.from(12345)});
+        expect(result.unitsConsumed, 721);
+      },
+    );
+
+    test(
+      'simulation fails closed when requested account state is absent',
+      () async {
+        final rpc = SolanaRpc(
+          url: 'x',
+          transport: FakeJsonRpc(
+            (method, params) => _ok({
+              'value': {'err': null, 'accounts': null},
+            }),
+          ),
+        );
+
+        expect(
+          () => rpc.simulateMessage(
+            Uint8List.fromList([1, 2, 3]),
+            accountAddresses: const ['fee-payer'],
+          ),
+          throwsA(isA<RpcException>()),
+        );
+      },
+    );
   });
 
   group('TronRpc', () {
@@ -240,6 +414,57 @@ void main() {
         ),
       );
       expect(await rpc.getTrxBalance('Tabc'), BigInt.from(1420000000));
+    });
+
+    test(
+      'account balances preserve activation and requested TRC-20 balance',
+      () async {
+        final rpc = TronRpc(
+          baseUrl: 'https://api',
+          transport: FakeRest(
+            onGet: (u) => {
+              'data': [
+                {
+                  'balance': 1200000,
+                  'trc20': [
+                    {'TToken': '99000000'},
+                  ],
+                },
+              ],
+            },
+          ),
+        );
+
+        final balances = await rpc.getAccountBalances(
+          'Tabc',
+          tokenContract: 'TToken',
+        );
+        expect(balances.activated, isTrue);
+        expect(balances.trx, BigInt.from(1200000));
+        expect(balances.token, BigInt.from(99000000));
+      },
+    );
+
+    test('malformed requested TRC-20 balance fails closed', () async {
+      final rpc = TronRpc(
+        baseUrl: 'https://api',
+        transport: FakeRest(
+          onGet: (u) => {
+            'data': [
+              {
+                'trc20': [
+                  {'TToken': 123},
+                ],
+              },
+            ],
+          },
+        ),
+      );
+
+      expect(
+        () => rpc.getAccountBalances('Tabc', tokenContract: 'TToken'),
+        throwsA(isA<RpcException>()),
+      );
     });
 
     test('broadcast returns txid on success', () async {
@@ -301,9 +526,9 @@ void main() {
       },
     );
 
-    // TronGrid answers node-level failures with a top-level `Error` and no
-    // `code`/`message`; reading only the latter reported "rejected: null".
-    test('a top-level Error is surfaced, never swallowed as null', () async {
+    // TronGrid can answer node-level failures with arbitrary Java exception
+    // text. The raw provider string must not cross into UI/logging.
+    test('a top-level Error is normalized, never surfaced verbatim', () async {
       final rpc = TronRpc(
         baseUrl: 'https://api',
         transport: FakeRest(
@@ -318,13 +543,13 @@ void main() {
           isA<RpcException>().having(
             (e) => e.message,
             'message',
-            contains('NullPointerException'),
+            'transaction rejected by network',
           ),
         ),
       );
     });
 
-    test('a reasonless rejection says so instead of printing null', () async {
+    test('a reasonless rejection uses the fixed public message', () async {
       final rpc = TronRpc(
         baseUrl: 'https://api',
         transport: FakeRest(onPost: (u, b) => {'result': false}),
@@ -335,7 +560,7 @@ void main() {
           isA<RpcException>().having(
             (e) => e.message,
             'message',
-            allOf(contains('no reason given'), isNot(contains('null'))),
+            'transaction rejected by network',
           ),
         ),
       );
@@ -395,5 +620,113 @@ void main() {
         expect(estimate.feeLimitSun, 35280000);
       },
     );
+
+    test(
+      'bandwidth uses current resources and charges nothing when covered',
+      () async {
+        final rpc = TronRpc(
+          baseUrl: 'https://api',
+          transport: FakeRest(
+            onPost: (url, body) {
+              if (url.endsWith('getaccountresource')) {
+                return {
+                  'NetLimit': 1000,
+                  'NetUsed': 100,
+                  'freeNetLimit': 600,
+                  'freeNetUsed': 50,
+                };
+              }
+              if (url.endsWith('getchainparameters')) {
+                return {
+                  'chainParameter': [
+                    {'key': 'getTransactionFee', 'value': 1000},
+                  ],
+                };
+              }
+              throw StateError(url);
+            },
+          ),
+        );
+
+        final estimate = await rpc.estimateBandwidthFee(
+          owner: 'TOwner',
+          rawDataLength: 100,
+          activatesRecipient: false,
+        );
+        expect(estimate.stakedBandwidthAvailable, 900);
+        expect(estimate.freeBandwidthAvailable, 550);
+        expect(estimate.bandwidthFeeSun, 0);
+        expect(estimate.activationFeeSun, 0);
+      },
+    );
+
+    test(
+      'bandwidth burn and activation fees use live chain parameters',
+      () async {
+        final rpc = TronRpc(
+          baseUrl: 'https://api',
+          transport: FakeRest(
+            onPost: (url, body) {
+              if (url.endsWith('getaccountresource')) {
+                return <String, Object?>{};
+              }
+              if (url.endsWith('getchainparameters')) {
+                return {
+                  'chainParameter': [
+                    {'key': 'getTransactionFee', 'value': 1000},
+                    {'key': 'getCreateAccountFee', 'value': 100000},
+                    {
+                      'key': 'getCreateNewAccountFeeInSystemContract',
+                      'value': 1000000,
+                    },
+                  ],
+                };
+              }
+              throw StateError(url);
+            },
+          ),
+        );
+
+        final ordinary = await rpc.estimateBandwidthFee(
+          owner: 'TOwner',
+          rawDataLength: 100,
+          activatesRecipient: false,
+        );
+        expect(ordinary.bandwidthFeeSun, ordinary.estimatedBandwidth * 1000);
+
+        final activation = await rpc.estimateBandwidthFee(
+          owner: 'TOwner',
+          rawDataLength: 100,
+          activatesRecipient: true,
+        );
+        expect(activation.bandwidthFeeSun, 100000);
+        expect(activation.activationFeeSun, 1000000);
+      },
+    );
+
+    test('missing activation parameters reject an activation quote', () async {
+      final rpc = TronRpc(
+        baseUrl: 'https://api',
+        transport: FakeRest(
+          onPost: (url, body) {
+            if (url.endsWith('getaccountresource')) return <String, Object?>{};
+            return {
+              'chainParameter': [
+                {'key': 'getTransactionFee', 'value': 1000},
+              ],
+            };
+          },
+        ),
+      );
+
+      expect(
+        () => rpc.estimateBandwidthFee(
+          owner: 'TOwner',
+          rawDataLength: 100,
+          activatesRecipient: true,
+        ),
+        throwsA(isA<RpcException>()),
+      );
+    });
   });
 }

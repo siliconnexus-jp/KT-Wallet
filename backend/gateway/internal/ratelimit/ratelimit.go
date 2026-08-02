@@ -23,24 +23,43 @@ type bucket struct {
 // (typically the client IP). Refill is computed lazily from the injected
 // clock, so tests can drive it deterministically.
 type Limiter struct {
-	clk   clock.Clock
-	rate  float64 // tokens per second
-	burst float64
+	clk        clock.Clock
+	rate       float64 // tokens per second
+	burst      float64
+	maxBuckets int
 
 	mu      sync.Mutex
 	buckets map[string]*bucket
 }
 
+const (
+	defaultMaxBuckets = 65536
+	overflowBucketKey = "\x00overflow"
+)
+
 // New returns a Limiter allowing `rate` requests per second with a burst
 // capacity of `burst` per key.
 func New(clk clock.Clock, rate float64, burst float64) *Limiter {
+	return newLimiter(clk, rate, burst, defaultMaxBuckets)
+}
+
+func newLimiter(clk clock.Clock, rate float64, burst float64, maxBuckets int) *Limiter {
 	if rate <= 0 {
 		rate = 1
 	}
 	if burst < 1 {
 		burst = 1
 	}
-	return &Limiter{clk: clk, rate: rate, burst: burst, buckets: make(map[string]*bucket)}
+	if maxBuckets < 1 {
+		maxBuckets = 1
+	}
+	return &Limiter{
+		clk:        clk,
+		rate:       rate,
+		burst:      burst,
+		maxBuckets: maxBuckets,
+		buckets:    make(map[string]*bucket),
+	}
 }
 
 // Allow reports whether one request for key fits in the budget, consuming a
@@ -50,13 +69,19 @@ func (l *Limiter) Allow(key string) bool {
 	defer l.mu.Unlock()
 	now := l.clk.Now()
 
-	// Bound memory: when the table grows large, drop buckets that have fully
-	// refilled (they are indistinguishable from fresh ones).
-	if len(l.buckets) > 65536 {
+	// Bound memory: first drop buckets that have fully refilled (they are
+	// indistinguishable from fresh ones). If a high-cardinality IP flood keeps
+	// every bucket active, new keys share one conservative overflow bucket
+	// instead of growing memory without limit.
+	regularCapacity := l.maxBuckets - 1 // reserve one slot for overflow
+	if _, exists := l.buckets[key]; !exists && len(l.buckets) >= regularCapacity {
 		for k, b := range l.buckets {
-			if now.Sub(b.last).Seconds()*l.rate >= l.burst {
+			if k != overflowBucketKey && now.Sub(b.last).Seconds()*l.rate >= l.burst {
 				delete(l.buckets, k)
 			}
+		}
+		if len(l.buckets) >= regularCapacity {
+			key = overflowBucketKey
 		}
 	}
 
