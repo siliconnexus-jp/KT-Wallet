@@ -227,6 +227,23 @@
   Gateway 全量/race/vet/govulncheck/ops 和静态边界通过。
   当前范围仅为 Helius；Alchemy、Etherscan/Blockscout、TronGrid、CoinGecko 与 GoPlus
   专用响应仍按各自风险继续审阅。该修复是本地源码候选，生产仍为 1.16.15。
+- [x] 2026-08-04 继续关闭 Alchemy `alchemy_getAssetTransfers` 与缺失 metadata 时的
+  `eth_getBlockByNumber` 批量时间回填边界。旧实现把信封、result、transfer、rawContract
+  和批量 block 直接解码到 Go struct：错/缺 id、错版本、未知成员、大小写别名/冲突与
+  重复 id/result/transfers/hash/raw value/metadata timestamp 共 20 类交易响应全部被接受；
+  批量回包的错版本、未知信封、Result/Timestamp 别名、重复 id/result/timestamp 与批次
+  id 共 8 类也全部通过。现交易信封精确绑定 `jsonrpc=2.0 / id=1 / result xor error`，
+  result 只接受官方 transfers/pageKey，row 与 rawContract 使用完整受审字段词汇表；区块号、
+  交易哈希、地址、category、原始数量、decimal、contract 与官方 nullable 字段逐项校验。
+  合约创建允许 `to:null`，metadata 合法缺失/null 时才进入时间回填。批量回包要求数量完整、
+  id 唯一且落在请求范围；Ethereum block 其他官方字段保持可扩展，但所有键必须唯一且被消费
+  的 timestamp 只接受精确小写 hex quantity。20 类交易歧义负例、21 类金融/类别语义负例、
+  12 类批量歧义负例、官方 nullable/pageKey、乱序完整 block、标准 error data 与 Provider
+  错误脱敏正例连续 20 轮；全部 Alchemy 与 BNB handler 路由/回退连续 10 轮通过。Gateway
+  全量、关键包
+  race、vet、govulncheck/ops 与静态远程安全边界通过。当前范围扩展到 Helius + Alchemy；
+  Etherscan/Blockscout、TronGrid、CoinGecko 与 GoPlus 仍待同等级审阅。该修复是本地源码
+  候选，生产仍为 1.16.15。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。

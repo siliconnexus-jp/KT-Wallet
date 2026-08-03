@@ -289,7 +289,7 @@ func TestBNBHistoryUsesAlchemyBeforeEtherscan(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		if request.Params[0]["toAddress"] != nil {
 			_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":1,"result":{"transfers":[{
-				"uniqueId":"0xbnbtoken:log:7","hash":"0xbnbtoken",
+				"uniqueId":"0xbnbtoken:log:7","blockNum":"0x201","hash":"0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
 				"from":"0x2222222222222222222222222222222222222222","to":%q,
 				"asset":"FAKE-BUSD","category":"erc20",
 				"rawContract":{"value":"0x2625a0","address":"0xed24fc36d5ee211ea25a80239fb8c4cfd80f12ee","decimal":"0x12"},
@@ -298,7 +298,7 @@ func TestBNBHistoryUsesAlchemyBeforeEtherscan(t *testing.T) {
 			return
 		}
 		_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":1,"result":{"transfers":[{
-			"uniqueId":"0xbnb:external","hash":"0xbnb",
+			"uniqueId":"0xbnb:external","blockNum":"0x200","hash":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
 			"from":%q,"to":"0x2222222222222222222222222222222222222222",
 			"asset":"BNB","category":"external",
 			"rawContract":{"value":"0xde0b6b3a7640000","address":null,"decimal":"0x12"},
@@ -318,8 +318,8 @@ func TestBNBHistoryUsesAlchemyBeforeEtherscan(t *testing.T) {
 		`{"chain":"bnb","network":"bnb-testnet","address":%q}`, evmSelf,
 	)))
 	assertJSONEq(t, `[
-		{"id":"0xbnbtoken:log:7","hash":"0xbnbtoken","direction":"in","from":"0x2222222222222222222222222222222222222222","to":"0x1111111111111111111111111111111111111111","amountRaw":"2500000","decimals":18,"symbol":"BUSD","contract":"0xed24fc36d5ee211ea25a80239fb8c4cfd80f12ee","verified":true,"timestampMs":1785286923000,"status":"ok"},
-		{"id":"0xbnb:external","hash":"0xbnb","direction":"out","from":"0x1111111111111111111111111111111111111111","to":"0x2222222222222222222222222222222222222222","amountRaw":"1000000000000000000","decimals":18,"symbol":"BNB","verified":true,"timestampMs":1785286860000,"status":"ok"}
+		{"id":"0xbnbtoken:log:7","hash":"0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","direction":"in","from":"0x2222222222222222222222222222222222222222","to":"0x1111111111111111111111111111111111111111","amountRaw":"2500000","decimals":18,"symbol":"BUSD","contract":"0xed24fc36d5ee211ea25a80239fb8c4cfd80f12ee","verified":true,"timestampMs":1785286923000,"status":"ok"},
+		{"id":"0xbnb:external","hash":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","direction":"out","from":"0x1111111111111111111111111111111111111111","to":"0x2222222222222222222222222222222222222222","amountRaw":"1000000000000000000","decimals":18,"symbol":"BNB","verified":true,"timestampMs":1785286860000,"status":"ok"}
 	]`, res["records"])
 	if alchemy.hitCount("/") != 2 {
 		t.Fatalf("Alchemy must query both directions, hits = %d", alchemy.hitCount("/"))

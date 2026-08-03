@@ -116,6 +116,7 @@ void main() {
   _auditGatewayRPCEnvelope(failures);
   _auditGatewayUpstreamRPCEnvelope(failures);
   _auditGatewayHeliusResponseSchema(failures);
+  _auditGatewayAlchemyResponseSchema(failures);
   _auditRiskSignalDirection(failures);
 
   if (failures.isNotEmpty) {
@@ -132,7 +133,8 @@ void main() {
     '3 hot-signing families independently verified, '
     'hot and air-gapped broadcasts hash-bound before success metrics, '
     'all parameterized public Gateway requests, inbound JSON-RPC envelopes, '
-    'upstream node responses, and Helius history responses exact-schema '
+    'upstream node responses, Helius history responses, and Alchemy history '
+    'plus fallback block timestamps exact-schema '
     'decoded.',
   );
 }
@@ -562,6 +564,44 @@ void _auditGatewayHeliusResponseSchema(List<String> failures) {
   }
   if (source.contains('Data []HeliusTransfer `json:"data"`')) {
     failures.add('$path restored permissive Helius history decoding');
+  }
+}
+
+void _auditGatewayAlchemyResponseSchema(List<String> failures) {
+  const path = 'backend/gateway/internal/upstream/alchemy.go';
+  final source = File(path).readAsStringSync();
+  for (final marker in const [
+    'func decodeAlchemyTransfers(',
+    'decodeExactJSONObject(data, "jsonrpc", "id", "result", "error")',
+    'decodeExactJSONObject(resultRaw, "transfers", "pageKey")',
+    'func decodeAlchemyTransfer(',
+    'decodeExactJSONObject(fields["rawContract"], "value", "address", "decimal")',
+    'validOptionalJSONNumber(fields["value"])',
+    'missingOrJSONNull(fields["erc721TokenId"])',
+    'missingOrJSONNull(fields["erc1155Metadata"])',
+    'missingOrJSONNull(fields["tokenId"])',
+    'validAlchemyQuantity(*rawWire.Value)',
+    'rawAmount.Sign() <= 0',
+    'rawDecimals.Uint64() > 255',
+    'transfers, rejected, err := decodeAlchemyTransfers(data)',
+    'func decodeAlchemyBlockTimestamps(',
+    'blockFields, err := decodeUniqueJSONObject(resultRaw)',
+    'strings.EqualFold(key, "timestamp") && key != "timestamp"',
+    'timestamps, rejected, err := decodeAlchemyBlockTimestamps(data, blocks)',
+  ]) {
+    if (!source.contains(marker)) {
+      failures.add('$path lost exact Alchemy response invariant: $marker');
+    }
+  }
+  for (final permissive in const [
+    'Transfers []AlchemyTransfer `json:"transfers"`',
+    'json.Unmarshal(data, &out)',
+  ]) {
+    if (source.contains(permissive)) {
+      failures.add(
+        '$path restored permissive Alchemy response decoding: $permissive',
+      );
+    }
   }
 }
 

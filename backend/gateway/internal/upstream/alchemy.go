@@ -50,22 +50,260 @@ type AlchemyTransfer struct {
 	BlockTime string             `json:"-"`
 }
 
-// UnmarshalJSON accepts the optional metadata.blockTimestamp field without
-// exposing Alchemy's floating-point display amount as a source of truth.
-func (t *AlchemyTransfer) UnmarshalJSON(data []byte) error {
-	type alias AlchemyTransfer
-	var wire struct {
-		alias
-		Metadata struct {
-			BlockTimestamp string `json:"blockTimestamp"`
-		} `json:"metadata"`
+func decodeAlchemyTransfers(data []byte) ([]AlchemyTransfer, bool, error) {
+	fields, err := decodeExactJSONObject(data, "jsonrpc", "id", "result", "error")
+	if err != nil {
+		return nil, false, err
 	}
-	if err := json.Unmarshal(data, &wire); err != nil {
-		return err
+	var version string
+	if err := json.Unmarshal(fields["jsonrpc"], &version); err != nil {
+		return nil, false, err
 	}
-	*t = AlchemyTransfer(wire.alias)
-	t.BlockTime = wire.Metadata.BlockTimestamp
-	return nil
+	resultRaw, hasResult := fields["result"]
+	errorRaw, hasError := fields["error"]
+	if version != "2.0" ||
+		!bytes.Equal(bytes.TrimSpace(fields["id"]), []byte("1")) ||
+		hasResult == hasError {
+		return nil, false, fmt.Errorf("invalid Alchemy JSON-RPC response envelope")
+	}
+	if hasError {
+		errorFields, err := decodeExactJSONObject(errorRaw, "code", "message", "data")
+		if err != nil {
+			return nil, false, err
+		}
+		var code *int
+		var message *string
+		if err := json.Unmarshal(errorFields["code"], &code); err != nil ||
+			json.Unmarshal(errorFields["message"], &message) != nil ||
+			code == nil || message == nil {
+			return nil, false, fmt.Errorf("invalid Alchemy JSON-RPC error object")
+		}
+		return nil, true, nil
+	}
+
+	resultFields, err := decodeExactJSONObject(resultRaw, "transfers", "pageKey")
+	if err != nil {
+		return nil, false, err
+	}
+	if pageKeyRaw, ok := resultFields["pageKey"]; ok {
+		var pageKey *string
+		if err := json.Unmarshal(pageKeyRaw, &pageKey); err != nil ||
+			pageKey == nil || len(*pageKey) > 512 {
+			return nil, false, fmt.Errorf("invalid Alchemy page key")
+		}
+	}
+	transfersRaw, ok := resultFields["transfers"]
+	if !ok {
+		return nil, false, fmt.Errorf("Alchemy result has no transfers")
+	}
+	var entries []json.RawMessage
+	if err := json.Unmarshal(transfersRaw, &entries); err != nil || entries == nil {
+		return nil, false, fmt.Errorf("Alchemy transfers is not an array")
+	}
+	transfers := make([]AlchemyTransfer, 0, len(entries))
+	for _, entry := range entries {
+		transfer, err := decodeAlchemyTransfer(entry)
+		if err != nil {
+			return nil, false, err
+		}
+		transfers = append(transfers, transfer)
+	}
+	return transfers, false, nil
+}
+
+func decodeAlchemyTransfer(raw json.RawMessage) (AlchemyTransfer, error) {
+	fields, err := decodeExactJSONObject(
+		raw,
+		"blockNum",
+		"uniqueId",
+		"hash",
+		"from",
+		"to",
+		"value",
+		"erc721TokenId",
+		"erc1155Metadata",
+		"tokenId",
+		"asset",
+		"category",
+		"rawContract",
+		"metadata",
+		"typeTraceAddress",
+	)
+	if err != nil {
+		return AlchemyTransfer{}, err
+	}
+	for _, required := range []string{
+		"blockNum", "uniqueId", "hash", "from", "to", "category", "rawContract",
+	} {
+		if _, ok := fields[required]; !ok {
+			return AlchemyTransfer{}, fmt.Errorf("incomplete Alchemy transfer row")
+		}
+	}
+	type transferWire struct {
+		BlockNum *string `json:"blockNum"`
+		UniqueID *string `json:"uniqueId"`
+		Hash     *string `json:"hash"`
+		From     *string `json:"from"`
+		To       *string `json:"to"`
+		Asset    *string `json:"asset"`
+		Category *string `json:"category"`
+	}
+	var wire transferWire
+	if err := json.Unmarshal(raw, &wire); err != nil ||
+		wire.BlockNum == nil || wire.UniqueID == nil || wire.Hash == nil ||
+		wire.From == nil || wire.Category == nil {
+		return AlchemyTransfer{}, fmt.Errorf("incomplete Alchemy transfer row")
+	}
+	if !validAlchemyQuantity(*wire.BlockNum) || !validAlchemyEventID(*wire.UniqueID) ||
+		!validAlchemyHash(*wire.Hash) || !validAlchemyAddress(*wire.From) {
+		return AlchemyTransfer{}, fmt.Errorf("invalid Alchemy transfer identity")
+	}
+	if !validOptionalJSONNumber(fields["value"]) ||
+		!missingOrJSONNull(fields["erc721TokenId"]) ||
+		!missingOrJSONNull(fields["erc1155Metadata"]) ||
+		!missingOrJSONNull(fields["tokenId"]) ||
+		!validOptionalJSONString(fields["typeTraceAddress"]) {
+		return AlchemyTransfer{}, fmt.Errorf("invalid Alchemy transfer field type")
+	}
+	to := ""
+	if wire.To != nil {
+		if !validAlchemyAddress(*wire.To) {
+			return AlchemyTransfer{}, fmt.Errorf("invalid Alchemy recipient")
+		}
+		to = *wire.To
+	}
+	switch *wire.Category {
+	case "external", "internal", "erc20":
+	default:
+		return AlchemyTransfer{}, fmt.Errorf("invalid Alchemy transfer category")
+	}
+
+	rawFields, err := decodeExactJSONObject(fields["rawContract"], "value", "address", "decimal")
+	if err != nil {
+		return AlchemyTransfer{}, err
+	}
+	for _, required := range []string{"value", "address", "decimal"} {
+		if _, ok := rawFields[required]; !ok {
+			return AlchemyTransfer{}, fmt.Errorf("incomplete Alchemy raw contract")
+		}
+	}
+	var rawWire struct {
+		Value   *string `json:"value"`
+		Address *string `json:"address"`
+		Decimal *string `json:"decimal"`
+	}
+	if err := json.Unmarshal(fields["rawContract"], &rawWire); err != nil ||
+		rawWire.Value == nil || rawWire.Decimal == nil ||
+		!validAlchemyQuantity(*rawWire.Value) || !validAlchemyQuantity(*rawWire.Decimal) {
+		return AlchemyTransfer{}, fmt.Errorf("invalid Alchemy raw contract")
+	}
+	rawAmount, amountOK := new(big.Int).SetString((*rawWire.Value)[2:], 16)
+	rawDecimals, decimalsOK := new(big.Int).SetString((*rawWire.Decimal)[2:], 16)
+	if !amountOK || rawAmount.Sign() <= 0 || !decimalsOK ||
+		!rawDecimals.IsUint64() || rawDecimals.Uint64() > 255 {
+		return AlchemyTransfer{}, fmt.Errorf("invalid Alchemy raw contract semantics")
+	}
+	contract := ""
+	if *wire.Category == "erc20" {
+		if rawWire.Address == nil || !validAlchemyAddress(*rawWire.Address) {
+			return AlchemyTransfer{}, fmt.Errorf("invalid Alchemy token contract")
+		}
+		contract = *rawWire.Address
+	} else if rawWire.Address != nil {
+		return AlchemyTransfer{}, fmt.Errorf("unexpected Alchemy native contract")
+	}
+
+	blockTime := ""
+	if metadataRaw, ok := fields["metadata"]; ok &&
+		!bytes.Equal(bytes.TrimSpace(metadataRaw), []byte("null")) {
+		metadataFields, err := decodeExactJSONObject(metadataRaw, "blockTimestamp")
+		if err != nil {
+			return AlchemyTransfer{}, err
+		}
+		var timestamp *string
+		if err := json.Unmarshal(metadataFields["blockTimestamp"], &timestamp); err != nil ||
+			timestamp == nil {
+			return AlchemyTransfer{}, fmt.Errorf("invalid Alchemy transfer metadata")
+		}
+		if _, err := time.Parse(time.RFC3339Nano, *timestamp); err != nil {
+			return AlchemyTransfer{}, fmt.Errorf("invalid Alchemy transfer timestamp")
+		}
+		blockTime = *timestamp
+	}
+	asset := ""
+	if wire.Asset != nil {
+		asset = *wire.Asset
+	}
+	return AlchemyTransfer{
+		UniqueID:  *wire.UniqueID,
+		BlockNum:  *wire.BlockNum,
+		Hash:      *wire.Hash,
+		From:      *wire.From,
+		To:        to,
+		Asset:     asset,
+		Category:  *wire.Category,
+		Raw:       AlchemyRawContract{Value: *rawWire.Value, Address: contract, Decimal: *rawWire.Decimal},
+		BlockTime: blockTime,
+	}, nil
+}
+
+func validAlchemyEventID(value string) bool {
+	if len(value) == 0 || len(value) > 512 {
+		return false
+	}
+	for _, r := range value {
+		if r < 0x21 || r > 0x7e {
+			return false
+		}
+	}
+	return true
+}
+
+func validAlchemyHash(value string) bool {
+	return len(value) == 66 && validHexBytes(value)
+}
+
+func validAlchemyAddress(value string) bool {
+	return len(value) == 42 && validHexBytes(value)
+}
+
+func validAlchemyQuantity(value string) bool {
+	if len(value) < 3 || len(value) > 66 || !strings.HasPrefix(value, "0x") {
+		return false
+	}
+	for _, digit := range value[2:] {
+		if !((digit >= '0' && digit <= '9') || (digit >= 'a' && digit <= 'f') ||
+			(digit >= 'A' && digit <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+func validOptionalJSONNumber(raw json.RawMessage) bool {
+	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return true
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if decoder.Decode(&value) != nil {
+		return false
+	}
+	_, ok := value.(json.Number)
+	return ok
+}
+
+func validOptionalJSONString(raw json.RawMessage) bool {
+	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return true
+	}
+	var value string
+	return json.Unmarshal(raw, &value) == nil
+}
+
+func missingOrJSONNull(raw json.RawMessage) bool {
+	return len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null"))
 }
 
 // Transfers returns confirmed native and ERC-20 movements involving address.
@@ -186,28 +424,17 @@ func (a *Alchemy) requestEndpoint(
 			Message:  fmt.Sprintf("Alchemy returned HTTP %d", resp.StatusCode),
 		}
 	}
-	var out struct {
-		Result struct {
-			Transfers []AlchemyTransfer `json:"transfers"`
-		} `json:"result"`
-		Error *struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(data, &out); err != nil {
+	transfers, rejected, err := decodeAlchemyTransfers(data)
+	if err != nil {
 		return nil, &Unavailable{Upstream: "alchemy", Message: "malformed Alchemy response"}
 	}
-	if out.Error != nil {
+	if rejected {
 		return nil, &Unavailable{
 			Upstream: "alchemy",
-			Message:  fmt.Sprintf("Alchemy rejected request with code %d", out.Error.Code),
+			Message:  "Alchemy rejected history request",
 		}
 	}
-	if out.Result.Transfers == nil {
-		return nil, &Unavailable{Upstream: "alchemy", Message: "Alchemy response has no transfers"}
-	}
-	return out.Result.Transfers, nil
+	return transfers, nil
 }
 
 func (a *Alchemy) fillMissingBlockTimes(
@@ -310,51 +537,100 @@ func (a *Alchemy) requestBlockTimestamps(
 			Message:  fmt.Sprintf("Alchemy returned HTTP %d", resp.StatusCode),
 		}
 	}
-	var out []struct {
-		ID     int `json:"id"`
-		Result *struct {
-			Timestamp string `json:"timestamp"`
-		} `json:"result"`
-		Error *struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(data, &out); err != nil {
+	timestamps, rejected, err := decodeAlchemyBlockTimestamps(data, blocks)
+	if err != nil {
 		return nil, &Unavailable{
 			Upstream: "alchemy",
 			Message:  "malformed Alchemy batch response",
 		}
 	}
-	timestamps := make(map[string]string, len(out))
-	for _, item := range out {
-		if item.Error != nil {
-			return nil, &Unavailable{
-				Upstream: "alchemy",
-				Message:  fmt.Sprintf("Alchemy rejected request with code %d", item.Error.Code),
+	if rejected {
+		return nil, &Unavailable{
+			Upstream: "alchemy",
+			Message:  "Alchemy rejected block request",
+		}
+	}
+	return timestamps, nil
+}
+
+func decodeAlchemyBlockTimestamps(
+	data []byte,
+	blocks []string,
+) (map[string]string, bool, error) {
+	var entries []json.RawMessage
+	if err := json.Unmarshal(data, &entries); err != nil || entries == nil ||
+		len(entries) != len(blocks) {
+		return nil, false, fmt.Errorf("invalid Alchemy batch response")
+	}
+
+	timestamps := make(map[string]string, len(entries))
+	seenIDs := make(map[int]struct{}, len(entries))
+	for _, entry := range entries {
+		fields, err := decodeExactJSONObject(entry, "jsonrpc", "id", "result", "error")
+		if err != nil {
+			return nil, false, err
+		}
+		var version string
+		var id *int
+		if err := json.Unmarshal(fields["jsonrpc"], &version); err != nil ||
+			json.Unmarshal(fields["id"], &id) != nil || id == nil ||
+			version != "2.0" || *id <= 0 || *id > len(blocks) {
+			return nil, false, fmt.Errorf("invalid Alchemy batch envelope")
+		}
+		if _, duplicate := seenIDs[*id]; duplicate {
+			return nil, false, fmt.Errorf("duplicate Alchemy batch id")
+		}
+		seenIDs[*id] = struct{}{}
+
+		resultRaw, hasResult := fields["result"]
+		errorRaw, hasError := fields["error"]
+		if hasResult == hasError {
+			return nil, false, fmt.Errorf("invalid Alchemy batch result")
+		}
+		if hasError {
+			errorFields, err := decodeExactJSONObject(errorRaw, "code", "message", "data")
+			if err != nil {
+				return nil, false, err
+			}
+			var code *int
+			var message *string
+			if err := json.Unmarshal(errorFields["code"], &code); err != nil ||
+				json.Unmarshal(errorFields["message"], &message) != nil ||
+				code == nil || message == nil {
+				return nil, false, fmt.Errorf("invalid Alchemy batch error")
+			}
+			return nil, true, nil
+		}
+
+		blockFields, err := decodeUniqueJSONObject(resultRaw)
+		if err != nil {
+			return nil, false, err
+		}
+		for key := range blockFields {
+			if strings.EqualFold(key, "timestamp") && key != "timestamp" {
+				return nil, false, fmt.Errorf("ambiguous Alchemy block timestamp")
 			}
 		}
-		if item.ID <= 0 || item.ID > len(blocks) ||
-			item.Result == nil || item.Result.Timestamp == "" {
-			return nil, &Unavailable{
-				Upstream: "alchemy",
-				Message:  "Alchemy block response is incomplete",
-			}
+		timestampRaw, ok := blockFields["timestamp"]
+		if !ok {
+			return nil, false, fmt.Errorf("Alchemy block timestamp is missing")
 		}
-		seconds, ok := new(big.Int).SetString(
-			strings.TrimPrefix(item.Result.Timestamp, "0x"),
-			16,
-		)
-		if !ok || !seconds.IsInt64() {
-			return nil, &Unavailable{
-				Upstream: "alchemy",
-				Message:  "Alchemy returned an invalid block timestamp",
-			}
+		var timestamp *string
+		if err := json.Unmarshal(timestampRaw, &timestamp); err != nil ||
+			timestamp == nil || !validAlchemyQuantity(*timestamp) {
+			return nil, false, fmt.Errorf("invalid Alchemy block timestamp")
 		}
-		timestamps[blocks[item.ID-1]] = time.Unix(
+		seconds, ok := new(big.Int).SetString((*timestamp)[2:], 16)
+		if !ok || !seconds.IsInt64() || seconds.Sign() < 0 {
+			return nil, false, fmt.Errorf("invalid Alchemy block timestamp")
+		}
+		timestamps[blocks[*id-1]] = time.Unix(
 			seconds.Int64(),
 			0,
 		).UTC().Format(time.RFC3339Nano)
 	}
-	return timestamps, nil
+	if len(timestamps) != len(blocks) {
+		return nil, false, fmt.Errorf("incomplete Alchemy batch response")
+	}
+	return timestamps, false, nil
 }

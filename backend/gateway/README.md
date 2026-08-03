@@ -580,7 +580,21 @@ false marker as proof that no pending outgoing transaction exists.
   Etherscan v2 (`ETHERSCAN_API_KEY`) and then keyless Blockscout/Routescan
   explorers remain fallbacks. Transfer rows keep their event-level
   `uniqueId`, so multiple transfers in one transaction are not lost. Token
-  symbols/decimals are authoritative only for registered contracts.
+  symbols/decimals are authoritative only for registered contracts. Alchemy
+  responses are decoded as a provider trust boundary: the JSON-RPC envelope
+  must be version `2.0`, numeric id `1`, and contain exactly one result/error;
+  result accepts only `transfers` plus the documented optional string
+  `pageKey`. Transfer rows use the reviewed official field vocabulary, require
+  valid block quantities, 32-byte hashes, EVM addresses, category-specific
+  non-zero raw amounts, 0–255 decimals, `rawContract` semantics and typed
+  nullable fields. Because this request only includes native/internal/ERC-20
+  categories, NFT-specific ids/metadata must be
+  omitted or null. Unknown members, aliases, duplicate keys, malformed rows or
+  a nullable `pageKey` reject the complete provider result. When Alchemy omits
+  transfer metadata, the timestamp fallback batch also requires unique in-range
+  response ids and an exact lowercase hex
+  `timestamp`; the surrounding Ethereum block remains forward-compatible but
+  duplicate keys and `Timestamp` aliases fail closed.
 - **solana** — Helius `getTransfersByAddress` is preferred when
   `HELIUS_API_KEY` is set. Its JSON-RPC envelope must identify version `2.0`
   and the exact `kt-wallet` request id, with exactly one result/error. The

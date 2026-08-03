@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -199,6 +200,286 @@ func TestHeliusResponseAllowsCurrentOfficialTransferFields(t *testing.T) {
 	}
 }
 
+func TestAlchemyTransferResponseRejectsAmbiguousProviderJSON(t *testing.T) {
+	t.Parallel()
+
+	const row = `{"blockNum":"0xabc","uniqueId":"0xevent:external",` +
+		`"hash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",` +
+		`"from":"0x1111111111111111111111111111111111111111",` +
+		`"to":"0x2222222222222222222222222222222222222222",` +
+		`"value":1,"erc721TokenId":null,"erc1155Metadata":null,"tokenId":null,` +
+		`"asset":"ETH","category":"external",` +
+		`"rawContract":{"value":"0x1","address":null,"decimal":"0x12"},` +
+		`"metadata":{"blockTimestamp":"2026-07-29T01:01:00Z"}}`
+	validResult := fmt.Sprintf(`{"transfers":[%s],"pageKey":""}`, row)
+	rowUnknown := strings.Replace(row, `"metadata":`, `"unexpected":true,"metadata":`, 1)
+	rowHashAlias := strings.Replace(row, `"hash":`, `"Hash":`, 1)
+	rowDuplicateHash := strings.Replace(row, `"hash":`, `"hash":"0xdead","hash":`, 1)
+	rowRawUnknown := strings.Replace(row, `"decimal":"0x12"`, `"decimal":"0x12","unexpected":true`, 1)
+	rowRawAlias := strings.Replace(row, `"value":"0x1"`, `"Value":"0x1"`, 1)
+	rowRawDuplicate := strings.Replace(row, `"value":"0x1"`, `"value":"0x2","value":"0x1"`, 1)
+	rowMetadataUnknown := strings.Replace(row, `"blockTimestamp":"2026-07-29T01:01:00Z"`, `"blockTimestamp":"2026-07-29T01:01:00Z","unexpected":true`, 1)
+	rowTimestampAlias := strings.Replace(row, `"blockTimestamp":`, `"BlockTimestamp":`, 1)
+	rowTimestampDuplicate := strings.Replace(row, `"blockTimestamp":`, `"blockTimestamp":"2020-01-01T00:00:00Z","blockTimestamp":`, 1)
+
+	tests := []struct {
+		name    string
+		payload string
+	}{
+		{"wrong response id", fmt.Sprintf(`{"jsonrpc":"2.0","id":2,"result":%s}`, validResult)},
+		{"missing response id", fmt.Sprintf(`{"jsonrpc":"2.0","result":%s}`, validResult)},
+		{"wrong version", fmt.Sprintf(`{"jsonrpc":"1.0","id":1,"result":%s}`, validResult)},
+		{"unknown envelope member", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":%s,"unexpected":true}`, validResult)},
+		{"result case alias", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"Result":%s}`, validResult)},
+		{"result case collision", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[]},"Result":%s}`, validResult)},
+		{"duplicate response id ending expected", fmt.Sprintf(`{"jsonrpc":"2.0","id":2,"id":1,"result":%s}`, validResult)},
+		{"duplicate result ending valid", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[]},"result":%s}`, validResult)},
+		{"unknown result member", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s],"unexpected":true}}`, row)},
+		{"transfers case alias", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"Transfers":[%s]}}`, row)},
+		{"duplicate transfers ending valid", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[],"transfers":[%s]}}`, row)},
+		{"unknown transfer member", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowUnknown)},
+		{"transfer hash case alias", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowHashAlias)},
+		{"duplicate transfer hash", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowDuplicateHash)},
+		{"unknown raw contract member", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowRawUnknown)},
+		{"raw value case alias", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowRawAlias)},
+		{"duplicate raw value", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowRawDuplicate)},
+		{"unknown metadata member", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowMetadataUnknown)},
+		{"timestamp case alias", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowTimestampAlias)},
+		{"duplicate timestamp", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowTimestampDuplicate)},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.payload))
+			}))
+			defer server.Close()
+
+			client := NewAlchemy([]string{server.URL}, server.Client(), time.Second)
+			transfers, err := client.requestEndpoint(context.Background(), server.URL, []byte(`{}`))
+			if err == nil {
+				t.Fatalf("ambiguous Alchemy response must fail closed, got %#v", transfers)
+			}
+		})
+	}
+}
+
+func TestAlchemyTransferResponseRejectsInvalidFinancialFields(t *testing.T) {
+	t.Parallel()
+
+	const row = `{"blockNum":"0xabc","uniqueId":"0xevent:external",` +
+		`"hash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",` +
+		`"from":"0x1111111111111111111111111111111111111111",` +
+		`"to":"0x2222222222222222222222222222222222222222",` +
+		`"asset":"ETH","category":"external",` +
+		`"rawContract":{"value":"0x1","address":null,"decimal":"0x12"},` +
+		`"metadata":{"blockTimestamp":"2026-07-29T01:01:00Z"}}`
+	tests := []struct {
+		name   string
+		row    string
+		result string
+	}{
+		{"missing block number", strings.Replace(row, `"blockNum":"0xabc",`, "", 1), ""},
+		{"invalid block number", strings.Replace(row, `"blockNum":"0xabc"`, `"blockNum":"latest"`, 1), ""},
+		{"invalid transaction hash", strings.Replace(row, `"hash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`, `"hash":"0x1234"`, 1), ""},
+		{"invalid sender", strings.Replace(row, `"from":"0x1111111111111111111111111111111111111111"`, `"from":"0x1234"`, 1), ""},
+		{"invalid recipient", strings.Replace(row, `"to":"0x2222222222222222222222222222222222222222"`, `"to":"0x1234"`, 1), ""},
+		{"unsupported category", strings.Replace(row, `"category":"external"`, `"category":"erc721"`, 1), ""},
+		{"missing raw decimal", strings.Replace(row, `,"decimal":"0x12"`, "", 1), ""},
+		{"invalid raw value", strings.Replace(row, `"value":"0x1"`, `"value":"-1"`, 1), ""},
+		{"zero raw value excluded by request", strings.Replace(row, `"value":"0x1"`, `"value":"0x0"`, 1), ""},
+		{"decimal exceeds ERC20 range", strings.Replace(row, `"decimal":"0x12"`, `"decimal":"0x100"`, 1), ""},
+		{"native row with token contract", strings.Replace(row, `"address":null`, `"address":"0x3333333333333333333333333333333333333333"`, 1), ""},
+		{"token row without contract", strings.Replace(row, `"category":"external"`, `"category":"erc20"`, 1), ""},
+		{"invalid block timestamp", strings.Replace(row, `"blockTimestamp":"2026-07-29T01:01:00Z"`, `"blockTimestamp":"yesterday"`, 1), ""},
+		{"value must be numeric", strings.Replace(row, `"asset":"ETH"`, `"value":"1","asset":"ETH"`, 1), ""},
+		{"erc721 token id must be string", strings.Replace(row, `"asset":"ETH"`, `"erc721TokenId":{},"asset":"ETH"`, 1), ""},
+		{"erc1155 metadata must be array", strings.Replace(row, `"asset":"ETH"`, `"erc1155Metadata":{},"asset":"ETH"`, 1), ""},
+		{"erc721 token id is inapplicable", strings.Replace(row, `"asset":"ETH"`, `"erc721TokenId":"0x1","asset":"ETH"`, 1), ""},
+		{"erc1155 metadata is inapplicable", strings.Replace(row, `"asset":"ETH"`, `"erc1155Metadata":[],"asset":"ETH"`, 1), ""},
+		{"generic token id is inapplicable", strings.Replace(row, `"asset":"ETH"`, `"tokenId":"1","asset":"ETH"`, 1), ""},
+		{"trace address must be string", strings.Replace(row, `"asset":"ETH"`, `"typeTraceAddress":7,"asset":"ETH"`, 1), ""},
+		{"null page key", row, `{"transfers":[%s],"pageKey":null}`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := fmt.Sprintf(`{"transfers":[%s]}`, tc.row)
+			if tc.result != "" {
+				result = fmt.Sprintf(tc.result, tc.row)
+			}
+			payload := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":%s}`, result)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(payload))
+			}))
+			defer server.Close()
+
+			client := NewAlchemy([]string{server.URL}, server.Client(), time.Second)
+			transfers, err := client.requestEndpoint(context.Background(), server.URL, []byte(`{}`))
+			if err == nil {
+				t.Fatalf("invalid Alchemy financial field must fail closed, got %#v", transfers)
+			}
+		})
+	}
+}
+
+func TestAlchemyTransferResponseAllowsDocumentedNullableFields(t *testing.T) {
+	t.Parallel()
+
+	payload := `{"jsonrpc":"2.0","id":1,"result":{"transfers":[` +
+		`{"blockNum":"0xabc","uniqueId":"0xcreate:external",` +
+		`"hash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",` +
+		`"from":"0x1111111111111111111111111111111111111111","to":null,` +
+		`"value":1,"erc721TokenId":null,"erc1155Metadata":null,"tokenId":null,` +
+		`"asset":"ETH","category":"external","typeTraceAddress":null,` +
+		`"rawContract":{"value":"0x1","address":null,"decimal":"0x12"},"metadata":null},` +
+		`{"blockNum":"0xabd","uniqueId":"0xtoken:log:1",` +
+		`"hash":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",` +
+		`"from":"0x2222222222222222222222222222222222222222",` +
+		`"to":"0x1111111111111111111111111111111111111111",` +
+		`"asset":"USDC","category":"erc20",` +
+		`"rawContract":{"value":"0x2","address":"0x3333333333333333333333333333333333333333","decimal":"0x6"},` +
+		`"metadata":{"blockTimestamp":"2026-07-29T01:01:00.123Z"}}` +
+		`],"pageKey":"page-2"}}`
+	transfers, rejected, err := decodeAlchemyTransfers([]byte(payload))
+	if err != nil || rejected || len(transfers) != 2 {
+		t.Fatalf("documented Alchemy shape must decode: transfers=%#v rejected=%v err=%v", transfers, rejected, err)
+	}
+	if transfers[0].To != "" || transfers[0].BlockTime != "" ||
+		transfers[1].Raw.Address != "0x3333333333333333333333333333333333333333" ||
+		transfers[1].BlockTime != "2026-07-29T01:01:00.123Z" {
+		t.Fatalf("documented nullable/metadata semantics were not preserved: %#v", transfers)
+	}
+}
+
+func TestAlchemyBlockBatchRejectsAmbiguousProviderJSON(t *testing.T) {
+	t.Parallel()
+
+	const block = `{"number":"0xabc",` +
+		`"hash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",` +
+		`"timestamp":"0x6889777b"}`
+	tests := []struct {
+		name    string
+		payload string
+	}{
+		{"wrong version", fmt.Sprintf(`[{"jsonrpc":"1.0","id":1,"result":%s}]`, block)},
+		{"unknown envelope member", fmt.Sprintf(`[{"jsonrpc":"2.0","id":1,"result":%s,"unexpected":true}]`, block)},
+		{"result case alias", fmt.Sprintf(`[{"jsonrpc":"2.0","id":1,"Result":%s}]`, block)},
+		{"duplicate id ending expected", fmt.Sprintf(`[{"jsonrpc":"2.0","id":2,"id":1,"result":%s}]`, block)},
+		{"duplicate result ending valid", fmt.Sprintf(`[{"jsonrpc":"2.0","id":1,"result":null,"result":%s}]`, block)},
+		{"timestamp case alias", fmt.Sprintf(`[{"jsonrpc":"2.0","id":1,"result":{"Timestamp":"0x6889777b"}}]`)},
+		{"duplicate timestamp", fmt.Sprintf(`[{"jsonrpc":"2.0","id":1,"result":{"timestamp":"0x1","timestamp":"0x6889777b"}}]`)},
+		{"duplicate batch id", fmt.Sprintf(`[{"jsonrpc":"2.0","id":1,"result":%s},{"jsonrpc":"2.0","id":1,"result":%s}]`, block, block)},
+		{"result and error collision", fmt.Sprintf(`[{"jsonrpc":"2.0","id":1,"result":%s,"error":{"code":-1,"message":"failed"}}]`, block)},
+		{"unknown error member", `[{"jsonrpc":"2.0","id":1,"error":{"code":-1,"message":"failed","unexpected":true}}]`},
+		{"duplicate error code", `[{"jsonrpc":"2.0","id":1,"error":{"code":-2,"code":-1,"message":"failed"}}]`},
+		{"missing error message", `[{"jsonrpc":"2.0","id":1,"error":{"code":-1}}]`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.payload))
+			}))
+			defer server.Close()
+
+			client := NewAlchemy([]string{server.URL}, server.Client(), time.Second)
+			timestamps, err := client.requestBlockTimestamps(
+				context.Background(), server.URL, []byte(`[]`), []string{"0xabc"},
+			)
+			if err == nil {
+				t.Fatalf("ambiguous Alchemy block batch must fail closed, got %#v", timestamps)
+			}
+		})
+	}
+}
+
+func TestAlchemyBlockBatchAllowsDocumentedExtensibleBlocks(t *testing.T) {
+	t.Parallel()
+
+	const firstTimestamp = "0x6889777b"
+	const secondTimestamp = "0x68897780"
+	payload := `[` +
+		`{"jsonrpc":"2.0","id":2,"result":{"number":"0xabd",` +
+		`"hash":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",` +
+		`"parentHash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",` +
+		`"transactions":[],"timestamp":"` + secondTimestamp + `"}},` +
+		`{"jsonrpc":"2.0","id":1,"result":{"number":"0xabc",` +
+		`"hash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",` +
+		`"transactions":[],"timestamp":"` + firstTimestamp + `"}}]`
+	blocks := []string{"0xabc", "0xabd"}
+	timestamps, rejected, err := decodeAlchemyBlockTimestamps([]byte(payload), blocks)
+	if err != nil || rejected {
+		t.Fatalf("documented Ethereum blocks must decode: rejected=%v err=%v", rejected, err)
+	}
+	for i, raw := range []string{firstTimestamp, secondTimestamp} {
+		seconds, ok := new(big.Int).SetString(raw[2:], 16)
+		if !ok {
+			t.Fatal("invalid test timestamp")
+		}
+		want := time.Unix(seconds.Int64(), 0).UTC().Format(time.RFC3339Nano)
+		if got := timestamps[blocks[i]]; got != want {
+			t.Fatalf("timestamp[%s]=%q, want %q", blocks[i], got, want)
+		}
+	}
+}
+
+func TestAlchemyBlockBatchReturnsSafeRejection(t *testing.T) {
+	t.Parallel()
+
+	payload := `[{"jsonrpc":"2.0","id":1,"error":{` +
+		`"code":-32000,"message":"provider detail","data":{"request":"secret"}}}]`
+	timestamps, rejected, err := decodeAlchemyBlockTimestamps(
+		[]byte(payload), []string{"0xabc"},
+	)
+	if err != nil || !rejected || timestamps != nil {
+		t.Fatalf("standard provider error must be a safe rejection: timestamps=%#v rejected=%v err=%v", timestamps, rejected, err)
+	}
+}
+
+func TestAlchemyProviderErrorsAreRedacted(t *testing.T) {
+	t.Parallel()
+
+	const providerError = `{"jsonrpc":"2.0","id":1,"error":{` +
+		`"code":-32000,"message":"provider detail","data":{"request":"secret"}}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(providerError))
+	}))
+	defer server.Close()
+
+	client := NewAlchemy([]string{server.URL}, server.Client(), time.Second)
+	_, historyErr := client.requestEndpoint(
+		context.Background(), server.URL, []byte(`{}`),
+	)
+	var historyUnavailable *Unavailable
+	if historyErr == nil || historyErr.Error() != "upstream temporarily unavailable" ||
+		!errors.As(historyErr, &historyUnavailable) ||
+		historyUnavailable.Upstream != "alchemy" ||
+		historyUnavailable.Message != "Alchemy rejected history request" {
+		t.Fatalf("history rejection must be fixed and redacted, got %v", historyErr)
+	}
+
+	batchServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("[" + providerError + "]"))
+	}))
+	defer batchServer.Close()
+	_, blockErr := client.requestBlockTimestamps(
+		context.Background(), batchServer.URL, []byte(`[]`), []string{"0xabc"},
+	)
+	var blockUnavailable *Unavailable
+	if blockErr == nil || blockErr.Error() != "upstream temporarily unavailable" ||
+		!errors.As(blockErr, &blockUnavailable) ||
+		blockUnavailable.Upstream != "alchemy" ||
+		blockUnavailable.Message != "Alchemy rejected block request" {
+		t.Fatalf("block rejection must be fixed and redacted, got %v", blockErr)
+	}
+}
+
 func TestAlchemyTransfersQueriesBothDirectionsAndUsesRawValues(t *testing.T) {
 	var (
 		mu         sync.Mutex
@@ -228,7 +509,7 @@ func TestAlchemyTransfersQueriesBothDirectionsAndUsesRawValues(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		if direction == "toAddress" {
 			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[{
-				"uniqueId":"0xtoken:log:2","hash":"0xtoken",
+				"uniqueId":"0xtoken:log:2","blockNum":"0x101","hash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				"from":"0x2222222222222222222222222222222222222222",
 				"to":"0x1111111111111111111111111111111111111111",
 				"asset":"USDC","category":"erc20",
@@ -238,7 +519,7 @@ func TestAlchemyTransfersQueriesBothDirectionsAndUsesRawValues(t *testing.T) {
 			return
 		}
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[{
-			"uniqueId":"0xnative:external","hash":"0xnative",
+		"uniqueId":"0xnative:external","blockNum":"0x100","hash":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			"from":"0x1111111111111111111111111111111111111111",
 			"to":"0x2222222222222222222222222222222222222222",
 			"asset":"BNB","category":"external",
@@ -266,7 +547,7 @@ func TestAlchemyTransfersQueriesBothDirectionsAndUsesRawValues(t *testing.T) {
 		t.Fatalf("directions = %#v", directions)
 	}
 	for _, transfer := range transfers {
-		if strings.HasPrefix(transfer.Hash, "0xtoken") &&
+		if strings.HasPrefix(transfer.UniqueID, "0xtoken") &&
 			(transfer.Raw.Value != "0x2625a0" || transfer.BlockTime == "") {
 			t.Fatalf("raw token transfer was not preserved: %#v", transfer)
 		}
@@ -314,7 +595,7 @@ func TestAlchemyBackfillsMissingMetadataFromBlockBatch(t *testing.T) {
 		}
 		if strings.Contains(string(body), `"toAddress"`) {
 			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[{
-				"uniqueId":"0xmissing:external","blockNum":"0xabc","hash":"0xmissing",
+				"uniqueId":"0xmissing:external","blockNum":"0xabc","hash":"0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
 				"from":"0x2222222222222222222222222222222222222222",
 				"to":"0x1111111111111111111111111111111111111111",
 				"asset":"BNB","category":"external",

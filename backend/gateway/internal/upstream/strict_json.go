@@ -13,12 +13,30 @@ import (
 // trust boundaries where accepting two interpretations of the same response
 // could change a balance, fee, transaction status or broadcast outcome.
 func decodeExactJSONObject(raw []byte, allowedKeys ...string) (map[string]json.RawMessage, error) {
-	if !json.Valid(raw) {
-		return nil, errors.New("invalid JSON")
+	values, err := decodeUniqueJSONObject(raw)
+	if err != nil {
+		return nil, err
 	}
 	allowed := make(map[string]struct{}, len(allowedKeys))
 	for _, key := range allowedKeys {
 		allowed[key] = struct{}{}
+	}
+	for key := range values {
+		if _, known := allowed[key]; !known {
+			return nil, fmt.Errorf("unknown JSON object key %q", key)
+		}
+	}
+	return values, nil
+}
+
+// decodeUniqueJSONObject is used for provider objects whose complete field
+// vocabulary is intentionally extensible (for example, an Ethereum block),
+// while every key that KT Wallet consumes must still have one unambiguous
+// spelling and value. It rejects duplicate keys but leaves the caller to
+// validate its required exact members and case aliases.
+func decodeUniqueJSONObject(raw []byte) (map[string]json.RawMessage, error) {
+	if !json.Valid(raw) {
+		return nil, errors.New("invalid JSON")
 	}
 
 	decoder := json.NewDecoder(bytes.NewReader(raw))
@@ -31,7 +49,7 @@ func decodeExactJSONObject(raw []byte, allowedKeys ...string) (map[string]json.R
 		return nil, errors.New("expected JSON object")
 	}
 
-	values := make(map[string]json.RawMessage, len(allowedKeys))
+	values := make(map[string]json.RawMessage)
 	for decoder.More() {
 		keyToken, err := decoder.Token()
 		if err != nil {
@@ -40,9 +58,6 @@ func decodeExactJSONObject(raw []byte, allowedKeys ...string) (map[string]json.R
 		key, ok := keyToken.(string)
 		if !ok {
 			return nil, errors.New("non-string JSON object key")
-		}
-		if _, known := allowed[key]; !known {
-			return nil, fmt.Errorf("unknown JSON object key %q", key)
 		}
 		if _, duplicate := values[key]; duplicate {
 			return nil, fmt.Errorf("duplicate JSON object key %q", key)
