@@ -1783,7 +1783,7 @@ class _WalletManageScreenState extends State<WalletManageScreen> {
     final state = switch (w) {
       HotWallet(backedUp: true) => l10n.walletStateBackedUp,
       HotWallet() => l10n.walletStateNotBackedUp,
-      WatchWallet() => 'KT Wallet Cold Signer',
+      WatchWallet() => l10n.walletStateColdSigner,
     };
     final largeText = MediaQuery.textScalerOf(context).scale(14) >= 20;
     return Expanded(

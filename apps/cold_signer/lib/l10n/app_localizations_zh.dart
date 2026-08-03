@@ -417,8 +417,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get signingBlocked => '已禁止签名';
 
   @override
-  String get signingBlockedDesc =>
-      '该交易包含无法安全解析的内容，KT Cold Signer 已拒绝签名以保护你的资产。';
+  String get signingBlockedDesc => '该交易包含无法安全解析的内容，KT冷钱包已拒绝签名以保护你的资产。';
 
   @override
   String get transactionParseFailed => '无法安全解析';

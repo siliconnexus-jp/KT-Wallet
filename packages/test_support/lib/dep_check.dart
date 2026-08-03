@@ -50,6 +50,50 @@ Set<String> _icuPlaceholders(String value) => RegExp(
   r'\{([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\})',
 ).allMatches(value).map((match) => match.group(1)!).toSet();
 
+/// Rejects retired or locale-inappropriate brand terms in user-visible ARB
+/// messages. Terms are matched literally and reported with locale + key so a
+/// release review can distinguish production copy from source comments and
+/// historical documentation.
+List<String> findForbiddenLocalizationTermIssues(
+  Map<String, String> catalogs,
+  Map<String, Set<String>> forbiddenTermsByLocale,
+) {
+  final issues = <String>[];
+  for (final policy in forbiddenTermsByLocale.entries) {
+    final source = catalogs[policy.key];
+    if (source == null) {
+      issues.add('${policy.key}: missing catalog for forbidden-term policy');
+      continue;
+    }
+    Object? decoded;
+    try {
+      decoded = jsonDecode(source);
+    } on FormatException {
+      issues.add('${policy.key}: invalid JSON for forbidden-term policy');
+      continue;
+    }
+    if (decoded is! Map<String, dynamic>) {
+      issues.add('${policy.key}: ARB root must be an object');
+      continue;
+    }
+    for (final term in policy.value) {
+      if (term.isEmpty) {
+        issues.add('${policy.key}: forbidden term must not be empty');
+        continue;
+      }
+      for (final message in decoded.entries) {
+        if (message.key.startsWith('@') || message.value is! String) continue;
+        if ((message.value as String).contains(term)) {
+          issues.add(
+            '${policy.key}:${message.key}: contains forbidden term "$term"',
+          );
+        }
+      }
+    }
+  }
+  return issues;
+}
+
 /// Validates that localized Flutter ARB catalogs expose the exact same
 /// user-visible keys and ICU placeholders as the English source catalog.
 ///

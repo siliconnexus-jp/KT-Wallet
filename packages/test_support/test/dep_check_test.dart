@@ -353,6 +353,30 @@ void main() {
   });
 
   group('Flutter ARB localization gate', () {
+    test('rejects retired and locale-inappropriate brand terms', () {
+      final issues = findForbiddenLocalizationTermIssues(
+        {
+          'en': '{"@@locale":"en","pair":"Pair KT Wallet Cold Signer"}',
+          'zh': '{"@@locale":"zh","pair":"连接 KT Cold Signer"}',
+          'ja': '{"@@locale":"ja","pair":"KT Cold Signerと接続"}',
+        },
+        {
+          'en': {'KT Wallet Cold Signer'},
+          'zh': {'KT Wallet Cold Signer', 'KT Cold Signer'},
+        },
+      );
+
+      expect(
+        issues,
+        contains('en:pair: contains forbidden term "KT Wallet Cold Signer"'),
+      );
+      expect(
+        issues,
+        contains('zh:pair: contains forbidden term "KT Cold Signer"'),
+      );
+      expect(issues.where((issue) => issue.startsWith('ja:')), isEmpty);
+    });
+
     test('accepts exact keys, locales and ICU placeholders', () {
       final issues = findArbCatalogIssues({
         'en': '''{

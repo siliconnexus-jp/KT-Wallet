@@ -570,7 +570,13 @@ void main() {
       sameAsDefaultAllowedKeys: switch (app) {
         'kt_wallet' => const {
           'zh': {'txNonceLabel', 'rpcNotMeasured', 'chainIdLabel'},
-          'ja': {'appName', 'txNonceLabel', 'rpcNotMeasured', 'chainIdLabel'},
+          'ja': {
+            'appName',
+            'walletStateColdSigner',
+            'txNonceLabel',
+            'rpcNotMeasured',
+            'chainIdLabel',
+          },
         },
         'cold_signer' => const {
           'zh': {'chainIdLabel'},
@@ -590,6 +596,29 @@ void main() {
     );
     if (arbIssues.isNotEmpty) {
       failures.add('$app ARB localization drift: $arbIssues');
+    }
+
+    final brandIssues = findForbiddenLocalizationTermIssues(
+      {
+        for (final locale in ['en', 'zh', 'ja'])
+          locale: File('$appRoot/lib/l10n/app_$locale.arb').readAsStringSync(),
+      },
+      switch (app) {
+        'kt_wallet' => const {
+          'en': {'KT Wallet Cold Signer'},
+          'zh': {'KT Wallet Cold Signer', 'KT Cold Signer'},
+          'ja': {'KT Wallet Cold Signer'},
+        },
+        'cold_signer' => const {
+          'en': {'KT Wallet Cold Signer'},
+          'zh': {'KT Wallet Cold Signer', 'KT Cold Signer'},
+          'ja': {'KT Wallet Cold Signer'},
+        },
+        _ => const {},
+      },
+    );
+    if (brandIssues.isNotEmpty) {
+      failures.add('$app localized brand drift: $brandIssues');
     }
 
     final androidIssues = findAndroidStringResourceIssues({

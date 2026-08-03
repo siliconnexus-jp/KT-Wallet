@@ -30,6 +30,16 @@ HotWallet _wallet(String id, String name, int sortOrder) => HotWallet(
   backedUp: true,
 );
 
+WatchWallet _watchWallet(String id, String name, int sortOrder) => WatchWallet(
+  id: id,
+  name: name,
+  avatarColor: 0xFF0EA5E9,
+  addresses: _addresses,
+  sortOrder: sortOrder,
+  coldWalletId: 'cold-$id',
+  protocolVersion: 1,
+);
+
 void main() {
   group('WalletController.reorder', () {
     late WalletDatabase db;
@@ -129,9 +139,12 @@ void main() {
   });
 
   group('WalletManageScreen reorder mode', () {
-    Widget app(WalletController controller) => MaterialApp(
+    Widget app(
+      WalletController controller, {
+      Locale locale = const Locale('zh'),
+    }) => MaterialApp(
       debugShowCheckedModeBanner: false,
-      locale: const Locale('zh'),
+      locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: WalletScope(
@@ -139,6 +152,24 @@ void main() {
         child: const WalletManageScreen(),
       ),
     );
+
+    testWidgets('watch-wallet signer brand follows the active locale', (
+      tester,
+    ) async {
+      final controller = WalletController(WalletManager());
+      await controller.add(_watchWallet('watch-1', 'Watch', 0));
+
+      for (final (locale, expected) in const [
+        (Locale('en'), 'KT Cold Signer'),
+        (Locale('zh'), 'KT冷钱包'),
+        (Locale('ja'), 'KT Cold Signer'),
+      ]) {
+        await tester.pumpWidget(app(controller, locale: locale));
+        await tester.pumpAndSettle();
+        expect(find.text(expected), findsOneWidget);
+        expect(find.text('KT Wallet Cold Signer'), findsNothing);
+      }
+    });
 
     testWidgets(
       '排序 toggles reorder mode; dragging row 0 below row 1 reorders and persists',

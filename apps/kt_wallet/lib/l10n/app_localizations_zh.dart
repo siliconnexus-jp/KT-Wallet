@@ -69,6 +69,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get walletStateNotBackedUp => '未备份';
 
   @override
+  String get walletStateColdSigner => 'KT冷钱包';
+
+  @override
   String get walletSeedDaily => '日常钱包';
 
   @override
@@ -221,7 +224,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectColdWallet => '连接离线钱包';
 
   @override
-  String get connectColdWalletDesc => '扫码配对 KT Wallet Cold Signer，私钥永不进入本机';
+  String get connectColdWalletDesc => '扫码配对 KT冷钱包，私钥永不进入本机';
 
   @override
   String get createWalletTitle => '创建普通钱包';
@@ -321,7 +324,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectColdSafety => '本机永远不会接收或保存助记词、私钥或 Seed。';
 
   @override
-  String get scanAccountHint => '对准 KT Wallet Cold Signer 的地址二维码';
+  String get scanAccountHint => '对准 KT冷钱包的地址二维码';
 
   @override
   String get importConfirmTitle => '确认导入';

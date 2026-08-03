@@ -69,6 +69,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get walletStateNotBackedUp => 'Not backed up';
 
   @override
+  String get walletStateColdSigner => 'KT Cold Signer';
+
+  @override
   String get walletSeedDaily => 'Daily Wallet';
 
   @override
@@ -224,7 +227,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get connectColdWalletDesc =>
-      'Pair KT Wallet Cold Signer by QR; private keys never touch this device';
+      'Pair KT Cold Signer by QR; private keys never touch this device';
 
   @override
   String get createWalletTitle => 'Create standard wallet';
@@ -336,7 +339,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'This device never receives or stores a phrase, private key, or seed.';
 
   @override
-  String get scanAccountHint => 'Aim at the KT Wallet Cold Signer address QR';
+  String get scanAccountHint => 'Aim at the KT Cold Signer address QR';
 
   @override
   String get importConfirmTitle => 'Confirm import';

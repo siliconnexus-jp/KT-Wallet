@@ -895,7 +895,7 @@ abstract class AppLocalizations {
   /// No description provided for @signingBlockedDesc.
   ///
   /// In zh, this message translates to:
-  /// **'该交易包含无法安全解析的内容，KT Cold Signer 已拒绝签名以保护你的资产。'**
+  /// **'该交易包含无法安全解析的内容，KT冷钱包已拒绝签名以保护你的资产。'**
   String get signingBlockedDesc;
 
   /// No description provided for @transactionParseFailed.

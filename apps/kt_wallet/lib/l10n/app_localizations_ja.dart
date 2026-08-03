@@ -69,6 +69,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get walletStateNotBackedUp => '未バックアップ';
 
   @override
+  String get walletStateColdSigner => 'KT Cold Signer';
+
+  @override
   String get walletSeedDaily => '日常ウォレット';
 
   @override
@@ -221,8 +224,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get connectColdWallet => 'オフラインウォレットを接続';
 
   @override
-  String get connectColdWalletDesc =>
-      'QRでKT Wallet Cold Signerとペアリング。秘密鍵は端末に入りません';
+  String get connectColdWalletDesc => 'QRでKT Cold Signerとペアリング。秘密鍵は端末に入りません';
 
   @override
   String get createWalletTitle => '通常ウォレットを作成';
@@ -324,7 +326,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get connectColdSafety => '端末はフレーズ・秘密鍵・シードを一切受信・保存しません。';
 
   @override
-  String get scanAccountHint => 'KT Wallet Cold SignerのアドレスQRに合わせてください';
+  String get scanAccountHint => 'KT Cold SignerのアドレスQRに合わせてください';
 
   @override
   String get importConfirmTitle => 'インポートを確認';

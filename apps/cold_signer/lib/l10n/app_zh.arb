@@ -161,7 +161,7 @@
   "backToHome": "返回首页",
   "viewRawTxData": "查看原始交易数据",
   "signingBlocked": "已禁止签名",
-  "signingBlockedDesc": "该交易包含无法安全解析的内容，KT Cold Signer 已拒绝签名以保护你的资产。",
+  "signingBlockedDesc": "该交易包含无法安全解析的内容，KT冷钱包已拒绝签名以保护你的资产。",
   "transactionParseFailed": "无法安全解析",
   "signingFailed": "签名失败，交易、钱包或认证未通过校验。",
   "unknownContractCallDetected": "检测到未知合约调用：{method}",

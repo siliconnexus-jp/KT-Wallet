@@ -220,6 +220,12 @@ abstract class AppLocalizations {
   /// **'未备份'**
   String get walletStateNotBackedUp;
 
+  /// No description provided for @walletStateColdSigner.
+  ///
+  /// In zh, this message translates to:
+  /// **'KT冷钱包'**
+  String get walletStateColdSigner;
+
   /// No description provided for @walletSeedDaily.
   ///
   /// In zh, this message translates to:
@@ -499,7 +505,7 @@ abstract class AppLocalizations {
   /// No description provided for @connectColdWalletDesc.
   ///
   /// In zh, this message translates to:
-  /// **'扫码配对 KT Wallet Cold Signer，私钥永不进入本机'**
+  /// **'扫码配对 KT冷钱包，私钥永不进入本机'**
   String get connectColdWalletDesc;
 
   /// No description provided for @createWalletTitle.
@@ -685,7 +691,7 @@ abstract class AppLocalizations {
   /// No description provided for @scanAccountHint.
   ///
   /// In zh, this message translates to:
-  /// **'对准 KT Wallet Cold Signer 的地址二维码'**
+  /// **'对准 KT冷钱包的地址二维码'**
   String get scanAccountHint;
 
   /// No description provided for @importConfirmTitle.
