@@ -260,6 +260,26 @@
   Gateway 全量、关键包 race、vet、govulncheck/ops 及新增静态退化门禁通过。Provider 严格
   范围现扩展到 Helius + Alchemy + Etherscan/Blockscout；TronGrid、CoinGecko 与 GoPlus
   仍待同等级审阅。该修复是本地源码候选，生产仍为 1.16.15。
+- [x] 2026-08-04 继续关闭 TronGrid 三条账户历史 feed。旧实现把
+  `data/success/meta`、TRC-20、native raw contract 与 internal data 直接解码进 Go
+  struct，会接受未知成员、大小写别名/冲突、重复 data/value/amount/type/scalar、
+  `success=false`、负数/小数金额和短交易 ID；15 类关键红测证明旧路径全部错误接受。
+  现三条 feed 都要求精确 `data/success/meta` 信封与 `success=true`，并固定请求
+  `only_confirmed=true&order_by=block_timestamp,desc`。分页 metadata、TRC-20 token
+  info、native receipt/raw-data contract 与 internal scalar wrapper 都使用唯一键和受审
+  字段词汇表；64-hex transaction/trace id、Base58Check 或 41-hex 地址、正时间戳、
+  uint256/协议 int64 金额、0–255 decimals 与已知 receipt enum 逐项校验。Token 混合
+  endpoint 只把 `type=Transfer` 纳入资产记录，授权/NFT 不会冒充 TRC-20 转账；native
+  解析全部 raw contracts；同一 internal trace 的 TRX 与 TRC-10 双资产移动都保留。
+  Handler 对三类事件分别重验与当前钱包的关系，不再用“同 hash 存在 Token”删除真实
+  native movement；多合约事件使用 contract index，TRC-20 使用交易语义指纹而非分页
+  行号保持稳定唯一身份。15 类旧红测、分页歧义、
+  当前官方信封/字段正例、非转账跳过、多合约/双资产/无关行过滤连续通过；upstream
+  20/20、handler 10/10，Gateway 全量、关键包 race、vet、govulncheck/ops、静态远程
+  安全边界与公共源码 12/12 门禁通过；提交前再以 TRON 官方文档公开地址只读抽取当前
+  mainnet 三条 limit=1 回包，三者顶层/row/meta 字段均与受审词汇表一致。Provider 严格范围现扩展到 Helius + Alchemy +
+  Etherscan/Blockscout + TronGrid；CoinGecko 与 GoPlus 仍待同等级审阅。该修复是本地源码
+  候选，生产仍为 1.16.15。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。

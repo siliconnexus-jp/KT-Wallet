@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -111,9 +112,10 @@ func (g *Gateway) GetHistory(ctx context.Context, params json.RawMessage) (any, 
 	return res, nil
 }
 
-// tronHistory merges TRC-20 transfers and native TransferContract
-// transactions, newest first. Token rows retain contract identity; only a
-// native wrapper for the same hash is removed.
+// tronHistory merges TRC-20 transfers and protocol/internal value movements,
+// newest first. Every event is independently validated as touching the
+// requested wallet; a shared transaction hash never suppresses a distinct
+// asset movement.
 func (g *Gateway) tronHistory(ctx context.Context, network, address string, limit int) (*historyResult, *rpc.Error) {
 	selfHex := tronAddrHex(address)
 
@@ -132,18 +134,21 @@ func (g *Gateway) tronHistory(ctx context.Context, network, address string, limi
 	}
 
 	records := make([]historyRecord, 0, len(trc20)+len(native)+len(internal))
-	tokenHashes := make(map[string]bool, len(trc20))
-	for i, t := range trc20 {
+	for _, t := range trc20 {
+		from := tronAddrHex(t.From)
+		to := tronAddrHex(t.To)
+		if from != selfHex && to != selfHex {
+			continue
+		}
 		dir := "in"
-		if tronAddrHex(t.From) == selfHex {
+		if from == selfHex {
 			dir = "out"
 		}
 		symbol, decimals, verified := historyTokenMeta(
 			g.officialByNetwork[network], t.Contract, t.Symbol, t.Decimals,
 		)
-		tokenHashes[t.TransactionID] = true
 		records = append(records, historyRecord{
-			ID:          fmt.Sprintf("%s:trc20:%s:%d", t.TransactionID, t.Contract, i),
+			ID:          tronTRC20EventID(t),
 			Hash:        t.TransactionID,
 			Direction:   dir,
 			From:        t.From,
@@ -158,15 +163,20 @@ func (g *Gateway) tronHistory(ctx context.Context, network, address string, limi
 		})
 	}
 	for _, t := range native {
-		if tokenHashes[t.TxID] {
+		from := tronAddrHex(t.Owner)
+		to := tronAddrHex(t.To)
+		if from != selfHex && to != selfHex {
 			continue
 		}
 		dir := "in"
-		if tronAddrHex(t.Owner) == selfHex {
+		if from == selfHex {
 			dir = "out"
 		}
 		status := historyExecutionStatus(t.Status)
 		id := t.TxID
+		if t.ContractIndex > 0 {
+			id += fmt.Sprintf(":contract:%d", t.ContractIndex)
+		}
 		decimals := 6
 		symbol := "TRX"
 		contract := ""
@@ -194,8 +204,8 @@ func (g *Gateway) tronHistory(ctx context.Context, network, address string, limi
 		})
 	}
 	for _, t := range internal {
-		from := strings.ToLower(t.From)
-		to := strings.ToLower(t.To)
+		from := tronAddrHex(t.From)
+		to := tronAddrHex(t.To)
 		if from != selfHex && to != selfHex {
 			continue
 		}
@@ -214,8 +224,12 @@ func (g *Gateway) tronHistory(ctx context.Context, network, address string, limi
 			contract = t.TokenID
 			verified = false
 		}
+		id := t.TxID + ":internal:" + t.InternalTxID
+		if t.AssetIndex > 0 || t.TokenID != "" {
+			id += ":trc10:" + t.TokenID
+		}
 		records = append(records, historyRecord{
-			ID:          t.TxID + ":internal:" + t.InternalTxID,
+			ID:          id,
 			Hash:        t.TxID,
 			Direction:   dir,
 			From:        tronAddrDisplay(t.From),
@@ -244,6 +258,18 @@ func (g *Gateway) tronHistory(ctx context.Context, network, address string, limi
 		}
 	}
 	return &historyResult{Status: "ok", Records: deduped}, nil
+}
+
+func tronTRC20EventID(t upstream.TRC20Transfer) string {
+	semantic := strings.Join([]string{
+		strings.ToLower(t.TransactionID),
+		t.Contract,
+		t.From,
+		t.To,
+		t.Value,
+	}, "\x00")
+	digest := sha256.Sum256([]byte(semantic))
+	return fmt.Sprintf("%s:trc20:%s:%x", t.TransactionID, t.Contract, digest[:8])
 }
 
 func (g *Gateway) evmHistory(ctx context.Context, chain, network, address string, limit int) (*historyResult, *rpc.Error) {

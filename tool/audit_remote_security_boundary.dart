@@ -118,6 +118,7 @@ void main() {
   _auditGatewayHeliusResponseSchema(failures);
   _auditGatewayAlchemyResponseSchema(failures);
   _auditGatewayExplorerResponseSchema(failures);
+  _auditGatewayTronHistoryResponseSchema(failures);
   _auditRiskSignalDirection(failures);
 
   if (failures.isNotEmpty) {
@@ -134,7 +135,8 @@ void main() {
     '3 hot-signing families independently verified, '
     'hot and air-gapped broadcasts hash-bound before success metrics, '
     'all parameterized public Gateway requests, inbound JSON-RPC envelopes, '
-    'upstream node responses, Helius, Alchemy, and Etherscan/Blockscout '
+    'upstream node responses, Helius, Alchemy, Etherscan/Blockscout, and '
+    'TronGrid '
     'history responses plus fallback block timestamps exact-schema '
     'decoded.',
   );
@@ -635,6 +637,65 @@ void _auditGatewayExplorerResponseSchema(List<String> failures) {
         '$path restored permissive explorer response decoding: $permissive',
       );
     }
+  }
+}
+
+void _auditGatewayTronHistoryResponseSchema(List<String> failures) {
+  const decoderPath = 'backend/gateway/internal/upstream/tron_history.go';
+  final decoder = File(decoderPath).readAsStringSync();
+  for (final marker in const [
+    'func decodeTronHistoryEnvelope(',
+    'decodeExactJSONObject(data, "data", "success", "meta")',
+    'func decodeTronTRC20History(',
+    'func decodeTronTRC20Transfer(',
+    'typeName != "Transfer"',
+    'validTronUnsignedDecimal(value, 256)',
+    'func decodeTronNativeHistory(',
+    'func decodeTronNativeTransaction(',
+    'ContractIndex: index',
+    'func decodeTronInternalHistory(',
+    'func decodeTronInternalTransaction(',
+    'transfer.AssetIndex = 1',
+    'func validTronAddress(',
+  ]) {
+    if (!decoder.contains(marker)) {
+      failures.add(
+        '$decoderPath lost exact TronGrid history invariant: $marker',
+      );
+    }
+  }
+
+  const clientPath = 'backend/gateway/internal/upstream/tron.go';
+  final client = File(clientPath).readAsStringSync();
+  for (final marker in const [
+    'transfers, err := decodeTronTRC20History(data)',
+    'transfers, err := decodeTronNativeHistory(data)',
+    'transfers, err := decodeTronInternalHistory(data)',
+    'only_confirmed=true&order_by=block_timestamp,desc',
+  ]) {
+    if (!client.contains(marker)) {
+      failures.add('$clientPath lost strict TronGrid history binding: $marker');
+    }
+  }
+
+  const handlerPath = 'backend/gateway/internal/handlers/history.go';
+  final handler = File(handlerPath).readAsStringSync();
+  for (final marker in const [
+    'ID:          tronTRC20EventID(t)',
+    'func tronTRC20EventID(',
+    'digest := sha256.Sum256([]byte(semantic))',
+    'if from != selfHex && to != selfHex',
+    'id += fmt.Sprintf(":contract:%d", t.ContractIndex)',
+    'id += ":trc10:" + t.TokenID',
+  ]) {
+    if (!handler.contains(marker)) {
+      failures.add(
+        '$handlerPath lost TronGrid event-identity invariant: $marker',
+      );
+    }
+  }
+  if (handler.contains('tokenHashes[t.TransactionID]')) {
+    failures.add('$handlerPath restored hash-wide TRC-20/native suppression');
   }
 }
 

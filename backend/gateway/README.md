@@ -568,9 +568,24 @@ false marker as proof that no pending outgoing transaction exists.
     "verified": B, "timestampMs": <int>, "status": "ok"|"failed"}]}`
 
 - **tron** — always supported via TronGrid: TRC-20 transfers + native
-  `TransferContract` transactions, merged newest-first. TRC-20 rows include
-  their contract and are verified against the active network's registry.
-  `tron-nile` runs the same code against the nile TronGrid base URL.
+  `TransferContract` / TRC-10 `TransferAssetContract` + contract-created
+  internal movements, merged newest-first. TRC-20 rows include their contract
+  and are verified against the active network's registry. `tron-nile` runs the
+  same code against the nile TronGrid base URL. All three history endpoints
+  explicitly request confirmed rows in descending block-time order and decode
+  the exact `data/success/meta` envelope. Pagination metadata, token info,
+  receipt rows, raw contracts and internal value wrappers reject unknown
+  members, aliases and duplicate keys. Transaction/trace ids, Base58Check or
+  41-hex addresses, timestamps, unsigned amounts, decimals and receipt enums
+  are validated before a row can enter wallet history. The mixed token endpoint
+  contributes only `type=Transfer`; approvals and NFT activity are not
+  mislabeled as fungible transfers. Every raw-data contract is inspected, an
+  internal trace may retain both TRX and TRC-10 movements, and every event is
+  independently checked against the requested wallet. A shared transaction
+  hash never suppresses a distinct native or token movement. TRC-20 event ids
+  use a deterministic semantic fingerprint rather than the row's page offset,
+  so pagination changes cannot manufacture a duplicate history row. Any malformed
+  provider page fails closed instead of becoming an empty/successful history.
 - **EVM families** — Alchemy Transfers API is preferred when
   `ALCHEMY_API_KEY` is configured and covers native/internal/ERC-20 movements
   on all twelve EVM networks, including BNB 56/97 and Polygon Amoy. The same

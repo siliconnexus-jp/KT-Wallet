@@ -198,12 +198,15 @@ func TestTronNileHistory(t *testing.T) {
 	if res["status"] != "ok" {
 		t.Fatalf("nile history must be supported through TronGrid, got %v", res["status"])
 	}
-	assertJSONEq(t, `[
-		{"id":"t1:trc20:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:0","hash":"t1","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"1000000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":false,"timestampMs":5000,"status":"ok"},
-		{"id":"n1","hash":"n1","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"7000000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":4000,"status":"ok"},
-		{"id":"tdup:trc20:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:1","hash":"tdup","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"250000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":false,"timestampMs":3000,"status":"ok"},
-		{"id":"n3","hash":"n3","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"42","decimals":6,"symbol":"TRX","verified":true,"timestampMs":2000,"status":"failed"}
-	]`, res["records"])
+	assertJSONEq(t, fmt.Sprintf(`[
+		{"id":"%[5]s","hash":"%[1]s","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"1000000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":false,"timestampMs":5000,"status":"ok"},
+		{"id":"%[2]s","hash":"%[2]s","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"7000000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":4000,"status":"ok"},
+		{"id":"%[6]s","hash":"%[3]s","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"250000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":false,"timestampMs":3000,"status":"ok"},
+		{"id":"%[3]s","hash":"%[3]s","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"250000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":3000,"status":"ok"},
+		{"id":"%[4]s","hash":"%[4]s","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"42","decimals":6,"symbol":"TRX","verified":true,"timestampMs":2000,"status":"failed"}
+	]`, tronTx1, tronTx3, tronTx2, tronTx4,
+		tronTRC20FixtureID(tronTx1, tronUSDT, tronSelfB58, tronOtherB58, "1000000"),
+		tronTRC20FixtureID(tronTx2, tronUSDT, tronOtherB58, tronSelfB58, "250000")), res["records"])
 	if got := nile.hitCount("/v1/accounts/"); got != 3 { // trc20 + native + internal
 		t.Fatalf("nile base URL must serve the history calls, hits = %d", got)
 	}

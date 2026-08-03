@@ -1,16 +1,24 @@
 package handlers_test
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
 	"ktwallet/gateway/internal/handlers"
 	"ktwallet/gateway/internal/rpc"
 )
+
+func tronTRC20FixtureID(txID, contract, from, to, value string) string {
+	semantic := strings.Join([]string{strings.ToLower(txID), contract, from, to, value}, "\x00")
+	digest := sha256.Sum256([]byte(semantic))
+	return fmt.Sprintf("%s:trc20:%s:%x", txID, contract, digest[:8])
+}
 
 // tronGridFixture wires realistic TronGrid shapes: TRC-20 transfers
 // (transaction_id/from/to/value/token_info) plus native transactions
@@ -19,30 +27,31 @@ func tronGridFixture(t *testing.T) *restFake {
 	grid := newRESTFake(t)
 	grid.routeJSON("/v1/accounts/"+tronSelfB58+"/transactions/trc20", fmt.Sprintf(`{
 		"data": [
-			{"transaction_id":"t1","from":%q,"to":%q,"value":"1000000","block_timestamp":5000,
+			{"transaction_id":%q,"from":%q,"to":%q,"type":"Transfer","value":"1000000","block_timestamp":5000,
 			 "token_info":{"symbol":"USDT","decimals":6,"address":%q}},
-			{"transaction_id":"tdup","from":%q,"to":%q,"value":"250000","block_timestamp":3000,
+			{"transaction_id":%q,"from":%q,"to":%q,"type":"Transfer","value":"250000","block_timestamp":3000,
 			 "token_info":{"symbol":"USDT","decimals":6,"address":%q}}
 		],
 		"success": true
-	}`, tronSelfB58, tronOtherB58, tronUSDT, tronOtherB58, tronSelfB58, tronUSDT))
+	}`, tronTx1, tronSelfB58, tronOtherB58, tronUSDT, tronTx2, tronOtherB58, tronSelfB58, tronUSDT))
 	grid.routeJSON("/v1/accounts/"+tronSelfB58+"/transactions", fmt.Sprintf(`{
 		"data": [
-			{"txID":"n1","block_timestamp":4000,"ret":[{"contractRet":"SUCCESS"}],
+			{"txID":%q,"block_timestamp":4000,"ret":[{"contractRet":"SUCCESS"}],
 			 "raw_data":{"contract":[{"type":"TransferContract",
 				"parameter":{"value":{"amount":7000000,"owner_address":%q,"to_address":%q}}}]}},
-			{"txID":"tdup","block_timestamp":3000,"ret":[{"contractRet":"SUCCESS"}],
+			{"txID":%q,"block_timestamp":3000,"ret":[{"contractRet":"SUCCESS"}],
 			 "raw_data":{"contract":[{"type":"TransferContract",
 				"parameter":{"value":{"amount":250000,"owner_address":%q,"to_address":%q}}}]}},
-			{"txID":"n3","block_timestamp":2000,"ret":[{"contractRet":"REVERT"}],
+			{"txID":%q,"block_timestamp":2000,"ret":[{"contractRet":"REVERT"}],
 			 "raw_data":{"contract":[{"type":"TransferContract",
 				"parameter":{"value":{"amount":42,"owner_address":%q,"to_address":%q}}}]}},
-			{"txID":"n4","block_timestamp":1000,"ret":[{"contractRet":"SUCCESS"}],
+			{"txID":%q,"block_timestamp":1000,"ret":[{"contractRet":"SUCCESS"}],
 			 "raw_data":{"contract":[{"type":"TriggerSmartContract",
 				"parameter":{"value":{"owner_address":%q}}}]}}
 		],
 		"success": true
-	}`, tronOtherHex, tronSelfHex, tronOtherHex, tronSelfHex, tronSelfHex, tronOtherHex, tronSelfHex))
+	}`, tronTx3, tronOtherHex, tronSelfHex, tronTx2, tronOtherHex, tronSelfHex,
+		tronTx4, tronSelfHex, tronOtherHex, tronTx5, tronSelfHex))
 	grid.routeJSON(
 		"/v1/accounts/"+tronSelfB58+"/internal-transactions",
 		`{"data":[],"success":true}`,
@@ -61,13 +70,17 @@ func TestTronHistoryMergeDedupeDirection(t *testing.T) {
 	if res["status"] != "ok" {
 		t.Fatalf("tron history must always be supported, got %v", res["status"])
 	}
-	assertJSONEq(t, `[
-		{"id":"t1:trc20:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:0","hash":"t1","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"1000000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":true,"timestampMs":5000,"status":"ok"},
-		{"id":"n1","hash":"n1","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"7000000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":4000,"status":"ok"},
-		{"id":"tdup:trc20:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:1","hash":"tdup","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"250000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":true,"timestampMs":3000,"status":"ok"},
-		{"id":"n3","hash":"n3","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"42","decimals":6,"symbol":"TRX","verified":true,"timestampMs":2000,"status":"failed"}
-	]`, res["records"])
-	// n4 (TriggerSmartContract) skipped; tdup deduped across the two feeds.
+	assertJSONEq(t, fmt.Sprintf(`[
+		{"id":"%[5]s","hash":"%[1]s","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"1000000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":true,"timestampMs":5000,"status":"ok"},
+		{"id":"%[2]s","hash":"%[2]s","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"7000000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":4000,"status":"ok"},
+		{"id":"%[6]s","hash":"%[3]s","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"250000","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":true,"timestampMs":3000,"status":"ok"},
+		{"id":"%[3]s","hash":"%[3]s","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"250000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":3000,"status":"ok"},
+		{"id":"%[4]s","hash":"%[4]s","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"42","decimals":6,"symbol":"TRX","verified":true,"timestampMs":2000,"status":"failed"}
+	]`, tronTx1, tronTx3, tronTx2, tronTx4,
+		tronTRC20FixtureID(tronTx1, tronUSDT, tronSelfB58, tronOtherB58, "1000000"),
+		tronTRC20FixtureID(tronTx2, tronUSDT, tronOtherB58, tronSelfB58, "250000")), res["records"])
+	// TriggerSmartContract is skipped. A real TRX movement sharing a hash with
+	// a TRC-20 event is retained because it is a distinct asset movement.
 }
 
 func TestTronHistoryLimit(t *testing.T) {
@@ -79,9 +92,47 @@ func TestTronHistoryLimit(t *testing.T) {
 	if len(records) != 2 {
 		t.Fatalf("limit 2 must cap the merged list, got %d records", len(records))
 	}
-	if records[0].(map[string]any)["hash"] != "t1" || records[1].(map[string]any)["hash"] != "n1" {
+	if records[0].(map[string]any)["hash"] != tronTx1 || records[1].(map[string]any)["hash"] != tronTx3 {
 		t.Fatalf("records must be newest-first: %v", records)
 	}
+}
+
+func TestTronHistoryFiltersUnrelatedRowsAndPreservesContractEvents(t *testing.T) {
+	grid := newRESTFake(t)
+	grid.routeJSON(
+		"/v1/accounts/"+tronSelfB58+"/transactions/trc20",
+		fmt.Sprintf(`{"data":[
+			{"transaction_id":%q,"from":%q,"to":%q,"type":"Transfer","value":"1",`+
+			`"block_timestamp":5000,"token_info":{"symbol":"USDT","decimals":6,"address":%q}},
+			{"transaction_id":%q,"from":%q,"to":%q,"type":"Transfer","value":"2",`+
+			`"block_timestamp":4000,"token_info":{"symbol":"USDT","decimals":6,"address":%q}}
+		],"success":true}`,
+			tronTx1, tronOtherB58, "TJmmqjb1DK9TTZbQXzRQ2AuA94z4gKAPFh", tronUSDT,
+			tronTx2, tronOtherB58, tronSelfB58, tronUSDT),
+	)
+	grid.routeJSON(
+		"/v1/accounts/"+tronSelfB58+"/transactions",
+		fmt.Sprintf(`{"data":[{"txID":%q,"block_timestamp":3000,"ret":[{"contractRet":"SUCCESS"}],`+
+			`"raw_data":{"contract":[
+				{"type":"TransferContract","parameter":{"value":{"amount":3,"owner_address":%q,"to_address":%q}}},
+				{"type":"TransferContract","parameter":{"value":{"amount":4,"owner_address":%q,"to_address":%q}}}
+			]}}],"success":true}`,
+			tronTx3, tronOtherHex, "41608f8da72479edc7dd921e4c30bb7e7cddbe722e", tronSelfHex, tronOtherHex),
+	)
+	grid.routeJSON(
+		"/v1/accounts/"+tronSelfB58+"/internal-transactions",
+		fmt.Sprintf(`{"data":[{"tx_id":%q,"internal_tx_id":%q,"from_address":%q,"to_address":%q,`+
+			`"block_timestamp":2000,"data":{"rejected":false,"call_value":{"_":5}}}],"success":true}`,
+			tronTx4, tronTrace1, tronOtherHex, "41608f8da72479edc7dd921e4c30bb7e7cddbe722e"),
+	)
+	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"tron","address":%q}`, tronSelfB58)))
+	assertJSONEq(t, fmt.Sprintf(`[
+		{"id":"%[3]s","hash":"%[1]s","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"2","decimals":6,"symbol":"USDT","contract":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","verified":true,"timestampMs":4000,"status":"ok"},
+		{"id":"%[2]s:contract:1","hash":"%[2]s","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"4","decimals":6,"symbol":"TRX","verified":true,"timestampMs":3000,"status":"ok"}
+	]`, tronTx2, tronTx3,
+		tronTRC20FixtureID(tronTx2, tronUSDT, tronOtherB58, tronSelfB58, "2")), res["records"])
 }
 
 func TestTronHistoryIncludesTRC10AndInternalTRX(t *testing.T) {
@@ -93,29 +144,29 @@ func TestTronHistoryIncludesTRC10AndInternalTRX(t *testing.T) {
 	grid.routeJSON(
 		"/v1/accounts/"+tronSelfB58+"/internal-transactions",
 		fmt.Sprintf(`{"data":[{
-			"tx_id":"parent","internal_tx_id":"trace-1",
+			"tx_id":%q,"internal_tx_id":%q,
 			"from_address":%q,"to_address":%q,"block_timestamp":3000,
 			"data":{"rejected":false,"call_value":{"_":2500000}}
-		}],"success":true}`, tronOtherHex, tronSelfHex),
+		}],"success":true}`, tronTx1, tronTrace1, tronOtherHex, tronSelfHex),
 	)
 	grid.routeJSON(
 		"/v1/accounts/"+tronSelfB58+"/transactions",
 		fmt.Sprintf(`{"data":[{
-			"txID":"trc10","block_timestamp":2000,
+			"txID":%q,"block_timestamp":2000,
 			"ret":[{"contractRet":"SUCCESS"}],
 			"raw_data":{"contract":[{"type":"TransferAssetContract",
 				"parameter":{"value":{"amount":42,"asset_name":"1002000",
 					"owner_address":%q,"to_address":%q}}}]}
-		}],"success":true}`, tronSelfHex, tronOtherHex),
+		}],"success":true}`, tronTx2, tronSelfHex, tronOtherHex),
 	)
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
 
 	res := result(t, e.rpc("kt_getHistory",
 		fmt.Sprintf(`{"chain":"tron","address":%q}`, tronSelfB58)))
-	assertJSONEq(t, `[
-		{"id":"parent:internal:trace-1","hash":"parent","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"2500000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":3000,"status":"ok"},
-		{"id":"trc10:trc10:1002000","hash":"trc10","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"42","decimals":0,"symbol":"TRC10","contract":"1002000","verified":false,"timestampMs":2000,"status":"ok"}
-	]`, res["records"])
+	assertJSONEq(t, fmt.Sprintf(`[
+		{"id":"%[1]s:internal:%[2]s","hash":"%[1]s","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"2500000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":3000,"status":"ok"},
+		{"id":"%[3]s:trc10:1002000","hash":"%[3]s","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"42","decimals":0,"symbol":"TRC10","contract":"1002000","verified":false,"timestampMs":2000,"status":"ok"}
+	]`, tronTx1, tronTrace1, tronTx2), res["records"])
 }
 
 func TestTronHistoryUpstreamFailure(t *testing.T) {
@@ -289,27 +340,27 @@ func TestTronHistoryMissingExecutionEvidenceIsUnknown(t *testing.T) {
 	grid.routeJSON(
 		"/v1/accounts/"+tronSelfB58+"/internal-transactions",
 		fmt.Sprintf(`{"data":[{
-			"tx_id":"internal-unknown","internal_tx_id":"trace-unknown",
+			"tx_id":%q,"internal_tx_id":%q,
 			"from_address":%q,"to_address":%q,"block_timestamp":3000,
 			"data":{"call_value":{"_":1000000}}
-		}],"success":true}`, tronOtherHex, tronSelfHex),
+		}],"success":true}`, tronTx1, tronTrace1, tronOtherHex, tronSelfHex),
 	)
 	grid.routeJSON(
 		"/v1/accounts/"+tronSelfB58+"/transactions",
 		fmt.Sprintf(`{"data":[{
-			"txID":"native-unknown","block_timestamp":2000,
+			"txID":%q,"block_timestamp":2000,
 			"raw_data":{"contract":[{"type":"TransferContract",
 				"parameter":{"value":{"amount":42,"owner_address":%q,"to_address":%q}}}]}
-		}],"success":true}`, tronSelfHex, tronOtherHex),
+		}],"success":true}`, tronTx2, tronSelfHex, tronOtherHex),
 	)
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
 
 	res := result(t, e.rpc("kt_getHistory",
 		fmt.Sprintf(`{"chain":"tron","address":%q}`, tronSelfB58)))
-	assertJSONEq(t, `[
-		{"id":"internal-unknown:internal:trace-unknown","hash":"internal-unknown","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"1000000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":3000,"status":"unknown"},
-		{"id":"native-unknown","hash":"native-unknown","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"42","decimals":6,"symbol":"TRX","verified":true,"timestampMs":2000,"status":"unknown"}
-	]`, res["records"])
+	assertJSONEq(t, fmt.Sprintf(`[
+		{"id":"%[1]s:internal:%[2]s","hash":"%[1]s","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"1000000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":3000,"status":"unknown"},
+		{"id":"%[3]s","hash":"%[3]s","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"42","decimals":6,"symbol":"TRX","verified":true,"timestampMs":2000,"status":"unknown"}
+	]`, tronTx1, tronTrace1, tronTx2), res["records"])
 	for _, hit := range grid.hitsFor("/v1/accounts/") {
 		u, err := url.Parse(hit.Path)
 		if err != nil || u.Query().Get("only_confirmed") != "true" {
@@ -938,7 +989,7 @@ func TestTronFixtureRoutesDistinct(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Data) == 0 || out.Data[0]["transaction_id"] != "t1" {
+	if len(out.Data) == 0 || out.Data[0]["transaction_id"] != tronTx1 {
 		t.Fatalf("trc20 route not matched correctly: %v", out.Data)
 	}
 }

@@ -51,6 +51,17 @@ func (t *Tron) unavailable(msg string) *Unavailable {
 }
 
 func (t *Tron) do(ctx context.Context, method, path string, body []byte, out any) error {
+	data, err := t.fetch(ctx, method, path, body)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(data, out); err != nil {
+		return t.unavailable("malformed TronGrid response")
+	}
+	return nil
+}
+
+func (t *Tron) fetch(ctx context.Context, method, path string, body []byte) ([]byte, error) {
 	actx, cancel := context.WithTimeout(ctx, t.timeout)
 	defer cancel()
 	var rd io.Reader
@@ -59,25 +70,22 @@ func (t *Tron) do(ctx context.Context, method, path string, body []byte, out any
 	}
 	req, err := http.NewRequestWithContext(actx, method, t.base+path, rd)
 	if err != nil {
-		return safeRequestCreationFailure(hostOf(t.base))
+		return nil, safeRequestCreationFailure(hostOf(t.base))
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := t.client.Do(req)
 	if err != nil {
-		return safeRequestFailure(hostOf(t.base), actx, err)
+		return nil, safeRequestFailure(hostOf(t.base), actx, err)
 	}
 	defer resp.Body.Close()
 	data, err := readBoundedResponse(resp.Body, 8<<20)
 	if err != nil {
-		return safeResponseReadFailure(hostOf(t.base))
+		return nil, safeResponseReadFailure(hostOf(t.base))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return t.unavailable(fmt.Sprintf("TronGrid returned HTTP %d", resp.StatusCode))
+		return nil, t.unavailable(fmt.Sprintf("TronGrid returned HTTP %d", resp.StatusCode))
 	}
-	if err := json.Unmarshal(data, out); err != nil {
-		return t.unavailable("malformed TronGrid response")
-	}
-	return nil
+	return data, nil
 }
 
 // Account is the balance-relevant slice of GET /v1/accounts/{addr}.
@@ -210,39 +218,17 @@ type TRC20Transfer struct {
 
 // TRC20Transfers lists confirmed TRC-20 transfers touching addr, newest first.
 func (t *Tron) TRC20Transfers(ctx context.Context, addr string, limit int) ([]TRC20Transfer, error) {
-	var out struct {
-		Data []struct {
-			TransactionID  string `json:"transaction_id"`
-			From           string `json:"from"`
-			To             string `json:"to"`
-			Value          string `json:"value"`
-			BlockTimestamp int64  `json:"block_timestamp"`
-			TokenInfo      *struct {
-				Symbol   string `json:"symbol"`
-				Decimals int    `json:"decimals"`
-				Address  string `json:"address"`
-			} `json:"token_info"`
-		} `json:"data"`
-	}
-	path := fmt.Sprintf("/v1/accounts/%s/transactions/trc20?limit=%d&only_confirmed=true", url.PathEscape(addr), limit)
-	if err := t.do(ctx, http.MethodGet, path, nil, &out); err != nil {
+	path := fmt.Sprintf(
+		"/v1/accounts/%s/transactions/trc20?limit=%d&only_confirmed=true&order_by=block_timestamp,desc",
+		url.PathEscape(addr), limit,
+	)
+	data, err := t.fetch(ctx, http.MethodGet, path, nil)
+	if err != nil {
 		return nil, err
 	}
-	transfers := make([]TRC20Transfer, 0, len(out.Data))
-	for _, d := range out.Data {
-		tr := TRC20Transfer{
-			TransactionID:  d.TransactionID,
-			From:           d.From,
-			To:             d.To,
-			Value:          d.Value,
-			BlockTimestamp: d.BlockTimestamp,
-		}
-		if d.TokenInfo != nil {
-			tr.Symbol = d.TokenInfo.Symbol
-			tr.Decimals = d.TokenInfo.Decimals
-			tr.Contract = d.TokenInfo.Address
-		}
-		transfers = append(transfers, tr)
+	transfers, err := decodeTronTRC20History(data)
+	if err != nil {
+		return nil, t.unavailable("malformed TronGrid TRC-20 history response")
 	}
 	return transfers, nil
 }
@@ -255,6 +241,7 @@ type NativeTransfer struct {
 	Owner, To      string // hex (41-prefixed)
 	Amount         string
 	TokenID        string // non-empty for TransferAssetContract (TRC-10)
+	ContractIndex  int    // index in raw_data.contract; part of event identity
 	BlockTimestamp int64
 	Status         ExecutionStatus
 }
@@ -262,63 +249,18 @@ type NativeTransfer struct {
 // NativeTransactions lists protocol-level value transfers for addr:
 // TransferContract (TRX) and TransferAssetContract (TRC-10).
 func (t *Tron) NativeTransactions(ctx context.Context, addr string, limit int) ([]NativeTransfer, error) {
-	var out struct {
-		Data []struct {
-			TxID           string `json:"txID"`
-			BlockTimestamp int64  `json:"block_timestamp"`
-			Ret            []struct {
-				ContractRet string `json:"contractRet"`
-			} `json:"ret"`
-			RawData struct {
-				Contract []struct {
-					Type      string `json:"type"`
-					Parameter struct {
-						Value struct {
-							Amount       json.Number `json:"amount"`
-							OwnerAddress string      `json:"owner_address"`
-							ToAddress    string      `json:"to_address"`
-							AssetName    string      `json:"asset_name"`
-						} `json:"value"`
-					} `json:"parameter"`
-				} `json:"contract"`
-			} `json:"raw_data"`
-		} `json:"data"`
-	}
 	path := fmt.Sprintf(
-		"/v1/accounts/%s/transactions?limit=%d&only_confirmed=true",
+		"/v1/accounts/%s/transactions?limit=%d&only_confirmed=true&order_by=block_timestamp,desc",
 		url.PathEscape(addr),
 		limit,
 	)
-	if err := t.do(ctx, http.MethodGet, path, nil, &out); err != nil {
+	data, err := t.fetch(ctx, http.MethodGet, path, nil)
+	if err != nil {
 		return nil, err
 	}
-	var transfers []NativeTransfer
-	for _, d := range out.Data {
-		if len(d.RawData.Contract) == 0 {
-			continue
-		}
-		contractType := d.RawData.Contract[0].Type
-		if contractType != "TransferContract" && contractType != "TransferAssetContract" {
-			continue
-		}
-		v := d.RawData.Contract[0].Parameter.Value
-		status := ExecutionUnknown
-		if len(d.Ret) > 0 && strings.TrimSpace(d.Ret[0].ContractRet) != "" {
-			if strings.EqualFold(strings.TrimSpace(d.Ret[0].ContractRet), "SUCCESS") {
-				status = ExecutionConfirmed
-			} else {
-				status = ExecutionFailed
-			}
-		}
-		transfers = append(transfers, NativeTransfer{
-			TxID:           d.TxID,
-			Owner:          v.OwnerAddress,
-			To:             v.ToAddress,
-			Amount:         v.Amount.String(),
-			TokenID:        v.AssetName,
-			BlockTimestamp: d.BlockTimestamp,
-			Status:         status,
-		})
+	transfers, err := decodeTronNativeHistory(data)
+	if err != nil {
+		return nil, t.unavailable("malformed TronGrid native history response")
 	}
 	return transfers, nil
 }
@@ -331,86 +273,27 @@ type InternalTransfer struct {
 	From, To           string // hex (41-prefixed)
 	Amount             string
 	TokenID            string // empty means TRX
+	AssetIndex         int    // stable identity when one trace moves two assets
 	BlockTimestamp     int64
 	Status             ExecutionStatus
 }
 
 // InternalTransactions lists contract-created value movements touching addr.
 func (t *Tron) InternalTransactions(ctx context.Context, addr string, limit int) ([]InternalTransfer, error) {
-	var out struct {
-		Data []struct {
-			TxID           string `json:"tx_id"`
-			InternalTxID   string `json:"internal_tx_id"`
-			From           string `json:"from_address"`
-			To             string `json:"to_address"`
-			BlockTimestamp int64  `json:"block_timestamp"`
-			Data           struct {
-				Rejected       *bool           `json:"rejected"`
-				CallValue      json.RawMessage `json:"call_value"`
-				CallTokenValue json.RawMessage `json:"call_token_value"`
-				TokenID        json.RawMessage `json:"token_id"`
-			} `json:"data"`
-		} `json:"data"`
-	}
 	path := fmt.Sprintf(
-		"/v1/accounts/%s/internal-transactions?limit=%d&only_confirmed=true",
+		"/v1/accounts/%s/internal-transactions?limit=%d&only_confirmed=true&order_by=block_timestamp,desc",
 		url.PathEscape(addr),
 		limit,
 	)
-	if err := t.do(ctx, http.MethodGet, path, nil, &out); err != nil {
+	data, err := t.fetch(ctx, http.MethodGet, path, nil)
+	if err != nil {
 		return nil, err
 	}
-	transfers := make([]InternalTransfer, 0, len(out.Data))
-	for _, d := range out.Data {
-		amount := tronGridScalar(d.Data.CallValue)
-		tokenID := ""
-		if tokenAmount := tronGridScalar(d.Data.CallTokenValue); tokenAmount != "" {
-			amount = tokenAmount
-			tokenID = tronGridScalar(d.Data.TokenID)
-		}
-		if amount == "" || amount == "0" || d.TxID == "" || d.InternalTxID == "" {
-			continue
-		}
-		status := ExecutionUnknown
-		if d.Data.Rejected != nil {
-			if *d.Data.Rejected {
-				status = ExecutionFailed
-			} else {
-				status = ExecutionConfirmed
-			}
-		}
-		transfers = append(transfers, InternalTransfer{
-			TxID:           d.TxID,
-			InternalTxID:   d.InternalTxID,
-			From:           d.From,
-			To:             d.To,
-			Amount:         amount,
-			TokenID:        tokenID,
-			BlockTimestamp: d.BlockTimestamp,
-			Status:         status,
-		})
+	transfers, err := decodeTronInternalHistory(data)
+	if err != nil {
+		return nil, t.unavailable("malformed TronGrid internal history response")
 	}
 	return transfers, nil
-}
-
-func tronGridScalar(raw json.RawMessage) string {
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
-		return ""
-	}
-	var wrapped map[string]json.RawMessage
-	if json.Unmarshal(trimmed, &wrapped) == nil {
-		return tronGridScalar(wrapped["_"])
-	}
-	var text string
-	if json.Unmarshal(trimmed, &text) == nil {
-		return text
-	}
-	var number json.Number
-	if json.Unmarshal(trimmed, &number) == nil {
-		return number.String()
-	}
-	return ""
 }
 
 // Broadcast POSTs a signed transaction and returns the txid. The endpoint
