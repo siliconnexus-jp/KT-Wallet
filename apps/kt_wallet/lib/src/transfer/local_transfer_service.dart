@@ -358,11 +358,19 @@ class LocalTransferService {
     _requirePreparedSender(wallet, prepared.chain, prepared.from);
     return ExperienceMetrics.instance.measure(
       ExperienceMetricNames.transactionSign,
-      () => wallet.sign(
-        crypto,
-        coin: prepared.coin,
-        signingInput: prepared.unsignedTx,
-      ),
+      () async {
+        final signed = await wallet.sign(
+          crypto,
+          coin: prepared.coin,
+          signingInput: prepared.unsignedTx,
+        );
+        return _verifyNativeSignedResult(
+          chain: prepared.chain,
+          unsignedTx: prepared.unsignedTx,
+          claimedSigner: prepared.from,
+          signed: signed,
+        );
+      },
     );
   }
 
@@ -666,7 +674,19 @@ class LocalTransferService {
     if (identity != null) await _identity!.verifyTron(identity);
     return ExperienceMetrics.instance.measure(
       ExperienceMetricNames.transactionSign,
-      () => wallet.sign(crypto, coin: Coin.tron, signingInput: prepared.rawTx),
+      () async {
+        final signed = await wallet.sign(
+          crypto,
+          coin: Coin.tron,
+          signingInput: prepared.rawTx,
+        );
+        return _verifyNativeSignedResult(
+          chain: Chain.tron,
+          unsignedTx: prepared.rawTx,
+          claimedSigner: prepared.from,
+          signed: signed,
+        );
+      },
     );
   }
 
@@ -824,12 +844,53 @@ class LocalTransferService {
     if (identity != null) await _identity!.verifySolana(identity);
     return ExperienceMetrics.instance.measure(
       ExperienceMetricNames.transactionSign,
-      () => wallet.sign(
-        crypto,
-        coin: Coin.solana,
-        signingInput: prepared.message,
-      ),
+      () async {
+        final signed = await wallet.sign(
+          crypto,
+          coin: Coin.solana,
+          signingInput: prepared.message,
+        );
+        return _verifyNativeSignedResult(
+          chain: Chain.solana,
+          unsignedTx: prepared.message,
+          claimedSigner: prepared.from,
+          signed: signed,
+        );
+      },
     );
+  }
+
+  /// Independent post-signing boundary for the hot-wallet path.
+  ///
+  /// Native Wallet Core owns the private key and performs the signature, but
+  /// its bridge result is still untrusted input at this layer. Before any
+  /// signed bytes or hash are persisted/broadcast, recover or derive the
+  /// signer from the signature, bind the signed payload to the exact immutable
+  /// quote shown to the user, and derive the transaction hash independently.
+  /// This mirrors the Cold Signer QR ingestion gate and prevents a compromised
+  /// or regressed native bridge from substituting a different transaction.
+  Future<SignedTransaction> _verifyNativeSignedResult({
+    required Chain chain,
+    required Uint8List unsignedTx,
+    required String claimedSigner,
+    required SignedTransaction signed,
+  }) async {
+    // Own the bytes while asynchronous Ed25519 verification is in flight; a
+    // platform implementation must not be able to mutate a previously
+    // returned buffer after it has passed verification.
+    final signedBytes = Uint8List.fromList(signed.signedTx);
+    final verified = await verifySignedTransaction(
+      chain: chain,
+      unsignedTx: Uint8List.fromList(unsignedTx),
+      signedTx: signedBytes,
+      claimedSigner: claimedSigner,
+    );
+    if (verified.txHash != signed.txHash) {
+      throw const SignatureVerificationError(
+        'native transaction hash mismatch',
+      );
+    }
+    return SignedTransaction(signedTx: signedBytes, txHash: verified.txHash);
   }
 
   /// Irreversible network boundary. Callers that need crash recovery should

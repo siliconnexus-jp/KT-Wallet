@@ -1,0 +1,334 @@
+import 'dart:io';
+
+/// Closed review boundary for data controlled by Gateway/RPC operators.
+///
+/// The wallet intentionally has no remotely downloaded policy or feature-flag
+/// plane. Gateway data may provide chain state, metadata and additive risk
+/// signals, but it must never be able to disable authentication, signature
+/// verification or exact-transaction binding. This audit freezes the current
+/// response vocabulary and the network-free cryptographic modules so a future
+/// remote field or SDK cannot silently acquire security authority.
+const _reviewedGatewayResponseKeys = <String>{
+  'accounts',
+  'amount',
+  'amountRaw',
+  'approvals',
+  'approvedAt',
+  'balance',
+  'cachedAtMs',
+  'category',
+  'chain',
+  'change24h',
+  'code',
+  'contract',
+  'data',
+  'decimals',
+  'direction',
+  'error',
+  'fees',
+  'fiatPerUsd',
+  'from',
+  'gas',
+  'hash',
+  'id',
+  'maxFeePerGas',
+  'maxPriorityFeePerGas',
+  'message',
+  'name',
+  'native',
+  'nativeLatest',
+  'nativePending',
+  'network',
+  'networks',
+  'nonce',
+  'ok',
+  'pendingAvailable',
+  'popular',
+  'prices',
+  'raw',
+  'records',
+  'result',
+  'returnData',
+  'risk',
+  'source',
+  'spender',
+  'spenderName',
+  'spenderTag',
+  'spenderTrusted',
+  'status',
+  'symbol',
+  'timestampMs',
+  'to',
+  'token',
+  'tokenAddress',
+  'tokenName',
+  'tokenSymbol',
+  'tokens',
+  'transaction',
+  'txHash',
+  'unlimited',
+  'upstream',
+  'usd',
+  'verified',
+};
+
+const _remotePolicySdkTokens = <String>{
+  'firebase_remote_config',
+  'remote_config',
+  'configcat',
+  'launchdarkly',
+  'unleash',
+  'growthbook',
+  'feature_flag',
+};
+
+const _networkFreeSecurityFiles = <String>{
+  'apps/kt_wallet/lib/src/transfer/airgap_codec.dart',
+  'apps/kt_wallet/lib/src/security/transaction_auth.dart',
+  'apps/kt_wallet/lib/src/security/wallet_pin.dart',
+  'apps/cold_signer/lib/src/state/signer_wallet_controller.dart',
+  'packages/chains/lib/src/signature_verifier.dart',
+};
+
+void main() {
+  final selfTestFailures = _selfTestFailures();
+  if (selfTestFailures.isNotEmpty) {
+    for (final failure in selfTestFailures) {
+      stderr.writeln('Remote security boundary self-test failed: $failure');
+    }
+    exitCode = 70;
+    return;
+  }
+
+  if (!File('pubspec.yaml').existsSync()) {
+    stderr.writeln('Run this audit from the KT-Wallet repository root.');
+    exitCode = 64;
+    return;
+  }
+
+  final failures = <String>[];
+  _auditRemoteSdkDependencies(failures);
+  _auditGatewayVocabulary(failures);
+  _auditNetworkFreeSecurityModules(failures);
+  _auditHotSigningBoundary(failures);
+  _auditRiskSignalDirection(failures);
+
+  if (failures.isNotEmpty) {
+    for (final failure in failures) {
+      stderr.writeln('Remote security boundary FAIL: $failure');
+    }
+    exitCode = 1;
+    return;
+  }
+  stdout.writeln(
+    'Remote security boundary audit passed: '
+    '${_reviewedGatewayResponseKeys.length} reviewed Gateway fields, '
+    '${_networkFreeSecurityFiles.length} network-free security modules, '
+    '3 hot-signing families independently verified.',
+  );
+}
+
+void _auditRemoteSdkDependencies(List<String> failures) {
+  for (final path in const [
+    'apps/kt_wallet/pubspec.yaml',
+    'apps/cold_signer/pubspec.yaml',
+  ]) {
+    final source = File(path).readAsStringSync().toLowerCase();
+    for (final token in _remotePolicySdkTokens) {
+      if (source.contains(token)) {
+        failures.add('$path introduces remote policy dependency: $token');
+      }
+    }
+  }
+
+  for (final root in const [
+    'apps/kt_wallet/lib',
+    'apps/cold_signer/lib',
+    'packages/core_crypto/lib',
+    'packages/airgap_protocol/lib',
+    'packages/chains/lib',
+  ]) {
+    for (final entity in Directory(root).listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      final imports = _imports(entity.readAsStringSync());
+      for (final import in imports) {
+        final normalized = import.toLowerCase();
+        for (final token in _remotePolicySdkTokens) {
+          if (normalized.contains(token)) {
+            failures.add('${entity.path} imports remote policy SDK: $import');
+          }
+        }
+      }
+    }
+  }
+}
+
+void _auditGatewayVocabulary(List<String> failures) {
+  const path = 'apps/kt_wallet/lib/src/market/gateway_client.dart';
+  final source = File(path).readAsStringSync();
+  final actual = _mapLookupKeys(source);
+  final added = actual.difference(_reviewedGatewayResponseKeys).toList()
+    ..sort();
+  final stale = _reviewedGatewayResponseKeys.difference(actual).toList()
+    ..sort();
+  if (added.isNotEmpty) {
+    failures.add('$path has unreviewed remote fields: ${added.join(', ')}');
+  }
+  if (stale.isNotEmpty) {
+    failures.add(
+      '$path removed reviewed fields; shrink allowlist: ${stale.join(', ')}',
+    );
+  }
+}
+
+void _auditNetworkFreeSecurityModules(List<String> failures) {
+  for (final path in _networkFreeSecurityFiles) {
+    final file = File(path);
+    if (!file.existsSync()) {
+      failures.add('$path is missing');
+      continue;
+    }
+    for (final import in _imports(file.readAsStringSync())) {
+      final normalized = import.toLowerCase();
+      if (normalized == 'dart:io' ||
+          normalized == 'package:http/http.dart' ||
+          normalized.contains('gateway_client.dart') ||
+          _remotePolicySdkTokens.any(normalized.contains)) {
+        failures.add(
+          '$path lets network/remote policy into crypto/auth: $import',
+        );
+      }
+    }
+  }
+}
+
+void _auditHotSigningBoundary(List<String> failures) {
+  const path = 'apps/kt_wallet/lib/src/transfer/local_transfer_service.dart';
+  final source = File(path).readAsStringSync();
+  final expectations = <String, List<String>>{
+    'signPreparedEvm': [
+      '_verifyNativeSignedResult(',
+      'unsignedTx: prepared.unsignedTx',
+      'claimedSigner: prepared.from',
+    ],
+    'signPreparedTron': [
+      '_verifyNativeSignedResult(',
+      'unsignedTx: prepared.rawTx',
+      'claimedSigner: prepared.from',
+    ],
+    'signPreparedSolana': [
+      '_verifyNativeSignedResult(',
+      'unsignedTx: prepared.message',
+      'claimedSigner: prepared.from',
+    ],
+  };
+  for (final entry in expectations.entries) {
+    final section = _futureMethodSection(source, entry.key);
+    if (section == null) {
+      failures.add('$path is missing ${entry.key}');
+      continue;
+    }
+    for (final marker in entry.value) {
+      if (!section.contains(marker)) {
+        failures.add(
+          '$path ${entry.key} bypasses post-sign verification: $marker',
+        );
+      }
+    }
+  }
+
+  final verifier = _futureMethodSection(source, '_verifyNativeSignedResult');
+  for (final marker in const [
+    'Uint8List.fromList(signed.signedTx)',
+    'verifySignedTransaction(',
+    'claimedSigner: claimedSigner',
+    'if (verified.txHash != signed.txHash)',
+    "'native transaction hash mismatch'",
+  ]) {
+    if (verifier == null || !verifier.contains(marker)) {
+      failures.add('$path post-sign verifier lost invariant: $marker');
+    }
+  }
+  if ('wallet.sign('.allMatches(source).length != 3) {
+    failures.add(
+      '$path changed native signing ownership; review every sign site',
+    );
+  }
+}
+
+void _auditRiskSignalDirection(List<String> failures) {
+  const transferPath = 'apps/kt_wallet/lib/src/screens/transfer_screens.dart';
+  final transfer = File(transferPath).readAsStringSync();
+  for (final marker in const [
+    '_tokenRisk == _TokenRiskUiState.checking ||',
+    '_tokenRisk == _TokenRiskUiState.unsafe',
+    'GatewayTokenRiskStatus.unknown => _TokenRiskUiState.unknown',
+    '_TokenRiskUiState.unavailable',
+  ]) {
+    if (!transfer.contains(marker)) {
+      failures.add(
+        '$transferPath lost additive/fail-visible risk rule: $marker',
+      );
+    }
+  }
+
+  const gatewayPath = 'apps/kt_wallet/lib/src/market/gateway_client.dart';
+  final gateway = File(gatewayPath).readAsStringSync();
+  for (final marker in const [
+    "(risk != 'unsafe' && risk != 'unknown')",
+    'enum GatewayTokenApprovalRisk { unsafe, unknown }',
+  ]) {
+    if (!gateway.contains(marker)) {
+      failures.add('$gatewayPath can elevate remote approval data: $marker');
+    }
+  }
+}
+
+Set<String> _imports(String source) => {
+  for (final match in RegExp(
+    r'''^\s*import\s+['"]([^'"]+)['"]''',
+    multiLine: true,
+  ).allMatches(source))
+    match.group(1)!,
+};
+
+Set<String> _mapLookupKeys(String source) => {
+  for (final match in RegExp(r'''\[['"]([^'"]+)['"]\]''').allMatches(source))
+    match.group(1)!,
+};
+
+String? _futureMethodSection(String source, String method) {
+  final declaration = RegExp(
+    'Future<[^>]+>\\s+${RegExp.escape(method)}\\(',
+  ).firstMatch(source);
+  if (declaration == null) return null;
+  final start = declaration.start;
+  final next = source.indexOf('\n  Future<', declaration.end);
+  return source.substring(start, next < 0 ? source.length : next);
+}
+
+List<String> _selfTestFailures() {
+  final failures = <String>[];
+  if (!_mapLookupKeys("final x = row['status'];").contains('status')) {
+    failures.add('map lookup extractor misses a remote field');
+  }
+  if (!_imports(
+    "import 'package:firebase_remote_config/x.dart';",
+  ).contains('package:firebase_remote_config/x.dart')) {
+    failures.add('import extractor misses a remote SDK');
+  }
+  const strict = '''
+  Future<SignedTransaction> signPreparedEvm() async {
+    return _verifyNativeSignedResult(
+      unsignedTx: prepared.unsignedTx,
+      claimedSigner: prepared.from,
+    );
+  }
+  Future<void> next() async {}
+''';
+  final section = _futureMethodSection(strict, 'signPreparedEvm');
+  if (section == null || section.contains('Future<void> next')) {
+    failures.add('method boundary extractor is not closed');
+  }
+  return failures;
+}

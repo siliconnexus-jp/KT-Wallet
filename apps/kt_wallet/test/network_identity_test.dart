@@ -2,7 +2,8 @@ import 'dart:typed_data';
 
 import 'package:chains/chains.dart';
 import 'package:chains/rpc.dart';
-import 'package:core_crypto/core_crypto.dart' show ChainAddresses, Coin;
+import 'package:core_crypto/core_crypto.dart'
+    show ChainAddresses, Coin, CoreCrypto, SignedTransaction;
 import 'package:core_crypto/testing.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/src/transfer/broadcast_service.dart';
@@ -110,6 +111,33 @@ class _BroadcastCapture extends BroadcastService {
     expect(chain, Chain.tron);
     return const BroadcastOutcome.ok('tron-hash');
   }
+}
+
+/// The TAPOS test below owns transaction construction and expiration only.
+/// Production [LocalTransferService] independently verifies native signatures;
+/// keep the deliberately non-cryptographic [MockCoreCrypto] out of that
+/// separate boundary instead of teaching a fixture to look like a real key.
+class _TronConstructionService extends LocalTransferService {
+  _TronConstructionService({
+    required BroadcastService broadcaster,
+    required String Function(Coin) endpoints,
+    required RestTransport restTransport,
+  }) : super(
+         broadcaster: broadcaster,
+         endpoints: endpoints,
+         restTransport: restTransport,
+       );
+
+  @override
+  Future<SignedTransaction> signPreparedTron({
+    required HotWallet wallet,
+    required CoreCrypto crypto,
+    required PreparedTronTransfer prepared,
+    required String? expectedNetworkIdentity,
+  }) async => SignedTransaction(
+    signedTx: Uint8List.fromList(const [1]),
+    txHash: 'tron-test-signature',
+  );
 }
 
 class _TronActivationRest implements RestTransport {
@@ -244,7 +272,7 @@ void main() {
         solana: '11111111111111111111111111111111',
       ),
     );
-    final service = LocalTransferService(
+    final service = _TronConstructionService(
       broadcaster: _BroadcastCapture(),
       endpoints: (_) => 'https://tron.invalid',
       restTransport: rest,

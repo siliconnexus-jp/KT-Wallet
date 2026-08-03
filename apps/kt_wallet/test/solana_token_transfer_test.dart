@@ -119,6 +119,34 @@ class _BroadcastCapture extends BroadcastService {
   }
 }
 
+/// This suite exercises Token-2022/ATA construction and broadcast plumbing,
+/// not cryptography. Production [LocalTransferService] verifies every native
+/// signature before broadcast; use an explicit test subclass here so the
+/// intentionally non-cryptographic [MockCoreCrypto] cannot be mistaken for a
+/// valid signature fixture.
+class _SolanaPreparationService extends LocalTransferService {
+  _SolanaPreparationService({
+    required BroadcastService broadcaster,
+    required String Function(Coin) endpoints,
+    required JsonRpcTransport jsonRpcTransport,
+  }) : super(
+         broadcaster: broadcaster,
+         endpoints: endpoints,
+         jsonRpcTransport: jsonRpcTransport,
+       );
+
+  @override
+  Future<SignedTransaction> signPreparedSolana({
+    required HotWallet wallet,
+    required CoreCrypto crypto,
+    required PreparedSolanaTransfer prepared,
+    required String? expectedNetworkIdentity,
+  }) async => SignedTransaction(
+    signedTx: Uint8List.fromList(const [1]),
+    txHash: 'solana-test-signature',
+  );
+}
+
 void main() {
   test('PYUSD uses Token-2022 and creates a missing recipient ATA', () async {
     final crypto = MockCoreCrypto();
@@ -141,7 +169,7 @@ void main() {
     );
     final transport = _SolanaTransport();
     final broadcaster = _BroadcastCapture();
-    final service = LocalTransferService(
+    final service = _SolanaPreparationService(
       broadcaster: broadcaster,
       endpoints: (_) => 'https://solana.test',
       jsonRpcTransport: transport,
@@ -210,7 +238,7 @@ void main() {
     );
     final transport = _SolanaTransport();
     final broadcaster = _BroadcastCapture();
-    final service = LocalTransferService(
+    final service = _SolanaPreparationService(
       broadcaster: broadcaster,
       endpoints: (_) => 'https://solana.test',
       jsonRpcTransport: transport,

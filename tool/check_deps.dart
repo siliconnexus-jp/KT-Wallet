@@ -1398,6 +1398,21 @@ void main() {
     );
   }
 
+  // Gateway/RPC responses may provide data and additive warnings, but never
+  // remotely weaken authentication, exact-transaction binding or signature
+  // verification. Keep that ownership boundary in the same release gate as
+  // the offline dependency firewall and native-key cleanup discipline.
+  final remoteBoundaryAudit = Process.runSync(Platform.resolvedExecutable, [
+    'tool/audit_remote_security_boundary.dart',
+  ]);
+  if (remoteBoundaryAudit.exitCode != 0) {
+    final details = '${remoteBoundaryAudit.stderr}'.trim();
+    failures.add(
+      'remote security boundary audit failed'
+      '${details.isEmpty ? '' : ': $details'}',
+    );
+  }
+
   if (failures.isEmpty) {
     stdout.writeln('check_deps: OK');
     return;

@@ -10,12 +10,17 @@ import 'package:analyzer/dart/ast/visitor.dart';
 /// The audit fails on a new untracked `storeWallet` site and also fails when a
 /// fixed file is accidentally left in this list, so the debt can only shrink.
 const _knownDebt = <String>{};
+const _reviewedResidualWalletIds = <String>{
+  'polygon-amoy-e2e-v2',
+  'kt-e2e-polygon-amoy-v3',
+};
 
 void main() {
   final selfTestFailures = <String>[
     ..._classifierSelfTestFailures(),
     ..._cleanupHelperSelfTestFailures(),
     ..._staleReplacementHelperSelfTestFailures(),
+    ..._residualCleanupEntrypointSelfTestFailures(),
   ];
   if (selfTestFailures.isNotEmpty) {
     for (final failure in selfTestFailures) {
@@ -50,6 +55,13 @@ void main() {
   if (!walletHelper.existsSync() ||
       !_staleReplacementHelperIsStrict(walletHelper.readAsStringSync())) {
     missingCleanup.add(_relativePath(root.path, walletHelper.path));
+  }
+  final residualCleanup = File(
+    '${root.path}/apps/kt_wallet/integration_test/native_e2e_cleanup_test.dart',
+  );
+  if (!residualCleanup.existsSync() ||
+      !_residualCleanupEntrypointIsStrict(residualCleanup.readAsStringSync())) {
+    missingCleanup.add(_relativePath(root.path, residualCleanup.path));
   }
   for (final relativeRoot in const [
     'apps/kt_wallet/integration_test',
@@ -91,6 +103,167 @@ void main() {
     'E2E wallet cleanup audit passed: '
     '$guardedStoreSites native store sites, 0 cleanup debts.',
   );
+}
+
+final class _ResidualCleanupVisitor extends RecursiveAstVisitor<void> {
+  final List<MethodInvocation> deleteCalls = <MethodInvocation>[];
+  final List<MethodInvocation> storeCalls = <MethodInvocation>[];
+  final List<MethodInvocation> guards = <MethodInvocation>[];
+  final List<CatchClause> catches = <CatchClause>[];
+  final Set<String> nativeCryptoVariables = <String>{};
+
+  @override
+  void visitVariableDeclaration(VariableDeclaration node) {
+    if (node.initializer?.toSource() == 'MethodChannelCoreCrypto()') {
+      nativeCryptoVariables.add(node.name.lexeme);
+    }
+    super.visitVariableDeclaration(node);
+  }
+
+  @override
+  void visitMethodInvocation(MethodInvocation node) {
+    switch (node.methodName.name) {
+      case 'deleteWallet':
+        deleteCalls.add(node);
+      case 'storeWallet':
+        storeCalls.add(node);
+      case 'expect':
+        guards.add(node);
+    }
+    super.visitMethodInvocation(node);
+  }
+
+  @override
+  void visitCatchClause(CatchClause node) {
+    catches.add(node);
+    super.visitCatchClause(node);
+  }
+}
+
+bool _residualCleanupEntrypointIsStrict(String source) {
+  final parsed = parseString(content: source, throwIfDiagnostics: false);
+  if (parsed.errors.isNotEmpty) return false;
+  final variables = parsed.unit.declarations
+      .whereType<TopLevelVariableDeclaration>()
+      .expand((declaration) => declaration.variables.variables)
+      .toList(growable: false);
+  final walletId = variables
+      .where((variable) => variable.name.lexeme == '_walletId')
+      .singleOrNull;
+  final allowlist = variables
+      .where((variable) => variable.name.lexeme == '_reviewedResidualSlots')
+      .singleOrNull;
+  if (walletId?.initializer?.toSource() !=
+          "String.fromEnvironment('KT_E2E_CLEANUP_WALLET_ID')" ||
+      allowlist?.initializer is! SetOrMapLiteral) {
+    return false;
+  }
+  final allowlistLiteral = allowlist!.initializer! as SetOrMapLiteral;
+  final allowedIds = allowlistLiteral.elements
+      .whereType<StringLiteral>()
+      .map((literal) => literal.stringValue)
+      .whereType<String>()
+      .toSet();
+  if (allowedIds.length != allowlistLiteral.elements.length ||
+      !_sameStrings(allowedIds, _reviewedResidualWalletIds)) {
+    return false;
+  }
+
+  final visitor = _ResidualCleanupVisitor();
+  parsed.unit.accept(visitor);
+  if (visitor.storeCalls.isNotEmpty ||
+      visitor.deleteCalls.length != 1 ||
+      visitor.catches.length != 1 ||
+      visitor.catches.single.exceptionType?.toSource() !=
+          'WalletNotFoundException' ||
+      !_sameStrings(visitor.nativeCryptoVariables, const {'crypto'})) {
+    return false;
+  }
+
+  final deletion = visitor.deleteCalls.single;
+  final deletionArguments = _positionalArguments(deletion);
+  final timeout = deletion.parent;
+  final catchClause = visitor.catches.single;
+  final catchOwner = catchClause.parent;
+  if (deletion.target?.toSource() != 'crypto' ||
+      deletionArguments.length != 1 ||
+      deletionArguments.single.toSource() != '_walletId' ||
+      timeout is! MethodInvocation ||
+      timeout.methodName.name != 'timeout' ||
+      !identical(timeout.target, deletion) ||
+      _positionalArguments(timeout).singleOrNull?.toSource() !=
+          'const Duration(seconds: 45)' ||
+      catchOwner is! TryStatement ||
+      deletion.offset < catchOwner.body.offset ||
+      deletion.end > catchOwner.body.end) {
+    return false;
+  }
+
+  return visitor.guards.any((guard) {
+    final arguments = _positionalArguments(guard);
+    return guard.offset < deletion.offset &&
+        arguments.length >= 2 &&
+        arguments[0].toSource() == '_reviewedResidualSlots' &&
+        arguments[1].toSource() == 'contains(_walletId)';
+  });
+}
+
+bool _sameStrings(Set<String> left, Set<String> right) =>
+    left.length == right.length && left.containsAll(right);
+
+List<String> _residualCleanupEntrypointSelfTestFailures() {
+  const strict = '''
+const _walletId = String.fromEnvironment('KT_E2E_CLEANUP_WALLET_ID');
+const _reviewedResidualSlots = <String>{
+  'polygon-amoy-e2e-v2',
+  'kt-e2e-polygon-amoy-v3',
+};
+void main() {
+  test('cleanup', () async {
+    expect(_reviewedResidualSlots, contains(_walletId));
+    final crypto = MethodChannelCoreCrypto();
+    try {
+      await crypto.deleteWallet(_walletId).timeout(const Duration(seconds: 45));
+    } on WalletNotFoundException {}
+  });
+}
+''';
+  final cases = <({String name, String source, bool accepted})>[
+    (
+      name: 'strict residual cleanup entrypoint is accepted',
+      source: strict,
+      accepted: true,
+    ),
+    (
+      name: 'residual cleanup allowlist expansion is rejected',
+      source: strict.replaceFirst(
+        "  'kt-e2e-polygon-amoy-v3',",
+        "  'kt-e2e-polygon-amoy-v3',\n  'production-wallet',",
+      ),
+      accepted: false,
+    ),
+    (
+      name: 'residual cleanup without a pre-delete guard is rejected',
+      source: strict.replaceFirst(
+        '    expect(_reviewedResidualSlots, contains(_walletId));\n',
+        '',
+      ),
+      accepted: false,
+    ),
+    (
+      name: 'residual cleanup swallowing authentication failure is rejected',
+      source: strict.replaceFirst(
+        '} on WalletNotFoundException {}',
+        '} on WalletNotFoundException {} on AuthFailedException {}',
+      ),
+      accepted: false,
+    ),
+  ];
+  return [
+    for (final item in cases)
+      if (_residualCleanupEntrypointIsStrict(item.source) != item.accepted)
+        item.name,
+  ];
 }
 
 final class _CleanupHelperVisitor extends RecursiveAstVisitor<void> {

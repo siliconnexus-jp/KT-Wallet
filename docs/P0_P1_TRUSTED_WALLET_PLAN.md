@@ -238,6 +238,16 @@
   缺失或错配会进入阻断页而不删除旧数据。临时认证/存储失败保留仅驻内存的未提交词表
   供当前验证页重试，持久提交成功后才清空。8 项故障/UI 负例与完整 KT Wallet
   850/850 通过。
+- [x] 热钱包不再把原生 Wallet Core 桥返回的 signed bytes 与 txHash 直接当作可信
+  广播凭据：EVM、TRON、Solana 三个签名入口在跨越持久化/广播边界前，都会复制并冻结
+  用户确认的 unsigned transaction/message，调用共享密码学验签器从 signed bytes 独立
+  恢复 signer，核对声明发送者、原始交易内容及派生 txHash，并要求派生 hash 与原生桥
+  返回值精确一致。EVM 分支同时覆盖 Ethereum、Polygon、Base、Arbitrum、Avalanche 与
+  BNB。畸形 EVM/TRON 签名和伪造 Solana native txHash 均在广播前失败，广播调用为 0；
+  合法 ed25519 正例只广播 1 次。iPhone 17 Pro Simulator 又用真实原生 Wallet Core
+  分别完成 EVM、TRON、Solana 签名与同一共享验签器复核，临时 `kt-e2e-*` wallet 经
+  系统认证 teardown 删除，集成测试 1/1 通过。KT Wallet 1514/1514、chains 183/183、
+  共享 packages 409/409 与静态分析 0 通过。
 - [x] KT Wallet 新建/导入热钱包和扫码配对观察钱包的本地 walletId 已从可预测的
   微秒时间戳改为 `Random.secure()` 生成的 144-bit URL-safe 随机值。旧 walletId 继续
   兼容读取；新 ID 在内存已有钱包中连续碰撞 8 次会失败闭合，数据库主键冲突仍由原子
@@ -898,7 +908,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   核对同实例、同 walletId，并只接受紧邻注册的生产认证 teardown，或确实覆盖该创建点且
   不吞异常的 `finally` 删除；纯 `MockCoreCrypto` 通过实际变量初始化识别，不再靠原始文本
   豁免。六类绕过先红后绿，真实扫描发现并修复 Sepolia replacement 生命周期，同时把
-  EVM replacement 的静默 TimeoutException 路径改为统一认证 teardown。当前 32 个原生
+  EVM replacement 的静默 TimeoutException 路径改为统一认证 teardown。当前 31 个原生
   store 分支、0 源码清理债务。门禁同时解析统一 helper 本身，要求真实注册 `addTearDown`、
   执行同实例 `deleteWallet(walletId).timeout(timeout)`，并只允许忽略
   `WalletNotFoundException`；空 helper 或吞 TimeoutException 的负例均失败。
@@ -907,6 +917,9 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     `deleteWallet` 认证删除后重建；认证失败保留旧密钥并终止，不能覆盖。新建、认证替换、
     非测试命名空间和认证失败保持旧地址 4/4 通过；Analyzer 门禁另以缺命名空间、吞认证
     失败和错 walletId 三类绕过自测固定该控制流。
+  - [x] 原生 canonicality 集成测试已迁移到统一 `kt-e2e-*` 命名与认证 teardown；本轮
+    EVM/TRON/Solana 三次真实签名复核后，临时钱包通过系统密码认证删除，测试 1/1 退出
+    成功。该证据只覆盖本轮新建的临时 slot，不代表下述两个既有 Polygon slot 已删除。
   - [ ] 本次复跑暴露的旧 `polygon-amoy-e2e-v2` 与新
     `kt-e2e-polygon-amoy-v3` 两个已知 Simulator 测试 slot 尚需通过系统 Face ID 的
     cleanup-only 路径精确删除。没有重置 Keychain，也没有未经用户确认触发不可恢复删除；
@@ -1322,7 +1335,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     现统一为英文/日文 `KT Cold Signer`、中文 `KT冷钱包`；新增通用 ARB 禁用词门禁，
     可按语言拒绝退役品牌和语言不匹配名称。门禁单测先红后绿，三语 Widget 回归及受影响
     Golden 已人工复核；最新公开测试源码审计 12/12、完整依赖审计 13/13、KT Wallet
-    1510/1510、KT Cold Signer 570/570、共享 packages 409/409、静态分析 0、Gateway
+    1514/1514、KT Cold Signer 570/570、共享 packages 409/409、静态分析 0、Gateway
     audit 全部通过。
   - [ ] 真机系统权限弹窗、生命周期保护页及全部生产路由仍需逐页三语语义人工复核，
     因此本总项保持未完成，不能扩大宣称为“全 App 本地化验收完成”。
@@ -1366,7 +1379,13 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
 - [ ] 远程配置只能调整 endpoint/阈值，不能降低签名与验签规则。
   - [x] 当前版本没有远程配置下载或控制面；签名、验签、认证、风险阻断和交易一致性
     规则均为本地编译代码，Gateway/RPC 用户覆盖又受上述端点策略约束，因此运营端目前
-    无法远程开启“跳过验签/允许未知网络”等降级开关。
+    无法远程开启“跳过验签/允许未知网络”等降级开关。新增的结构审计同时禁止常见远程
+    配置/Feature Flag SDK，冻结 Gateway Client 当前 61 个响应字段为逐项复核的闭集，
+    并要求 AIRGAP codec、交易认证、PIN、Cold Signer controller 与共享签名验签器五个
+    安全模块保持无 HTTP/Gateway import。EVM/TRON/Solana 热钱包签名入口必须使用各自
+    精确 unsigned bytes 与 sender 调用独立验签器；Gateway Token 风险只能把状态提升为
+    `unsafe/unknown`，不能远程制造 `safe`。审计自带 extractor 负例并已纳入
+    `check_deps`，当前输出为 61 fields / 5 network-free modules / 3 signing families。
   - [ ] 若未来引入远程配置，仍需版本化 allowlist schema、配置签名、防回滚、过期和
     kill-switch 边界测试；未完成前不得添加可影响签名/验签的远程字段。
 - [x] 支持导出脱敏诊断包。About 页先展示“包含/永不包含”并要求显式确认，再导出
