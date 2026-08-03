@@ -292,9 +292,20 @@
   设备本地助记词 Argon2id 存储与可移植备份密码学继续隔离。超限使用三语固定错误，
   不读取完整文件、不回显 Provider 路径。备份专项 33/33、Android 独立向量/格式选择
   JVM 7/7、API 35 Unicode 跨平台向量与真实旧 Argon2 v1 恢复 2/2、生产 Swift
-  密码学源码直接编译执行同一向量通过，以及 iOS `build-for-testing` 通过；
-  iOS Simulator 当轮因 SpringBoard 异常退出未执行 XCTest，物理跨平台恢复与
-  Files/iCloud Drive/Android Provider 仍纳入真机验收。
+  密码学源码直接编译执行同一向量通过，以及 iOS `build-for-testing` 通过。2026-08-03
+  在唯一 iPhone 17 Pro Simulator / iOS 26.2 复跑 KT Wallet 原生 XCTest 11/11，
+  其中跨平台固定向量、错误密码和 256 KiB + 1 有界读取负例均通过；物理跨平台恢复与
+  Files/iCloud Drive/Android Provider 仍纳入真机验收，Simulator 结果不替代 Provider。
+- [x] iOS Xcode 构建不再被上一次 Flutter 集成测试的临时入口污染：真实复验发现被
+  Git 忽略的 `Generated.xcconfig` 会残留已经删除的 `flutter_test_listener.dart` 及
+  测试期 Dart defines，令后续 Debug XCTest 在 Flutter Run Script 阶段失败，Release/
+  Profile 虽已覆盖 `FLUTTER_TARGET`，仍可能继承测试期 defines。两款 App 的 Run Script
+  现先读取 generated target：listener 已不存在，或正在 Release/Profile/Archive 时，
+  只在当前构建环境恢复 `lib/main.dart` 并清除全部测试期 defines；仍存在的 Debug
+  listener 保持不变，不破坏正在运行的集成测试。4 个缺失/live/Archive/普通构建向量、
+  `check_deps` 双 App 项目门禁及修复后的 KT Wallet 原生 XCTest 11/11 通过；独立
+  KT Cold Signer 随后以真实残留且已删除的 listener 触发修复警告，生产入口重新打包后
+  原生 XCTest 8/8 通过，证明不是只修复测试脚本中的合成 fixture。
 - [x] 备份恢复不再把 Provider 故障伪装成用户取消：只有原生显式
   `cancelled=true` 返回空结果；插件不可用、读取失败、空响应与畸形 payload 分别进入
   固定失败类型，页面显示中英日可重试提示且不回显 URI、路径或原生异常。Provider

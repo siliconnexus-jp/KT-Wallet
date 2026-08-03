@@ -10,6 +10,7 @@ export GOTOOLCHAIN=go1.26.5+auto
 
 "$REPO_ROOT/tool/audit_runtime_privacy.sh"
 "$REPO_ROOT/tool/test_bundletool_version_reader.sh"
+"$REPO_ROOT/tool/test_prepare_ios_flutter_build.sh"
 
 GRADLE_WRAPPER_SHA256="76805e32c009c0cf0dd5d206bddc9fb22ea42e84db904b764f3047de095493f3"
 GRADLE_DISTRIBUTION_SHA256="b84e04fa845fecba48551f425957641074fcc00a88a84d2aae5808743b35fc85"

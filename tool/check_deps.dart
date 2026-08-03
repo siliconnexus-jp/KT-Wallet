@@ -471,13 +471,63 @@ void main() {
     }
   }
   final dependencyAudit = File('tool/audit_dependencies.sh');
-  if (!dependencyAudit.existsSync() ||
-      !dependencyAudit.readAsStringSync().contains(
-        'test_bundletool_version_reader.sh',
-      )) {
+  final dependencyAuditSource = dependencyAudit.existsSync()
+      ? dependencyAudit.readAsStringSync()
+      : '';
+  if (!dependencyAuditSource.contains('test_bundletool_version_reader.sh')) {
     failures.add(
       '${dependencyAudit.path} does not execute the bundletool parser vectors',
     );
+  }
+  if (!dependencyAuditSource.contains('test_prepare_ios_flutter_build.sh')) {
+    failures.add(
+      '${dependencyAudit.path} does not execute the stale Flutter target vectors',
+    );
+  }
+
+  final iosFlutterBuildPreparation = File('tool/prepare_ios_flutter_build.sh');
+  final iosFlutterBuildPreparationSource =
+      iosFlutterBuildPreparation.existsSync()
+      ? iosFlutterBuildPreparation.readAsStringSync()
+      : '';
+  for (final requiredBoundary in [
+    '*/flutter_test_listener.*/listener.dart)',
+    'export FLUTTER_TARGET=lib/main.dart',
+    'unset DART_DEFINES',
+    '[ ! -f "\$kt_generated_target" ]',
+  ]) {
+    if (!iosFlutterBuildPreparationSource.contains(requiredBoundary)) {
+      failures.add(
+        '${iosFlutterBuildPreparation.path} does not preserve boundary: '
+        '$requiredBoundary',
+      );
+    }
+  }
+  const iosBuildPreparationInvocation =
+      '. \\"\$SRCROOT/../../../tool/prepare_ios_flutter_build.sh\\"\\n'
+      '/bin/sh \\"\$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\\" build';
+  for (final app in ['kt_wallet', 'cold_signer']) {
+    final project = File('apps/$app/ios/Runner.xcodeproj/project.pbxproj');
+    final source = project.existsSync() ? project.readAsStringSync() : '';
+    if (!source.contains(iosBuildPreparationInvocation)) {
+      failures.add(
+        '${project.path} does not sanitize stale Flutter test build settings',
+      );
+    }
+  }
+  final iosBuildPreparationTest = File(
+    'tool/test_prepare_ios_flutter_build.sh',
+  );
+  if (!iosBuildPreparationTest.existsSync()) {
+    failures.add('${iosBuildPreparationTest.path} is missing');
+  } else {
+    final result = Process.runSync('bash', [iosBuildPreparationTest.path]);
+    if (result.exitCode != 0) {
+      failures.add(
+        '${iosBuildPreparationTest.path} behavior vectors failed '
+        '(exit ${result.exitCode})',
+      );
+    }
   }
 
   // mobile_scanner 7.4.0 currently brings JUnit 6.1.2 into its own Android
