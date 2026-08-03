@@ -6,6 +6,32 @@ import XCTest
 
 class RunnerTests: XCTestCase {
 
+  func testScenePrivacyIgnoresTemporaryInactiveTransitions() {
+    var state = ScenePrivacyState()
+
+    XCTAssertEqual(state.didBecomeActive(), .none)
+    XCTAssertFalse(state.isProtected)
+  }
+
+  func testScenePrivacyStaysCoveredUntilTheSceneIsActive() {
+    var state = ScenePrivacyState()
+
+    XCTAssertEqual(state.didEnterBackground(), .showCover)
+    XCTAssertTrue(state.isProtected)
+    XCTAssertEqual(state.willEnterForeground(), .none)
+    XCTAssertTrue(state.isProtected)
+    XCTAssertEqual(state.didBecomeActive(), .hideCover)
+    XCTAssertFalse(state.isProtected)
+  }
+
+  func testScenePrivacyRepeatedBackgroundCallbacksRemainFailClosed() {
+    var state = ScenePrivacyState()
+
+    XCTAssertEqual(state.didEnterBackground(), .showCover)
+    XCTAssertEqual(state.didEnterBackground(), .showCover)
+    XCTAssertTrue(state.isProtected)
+  }
+
   func testDeviceNetworkClassificationIsFailClosed() {
     XCTAssertEqual(DeviceSecurityClassifier.network(.satisfied), "unsafe")
     XCTAssertEqual(DeviceSecurityClassifier.network(.unsatisfied), "safe")

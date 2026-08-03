@@ -81,12 +81,6 @@ final class OneShotDeviceSecurityResult {
       name: UIScreen.capturedDidChangeNotification,
       object: nil
     )
-    NotificationCenter.default.addObserver(
-      self,
-      selector: #selector(didBecomeActive),
-      name: UIApplication.didBecomeActiveNotification,
-      object: nil
-    )
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
@@ -161,11 +155,6 @@ final class OneShotDeviceSecurityResult {
     }
   }
 
-  override func applicationDidBecomeActive(_ application: UIApplication) {
-    super.applicationDidBecomeActive(application)
-    hidePrivacyCover()
-  }
-
   @objc private func screenshotTaken() {
     screenSecurityChannel?.invokeMethod("screenshotTaken", arguments: nil)
   }
@@ -175,10 +164,6 @@ final class OneShotDeviceSecurityResult {
       "screenCaptureChanged",
       arguments: UIScreen.main.isCaptured
     )
-  }
-
-  @objc private func didBecomeActive() {
-    hidePrivacyCover()
   }
 
   func showPrivacyCover() {

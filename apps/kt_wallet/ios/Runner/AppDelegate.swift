@@ -69,12 +69,6 @@ func readPickedFileBounded(at url: URL, maxBytes: Int) throws -> Data {
       name: UIScreen.capturedDidChangeNotification,
       object: nil
     )
-    NotificationCenter.default.addObserver(
-      self,
-      selector: #selector(didBecomeActive),
-      name: UIApplication.didBecomeActiveNotification,
-      object: nil
-    )
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
@@ -388,11 +382,6 @@ func readPickedFileBounded(at url: URL, maxBytes: Int) throws -> Data {
     }
   }
 
-  override func applicationDidBecomeActive(_ application: UIApplication) {
-    super.applicationDidBecomeActive(application)
-    hidePrivacyCover()
-  }
-
   @objc private func screenshotTaken() {
     screenSecurityChannel?.invokeMethod("screenshotTaken", arguments: nil)
   }
@@ -402,10 +391,6 @@ func readPickedFileBounded(at url: URL, maxBytes: Int) throws -> Data {
       "screenCaptureChanged",
       arguments: UIScreen.main.isCaptured
     )
-  }
-
-  @objc private func didBecomeActive() {
-    hidePrivacyCover()
   }
 
   /// Throws away the cached cover so the next show rebuilds it.

@@ -268,11 +268,14 @@ therefore distinguishes signing, broadcasting, and chain confirmation.
   item. Recovery is through the explicit encrypted backup or recovery phrase,
   not an implicit app-data restore.
 - Both apps install an in-window privacy cover when the task leaves the
-  foreground. On Android 13+, Recents capture is disabled and the system shows
-  a dark KT task placeholder; older Android versions use a background-only
-  secure-window fallback. Pulling a notification shade or another temporary
-  system overlay does not replace the live UI. Successful screenshots trigger
-  a non-blocking security warning where the operating system supports detection.
+  foreground. On iOS, the cover is installed only after the scene actually
+  enters the background, remains in place throughout foreground restoration,
+  and is removed only when that scene becomes active again. On Android 13+,
+  Recents capture is disabled and the system shows a dark KT task placeholder;
+  older Android versions use a background-only secure-window fallback. Pulling
+  Control Center, the notification shade, or another temporary system overlay
+  does not replace the live UI. Successful screenshots trigger a non-blocking
+  security warning where the operating system supports detection.
 - Production routes do not seed sample wallets, fake balances, or simulated
   successful transactions.
 - Online verification recovers the signer from canonical signed bytes and
@@ -361,6 +364,21 @@ The underlying suites can also be run individually:
 tool/audit_dependencies.sh
 ```
 
+The iOS Scene lifecycle and native security bridges have separate XCTest
+targets. Run them on one explicitly selected simulator so local testing does
+not create or retain unnecessary simulator devices:
+
+```sh
+(cd apps/kt_wallet/ios && xcodebuild \
+  -workspace Runner.xcworkspace -scheme Runner -configuration Debug \
+  -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' \
+  -only-testing:RunnerTests test)
+(cd apps/cold_signer/ios && xcodebuild \
+  -workspace Runner.xcworkspace -scheme Runner -configuration Debug \
+  -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' \
+  -only-testing:RunnerTests test)
+```
+
 `tool/audit_dependencies.sh` requires Go 1.26.5 through toolchain
 auto-selection, verifies all three official Gradle Wrapper JAR/distribution
 checksums, resolves both locked Android Release runtime graphs, enforces both
@@ -405,8 +423,11 @@ The latest source gate (2026-08-03) completed with zero static-analysis
 issues: **1,461/1,461** KT Wallet tests, **570/570** KT Cold Signer tests, and
 **400/400** shared-package tests passed. The Gateway audit, public-secret gate,
 native dependency lock/checksum verification, and OSV scans also passed. These
-numbers are reproducible source evidence, not a substitute for the outstanding
-physical-device, real-chain, signed-artifact, or independent-audit work below.
+numbers are reproducible source evidence. On the same date, the iOS native
+Runner test targets passed **9/9** for KT Wallet and **6/6** for KT Cold Signer
+on the single retained iPhone 17 Pro simulator, including the Scene privacy
+state tests. This is not a substitute for the outstanding physical-device,
+real-chain, signed-artifact, or independent-audit work below.
 
 ## Application identities
 
