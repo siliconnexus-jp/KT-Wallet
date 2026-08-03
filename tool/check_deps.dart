@@ -375,6 +375,31 @@ void main() {
   final appleArtifactGuardSource = appleArtifactGuard.existsSync()
       ? appleArtifactGuard.readAsStringSync()
       : '';
+  for (final signedAppleBoundary in [
+    '--require-signed',
+    'codesign --verify --deep --strict',
+    'security cms -D -u 9',
+    'certificate leaf = H',
+    'DeveloperCertificates.',
+    'embedded.mobileprovision',
+    'Entitlements.application-identifier',
+    'Entitlements.get-task-allow',
+    'ProvisionedDevices.0',
+    'ProvisionsAllDevices',
+    r'Entitlements.com\.apple\.developer\.default-data-protection',
+    r'com\.apple\.developer\.team-identifier',
+    r'com\.apple\.developer\.default-data-protection',
+    'NSFileProtectionComplete',
+    'nested Apple code signer does not match the profile',
+    'Apple artifact is not signed by a distribution identity',
+  ]) {
+    if (!appleArtifactGuardSource.contains(signedAppleBoundary)) {
+      failures.add(
+        '${appleArtifactGuard.path} is missing signed-artifact boundary: '
+        '$signedAppleBoundary',
+      );
+    }
+  }
   for (final credentialBoundary in [
     'github_pat_',
     'alch_',

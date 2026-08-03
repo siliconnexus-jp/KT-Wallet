@@ -349,9 +349,23 @@
   Bidi/零宽字符，归一空格并限制 80 code points；空名称使用三语匿名回退。文件错误与
   密码错误分离为各自语义区域，无有效文件时密码框禁用，换文件失败清除旧密码，重新
   编辑密码清除旧错误。恶意名称、MethodChannel 映射、状态错配与 Golden 均已覆盖。
-- [ ] iOS 正式签名归档后使用 `codesign -d --entitlements :-` 复核分发产物确实携带
-  Complete Data Protection。Simulator 的 ad-hoc 签名不会保留设备专属 entitlement，
-  无签名 device build 也不能替代分发包验收。
+- [x] Apple 制品门禁新增显式 `--require-signed` 分发模式：在既有 bundle ID、
+  WalletCore、SQLite、Privacy Manifest、Export Compliance 与秘密扫描之外，执行
+  `codesign --verify --deep --strict`，要求 Apple/iPhone Distribution identity、Apple
+  信任的 `embedded.mobileprovision` CMS 且最终 App signer 必须存在于 profile 的
+  DeveloperCertificates，并逐个要求内嵌 Framework、Extension 与动态库使用同一 profile
+  signer；同时核对精确 team + bundle application identifier、iOS 平台、
+  未过期 App Store profile、`get-task-allow=false`，并同时从 profile 与最终签名
+  entitlements 读取 `NSFileProtectionComplete`。Development、Ad Hoc、Enterprise、
+  wildcard、错 bundle、过期、可调试或未签名制品均失败闭合；静态门禁防止这些检查
+  被后续删除。两个现有 unsigned iphoneos App 仍通过内容审阅，但在严格模式下都按预期
+  被“无有效分发签名 + 无 embedded profile”拒绝。
+- [ ] 使用两款 App 各自正式签名 Archive/IPA 实际执行上述严格门禁。2026-08-03 本机
+  `flutter build ipa --release` 对两个 bundle ID 分别尝试归档，均明确失败：Xcode 当前
+  没有可用账号会话，现有 wildcard profile 不含 Data Protection capability 及
+  `com.apple.developer.default-data-protection`。不能删除安全 entitlement 换取构建成功；
+  需为团队 `6SFGHFY924` / `29K73YAJ7J` 配置匹配的 App ID、App Store profile 与
+  Distribution 证书后重跑。Simulator ad-hoc 或无签名 device build 不能替代该证据。
 - [ ] iOS/Android 真机验证系统生物识别/设备密码原生提示，以及每次真实
   Wallet Core 签名都不可通过返回、深链或路由绕过。模拟器中的可注入认证
   不能替代这项证据。
@@ -1243,8 +1257,9 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     签名拦截提示仍使用已停用的 `KT Wallet Cold Signer` 或中文界面中的英文名称。
     现统一为英文/日文 `KT Cold Signer`、中文 `KT冷钱包`；新增通用 ARB 禁用词门禁，
     可按语言拒绝退役品牌和语言不匹配名称。门禁单测先红后绿，三语 Widget 回归及受影响
-    Golden 已人工复核；最新公开测试源码审计 12/12、KT Wallet 1474/1474、KT Cold
-    Signer 570/570、共享 packages 401/401、静态分析 0、Gateway audit 全部通过。
+    Golden 已人工复核；最新公开测试源码审计 12/12、完整依赖审计 13/13、KT Wallet
+    1488/1488、KT Cold Signer 570/570、共享 packages 401/401、静态分析 0、Gateway
+    audit 全部通过。
   - [ ] 真机系统权限弹窗、生命周期保护页及全部生产路由仍需逐页三语语义人工复核，
     因此本总项保持未完成，不能扩大宣称为“全 App 本地化验收完成”。
 

@@ -457,6 +457,26 @@ tool/check_apple_release_artifact.sh apps/kt_wallet/build/ios/iphoneos/Runner.ap
 tool/check_apple_release_artifact.sh apps/cold_signer/build/ios/iphoneos/Runner.app
 ```
 
+The two commands above intentionally allow unsigned device bundles for local
+source/artifact review. Before TestFlight or App Store distribution, export the
+signed `.app` from each archive and rerun the guard in strict mode:
+
+```sh
+tool/check_apple_release_artifact.sh --require-signed \
+  /path/to/KT-Wallet.xcarchive/Products/Applications/Runner.app \
+  cc.siliconnexus.ktwallet
+tool/check_apple_release_artifact.sh --require-signed \
+  /path/to/KT-Cold-Signer.xcarchive/Products/Applications/Runner.app \
+  cc.siliconnexus.ktwallet.coldsigner
+```
+
+Strict mode requires a valid distribution signature, binds every embedded
+framework, extension, and dynamic library to the same profile signer, and requires an Apple-trusted profile
+CMS whose certificate list contains the actual app signer, an unexpired App
+Store profile that exactly matches the bundle ID, debugger attachment disabled,
+and `NSFileProtectionComplete` in both profile and final signed entitlements.
+Passing the unsigned guard must never be reported as signed-release evidence.
+
 Android Debug/test builds without Wallet Core use a fail-closed crypto stub:
 signing and key operations return `CRYPTO_UNAVAILABLE` rather than producing
 placeholder cryptography. Android Release builds refuse to configure unless
@@ -472,9 +492,10 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-03) completed with zero static-analysis
-issues: **1,481/1,481** KT Wallet tests, **570/570** KT Cold Signer tests, and
-**401/401** shared-package tests passed. The Gateway audit, public-secret gate,
-native dependency lock/checksum verification, and OSV scans also passed. These
+issues: **1,488/1,488** KT Wallet tests, **570/570** KT Cold Signer tests, and
+**401/401** shared-package tests passed. The default gate passed **12/12** and
+the native/runtime/OSV `--full` gate passed **13/13**. The Gateway audit,
+public-secret gate, native dependency lock/checksum verification, and OSV scans also passed. These
 numbers are reproducible source evidence. On the same date, the iOS native
 Runner test targets passed **11/11** for KT Wallet and **8/8** for KT Cold Signer
 on the single retained iPhone 17 Pro simulator, including the Scene privacy

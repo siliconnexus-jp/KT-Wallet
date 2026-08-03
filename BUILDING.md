@@ -210,8 +210,30 @@ evidence for source/artifact review, but it is **not** uploadable or
 distributable until the correct upload key is applied and the guard is rerun.
 
 For iOS, select the SiliconNexus Apple team and the App Store provisioning
-profile in Xcode, then archive `apps/kt_wallet/ios/Runner.xcworkspace`.
-Signing identities and provisioning profiles remain local/CI secrets.
+profile in Xcode, then archive each workspace. Signing identities and
+provisioning profiles remain local/CI secrets. Do not remove the Data Protection
+capability to make a wildcard profile build: both final profiles and signed
+entitlements must preserve `NSFileProtectionComplete`.
+
+After exporting or locating the signed `.app` inside each `.xcarchive`, inspect
+the exact distribution artifact rather than the earlier no-codesign build:
+
+```sh
+tool/check_apple_release_artifact.sh --require-signed \
+  /path/to/KT-Wallet.xcarchive/Products/Applications/Runner.app \
+  cc.siliconnexus.ktwallet
+tool/check_apple_release_artifact.sh --require-signed \
+  /path/to/KT-Cold-Signer.xcarchive/Products/Applications/Runner.app \
+  cc.siliconnexus.ktwallet.coldsigner
+```
+
+Strict mode verifies the complete nested signature, binds every embedded
+framework, extension, and dynamic library to the same distribution certificate,
+verifies the Apple-trusted profile CMS and signer-certificate membership, exact
+application/team identifiers, App Store (not
+development/ad hoc/enterprise) distribution, profile expiration,
+`get-task-allow`, and complete data protection. A no-codesign `.app`, a wildcard
+profile, or a profile for the wrong bundle ID must fail.
 
 ## Apple export compliance
 
