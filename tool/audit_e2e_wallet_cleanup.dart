@@ -15,6 +15,7 @@ void main() {
   final selfTestFailures = <String>[
     ..._classifierSelfTestFailures(),
     ..._cleanupHelperSelfTestFailures(),
+    ..._staleReplacementHelperSelfTestFailures(),
   ];
   if (selfTestFailures.isNotEmpty) {
     for (final failure in selfTestFailures) {
@@ -42,6 +43,13 @@ void main() {
         !_cleanupHelperIsStrict(helper.readAsStringSync())) {
       missingCleanup.add(_relativePath(root.path, helper.path));
     }
+  }
+  final walletHelper = File(
+    '${root.path}/apps/kt_wallet/integration_test/support/e2e_wallet_cleanup.dart',
+  );
+  if (!walletHelper.existsSync() ||
+      !_staleReplacementHelperIsStrict(walletHelper.readAsStringSync())) {
+    missingCleanup.add(_relativePath(root.path, walletHelper.path));
   }
   for (final relativeRoot in const [
     'apps/kt_wallet/integration_test',
@@ -87,6 +95,8 @@ void main() {
 
 final class _CleanupHelperVisitor extends RecursiveAstVisitor<void> {
   final List<MethodInvocation> tearDownCalls = <MethodInvocation>[];
+  final List<MethodInvocation> storeCalls = <MethodInvocation>[];
+  final List<MethodInvocation> registrationCalls = <MethodInvocation>[];
   final List<MethodInvocation> deleteCalls = <MethodInvocation>[];
   final List<CatchClause> catches = <CatchClause>[];
 
@@ -95,6 +105,10 @@ final class _CleanupHelperVisitor extends RecursiveAstVisitor<void> {
     switch (node.methodName.name) {
       case 'addTearDown':
         tearDownCalls.add(node);
+      case 'storeWallet':
+        storeCalls.add(node);
+      case 'registerE2eWalletCleanup':
+        registrationCalls.add(node);
       case 'deleteWallet':
         deleteCalls.add(node);
     }
@@ -106,6 +120,125 @@ final class _CleanupHelperVisitor extends RecursiveAstVisitor<void> {
     catches.add(node);
     super.visitCatchClause(node);
   }
+}
+
+bool _staleReplacementHelperIsStrict(String source) {
+  final parsed = parseString(content: source, throwIfDiagnostics: false);
+  final functions = parsed.unit.declarations
+      .whereType<FunctionDeclaration>()
+      .where((node) => node.name.lexeme == 'storeE2eWallet')
+      .toList(growable: false);
+  if (functions.length != 1) return false;
+  final function = functions.single;
+  final parameters = function.functionExpression.parameters?.toSource() ?? '';
+  final functionSource = function.toSource();
+  if (!RegExp(r'\bCoreCrypto\s+crypto\b').hasMatch(parameters) ||
+      !RegExp(r'\brequired\s+String\s+walletId\b').hasMatch(parameters) ||
+      !RegExp(r'\brequired\s+String\s+mnemonic\b').hasMatch(parameters) ||
+      !RegExp(r'\bDuration\s+timeout\b').hasMatch(parameters) ||
+      !functionSource.contains("!walletId.startsWith('kt-e2e-')") ||
+      !functionSource.contains('throw ArgumentError.value(')) {
+    return false;
+  }
+
+  final visitor = _CleanupHelperVisitor();
+  function.functionExpression.body.accept(visitor);
+  if (visitor.storeCalls.length != 2 ||
+      visitor.registrationCalls.length != 2 ||
+      visitor.deleteCalls.length != 1 ||
+      visitor.catches.length != 1 ||
+      visitor.catches.single.exceptionType?.toSource() !=
+          'WalletAlreadyExistsException') {
+    return false;
+  }
+  for (final store in visitor.storeCalls) {
+    if (store.target?.toSource() != 'crypto' ||
+        _namedArgument(store, 'walletId') != 'walletId' ||
+        _namedArgument(store, 'mnemonic') != 'mnemonic') {
+      return false;
+    }
+  }
+  for (final registration in visitor.registrationCalls) {
+    final arguments = _positionalArguments(registration);
+    if (arguments.length != 2 ||
+        arguments[0].toSource() != 'crypto' ||
+        arguments[1].toSource() != 'walletId' ||
+        _namedArgument(registration, 'timeout') != 'timeout') {
+      return false;
+    }
+  }
+
+  final deletion = visitor.deleteCalls.single;
+  final deletionArguments = _positionalArguments(deletion);
+  final timeoutCall = deletion.parent;
+  final catchClause = visitor.catches.single;
+  if (deletion.target?.toSource() != 'crypto' ||
+      deletionArguments.length != 1 ||
+      deletionArguments.single.toSource() != 'walletId' ||
+      timeoutCall is! MethodInvocation ||
+      timeoutCall.methodName.name != 'timeout' ||
+      !identical(timeoutCall.target, deletion) ||
+      _positionalArguments(timeoutCall).singleOrNull?.toSource() != 'timeout' ||
+      deletion.offset < catchClause.offset ||
+      deletion.end > catchClause.end) {
+    return false;
+  }
+
+  final audit = _auditCleanup(functionSource);
+  return audit.nativeStoreSites == 2 && audit.missingWalletIds.isEmpty;
+}
+
+List<String> _staleReplacementHelperSelfTestFailures() {
+  const strict = '''
+Future<void> storeE2eWallet(CoreCrypto crypto, {required String walletId, required String mnemonic, Duration timeout = const Duration(seconds: 45)}) async {
+  if (!walletId.startsWith('kt-e2e-')) { throw ArgumentError.value(walletId); }
+  try {
+    await crypto.storeWallet(walletId: walletId, mnemonic: mnemonic).timeout(timeout);
+    registerE2eWalletCleanup(crypto, walletId, timeout: timeout);
+    return;
+  } on WalletAlreadyExistsException {
+    await crypto.deleteWallet(walletId).timeout(timeout);
+  }
+  await crypto.storeWallet(walletId: walletId, mnemonic: mnemonic).timeout(timeout);
+  registerE2eWalletCleanup(crypto, walletId, timeout: timeout);
+}
+''';
+  final cases = <({String name, String source, bool accepted})>[
+    (
+      name: 'strict stale E2E replacement helper is accepted',
+      source: strict,
+      accepted: true,
+    ),
+    (
+      name: 'stale helper without reserved namespace is rejected',
+      source: strict.replaceFirst(
+        "if (!walletId.startsWith('kt-e2e-')) { throw ArgumentError.value(walletId); }",
+        '',
+      ),
+      accepted: false,
+    ),
+    (
+      name: 'stale helper swallowing authenticated deletion is rejected',
+      source: strict.replaceFirst(
+        'await crypto.deleteWallet(walletId).timeout(timeout);',
+        'try { await crypto.deleteWallet(walletId).timeout(timeout); } on AuthFailedException {}',
+      ),
+      accepted: false,
+    ),
+    (
+      name: 'stale helper registering another wallet is rejected',
+      source: strict.replaceFirst(
+        'registerE2eWalletCleanup(crypto, walletId, timeout: timeout);',
+        'registerE2eWalletCleanup(crypto, otherId, timeout: timeout);',
+      ),
+      accepted: false,
+    ),
+  ];
+  return [
+    for (final item in cases)
+      if (_staleReplacementHelperIsStrict(item.source) != item.accepted)
+        item.name,
+  ];
 }
 
 bool _cleanupHelperIsStrict(String source) {

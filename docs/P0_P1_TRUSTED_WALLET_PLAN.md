@@ -643,6 +643,10 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   展示用户输入的主地址，不信任 QR summary。
 - 边界：自动帧聚合不代替两台物理设备的真实摄像头扫描；八链中只剩 Polygon Amoy
   因 POL 测试燃料不足尚未完成同等级双端链上闭环。
+- 2026-08-03 18:31 JST 使用仍有效的当前短期批次在唯一 iPhone 17 Pro Simulator
+  重新启动 Polygon Amoy 原生币 + Circle USDC 用例。官方 chainId/余额读取阶段返回
+  POL 精确为 0，用例在费用预算、签名和广播之前失败，原生签名调用与链上广播均为 0；
+  没有把“测试启动成功”写成链路通过。
 
 2026-07-31 Cold Signer 原生签名/验签子链路证据（仍不等同于广播闭环）：
 
@@ -836,7 +840,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   不变，通过唯一 iPhone 17 Pro Simulator 的系统 Face ID 菜单立即复跑 cleanup-only，
   原生桥明确返回 `E2E-STALE-NATIVE-KEY-DELETED`，随后集成测试 1/1 退出成功。没有重置
   Simulator Keychain，也没有读取或打印助记词；当前已知 provisioning 临时密钥已清理。
-- [x] 原生 E2E 钱包生命周期必须闭合。仓库级
+- [ ] 原生 E2E 钱包生命周期必须闭合。仓库级
   `tool/audit_e2e_wallet_cleanup.dart` 已建立“零新增技术债”门禁：任何新的
   `storeWallet` 测试若没有显式 `deleteWallet` 或
   `registerE2eWalletCleanup` 会直接失败；已先修复基础真实派生与 Sepolia 签名测试，
@@ -850,13 +854,22 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   核对同实例、同 walletId，并只接受紧邻注册的生产认证 teardown，或确实覆盖该创建点且
   不吞异常的 `finally` 删除；纯 `MockCoreCrypto` 通过实际变量初始化识别，不再靠原始文本
   豁免。六类绕过先红后绿，真实扫描发现并修复 Sepolia replacement 生命周期，同时把
-  EVM replacement 的静默 TimeoutException 路径改为统一认证 teardown。当前 31 个原生
-  store 站点、0 清理债务。门禁同时解析统一 helper 本身，要求真实注册 `addTearDown`、
+  EVM replacement 的静默 TimeoutException 路径改为统一认证 teardown。当前 32 个原生
+  store 分支、0 源码清理债务。门禁同时解析统一 helper 本身，要求真实注册 `addTearDown`、
   执行同实例 `deleteWallet(walletId).timeout(timeout)`，并只允许忽略
   `WalletNotFoundException`；空 helper 或吞 TimeoutException 的负例均失败。
-  `check_deps`、完整静态分析与 KT Wallet 1453/1453 通过。
+  `check_deps`、完整静态分析、KT Wallet 1492/1492 与完整公开测试审计 13/13 通过。
+  - [x] Polygon 用例新增只接受 `kt-e2e-*` 的中断自愈 helper：同名 slot 只能经生产
+    `deleteWallet` 认证删除后重建；认证失败保留旧密钥并终止，不能覆盖。新建、认证替换、
+    非测试命名空间和认证失败保持旧地址 4/4 通过；Analyzer 门禁另以缺命名空间、吞认证
+    失败和错 walletId 三类绕过自测固定该控制流。
+  - [ ] 本次复跑暴露的旧 `polygon-amoy-e2e-v2` 与新
+    `kt-e2e-polygon-amoy-v3` 两个已知 Simulator 测试 slot 尚需通过系统 Face ID 的
+    cleanup-only 路径精确删除。没有重置 Keychain，也没有未经用户确认触发不可恢复删除；
+    因此总项暂时恢复为未完成。
 - [ ] 新批次尚未补充最小测试网 gas/Token，因此八链真实广播矩阵仍需在注资后重跑；
   旧 EVM 地址关联主网 BNB，只保留在本地安全归档中，不得用于自动化或未授权交易。
+  18:31 JST 的 Polygon Amoy 真实预检仍返回 POL=0，签名/广播均未执行。
 
 ## P1：达到国际“可靠基础钱包”水平
 
@@ -1258,7 +1271,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     现统一为英文/日文 `KT Cold Signer`、中文 `KT冷钱包`；新增通用 ARB 禁用词门禁，
     可按语言拒绝退役品牌和语言不匹配名称。门禁单测先红后绿，三语 Widget 回归及受影响
     Golden 已人工复核；最新公开测试源码审计 12/12、完整依赖审计 13/13、KT Wallet
-    1488/1488、KT Cold Signer 570/570、共享 packages 401/401、静态分析 0、Gateway
+    1492/1492、KT Cold Signer 570/570、共享 packages 401/401、静态分析 0、Gateway
     audit 全部通过。
   - [ ] 真机系统权限弹窗、生命周期保护页及全部生产路由仍需逐页三语语义人工复核，
     因此本总项保持未完成，不能扩大宣称为“全 App 本地化验收完成”。

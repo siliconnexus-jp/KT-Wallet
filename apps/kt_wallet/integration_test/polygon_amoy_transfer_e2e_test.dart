@@ -16,7 +16,10 @@ import 'package:kt_wallet/src/transfer/chain_params_service.dart';
 // Bump the fixture id when the simulator may contain an older Keychain entry
 // created with biometric access control. This E2E wallet is intentionally
 // stored with requireAuth=false and tests signing, not the authentication UI.
-const _walletId = 'polygon-amoy-e2e-v2';
+// Keep native E2E slots in an explicit namespace so a test installation can
+// never collide with a production wallet's random identifier. Bump the suffix
+// only when a previously interrupted simulator run left a legacy test slot.
+const _walletId = 'kt-e2e-polygon-amoy-v3';
 const _rpcUrl = 'https://polygon-amoy-bor-rpc.publicnode.com';
 const _usdc = '0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582';
 const _sink = '0x000000000000000000000000000000000000dEaD';
@@ -31,12 +34,12 @@ void main() {
       final crypto = MethodChannelCoreCrypto();
       const mnemonic = String.fromEnvironment('SEPOLIA_E2E_MNEMONIC');
       expect(mnemonic, isNotEmpty);
-      await crypto.storeWallet(
+      await storeE2eWallet(
+        crypto,
         walletId: _walletId,
         mnemonic: mnemonic,
         requireAuth: false,
       );
-      registerE2eWalletCleanup(crypto, _walletId);
       final addresses = await crypto.deriveAddresses(_walletId);
       final transport = HttpJsonRpcTransport(
         timeout: const Duration(seconds: 20),
