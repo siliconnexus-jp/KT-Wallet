@@ -60,6 +60,14 @@ class _IntentFailingStore extends WalletStore {
       Future<void>.error(StateError('cannot persist delete intent'));
 }
 
+class _FinalityReadFailingStore extends WalletStore {
+  _FinalityReadFailingStore(super.database);
+
+  @override
+  Future<List<FinalityMetric>> finalityMetrics() =>
+      Future<List<FinalityMetric>>.error(StateError('metrics unavailable'));
+}
+
 void main() {
   late WalletDatabase db;
   late WalletStore store;
@@ -326,6 +334,16 @@ void main() {
       expect(controller.current?.id, second.id);
     },
   );
+
+  test('diagnostic finality reads never break wallet operations', () async {
+    final controller = WalletController(
+      WalletManager(),
+      store: _FinalityReadFailingStore(db),
+    );
+
+    await expectLater(controller.restoreDurableFinalityMetrics(), completes);
+    await expectLater(controller.restoreDurableFinalityMetrics(), completes);
+  });
 
   test(
     'older local transfers are backfilled into the recipient history',

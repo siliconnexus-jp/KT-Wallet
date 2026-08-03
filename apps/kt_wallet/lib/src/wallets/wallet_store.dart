@@ -106,6 +106,9 @@ class WalletStore {
   Future<db.Transaction?> transactionById(String walletId, String id) =>
       _wallets.scoped(walletId).transactionById(id);
 
+  Future<List<db.FinalityMetric>> finalityMetrics() =>
+      db.FinalityMetricsRepository(_db).recent();
+
   Future<String?> setting(String walletId, String key) =>
       _wallets.scoped(walletId).setting(key);
 
@@ -340,6 +343,7 @@ class WalletStore {
     db.TxCheckOutcome? lastCheckOutcome,
     bool clearLastCheckOutcome = false,
     bool onlyIfLive = false,
+    int? finalityMetricAt,
   }) => _wallets
       .scoped(walletId)
       .updateTransactionStatus(
@@ -351,6 +355,7 @@ class WalletStore {
         lastCheckOutcome: lastCheckOutcome,
         clearLastCheckOutcome: clearLastCheckOutcome,
         onlyIfLive: onlyIfLive,
+        finalityMetricAt: finalityMetricAt,
       );
 
   Future<bool> setTransactionNonceIfAbsent(

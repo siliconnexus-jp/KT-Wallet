@@ -7,7 +7,6 @@ import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/widgets.dart';
 import 'package:wallet_data/wallet_data.dart' as db;
 
-import '../observability/transaction_finality_metrics.dart';
 import '../state/wallet_controller.dart';
 import '../observability/experience_metrics.dart';
 import 'history_service.dart';
@@ -615,17 +614,17 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
         };
         if (next == null) continue;
         final confirmedHash = hash!;
+        final settledAt = DateTime.now().millisecondsSinceEpoch;
         var applied = false;
-        var replacedTransactions = const <db.Transaction>[];
         if (_isEvmCoinName(local.coin)) {
           final settlement = await _wallets.settleEvmTransactionForWallet(
             walletId: local.walletId,
             id: local.id,
             status: next,
             hash: confirmedHash,
+            lastCheckedAt: settledAt,
           );
           applied = settlement.applied;
-          replacedTransactions = settlement.replacedTransactions;
         } else {
           applied = await _wallets.updateTransactionStatusForWallet(
             local.walletId,
@@ -634,18 +633,10 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
             hash: confirmedHash,
             clearLastCheckOutcome: true,
             onlyIfLive: true,
+            finalityMetricAt: settledAt,
           );
         }
         if (!applied) continue;
-        final settledAt = DateTime.now().millisecondsSinceEpoch;
-        recordTerminalTransactionFinality(local, next, settledAt);
-        for (final replaced in replacedTransactions) {
-          recordTerminalTransactionFinality(
-            replaced,
-            db.TxStatus.replaced,
-            settledAt,
-          );
-        }
         _enqueueNotice(
           TransactionStatusNotice(
             hash: confirmedHash,
@@ -780,7 +771,6 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
         final changed = next != null && next != transaction.status;
         final persisted = changed ? next : transaction.status;
         var applied = false;
-        var replacedTransactions = const <db.Transaction>[];
         if (_isEvmCoinName(transaction.coin) &&
             changed &&
             (persisted == db.TxStatus.confirmed ||
@@ -793,7 +783,6 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
             lastCheckedAt: checkedAt,
           );
           applied = settlement.applied;
-          replacedTransactions = settlement.replacedTransactions;
         } else {
           applied = await _wallets.updateTransactionStatusForWallet(
             transaction.walletId,
@@ -804,17 +793,8 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
             lastCheckOutcome: outcome,
             clearLastCheckOutcome: terminal,
             onlyIfLive: true,
+            finalityMetricAt: changed && terminal ? checkedAt : null,
           );
-        }
-        if (applied && changed && terminal) {
-          recordTerminalTransactionFinality(transaction, next, checkedAt);
-          for (final replaced in replacedTransactions) {
-            recordTerminalTransactionFinality(
-              replaced,
-              db.TxStatus.replaced,
-              checkedAt,
-            );
-          }
         }
         if (applied && changed) {
           if (next == db.TxStatus.confirmed ||

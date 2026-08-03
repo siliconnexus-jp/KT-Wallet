@@ -52,7 +52,6 @@ import '../market/token_balance_service.dart'
 import '../market/transaction_card.dart';
 import '../market/transaction_status_service.dart';
 import '../observability/experience_metrics.dart';
-import '../observability/transaction_finality_metrics.dart';
 import '../platform/external_actions.dart';
 import '../platform/media_gallery.dart';
 import '../security/biometric_auth.dart';
@@ -3648,7 +3647,6 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
     final controller = WalletScope.of(context);
     final persisted = changed ? next : tx.status;
     var applied = false;
-    var replacedTransactions = const <Transaction>[];
     if (_isEvmCoinName(tx.coin) &&
         changed &&
         (persisted == TxStatus.confirmed || persisted == TxStatus.failed)) {
@@ -3660,7 +3658,6 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
         lastCheckedAt: checkedAt,
       );
       applied = settlement.applied;
-      replacedTransactions = settlement.replacedTransactions;
     } else {
       applied = await controller.updateTransactionStatusForWallet(
         tx.walletId,
@@ -3671,22 +3668,13 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
         lastCheckOutcome: outcome,
         clearLastCheckOutcome: terminal,
         onlyIfLive: true,
+        finalityMetricAt: changed && terminal ? checkedAt : null,
       );
     }
     if (!mounted) return;
     if (!applied) {
       await _reload();
       return;
-    }
-    if (changed && terminal) {
-      recordTerminalTransactionFinality(tx, persisted, checkedAt);
-      for (final replaced in replacedTransactions) {
-        recordTerminalTransactionFinality(
-          replaced,
-          TxStatus.replaced,
-          checkedAt,
-        );
-      }
     }
     setState(() {
       _lastCheckedAt = checkedAt;
@@ -4082,7 +4070,6 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     final controller = WalletScope.of(context);
     final persisted = changed ? next : transaction.status;
     var applied = false;
-    var replacedTransactions = const <Transaction>[];
     if (_isEvmCoinName(transaction.coin) &&
         changed &&
         (persisted == TxStatus.confirmed || persisted == TxStatus.failed)) {
@@ -4094,7 +4081,6 @@ class _TxDetailScreenState extends State<TxDetailScreen>
         lastCheckedAt: checkedAt,
       );
       applied = settlement.applied;
-      replacedTransactions = settlement.replacedTransactions;
     } else {
       applied = await controller.updateTransactionStatusForWallet(
         transaction.walletId,
@@ -4105,22 +4091,13 @@ class _TxDetailScreenState extends State<TxDetailScreen>
         lastCheckOutcome: outcome,
         clearLastCheckOutcome: terminal,
         onlyIfLive: true,
+        finalityMetricAt: changed && terminal ? checkedAt : null,
       );
     }
     if (!mounted) return;
     if (!applied) {
       _reload();
       return;
-    }
-    if (changed && terminal) {
-      recordTerminalTransactionFinality(transaction, persisted, checkedAt);
-      for (final replaced in replacedTransactions) {
-        recordTerminalTransactionFinality(
-          replaced,
-          TxStatus.replaced,
-          checkedAt,
-        );
-      }
     }
     setState(() {
       _lastCheckedAt = checkedAt;

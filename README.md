@@ -516,8 +516,8 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-04) completed with zero static-analysis
-issues: **1,527/1,527** KT Wallet tests, **570/570** KT Cold Signer tests, and
-**409/409** shared-package tests passed. The default gate passed **12/12** and
+issues: **1,530/1,530** KT Wallet tests, **570/570** KT Cold Signer tests, and
+**413/413** shared-package tests passed. The default gate passed **12/12** and
 the native/runtime/OSV `--full` gate passed **13/13**. The Gateway audit,
 public-secret gate, Gateway public-release version gate, native dependency
 lock/checksum verification, and OSV scans also passed. These numbers are
@@ -529,20 +529,25 @@ complete live result: one healthy chain cannot hide another chain's explicit
 failure, and missing/invalid native quotes cannot be counted as a successful
 portfolio refresh. A legacy wallet whose actually enabled chains are all on
 testnets now skips the price request entirely, regardless of disabled network
-profiles. Transaction finality is recorded only after a terminal state is
-persisted: confirmed is successful; failed, replaced, and expired are failed;
-pending and unknown evidence never manufacture a terminal sample. Hash-specific
-terminal evidence wins over weaker account-history reconciliation, and both
-paths use the same persistence-first metric boundary, so slow or unsuccessful
-outcomes cannot disappear from success rate or P95 or be counted twice.
+profiles. Transaction finality is committed in the same Drift transaction as
+its terminal state: confirmed is successful; failed, replaced, and expired are
+failed; pending and unknown evidence never manufacture a terminal sample. The
+bounded SQLite ring stores only duration and outcome—no wallet, address, hash,
+amount, network, error text, event timestamp, or payload—and is the single
+persistent source for finality. SharedPreferences schema 3 explicitly excludes
+those samples. Finality and ordinary experience samples use independent
+100-entry in-memory pools, and diagnostic read failures are swallowed so they
+cannot break startup, confirmation, or UI refresh. A process exit after
+confirmed/failed commits therefore cannot lose or duplicate the corresponding
+success-rate/P95 evidence on restart.
 
 EVM nonce competitors are settled in one Drift transaction guarded by a live-
 status compare-and-set. A late pending/unknown response cannot overwrite a
-confirmed, failed, replaced, or expired row; the same settlement returns every
-competitor it replaced so each success and failed finality is counted exactly
-once. Account-history reconciliation, hash polling, the broadcast-result page,
-and transaction detail use one persistence-first finality recorder. Detail
-pollers reload when their stale write loses this guard instead of publishing
+confirmed, failed, replaced, or expired row; the same settlement commits an
+anonymous failed-finality row for every competitor it replaces together with
+the winner's outcome. Account-history reconciliation, hash polling, the
+broadcast-result page, and transaction detail all use that database boundary.
+Detail pollers reload when their stale write loses this guard instead of publishing
 the stale response; a direct receipt confirmation is also terminal even when
 the fallback status service is not consulted. On
 2026-08-03, the iOS native

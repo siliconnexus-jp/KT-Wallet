@@ -621,4 +621,133 @@ void main() {
       },
     );
   });
+
+  group('durable transaction finality metrics', () {
+    test(
+      'terminal status and anonymous metric commit atomically once',
+      () async {
+        final repo = wallets.scoped('A');
+        await repo.upsertTransaction(
+          _evmTx('solana-style-finality', 'A', networkId: 'sol-devnet'),
+        );
+        await repo.updateTransactionStatus(
+          'solana-style-finality',
+          TxStatus.pending,
+          hash: '5QFinality',
+          broadcastAt: 2000,
+        );
+
+        expect(
+          await repo.updateTransactionStatus(
+            'solana-style-finality',
+            TxStatus.confirmed,
+            finalityMetricAt: 3500,
+          ),
+          isTrue,
+        );
+        // A competing poller loses the live-row CAS and therefore cannot append
+        // a duplicate metric for the same terminal transition.
+        expect(
+          await repo.updateTransactionStatus(
+            'solana-style-finality',
+            TxStatus.confirmed,
+            finalityMetricAt: 3600,
+          ),
+          isFalse,
+        );
+
+        final samples = await FinalityMetricsRepository(db).recent();
+        expect(samples, hasLength(1));
+        expect(samples.single.durationMs, 1500);
+        expect(samples.single.success, isTrue);
+        expect(
+          (await repo.transactionById('solana-style-finality'))!.status,
+          TxStatus.confirmed,
+        );
+      },
+    );
+
+    test(
+      'receipt settlement records winner and replaced competitor together',
+      () async {
+        final repo = wallets.scoped('A');
+        await repo.reserveEvmTransaction(
+          _evmTx('metric-original', 'A'),
+          coin: 'eth',
+          networkId: 'eth-mainnet',
+          from: '0xfrom',
+          nonce: '7',
+        );
+        await repo.updateTransactionStatus(
+          'metric-original',
+          TxStatus.pending,
+          hash: '0xold',
+          broadcastAt: 1200,
+        );
+        await repo.reserveEvmTransaction(
+          _evmTx(
+            'metric-replacement',
+            'A',
+            replacesId: 'metric-original',
+            replacementKind: TxReplacementKind.speedUp,
+          ),
+          coin: 'eth',
+          networkId: 'eth-mainnet',
+          from: '0xfrom',
+          nonce: '7',
+          replacesId: 'metric-original',
+        );
+        await repo.recordEvmReplacementBroadcast(
+          originalId: 'metric-original',
+          replacementId: 'metric-replacement',
+          hash: '0xnew',
+          broadcastAt: 2000,
+        );
+
+        final result = await repo.settleEvmTransaction(
+          id: 'metric-replacement',
+          status: TxStatus.confirmed,
+          hash: '0xnew',
+          lastCheckedAt: 3200,
+        );
+        expect(result.applied, isTrue);
+
+        final samples = await FinalityMetricsRepository(db).recent();
+        expect(samples, hasLength(2));
+        expect(samples.where((sample) => sample.success), hasLength(1));
+        expect(samples.where((sample) => !sample.success), hasLength(1));
+        expect(samples.map((sample) => sample.durationMs).toSet(), {
+          1200,
+          2000,
+        });
+      },
+    );
+
+    test(
+      'anonymous finality storage stays bounded to the newest 100',
+      () async {
+        final repo = wallets.scoped('A');
+        for (var index = 0; index < 105; index++) {
+          final id = 'bounded-$index';
+          await repo.upsertTransaction(
+            _evmTx(id, 'A', nonce: index.toString()),
+          );
+          expect(
+            await repo.updateTransactionStatus(
+              id,
+              TxStatus.confirmed,
+              onlyIfLive: true,
+              finalityMetricAt: 2000 + index,
+            ),
+            isTrue,
+          );
+        }
+
+        final samples = await FinalityMetricsRepository(db).recent();
+        expect(samples, hasLength(FinalityMetricsRepository.capacity));
+        expect(samples.first.durationMs, 1005);
+        expect(samples.last.durationMs, 1104);
+      },
+    );
+  });
 }

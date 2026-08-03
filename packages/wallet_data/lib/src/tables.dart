@@ -189,6 +189,20 @@ class Transactions extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Privacy-minimal transaction-finality samples committed in the same SQLite
+/// transaction as the terminal status they describe.
+///
+/// The table deliberately contains no wallet id, address, transaction hash,
+/// amount, network, error text or event timestamp. An auto-increment sequence
+/// only preserves local ordering while the repository keeps the newest 100
+/// rows. This makes SQLite the single durable source for finality metrics and
+/// removes the crash window created by copying them to SharedPreferences.
+class FinalityMetrics extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get durationMs => integer()();
+  BoolColumn get success => boolean()();
+}
+
 class AddressBook extends Table {
   TextColumn get id => text()();
   TextColumn get walletId => text().references(Wallets, #id)();

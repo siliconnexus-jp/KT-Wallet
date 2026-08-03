@@ -11,6 +11,7 @@ part 'database.g.dart';
     Tokens,
     Balances,
     Transactions,
+    FinalityMetrics,
     AddressBook,
     SignRequests,
     Settings,
@@ -30,8 +31,9 @@ class WalletDatabase extends _$WalletDatabase {
   /// v6: persisted timestamp of the latest hash-specific status lookup.
   /// v7: persisted pending/unknown outcome of that lookup.
   /// v8: explicit transfer / ERC-20 approval-revoke transaction operation.
+  /// v9: crash-safe, privacy-minimal transaction-finality metric ring.
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   /// Backfill map for [Transactions.networkId]: the chain family's MAINNET
   /// network id, keyed by the `coin` column. Kept as literals because
@@ -95,6 +97,9 @@ class WalletDatabase extends _$WalletDatabase {
       }
       if (from < 8) {
         await m.addColumn(transactions, transactions.operation);
+      }
+      if (from < 9) {
+        await m.createTable(finalityMetrics);
       }
     },
     beforeOpen: (details) async {

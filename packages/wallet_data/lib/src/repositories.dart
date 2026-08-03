@@ -31,6 +31,50 @@ class EvmSettlementResult {
   final List<Transaction> replacedTransactions;
 }
 
+/// Global repository for the privacy-minimal finality metric ring.
+///
+/// Rows have no wallet or transaction identity and are intentionally kept
+/// outside wallet-scoped business data. They are written by
+/// [WalletRepository] inside the same transaction as a terminal state and are
+/// only read here for local aggregate diagnostics.
+class FinalityMetricsRepository {
+  FinalityMetricsRepository(this._db);
+
+  static const capacity = 100;
+  final WalletDatabase _db;
+
+  Future<List<FinalityMetric>> recent() async {
+    final newest =
+        await (_db.select(_db.finalityMetrics)
+              ..orderBy([
+                (row) =>
+                    OrderingTerm(expression: row.id, mode: OrderingMode.desc),
+              ])
+              ..limit(capacity))
+            .get();
+    return List.unmodifiable(newest.reversed);
+  }
+
+  Future<void> _record({required int durationMs, required bool success}) async {
+    await _db
+        .into(_db.finalityMetrics)
+        .insert(
+          FinalityMetricsCompanion.insert(
+            durationMs: durationMs,
+            success: success,
+          ),
+        );
+    // SQLite is the canonical ring, not an unbounded analytics log. Deleting
+    // older anonymous samples in the same transaction preserves both the
+    // transaction status and the newest bounded evidence across crashes.
+    await _db.customStatement(
+      'DELETE FROM finality_metrics WHERE id NOT IN '
+      '(SELECT id FROM finality_metrics ORDER BY id DESC LIMIT ?)',
+      [capacity],
+    );
+  }
+}
+
 const _liveTransactionStatuses = <TxStatus>[
   TxStatus.submitted,
   TxStatus.broadcast,
@@ -227,33 +271,81 @@ class WalletRepository {
     TxCheckOutcome? lastCheckOutcome,
     bool clearLastCheckOutcome = false,
     bool onlyIfLive = false,
+    int? finalityMetricAt,
   }) async {
-    final update = _db.update(_db.transactions)
-      ..where((t) {
-        var predicate = t.walletId.equals(walletId) & t.id.equals(id);
-        if (onlyIfLive) {
-          predicate = predicate & t.status.isIn(_liveTransactionStatusIndexes);
-        }
-        return predicate;
-      });
-    final changed = await update.write(
-      TransactionsCompanion(
-        status: Value(status),
-        hash: hash == null ? const Value.absent() : Value(hash),
-        broadcastAt: broadcastAt == null
-            ? const Value.absent()
-            : Value(broadcastAt),
-        lastCheckedAt: lastCheckedAt == null
-            ? const Value.absent()
-            : Value(lastCheckedAt),
-        lastCheckOutcome: clearLastCheckOutcome
-            ? const Value(null)
-            : lastCheckOutcome == null
-            ? const Value.absent()
-            : Value(lastCheckOutcome),
-      ),
-    );
-    return changed == 1;
+    bool? finalitySuccess;
+    if (finalityMetricAt != null) {
+      finalitySuccess = switch (status) {
+        TxStatus.confirmed => true,
+        TxStatus.failed || TxStatus.replaced || TxStatus.expired => false,
+        _ => throw ArgumentError.value(
+          status,
+          'status',
+          'cannot produce a transaction-finality metric',
+        ),
+      };
+    }
+
+    Future<int> writeStatus() {
+      final update = _db.update(_db.transactions)
+        ..where((t) {
+          var predicate = t.walletId.equals(walletId) & t.id.equals(id);
+          // A finality metric represents one live -> terminal transition. Make
+          // that compare-and-set intrinsic to the repository contract instead
+          // of trusting every current and future caller to request it.
+          if (onlyIfLive || finalityMetricAt != null) {
+            predicate =
+                predicate & t.status.isIn(_liveTransactionStatusIndexes);
+          }
+          return predicate;
+        });
+      return update.write(
+        TransactionsCompanion(
+          status: Value(status),
+          hash: hash == null ? const Value.absent() : Value(hash),
+          broadcastAt: broadcastAt == null
+              ? const Value.absent()
+              : Value(broadcastAt),
+          lastCheckedAt: lastCheckedAt == null
+              ? const Value.absent()
+              : Value(lastCheckedAt),
+          lastCheckOutcome: clearLastCheckOutcome
+              ? const Value(null)
+              : lastCheckOutcome == null
+              ? const Value.absent()
+              : Value(lastCheckOutcome),
+        ),
+      );
+    }
+
+    if (finalityMetricAt == null) return await writeStatus() == 1;
+    return _db.transaction(() async {
+      final row = await transactionById(id);
+      if (row == null) return false;
+      final changed = await writeStatus();
+      if (changed != 1) return false;
+      await _recordFinalityMetric(
+        row,
+        settledAt: finalityMetricAt,
+        success: finalitySuccess!,
+      );
+      return true;
+    });
+  }
+
+  Future<void> _recordFinalityMetric(
+    Transaction row, {
+    required int settledAt,
+    required bool success,
+  }) {
+    final startedAt = row.broadcastAt ?? row.createdAt;
+    // Wall clocks can move backwards while a transfer is pending. Preserve
+    // the terminal outcome without fabricating negative latency.
+    final elapsedMs = settledAt - startedAt;
+    final durationMs = elapsedMs < 0 ? 0 : elapsedMs;
+    return FinalityMetricsRepository(
+      _db,
+    )._record(durationMs: durationMs, success: success);
   }
 
   /// Backfills an observed EVM nonce without ever overwriting existing
@@ -410,6 +502,19 @@ class WalletRepository {
               lastCheckOutcome: const Value(null),
             ),
           );
+      final settledAt = lastCheckedAt ?? DateTime.now().millisecondsSinceEpoch;
+      await _recordFinalityMetric(
+        row,
+        settledAt: settledAt,
+        success: status == TxStatus.confirmed,
+      );
+      for (final replacedTransaction in replaced.values) {
+        await _recordFinalityMetric(
+          replacedTransaction,
+          settledAt: settledAt,
+          success: false,
+        );
+      }
       return EvmSettlementResult(
         applied: true,
         replacedTransactions: List.unmodifiable(replaced.values),

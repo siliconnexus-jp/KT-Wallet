@@ -1,12 +1,13 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
 import 'package:test/test.dart';
 import 'package:wallet_data/wallet_data.dart';
 
 void main() {
-  test('schemaVersion is 8 and all tables are created', () async {
+  test('schemaVersion is 9 and all tables are created', () async {
     final db = WalletDatabase(NativeDatabase.memory());
     addTearDown(db.close);
 
@@ -21,7 +22,7 @@ void main() {
             .map((r) => r.data['name'] as String)
             .toSet();
 
-    expect(db.schemaVersion, 8);
+    expect(db.schemaVersion, 9);
     for (final expected in [
       'wallets',
       'accounts',
@@ -34,12 +35,13 @@ void main() {
       'wallet_settings',
       'contacts',
       'custom_tokens',
+      'finality_metrics',
     ]) {
       expect(tables, contains(expected), reason: 'missing table $expected');
     }
   });
 
-  test('v1 → v8 migration keeps data and adds operation metadata', () async {
+  test('v1 → v9 migration keeps data and adds operation metadata', () async {
     // Build the two v1 tables touched by later migrations. The old
     // transactions schema deliberately has none of the EVM replacement
     // columns introduced in v3.
@@ -153,10 +155,10 @@ void main() {
         .data
         .values
         .first;
-    expect(version, 8);
+    expect(version, 9);
   });
 
-  test('v3 → v8 adds network, finality and operation metadata', () async {
+  test('v3 → v9 adds network, finality and operation metadata', () async {
     final dir = await Directory.systemTemp.createTemp('wallet_data_v3');
     addTearDown(() => dir.delete(recursive: true));
     final file = File('${dir.path}/v3.sqlite');
@@ -275,7 +277,7 @@ void main() {
         .data
         .values
         .first;
-    expect(version, 8);
+    expect(version, 9);
   });
 
   test('concurrent transactions on separate wallets do not corrupt', () async {
@@ -400,4 +402,71 @@ void main() {
     final ordered = (await a.transactions()).map((t) => t.id).toList();
     expect(ordered, ['new', 'mid', 'old']);
   });
+
+  test(
+    'terminal status and metric survive process death as one commit',
+    () async {
+      final dir = await Directory.systemTemp.createTemp(
+        'wallet_finality_crash',
+      );
+      addTearDown(() => dir.delete(recursive: true));
+      final file = File('${dir.path}/wallet.sqlite');
+
+      final first = WalletDatabase(NativeDatabase(file));
+      final firstWallets = WalletsRepository(first);
+      await firstWallets.insert(
+        WalletsCompanion.insert(
+          id: 'restart-wallet',
+          name: 'Restart',
+          type: WalletType.hot,
+          avatarColor: 1,
+          createdAt: 1000,
+        ),
+      );
+      final firstRepo = firstWallets.scoped('restart-wallet');
+      await firstRepo.upsertTransaction(
+        TransactionsCompanion.insert(
+          id: 'restart-finality',
+          walletId: 'restart-wallet',
+          coin: 'solana',
+          networkId: const Value('sol-devnet'),
+          direction: TxDirection.outgoing,
+          fromAddr: 'sender',
+          toAddr: 'recipient',
+          amountRaw: '100',
+          hash: const Value('signature'),
+          status: TxStatus.pending,
+          signMode: SignMode.local,
+          createdAt: 1000,
+          broadcastAt: const Value(2000),
+        ),
+      );
+      expect(
+        await firstRepo.updateTransactionStatus(
+          'restart-finality',
+          TxStatus.confirmed,
+          onlyIfLive: true,
+          finalityMetricAt: 3500,
+        ),
+        isTrue,
+      );
+      // Simulate process death before Flutter has had any opportunity to copy or
+      // observe the sample.
+      await first.close();
+
+      final restarted = WalletDatabase(NativeDatabase(file));
+      addTearDown(restarted.close);
+      final restartedRepo = WalletsRepository(
+        restarted,
+      ).scoped('restart-wallet');
+      expect(
+        (await restartedRepo.transactionById('restart-finality'))!.status,
+        TxStatus.confirmed,
+      );
+      final samples = await FinalityMetricsRepository(restarted).recent();
+      expect(samples, hasLength(1));
+      expect(samples.single.durationMs, 1500);
+      expect(samples.single.success, isTrue);
+    },
+  );
 }

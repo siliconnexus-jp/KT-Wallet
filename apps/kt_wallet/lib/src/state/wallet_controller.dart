@@ -9,6 +9,7 @@ import 'package:wallet_data/wallet_data.dart'
         Contact,
         CustomToken,
         EvmSettlementResult,
+        FinalityMetric,
         SignMode,
         Transaction,
         TxCheckOutcome,
@@ -17,6 +18,7 @@ import 'package:wallet_data/wallet_data.dart'
         TxStatus;
 
 import '../wallets/wallet_manager.dart';
+import '../observability/experience_metrics.dart';
 import '../wallets/wallet_model.dart';
 import '../wallets/wallet_store.dart';
 
@@ -47,6 +49,7 @@ class WalletController extends ChangeNotifier {
   final bool _allowTestBypass;
   final WalletStore? _store;
   Future<void> _metadataWrites = Future<void>.value();
+  Future<void> _finalityMetricRefreshes = Future<void>.value();
 
   /// Releases the backing store's database connection (no-op for in-memory
   /// controllers). Call when the controller is retired, e.g. when leaving
@@ -57,6 +60,7 @@ class WalletController extends ChangeNotifier {
     // Drain the serialized metadata queue before closing Drift, otherwise the
     // last user-visible change can race a closed database and be lost.
     await _metadataWrites;
+    await _finalityMetricRefreshes;
     await _store?.close();
   }
 
@@ -365,6 +369,7 @@ class WalletController extends ChangeNotifier {
     int? lastCheckedAt,
     TxCheckOutcome? lastCheckOutcome,
     bool clearLastCheckOutcome = false,
+    int? finalityMetricAt,
   }) async {
     final walletId = current?.id;
     if (walletId == null || _store == null) {
@@ -380,6 +385,7 @@ class WalletController extends ChangeNotifier {
       lastCheckedAt: lastCheckedAt,
       lastCheckOutcome: lastCheckOutcome,
       clearLastCheckOutcome: clearLastCheckOutcome,
+      finalityMetricAt: finalityMetricAt,
     );
   }
 
@@ -396,6 +402,7 @@ class WalletController extends ChangeNotifier {
     TxCheckOutcome? lastCheckOutcome,
     bool clearLastCheckOutcome = false,
     bool onlyIfLive = false,
+    int? finalityMetricAt,
   }) async {
     final store = _store;
     if (store == null) {
@@ -412,8 +419,12 @@ class WalletController extends ChangeNotifier {
       lastCheckOutcome: lastCheckOutcome,
       clearLastCheckOutcome: clearLastCheckOutcome,
       onlyIfLive: onlyIfLive,
+      finalityMetricAt: finalityMetricAt,
     );
-    if (applied) notifyListeners();
+    if (applied) {
+      if (finalityMetricAt != null) await restoreDurableFinalityMetrics();
+      notifyListeners();
+    }
     return applied;
   }
 
@@ -490,8 +501,36 @@ class WalletController extends ChangeNotifier {
       hash: hash,
       lastCheckedAt: lastCheckedAt,
     );
-    if (result.applied) notifyListeners();
+    if (result.applied) {
+      await restoreDurableFinalityMetrics();
+      notifyListeners();
+    }
     return result;
+  }
+
+  /// Loads SQLite's privacy-minimal finality ring into the local diagnostics
+  /// view. SQLite remains the sole persistent owner of these samples.
+  Future<void> restoreDurableFinalityMetrics() {
+    final store = _store;
+    if (store == null) return Future<void>.value();
+    final refresh = _finalityMetricRefreshes.then((_) async {
+      try {
+        final List<FinalityMetric> rows = await store.finalityMetrics();
+        ExperienceMetrics.instance.replaceDurableTransactionFinality(
+          rows.map(
+            (row) => DurableTransactionFinalityMetric(
+              duration: Duration(milliseconds: row.durationMs),
+              success: row.success,
+            ),
+          ),
+        );
+      } on Object {
+        // A transaction status is already durable before this diagnostic read.
+        // Observability must never fail startup, confirmation or UI refresh.
+      }
+    });
+    _finalityMetricRefreshes = refresh;
+    return refresh;
   }
 
   int _nextColor() => _palette[_manager.count % _palette.length];

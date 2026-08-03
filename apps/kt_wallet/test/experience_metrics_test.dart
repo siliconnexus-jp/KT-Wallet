@@ -30,6 +30,13 @@ void main() {
       const Duration(milliseconds: 1),
       success: false,
     );
+    // Finality is allowlisted for diagnostics but has a stricter owner: only
+    // the SQLite transaction that commits the terminal state may supply it.
+    ExperienceMetrics.instance.record(
+      ExperienceMetricNames.transactionFinality,
+      const Duration(milliseconds: 2),
+      success: true,
+    );
     expect(ExperienceMetrics.instance.recent, isEmpty);
   });
 
@@ -178,21 +185,101 @@ void main() {
     },
   );
 
-  test('schema one is migrated to the privacy-minimal schema two', () async {
-    final store = _MemoryMetricsStore()
-      ..encoded = jsonEncode({
-        'schemaVersion': 1,
-        'samples': [
-          [ExperienceMetricNames.marketRefresh, 12, true],
-        ],
-      });
-    final metrics = ExperienceMetrics.forTesting(store);
-    await metrics.initializePersistence();
-    await metrics.flush();
+  test(
+    'legacy samples migrate while finality moves to the durable database',
+    () async {
+      final store = _MemoryMetricsStore()
+        ..encoded = jsonEncode({
+          'schemaVersion': 1,
+          'samples': [
+            [ExperienceMetricNames.marketRefresh, 12, true],
+          ],
+        });
+      final metrics = ExperienceMetrics.forTesting(store);
+      await metrics.initializePersistence();
+      await metrics.flush();
 
-    final migrated = jsonDecode(store.encoded!) as Map<String, dynamic>;
-    expect(migrated['schemaVersion'], 2);
-    expect(migrated['nativeIncidentHighWatermark'], 0);
+      final migrated = jsonDecode(store.encoded!) as Map<String, dynamic>;
+      expect(migrated['schemaVersion'], 3);
+      expect(migrated['nativeIncidentHighWatermark'], 0);
+    },
+  );
+
+  test(
+    'durable finality replaces legacy copies and is never dual-written',
+    () async {
+      final store = _MemoryMetricsStore()
+        ..encoded = jsonEncode({
+          'schemaVersion': 2,
+          'nativeIncidentHighWatermark': 0,
+          'samples': [
+            [ExperienceMetricNames.transactionFinality, 999, false],
+            [ExperienceMetricNames.marketRefresh, 12, true],
+          ],
+        });
+      final metrics = ExperienceMetrics.forTesting(store);
+      await metrics.initializePersistence();
+
+      metrics.replaceDurableTransactionFinality([
+        const DurableTransactionFinalityMetric(
+          duration: Duration(milliseconds: 1500),
+          success: true,
+        ),
+      ]);
+      await metrics.flush();
+
+      expect(
+        metrics.recent
+            .where(
+              (sample) =>
+                  sample.name == ExperienceMetricNames.transactionFinality,
+            )
+            .single
+            .duration,
+        const Duration(milliseconds: 1500),
+      );
+      final persisted = jsonDecode(store.encoded!) as Map<String, dynamic>;
+      expect(persisted['schemaVersion'], 3);
+      expect(
+        (persisted['samples'] as List<Object?>).where(
+          (row) =>
+              row is List<Object?> &&
+              row.first == ExperienceMetricNames.transactionFinality,
+        ),
+        isEmpty,
+      );
+    },
+  );
+
+  test('durable finality cannot evict unrelated experience samples', () async {
+    final metrics = ExperienceMetrics.forTesting(_MemoryMetricsStore());
+    await metrics.initializePersistence();
+    metrics.record(
+      ExperienceMetricNames.marketRefresh,
+      const Duration(milliseconds: 12),
+      success: true,
+    );
+
+    metrics.replaceDurableTransactionFinality([
+      for (var index = 0; index < 100; index++)
+        DurableTransactionFinalityMetric(
+          duration: Duration(milliseconds: index),
+          success: index.isEven,
+        ),
+    ]);
+
+    expect(
+      metrics.recent.where(
+        (sample) => sample.name == ExperienceMetricNames.marketRefresh,
+      ),
+      hasLength(1),
+    );
+    expect(
+      metrics.recent.where(
+        (sample) => sample.name == ExperienceMetricNames.transactionFinality,
+      ),
+      hasLength(100),
+    );
   });
 
   test(

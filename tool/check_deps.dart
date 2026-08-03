@@ -1062,7 +1062,7 @@ void main() {
     '_hasPendingTransactions = remainingPending.isNotEmpty',
     'updateTransactionStatusForWallet(',
     'walletId: transaction.walletId',
-    'replacedTransactions',
+    'finalityMetricAt: changed && terminal ? checkedAt : null',
   ]) {
     if (!historyFinalityControllerSource.contains(marker)) {
       failures.add(
@@ -1084,39 +1084,73 @@ void main() {
       '${transferScreens.path} does not CAS both transaction-detail pollers against live rows',
     );
   }
-  final finalityMetrics = File(
-    'apps/kt_wallet/lib/src/observability/transaction_finality_metrics.dart',
+  final finalityDatabase = File('packages/wallet_data/lib/src/database.dart');
+  final finalityDatabaseSource = finalityDatabase.existsSync()
+      ? finalityDatabase.readAsStringSync()
+      : '';
+  final finalityRepositories = File(
+    'packages/wallet_data/lib/src/repositories.dart',
   );
-  final finalityMetricsSource = finalityMetrics.existsSync()
-      ? finalityMetrics.readAsStringSync()
+  final finalityRepositoriesSource = finalityRepositories.existsSync()
+      ? finalityRepositories.readAsStringSync()
+      : '';
+  final experienceMetrics = File(
+    'apps/kt_wallet/lib/src/observability/experience_metrics.dart',
+  );
+  final experienceMetricsSource = experienceMetrics.existsSync()
+      ? experienceMetrics.readAsStringSync()
       : '';
   for (final marker in const [
-    'void recordTerminalTransactionFinality(',
-    'transaction.broadcastAt ?? transaction.createdAt',
-    'ExperienceMetricNames.transactionFinality',
-    'db.TxStatus.replaced',
-    'db.TxStatus.expired',
+    'FinalityMetrics,',
+    'int get schemaVersion => 9;',
+    'await m.createTable(finalityMetrics);',
   ]) {
-    if (!finalityMetricsSource.contains(marker)) {
+    if (!finalityDatabaseSource.contains(marker)) {
       failures.add(
-        '${finalityMetrics.path} does not centralize durable terminal metrics: $marker',
+        '${finalityDatabase.path} does not migrate the durable finality ring: $marker',
+      );
+    }
+  }
+  for (final marker in const [
+    'class FinalityMetricsRepository',
+    'DELETE FROM finality_metrics WHERE id NOT IN',
+    'int? finalityMetricAt,',
+    'if (onlyIfLive || finalityMetricAt != null)',
+    'return _db.transaction(() async {',
+    'await _recordFinalityMetric(',
+    'for (final replacedTransaction in replaced.values)',
+  ]) {
+    if (!finalityRepositoriesSource.contains(marker)) {
+      failures.add(
+        '${finalityRepositories.path} does not atomically retain every terminal metric: $marker',
+      );
+    }
+  }
+  for (final marker in const [
+    'static const _persistenceSchemaVersion = 3;',
+    'final ListQueue<ExperienceMetric> _durableFinality',
+    'void replaceDurableTransactionFinality(',
+    'metric.name != ExperienceMetricNames.transactionFinality',
+    'name == ExperienceMetricNames.transactionFinality',
+  ]) {
+    if (!experienceMetricsSource.contains(marker)) {
+      failures.add(
+        '${experienceMetrics.path} can dual-write durable finality samples: $marker',
       );
     }
   }
   if (RegExp(
-        r'recordTerminalTransactionFinality\(',
+        r'finalityMetricAt:',
       ).allMatches(historyFinalityControllerSource).length <
-      4) {
+      2) {
     failures.add(
-      '${historyFinalityController.path} does not record both target and replacement terminal metrics',
+      '${historyFinalityController.path} can commit non-EVM finality without its durable metric',
     );
   }
-  if (RegExp(
-        r'recordTerminalTransactionFinality\(',
-      ).allMatches(transferScreensSource).length <
-      4) {
+  if (RegExp(r'finalityMetricAt:').allMatches(transferScreensSource).length <
+      2) {
     failures.add(
-      '${transferScreens.path} can persist detail-first terminal states without metrics',
+      '${transferScreens.path} can commit detail-first finality without its durable metric',
     );
   }
   if (!transferScreensSource.contains('next == TxStatus.confirmed')) {
@@ -1230,7 +1264,10 @@ void main() {
     'settleEvmTransactionForWallet(',
     'bool onlyIfLive = false',
     'onlyIfLive: onlyIfLive',
-    'if (result.applied) notifyListeners()',
+    'if (result.applied) {',
+    'await restoreDurableFinalityMetrics();',
+    'Observability must never fail startup, confirmation or UI refresh.',
+    '_finalityMetricRefreshes = refresh;',
   ]) {
     if (!walletControllerSource.contains(marker)) {
       failures.add(

@@ -57,6 +57,21 @@ class ExperienceMetric {
   final DateTime recordedAt;
 }
 
+/// Anonymous finality sample restored from the wallet database.
+///
+/// The database row intentionally has no transaction identity or timestamp;
+/// this DTO keeps that boundary explicit when the in-memory diagnostic ring
+/// is refreshed.
+class DurableTransactionFinalityMetric {
+  const DurableTransactionFinalityMetric({
+    required this.duration,
+    required this.success,
+  });
+
+  final Duration duration;
+  final bool success;
+}
+
 class ExperienceMetrics {
   ExperienceMetrics._();
 
@@ -66,9 +81,10 @@ class ExperienceMetrics {
 
   static final ExperienceMetrics instance = ExperienceMetrics._();
   static const _capacity = 100;
-  static const _persistenceSchemaVersion = 2;
+  static const _persistenceSchemaVersion = 3;
   static const maxDurationMs = 6 * 60 * 60 * 1000;
   final ListQueue<ExperienceMetric> _recent = ListQueue(_capacity);
+  final ListQueue<ExperienceMetric> _durableFinality = ListQueue(_capacity);
   bool _errorObserversInstalled = false;
   ExperienceMetricsPersistence? _persistence;
   Future<void>? _initializeFuture;
@@ -76,7 +92,11 @@ class ExperienceMetrics {
   bool _persistenceReady = false;
   int _nativeIncidentHighWatermark = 0;
 
-  List<ExperienceMetric> get recent => List.unmodifiable(_recent);
+  /// Returns both independently bounded pools. Durable finality must not evict
+  /// startup, refresh, signing or broadcast evidence merely because a wallet
+  /// has accumulated 100 completed transactions.
+  List<ExperienceMetric> get recent =>
+      List.unmodifiable([..._recent, ..._durableFinality]);
 
   /// Restores the privacy-minimal bounded sample list from the device.
   ///
@@ -132,7 +152,10 @@ class ExperienceMetrics {
     // Observability must never break a wallet operation. Unknown names are
     // silently discarded (and not printed) so a typo cannot fail a transfer,
     // while user-derived strings can never become metric identifiers.
-    if (!ExperienceMetricNames.all.contains(name)) return;
+    if (!ExperienceMetricNames.all.contains(name) ||
+        name == ExperienceMetricNames.transactionFinality) {
+      return;
+    }
     _append(
       ExperienceMetric(
         name: name,
@@ -172,6 +195,7 @@ class ExperienceMetrics {
     if (decoded is! Map<String, dynamic> ||
         !const {
           1,
+          2,
           _persistenceSchemaVersion,
         }.contains(decoded['schemaVersion']) ||
         decoded['samples'] is! List<Object?>) {
@@ -195,6 +219,13 @@ class ExperienceMetrics {
           durationMs < 0 ||
           durationMs > maxDurationMs ||
           success is! bool) {
+        return null;
+      }
+      // Schema 3 moved finality to the Drift transaction that owns the status
+      // transition. Seeing it here means the payload does not obey the new
+      // single-source contract, so reject the unit rather than dual-count it.
+      if (schemaVersion == _persistenceSchemaVersion &&
+          name == ExperienceMetricNames.transactionFinality) {
         return null;
       }
       samples.add(
@@ -222,13 +253,51 @@ class ExperienceMetrics {
     'nativeIncidentHighWatermark': _nativeIncidentHighWatermark,
     'samples': [
       for (final metric in _recent)
-        [
-          metric.name,
-          metric.duration.inMilliseconds.clamp(0, maxDurationMs),
-          metric.success,
-        ],
+        if (metric.name != ExperienceMetricNames.transactionFinality)
+          [
+            metric.name,
+            metric.duration.inMilliseconds.clamp(0, maxDurationMs),
+            metric.success,
+          ],
     ],
   });
+
+  /// Replaces every in-memory finality sample with the crash-safe SQLite ring.
+  ///
+  /// These samples remain visible to local diagnostics and the explicitly
+  /// consented aggregate report, but [_encode] deliberately excludes them:
+  /// persisting the same event in SharedPreferences would reintroduce a
+  /// cross-store crash/duplication window.
+  void replaceDurableTransactionFinality(
+    Iterable<DurableTransactionFinalityMetric> samples,
+  ) {
+    // Schema 1/2 may have restored finality into the legacy generic ring.
+    // Remove those copies exactly once before installing SQLite's authority.
+    final retained = _recent
+        .where(
+          (metric) => metric.name != ExperienceMetricNames.transactionFinality,
+        )
+        .toList(growable: false);
+    _recent
+      ..clear()
+      ..addAll(retained);
+    _durableFinality.clear();
+    for (final sample in samples) {
+      if (sample.duration.isNegative) continue;
+      if (_durableFinality.length == _capacity) {
+        _durableFinality.removeFirst();
+      }
+      _durableFinality.add(
+        ExperienceMetric(
+          name: ExperienceMetricNames.transactionFinality,
+          duration: sample.duration,
+          success: sample.success,
+          recordedAt: DateTime.now(),
+        ),
+      );
+    }
+    _schedulePersist();
+  }
 
   void _schedulePersist() {
     unawaited(_persistWithResult());
@@ -355,6 +424,7 @@ class ExperienceMetrics {
 
   void clear() {
     _recent.clear();
+    _durableFinality.clear();
     _nativeIncidentHighWatermark = 0;
     _schedulePersist();
   }

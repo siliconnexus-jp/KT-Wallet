@@ -1383,9 +1383,10 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   - [x] App 已采集首帧启动、Flutter/Platform 错误计数、市场/历史刷新，及 prepare /
     sign / broadcast / finality 交易阶段的耗时与成功状态；队列最多 100 条，诊断导出
     只输出聚合计数和 P50/P95。
-  - [x] 上述固定 allowlist 样本已使用版本化 SharedPreferences 在本机跨重启保存；只
-    持久化指标名、受限毫秒值和布尔结果，不保存准确事件时间、错误文字或 stack。畸形、
-    未知字段和未来 schema 整包拒绝，读写失败不阻止 App 启动或钱包操作。
+  - [x] 除交易终态外的固定 allowlist 样本使用版本化 SharedPreferences 在本机跨重启
+    保存；只持久化指标名、受限毫秒值和布尔结果，不保存准确事件时间、错误文字或
+    stack。畸形、未知字段和未来 schema 整包拒绝，读写失败不阻止 App 启动或钱包操作。
+    `transaction.finality` 已改由下述 Drift v9 单一可信源保存，schema 3 明确拒绝双写。
   - [x] Android 两款 App 均安装进程级 uncaught-exception 观察器和仅前台运行的主线程
     ANR 看门狗；连续阻塞 10 秒才记录一次，后台、调试器和同一轮卡死不会制造重复告警。
     iOS 两款 App 使用 MetricKit 接收系统的 crash / hang 汇总。两端原生队列最多 32 条，
@@ -1423,6 +1424,19 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     hash=replaced、账户历史=confirmed 的冲突负例，旧实现会把 replaced 改写 confirmed
     并同时记录失败/成功两个样本；现保持 hash 专项终态、只记录一次失败。finality 定向
     15/15、KT Wallet 1524/1524、静态分析 0 通过。
+  - [x] 2026-08-04 继续严审发现上述“落库后记录”仍有进程崩溃窗口：终态数据库提交后、
+    SharedPreferences 异步写入前退出，交易已不再进入 Pending 对账，指标会永久消失；
+    若用重放补救又会产生双存储去重问题。现升级 Drift v9，confirmed / failed /
+    replaced / expired 与匿名 `{durationMs, success}` 在同一 SQLite 事务提交；EVM receipt
+    settlement 同事务记录 winner 及所有 replaced 竞争者。匿名表不含 walletId、地址、
+    hash、金额、网络、错误文字、时间或 payload，并在事务内裁剪为最近 100 条。
+    SharedPreferences schema 3 不再保存 finality，App 启动和每次终态后从 SQLite 刷新本地
+    聚合。红测先证明旧 API、旧 schema 和旧迁移均无法满足；修复后 CAS 重复写 0 条新增、
+    winner/loser 各 1 条、105 条裁剪为 100 条、进程在 Flutter 观察前退出并重启仍恢复
+    confirmed + 唯一指标。故障注入继续证明，SQLite 指标读取失败不得影响启动、终态确认
+    或 UI 刷新；终态指标与普通体验指标各自保留最多 100 条，不能相互挤占。KT Wallet
+    1530/1530、KT Cold Signer 570/570、共享 packages 413/413、静态分析 0、完整公开
+    测试/原生依赖/OSV 门禁 13/13 通过。
   - [ ] iOS MetricKit 真正的系统 payload 投递及 Android 真实 ANR/fatal 仍需物理设备
     故障注入验收；匿名未认证样本也不能替代 App Store/Play Console 的可信安装基数或
     外部崩溃平台。因此本总项仍保持未完成，不能宣称已有完整生产崩溃率监控。

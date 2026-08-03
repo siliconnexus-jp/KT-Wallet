@@ -596,6 +596,9 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES wallets (id)',
+    ),
   );
   static const VerificationMeta _coinMeta = const VerificationMeta('coin');
   @override
@@ -971,6 +974,9 @@ class $TokensTable extends Tokens with TableInfo<$TokensTable, Token> {
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES wallets (id)',
+    ),
   );
   static const VerificationMeta _coinMeta = const VerificationMeta('coin');
   @override
@@ -1481,6 +1487,9 @@ class $BalancesTable extends Balances with TableInfo<$BalancesTable, Balance> {
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES wallets (id)',
+    ),
   );
   static const VerificationMeta _coinMeta = const VerificationMeta('coin');
   @override
@@ -1898,6 +1907,9 @@ class $TransactionsTable extends Transactions
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES wallets (id)',
+    ),
   );
   static const VerificationMeta _reqIdMeta = const VerificationMeta('reqId');
   @override
@@ -3590,6 +3602,262 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
   }
 }
 
+class $FinalityMetricsTable extends FinalityMetrics
+    with TableInfo<$FinalityMetricsTable, FinalityMetric> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FinalityMetricsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _durationMsMeta = const VerificationMeta(
+    'durationMs',
+  );
+  @override
+  late final GeneratedColumn<int> durationMs = GeneratedColumn<int>(
+    'duration_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _successMeta = const VerificationMeta(
+    'success',
+  );
+  @override
+  late final GeneratedColumn<bool> success = GeneratedColumn<bool>(
+    'success',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("success" IN (0, 1))',
+    ),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, durationMs, success];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'finality_metrics';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FinalityMetric> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('duration_ms')) {
+      context.handle(
+        _durationMsMeta,
+        durationMs.isAcceptableOrUnknown(data['duration_ms']!, _durationMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_durationMsMeta);
+    }
+    if (data.containsKey('success')) {
+      context.handle(
+        _successMeta,
+        success.isAcceptableOrUnknown(data['success']!, _successMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_successMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  FinalityMetric map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FinalityMetric(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      durationMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}duration_ms'],
+      )!,
+      success: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}success'],
+      )!,
+    );
+  }
+
+  @override
+  $FinalityMetricsTable createAlias(String alias) {
+    return $FinalityMetricsTable(attachedDatabase, alias);
+  }
+}
+
+class FinalityMetric extends DataClass implements Insertable<FinalityMetric> {
+  final int id;
+  final int durationMs;
+  final bool success;
+  const FinalityMetric({
+    required this.id,
+    required this.durationMs,
+    required this.success,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['duration_ms'] = Variable<int>(durationMs);
+    map['success'] = Variable<bool>(success);
+    return map;
+  }
+
+  FinalityMetricsCompanion toCompanion(bool nullToAbsent) {
+    return FinalityMetricsCompanion(
+      id: Value(id),
+      durationMs: Value(durationMs),
+      success: Value(success),
+    );
+  }
+
+  factory FinalityMetric.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FinalityMetric(
+      id: serializer.fromJson<int>(json['id']),
+      durationMs: serializer.fromJson<int>(json['durationMs']),
+      success: serializer.fromJson<bool>(json['success']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'durationMs': serializer.toJson<int>(durationMs),
+      'success': serializer.toJson<bool>(success),
+    };
+  }
+
+  FinalityMetric copyWith({int? id, int? durationMs, bool? success}) =>
+      FinalityMetric(
+        id: id ?? this.id,
+        durationMs: durationMs ?? this.durationMs,
+        success: success ?? this.success,
+      );
+  FinalityMetric copyWithCompanion(FinalityMetricsCompanion data) {
+    return FinalityMetric(
+      id: data.id.present ? data.id.value : this.id,
+      durationMs: data.durationMs.present
+          ? data.durationMs.value
+          : this.durationMs,
+      success: data.success.present ? data.success.value : this.success,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FinalityMetric(')
+          ..write('id: $id, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('success: $success')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, durationMs, success);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FinalityMetric &&
+          other.id == this.id &&
+          other.durationMs == this.durationMs &&
+          other.success == this.success);
+}
+
+class FinalityMetricsCompanion extends UpdateCompanion<FinalityMetric> {
+  final Value<int> id;
+  final Value<int> durationMs;
+  final Value<bool> success;
+  const FinalityMetricsCompanion({
+    this.id = const Value.absent(),
+    this.durationMs = const Value.absent(),
+    this.success = const Value.absent(),
+  });
+  FinalityMetricsCompanion.insert({
+    this.id = const Value.absent(),
+    required int durationMs,
+    required bool success,
+  }) : durationMs = Value(durationMs),
+       success = Value(success);
+  static Insertable<FinalityMetric> custom({
+    Expression<int>? id,
+    Expression<int>? durationMs,
+    Expression<bool>? success,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (durationMs != null) 'duration_ms': durationMs,
+      if (success != null) 'success': success,
+    });
+  }
+
+  FinalityMetricsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? durationMs,
+    Value<bool>? success,
+  }) {
+    return FinalityMetricsCompanion(
+      id: id ?? this.id,
+      durationMs: durationMs ?? this.durationMs,
+      success: success ?? this.success,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (durationMs.present) {
+      map['duration_ms'] = Variable<int>(durationMs.value);
+    }
+    if (success.present) {
+      map['success'] = Variable<bool>(success.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FinalityMetricsCompanion(')
+          ..write('id: $id, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('success: $success')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $AddressBookTable extends AddressBook
     with TableInfo<$AddressBookTable, AddressBookData> {
   @override
@@ -3615,6 +3883,9 @@ class $AddressBookTable extends AddressBook
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES wallets (id)',
+    ),
   );
   static const VerificationMeta _nameMeta = const VerificationMeta('name');
   @override
@@ -4020,6 +4291,9 @@ class $SignRequestsTable extends SignRequests
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES wallets (id)',
+    ),
   );
   static const VerificationMeta _coinMeta = const VerificationMeta('coin');
   @override
@@ -4629,6 +4903,9 @@ class $WalletSettingsTable extends WalletSettings
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES wallets (id)',
+    ),
   );
   static const VerificationMeta _keyMeta = const VerificationMeta('key');
   @override
@@ -5751,6 +6028,9 @@ abstract class _$WalletDatabase extends GeneratedDatabase {
   late final $TokensTable tokens = $TokensTable(this);
   late final $BalancesTable balances = $BalancesTable(this);
   late final $TransactionsTable transactions = $TransactionsTable(this);
+  late final $FinalityMetricsTable finalityMetrics = $FinalityMetricsTable(
+    this,
+  );
   late final $AddressBookTable addressBook = $AddressBookTable(this);
   late final $SignRequestsTable signRequests = $SignRequestsTable(this);
   late final $SettingsTable settings = $SettingsTable(this);
@@ -5767,6 +6047,7 @@ abstract class _$WalletDatabase extends GeneratedDatabase {
     tokens,
     balances,
     transactions,
+    finalityMetrics,
     addressBook,
     signRequests,
     settings,
@@ -5802,6 +6083,141 @@ typedef $$WalletsTableUpdateCompanionBuilder =
       Value<int> createdAt,
       Value<int> rowid,
     });
+
+final class $$WalletsTableReferences
+    extends BaseReferences<_$WalletDatabase, $WalletsTable, Wallet> {
+  $$WalletsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$AccountsTable, List<Account>> _accountsRefsTable(
+    _$WalletDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.accounts,
+    aliasName: 'wallets__id__accounts__wallet_id',
+  );
+
+  $$AccountsTableProcessedTableManager get accountsRefs {
+    final manager = $$AccountsTableTableManager(
+      $_db,
+      $_db.accounts,
+    ).filter((f) => f.walletId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_accountsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$TokensTable, List<Token>> _tokensRefsTable(
+    _$WalletDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.tokens,
+    aliasName: 'wallets__id__tokens__wallet_id',
+  );
+
+  $$TokensTableProcessedTableManager get tokensRefs {
+    final manager = $$TokensTableTableManager(
+      $_db,
+      $_db.tokens,
+    ).filter((f) => f.walletId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_tokensRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$BalancesTable, List<Balance>> _balancesRefsTable(
+    _$WalletDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.balances,
+    aliasName: 'wallets__id__balances__wallet_id',
+  );
+
+  $$BalancesTableProcessedTableManager get balancesRefs {
+    final manager = $$BalancesTableTableManager(
+      $_db,
+      $_db.balances,
+    ).filter((f) => f.walletId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_balancesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$TransactionsTable, List<Transaction>>
+  _transactionsRefsTable(_$WalletDatabase db) => MultiTypedResultKey.fromTable(
+    db.transactions,
+    aliasName: 'wallets__id__transactions__wallet_id',
+  );
+
+  $$TransactionsTableProcessedTableManager get transactionsRefs {
+    final manager = $$TransactionsTableTableManager(
+      $_db,
+      $_db.transactions,
+    ).filter((f) => f.walletId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_transactionsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$AddressBookTable, List<AddressBookData>>
+  _addressBookRefsTable(_$WalletDatabase db) => MultiTypedResultKey.fromTable(
+    db.addressBook,
+    aliasName: 'wallets__id__address_book__wallet_id',
+  );
+
+  $$AddressBookTableProcessedTableManager get addressBookRefs {
+    final manager = $$AddressBookTableTableManager(
+      $_db,
+      $_db.addressBook,
+    ).filter((f) => f.walletId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_addressBookRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$SignRequestsTable, List<SignRequest>>
+  _signRequestsRefsTable(_$WalletDatabase db) => MultiTypedResultKey.fromTable(
+    db.signRequests,
+    aliasName: 'wallets__id__sign_requests__wallet_id',
+  );
+
+  $$SignRequestsTableProcessedTableManager get signRequestsRefs {
+    final manager = $$SignRequestsTableTableManager(
+      $_db,
+      $_db.signRequests,
+    ).filter((f) => f.walletId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_signRequestsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$WalletSettingsTable, List<WalletSetting>>
+  _walletSettingsRefsTable(_$WalletDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.walletSettings,
+        aliasName: 'wallets__id__wallet_settings__wallet_id',
+      );
+
+  $$WalletSettingsTableProcessedTableManager get walletSettingsRefs {
+    final manager = $$WalletSettingsTableTableManager(
+      $_db,
+      $_db.walletSettings,
+    ).filter((f) => f.walletId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_walletSettingsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
 
 class $$WalletsTableFilterComposer
     extends Composer<_$WalletDatabase, $WalletsTable> {
@@ -5857,6 +6273,181 @@ class $$WalletsTableFilterComposer
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  Expression<bool> accountsRefs(
+    Expression<bool> Function($$AccountsTableFilterComposer f) f,
+  ) {
+    final $$AccountsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.walletId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableFilterComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> tokensRefs(
+    Expression<bool> Function($$TokensTableFilterComposer f) f,
+  ) {
+    final $$TokensTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.tokens,
+      getReferencedColumn: (t) => t.walletId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TokensTableFilterComposer(
+            $db: $db,
+            $table: $db.tokens,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> balancesRefs(
+    Expression<bool> Function($$BalancesTableFilterComposer f) f,
+  ) {
+    final $$BalancesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.balances,
+      getReferencedColumn: (t) => t.walletId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BalancesTableFilterComposer(
+            $db: $db,
+            $table: $db.balances,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> transactionsRefs(
+    Expression<bool> Function($$TransactionsTableFilterComposer f) f,
+  ) {
+    final $$TransactionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.transactions,
+      getReferencedColumn: (t) => t.walletId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransactionsTableFilterComposer(
+            $db: $db,
+            $table: $db.transactions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> addressBookRefs(
+    Expression<bool> Function($$AddressBookTableFilterComposer f) f,
+  ) {
+    final $$AddressBookTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.addressBook,
+      getReferencedColumn: (t) => t.walletId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AddressBookTableFilterComposer(
+            $db: $db,
+            $table: $db.addressBook,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> signRequestsRefs(
+    Expression<bool> Function($$SignRequestsTableFilterComposer f) f,
+  ) {
+    final $$SignRequestsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.signRequests,
+      getReferencedColumn: (t) => t.walletId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SignRequestsTableFilterComposer(
+            $db: $db,
+            $table: $db.signRequests,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> walletSettingsRefs(
+    Expression<bool> Function($$WalletSettingsTableFilterComposer f) f,
+  ) {
+    final $$WalletSettingsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.walletSettings,
+      getReferencedColumn: (t) => t.walletId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletSettingsTableFilterComposer(
+            $db: $db,
+            $table: $db.walletSettings,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$WalletsTableOrderingComposer
@@ -5955,6 +6546,181 @@ class $$WalletsTableAnnotationComposer
 
   GeneratedColumn<int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  Expression<T> accountsRefs<T extends Object>(
+    Expression<T> Function($$AccountsTableAnnotationComposer a) f,
+  ) {
+    final $$AccountsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.walletId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> tokensRefs<T extends Object>(
+    Expression<T> Function($$TokensTableAnnotationComposer a) f,
+  ) {
+    final $$TokensTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.tokens,
+      getReferencedColumn: (t) => t.walletId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TokensTableAnnotationComposer(
+            $db: $db,
+            $table: $db.tokens,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> balancesRefs<T extends Object>(
+    Expression<T> Function($$BalancesTableAnnotationComposer a) f,
+  ) {
+    final $$BalancesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.balances,
+      getReferencedColumn: (t) => t.walletId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BalancesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.balances,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> transactionsRefs<T extends Object>(
+    Expression<T> Function($$TransactionsTableAnnotationComposer a) f,
+  ) {
+    final $$TransactionsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.transactions,
+      getReferencedColumn: (t) => t.walletId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransactionsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.transactions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> addressBookRefs<T extends Object>(
+    Expression<T> Function($$AddressBookTableAnnotationComposer a) f,
+  ) {
+    final $$AddressBookTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.addressBook,
+      getReferencedColumn: (t) => t.walletId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AddressBookTableAnnotationComposer(
+            $db: $db,
+            $table: $db.addressBook,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> signRequestsRefs<T extends Object>(
+    Expression<T> Function($$SignRequestsTableAnnotationComposer a) f,
+  ) {
+    final $$SignRequestsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.signRequests,
+      getReferencedColumn: (t) => t.walletId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SignRequestsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.signRequests,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> walletSettingsRefs<T extends Object>(
+    Expression<T> Function($$WalletSettingsTableAnnotationComposer a) f,
+  ) {
+    final $$WalletSettingsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.walletSettings,
+      getReferencedColumn: (t) => t.walletId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletSettingsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.walletSettings,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$WalletsTableTableManager
@@ -5968,9 +6734,17 @@ class $$WalletsTableTableManager
           $$WalletsTableAnnotationComposer,
           $$WalletsTableCreateCompanionBuilder,
           $$WalletsTableUpdateCompanionBuilder,
-          (Wallet, BaseReferences<_$WalletDatabase, $WalletsTable, Wallet>),
+          (Wallet, $$WalletsTableReferences),
           Wallet,
-          PrefetchHooks Function()
+          PrefetchHooks Function({
+            bool accountsRefs,
+            bool tokensRefs,
+            bool balancesRefs,
+            bool transactionsRefs,
+            bool addressBookRefs,
+            bool signRequestsRefs,
+            bool walletSettingsRefs,
+          })
         > {
   $$WalletsTableTableManager(_$WalletDatabase db, $WalletsTable table)
     : super(
@@ -6032,9 +6806,184 @@ class $$WalletsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$WalletsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback:
+              ({
+                accountsRefs = false,
+                tokensRefs = false,
+                balancesRefs = false,
+                transactionsRefs = false,
+                addressBookRefs = false,
+                signRequestsRefs = false,
+                walletSettingsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (accountsRefs) db.accounts,
+                    if (tokensRefs) db.tokens,
+                    if (balancesRefs) db.balances,
+                    if (transactionsRefs) db.transactions,
+                    if (addressBookRefs) db.addressBook,
+                    if (signRequestsRefs) db.signRequests,
+                    if (walletSettingsRefs) db.walletSettings,
+                  ],
+                  addJoins: null,
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (accountsRefs)
+                        await $_getPrefetchedData<
+                          Wallet,
+                          $WalletsTable,
+                          Account
+                        >(
+                          currentTable: table,
+                          referencedTable: $$WalletsTableReferences
+                              ._accountsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$WalletsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).accountsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.walletId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (tokensRefs)
+                        await $_getPrefetchedData<Wallet, $WalletsTable, Token>(
+                          currentTable: table,
+                          referencedTable: $$WalletsTableReferences
+                              ._tokensRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$WalletsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).tokensRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.walletId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (balancesRefs)
+                        await $_getPrefetchedData<
+                          Wallet,
+                          $WalletsTable,
+                          Balance
+                        >(
+                          currentTable: table,
+                          referencedTable: $$WalletsTableReferences
+                              ._balancesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$WalletsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).balancesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.walletId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (transactionsRefs)
+                        await $_getPrefetchedData<
+                          Wallet,
+                          $WalletsTable,
+                          Transaction
+                        >(
+                          currentTable: table,
+                          referencedTable: $$WalletsTableReferences
+                              ._transactionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$WalletsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).transactionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.walletId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (addressBookRefs)
+                        await $_getPrefetchedData<
+                          Wallet,
+                          $WalletsTable,
+                          AddressBookData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$WalletsTableReferences
+                              ._addressBookRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$WalletsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).addressBookRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.walletId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (signRequestsRefs)
+                        await $_getPrefetchedData<
+                          Wallet,
+                          $WalletsTable,
+                          SignRequest
+                        >(
+                          currentTable: table,
+                          referencedTable: $$WalletsTableReferences
+                              ._signRequestsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$WalletsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).signRequestsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.walletId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (walletSettingsRefs)
+                        await $_getPrefetchedData<
+                          Wallet,
+                          $WalletsTable,
+                          WalletSetting
+                        >(
+                          currentTable: table,
+                          referencedTable: $$WalletsTableReferences
+                              ._walletSettingsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$WalletsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).walletSettingsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.walletId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
         ),
       );
 }
@@ -6049,9 +6998,17 @@ typedef $$WalletsTableProcessedTableManager =
       $$WalletsTableAnnotationComposer,
       $$WalletsTableCreateCompanionBuilder,
       $$WalletsTableUpdateCompanionBuilder,
-      (Wallet, BaseReferences<_$WalletDatabase, $WalletsTable, Wallet>),
+      (Wallet, $$WalletsTableReferences),
       Wallet,
-      PrefetchHooks Function()
+      PrefetchHooks Function({
+        bool accountsRefs,
+        bool tokensRefs,
+        bool balancesRefs,
+        bool transactionsRefs,
+        bool addressBookRefs,
+        bool signRequestsRefs,
+        bool walletSettingsRefs,
+      })
     >;
 typedef $$AccountsTableCreateCompanionBuilder =
     AccountsCompanion Function({
@@ -6072,6 +7029,28 @@ typedef $$AccountsTableUpdateCompanionBuilder =
       Value<int> rowid,
     });
 
+final class $$AccountsTableReferences
+    extends BaseReferences<_$WalletDatabase, $AccountsTable, Account> {
+  $$AccountsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $WalletsTable _walletIdTable(_$WalletDatabase db) =>
+      db.wallets.createAlias('accounts__wallet_id__wallets__id');
+
+  $$WalletsTableProcessedTableManager get walletId {
+    final $_column = $_itemColumn<String>('wallet_id')!;
+
+    final manager = $$WalletsTableTableManager(
+      $_db,
+      $_db.wallets,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_walletIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
 class $$AccountsTableFilterComposer
     extends Composer<_$WalletDatabase, $AccountsTable> {
   $$AccountsTableFilterComposer({
@@ -6081,11 +7060,6 @@ class $$AccountsTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<String> get walletId => $composableBuilder(
-    column: $table.walletId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<String> get coin => $composableBuilder(
     column: $table.coin,
     builder: (column) => ColumnFilters(column),
@@ -6105,6 +7079,29 @@ class $$AccountsTableFilterComposer
     column: $table.accountIndex,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$WalletsTableFilterComposer get walletId {
+    final $$WalletsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableFilterComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$AccountsTableOrderingComposer
@@ -6116,11 +7113,6 @@ class $$AccountsTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<String> get walletId => $composableBuilder(
-    column: $table.walletId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get coin => $composableBuilder(
     column: $table.coin,
     builder: (column) => ColumnOrderings(column),
@@ -6140,6 +7132,29 @@ class $$AccountsTableOrderingComposer
     column: $table.accountIndex,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$WalletsTableOrderingComposer get walletId {
+    final $$WalletsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableOrderingComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$AccountsTableAnnotationComposer
@@ -6151,9 +7166,6 @@ class $$AccountsTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<String> get walletId =>
-      $composableBuilder(column: $table.walletId, builder: (column) => column);
-
   GeneratedColumn<String> get coin =>
       $composableBuilder(column: $table.coin, builder: (column) => column);
 
@@ -6169,6 +7181,29 @@ class $$AccountsTableAnnotationComposer
     column: $table.accountIndex,
     builder: (column) => column,
   );
+
+  $$WalletsTableAnnotationComposer get walletId {
+    final $$WalletsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$AccountsTableTableManager
@@ -6182,9 +7217,9 @@ class $$AccountsTableTableManager
           $$AccountsTableAnnotationComposer,
           $$AccountsTableCreateCompanionBuilder,
           $$AccountsTableUpdateCompanionBuilder,
-          (Account, BaseReferences<_$WalletDatabase, $AccountsTable, Account>),
+          (Account, $$AccountsTableReferences),
           Account,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool walletId})
         > {
   $$AccountsTableTableManager(_$WalletDatabase db, $AccountsTable table)
     : super(
@@ -6230,9 +7265,54 @@ class $$AccountsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$AccountsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({walletId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (walletId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.walletId,
+                                referencedTable: $$AccountsTableReferences
+                                    ._walletIdTable(db),
+                                referencedColumn: $$AccountsTableReferences
+                                    ._walletIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
         ),
       );
 }
@@ -6247,9 +7327,9 @@ typedef $$AccountsTableProcessedTableManager =
       $$AccountsTableAnnotationComposer,
       $$AccountsTableCreateCompanionBuilder,
       $$AccountsTableUpdateCompanionBuilder,
-      (Account, BaseReferences<_$WalletDatabase, $AccountsTable, Account>),
+      (Account, $$AccountsTableReferences),
       Account,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool walletId})
     >;
 typedef $$TokensTableCreateCompanionBuilder =
     TokensCompanion Function({
@@ -6276,6 +7356,28 @@ typedef $$TokensTableUpdateCompanionBuilder =
       Value<int> rowid,
     });
 
+final class $$TokensTableReferences
+    extends BaseReferences<_$WalletDatabase, $TokensTable, Token> {
+  $$TokensTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $WalletsTable _walletIdTable(_$WalletDatabase db) =>
+      db.wallets.createAlias('tokens__wallet_id__wallets__id');
+
+  $$WalletsTableProcessedTableManager get walletId {
+    final $_column = $_itemColumn<String>('wallet_id')!;
+
+    final manager = $$WalletsTableTableManager(
+      $_db,
+      $_db.wallets,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_walletIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
 class $$TokensTableFilterComposer
     extends Composer<_$WalletDatabase, $TokensTable> {
   $$TokensTableFilterComposer({
@@ -6285,11 +7387,6 @@ class $$TokensTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<String> get walletId => $composableBuilder(
-    column: $table.walletId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<String> get coin => $composableBuilder(
     column: $table.coin,
     builder: (column) => ColumnFilters(column),
@@ -6324,6 +7421,29 @@ class $$TokensTableFilterComposer
     column: $table.trusted,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$WalletsTableFilterComposer get walletId {
+    final $$WalletsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableFilterComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$TokensTableOrderingComposer
@@ -6335,11 +7455,6 @@ class $$TokensTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<String> get walletId => $composableBuilder(
-    column: $table.walletId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get coin => $composableBuilder(
     column: $table.coin,
     builder: (column) => ColumnOrderings(column),
@@ -6374,6 +7489,29 @@ class $$TokensTableOrderingComposer
     column: $table.trusted,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$WalletsTableOrderingComposer get walletId {
+    final $$WalletsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableOrderingComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$TokensTableAnnotationComposer
@@ -6385,9 +7523,6 @@ class $$TokensTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<String> get walletId =>
-      $composableBuilder(column: $table.walletId, builder: (column) => column);
-
   GeneratedColumn<String> get coin =>
       $composableBuilder(column: $table.coin, builder: (column) => column);
 
@@ -6408,6 +7543,29 @@ class $$TokensTableAnnotationComposer
 
   GeneratedColumn<bool> get trusted =>
       $composableBuilder(column: $table.trusted, builder: (column) => column);
+
+  $$WalletsTableAnnotationComposer get walletId {
+    final $$WalletsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$TokensTableTableManager
@@ -6421,9 +7579,9 @@ class $$TokensTableTableManager
           $$TokensTableAnnotationComposer,
           $$TokensTableCreateCompanionBuilder,
           $$TokensTableUpdateCompanionBuilder,
-          (Token, BaseReferences<_$WalletDatabase, $TokensTable, Token>),
+          (Token, $$TokensTableReferences),
           Token,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool walletId})
         > {
   $$TokensTableTableManager(_$WalletDatabase db, $TokensTable table)
     : super(
@@ -6481,9 +7639,52 @@ class $$TokensTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) =>
+                    (e.readTable(table), $$TokensTableReferences(db, table, e)),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({walletId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (walletId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.walletId,
+                                referencedTable: $$TokensTableReferences
+                                    ._walletIdTable(db),
+                                referencedColumn: $$TokensTableReferences
+                                    ._walletIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
         ),
       );
 }
@@ -6498,9 +7699,9 @@ typedef $$TokensTableProcessedTableManager =
       $$TokensTableAnnotationComposer,
       $$TokensTableCreateCompanionBuilder,
       $$TokensTableUpdateCompanionBuilder,
-      (Token, BaseReferences<_$WalletDatabase, $TokensTable, Token>),
+      (Token, $$TokensTableReferences),
       Token,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool walletId})
     >;
 typedef $$BalancesTableCreateCompanionBuilder =
     BalancesCompanion Function({
@@ -6523,6 +7724,28 @@ typedef $$BalancesTableUpdateCompanionBuilder =
       Value<int> rowid,
     });
 
+final class $$BalancesTableReferences
+    extends BaseReferences<_$WalletDatabase, $BalancesTable, Balance> {
+  $$BalancesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $WalletsTable _walletIdTable(_$WalletDatabase db) =>
+      db.wallets.createAlias('balances__wallet_id__wallets__id');
+
+  $$WalletsTableProcessedTableManager get walletId {
+    final $_column = $_itemColumn<String>('wallet_id')!;
+
+    final manager = $$WalletsTableTableManager(
+      $_db,
+      $_db.wallets,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_walletIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
 class $$BalancesTableFilterComposer
     extends Composer<_$WalletDatabase, $BalancesTable> {
   $$BalancesTableFilterComposer({
@@ -6532,11 +7755,6 @@ class $$BalancesTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<String> get walletId => $composableBuilder(
-    column: $table.walletId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<String> get coin => $composableBuilder(
     column: $table.coin,
     builder: (column) => ColumnFilters(column),
@@ -6561,6 +7779,29 @@ class $$BalancesTableFilterComposer
     column: $table.updatedAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$WalletsTableFilterComposer get walletId {
+    final $$WalletsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableFilterComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$BalancesTableOrderingComposer
@@ -6572,11 +7813,6 @@ class $$BalancesTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<String> get walletId => $composableBuilder(
-    column: $table.walletId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get coin => $composableBuilder(
     column: $table.coin,
     builder: (column) => ColumnOrderings(column),
@@ -6601,6 +7837,29 @@ class $$BalancesTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$WalletsTableOrderingComposer get walletId {
+    final $$WalletsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableOrderingComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$BalancesTableAnnotationComposer
@@ -6612,9 +7871,6 @@ class $$BalancesTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<String> get walletId =>
-      $composableBuilder(column: $table.walletId, builder: (column) => column);
-
   GeneratedColumn<String> get coin =>
       $composableBuilder(column: $table.coin, builder: (column) => column);
 
@@ -6629,6 +7885,29 @@ class $$BalancesTableAnnotationComposer
 
   GeneratedColumn<int> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$WalletsTableAnnotationComposer get walletId {
+    final $$WalletsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$BalancesTableTableManager
@@ -6642,9 +7921,9 @@ class $$BalancesTableTableManager
           $$BalancesTableAnnotationComposer,
           $$BalancesTableCreateCompanionBuilder,
           $$BalancesTableUpdateCompanionBuilder,
-          (Balance, BaseReferences<_$WalletDatabase, $BalancesTable, Balance>),
+          (Balance, $$BalancesTableReferences),
           Balance,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool walletId})
         > {
   $$BalancesTableTableManager(_$WalletDatabase db, $BalancesTable table)
     : super(
@@ -6694,9 +7973,54 @@ class $$BalancesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$BalancesTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({walletId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (walletId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.walletId,
+                                referencedTable: $$BalancesTableReferences
+                                    ._walletIdTable(db),
+                                referencedColumn: $$BalancesTableReferences
+                                    ._walletIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
         ),
       );
 }
@@ -6711,9 +8035,9 @@ typedef $$BalancesTableProcessedTableManager =
       $$BalancesTableAnnotationComposer,
       $$BalancesTableCreateCompanionBuilder,
       $$BalancesTableUpdateCompanionBuilder,
-      (Balance, BaseReferences<_$WalletDatabase, $BalancesTable, Balance>),
+      (Balance, $$BalancesTableReferences),
       Balance,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool walletId})
     >;
 typedef $$TransactionsTableCreateCompanionBuilder =
     TransactionsCompanion Function({
@@ -6784,6 +8108,28 @@ typedef $$TransactionsTableUpdateCompanionBuilder =
       Value<int> rowid,
     });
 
+final class $$TransactionsTableReferences
+    extends BaseReferences<_$WalletDatabase, $TransactionsTable, Transaction> {
+  $$TransactionsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $WalletsTable _walletIdTable(_$WalletDatabase db) =>
+      db.wallets.createAlias('transactions__wallet_id__wallets__id');
+
+  $$WalletsTableProcessedTableManager get walletId {
+    final $_column = $_itemColumn<String>('wallet_id')!;
+
+    final manager = $$WalletsTableTableManager(
+      $_db,
+      $_db.wallets,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_walletIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
 class $$TransactionsTableFilterComposer
     extends Composer<_$WalletDatabase, $TransactionsTable> {
   $$TransactionsTableFilterComposer({
@@ -6795,11 +8141,6 @@ class $$TransactionsTableFilterComposer
   });
   ColumnFilters<String> get id => $composableBuilder(
     column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get walletId => $composableBuilder(
-    column: $table.walletId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6948,6 +8289,29 @@ class $$TransactionsTableFilterComposer
     column: $table.replacementKind,
     builder: (column) => ColumnWithTypeConverterFilters(column),
   );
+
+  $$WalletsTableFilterComposer get walletId {
+    final $$WalletsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableFilterComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$TransactionsTableOrderingComposer
@@ -6961,11 +8325,6 @@ class $$TransactionsTableOrderingComposer
   });
   ColumnOrderings<String> get id => $composableBuilder(
     column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get walletId => $composableBuilder(
-    column: $table.walletId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -7108,6 +8467,29 @@ class $$TransactionsTableOrderingComposer
     column: $table.replacementKind,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$WalletsTableOrderingComposer get walletId {
+    final $$WalletsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableOrderingComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$TransactionsTableAnnotationComposer
@@ -7121,9 +8503,6 @@ class $$TransactionsTableAnnotationComposer
   });
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<String> get walletId =>
-      $composableBuilder(column: $table.walletId, builder: (column) => column);
 
   GeneratedColumn<String> get reqId =>
       $composableBuilder(column: $table.reqId, builder: (column) => column);
@@ -7230,6 +8609,29 @@ class $$TransactionsTableAnnotationComposer
     column: $table.replacementKind,
     builder: (column) => column,
   );
+
+  $$WalletsTableAnnotationComposer get walletId {
+    final $$WalletsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$TransactionsTableTableManager
@@ -7243,12 +8645,9 @@ class $$TransactionsTableTableManager
           $$TransactionsTableAnnotationComposer,
           $$TransactionsTableCreateCompanionBuilder,
           $$TransactionsTableUpdateCompanionBuilder,
-          (
-            Transaction,
-            BaseReferences<_$WalletDatabase, $TransactionsTable, Transaction>,
-          ),
+          (Transaction, $$TransactionsTableReferences),
           Transaction,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool walletId})
         > {
   $$TransactionsTableTableManager(_$WalletDatabase db, $TransactionsTable table)
     : super(
@@ -7396,9 +8795,54 @@ class $$TransactionsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$TransactionsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({walletId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (walletId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.walletId,
+                                referencedTable: $$TransactionsTableReferences
+                                    ._walletIdTable(db),
+                                referencedColumn: $$TransactionsTableReferences
+                                    ._walletIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
         ),
       );
 }
@@ -7413,11 +8857,172 @@ typedef $$TransactionsTableProcessedTableManager =
       $$TransactionsTableAnnotationComposer,
       $$TransactionsTableCreateCompanionBuilder,
       $$TransactionsTableUpdateCompanionBuilder,
-      (
-        Transaction,
-        BaseReferences<_$WalletDatabase, $TransactionsTable, Transaction>,
-      ),
+      (Transaction, $$TransactionsTableReferences),
       Transaction,
+      PrefetchHooks Function({bool walletId})
+    >;
+typedef $$FinalityMetricsTableCreateCompanionBuilder =
+    FinalityMetricsCompanion Function({
+      Value<int> id,
+      required int durationMs,
+      required bool success,
+    });
+typedef $$FinalityMetricsTableUpdateCompanionBuilder =
+    FinalityMetricsCompanion Function({
+      Value<int> id,
+      Value<int> durationMs,
+      Value<bool> success,
+    });
+
+class $$FinalityMetricsTableFilterComposer
+    extends Composer<_$WalletDatabase, $FinalityMetricsTable> {
+  $$FinalityMetricsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get success => $composableBuilder(
+    column: $table.success,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$FinalityMetricsTableOrderingComposer
+    extends Composer<_$WalletDatabase, $FinalityMetricsTable> {
+  $$FinalityMetricsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get success => $composableBuilder(
+    column: $table.success,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$FinalityMetricsTableAnnotationComposer
+    extends Composer<_$WalletDatabase, $FinalityMetricsTable> {
+  $$FinalityMetricsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get success =>
+      $composableBuilder(column: $table.success, builder: (column) => column);
+}
+
+class $$FinalityMetricsTableTableManager
+    extends
+        RootTableManager<
+          _$WalletDatabase,
+          $FinalityMetricsTable,
+          FinalityMetric,
+          $$FinalityMetricsTableFilterComposer,
+          $$FinalityMetricsTableOrderingComposer,
+          $$FinalityMetricsTableAnnotationComposer,
+          $$FinalityMetricsTableCreateCompanionBuilder,
+          $$FinalityMetricsTableUpdateCompanionBuilder,
+          (
+            FinalityMetric,
+            BaseReferences<
+              _$WalletDatabase,
+              $FinalityMetricsTable,
+              FinalityMetric
+            >,
+          ),
+          FinalityMetric,
+          PrefetchHooks Function()
+        > {
+  $$FinalityMetricsTableTableManager(
+    _$WalletDatabase db,
+    $FinalityMetricsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FinalityMetricsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FinalityMetricsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FinalityMetricsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> durationMs = const Value.absent(),
+                Value<bool> success = const Value.absent(),
+              }) => FinalityMetricsCompanion(
+                id: id,
+                durationMs: durationMs,
+                success: success,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int durationMs,
+                required bool success,
+              }) => FinalityMetricsCompanion.insert(
+                id: id,
+                durationMs: durationMs,
+                success: success,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$FinalityMetricsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$WalletDatabase,
+      $FinalityMetricsTable,
+      FinalityMetric,
+      $$FinalityMetricsTableFilterComposer,
+      $$FinalityMetricsTableOrderingComposer,
+      $$FinalityMetricsTableAnnotationComposer,
+      $$FinalityMetricsTableCreateCompanionBuilder,
+      $$FinalityMetricsTableUpdateCompanionBuilder,
+      (
+        FinalityMetric,
+        BaseReferences<_$WalletDatabase, $FinalityMetricsTable, FinalityMetric>,
+      ),
+      FinalityMetric,
       PrefetchHooks Function()
     >;
 typedef $$AddressBookTableCreateCompanionBuilder =
@@ -7441,6 +9046,29 @@ typedef $$AddressBookTableUpdateCompanionBuilder =
       Value<int> rowid,
     });
 
+final class $$AddressBookTableReferences
+    extends
+        BaseReferences<_$WalletDatabase, $AddressBookTable, AddressBookData> {
+  $$AddressBookTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $WalletsTable _walletIdTable(_$WalletDatabase db) =>
+      db.wallets.createAlias('address_book__wallet_id__wallets__id');
+
+  $$WalletsTableProcessedTableManager get walletId {
+    final $_column = $_itemColumn<String>('wallet_id')!;
+
+    final manager = $$WalletsTableTableManager(
+      $_db,
+      $_db.wallets,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_walletIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
 class $$AddressBookTableFilterComposer
     extends Composer<_$WalletDatabase, $AddressBookTable> {
   $$AddressBookTableFilterComposer({
@@ -7452,11 +9080,6 @@ class $$AddressBookTableFilterComposer
   });
   ColumnFilters<String> get id => $composableBuilder(
     column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get walletId => $composableBuilder(
-    column: $table.walletId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7479,6 +9102,29 @@ class $$AddressBookTableFilterComposer
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$WalletsTableFilterComposer get walletId {
+    final $$WalletsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableFilterComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$AddressBookTableOrderingComposer
@@ -7492,11 +9138,6 @@ class $$AddressBookTableOrderingComposer
   });
   ColumnOrderings<String> get id => $composableBuilder(
     column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get walletId => $composableBuilder(
-    column: $table.walletId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -7519,6 +9160,29 @@ class $$AddressBookTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$WalletsTableOrderingComposer get walletId {
+    final $$WalletsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableOrderingComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$AddressBookTableAnnotationComposer
@@ -7533,9 +9197,6 @@ class $$AddressBookTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<String> get walletId =>
-      $composableBuilder(column: $table.walletId, builder: (column) => column);
-
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
 
@@ -7547,6 +9208,29 @@ class $$AddressBookTableAnnotationComposer
 
   GeneratedColumn<int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$WalletsTableAnnotationComposer get walletId {
+    final $$WalletsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$AddressBookTableTableManager
@@ -7560,16 +9244,9 @@ class $$AddressBookTableTableManager
           $$AddressBookTableAnnotationComposer,
           $$AddressBookTableCreateCompanionBuilder,
           $$AddressBookTableUpdateCompanionBuilder,
-          (
-            AddressBookData,
-            BaseReferences<
-              _$WalletDatabase,
-              $AddressBookTable,
-              AddressBookData
-            >,
-          ),
+          (AddressBookData, $$AddressBookTableReferences),
           AddressBookData,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool walletId})
         > {
   $$AddressBookTableTableManager(_$WalletDatabase db, $AddressBookTable table)
     : super(
@@ -7619,9 +9296,54 @@ class $$AddressBookTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$AddressBookTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({walletId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (walletId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.walletId,
+                                referencedTable: $$AddressBookTableReferences
+                                    ._walletIdTable(db),
+                                referencedColumn: $$AddressBookTableReferences
+                                    ._walletIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
         ),
       );
 }
@@ -7636,12 +9358,9 @@ typedef $$AddressBookTableProcessedTableManager =
       $$AddressBookTableAnnotationComposer,
       $$AddressBookTableCreateCompanionBuilder,
       $$AddressBookTableUpdateCompanionBuilder,
-      (
-        AddressBookData,
-        BaseReferences<_$WalletDatabase, $AddressBookTable, AddressBookData>,
-      ),
+      (AddressBookData, $$AddressBookTableReferences),
       AddressBookData,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool walletId})
     >;
 typedef $$SignRequestsTableCreateCompanionBuilder =
     SignRequestsCompanion Function({
@@ -7664,6 +9383,28 @@ typedef $$SignRequestsTableUpdateCompanionBuilder =
       Value<int> rowid,
     });
 
+final class $$SignRequestsTableReferences
+    extends BaseReferences<_$WalletDatabase, $SignRequestsTable, SignRequest> {
+  $$SignRequestsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $WalletsTable _walletIdTable(_$WalletDatabase db) =>
+      db.wallets.createAlias('sign_requests__wallet_id__wallets__id');
+
+  $$WalletsTableProcessedTableManager get walletId {
+    final $_column = $_itemColumn<String>('wallet_id')!;
+
+    final manager = $$WalletsTableTableManager(
+      $_db,
+      $_db.wallets,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_walletIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
 class $$SignRequestsTableFilterComposer
     extends Composer<_$WalletDatabase, $SignRequestsTable> {
   $$SignRequestsTableFilterComposer({
@@ -7675,11 +9416,6 @@ class $$SignRequestsTableFilterComposer
   });
   ColumnFilters<String> get reqId => $composableBuilder(
     column: $table.reqId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get walletId => $composableBuilder(
-    column: $table.walletId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7702,6 +9438,29 @@ class $$SignRequestsTableFilterComposer
     column: $table.status,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$WalletsTableFilterComposer get walletId {
+    final $$WalletsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableFilterComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$SignRequestsTableOrderingComposer
@@ -7715,11 +9474,6 @@ class $$SignRequestsTableOrderingComposer
   });
   ColumnOrderings<String> get reqId => $composableBuilder(
     column: $table.reqId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get walletId => $composableBuilder(
-    column: $table.walletId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -7742,6 +9496,29 @@ class $$SignRequestsTableOrderingComposer
     column: $table.status,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$WalletsTableOrderingComposer get walletId {
+    final $$WalletsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableOrderingComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$SignRequestsTableAnnotationComposer
@@ -7756,9 +9533,6 @@ class $$SignRequestsTableAnnotationComposer
   GeneratedColumn<String> get reqId =>
       $composableBuilder(column: $table.reqId, builder: (column) => column);
 
-  GeneratedColumn<String> get walletId =>
-      $composableBuilder(column: $table.walletId, builder: (column) => column);
-
   GeneratedColumn<String> get coin =>
       $composableBuilder(column: $table.coin, builder: (column) => column);
 
@@ -7770,6 +9544,29 @@ class $$SignRequestsTableAnnotationComposer
 
   GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
+
+  $$WalletsTableAnnotationComposer get walletId {
+    final $$WalletsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$SignRequestsTableTableManager
@@ -7783,12 +9580,9 @@ class $$SignRequestsTableTableManager
           $$SignRequestsTableAnnotationComposer,
           $$SignRequestsTableCreateCompanionBuilder,
           $$SignRequestsTableUpdateCompanionBuilder,
-          (
-            SignRequest,
-            BaseReferences<_$WalletDatabase, $SignRequestsTable, SignRequest>,
-          ),
+          (SignRequest, $$SignRequestsTableReferences),
           SignRequest,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool walletId})
         > {
   $$SignRequestsTableTableManager(_$WalletDatabase db, $SignRequestsTable table)
     : super(
@@ -7838,9 +9632,54 @@ class $$SignRequestsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SignRequestsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({walletId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (walletId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.walletId,
+                                referencedTable: $$SignRequestsTableReferences
+                                    ._walletIdTable(db),
+                                referencedColumn: $$SignRequestsTableReferences
+                                    ._walletIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
         ),
       );
 }
@@ -7855,12 +9694,9 @@ typedef $$SignRequestsTableProcessedTableManager =
       $$SignRequestsTableAnnotationComposer,
       $$SignRequestsTableCreateCompanionBuilder,
       $$SignRequestsTableUpdateCompanionBuilder,
-      (
-        SignRequest,
-        BaseReferences<_$WalletDatabase, $SignRequestsTable, SignRequest>,
-      ),
+      (SignRequest, $$SignRequestsTableReferences),
       SignRequest,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool walletId})
     >;
 typedef $$SettingsTableCreateCompanionBuilder =
     SettingsCompanion Function({
@@ -8010,6 +9846,33 @@ typedef $$WalletSettingsTableUpdateCompanionBuilder =
       Value<int> rowid,
     });
 
+final class $$WalletSettingsTableReferences
+    extends
+        BaseReferences<_$WalletDatabase, $WalletSettingsTable, WalletSetting> {
+  $$WalletSettingsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $WalletsTable _walletIdTable(_$WalletDatabase db) =>
+      db.wallets.createAlias('wallet_settings__wallet_id__wallets__id');
+
+  $$WalletsTableProcessedTableManager get walletId {
+    final $_column = $_itemColumn<String>('wallet_id')!;
+
+    final manager = $$WalletsTableTableManager(
+      $_db,
+      $_db.wallets,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_walletIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
 class $$WalletSettingsTableFilterComposer
     extends Composer<_$WalletDatabase, $WalletSettingsTable> {
   $$WalletSettingsTableFilterComposer({
@@ -8019,11 +9882,6 @@ class $$WalletSettingsTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<String> get walletId => $composableBuilder(
-    column: $table.walletId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<String> get key => $composableBuilder(
     column: $table.key,
     builder: (column) => ColumnFilters(column),
@@ -8033,6 +9891,29 @@ class $$WalletSettingsTableFilterComposer
     column: $table.value,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$WalletsTableFilterComposer get walletId {
+    final $$WalletsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableFilterComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$WalletSettingsTableOrderingComposer
@@ -8044,11 +9925,6 @@ class $$WalletSettingsTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<String> get walletId => $composableBuilder(
-    column: $table.walletId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get key => $composableBuilder(
     column: $table.key,
     builder: (column) => ColumnOrderings(column),
@@ -8058,6 +9934,29 @@ class $$WalletSettingsTableOrderingComposer
     column: $table.value,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$WalletsTableOrderingComposer get walletId {
+    final $$WalletsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableOrderingComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$WalletSettingsTableAnnotationComposer
@@ -8069,14 +9968,34 @@ class $$WalletSettingsTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<String> get walletId =>
-      $composableBuilder(column: $table.walletId, builder: (column) => column);
-
   GeneratedColumn<String> get key =>
       $composableBuilder(column: $table.key, builder: (column) => column);
 
   GeneratedColumn<String> get value =>
       $composableBuilder(column: $table.value, builder: (column) => column);
+
+  $$WalletsTableAnnotationComposer get walletId {
+    final $$WalletsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.walletId,
+      referencedTable: $db.wallets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.wallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$WalletSettingsTableTableManager
@@ -8090,16 +10009,9 @@ class $$WalletSettingsTableTableManager
           $$WalletSettingsTableAnnotationComposer,
           $$WalletSettingsTableCreateCompanionBuilder,
           $$WalletSettingsTableUpdateCompanionBuilder,
-          (
-            WalletSetting,
-            BaseReferences<
-              _$WalletDatabase,
-              $WalletSettingsTable,
-              WalletSetting
-            >,
-          ),
+          (WalletSetting, $$WalletSettingsTableReferences),
           WalletSetting,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool walletId})
         > {
   $$WalletSettingsTableTableManager(
     _$WalletDatabase db,
@@ -8139,9 +10051,55 @@ class $$WalletSettingsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$WalletSettingsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({walletId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (walletId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.walletId,
+                                referencedTable: $$WalletSettingsTableReferences
+                                    ._walletIdTable(db),
+                                referencedColumn:
+                                    $$WalletSettingsTableReferences
+                                        ._walletIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
         ),
       );
 }
@@ -8156,12 +10114,9 @@ typedef $$WalletSettingsTableProcessedTableManager =
       $$WalletSettingsTableAnnotationComposer,
       $$WalletSettingsTableCreateCompanionBuilder,
       $$WalletSettingsTableUpdateCompanionBuilder,
-      (
-        WalletSetting,
-        BaseReferences<_$WalletDatabase, $WalletSettingsTable, WalletSetting>,
-      ),
+      (WalletSetting, $$WalletSettingsTableReferences),
       WalletSetting,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool walletId})
     >;
 typedef $$ContactsTableCreateCompanionBuilder =
     ContactsCompanion Function({
@@ -8628,6 +10583,8 @@ class $WalletDatabaseManager {
       $$BalancesTableTableManager(_db, _db.balances);
   $$TransactionsTableTableManager get transactions =>
       $$TransactionsTableTableManager(_db, _db.transactions);
+  $$FinalityMetricsTableTableManager get finalityMetrics =>
+      $$FinalityMetricsTableTableManager(_db, _db.finalityMetrics);
   $$AddressBookTableTableManager get addressBook =>
       $$AddressBookTableTableManager(_db, _db.addressBook);
   $$SignRequestsTableTableManager get signRequests =>

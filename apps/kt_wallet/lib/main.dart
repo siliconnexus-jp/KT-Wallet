@@ -73,6 +73,7 @@ Future<WalletController> _bootstrapWallet() async {
   );
   await controller.recoverPendingDeletions();
   await controller.validateNativeWallets();
+  await controller.restoreDurableFinalityMetrics();
   return controller;
 }
 
