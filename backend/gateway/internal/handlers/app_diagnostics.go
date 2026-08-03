@@ -150,12 +150,81 @@ func invalidAppDiagnostics() *rpc.Error {
 }
 
 func decodeStrictJSON(raw json.RawMessage, target any) error {
+	if err := rejectDuplicateJSONKeys(raw); err != nil {
+		return err
+	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
 		return err
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return errors.New("trailing JSON value")
+	}
+	return nil
+}
+
+func rejectDuplicateJSONKeys(raw json.RawMessage) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	var consumeValue func() error
+	consumeValue = func() error {
+		token, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		delim, ok := token.(json.Delim)
+		if !ok {
+			return nil
+		}
+		switch delim {
+		case '{':
+			seen := map[string]struct{}{}
+			for decoder.More() {
+				keyToken, err := decoder.Token()
+				if err != nil {
+					return err
+				}
+				key, ok := keyToken.(string)
+				if !ok {
+					return errors.New("non-string JSON object key")
+				}
+				if _, duplicate := seen[key]; duplicate {
+					return errors.New("duplicate JSON object key")
+				}
+				seen[key] = struct{}{}
+				if err := consumeValue(); err != nil {
+					return err
+				}
+			}
+			end, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			if end != json.Delim('}') {
+				return errors.New("unterminated JSON object")
+			}
+		case '[':
+			for decoder.More() {
+				if err := consumeValue(); err != nil {
+					return err
+				}
+			}
+			end, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			if end != json.Delim(']') {
+				return errors.New("unterminated JSON array")
+			}
+		default:
+			return errors.New("unexpected JSON delimiter")
+		}
+		return nil
+	}
+	if err := consumeValue(); err != nil {
+		return err
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
 		return errors.New("trailing JSON value")
 	}
 	return nil

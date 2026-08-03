@@ -34,6 +34,18 @@ type OfficialToken struct {
 	Verified bool   `json:"verified"`
 }
 
+// officialTokenConfig is deliberately separate from the response model.
+// `verified` is derived from successful operator-catalog validation and is
+// never an accepted configuration input.
+type officialTokenConfig struct {
+	Network  string `json:"network"`
+	Symbol   string `json:"symbol"`
+	Name     string `json:"name"`
+	Contract string `json:"contract"`
+	Decimals int    `json:"decimals"`
+	Popular  bool   `json:"popular,omitempty"`
+}
+
 type tokenMeta struct {
 	Symbol   string
 	Decimals int
@@ -87,9 +99,20 @@ func LoadOfficialTokensFile(path string) ([]OfficialToken, error) {
 	if err != nil {
 		return nil, err
 	}
-	var tokens []OfficialToken
-	if err := json.Unmarshal(raw, &tokens); err != nil {
+	var configs []officialTokenConfig
+	if err := decodeStrictJSON(raw, &configs); err != nil {
 		return nil, fmt.Errorf("decode official tokens: %w", err)
+	}
+	var tokens []OfficialToken
+	for _, token := range configs {
+		tokens = append(tokens, OfficialToken{
+			Network:  token.Network,
+			Symbol:   token.Symbol,
+			Name:     token.Name,
+			Contract: token.Contract,
+			Decimals: token.Decimals,
+			Popular:  token.Popular,
+		})
 	}
 	return normalizeOfficialTokens(tokens)
 }

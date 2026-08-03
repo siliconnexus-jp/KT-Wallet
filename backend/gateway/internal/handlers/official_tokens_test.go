@@ -81,6 +81,45 @@ func TestLoadOfficialTokensFileRejectsDuplicateIdentity(t *testing.T) {
 	}
 }
 
+func TestLoadOfficialTokensFileRejectsUnknownFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "official-tokens.json")
+	const body = `[
+		{"network":"eth-mainnet","symbol":"USDT","name":"Tether USD","contract":"0xdac17f958d2ee523a2206206994597c13d831ec7","decimal":6}
+	]`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handlers.LoadOfficialTokensFile(path); err == nil {
+		t.Fatal("unknown official-token fields must fail closed")
+	}
+}
+
+func TestLoadOfficialTokensFileRejectsDerivedVerifiedField(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "official-tokens.json")
+	const body = `[
+		{"network":"eth-mainnet","symbol":"USDT","name":"Tether USD","contract":"0xdac17f958d2ee523a2206206994597c13d831ec7","decimals":6,"verified":false}
+	]`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handlers.LoadOfficialTokensFile(path); err == nil {
+		t.Fatal("verified is response-derived and must be rejected in config")
+	}
+}
+
+func TestLoadOfficialTokensFileRejectsDuplicateObjectKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "official-tokens.json")
+	const body = `[
+		{"network":"eth-mainnet","symbol":"USDT","name":"Tether USD","contract":"0xdac17f958d2ee523a2206206994597c13d831ec7","contract":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","decimals":6}
+	]`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handlers.LoadOfficialTokensFile(path); err == nil {
+		t.Fatal("duplicate JSON object keys must fail closed")
+	}
+}
+
 func TestCheckedInOfficialTokenCatalogLoads(t *testing.T) {
 	tokens, err := handlers.LoadOfficialTokensFile(
 		filepath.Join("..", "..", "config", "official-tokens.json"),

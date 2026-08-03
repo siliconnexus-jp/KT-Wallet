@@ -272,6 +272,11 @@ unknown, an address has the wrong shape, or a network/contract identity is
 duplicated. This fail-closed behavior prevents an incomplete parse from
 accidentally verifying the wrong asset.
 
+The configuration schema is closed: unknown fields, duplicate JSON object
+keys, trailing JSON values, and the response-derived `verified` field are
+rejected. A misspelled field therefore cannot silently fall back to a zero
+value and still receive a blue verification mark.
+
 ### Token risk registry
 
 Set `TOKEN_RISKS_FILE` to an operator-managed copy of

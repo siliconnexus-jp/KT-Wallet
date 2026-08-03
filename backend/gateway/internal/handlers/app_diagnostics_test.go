@@ -93,3 +93,24 @@ func TestReportAppDiagnosticsFailsClosedWithoutPartialMutation(t *testing.T) {
 		})
 	}
 }
+
+func TestReportAppDiagnosticsRejectsDuplicateJSONKeys(t *testing.T) {
+	e := newEnv(t, nil)
+	const params = `{
+		"schemaVersion":1,
+		"consent":true,
+		"consent":false,
+		"appVersion":"1.0.0+1",
+		"platform":"ios",
+		"locale":"zh",
+		"buildMode":"release",
+		"metrics":[]
+	}`
+	assertErrCode(t, e.rpc("kt_reportDiagnostics", params), -32602)
+	if metrics := e.gw.Metrics(); !strings.Contains(
+		metrics,
+		`kt_gateway_app_diagnostic_uploads_total{platform="ios"} 0`,
+	) {
+		t.Fatalf("duplicate-key report mutated counters:\n%s", metrics)
+	}
+}
