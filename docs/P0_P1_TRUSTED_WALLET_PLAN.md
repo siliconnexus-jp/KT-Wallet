@@ -989,6 +989,13 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     公网 health/ready、Gateway 1.16.11 `kt_health`、Sepolia `kt_getChainParams` 与
     `im-api.nyxnet.jp/.cc` 两条真实 WebSocket 101 握手均通过。旧生产制品及两次候选
     均保留时间戳备份，当前生产精确 SHA 与上述最终制品一致。
+- [x] Gateway 当前公开版本新增单一来源门禁：生产 Go 配置中的唯一 SemVer 必须与
+  backend README health 示例、根 README 状态表及可靠性段落、P0/P1 生产证据和 HTML
+  报告的发布徽标/上线标题逐项一致。门禁只匹配这些“当前状态”标记，允许历史发布记录
+  保留旧版本。六个公开面同时改旧的负例先红后绿，缺失和重复源码版本也失败闭合；
+  `dep_check` 35/35、test_support 61/61、共享 packages 404/404、默认源码门禁 12/12、
+  完整依赖门禁 13/13 和静态分析 0 均通过。该检查防止仓库公开证据漂移，不替代公网
+  `kt_health`、制品 SHA 或部署目录的运行时核验。
 - [x] `/healthz`、`/readyz`、`kt_health` 匿名 endpoint 汇总、Prometheus
   `/metrics` 与结构化 RPC 日志完成；指标只含 network、匿名位置、结果、错误类型
   和延迟，不含钱包数据或 provider 凭证。1.14.1 默认关闭 `/metrics`；只有配置至少
@@ -1271,7 +1278,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     现统一为英文/日文 `KT Cold Signer`、中文 `KT冷钱包`；新增通用 ARB 禁用词门禁，
     可按语言拒绝退役品牌和语言不匹配名称。门禁单测先红后绿，三语 Widget 回归及受影响
     Golden 已人工复核；最新公开测试源码审计 12/12、完整依赖审计 13/13、KT Wallet
-    1492/1492、KT Cold Signer 570/570、共享 packages 401/401、静态分析 0、Gateway
+    1492/1492、KT Cold Signer 570/570、共享 packages 404/404、静态分析 0、Gateway
     audit 全部通过。
   - [ ] 真机系统权限弹窗、生命周期保护页及全部生产路由仍需逐页三语语义人工复核，
     因此本总项保持未完成，不能扩大宣称为“全 App 本地化验收完成”。

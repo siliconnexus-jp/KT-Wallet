@@ -566,6 +566,66 @@ List<String> findDocumentationPlaceholders(String contents) => [
     if (contents.contains(marker)) marker,
 ];
 
+/// Keeps the production Gateway version in code and current public release
+/// surfaces synchronized.
+///
+/// Historical notes may legitimately mention older versions, so this checks
+/// exact status-table, reliability, release-badge and deployment headings
+/// instead of merely looking for the current number somewhere in each file.
+List<String> findGatewayReleaseVersionIssues({
+  required String gatewaySource,
+  required String backendReadme,
+  required String rootReadme,
+  required String readinessPlan,
+  required String htmlReport,
+}) {
+  final matches = RegExp(
+    r'^\s*Version:\s*"([0-9]+\.[0-9]+\.[0-9]+)",\s*$',
+    multiLine: true,
+  ).allMatches(gatewaySource).toList(growable: false);
+  if (matches.length != 1) {
+    return ['Gateway source must declare exactly one release version'];
+  }
+  final version = matches.single.group(1)!;
+  final issues = <String>[];
+  final requiredMarkers = <(String, String, String)>[
+    (
+      backendReadme,
+      '"version":"$version"',
+      'backend README health example is not $version',
+    ),
+    (
+      rootReadme,
+      '| KT Gateway | `$version` |',
+      'root README status table is not $version',
+    ),
+    (
+      rootReadme,
+      'Gateway `$version` currently exposes',
+      'root README reliability section is not $version',
+    ),
+    (
+      readinessPlan,
+      '生产 $version 的公开 Ethereum 历史只读 smoke',
+      'P0/P1 readiness plan production evidence is not $version',
+    ),
+    (
+      htmlReport,
+      'Gateway $version 生产发布',
+      'HTML report release badge is not $version',
+    ),
+    (
+      htmlReport,
+      'Gateway 发布状态 · $version 已上线',
+      'HTML report deployed section is not $version',
+    ),
+  ];
+  for (final (contents, marker, issue) in requiredMarkers) {
+    if (!contents.contains(marker)) issues.add(issue);
+  }
+  return issues;
+}
+
 /// Every real-chain integration entrypoint that reads the funded mnemonic must
 /// validate the versioned batch metadata before registering or running tests.
 bool realE2eEntrypointHasCredentialGuard(String contents) {

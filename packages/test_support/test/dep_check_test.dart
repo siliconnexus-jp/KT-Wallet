@@ -278,6 +278,85 @@ dependencies:
     });
   });
 
+  group('Gateway public release version', () {
+    const source = '''
+GatewayConfig{
+  Version: "1.2.3",
+}
+''';
+    const backendReadme = '{"result":{"version":"1.2.3"}}';
+    const rootReadme = '''
+| KT Gateway | `1.2.3` | Production service |
+Gateway `1.2.3` currently exposes 16 mainnet/testnet network profiles.
+''';
+    const readinessPlan = '生产 1.2.3 的公开 Ethereum 历史只读 smoke 返回 5 条且 5/5 ok。';
+    const report = '''
+<span>Gateway 1.2.3 生产发布</span>
+<strong>Gateway 发布状态 · 1.2.3 已上线</strong>
+''';
+
+    test('accepts one source version and exact current public markers', () {
+      expect(
+        findGatewayReleaseVersionIssues(
+          gatewaySource: source,
+          backendReadme: backendReadme,
+          rootReadme: rootReadme,
+          readinessPlan: readinessPlan,
+          htmlReport: report,
+        ),
+        isEmpty,
+      );
+    });
+
+    test('rejects stale current markers even if history mentions the version', () {
+      final issues = findGatewayReleaseVersionIssues(
+        gatewaySource: source,
+        backendReadme:
+            '${backendReadme.replaceAll('1.2.3', '1.2.2')}\nHistorical 1.2.3 notes.',
+        rootReadme:
+            '${rootReadme.replaceAll('1.2.3', '1.2.2')}\nHistorical 1.2.3 notes.',
+        readinessPlan:
+            '${readinessPlan.replaceAll('1.2.3', '1.2.2')}\nHistorical 1.2.3 notes.',
+        htmlReport:
+            '${report.replaceAll('1.2.3', '1.2.2')}\nHistorical Gateway 1.2.3.',
+      );
+
+      expect(issues, contains('backend README health example is not 1.2.3'));
+      expect(issues, contains('root README status table is not 1.2.3'));
+      expect(issues, contains('root README reliability section is not 1.2.3'));
+      expect(
+        issues,
+        contains('P0/P1 readiness plan production evidence is not 1.2.3'),
+      );
+      expect(issues, contains('HTML report release badge is not 1.2.3'));
+      expect(issues, contains('HTML report deployed section is not 1.2.3'));
+      expect(issues, hasLength(6));
+    });
+
+    test('rejects missing or ambiguous source versions', () {
+      expect(
+        findGatewayReleaseVersionIssues(
+          gatewaySource: 'GatewayConfig{}',
+          backendReadme: backendReadme,
+          rootReadme: rootReadme,
+          readinessPlan: readinessPlan,
+          htmlReport: report,
+        ),
+        ['Gateway source must declare exactly one release version'],
+      );
+      expect(
+        findGatewayReleaseVersionIssues(
+          gatewaySource: '$source\n$source',
+          backendReadme: backendReadme,
+          rootReadme: rootReadme,
+          readinessPlan: readinessPlan,
+          htmlReport: report,
+        ),
+        ['Gateway source must declare exactly one release version'],
+      );
+    });
+  });
+
   group('reviewed Gradle artifact pins', () {
     const origin = 'Official SHA-256 verified';
     const reviewed = {

@@ -1255,6 +1255,26 @@ void main() {
     }
   }
 
+  // The public status table and release report are safety-relevant evidence:
+  // a stale Gateway version can make operators and testers reason about the
+  // wrong cache, provider, privacy, or broadcast behavior. Bind every current
+  // release marker to the single version declared by production code while
+  // allowing older versions to remain in explicitly historical sections.
+  final gatewayReleaseVersionIssues = findGatewayReleaseVersionIssues(
+    gatewaySource: File(
+      'backend/gateway/internal/handlers/gateway.go',
+    ).readAsStringSync(),
+    backendReadme: File('backend/gateway/README.md').readAsStringSync(),
+    rootReadme: File('README.md').readAsStringSync(),
+    readinessPlan: File('docs/P0_P1_TRUSTED_WALLET_PLAN.md').readAsStringSync(),
+    htmlReport: File(
+      'reports/p0-p1-wallet-audit-2026-07-31/index.html',
+    ).readAsStringSync(),
+  );
+  for (final issue in gatewayReleaseVersionIssues) {
+    failures.add('Gateway public release version drift: $issue');
+  }
+
   // When a local funded E2E mnemonic exists, use it as a canary and reject any
   // exact disclosure in public text artifacts. Error output contains only the
   // leak category and file path, never the matched secret.
