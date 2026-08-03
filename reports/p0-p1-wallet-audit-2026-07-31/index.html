@@ -483,10 +483,11 @@
         <code>4Frj8584f3yv5ZAAVRs6yNXV5bXkVJR91EFPuA3p5q3S</code>。host 文件为 0600 且
         credential guard 通过；设备私密 JSON 已删除，iOS provisioning 临时 native
         walletId 也已通过唯一 iPhone 17 Pro Simulator 的生产 Face ID 策略执行
-        cleanup-only，原生桥返回明确删除成功且集成测试 1/1 通过。当前批次已在 Android API 35 以真实系统
-        指纹逐次授权重跑 16 条 Wallet Core 签名、AIRGAP-V1 往返和密码学验签，并在
-        teardown 删除 Android 临时原生钱包；尚未完成当前批次 iOS/独立 Cold Signer
-        矩阵。当前 EVM 地址经 Gateway 与独立 Amoy RPC 交叉读取均为 0 POL / 0 USDC，
+        cleanup-only，原生桥返回明确删除成功且集成测试 1/1 通过。当前批次已分别在
+        Android API 35 与唯一 iPhone 17 Pro Simulator / iOS 26.2 以真实系统认证重跑
+        16 条 Wallet Core 签名、AIRGAP-V1 往返和密码学验签，并在 teardown 认证删除
+        两端矩阵临时钱包；独立 KT Cold Signer 仍需单独验收。当前 EVM 地址经 Gateway
+        与独立 Amoy RPC 交叉读取均为 0 POL / 0 USDC，
         尚未广播。下表浏览器链接仅属于更早批次的
         历史回归证据，不能冒充新一轮验收。</div>
       <div class="scroll"><table>
@@ -696,7 +697,8 @@
           <tr><td>原生 wallet slot 只创建</td><td>重复 walletId 不能替换既有密钥或改变认证策略。iOS 不再先删除 Keychain item，直接用 <code>SecItemAdd</code> 原子拒绝 duplicate；Android 在同一临界区核对 blob 与 Keystore alias，密文写入私有临时文件、flush + fsync 后同目录 rename，文件提交失败补偿刚创建的 key。Dart、Mock 与双原生层统一返回 <code>WALLET_EXISTS</code></td><td class="pass">覆盖尝试后旧助记词/密文字节保持不变；Core Crypto 41/41、Android JVM 24/24、真实 Wallet Core Kotlin 编译；唯一 iPhone 17 Pro 签名 XCTest 真实验证 Keychain duplicate + 原值读取；双 App iOS 构建与全量回归通过</td></tr>
           <tr><td>设备本地密钥 envelope 闭合</td><td>header 只允许 0（直接熵）/1（设备 KDF），最终只接受 16/24/32-byte BIP-39 entropy。Android 私有 Keystore blob 在读入前只接受 45/53/61/89/97/105 bytes，GCM tag/block 失败固定为损坏；iOS Keychain payload 只接受 17/25/33/61/69/77 bytes。未知 header、截断、超长和错误熵长度不会进入 Wallet Core</td><td class="pass">Android 合法尺寸、44-byte 损坏文件、未知 flag 和错误熵长度负例，JVM 24/24；真实 Wallet Core 编译；唯一 iPhone 17 Pro 原生 XCTest 覆盖未知 flag 与错误 payload/entropy 尺寸；双 App iOS 构建通过</td></tr>
           <tr><td>Core Crypto 原生参数与资源闭合</td><td>iOS 不再对助记词、coin、签名 typed data、备份 blob/密码执行 <code>as!</code>，也不强制解包任意强度的 HDWallet；Android 同步精确解码。助记词强度只允许 128/192/256，补全 limit 为 1–20。双原生层在认证前进一步限制助记词 512 UTF-8 bytes、单词/前缀 64 bytes、设备 KDF 密码 1024 bytes、备份密码 4096 bytes、签名输入 1 MiB，并只接受 60/68/76-byte 真实备份 payload 与八链 coin allowlist。空、超限、错误尺寸和未知 coin 固定为 <code>INVALID_INPUT</code>，不会弹认证框、进入昂贵 KDF/Wallet Core 或终止进程</td><td class="pass">Core Crypto Dart 41/41、Android JVM 24/24、真实 Wallet Core Kotlin 编译；唯一 iPhone 17 Pro 覆盖错误类型、非法强度/limit、空/超限输入、错误备份尺寸与未知 coin；双 App iOS 构建、KT Wallet 1446/1446、Cold Signer 568/568 通过；check_deps 固定关键边界</td></tr>
-          <tr><td>当前批次 Android 八链离线矩阵</td><td><code>batch_20260802_3eb2631a3683a40c</code> 在 Android API 35 通过真实系统指纹逐次授权，执行 Ethereum、Polygon、Base、Arbitrum、Avalanche、BNB 的原生币/Token，以及 TRON/TRC-20、Solana/SPL-ATA 共 16 条 Wallet Core 签名；每条均完成 AIRGAP-V1 多帧聚合、原始交易解析、在线密码学验签与 signer 核对。测试不访问 RPC、不广播，结束时再次经系统指纹删除 Android 临时原生钱包</td><td class="pass">集成测试 1/1；16/16 operation/hash/signer 证据完整。边界：当前批次 iOS、独立 KT Cold Signer、物理相机 QR 与链上广播尚未验收</td></tr>
+          <tr><td>当前批次 Android 八链离线矩阵</td><td><code>batch_20260802_3eb2631a3683a40c</code> 在 Android API 35 通过真实系统指纹逐次授权，执行 Ethereum、Polygon、Base、Arbitrum、Avalanche、BNB 的原生币/Token，以及 TRON/TRC-20、Solana/SPL-ATA 共 16 条 Wallet Core 签名；每条均完成 AIRGAP-V1 多帧聚合、原始交易解析、在线密码学验签与 signer 核对。测试不访问 RPC、不广播，结束时再次经系统指纹删除 Android 临时原生钱包</td><td class="pass">集成测试 1/1；16/16 operation/hash/signer 证据完整。边界：独立 KT Cold Signer、物理相机 QR 与链上广播尚未验收</td></tr>
+          <tr><td>当前批次 iOS 八链离线矩阵</td><td>同一批次在唯一 iPhone 17 Pro Simulator / iOS 26.2 逐笔触发系统 Face ID，执行与 Android 相同的 16 条 Wallet Core 签名、AIRGAP-V1 多帧聚合、原始交易解析、在线密码学验签和 signer 核对；测试不访问 RPC、不广播，第 17 次 Face ID 删除矩阵临时原生钱包</td><td class="pass">集成测试 1/1；16/16 operation/hash/signer 与当前批次公开地址一致，认证 teardown 成功。边界：只证明 KT Wallet iOS bundle 的原生矩阵，不替代独立 KT Cold Signer、物理相机 QR 或链上广播</td></tr>
           <tr><td>原生 E2E 钱包清理真实性</td><td>仓库门禁使用 Analyzer AST 逐个核对原生 storeWallet 的 CoreCrypto 实例、walletId 与控制流；只接受同实例/同 ID 的紧邻认证 teardown，或覆盖创建点且不吞异常的 finally。统一 helper 本身也必须真实 addTearDown，并调用同实例 deleteWallet(walletId).timeout(timeout)，只允许忽略钱包已不存在。注释、错 ID、错实例、普通路径删除、第二钱包遗漏、空 helper 和捕获删除超时均不能伪装成已清理</td><td class="pass">站点与 helper 绕过先红后绿；真实发现并修复 Sepolia replacement 生命周期，EVM replacement 同步移除静默超时。两款 App integration tests 共 30 个原生 store 站点、0 清理债务；check_deps、分析 0、KT Wallet 1455/1455 通过。设备实际 Face ID/PIN 仍由 E2E 运行证明</td></tr>
           <tr><td>金额、原生币单位与市场展示精度</td><td>用户十进制金额到链上 base unit 全程使用 BigInt；超 Token decimals 不截断，逗号歧义输入拒绝。EIP-1559 的 chainId、nonce、priority/max fee、gas limit 与 value 在 RLP/哈希前必须小于 2^256。Gateway 不能以响应 metadata 改写 ETH/POL/AVAX/BNB/TRX/SOL 的协议固定 decimals 或 symbol；不一致时整链失败并进入直连回退。运营方 verified Token decimals 只接受 0–36。展示层只接受正且有限的币价/FX 与有限涨跌；BigInt 转法币、换算或合计溢出时显示 --</td><td class="pass">错误 ETH 单位、Portfolio 隔离、六类 EVM 超域标量、255-decimal 官方 Token、负/零市场报价及 4096-bit 极端余额均先红后绿；超过 IEEE-754 的链上金额仍精确往返。chains 178/178、内置 Token 精度 35/35、KT Wallet 1458/1458、分析 0、check_deps 通过。法币 double 仅展示，不进入余额授权或签名</td></tr>
           <tr><td>移动端错误隐私边界</td><td>Core Crypto 的 Android/iOS 原生层不再返回 Throwable、localizedDescription 或认证 Provider 文字；Dart MethodChannel 只保留固定错误码及锁定秒数。Gateway Client、直连 RPC、Solana 水龙头与 EVM/TRON/Solana Provider 错误统一丢弃完整 URI、任意 body 和未知节点文案；广播拒绝再以 16 类结构化原因进入 UI</td><td class="pass">先用助记词、私钥、Provider key、完整 URL、中文混排与异常 canary 证明旧路径；修复后 Core Crypto 20/20、HTTP/Gateway/广播 46/46、chains RPC 34/34、水龙头 10/10、三语映射 16/16、Wallet 860/860 通过，静态隐私门禁已纳入依赖审计</td></tr>
@@ -733,7 +735,7 @@
           <tr><td>加密备份文件输入与 Provider 边界</td><td>原生最多读取 256 KiB + 1 字节；Dart 严格核对 v1/v2 闭合 schema、KDF、cipher、UTC、payload format 与 payload；只有显式 cancelled=true 才静默返回。文件名只显示净化 basename，移除控制/Bidi/零宽字符并限制 80 code points；文件错误与密码错误分离，换文件失败清除旧密码</td><td class="partial">定向 33/33、Android 原生边界通过、iOS build-for-testing 通过；当轮 Simulator SpringBoard 异常退出，iOS XCTest 与物理 Provider 待复验</td></tr>
           <tr><td>跨平台加密备份格式</td><td>backup-v2 在 Android/iOS 统一为 PBKDF2-HMAC-SHA256 210000 rounds + AES-256-GCM，固定 salt16/nonce12/tag16 和 payload 布局；设备本地 Argon2id 与可移植备份分离。Android v1 仅在 portable 认证失败后兼容旧 Argon2id，v2 不允许降级。严审又发现 Android 原实现使用只保证 API 26+ 的 PBKDF2 SecretKeyFactory 别名，与 minSdk 24 冲突；现改由 API 23+ HmacSHA256 按 RFC 8018 直接计算同一 PBKDF2 block，显式使用 UTF-8，文件字节不变，并由依赖门禁防回归</td><td class="partial">Dart 33/33；Android 独立 Unicode key/blob、篡改与格式选择 JVM 7/7，其中新 KDF 定向 3/3；API 35 Unicode portable 向量与真实旧 v1 恢复 2/2；生产 Swift 源码直接编译执行同一向量和负例通过。API 24/25 与 iOS XCTest 当轮未运行，物理双向交叉恢复待验收；<a href="https://developer.android.com/reference/javax/crypto/SecretKeyFactory">Android 官方算法表</a>为兼容性边界依据</td></tr>
           <tr><td>离线备份密码强度</td><td>新建文件要求 14–128 Unicode scalar，拒绝低多样性、1–4 字符周期重复、单调连续和明确常见模式；三语区分过短、过长与可预测。旧文件恢复不套用新规则，避免安全升级锁死历史备份</td><td class="pass">英文/中日韩短语正例与短、超长、重复、连续、常见模式负例；MethodChannel 前失败闭合，W32 Golden 人工复核；Wallet 1424/1424、Core Crypto 39/39</td></tr>
-          <tr><td>测试凭证批次门禁</td><td>版本化批次 ID、UTC 创建/过期时间、最长 14 天、0600、非 symlink、公开 BIP-39 vector 拒绝；交互式输入关闭回显，报告扫描使用本地助记词 canary 且不回显秘密；23 个真实助记词 E2E 入口内置同一门禁</td><td class="partial">当前 14 天批次已由 iOS 原生 Wallet Core 生成，host 文件为 0600；Android 八链 16 条离线矩阵及认证删除通过，iOS provisioning 临时钱包也已通过 Simulator Face ID cleanup-only 删除。仍待注资后重跑真实广播矩阵</td></tr>
+          <tr><td>测试凭证批次门禁</td><td>版本化批次 ID、UTC 创建/过期时间、最长 14 天、0600、非 symlink、公开 BIP-39 vector 拒绝；交互式输入关闭回显，报告扫描使用本地助记词 canary 且不回显秘密；23 个真实助记词 E2E 入口内置同一门禁</td><td class="partial">当前 14 天批次已由 iOS 原生 Wallet Core 生成，host 文件为 0600；Android 与 iOS 八链 16 条离线矩阵及认证删除均通过，iOS provisioning 临时钱包也已通过 Simulator Face ID cleanup-only 删除。仍待注资后重跑真实广播矩阵</td></tr>
           <tr><td>E2E 原生密钥清理纪律</td><td>仓库级门禁枚举两个 App 的所有 <code>storeWallet</code> 测试；新增原生位置必须显式认证删除。共享 teardown 复用生产 <code>deleteWallet</code> 系统认证，超时直接令测试失败，仅容忍场景已主动删除后的 WALLET_NOT_FOUND，不存在未认证测试后门。仅使用已知 <code>MockCoreCrypto</code> 且无 MethodChannel 的纯内存 UI 测试明确排除，未知实现不豁免</td><td class="pass">6 个分类正负例、仓库门禁和 KT Wallet 1446/1446 通过；初始 24 个原始命中中，23 个真实原生测试已接入认证清理、1 个纯内存 Mock 被精确排除，原生技术债与未跟踪位置均为 0。门禁建立前遗留的当前 provisioning wallet 第一次删除按设计超时失败，第二次经系统 Matching Face 后返回 <code>E2E-STALE-NATIVE-KEY-DELETED</code>，cleanup-only 1/1 通过</td></tr>
           <tr><td>Package 公开测试文档</td><td>六个共享 package、Core Crypto podspec 与 example 均说明 API、示例、测试、许可证及安全边界；递归门禁禁止默认 TODO、示例公司/域名和 Flutter 模板描述回归；test_support fixture 从仓库根目录和包目录均可运行</td><td class="pass">文档门禁 + packages 397/397 通过</td></tr>
           <tr><td>Core Crypto Privacy Manifest</td><td>AuthGate 的 app-scoped UserDefaults 以 CA92.1 独立声明；CocoaPods resource bundle 与 SwiftPM resource 同时启用，源码 glob 不再吞入 xcprivacy；两份 Podfile 固定并向传递依赖传播 iOS 13 下限</td><td class="pass">podspec lint、21 项门禁定向测试、两款 Simulator 构建及最终 framework bundle 读取通过；相关两类 Xcode 警告为 0</td></tr>
@@ -1019,8 +1021,9 @@
           当前全部链都必须使用轮换后的 14 天短期批次重新验收。2026-08-03 原生
           Wallet Core 已生成 <code>batch_20260802_3eb2631a3683a40c</code>，凭据文件
           为 0600 且门禁验证通过，公开 EVM 地址为
-          <code>0xfa1B…aD11</code>；Android API 35 当前批次 16 条未广播矩阵已通过且
-          Android 临时钱包已删除；Gateway 与独立 Amoy RPC 均读到 0 POL / 0 USDC，
+          <code>0xfa1B…aD11</code>；Android API 35 与唯一 iPhone 17 Pro Simulator 的
+          当前批次 16 条未广播矩阵均已通过，两个矩阵临时钱包均认证删除；Gateway 与
+          独立 Amoy RPC 均读到 0 POL / 0 USDC，
           尚未广播。设备侧私密 JSON 已消费删除；iOS provisioning 临时 native walletId
           第一次 Face ID 删除真实超时失败，第二次立即 Matching Face 后由原生桥明确删除，
           cleanup-only 1/1 通过。旧 Polygon 地址虽有约 0.000585 POL / 16 USDC，也不得绕过

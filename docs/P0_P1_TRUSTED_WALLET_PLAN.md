@@ -627,8 +627,12 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   API 35 使用真实系统指纹逐次授权，重新完成六条 EVM 原生币/Token、TRON/TRC-20、
   Solana/SPL-ATA 共 16 条 Wallet Core 签名、AIRGAP-V1 往返与在线密码学验签；输出
   signer 与当前批次公开地址一致，测试 teardown 再次通过系统指纹删除 Android 临时
-  原生钱包。该证据只覆盖 Android 组合 App 的确定性未广播矩阵；当前批次 iOS 矩阵、
-  独立 KT Cold Signer、物理相机 QR 往返及链上广播仍需分别验收。
+  原生钱包。该证据只覆盖 Android 组合 App 的确定性未广播矩阵。
+- [x] 同一轮换批次已在唯一 iPhone 17 Pro Simulator / iOS 26.2 重新完成相同 16 条
+  矩阵：每笔通过系统 Face ID、原生 Wallet Core、AIRGAP-V1 多帧往返、原始交易解析和
+  在线密码学验签，EVM/TRON/Solana signer 均与当前批次公开地址一致；第 17 次系统
+  Face ID 成功删除矩阵临时钱包，集成测试 1/1 通过。该证据只覆盖 KT Wallet iOS bundle
+  的确定性未广播矩阵；独立 KT Cold Signer、物理相机 QR 往返及链上广播仍需分别验收。
 - [ ] 本矩阵的确定性、未广播交易仍只证明八链离线签名和验签；新批次全部八链仍需
   补充测试资产并保存 explorer txHash、链上确认与双端历史证据。旧批次的 Ethereum、
   Base、Arbitrum、Avalanche、BNB、TRON、Solana 广播闭环保留为历史回归证据；
