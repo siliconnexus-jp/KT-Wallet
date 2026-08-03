@@ -1,11 +1,11 @@
 import 'package:airgap_protocol/airgap_protocol.dart';
-import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../l10n/app_localizations.dart';
 import 'screens/signer_onboarding_screens.dart';
+import 'developer_mode.dart';
 import 'screens/signer_settings_screens.dart';
 import 'screens/signer_signing_screens.dart';
 import 'security/secure_vault.dart';
@@ -100,7 +100,7 @@ const _sensitiveMnemonicRoutes = {
 };
 
 GoRouter buildSignerRouter({String initialLocation = '/'}) {
-  final galleryMode = !kReleaseMode && initialLocation == '/';
+  final galleryMode = developerFixturesEnabled && initialLocation == '/';
   return GoRouter(
     initialLocation: galleryMode ? '/' : initialLocation,
     redirect: (context, state) => signerProductionRouteRedirect(

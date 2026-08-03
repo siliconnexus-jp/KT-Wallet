@@ -148,6 +148,11 @@ therefore distinguishes signing, broadcasting, and chain confirmation.
   process marker and explicit test-storage overrides at the compile-mode
   boundary. Repository checks prevent production code from reading that marker
   outside the two canonical test-environment adapters.
+- Developer galleries, seeded/test-bypass controllers, simulated scanner
+  results, legacy demo account exports, and demo wallet IDs are available only
+  in Debug builds. Profile is treated as production-equivalent here: both
+  Profile and Release reject these fixtures and normalize production routes to
+  real wallet state.
 - A transient native-key or derivation failure never erases the Cold Signer's
   durable wallet identifier. Failed onboarding attempts independently clean
   native key material and every PIN/metadata key; a failure in one cleanup
@@ -335,7 +340,7 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-03) completed with zero static-analysis
-issues: **1,459/1,459** KT Wallet tests, **569/569** KT Cold Signer tests, and
+issues: **1,460/1,460** KT Wallet tests, **570/570** KT Cold Signer tests, and
 **397/397** shared-package tests passed. The Gateway audit, public-secret gate,
 native dependency lock/checksum verification, and OSV scans also passed. These
 numbers are reproducible source evidence, not a substitute for the outstanding

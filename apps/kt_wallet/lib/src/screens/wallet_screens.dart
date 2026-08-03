@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:core_crypto/core_crypto.dart';
-import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +11,7 @@ import '../../l10n/app_localizations.dart';
 import '../security/secure_screen.dart';
 import '../state/wallet_controller.dart';
 import '../state/wallet_scope.dart';
+import '../state/developer_mode.dart';
 import '../transfer/airgap_codec.dart' show truncateMiddle;
 import '../wallets/pairing_airgap.dart';
 import '../wallets/wallet_manager.dart';
@@ -1208,7 +1208,7 @@ class ImportConfirmScreen extends StatelessWidget {
         // The only relaxed case is the known debug gallery fixture. Real
         // camera traffic and every release build require all eight public
         // keys and their derived addresses.
-        allowLegacyDemo: !kReleaseMode,
+        allowLegacyDemo: developerFixturesEnabled,
       );
     } on PayloadError {
       ScaffoldMessenger.of(context)
@@ -1238,7 +1238,7 @@ class ImportConfirmScreen extends StatelessWidget {
           id: id,
           avatarColor: 0xFF0C1220,
           sortOrder: controller.count,
-          allowLegacyDemo: !kReleaseMode,
+          allowLegacyDemo: developerFixturesEnabled,
         ),
       );
     } catch (_) {

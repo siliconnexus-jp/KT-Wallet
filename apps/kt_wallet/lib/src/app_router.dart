@@ -1,6 +1,5 @@
 import 'package:airgap_protocol/airgap_protocol.dart' show AccountExport;
 import 'package:core_crypto/core_crypto.dart' show Coin;
-import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -17,6 +16,7 @@ import 'screens/settings_screens.dart';
 import 'screens/transfer_screens.dart';
 import 'screens/wallet_screens.dart';
 import 'state/wallet_controller.dart';
+import 'state/developer_mode.dart';
 import 'transfer/local_transfer_service.dart';
 import 'transfer/transfer_draft.dart';
 
@@ -78,7 +78,7 @@ GoRouter buildRouter({
   LocalTransferService? transferService,
   TransferSession? transferSession,
 }) {
-  final effectiveGalleryMode = !kReleaseMode && galleryMode;
+  final effectiveGalleryMode = developerFixturesEnabled && galleryMode;
   return GoRouter(
     initialLocation: initialLocation,
     redirect: (context, state) => productionRouteRedirect(

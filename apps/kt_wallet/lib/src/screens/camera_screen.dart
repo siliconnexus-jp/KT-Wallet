@@ -1,12 +1,12 @@
 import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:chains/chains.dart';
-import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../transfer/frame_scan.dart';
+import '../state/developer_mode.dart';
 import '../wallets/pairing_airgap.dart';
 import '../widgets/scan_viewfinder.dart';
 
@@ -129,9 +129,9 @@ class _ScanAddressScreenState extends State<ScanAddressScreen> {
       title: l10n.scanAddressTitle,
       hint: l10n.scanAddressHint,
       onClose: () => Navigator.of(context).maybePop(),
-      onSimulatedScan: kReleaseMode
-          ? null
-          : () => _pop(ScanAddressScreen.demoAddress),
+      onSimulatedScan: developerFixturesEnabled
+          ? () => _pop(ScanAddressScreen.demoAddress)
+          : null,
       onScanned: _onScanned,
       availability: widget.availability,
     );
@@ -162,9 +162,9 @@ class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
   // Do not even materialize the deterministic pairing account in a release
   // process. The callback below is also null in release; this conditional
   // lets the compiler remove the fixture payload from that call path.
-  late final List<AirgapFrame> _frames = kReleaseMode
-      ? const []
-      : demoAccountExportFrames();
+  late final List<AirgapFrame> _frames = developerFixturesEnabled
+      ? demoAccountExportFrames()
+      : const [];
   final _session = QrFrameScanSession();
   int _received = 0;
   bool _navigated = false;
@@ -191,7 +191,7 @@ class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
         // four-chain fixture without public keys.
         validateScannedAccountExport(
           decoded,
-          allowLegacyDemo: _simulatedSession && !kReleaseMode,
+          allowLegacyDemo: _simulatedSession && developerFixturesEnabled,
         );
         _navigated = true;
         context.pushReplacement('/import-confirm', extra: decoded);
@@ -203,7 +203,7 @@ class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
   }
 
   void _onSimulatedScan(BuildContext context) {
-    if (kReleaseMode) return;
+    if (!developerFixturesEnabled) return;
     if (!_simulatedSession && _received != 0) {
       _session.reset();
       _received = 0;
@@ -236,7 +236,9 @@ class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
       title: l10n.scanAccountQr,
       hint: '${l10n.scanAccountHint}$progress',
       onClose: () => Navigator.of(context).maybePop(),
-      onSimulatedScan: kReleaseMode ? null : () => _onSimulatedScan(context),
+      onSimulatedScan: developerFixturesEnabled
+          ? () => _onSimulatedScan(context)
+          : null,
       onScanned: _onScanned,
       availability: widget.availability,
     );

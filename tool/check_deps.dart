@@ -623,14 +623,14 @@ void main() {
   // Design fixtures are intentionally retained for goldens and the debug
   // screen gallery, but the shipped router must make them unreachable. Keep
   // the boundary as a repository gate as well as widget tests: a future
-  // refactor must not silently remove the release-mode clamp, pending-flow
+  // refactor must not silently remove the Debug-only clamp, pending-flow
   // checks, wallet identity checks, or camera simulation clamp.
   final walletRouter = File('apps/kt_wallet/lib/src/app_router.dart');
   final walletRouterSource = walletRouter.existsSync()
       ? walletRouter.readAsStringSync()
       : '';
   for (final productionBoundary in [
-    'final effectiveGalleryMode = !kReleaseMode && galleryMode;',
+    'final effectiveGalleryMode = developerFixturesEnabled && galleryMode;',
     'required WalletController walletController',
     'walletController.pendingMnemonic == null',
     'currentWallet == null',
@@ -692,17 +692,20 @@ void main() {
       ? walletCamera.readAsStringSync()
       : '';
   if (RegExp(
-        r'onSimulatedScan:\s*kReleaseMode\s*\?\s*null\s*:',
+        r'onSimulatedScan:\s*developerFixturesEnabled\s*\?[^:]+:\s*null',
+        dotAll: true,
       ).allMatches(walletCameraSource).length <
       2) {
     failures.add(
-      '${walletCamera.path} does not clamp both live simulated scanners in release',
+      '${walletCamera.path} does not clamp both live simulated scanners to Debug',
     );
   }
-  if (!walletCameraSource.contains('if (kReleaseMode) return;') ||
-      !walletCameraSource.contains('kReleaseMode\n      ? const []')) {
+  if (!walletCameraSource.contains('if (!developerFixturesEnabled) return;') ||
+      !walletCameraSource.contains(
+        'developerFixturesEnabled\n      ? demoAccountExportFrames()\n      : const []',
+      )) {
     failures.add(
-      '${walletCamera.path} materializes or executes the account fixture in release',
+      '${walletCamera.path} materializes or executes the account fixture outside Debug',
     );
   }
   final transferScreens = File(
@@ -712,10 +715,11 @@ void main() {
       ? transferScreens.readAsStringSync()
       : '';
   if (!RegExp(
-    r'onSimulatedTap:\s*kReleaseMode\s*\?\s*null\s*:',
+    r'onSimulatedTap:\s*developerFixturesEnabled\s*\?[^:]+:\s*null',
+    dotAll: true,
   ).hasMatch(transferScreensSource)) {
     failures.add(
-      '${transferScreens.path} does not detach simulated signing in release',
+      '${transferScreens.path} does not detach simulated signing outside Debug',
     );
   }
   final historyService = File(
@@ -795,13 +799,46 @@ void main() {
       : '';
   for (final productionBoundary in [
     '_missingProductionController()',
-    'kReleaseMode && controller.allowsTestBypass',
+    '!developerFixturesEnabled && controller.allowsTestBypass',
     'walletController: widget.controller',
   ]) {
     if (!walletMainSource.contains(productionBoundary)) {
       failures.add(
         '${walletMain.path} does not preserve production controller boundary: '
         '$productionBoundary',
+      );
+    }
+  }
+
+  // Profile builds are production-like. kReleaseMode is valid only where the
+  // app reports its build classification; fixture, Gallery and simulated
+  // success gates must depend on the central kDebugMode adapter instead.
+  const allowedReleaseModeFiles = {
+    'apps/kt_wallet/lib/src/observability/diagnostic_bundle.dart',
+    'apps/kt_wallet/lib/src/observability/diagnostic_telemetry.dart',
+  };
+  for (final appLib in ['apps/kt_wallet/lib', 'apps/cold_signer/lib']) {
+    for (final entity in Directory(appLib).listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      if (entity.readAsStringSync().contains('kReleaseMode') &&
+          !allowedReleaseModeFiles.contains(entity.path)) {
+        failures.add(
+          '${entity.path} treats Profile as a developer-fixture build',
+        );
+      }
+    }
+  }
+  for (final developerMode in [
+    File('apps/kt_wallet/lib/src/state/developer_mode.dart'),
+    File('apps/cold_signer/lib/src/developer_mode.dart'),
+  ]) {
+    final source = developerMode.existsSync()
+        ? developerMode.readAsStringSync()
+        : '';
+    if (!source.contains('developerFixturesEnabled => kDebugMode') ||
+        !source.contains('isDebugBuild;')) {
+      failures.add(
+        '${developerMode.path} does not keep fixtures behind kDebugMode',
       );
     }
   }

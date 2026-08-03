@@ -136,9 +136,17 @@
   `kDebugMode && !kIsWeb && markerPresent`，PIN 与 vault 的显式测试 override 还在最终
   存储决策处再次受 `kDebugMode` 限制；相机和转账页只能依赖该统一入口。仓库门禁递归
   拒绝两份规范适配器之外的直接环境变量读取。两项边界测试先红后绿，KT Wallet
-  1459/1459、KT Cold Signer 569/569、共享 packages 397/397、Gateway audit、
+  1460/1460、KT Cold Signer 570/570、共享 packages 397/397、Gateway audit、
   `check_deps` 与完整静态分析通过。该项证明 Release/Profile 不能由进程标记进入测试
   存储或测试交易路径，不替代物理设备 Keychain/Keystore、相机和正式签名制品验收。
+- [x] 2026-08-03 进一步发现 Gallery、seed/test-bypass controller、模拟地址/账户/签名
+  扫码、legacy AccountExport 和 demo walletId 原先使用 `!kReleaseMode`，因此 Profile
+  构建仍可能进入开发夹具。两款 App 现在只通过统一的 `kDebugMode` 适配器开放这些
+  能力；Profile 与 Release 均按生产路由处理，仓库门禁禁止生产 Dart 再以
+  `kReleaseMode` 放宽夹具（仅诊断构建类型分类保留）。两项边界测试先红后绿，Wallet
+  定向 43/43、Signer 定向 19/19，两个 Android arm64 Profile AOT bundle 构建通过；
+  完整门禁 12/12、KT Wallet 1460/1460、KT Cold Signer 570/570、共享 packages
+  397/397、Gateway audit 与静态分析 0 问题。该项仍不替代正式签名制品检查或真机验收。
 - [x] Cold Signer 启动时的原生派生失败不再被当成“钱包不存在”并擦除 metadata/PIN；
   临时性 Wallet Core、Keychain 或 Keystore 故障只会进入阻断页并保留同一 walletId 供
   重试。Onboarding 在原生密钥已写入但 metadata 提交失败时，先补偿删除原生密钥，再
@@ -334,7 +342,7 @@
   `BigInt` 链上数量转成法币时检查 `double` 溢出，单资产、Token、跨部署合计、总资产、
   确认页和币种换算任何一步产生非有限值都显示 `--`，不会展示负资产或
   `Infinity/NaN`。负价格与 4096-bit 极端余额先红后绿；定向 86/86、KT Wallet
-  1459/1459、静态分析 0、`check_deps`、秘密扫描和差异格式门禁均通过。
+  1460/1460、静态分析 0、`check_deps`、秘密扫描和差异格式门禁均通过。
 - [x] 测试网禁止展示主网法币估值：原生币与 Token 的价格、24h 涨跌和总资产
   在 `MarketController` 数据边界按链环境隔离；全测试网环境不会发布或持久化
   主网 last-good 报价，混合环境只保留主网链估值。首页、Token 详情和确认页已在
@@ -673,8 +681,8 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   文档，同时依赖共享 `.gitignore` 排除本地凭证、私密 runbook 和构建目录。测试中需要
   验证的令牌形状改为运行时拼接，不降低检测正例强度；第一次全仓扫描实际发现并修正
   3 个测试文件中的 8 类 provider canary。文件选择负例先红后绿，定向 12/12、Faucet
-  10/10、test_support 57/57、共享 packages 397/397、KT Wallet 1459/1459、Cold Signer
-  569/569、`check_deps` 与完整静态分析 0 问题。该门禁覆盖当前工作树；Git 历史与无前缀
+  10/10、test_support 57/57、共享 packages 397/397、KT Wallet 1460/1460、Cold Signer
+  570/570、`check_deps` 与完整静态分析 0 问题。该门禁覆盖当前工作树；Git 历史与无前缀
   opaque key 仍必须继续依赖 GitHub Push Protection/专用扫描器。
 - [x] 2026-08-03 在 Provider 前缀和私钥格式之外增加通用高熵凭证赋值检测：只检查
   `apiKey/accessToken/authToken/bearerToken/clientSecret/credential/password/secret/token`

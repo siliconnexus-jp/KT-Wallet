@@ -1,10 +1,10 @@
-import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import 'l10n/app_localizations.dart';
 import 'src/screens/signer_onboarding_screens.dart';
+import 'src/developer_mode.dart';
 import 'src/observability/native_incidents.dart';
 import 'src/signer_router.dart';
 import 'src/state/locale_controller.dart';
@@ -31,7 +31,7 @@ class ColdSignerApp extends StatefulWidget {
     String initialLocation = '/',
   }) : localeController = localeController ?? LocaleController(),
        walletController = walletController ?? SignerWalletController(),
-       initialLocation = kReleaseMode && initialLocation == '/'
+       initialLocation = !developerFixturesEnabled && initialLocation == '/'
            ? '/welcome'
            : initialLocation;
 

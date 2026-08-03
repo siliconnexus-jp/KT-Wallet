@@ -1,6 +1,5 @@
 import 'package:cold_signer/cold_signer.dart';
 import 'package:core_crypto/core_crypto.dart';
-import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -16,6 +15,7 @@ import 'src/security/app_lock_gate.dart';
 import 'src/security/secure_screen.dart';
 import 'src/state/app_prefs.dart';
 import 'src/state/device_mode.dart';
+import 'src/state/developer_mode.dart';
 import 'src/state/locale_controller.dart';
 import 'src/state/networks.dart';
 import 'src/state/wallet_controller.dart';
@@ -132,13 +132,13 @@ WalletController _resolveWalletController(
   CoreCrypto? galleryCrypto,
 ) {
   if (controller == null) {
-    if (kReleaseMode) return _missingProductionController();
+    if (!developerFixturesEnabled) return _missingProductionController();
     return _seedController(galleryCrypto);
   }
   // A test-bypass controller enables fixture signatures and success paths in
   // several screens. Even an accidental alternate entrypoint must not be able
   // to inject one into a release process.
-  if (kReleaseMode && controller.allowsTestBypass) {
+  if (!developerFixturesEnabled && controller.allowsTestBypass) {
     throw StateError(
       'A release KtWalletApp cannot use a test-bypass WalletController.',
     );
@@ -656,7 +656,8 @@ class KtWalletApp extends StatefulWidget {
     this.transferService,
     TransferSession? transferSession,
     this.initialLocation = '/',
-  }) : galleryMode = !kReleaseMode && (galleryMode ?? controller == null),
+  }) : galleryMode =
+           developerFixturesEnabled && (galleryMode ?? controller == null),
        controller = _resolveWalletController(controller, galleryCrypto),
        localeController = localeController ?? LocaleController(),
        networkController = networkController ?? NetworkController(),

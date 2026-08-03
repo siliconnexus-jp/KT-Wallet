@@ -5,7 +5,6 @@ import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:chains/chains.dart';
 import 'package:chains/rpc.dart' show RpcRejectionKind;
 import 'package:core_crypto/core_crypto.dart' show Coin;
-import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -58,6 +57,7 @@ import '../security/biometric_auth.dart';
 import '../security/transaction_auth.dart';
 import '../security/wallet_pin.dart';
 import '../state/app_prefs.dart' show AppPrefsScope, AuthMethod;
+import '../state/developer_mode.dart';
 import '../state/flutter_test_env.dart' show isFlutterTestEnv;
 import '../state/networks.dart' show Network, NetworkScope;
 import '../transfer/airgap_codec.dart';
@@ -2588,7 +2588,8 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
       return;
     }
     final chain = (draft ?? demoDraft).chain;
-    final walletId = wallet?.id ?? (kReleaseMode ? '' : demoWalletId);
+    final walletId =
+        wallet?.id ?? (developerFixturesEnabled ? demoWalletId : '');
     final from = wallet == null ? '' : addressForChain(wallet.addresses, chain);
     // The ACTIVE network instance for the draft's chain: its evmChainId is
     // the signing domain the raw tx must carry (Sepolia 11155111, ...), and
@@ -3040,7 +3041,7 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
     Wallet? wallet,
   ) {
     if (_navigated) return;
-    if (kReleaseMode) return;
+    if (!developerFixturesEnabled) return;
     final request = session?.request;
     if (session != null && request != null) {
       // Signer side of the (simulated) air gap: the paired signer answers with
@@ -3150,9 +3151,9 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
                 height: 380,
                 frameColor: SignerColors.blue,
                 semanticLabel: l10n.scanSignResultTitle,
-                onSimulatedTap: kReleaseMode
-                    ? null
-                    : () => _simulateScan(context, session, wallet),
+                onSimulatedTap: developerFixturesEnabled
+                    ? () => _simulateScan(context, session, wallet)
+                    : null,
                 onScanned: _onScanned,
                 availability: widget.availability,
               ),
