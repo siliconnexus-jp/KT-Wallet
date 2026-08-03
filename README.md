@@ -51,6 +51,20 @@ independent install for a dedicated offline phone.
 
 The interface is localized in **简体中文**, **English**, and **日本語**.
 
+### Which app should I install?
+
+| Use case | Install | Network access | Private keys |
+|---|---|---|---|
+| Everyday balance, history, receive, and transfer | **KT Wallet** in Online Wallet mode | Required | Stored on this device for a hot wallet; absent for watch-only wallets |
+| One-device offline signing trial | **KT Wallet** in Cold Signer mode | Must remain offline while signing | Stored only in the native vault on this device |
+| Dedicated air-gapped signing phone | **KT Cold Signer** | Must remain offline while signing | Stored only in the native vault on the offline phone |
+
+For the strongest separation, use KT Wallet as a watch-only wallet on the
+connected phone and KT Cold Signer on a second phone that remains offline. The
+Cold Signer does not fetch balances, prices, or history and does not broadcast
+transactions. It only derives public accounts, verifies transaction details,
+authenticates the user, and signs QR requests.
+
 ## Air-gapped signing
 
 ```text
@@ -292,6 +306,18 @@ from application logs. See the
 [Gateway documentation](backend/gateway/README.md) for its protocol, cache,
 privacy, rate-limit, observability, and deployment boundaries.
 
+```text
+KT Wallet ── public chain data / broadcast ──▶ KT Gateway ──▶ RPC and indexers
+    │
+    └── unsigned request QR ──▶ KT Cold Signer ── signed response QR ──┘
+```
+
+The Gateway is infrastructure, not a custody service: it never receives a
+recovery phrase or private key and cannot sign a transaction. A custom RPC can
+be selected explicitly, but the app never silently changes away from a user's
+configured endpoint. The dedicated KT Cold Signer is expected to remain
+offline and has no Android `INTERNET` permission in its release artifact.
+
 ## Build and test
 
 Requirements:
@@ -412,6 +438,13 @@ The current build is suitable for continued TestFlight and controlled public
 beta evaluation with testnet or small-value assets. It must not yet be
 represented as having the assurance level of a mature international wallet or
 as suitable for holding large mainnet balances.
+
+There are currently no official App Store or Google Play download links.
+Screenshots and HTML reports in this repository are engineering evidence from
+specific builds and environments, not a security certification or a promise
+that every public RPC, faucet, indexer, or token contract will remain
+available. Always verify the network, contract or mint, recipient, amount, and
+fee before authorizing a transfer.
 
 The remaining release evidence includes:
 
