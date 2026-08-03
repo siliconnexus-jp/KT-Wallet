@@ -12,6 +12,7 @@ import 'package:kt_wallet/src/market/history_snapshot.dart';
 import 'package:kt_wallet/src/market/token_balance_service.dart'
     show usdtEthToken;
 import 'package:kt_wallet/src/market/transaction_status_service.dart';
+import 'package:kt_wallet/src/observability/experience_metrics.dart';
 import 'package:kt_wallet/src/screens/home_screen.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
 import 'package:kt_wallet/src/wallets/wallet_manager.dart';
@@ -238,6 +239,8 @@ Widget _app(HistoryController controller) => MaterialApp(
 const _unsupported = HistoryResult.unsupported();
 
 void main() {
+  setUp(ExperienceMetrics.instance.clear);
+
   test(
     'a broken history snapshot is ignored and live history still loads',
     () async {
@@ -271,8 +274,29 @@ void main() {
       expect(controller.isLoading, isFalse);
       expect(controller.records.map((record) => record.hash), ['0xlive']);
       expect(controller.showingCachedData, isFalse);
+      final metric = ExperienceMetrics.instance.recent.singleWhere(
+        (event) => event.name == ExperienceMetricNames.historyRefresh,
+      );
+      expect(metric.success, isTrue);
     },
   );
+
+  test('a partial indexer outage never records a successful refresh', () async {
+    final controller = _controller({
+      Coin.eth: const HistoryResult.ok([]),
+      Coin.polygon: const HistoryResult.error(),
+      Coin.tron: _unsupported,
+      Coin.solana: _unsupported,
+    });
+    addTearDown(controller.dispose);
+
+    await controller.refresh();
+
+    final metric = ExperienceMetrics.instance.recent.singleWhere(
+      (event) => event.name == ExperienceMetricNames.historyRefresh,
+    );
+    expect(metric.success, isFalse);
+  });
 
   test('an unexpected indexer failure closes honestly and can retry', () async {
     final controller = HistoryController(

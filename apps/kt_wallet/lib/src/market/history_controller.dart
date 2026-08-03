@@ -547,9 +547,16 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
       final (entries, _) = await (historyFuture, statusFuture).wait;
 
       if (generation != _generation) return; // superseded — drop stale results
-      final liveFetchSucceeded = entries.any(
-        (entry) => entry.$2.status == HistoryStatus.ok,
-      );
+      // An explorer refresh is successful only when at least one live source
+      // answered and no requested source explicitly failed. Unsupported chains
+      // are neutral; one healthy chain must never hide a peer indexer outage.
+      final liveFetchSucceeded =
+          entries.any((entry) => entry.$2.status == HistoryStatus.ok) &&
+          entries.every(
+            (entry) =>
+                entry.$2.status == HistoryStatus.ok ||
+                entry.$2.status == HistoryStatus.unsupported,
+          );
       var retainedCached = false;
       _results = {
         for (final (coin, result) in entries)

@@ -8,6 +8,7 @@ import 'package:kt_wallet/src/market/market_controller.dart';
 import 'package:kt_wallet/src/market/market_snapshot.dart';
 import 'package:kt_wallet/src/market/price_service.dart';
 import 'package:kt_wallet/src/market/token_balance_service.dart';
+import 'package:kt_wallet/src/observability/experience_metrics.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
 import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
@@ -168,8 +169,13 @@ class FakePriceService extends PriceService {
   final Map<String, double> tokenPrices;
   final Map<Coin, double> changes;
   final Map<String, double> tokenChanges;
+  int calls = 0;
   @override
-  Future<Map<Coin, double>?> fetchUsdPrices() async => prices;
+  Future<Map<Coin, double>?> fetchUsdPrices() async {
+    calls++;
+    return prices;
+  }
+
   @override
   Map<Coin, double>? get lastGoodUsd => cached;
   @override
@@ -259,6 +265,8 @@ const _prices = {
 };
 
 void main() {
+  setUp(ExperienceMetrics.instance.clear);
+
   test(
     'a broken display snapshot is ignored and live balances still load',
     () async {
@@ -403,6 +411,10 @@ void main() {
       expect(controller.totalUsd, closeTo(2051.5, 1e-9));
       expect(controller.fiatValueUsd(Coin.tron), closeTo(0.5, 1e-9));
       expect(controller.isOffline, isFalse);
+      final metric = ExperienceMetrics.instance.recent.singleWhere(
+        (event) => event.name == ExperienceMetricNames.marketRefresh,
+      );
+      expect(metric.success, isTrue);
     },
   );
 
@@ -416,6 +428,14 @@ void main() {
       );
       await negative.refresh();
       expect(negative.fiatValueUsd(Coin.eth), isNull);
+      expect(
+        ExperienceMetrics.instance.recent
+            .lastWhere(
+              (event) => event.name == ExperienceMetricNames.marketRefresh,
+            )
+            .success,
+        isFalse,
+      );
 
       final extremeBalances = <Coin, BalanceResult>{
         for (final coin in Coin.values) coin: const BalanceResult.error(),
@@ -581,6 +601,30 @@ void main() {
     }
   });
 
+  test('an all-testnet legacy wallet never requests market prices', () async {
+    final prices = FakePriceService(null);
+    final enabled = _wallets().current!.addresses.enabledCoins.toSet();
+    final controller = MarketController(
+      wallets: _wallets(),
+      balances: FakeBalanceService(_okResults()),
+      prices: prices,
+      isTestnet: enabled.contains,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.refresh();
+
+    expect(prices.calls, 0);
+    expect(
+      ExperienceMetrics.instance.recent
+          .singleWhere(
+            (event) => event.name == ExperienceMetricNames.marketRefresh,
+          )
+          .success,
+      isTrue,
+    );
+  });
+
   test('price failure falls back to the session last-good cache', () async {
     final controller = MarketController(
       wallets: _wallets(),
@@ -591,6 +635,10 @@ void main() {
     expect(controller.priceUsd(Coin.eth), 2000.0);
     expect(controller.totalUsd, closeTo(2051.5, 1e-9));
     expect(controller.isOffline, isFalse);
+    final metric = ExperienceMetrics.instance.recent.singleWhere(
+      (event) => event.name == ExperienceMetricNames.marketRefresh,
+    );
+    expect(metric.success, isFalse);
   });
 
   test('partial failure: total sums only computable chains', () async {
@@ -606,6 +654,10 @@ void main() {
     // 2 POL*0.5 + 5 TRX*0.1 + 0.5 SOL*100 = 51.50
     expect(controller.totalUsd, closeTo(51.5, 1e-9));
     expect(controller.isOffline, isFalse);
+    final metric = ExperienceMetrics.instance.recent.singleWhere(
+      (event) => event.name == ExperienceMetricNames.marketRefresh,
+    );
+    expect(metric.success, isFalse);
   });
 
   test(
@@ -722,6 +774,14 @@ void main() {
       expect(controller.tokenFiatValueUsd(byId['usdt-tron']!), isNull);
       // Natives 2051.50 + live-priced tokens 34.85.
       expect(controller.totalUsd, closeTo(2086.35, 1e-9));
+      expect(
+        ExperienceMetrics.instance.recent
+            .singleWhere(
+              (event) => event.name == ExperienceMetricNames.marketRefresh,
+            )
+            .success,
+        isFalse,
+      );
       controller.dispose();
     },
   );

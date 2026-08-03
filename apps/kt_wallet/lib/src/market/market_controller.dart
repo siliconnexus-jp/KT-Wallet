@@ -372,7 +372,7 @@ class MarketController extends ChangeNotifier {
       // the fetch entirely (an unpriceable quote must not even be requested).
       // Mixed environments still fetch once; testnet chains ignore the result
       // via the fiat guards above.
-      final skipPrices = Coin.values.every(_isTestnet);
+      final skipPrices = wallet.addresses.enabledCoins.every(_isTestnet);
       void revealNative(Coin coin, BalanceResult result) {
         if (generation != _generation) return;
         _results = {..._results, coin: result};
@@ -420,11 +420,34 @@ class MarketController extends ChangeNotifier {
       ).wait;
 
       if (generation != _generation) return; // superseded — drop stale results
+      final requestedResults = <BalanceResult?>[
+        for (final coin in wallet.addresses.enabledCoins) balances[coin],
+        if (tokenService != null)
+          for (final token in tokens) tokenBatch.tokens[token.id],
+      ];
+      final priceableCoins = wallet.addresses.enabledCoins.where(
+        (coin) => !_isTestnet(coin),
+      );
+      final pricesComplete =
+          skipPrices ||
+          priceableCoins.every((coin) {
+            final price = prices?[coin];
+            return price != null && price.isFinite && price > 0;
+          });
+      // The UI deliberately keeps every chain independent, but the aggregate
+      // refresh metric must not call a partial outage successful. Explicitly
+      // unsupported rows are neutral; missing/loading/error rows, or missing
+      // or invalid native quotes in a priceable environment, make it fail.
       final liveFetchSucceeded =
-          balances.values.any((result) => result.status == BalanceStatus.ok) ||
-          tokenBatch.tokens.values.any(
-            (result) => result.status == BalanceStatus.ok,
-          );
+          requestedResults.any(
+            (result) => result?.status == BalanceStatus.ok,
+          ) &&
+          requestedResults.every(
+            (result) =>
+                result?.status == BalanceStatus.ok ||
+                result?.status == BalanceStatus.unsupported,
+          ) &&
+          pricesComplete;
       var retainedStale = false;
       BalanceResult retainLastGood(
         BalanceResult? previous,

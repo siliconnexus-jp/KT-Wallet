@@ -516,7 +516,7 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-04) completed with zero static-analysis
-issues: **1,521/1,521** KT Wallet tests, **570/570** KT Cold Signer tests, and
+issues: **1,523/1,523** KT Wallet tests, **570/570** KT Cold Signer tests, and
 **409/409** shared-package tests passed. The default gate passed **12/12** and
 the native/runtime/OSV `--full` gate passed **13/13**. The Gateway audit,
 public-secret gate, Gateway public-release version gate, native dependency
@@ -524,7 +524,12 @@ lock/checksum verification, and OSV scans also passed. These numbers are
 reproducible source evidence. Broadcast acceptance is measured as successful
 only after the node acknowledgement matches the locally verified transaction
 hash; a missing or inconsistent hash is fail-closed/unknown and records a
-failed broadcast metric. On 2026-08-03, the iOS native
+failed broadcast metric. Market and history refresh metrics also require a
+complete live result: one healthy chain cannot hide another chain's explicit
+failure, and missing/invalid native quotes cannot be counted as a successful
+portfolio refresh. A legacy wallet whose actually enabled chains are all on
+testnets now skips the price request entirely, regardless of disabled network
+profiles. On 2026-08-03, the iOS native
 Runner test targets passed **11/11** for KT Wallet and **8/8** for KT Cold Signer
 on the single retained iPhone 17 Pro simulator, including the Scene privacy
 state and non-key background-window selection tests. Both apps were also
