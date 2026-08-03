@@ -308,7 +308,9 @@ class HistoryService {
         required bool internal,
         required int index,
       }) {
-        final hash = item['hash'];
+        final hash = internal
+            ? (item['hash'] ?? item['transactionHash'])
+            : item['hash'];
         if (hash is! String || hash.isEmpty) return;
         final rawFrom = '${item['from'] ?? ''}'.trim();
         final rawTo = '${item['to'] ?? ''}'.trim();
@@ -318,7 +320,7 @@ class HistoryService {
         final seconds = int.tryParse('${item['timeStamp'] ?? ''}');
         final value = BigInt.tryParse('${item['value'] ?? ''}');
         if (seconds == null || value == null || value == BigInt.zero) return;
-        final trace = '${item['traceId'] ?? index}';
+        final trace = '${item['traceId'] ?? item['index'] ?? index}';
         records.add(
           ChainTxRecord(
             coin: coin,
@@ -329,7 +331,7 @@ class HistoryService {
             toAddress: rawTo.isEmpty ? null : rawTo,
             amountText: _formatAmount(value, 18, _nativeSymbol(coin)),
             timestamp: DateTime.fromMillisecondsSinceEpoch(seconds * 1000),
-            confirmed: item['isError'] != '1',
+            status: _evmExplorerExecutionStatus(item),
           ),
         );
       }
@@ -388,7 +390,7 @@ class HistoryService {
             assetSymbol: symbol,
             assetVerified: official != null,
             timestamp: DateTime.fromMillisecondsSinceEpoch(seconds * 1000),
-            confirmed: item['isError'] != '1',
+            status: _evmTokenTransferExecutionStatus(item),
           ),
         );
       }
@@ -448,6 +450,86 @@ class HistoryService {
     Coin.bnb => 'BNB',
     _ => 'ETH',
   };
+
+  /// Etherscan-compatible providers are inconsistent about which execution
+  /// field they include. Missing evidence is not success, and contradictory
+  /// fields are not proof of either terminal outcome.
+  ChainTxStatus _evmExplorerExecutionStatus(Map<dynamic, dynamic> item) {
+    final evidence = <ChainTxStatus>{};
+    final isError = item['isError'];
+    if (isError != null) {
+      switch ('$isError'.trim()) {
+        case '0':
+          evidence.add(ChainTxStatus.confirmed);
+        case '1':
+          evidence.add(ChainTxStatus.failed);
+      }
+    }
+    final receipt = item['txreceipt_status'];
+    if (receipt != null) {
+      switch ('$receipt'.trim()) {
+        case '1':
+          evidence.add(ChainTxStatus.confirmed);
+        case '0':
+          evidence.add(ChainTxStatus.failed);
+      }
+    }
+    if (evidence.length != 1) return ChainTxStatus.unknown;
+    return evidence.single;
+  }
+
+  /// Token-transfer endpoints return receipt log events, not arbitrary
+  /// transactions. Their documented rows omit `isError` and
+  /// `txreceipt_status`; a canonical indexed block location is therefore
+  /// positive execution evidence. Explicit status fields still take
+  /// precedence, and malformed or contradictory values remain unknown.
+  ChainTxStatus _evmTokenTransferExecutionStatus(Map<dynamic, dynamic> item) {
+    if (item.containsKey('isError') || item.containsKey('txreceipt_status')) {
+      return _evmExplorerExecutionStatus(item);
+    }
+    final blockNumber = BigInt.tryParse('${item['blockNumber'] ?? ''}');
+    final transactionIndex = int.tryParse('${item['transactionIndex'] ?? ''}');
+    final confirmations = BigInt.tryParse('${item['confirmations'] ?? ''}');
+    if (blockNumber == null ||
+        blockNumber <= BigInt.zero ||
+        transactionIndex == null ||
+        transactionIndex < 0 ||
+        confirmations == null ||
+        confirmations.isNegative ||
+        !_isEvmBlockHash(item['blockHash'])) {
+      return ChainTxStatus.unknown;
+    }
+    return ChainTxStatus.confirmed;
+  }
+
+  bool _isEvmBlockHash(Object? raw) {
+    if (raw is! String) return false;
+    final value = raw.trim();
+    if (value.length != 66 || !value.startsWith('0x')) return false;
+    for (final codeUnit in value.codeUnits.skip(2)) {
+      final digit = codeUnit >= 0x30 && codeUnit <= 0x39;
+      final lower = codeUnit >= 0x61 && codeUnit <= 0x66;
+      final upper = codeUnit >= 0x41 && codeUnit <= 0x46;
+      if (!digit && !lower && !upper) return false;
+    }
+    return true;
+  }
+
+  ChainTxStatus _solanaExecutionStatus(
+    Map<dynamic, dynamic> signature,
+    Map<dynamic, dynamic> meta,
+  ) {
+    final signatureHasError = signature.containsKey('err');
+    final metaHasError = meta.containsKey('err');
+    if ((signatureHasError && signature['err'] != null) ||
+        (metaHasError && meta['err'] != null)) {
+      return ChainTxStatus.failed;
+    }
+    if (signatureHasError && metaHasError) {
+      return ChainTxStatus.confirmed;
+    }
+    return ChainTxStatus.unknown;
+  }
 
   Future<HistoryResult> _fetchSolana(String address, int limit) async {
     try {
@@ -561,7 +643,7 @@ class HistoryService {
                 assetSymbol: symbol,
                 assetVerified: official != null,
                 timestamp: timestamp,
-                confirmed: item['err'] == null && meta['err'] == null,
+                status: _solanaExecutionStatus(item, meta),
               ),
             );
           }
@@ -596,7 +678,7 @@ class HistoryService {
               toAddress: parties.to ?? (delta.isNegative ? null : address),
               amountText: _formatAmount(delta.abs(), 9, 'SOL'),
               timestamp: timestamp,
-              confirmed: item['err'] == null && meta['err'] == null,
+              status: _solanaExecutionStatus(item, meta),
             ),
           );
         }
@@ -802,9 +884,13 @@ class HistoryService {
     try {
       final (trc20, native, internal) = await (
         _getData(
-          '$tronApiUrl/v1/accounts/$address/transactions/trc20?limit=$limit',
+          '$tronApiUrl/v1/accounts/$address/transactions/trc20'
+          '?limit=$limit&only_confirmed=true',
         ),
-        _getData('$tronApiUrl/v1/accounts/$address/transactions?limit=$limit'),
+        _getData(
+          '$tronApiUrl/v1/accounts/$address/transactions'
+          '?limit=$limit&only_confirmed=true',
+        ),
         _getData(
           '$tronApiUrl/v1/accounts/$address/internal-transactions'
           '?limit=$limit&only_confirmed=true',
@@ -942,11 +1028,7 @@ class HistoryService {
     final value = parameter is Map ? parameter['value'] : null;
     if (value is! Map) return null;
 
-    var confirmed = true;
-    final ret = item['ret'];
-    if (ret is List && ret.isNotEmpty && ret.first is Map) {
-      confirmed = (ret.first as Map)['contractRet'] == 'SUCCESS';
-    }
+    final status = _tronContractExecutionStatus(item);
     final amount = _parseChainInteger(value['amount']);
     if (amount == null || amount.isNegative) return null;
     final owner = value['owner_address'];
@@ -989,8 +1071,22 @@ class HistoryService {
       assetSymbol: isTrc10 ? 'TRC10' : null,
       assetVerified: !isTrc10,
       timestamp: DateTime.fromMillisecondsSinceEpoch(ts),
-      confirmed: confirmed,
+      status: status,
     );
+  }
+
+  ChainTxStatus _tronContractExecutionStatus(Map<dynamic, dynamic> item) {
+    final ret = item['ret'];
+    if (ret is! List || ret.isEmpty || ret.first is! Map) {
+      return ChainTxStatus.unknown;
+    }
+    final value = (ret.first as Map)['contractRet'];
+    if (value is! String || value.trim().isEmpty) {
+      return ChainTxStatus.unknown;
+    }
+    return value.trim().toUpperCase() == 'SUCCESS'
+        ? ChainTxStatus.confirmed
+        : ChainTxStatus.failed;
   }
 
   ChainTxRecord? _parseTronInternal(
@@ -1041,7 +1137,11 @@ class HistoryService {
       assetSymbol: isTrc10 ? 'TRC10' : null,
       assetVerified: !isTrc10,
       timestamp: DateTime.fromMillisecondsSinceEpoch(timestamp),
-      confirmed: data['rejected'] != true,
+      status: switch (data['rejected']) {
+        false => ChainTxStatus.confirmed,
+        true => ChainTxStatus.failed,
+        _ => ChainTxStatus.unknown,
+      },
     );
   }
 

@@ -128,8 +128,10 @@ func (t *Tron) TransactionStatus(ctx context.Context, txID string) (string, erro
 		result = out.Result
 	}
 	switch strings.ToUpper(result) {
-	case "", "SUCCESS":
+	case "SUCCESS":
 		return "confirmed", nil
+	case "":
+		return "unknown", nil
 	default:
 		return "failed", nil
 	}
@@ -194,7 +196,7 @@ type NativeTransfer struct {
 	Amount         string
 	TokenID        string // non-empty for TransferAssetContract (TRC-10)
 	BlockTimestamp int64
-	Success        bool
+	Status         ExecutionStatus
 }
 
 // NativeTransactions lists protocol-level value transfers for addr:
@@ -222,7 +224,11 @@ func (t *Tron) NativeTransactions(ctx context.Context, addr string, limit int) (
 			} `json:"raw_data"`
 		} `json:"data"`
 	}
-	path := fmt.Sprintf("/v1/accounts/%s/transactions?limit=%d", url.PathEscape(addr), limit)
+	path := fmt.Sprintf(
+		"/v1/accounts/%s/transactions?limit=%d&only_confirmed=true",
+		url.PathEscape(addr),
+		limit,
+	)
 	if err := t.do(ctx, http.MethodGet, path, nil, &out); err != nil {
 		return nil, err
 	}
@@ -236,9 +242,13 @@ func (t *Tron) NativeTransactions(ctx context.Context, addr string, limit int) (
 			continue
 		}
 		v := d.RawData.Contract[0].Parameter.Value
-		success := true
-		if len(d.Ret) > 0 && d.Ret[0].ContractRet != "" && d.Ret[0].ContractRet != "SUCCESS" {
-			success = false
+		status := ExecutionUnknown
+		if len(d.Ret) > 0 && strings.TrimSpace(d.Ret[0].ContractRet) != "" {
+			if strings.EqualFold(strings.TrimSpace(d.Ret[0].ContractRet), "SUCCESS") {
+				status = ExecutionConfirmed
+			} else {
+				status = ExecutionFailed
+			}
 		}
 		transfers = append(transfers, NativeTransfer{
 			TxID:           d.TxID,
@@ -247,7 +257,7 @@ func (t *Tron) NativeTransactions(ctx context.Context, addr string, limit int) (
 			Amount:         v.Amount.String(),
 			TokenID:        v.AssetName,
 			BlockTimestamp: d.BlockTimestamp,
-			Success:        success,
+			Status:         status,
 		})
 	}
 	return transfers, nil
@@ -262,7 +272,7 @@ type InternalTransfer struct {
 	Amount             string
 	TokenID            string // empty means TRX
 	BlockTimestamp     int64
-	Success            bool
+	Status             ExecutionStatus
 }
 
 // InternalTransactions lists contract-created value movements touching addr.
@@ -275,7 +285,7 @@ func (t *Tron) InternalTransactions(ctx context.Context, addr string, limit int)
 			To             string `json:"to_address"`
 			BlockTimestamp int64  `json:"block_timestamp"`
 			Data           struct {
-				Rejected       bool            `json:"rejected"`
+				Rejected       *bool           `json:"rejected"`
 				CallValue      json.RawMessage `json:"call_value"`
 				CallTokenValue json.RawMessage `json:"call_token_value"`
 				TokenID        json.RawMessage `json:"token_id"`
@@ -301,6 +311,14 @@ func (t *Tron) InternalTransactions(ctx context.Context, addr string, limit int)
 		if amount == "" || amount == "0" || d.TxID == "" || d.InternalTxID == "" {
 			continue
 		}
+		status := ExecutionUnknown
+		if d.Data.Rejected != nil {
+			if *d.Data.Rejected {
+				status = ExecutionFailed
+			} else {
+				status = ExecutionConfirmed
+			}
+		}
 		transfers = append(transfers, InternalTransfer{
 			TxID:           d.TxID,
 			InternalTxID:   d.InternalTxID,
@@ -309,7 +327,7 @@ func (t *Tron) InternalTransactions(ctx context.Context, addr string, limit int)
 			Amount:         amount,
 			TokenID:        tokenID,
 			BlockTimestamp: d.BlockTimestamp,
-			Success:        !d.Data.Rejected,
+			Status:         status,
 		})
 	}
 	return transfers, nil

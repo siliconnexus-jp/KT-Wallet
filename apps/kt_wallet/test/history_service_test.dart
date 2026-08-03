@@ -146,6 +146,7 @@ void main() {
           if (request.url.path.endsWith('/transactions/trc20')) {
             expect(request.url.path, '/v1/accounts/$_me/transactions/trc20');
             expect(request.url.queryParameters['limit'], '20');
+            expect(request.url.queryParameters['only_confirmed'], 'true');
             return {
               'data': [
                 _trc20Item(
@@ -168,10 +169,12 @@ void main() {
             };
           }
           if (request.url.path.endsWith('/internal-transactions')) {
+            expect(request.url.queryParameters['only_confirmed'], 'true');
             return {'data': <Object?>[], 'success': true};
           }
           expect(request.url.path, '/v1/accounts/$_me/transactions');
           expect(request.url.queryParameters['limit'], '20');
+          expect(request.url.queryParameters['only_confirmed'], 'true');
           return {
             'data': [
               _nativeTransferItem(
@@ -344,8 +347,10 @@ void main() {
         final result = action == 'txlistinternal'
             ? [
                 {
-                  'hash': '0xairdrop',
-                  'traceId': '0_1',
+                  // Blockscout uses these names for internal transactions;
+                  // Etherscan uses hash/traceId for the same concepts.
+                  'transactionHash': '0xairdrop',
+                  'index': '0_1',
                   'from': '0x1111111111111111111111111111111111111111',
                   'to': '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
                   'value': '5000000000000000',
@@ -380,6 +385,7 @@ void main() {
       '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     );
     expect(result.records.single.amountText, '0.005 AVAX');
+    expect(result.records.single.status, ChainTxStatus.confirmed);
   });
 
   test(
@@ -403,7 +409,13 @@ void main() {
                     'tokenSymbol': 'FAKE',
                     'contractAddress':
                         '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-                    'isError': '0',
+                    // Official tokentx rows are successful receipt events and
+                    // expose canonical block evidence, not execution flags.
+                    'blockNumber': '4730207',
+                    'blockHash':
+                        '0x022c5e6a3d2487a8ccf8946a2ffb74938bf8e5c8a3f6d91b41c56378a96b5c37',
+                    'transactionIndex': '81',
+                    'confirmations': '1',
                   },
                 ]
               : <Object?>[];
@@ -422,6 +434,41 @@ void main() {
       expect(record.outgoing, isFalse);
       expect(record.fromAddress, '0x1111111111111111111111111111111111111111');
       expect(record.toAddress, address);
+      expect(record.status, ChainTxStatus.confirmed);
+    },
+  );
+
+  test(
+    'EVM token event without execution flags or canonical block evidence stays unknown',
+    () async {
+      const address = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      final service = HistoryService(
+        endpoints: (_) => 'https://rpc.ankr.com/eth',
+        client: MockClient((request) async {
+          final result = request.url.queryParameters['action'] == 'tokentx'
+              ? [
+                  {
+                    'hash': '0xunproven-token',
+                    'from': address,
+                    'to': '0x1111111111111111111111111111111111111111',
+                    'value': '1',
+                    'timeStamp': '1700000200',
+                    'tokenDecimal': '6',
+                    'tokenSymbol': 'TEST',
+                    'contractAddress':
+                        '0x2222222222222222222222222222222222222222',
+                  },
+                ]
+              : <Object?>[];
+          return http.Response(
+            jsonEncode({'status': '1', 'message': 'OK', 'result': result}),
+            200,
+          );
+        }),
+      );
+
+      final record = (await service.fetch(Coin.eth, address)).records.single;
+      expect(record.status, ChainTxStatus.unknown);
     },
   );
 
@@ -533,6 +580,7 @@ void main() {
       expect(record.amountText, '2 USDC');
       expect(record.assetContract, mint);
       expect(record.assetVerified, isTrue);
+      expect(record.status, ChainTxStatus.confirmed);
     },
   );
 
@@ -584,8 +632,10 @@ void main() {
         'trc10:trc10:1002000',
       ]);
       expect(records.first.amountText, '2.5 TRX');
+      expect(records.first.status, ChainTxStatus.confirmed);
       expect(records.last.amountText, '42 TRC10');
       expect(records.last.assetVerified, isFalse);
+      expect(records.last.status, ChainTxStatus.confirmed);
     },
   );
 
@@ -631,4 +681,144 @@ void main() {
     final service = _service(body: (_) => http.Response('not json', 200));
     expect((await service.fetch(Coin.tron, _me)).status, HistoryStatus.error);
   });
+
+  test(
+    'EVM direct history keeps missing or contradictory execution evidence unknown',
+    () async {
+      const address = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      final service = HistoryService(
+        endpoints: (_) => 'https://rpc.ankr.com/eth',
+        client: MockClient((request) async {
+          final action = request.url.queryParameters['action'];
+          final result = action == 'txlist'
+              ? [
+                  {
+                    'hash': '0xmissing',
+                    'from': address,
+                    'to': '0x1111111111111111111111111111111111111111',
+                    'value': '1000000000000000',
+                    'timeStamp': '1700000400',
+                  },
+                  {
+                    'hash': '0xconflict',
+                    'from': address,
+                    'to': '0x2222222222222222222222222222222222222222',
+                    'value': '2000000000000000',
+                    'timeStamp': '1700000300',
+                    'isError': '0',
+                    'txreceipt_status': '0',
+                  },
+                ]
+              : <Object?>[];
+          return http.Response(
+            jsonEncode({'status': '1', 'message': 'OK', 'result': result}),
+            200,
+          );
+        }),
+      );
+
+      final records = (await service.fetch(Coin.eth, address)).records;
+      expect(records, hasLength(2));
+      expect(
+        records.map((record) => record.status),
+        everyElement(ChainTxStatus.unknown),
+      );
+    },
+  );
+
+  test('Solana direct history requires explicit success evidence', () async {
+    const owner = '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin';
+    const recipient = '4Nd1mYtBS4yPPsSycFSCA1WzX7yBW2cVDpn9WzWtLDwT';
+    final service = HistoryService(
+      endpoints: (_) => 'https://api.mainnet-beta.solana.com',
+      client: MockClient((request) async {
+        final payload = jsonDecode(request.body) as Map<String, dynamic>;
+        final method = payload['method'];
+        final Object? result;
+        if (method == 'getTokenAccountsByOwner') {
+          result = {'value': <Object?>[]};
+        } else if (method == 'getSignaturesForAddress') {
+          result = [
+            {'signature': 'missing-status-signature', 'blockTime': 1700000500},
+          ];
+        } else if (method == 'getTransaction') {
+          result = {
+            'meta': {
+              'preBalances': [2000000000, 0],
+              'postBalances': [1000000000, 1000000000],
+              'preTokenBalances': <Object?>[],
+              'postTokenBalances': <Object?>[],
+            },
+            'transaction': {
+              'message': {
+                'accountKeys': [owner, recipient],
+                'instructions': [
+                  {
+                    'program': 'system',
+                    'parsed': {
+                      'info': {'source': owner, 'destination': recipient},
+                    },
+                  },
+                ],
+              },
+            },
+          };
+        } else {
+          fail('unexpected Solana RPC method $method');
+        }
+        return http.Response(
+          jsonEncode({'jsonrpc': '2.0', 'id': 1, 'result': result}),
+          200,
+        );
+      }),
+    );
+
+    final record = (await service.fetch(Coin.solana, owner)).records.single;
+    expect(record.status, ChainTxStatus.unknown);
+  });
+
+  test(
+    'TRON direct native and internal rows require explicit execution evidence',
+    () async {
+      final native = _nativeTransferItem(
+        hash: 'native-missing-status',
+        ownerHex: _meHex,
+        ts: 2000,
+      )..remove('ret');
+      final service = _service(
+        body: (request) {
+          expect(request.url.queryParameters['only_confirmed'], 'true');
+          if (request.url.path.endsWith('/transactions/trc20')) {
+            return {'data': <Object?>[]};
+          }
+          if (request.url.path.endsWith('/internal-transactions')) {
+            return {
+              'data': [
+                {
+                  'tx_id': 'internal-missing-status',
+                  'internal_tx_id': 'trace-unknown',
+                  'from_address': _otherHex,
+                  'to_address': _meHex,
+                  'block_timestamp': 3000,
+                  'data': {
+                    'call_value': {'_': '1000000'},
+                  },
+                },
+              ],
+            };
+          }
+          return {
+            'data': [native],
+          };
+        },
+      );
+
+      final records = (await service.fetch(Coin.tron, _me)).records;
+      expect(records, hasLength(2));
+      expect(
+        records.map((record) => record.status),
+        everyElement(ChainTxStatus.unknown),
+      );
+    },
+  );
 }

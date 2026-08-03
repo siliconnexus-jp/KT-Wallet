@@ -197,7 +197,11 @@ func (s *Solana) SignatureStatus(ctx context.Context, signature string) (string,
 	if err := json.Unmarshal(entry, &status); err != nil {
 		return "", &Unavailable{Upstream: "solana", Message: "malformed signature status entry"}
 	}
-	if trimmed := bytes.TrimSpace(status.Err); len(trimmed) != 0 && !bytes.Equal(trimmed, []byte("null")) {
+	trimmedErr := bytes.TrimSpace(status.Err)
+	if len(trimmedErr) == 0 {
+		return "unknown", nil
+	}
+	if !bytes.Equal(trimmedErr, []byte("null")) {
 		return "failed", nil
 	}
 	switch status.ConfirmationStatus {
@@ -206,14 +210,22 @@ func (s *Solana) SignatureStatus(ctx context.Context, signature string) (string,
 	case "processed":
 		return "pending", nil
 	default:
-		return "pending", nil
+		return "unknown", nil
 	}
 }
 
-// Failed reports whether the signature status contains a non-null error.
-func (s SolanaSignature) Failed() bool {
+// ExecutionStatus reports explicit success/failure while preserving a missing
+// `err` member as unknown. JSON null is positive success evidence in Solana's
+// getSignaturesForAddress contract; an absent field is not.
+func (s SolanaSignature) ExecutionStatus() ExecutionStatus {
 	trimmed := bytes.TrimSpace(s.Err)
-	return len(trimmed) != 0 && !bytes.Equal(trimmed, []byte("null"))
+	if len(trimmed) == 0 {
+		return ExecutionUnknown
+	}
+	if bytes.Equal(trimmed, []byte("null")) {
+		return ExecutionConfirmed
+	}
+	return ExecutionFailed
 }
 
 // GetTransactionAccountImpact resolves native SOL and owned SPL-token balance

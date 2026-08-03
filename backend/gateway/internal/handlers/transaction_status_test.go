@@ -73,6 +73,26 @@ func TestSolanaTransactionStatusReportsExecutionFailure(t *testing.T) {
 	}
 }
 
+func TestSolanaTransactionStatusMissingErrIsUnknown(t *testing.T) {
+	node := newRPCFake(t)
+	node.result("getSignatureStatuses", map[string]any{
+		"value": []any{map[string]any{
+			"confirmationStatus": "finalized",
+		}},
+	})
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.SolanaURLs = []string{node.srv.URL}
+	})
+
+	res := result(t, e.rpc(
+		"kt_getTransactionStatus",
+		fmt.Sprintf(`{"chain":"solana","hash":%q}`, solHash),
+	))
+	if res["status"] != "unknown" {
+		t.Fatalf("missing err evidence must stay unknown, got %v", res)
+	}
+}
+
 func TestTronTransactionStatusUsesFullNodeReceipt(t *testing.T) {
 	grid := newRESTFake(t)
 	grid.routeJSON(
@@ -89,5 +109,24 @@ func TestTronTransactionStatusUsesFullNodeReceipt(t *testing.T) {
 	))
 	if res["status"] != "confirmed" {
 		t.Fatalf("expected confirmed, got %v", res)
+	}
+}
+
+func TestTronTransactionStatusMissingReceiptResultIsUnknown(t *testing.T) {
+	grid := newRESTFake(t)
+	grid.routeJSON(
+		"/wallet/gettransactioninfobyid",
+		fmt.Sprintf(`{"id":%q,"receipt":{}}`, tronHash),
+	)
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.TronURL = grid.srv.URL
+	})
+
+	res := result(t, e.rpc(
+		"kt_getTransactionStatus",
+		fmt.Sprintf(`{"chain":"tron","hash":%q}`, tronHash),
+	))
+	if res["status"] != "unknown" {
+		t.Fatalf("missing receipt result must stay unknown, got %v", res)
 	}
 }

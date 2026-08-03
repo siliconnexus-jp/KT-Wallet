@@ -3,13 +3,51 @@ package upstream
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
+
+// ExecutionStatus preserves the difference between an explicit terminal
+// answer and a provider field that was absent or contradictory.
+type ExecutionStatus uint8
+
+const (
+	ExecutionUnknown ExecutionStatus = iota
+	ExecutionConfirmed
+	ExecutionFailed
+)
+
+// EtherscanExecutionStatus combines the two status fields used across
+// Etherscan-compatible providers. Missing or contradictory evidence remains
+// unknown instead of inheriting Go's zero values as success.
+func EtherscanExecutionStatus(isError, receiptStatus string) ExecutionStatus {
+	confirmed, failed := false, false
+	switch strings.TrimSpace(isError) {
+	case "0":
+		confirmed = true
+	case "1":
+		failed = true
+	}
+	switch strings.TrimSpace(receiptStatus) {
+	case "1":
+		confirmed = true
+	case "0":
+		failed = true
+	}
+	if confirmed == failed {
+		return ExecutionUnknown
+	}
+	if confirmed {
+		return ExecutionConfirmed
+	}
+	return ExecutionFailed
+}
 
 // Etherscan is a client for the Etherscan v2 multichain account API,
 // used for eth/polygon transaction history when an API key is configured.
@@ -34,27 +72,54 @@ func NewEtherscan(base, key string, client *http.Client, attemptTimeout time.Dur
 
 // EtherscanTx is one row of module=account&action=txlist.
 type EtherscanTx struct {
-	Hash      string `json:"hash"`
-	From      string `json:"from"`
-	To        string `json:"to"`
-	Value     string `json:"value"`
-	TimeStamp string `json:"timeStamp"`
-	IsError   string `json:"isError"`
+	Hash          string `json:"hash"`
+	From          string `json:"from"`
+	To            string `json:"to"`
+	Value         string `json:"value"`
+	TimeStamp     string `json:"timeStamp"`
+	IsError       string `json:"isError"`
+	ReceiptStatus string `json:"txreceipt_status"`
 }
 
 // EtherscanTokenTx is one ERC-20 transfer row from
 // module=account&action=tokentx.
 type EtherscanTokenTx struct {
-	Hash            string `json:"hash"`
-	LogIndex        string `json:"logIndex"`
-	From            string `json:"from"`
-	To              string `json:"to"`
-	Value           string `json:"value"`
-	TimeStamp       string `json:"timeStamp"`
-	TokenDecimal    string `json:"tokenDecimal"`
-	TokenSymbol     string `json:"tokenSymbol"`
-	ContractAddress string `json:"contractAddress"`
-	IsError         string `json:"isError"`
+	Hash             string `json:"hash"`
+	LogIndex         string `json:"logIndex"`
+	From             string `json:"from"`
+	To               string `json:"to"`
+	Value            string `json:"value"`
+	TimeStamp        string `json:"timeStamp"`
+	TokenDecimal     string `json:"tokenDecimal"`
+	TokenSymbol      string `json:"tokenSymbol"`
+	ContractAddress  string `json:"contractAddress"`
+	IsError          string `json:"isError"`
+	ReceiptStatus    string `json:"txreceipt_status"`
+	BlockNumber      string `json:"blockNumber"`
+	BlockHash        string `json:"blockHash"`
+	TransactionIndex string `json:"transactionIndex"`
+	Confirmations    string `json:"confirmations"`
+}
+
+// EtherscanTokenExecutionStatus recognizes the canonical indexed-event shape
+// documented by Etherscan/Blockscout. ERC-20 transfer rows are receipt logs, so
+// a valid block location is positive success evidence even though tokentx does
+// not expose the normal-transaction execution fields. Explicit provider fields
+// take precedence and malformed or contradictory values remain unknown.
+func EtherscanTokenExecutionStatus(t EtherscanTokenTx) ExecutionStatus {
+	if strings.TrimSpace(t.IsError) != "" || strings.TrimSpace(t.ReceiptStatus) != "" {
+		return EtherscanExecutionStatus(t.IsError, t.ReceiptStatus)
+	}
+	block, blockErr := strconv.ParseUint(strings.TrimSpace(t.BlockNumber), 10, 64)
+	_, indexErr := strconv.ParseUint(strings.TrimSpace(t.TransactionIndex), 10, 64)
+	_, confirmationsErr := strconv.ParseUint(strings.TrimSpace(t.Confirmations), 10, 64)
+	hash := strings.TrimSpace(t.BlockHash)
+	decoded, hashErr := hex.DecodeString(strings.TrimPrefix(hash, "0x"))
+	if blockErr != nil || block == 0 || indexErr != nil || confirmationsErr != nil ||
+		len(hash) != 66 || !strings.HasPrefix(hash, "0x") || hashErr != nil || len(decoded) != 32 {
+		return ExecutionUnknown
+	}
+	return ExecutionConfirmed
 }
 
 // EtherscanInternalTx is one native-value movement emitted from an EVM call
@@ -62,13 +127,32 @@ type EtherscanTokenTx struct {
 // multisigs, bridges, and airdrops can credit a wallet this way without
 // producing a normal transaction whose `to` is the wallet.
 type EtherscanInternalTx struct {
-	Hash      string `json:"hash"`
-	TraceID   string `json:"traceId"`
-	From      string `json:"from"`
-	To        string `json:"to"`
-	Value     string `json:"value"`
-	TimeStamp string `json:"timeStamp"`
-	IsError   string `json:"isError"`
+	Hash            string `json:"hash"`
+	TraceID         string `json:"traceId"`
+	From            string `json:"from"`
+	To              string `json:"to"`
+	Value           string `json:"value"`
+	TimeStamp       string `json:"timeStamp"`
+	IsError         string `json:"isError"`
+	ReceiptStatus   string `json:"txreceipt_status"`
+	TransactionHash string `json:"transactionHash"`
+	Index           string `json:"index"`
+}
+
+// CanonicalHash and CanonicalTraceID normalize Etherscan's hash/traceId and
+// Blockscout's transactionHash/index spellings.
+func (t EtherscanInternalTx) CanonicalHash() string {
+	if strings.TrimSpace(t.Hash) != "" {
+		return t.Hash
+	}
+	return t.TransactionHash
+}
+
+func (t EtherscanInternalTx) CanonicalTraceID() string {
+	if strings.TrimSpace(t.TraceID) != "" {
+		return t.TraceID
+	}
+	return t.Index
 }
 
 // TxList fetches the newest `limit` normal transactions for address on the

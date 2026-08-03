@@ -863,6 +863,14 @@ void main() {
       'final String? networkId;',
       'String? networkId,',
       'record.onNetwork(networkId)',
+      '_evmExplorerExecutionStatus',
+      '_evmTokenTransferExecutionStatus',
+      '_isEvmBlockHash',
+      "item['hash'] ?? item['transactionHash']",
+      "item['traceId'] ?? item['index'] ?? index",
+      '_solanaExecutionStatus',
+      '_tronContractExecutionStatus',
+      '?limit=\$limit&only_confirmed=true',
     ],
     'apps/kt_wallet/lib/src/market/history_controller.dart': [
       'networkId: transaction.networkId',
@@ -889,6 +897,52 @@ void main() {
       if (!(historySources[boundary.key] ?? '').contains(marker)) {
         failures.add(
           '${boundary.key} does not preserve history network identity: $marker',
+        );
+      }
+    }
+  }
+  for (final failOpen in const [
+    "item['isError'] != '1'",
+    "item['err'] == null && meta['err'] == null",
+    "data['rejected'] != true",
+    'var confirmed = true',
+  ]) {
+    if (historySources[historyService.path]!.contains(failOpen)) {
+      failures.add(
+        '${historyService.path} treats missing execution evidence as success: '
+        '$failOpen',
+      );
+    }
+  }
+  final gatewayHistorySources = {
+    'backend/gateway/internal/handlers/history.go': File(
+      'backend/gateway/internal/handlers/history.go',
+    ).readAsStringSync(),
+    'backend/gateway/internal/upstream/history.go': File(
+      'backend/gateway/internal/upstream/history.go',
+    ).readAsStringSync(),
+  };
+  for (final boundary in const {
+    'backend/gateway/internal/handlers/history.go': [
+      'EtherscanTokenExecutionStatus(t)',
+      't.CanonicalHash()',
+      't.CanonicalTraceID()',
+    ],
+    'backend/gateway/internal/upstream/history.go': [
+      'func EtherscanTokenExecutionStatus',
+      'BlockNumber',
+      'BlockHash',
+      'TransactionIndex',
+      'Confirmations',
+      'TransactionHash',
+      'func (t EtherscanInternalTx) CanonicalHash()',
+    ],
+  }.entries) {
+    for (final marker in boundary.value) {
+      if (!(gatewayHistorySources[boundary.key] ?? '').contains(marker)) {
+        failures.add(
+          '${boundary.key} does not preserve indexed EVM history evidence: '
+          '$marker',
         );
       }
     }

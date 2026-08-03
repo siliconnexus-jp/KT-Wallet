@@ -156,6 +156,121 @@ func TestEthHistoryWithoutKeyUsesPublicExplorer(t *testing.T) {
 	}
 }
 
+func TestEVMHistoryMissingOrContradictoryExecutionEvidenceIsUnknown(t *testing.T) {
+	explorer := newRESTFake(t)
+	explorer.route("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("action") != "txlist" {
+			_, _ = w.Write([]byte(`{"status":"1","message":"OK","result":[]}`))
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[
+			{"hash":"0xmissing","from":%q,"to":"0x2222222222222222222222222222222222222222","value":"1","timeStamp":"1700000600"},
+			{"hash":"0xconflict","from":%q,"to":"0x3333333333333333333333333333333333333333","value":"2","timeStamp":"1700000500","isError":"0","txreceipt_status":"0"}
+		]}`, evmSelf, evmSelf)
+	})
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.EVMHistoryFallbackURLs = map[string]string{
+			"eth-mainnet": explorer.srv.URL,
+		}
+	})
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf)))
+	assertJSONEq(t, `[
+		{"id":"0xmissing","hash":"0xmissing","direction":"out","from":"0x1111111111111111111111111111111111111111","to":"0x2222222222222222222222222222222222222222","amountRaw":"1","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000600000,"status":"unknown"},
+		{"id":"0xconflict","hash":"0xconflict","direction":"out","from":"0x1111111111111111111111111111111111111111","to":"0x3333333333333333333333333333333333333333","amountRaw":"2","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000500000,"status":"unknown"}
+	]`, res["records"])
+}
+
+func TestEVMHistoryAcceptsOfficialIndexedTokenEvidence(t *testing.T) {
+	explorer := newRESTFake(t)
+	explorer.route("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("action") != "tokentx" {
+			_, _ = w.Write([]byte(`{"status":"1","message":"OK","result":[]}`))
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[{
+			"hash":"0xtoken","from":%q,"to":"0x2222222222222222222222222222222222222222",
+			"value":"2500000","timeStamp":"1700000100","tokenDecimal":"6",
+			"tokenSymbol":"USDT","contractAddress":"0xdAC17F958D2ee523a2206206994597C13D831ec7",
+			"blockNumber":"4730207","blockHash":"0x022c5e6a3d2487a8ccf8946a2ffb74938bf8e5c8a3f6d91b41c56378a96b5c37",
+			"transactionIndex":"81","confirmations":"1"
+		}]}`, evmSelf)
+	})
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.EVMHistoryFallbackURLs = map[string]string{"eth-mainnet": explorer.srv.URL}
+	})
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf)))
+	records := res["records"].([]any)
+	if len(records) != 1 || records[0].(map[string]any)["status"] != "ok" {
+		t.Fatalf("canonical indexed token event must be confirmed: %v", records)
+	}
+}
+
+func TestEVMHistoryAcceptsBlockscoutInternalKeys(t *testing.T) {
+	explorer := newRESTFake(t)
+	explorer.route("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("action") != "txlistinternal" {
+			_, _ = w.Write([]byte(`{"status":"1","message":"OK","result":[]}`))
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[{
+			"transactionHash":"0xairdrop","index":"0_1","from":"0x2222222222222222222222222222222222222222",
+			"to":%q,"value":"5000000000000000","timeStamp":"1700000100","isError":"0"
+		}]}`, evmSelf)
+	})
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.EVMHistoryFallbackURLs = map[string]string{"eth-mainnet": explorer.srv.URL}
+	})
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf)))
+	assertJSONEq(t, `[{"id":"0xairdrop:internal:0_1","hash":"0xairdrop","direction":"in",
+		"from":"0x2222222222222222222222222222222222222222","to":"0x1111111111111111111111111111111111111111",
+		"amountRaw":"5000000000000000","decimals":18,"symbol":"ETH","verified":true,
+		"timestampMs":1700000100000,"status":"ok"}]`, res["records"])
+}
+
+func TestTronHistoryMissingExecutionEvidenceIsUnknown(t *testing.T) {
+	grid := newRESTFake(t)
+	grid.routeJSON(
+		"/v1/accounts/"+tronSelfB58+"/transactions/trc20",
+		`{"data":[],"success":true}`,
+	)
+	grid.routeJSON(
+		"/v1/accounts/"+tronSelfB58+"/internal-transactions",
+		fmt.Sprintf(`{"data":[{
+			"tx_id":"internal-unknown","internal_tx_id":"trace-unknown",
+			"from_address":%q,"to_address":%q,"block_timestamp":3000,
+			"data":{"call_value":{"_":1000000}}
+		}],"success":true}`, tronOtherHex, tronSelfHex),
+	)
+	grid.routeJSON(
+		"/v1/accounts/"+tronSelfB58+"/transactions",
+		fmt.Sprintf(`{"data":[{
+			"txID":"native-unknown","block_timestamp":2000,
+			"raw_data":{"contract":[{"type":"TransferContract",
+				"parameter":{"value":{"amount":42,"owner_address":%q,"to_address":%q}}}]}
+		}],"success":true}`, tronSelfHex, tronOtherHex),
+	)
+	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
+
+	res := result(t, e.rpc("kt_getHistory",
+		fmt.Sprintf(`{"chain":"tron","address":%q}`, tronSelfB58)))
+	assertJSONEq(t, `[
+		{"id":"internal-unknown:internal:trace-unknown","hash":"internal-unknown","direction":"in","from":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","to":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","amountRaw":"1000000","decimals":6,"symbol":"TRX","verified":true,"timestampMs":3000,"status":"unknown"},
+		{"id":"native-unknown","hash":"native-unknown","direction":"out","from":"TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C","to":"TUQQ9bYZNGPhzFTSKvqxYkAvgQQD2Ha9uT","amountRaw":"42","decimals":6,"symbol":"TRX","verified":true,"timestampMs":2000,"status":"unknown"}
+	]`, res["records"])
+	for _, hit := range grid.hitsFor("/v1/accounts/") {
+		u, err := url.Parse(hit.Path)
+		if err != nil || u.Query().Get("only_confirmed") != "true" {
+			t.Fatalf("history feed did not require confirmed rows: %q", hit.Path)
+		}
+	}
+}
+
 func TestPolygonAmoyHistoryWithoutKeyUnsupported(t *testing.T) {
 	e := newEnv(t, nil)
 	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(
@@ -250,7 +365,9 @@ func TestEthHistoryWithKey(t *testing.T) {
 				"result":[
 					{"hash":"0xh1","logIndex":"7","from":%q,"to":"0x2222222222222222222222222222222222222222",
 					 "value":"2500000","timeStamp":"1700000100","tokenDecimal":"6",
-					 "tokenSymbol":"FAKE","contractAddress":"0xdAC17F958D2ee523a2206206994597C13D831ec7"}
+					 "tokenSymbol":"FAKE","contractAddress":"0xdAC17F958D2ee523a2206206994597C13D831ec7",
+					 "blockNumber":"4730207","blockHash":"0x022c5e6a3d2487a8ccf8946a2ffb74938bf8e5c8a3f6d91b41c56378a96b5c37",
+					 "transactionIndex":"81","confirmations":"1"}
 				]}`, evmSelf)
 			return
 		}
@@ -495,6 +612,36 @@ func TestSolanaHistoryWithoutKeyUsesRPC(t *testing.T) {
 	if node.count("getSignaturesForAddress") != 1 || node.count("getTransaction") != 1 {
 		t.Fatalf("expected signature + transaction RPC calls, got %d/%d",
 			node.count("getSignaturesForAddress"), node.count("getTransaction"))
+	}
+}
+
+func TestSolanaHistoryMissingExecutionEvidenceIsUnknown(t *testing.T) {
+	node := newRPCFake(t)
+	node.result("getSignaturesForAddress", []any{
+		map[string]any{"signature": "missing-err", "blockTime": 1700000700},
+	})
+	node.result("getTransaction", map[string]any{
+		"meta": map[string]any{
+			"preBalances":  []any{100, 0},
+			"postBalances": []any{50, 50},
+		},
+		"transaction": map[string]any{
+			"message": map[string]any{
+				"accountKeys": []any{
+					map[string]any{"pubkey": solSelf, "signer": true},
+					map[string]any{"pubkey": solOther, "signer": false},
+				},
+			},
+		},
+	})
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.SolanaURLs = []string{node.srv.URL}
+	})
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"solana","address":%q}`, solSelf)))
+	records := res["records"].([]any)
+	if len(records) != 1 || records[0].(map[string]any)["status"] != "unknown" {
+		t.Fatalf("missing signature err must remain unknown: %v", records)
 	}
 }
 

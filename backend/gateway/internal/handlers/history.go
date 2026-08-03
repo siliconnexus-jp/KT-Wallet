@@ -34,7 +34,7 @@ type historyRecord struct {
 	Contract    string `json:"contract,omitempty"`
 	Verified    bool   `json:"verified"`
 	TimestampMs int64  `json:"timestampMs"`
-	Status      string `json:"status"` // "ok" | "failed"
+	Status      string `json:"status"` // "ok" | "failed" | "pending" | "unknown"
 }
 
 type historyResult struct {
@@ -44,6 +44,17 @@ type historyResult struct {
 
 func unsupportedHistory() *historyResult {
 	return &historyResult{Status: "unsupported", Records: []historyRecord{}}
+}
+
+func historyExecutionStatus(status upstream.ExecutionStatus) string {
+	switch status {
+	case upstream.ExecutionConfirmed:
+		return "ok"
+	case upstream.ExecutionFailed:
+		return "failed"
+	default:
+		return "unknown"
+	}
 }
 
 // GetHistory implements kt_getHistory. TRON uses TronGrid. EVM prefers the
@@ -154,10 +165,7 @@ func (g *Gateway) tronHistory(ctx context.Context, network, address string, limi
 		if tronAddrHex(t.Owner) == selfHex {
 			dir = "out"
 		}
-		status := "ok"
-		if !t.Success {
-			status = "failed"
-		}
+		status := historyExecutionStatus(t.Status)
 		id := t.TxID
 		decimals := 6
 		symbol := "TRX"
@@ -195,10 +203,7 @@ func (g *Gateway) tronHistory(ctx context.Context, network, address string, limi
 		if from == selfHex {
 			dir = "out"
 		}
-		status := "ok"
-		if !t.Success {
-			status = "failed"
-		}
+		status := historyExecutionStatus(t.Status)
 		decimals := 6
 		symbol := "TRX"
 		contract := ""
@@ -487,10 +492,7 @@ func evmHistoryResult(
 		if strings.ToLower(t.From) == self {
 			dir = "out"
 		}
-		status := "ok"
-		if t.IsError != "" && t.IsError != "0" {
-			status = "failed"
-		}
+		status := historyExecutionStatus(upstream.EtherscanTokenExecutionStatus(t))
 		ts, err := strconv.ParseInt(t.TimeStamp, 10, 64)
 		if err != nil {
 			continue
@@ -519,12 +521,13 @@ func evmHistoryResult(
 		})
 	}
 	for i, t := range internalTxs {
-		if t.Hash == "" || t.Value == "" || t.Value == "0" {
+		hash := t.CanonicalHash()
+		if hash == "" || t.Value == "" || t.Value == "0" {
 			continue
 		}
 		// Some nominally Etherscan-compatible explorers return the normal
 		// txlist body for txlistinternal. Suppress that false duplicate.
-		if normalMovements[evmMovementKey(t.Hash, t.From, t.To, t.Value, t.TimeStamp)] {
+		if normalMovements[evmMovementKey(hash, t.From, t.To, t.Value, t.TimeStamp)] {
 			continue
 		}
 		from := strings.ToLower(t.From)
@@ -536,21 +539,20 @@ func evmHistoryResult(
 		if from == self {
 			dir = "out"
 		}
-		status := "ok"
-		if t.IsError != "" && t.IsError != "0" {
-			status = "failed"
-		}
+		status := historyExecutionStatus(
+			upstream.EtherscanExecutionStatus(t.IsError, t.ReceiptStatus),
+		)
 		ts, err := strconv.ParseInt(t.TimeStamp, 10, 64)
 		if err != nil {
 			continue
 		}
-		traceID := t.TraceID
+		traceID := t.CanonicalTraceID()
 		if traceID == "" {
 			traceID = strconv.Itoa(i)
 		}
 		records = append(records, historyRecord{
-			ID:          t.Hash + ":internal:" + traceID,
-			Hash:        t.Hash,
+			ID:          hash + ":internal:" + traceID,
+			Hash:        hash,
 			Direction:   dir,
 			From:        t.From,
 			To:          t.To,
@@ -575,10 +577,9 @@ func evmHistoryResult(
 		if strings.ToLower(t.From) == self {
 			dir = "out"
 		}
-		status := "ok"
-		if t.IsError != "" && t.IsError != "0" {
-			status = "failed"
-		}
+		status := historyExecutionStatus(
+			upstream.EtherscanExecutionStatus(t.IsError, t.ReceiptStatus),
+		)
 		ts, err := strconv.ParseInt(t.TimeStamp, 10, 64)
 		if err != nil {
 			continue
@@ -649,10 +650,7 @@ func (g *Gateway) solanaHistory(ctx context.Context, network, address string, li
 			detailErr = err
 			continue
 		}
-		status := "ok"
-		if sig.Failed() {
-			status = "failed"
-		}
+		status := historyExecutionStatus(sig.ExecutionStatus())
 		var timestampMs int64
 		if sig.BlockTime != nil {
 			timestampMs = *sig.BlockTime * 1000
@@ -827,6 +825,13 @@ func heliusHistoryResult(
 		if transfer.InnerInstructionIdx != nil {
 			inner = *transfer.InnerInstructionIdx
 		}
+		status := "unknown"
+		switch transfer.ConfirmationStatus {
+		case "confirmed", "finalized":
+			status = "ok"
+		case "processed":
+			status = "pending"
+		}
 		records = append(records, historyRecord{
 			ID: fmt.Sprintf(
 				"%s:%d:%d:%d",
@@ -842,7 +847,7 @@ func heliusHistoryResult(
 			Contract:    contract,
 			Verified:    verified,
 			TimestampMs: transfer.BlockTime * 1000,
-			Status:      "ok",
+			Status:      status,
 		})
 		if len(records) == limit {
 			break

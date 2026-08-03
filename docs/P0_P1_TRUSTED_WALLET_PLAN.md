@@ -90,6 +90,22 @@
   既有跨链、Solana 大小写、刷新故障回归合计 33/33 通过；KT Wallet 全量
   1484/1484、静态分析 0、`check_deps` 与公开测试源码审计 12/12 通过。该不变量直接
   证明列表与数据库行为，不使用无关截图冒充远端冲突证据。
+- [x] 直连与 Gateway 历史解析不再把 Provider 缺失字段的语言零值当作成功：EVM
+  只有 `isError=0` 或 `txreceipt_status=1` 的一致证据才确认，二者冲突时保持
+  `unknown`；Solana 只有显式 `err:null` 才确认；TRON native/internal 分别要求
+  `contractRet` 或 `rejected`，三条 TronGrid feed 都显式请求 `only_confirmed=true`。
+  同时修复 hash 专项查询中 TRON 有交易 ID 但无 receipt result、Solana 已 finalized
+  但缺少 `err` 时的假确认。App 3 项与 Gateway 5 项负例均先红后绿；缺证据只展示
+  unknown 并继续按 hash 对账，明确成功/失败回归仍保持终态。该项是解析与协议不变量，
+  不以无关截图代替畸形 Provider 回包证据。
+- [x] 对照 Etherscan 官方 tokentx schema 与真实 Blockscout 响应继续复审后，修复
+  “安全但不可用”的第二层回归：ERC-20 事件本来不返回 normal transaction 的执行字段，
+  现在只有区块号、32-byte block hash、交易索引与非负确认数字段完整时，才把已索引
+  receipt event 认定为 confirmed；若 Provider 额外返回执行字段则仍以其为准，矛盾或
+  畸形保持 unknown。App 与 Gateway 同时兼容 Blockscout internal 的
+  `transactionHash/index`，避免空投、合约退款等内部转入在直连 fallback 消失。两项旧
+  行为均以红测复现后转绿；App history 18/18、Gateway upstream/handlers、完整公开源码
+  审计 12/12 通过。生产 1.16.11 的公开 Ethereum 历史只读 smoke 返回 5 条且 5/5 ok。
 - [x] TRON：从同一 `getnowblock` 构造并保存 TAPOS reference block 与
   canonical-time expiration；transaction info 缺失且链时间越界后才标记
   `expired`，边界内保持 `unknown`。
