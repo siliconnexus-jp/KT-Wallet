@@ -396,6 +396,144 @@ void main() {
     });
   });
 
+  test(
+    'duplicate EVM events are case-insensitively merged before rendering',
+    () async {
+      final lowerHash = '0x${'a' * 64}';
+      final upperHash = '0x${'A' * 64}';
+      final fixture = await _fixture(
+        remote: HistoryResult.ok([
+          ChainTxRecord(
+            coin: Coin.eth,
+            networkId: 'eth-mainnet',
+            hash: lowerHash,
+            id: lowerHash,
+            outgoing: true,
+            amountText: '0.001 ETH',
+            timestamp: DateTime(2026, 8, 3, 12),
+            status: ChainTxStatus.confirmed,
+          ),
+          ChainTxRecord(
+            coin: Coin.eth,
+            networkId: 'eth-mainnet',
+            hash: upperHash,
+            id: upperHash,
+            outgoing: true,
+            amountText: '0.001 ETH',
+            timestamp: DateTime(2026, 8, 3, 12),
+            status: ChainTxStatus.confirmed,
+          ),
+        ]),
+        hashStatus: ChainTransactionStatus.unknown,
+      );
+      addTearDown(fixture.history.dispose);
+      addTearDown(fixture.database.close);
+
+      await fixture.history.refresh();
+
+      expect(fixture.history.records, hasLength(1));
+      expect(
+        (await fixture.wallets.localTransactionById('local-pending'))?.status,
+        TxStatus.confirmed,
+      );
+    },
+  );
+
+  test(
+    'different transfer events in one EVM transaction stay distinct',
+    () async {
+      final hash = '0x${'a' * 64}';
+      final fixture = await _fixture(
+        remote: HistoryResult.ok([
+          ChainTxRecord(
+            coin: Coin.eth,
+            networkId: 'eth-mainnet',
+            hash: hash,
+            id: hash,
+            outgoing: true,
+            amountText: '0.001 ETH',
+            timestamp: DateTime(2026, 8, 3, 12),
+            status: ChainTxStatus.confirmed,
+          ),
+          ChainTxRecord(
+            coin: Coin.eth,
+            networkId: 'eth-mainnet',
+            hash: hash,
+            id: '$hash:token:0x${'b' * 40}:0',
+            outgoing: true,
+            amountText: '1 USDC',
+            timestamp: DateTime(2026, 8, 3, 12),
+            status: ChainTxStatus.confirmed,
+          ),
+        ]),
+        hashStatus: ChainTransactionStatus.unknown,
+      );
+      addTearDown(fixture.history.dispose);
+      addTearDown(fixture.database.close);
+
+      await fixture.history.refresh();
+
+      expect(fixture.history.records, hasLength(2));
+      expect(
+        fixture.history.records.map((record) => record.amountText).toSet(),
+        {'0.001 ETH', '1 USDC'},
+      );
+    },
+  );
+
+  test(
+    'conflicting terminal history evidence stays unknown and cannot settle',
+    () async {
+      final hash = '0x${'a' * 64}';
+      final fixture = await _fixture(
+        remote: HistoryResult.ok([
+          ChainTxRecord(
+            coin: Coin.eth,
+            networkId: 'eth-mainnet',
+            hash: hash,
+            outgoing: true,
+            amountText: '0.001 ETH',
+            timestamp: DateTime(2026, 8, 3, 12),
+            status: ChainTxStatus.confirmed,
+          ),
+          ChainTxRecord(
+            coin: Coin.eth,
+            networkId: 'eth-mainnet',
+            hash: hash,
+            id: '$hash:token:0x${'b' * 40}:0',
+            outgoing: true,
+            amountText: '0.001 ETH',
+            timestamp: DateTime(2026, 8, 3, 12),
+            status: ChainTxStatus.failed,
+          ),
+          // Repeated good-looking rows cannot erase a terminal contradiction.
+          ChainTxRecord(
+            coin: Coin.eth,
+            networkId: 'eth-mainnet',
+            hash: hash,
+            outgoing: true,
+            amountText: '0.001 ETH',
+            timestamp: DateTime(2026, 8, 3, 12),
+            status: ChainTxStatus.confirmed,
+          ),
+        ]),
+        hashStatus: ChainTransactionStatus.unknown,
+      );
+      addTearDown(fixture.history.dispose);
+      addTearDown(fixture.database.close);
+
+      await fixture.history.refresh();
+
+      final local = await fixture.wallets.localTransactionById('local-pending');
+      expect(local?.status, TxStatus.pending);
+      expect(local?.lastCheckOutcome, TxCheckOutcome.unknown);
+      expect(fixture.history.records, hasLength(2));
+      expect(fixture.history.records.map((record) => record.status).toSet(), {
+        ChainTxStatus.unknown,
+      });
+    },
+  );
+
   test('chain-authoritative expiration settles the row as expired', () async {
     final fixture = await _fixture(
       remote: const HistoryResult.ok([]),

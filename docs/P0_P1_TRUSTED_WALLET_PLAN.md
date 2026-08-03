@@ -81,6 +81,15 @@
   不能让结果丢失或落到当前钱包。旧实现在 Sepolia Pending + 主网显示条件下红测保持
   pending；修复后链状态更新为 confirmed 而主网列表仍为空。钱包数据 20/20、相关
   Wallet 定向 73/73、静态分析与 `check_deps` 通过。
+- [x] 历史最终合并增加远端事件级去重与交易级状态冲突闭合：EVM 交易哈希及事件 ID
+  按大小写不敏感身份合并，TRON 只规范化十六进制交易哈希而保留 Base58 后缀，Solana
+  签名与事件 ID 保持大小写敏感；同一交易的原生币、Token、internal/SPL event 仍按
+  稳定事件 ID 分开展示。Gateway、直连结果或旧快照重复返回同一事件时只显示一次；
+  同一 coin + networkId + hash 若同时出现 confirmed 与 failed，无论顺序或重复次数，
+  所有事件统一降为 unknown、本地 Pending 不结算并继续 hash 专项查询。三项新增负例与
+  既有跨链、Solana 大小写、刷新故障回归合计 33/33 通过；KT Wallet 全量
+  1484/1484、静态分析 0、`check_deps` 与公开测试源码审计 12/12 通过。该不变量直接
+  证明列表与数据库行为，不使用无关截图冒充远端冲突证据。
 - [x] TRON：从同一 `getnowblock` 构造并保存 TAPOS reference block 与
   canonical-time expiration；transaction info 缺失且链时间越界后才标记
   `expired`，边界内保持 `unknown`。

@@ -28,6 +28,13 @@ typedef _HistoryIdentity = ({
   String normalizedHash,
 });
 
+typedef _HistoryEventIdentity = ({
+  Coin coin,
+  String networkId,
+  String normalizedHash,
+  String eventId,
+});
+
 Coin? _coinForName(String name) {
   for (final coin in Coin.values) {
     if (coin.name == name) return coin;
@@ -48,6 +55,49 @@ _HistoryIdentity? _recordIdentity(ChainTxRecord record) {
     networkId: networkId,
     normalizedHash: _normalizeHistoryHash(record.coin, record.hash),
   );
+}
+
+_HistoryEventIdentity? _recordEventIdentity(ChainTxRecord record) {
+  final transaction = _recordIdentity(record);
+  if (transaction == null) return null;
+  final rawId = record.id;
+  var eventId = transaction.normalizedHash;
+  if (rawId != null && rawId.isNotEmpty) {
+    final hash = record.hash;
+    final beginsWithHash = record.coin == Coin.solana
+        ? rawId.startsWith(hash)
+        : rawId.toLowerCase().startsWith(hash.toLowerCase());
+    eventId = beginsWithHash
+        ? '${transaction.normalizedHash}${rawId.substring(hash.length)}'
+        : rawId;
+    // EVM event suffixes contain only hexadecimal contracts and numeric
+    // trace/log indexes, so casing is not part of their identity. TRON and
+    // Solana suffixes can contain case-sensitive Base58 identifiers.
+    if (_isEvmCoinName(record.coin.name)) eventId = eventId.toLowerCase();
+  }
+  return (
+    coin: transaction.coin,
+    networkId: transaction.networkId,
+    normalizedHash: transaction.normalizedHash,
+    eventId: eventId,
+  );
+}
+
+ChainTxStatus _resolveRemoteStatuses(Set<ChainTxStatus> statuses) {
+  if (statuses.contains(ChainTxStatus.confirmed) &&
+      statuses.contains(ChainTxStatus.failed)) {
+    // Two authoritative-looking but contradictory terminal answers are not
+    // proof of either outcome. Keep polling instead of depending on order.
+    return ChainTxStatus.unknown;
+  }
+  if (statuses.contains(ChainTxStatus.confirmed)) {
+    return ChainTxStatus.confirmed;
+  }
+  if (statuses.contains(ChainTxStatus.failed)) return ChainTxStatus.failed;
+  if (statuses.contains(ChainTxStatus.pending)) {
+    return ChainTxStatus.pending;
+  }
+  return ChainTxStatus.unknown;
 }
 
 _HistoryIdentity? _transactionIdentity(db.Transaction transaction) {
@@ -245,10 +295,43 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// All successfully fetched records across chains, newest first.
   List<ChainTxRecord> get records {
-    final merged = [
-      for (final result in _results.values)
-        if (result.status == HistoryStatus.ok) ...result.records,
-    ];
+    final merged = <ChainTxRecord>[];
+    final remoteEvents = <_HistoryEventIdentity, ChainTxRecord>{};
+    final remoteTransactionStatuses = <_HistoryIdentity, Set<ChainTxStatus>>{};
+    for (final result in _results.values) {
+      if (result.status != HistoryStatus.ok) continue;
+      for (final record in result.records) {
+        final identity = _recordEventIdentity(record);
+        if (identity == null) {
+          // Legacy rows without a concrete network cannot be safely merged.
+          merged.add(record);
+          continue;
+        }
+        final prior = remoteEvents[identity];
+        if (prior == null || record.timestamp.isAfter(prior.timestamp)) {
+          remoteEvents[identity] = record;
+        }
+        final transaction = _recordIdentity(record)!;
+        (remoteTransactionStatuses[transaction] ??= <ChainTxStatus>{}).add(
+          record.status,
+        );
+      }
+    }
+    for (final entry in remoteEvents.entries) {
+      final transaction = (
+        coin: entry.key.coin,
+        networkId: entry.key.networkId,
+        normalizedHash: entry.key.normalizedHash,
+      );
+      final status = _resolveRemoteStatuses(
+        remoteTransactionStatuses[transaction]!,
+      );
+      merged.add(
+        entry.value.status == status
+            ? entry.value
+            : entry.value.withStatus(status),
+      );
+    }
     final remoteIdentities = <_HistoryIdentity>{};
     for (final record in merged) {
       final identity = _recordIdentity(record);
@@ -484,28 +567,36 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
       final remainingPending = await _loadPendingTransactions();
       if (generation != _generation) return;
       _hasPendingTransactions = remainingPending.isNotEmpty;
-      final remoteByIdentity = <_HistoryIdentity, ChainTxRecord>{};
+      final remoteStatusesByIdentity = <_HistoryIdentity, Set<ChainTxStatus>>{};
       for (final result in _results.values) {
         if (result.status != HistoryStatus.ok) continue;
         for (final record in result.records) {
           final identity = _recordIdentity(record);
-          if (identity != null) remoteByIdentity[identity] = record;
+          if (identity == null) continue;
+          (remoteStatusesByIdentity[identity] ??= <ChainTxStatus>{}).add(
+            record.status,
+          );
         }
       }
       for (final local in _localTransactions) {
         final hash = local.hash;
         final identity = _transactionIdentity(local);
-        final remote = identity == null ? null : remoteByIdentity[identity];
+        final remoteStatuses = identity == null
+            ? null
+            : remoteStatusesByIdentity[identity];
+        final remoteStatus = remoteStatuses == null
+            ? null
+            : _resolveRemoteStatuses(remoteStatuses);
         // Account-history absence is never finality evidence. An indexer can be
         // delayed, rate-limited or temporarily incomplete, so only the
         // hash-specific status service or an explicit terminal history status
         // may settle a local row.
-        if (remote == null ||
+        if (remoteStatus == null ||
             local.status == db.TxStatus.confirmed ||
             local.status == db.TxStatus.failed) {
           continue;
         }
-        final next = switch (remote.status) {
+        final next = switch (remoteStatus) {
           ChainTxStatus.confirmed => db.TxStatus.confirmed,
           ChainTxStatus.failed => db.TxStatus.failed,
           ChainTxStatus.pending || ChainTxStatus.unknown => null,

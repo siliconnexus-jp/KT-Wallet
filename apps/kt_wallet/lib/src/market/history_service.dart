@@ -129,6 +129,22 @@ class ChainTxRecord {
   ChainTxRecord onNetworkIfKnown(String? id) =>
       id == null ? this : onNetwork(id);
 
+  ChainTxRecord withStatus(ChainTxStatus value) => ChainTxRecord(
+    coin: coin,
+    networkId: networkId,
+    hash: hash,
+    id: id,
+    outgoing: outgoing,
+    fromAddress: fromAddress,
+    toAddress: toAddress,
+    amountText: amountText,
+    assetContract: assetContract,
+    assetSymbol: assetSymbol,
+    assetVerified: assetVerified,
+    timestamp: timestamp,
+    status: value,
+  );
+
   bool get confirmed => status == ChainTxStatus.confirmed;
   bool get failed => status == ChainTxStatus.failed;
   bool get pending => status == ChainTxStatus.pending;
