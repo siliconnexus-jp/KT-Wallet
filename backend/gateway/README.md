@@ -40,7 +40,7 @@ curl -s localhost:8080/rpc -d '{"jsonrpc":"2.0","id":1,"method":"kt_health"}'
 curl -s localhost:8080/healthz
 curl -s localhost:8080/readyz
 curl -s -H "Authorization: Bearer $METRICS_BEARER_TOKEN" localhost:8080/metrics
-# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.13"}}
+# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.14"}}
 ```
 
 ## Environment

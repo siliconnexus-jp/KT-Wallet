@@ -105,7 +105,7 @@
   畸形保持 unknown。App 与 Gateway 同时兼容 Blockscout internal 的
   `transactionHash/index`，避免空投、合约退款等内部转入在直连 fallback 消失。两项旧
   行为均以红测复现后转绿；App history 18/18、Gateway upstream/handlers、完整公开源码
-  审计 12/12 通过。生产 1.16.13 的公开 Ethereum 历史只读 smoke 返回 5 条且 5/5 ok。
+  审计 12/12 通过。生产 1.16.14 的公开 Ethereum 历史只读 smoke 返回 5 条且 5/5 ok。
 - [x] EVM hash 专项终态查询不再只信任 receipt 的 `status`：App 直连与 Gateway
   同时要求返回的 `transactionHash` 精确匹配请求 hash，并要求 32-byte `blockHash`、
   canonical `blockNumber` 与 `transactionIndex` 完整；无 receipt 但节点声称仍在 mempool
@@ -113,10 +113,23 @@
   quantity、超过 256-bit 的数量或非 0/1 hex status 在 App 保持 `unknown`，Gateway 返回固定 upstream error，均不会
   伪造 confirmed/failed/pending。三项 App、三项共享 parser 与三项 Gateway 负例先红后绿；
   KT Wallet 1495/1495、chains 181/181、Gateway 普通/race/vet/govulncheck 与静态分析通过。
-  生产 1.16.13 已按 secondary → primary 滚动，公网与双实例均返回 16 网络、ready；
+  生产 1.16.14 已按 secondary → primary 滚动，公网与双实例均返回 16 网络、ready；
   全 `f` 的有效形状假 hash 三处均为 unknown，公开 Ethereum 历史 5/5 status=ok。
   这只能证明 RPC 回包内部身份与包含字段一致，不能把单一 RPC 的区块视为密码学最终性，
   因此不使用无关 UI 截图扩大结论。
+- [x] TRON hash 专项查询绑定完整链上证据：App 直连与 Gateway 都要求
+  `TransactionInfo.id` 与请求的 64-hex txID 精确一致，并要求非负 `blockNumber`。
+  智能合约/TRC-20 必须给出协议已知的 `receipt.result`；普通 TRX 系统转账因 protobuf
+  默认值可能省略该字段时，必须继续读取 `gettransactionbyid`，再次核对同一 `txID`，
+  并要求非空且全部已知的 `ret.contractRet`。顶层 `FAILED` 明确映射为失败；错误 txID、
+  缺区块、缺结果、未知枚举或错误 fallback 交易在 App 保持 unknown/抛出固定解析错误，
+  Gateway 返回固定 upstream error，均不能生成 confirmed。生产 1.16.14 已按
+  secondary → primary 滚动；双实例与公网对有效形状假 txID 均为 unknown，发布后
+  warning+ 为 0，Prometheus 3/3、规则 17/17、0 firing，Alertmanager 0 active。
+  KT Wallet 1498/1498、chains 183/183、共享 packages 409/409、Gateway 普通/race/
+  vet/govulncheck、静态分析 0 与完整公开测试审计 13/13 通过。
+  该证据证明交易身份、包含位置与执行结果相互绑定，但 FullNode receipt 仍不等同于
+  SolidityNode 固化或密码学最终性。
 - [x] TRON：从同一 `getnowblock` 构造并保存 TAPOS reference block 与
   canonical-time expiration；transaction info 缺失且链时间越界后才标记
   `expired`，边界内保持 `unknown`。
@@ -1004,7 +1017,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   backend README health 示例、根 README 状态表及可靠性段落、P0/P1 生产证据和 HTML
   报告的发布徽标/上线标题逐项一致。门禁只匹配这些“当前状态”标记，允许历史发布记录
   保留旧版本。六个公开面同时改旧的负例先红后绿，缺失和重复源码版本也失败闭合；
-  `dep_check` 35/35、test_support 61/61、共享 packages 407/407、默认源码门禁 12/12、
+  `dep_check` 35/35、test_support 61/61、共享 packages 409/409、默认源码门禁 12/12、
   完整依赖门禁 13/13 和静态分析 0 均通过。该检查防止仓库公开证据漂移，不替代公网
   `kt_health`、制品 SHA 或部署目录的运行时核验。
 - [x] `/healthz`、`/readyz`、`kt_health` 匿名 endpoint 汇总、Prometheus
@@ -1289,7 +1302,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     现统一为英文/日文 `KT Cold Signer`、中文 `KT冷钱包`；新增通用 ARB 禁用词门禁，
     可按语言拒绝退役品牌和语言不匹配名称。门禁单测先红后绿，三语 Widget 回归及受影响
     Golden 已人工复核；最新公开测试源码审计 12/12、完整依赖审计 13/13、KT Wallet
-    1495/1495、KT Cold Signer 570/570、共享 packages 407/407、静态分析 0、Gateway
+    1498/1498、KT Cold Signer 570/570、共享 packages 409/409、静态分析 0、Gateway
     audit 全部通过。
   - [ ] 真机系统权限弹窗、生命周期保护页及全部生产路由仍需逐页三语语义人工复核，
     因此本总项保持未完成，不能扩大宣称为“全 App 本地化验收完成”。

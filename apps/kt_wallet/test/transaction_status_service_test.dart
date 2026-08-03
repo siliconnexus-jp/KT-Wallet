@@ -45,6 +45,10 @@ const _evmHash =
     '0x1111111111111111111111111111111111111111111111111111111111111111';
 const _otherEvmHash =
     '0x2222222222222222222222222222222222222222222222222222222222222222';
+const _tronHash =
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const _otherTronHash =
+    'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
 Map<String, Object?> _evmReceipt({
   String transactionHash = _evmHash,
@@ -466,16 +470,68 @@ void main() {
       endpoints: (_) => 'https://tron.example',
       jsonRpcTransport: _JsonRpc(const {}),
       restTransport: _Rest({
-        'id': 'hash',
+        'id': _tronHash,
+        'blockNumber': 42,
         'receipt': {'result': 'SUCCESS'},
       }),
     );
 
     expect(
-      await service.check(_tx(Coin.tron.name, 'hash')),
+      await service.check(_tx(Coin.tron.name, _tronHash)),
       ChainTransactionStatus.confirmed,
     );
   });
+
+  test('TRON receipt for another txID is unknown, never confirmed', () async {
+    final service = TransactionStatusService(
+      endpoints: (_) => 'https://tron.example',
+      jsonRpcTransport: _JsonRpc(const {}),
+      restTransport: _Rest({
+        'id': _otherTronHash,
+        'blockNumber': 42,
+        'receipt': {'result': 'SUCCESS'},
+      }),
+    );
+
+    expect(
+      await service.check(_tx(Coin.tron.name, _tronHash)),
+      ChainTransactionStatus.unknown,
+    );
+  });
+
+  test(
+    'TRON native transfer verifies omitted receipt result via tx ret',
+    () async {
+      final rest = _Rest.onPost((url, _) {
+        if (url.endsWith('/wallet/gettransactioninfobyid')) {
+          return {
+            'id': _tronHash,
+            'blockNumber': 42,
+            'receipt': <String, Object?>{},
+          };
+        }
+        if (url.endsWith('/wallet/gettransactionbyid')) {
+          return {
+            'txID': _tronHash,
+            'ret': [
+              {'contractRet': 'SUCCESS'},
+            ],
+          };
+        }
+        return null;
+      });
+      final service = TransactionStatusService(
+        endpoints: (_) => 'https://tron.example',
+        jsonRpcTransport: _JsonRpc(const {}),
+        restTransport: rest,
+      );
+
+      expect(
+        await service.check(_tx(Coin.tron.name, _tronHash)),
+        ChainTransactionStatus.confirmed,
+      );
+    },
+  );
 
   test('missing TRON hash expires against canonical block time', () async {
     final service = TransactionStatusService(

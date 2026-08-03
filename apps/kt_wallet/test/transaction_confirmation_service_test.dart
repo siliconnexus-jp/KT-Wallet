@@ -47,6 +47,10 @@ const _evmHash =
     '0x1111111111111111111111111111111111111111111111111111111111111111';
 const _otherEvmHash =
     '0x2222222222222222222222222222222222222222222222222222222222222222';
+const _tronHash =
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const _otherTronHash =
+    'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
 Map<String, Object?> _evmReceipt({
   String transactionHash = _evmHash,
@@ -137,10 +141,11 @@ void main() {
         restTransport: rest,
       );
 
-      final pending = await service.check(Chain.tron, 'hash');
+      final pending = await service.check(Chain.tron, _tronHash);
       expect(pending.status, TxStatus.pending);
       expect(pending.confirmations, 0);
       rest.responses['/wallet/gettransactioninfobyid'] = {
+        'id': _tronHash,
         'blockNumber': 100,
         'receipt': {'result': 'SUCCESS'},
       };
@@ -150,9 +155,65 @@ void main() {
           'raw_data': {'number': 102, 'timestamp': 1780000000000},
         },
       };
-      final confirmed = await service.check(Chain.tron, 'hash');
+      final confirmed = await service.check(Chain.tron, _tronHash);
       expect(confirmed.status, TxStatus.confirmed);
       expect(confirmed.confirmations, 3);
+
+      rest.responses['/wallet/gettransactioninfobyid'] = {
+        'id': _tronHash,
+        'blockNumber': 101,
+        'receipt': <String, Object?>{},
+      };
+      rest.responses['/wallet/gettransactionbyid'] = {
+        'txID': _tronHash,
+        'ret': [
+          {'contractRet': 'SUCCESS'},
+        ],
+      };
+      final nativeConfirmed = await service.check(Chain.tron, _tronHash);
+      expect(nativeConfirmed.status, TxStatus.confirmed);
+      expect(nativeConfirmed.confirmations, 2);
+    });
+
+    test('TRON rejects mismatched or incomplete receipt evidence', () async {
+      final rest = _Rest({
+        '/wallet/gettransactioninfobyid': {
+          'id': _otherTronHash,
+          'blockNumber': 100,
+          'receipt': {'result': 'SUCCESS'},
+        },
+        '/wallet/getnowblock': {
+          'blockID': List<String>.filled(32, '00').join(),
+          'block_header': {
+            'raw_data': {'number': 102, 'timestamp': 1780000000000},
+          },
+        },
+      });
+      final service = TransactionConfirmationService(
+        endpoints: _endpoint,
+        jsonRpcTransport: _JsonRpc(),
+        restTransport: rest,
+      );
+
+      await expectLater(
+        service.check(Chain.tron, _tronHash),
+        throwsA(isA<RpcException>()),
+      );
+      rest.responses['/wallet/gettransactioninfobyid'] = {
+        'id': _tronHash,
+        'blockNumber': 100,
+        'receipt': <String, Object?>{},
+      };
+      rest.responses['/wallet/gettransactionbyid'] = {
+        'txID': _otherTronHash,
+        'ret': [
+          {'contractRet': 'SUCCESS'},
+        ],
+      };
+      await expectLater(
+        service.check(Chain.tron, _tronHash),
+        throwsA(isA<RpcException>()),
+      );
     });
 
     test('Solana status maps pending, confirmed, and failed', () async {

@@ -10,10 +10,23 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
 )
+
+var tronTransactionIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{64}$`)
+
+var tronReceiptResults = map[string]struct{}{
+	"SUCCESS": {}, "REVERT": {},
+	"BAD_JUMP_DESTINATION": {}, "OUT_OF_MEMORY": {},
+	"PRECOMPILED_CONTRACT": {}, "STACK_TOO_SMALL": {},
+	"STACK_TOO_LARGE": {}, "ILLEGAL_OPERATION": {},
+	"STACK_OVERFLOW": {}, "OUT_OF_ENERGY": {}, "OUT_OF_TIME": {},
+	"JVM_STACK_OVER_FLOW": {}, "TRANSFER_FAILED": {},
+	"INVALID_CODE": {},
+}
 
 // Tron is a TronGrid REST client.
 type Tron struct {
@@ -111,8 +124,9 @@ func (t *Tron) TransactionStatus(ctx context.Context, txID string) (string, erro
 		return "", err
 	}
 	var out struct {
-		ID      string `json:"id"`
-		Receipt struct {
+		ID          string `json:"id"`
+		BlockNumber *int64 `json:"blockNumber"`
+		Receipt     struct {
 			Result string `json:"result"`
 		} `json:"receipt"`
 		Result string `json:"result"`
@@ -120,21 +134,67 @@ func (t *Tron) TransactionStatus(ctx context.Context, txID string) (string, erro
 	if err := t.do(ctx, http.MethodPost, "/wallet/gettransactioninfobyid", body, &out); err != nil {
 		return "", err
 	}
-	if out.ID == "" && out.Receipt.Result == "" && out.Result == "" {
+	if out.ID == "" && out.BlockNumber == nil && out.Receipt.Result == "" && out.Result == "" {
 		return "unknown", nil
 	}
-	result := out.Receipt.Result
-	if result == "" {
-		result = out.Result
+	if !tronTransactionIDPattern.MatchString(txID) ||
+		!tronTransactionIDPattern.MatchString(out.ID) ||
+		!strings.EqualFold(out.ID, txID) ||
+		out.BlockNumber == nil || *out.BlockNumber < 0 {
+		return "", t.unavailable("malformed transaction receipt")
 	}
-	switch strings.ToUpper(result) {
+	result := strings.ToUpper(out.Receipt.Result)
+	if result == "" && out.Result != "" {
+		if !strings.EqualFold(out.Result, "FAILED") {
+			return "", t.unavailable("unknown transaction result")
+		}
+		result = "FAILED"
+	}
+	if result == "" {
+		result, err = t.transactionContractResult(ctx, txID, body)
+		if err != nil {
+			return "", err
+		}
+	}
+	if result == "FAILED" {
+		return "failed", nil
+	}
+	if _, known := tronReceiptResults[result]; !known {
+		return "", t.unavailable("unknown transaction receipt result")
+	}
+	switch result {
 	case "SUCCESS":
 		return "confirmed", nil
-	case "":
-		return "unknown", nil
 	default:
 		return "failed", nil
 	}
+}
+
+func (t *Tron) transactionContractResult(ctx context.Context, txID string, body []byte) (string, error) {
+	var out struct {
+		TxID string `json:"txID"`
+		Ret  []struct {
+			ContractRet string `json:"contractRet"`
+		} `json:"ret"`
+	}
+	if err := t.do(ctx, http.MethodPost, "/wallet/gettransactionbyid", body, &out); err != nil {
+		return "", err
+	}
+	if !tronTransactionIDPattern.MatchString(out.TxID) ||
+		!strings.EqualFold(out.TxID, txID) || len(out.Ret) == 0 {
+		return "", t.unavailable("malformed transaction result")
+	}
+	result := "SUCCESS"
+	for _, row := range out.Ret {
+		normalized := strings.ToUpper(row.ContractRet)
+		if _, known := tronReceiptResults[normalized]; !known {
+			return "", t.unavailable("unknown transaction contract result")
+		}
+		if normalized != "SUCCESS" {
+			result = normalized
+		}
+	}
+	return result, nil
 }
 
 // TRC20Transfer is one row of GET /v1/accounts/{addr}/transactions/trc20.

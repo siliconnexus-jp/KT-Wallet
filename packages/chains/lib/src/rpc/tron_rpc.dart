@@ -1,5 +1,119 @@
 import 'transport.dart';
 
+final RegExp _tronTransactionIdPattern = RegExp(r'^[0-9a-fA-F]{64}$');
+const _tronReceiptResults = {
+  'SUCCESS',
+  'REVERT',
+  'BAD_JUMP_DESTINATION',
+  'OUT_OF_MEMORY',
+  'PRECOMPILED_CONTRACT',
+  'STACK_TOO_SMALL',
+  'STACK_TOO_LARGE',
+  'ILLEGAL_OPERATION',
+  'STACK_OVERFLOW',
+  'OUT_OF_ENERGY',
+  'OUT_OF_TIME',
+  'JVM_STACK_OVER_FLOW',
+  'TRANSFER_FAILED',
+  'INVALID_CODE',
+};
+
+/// Complete inclusion evidence returned by
+/// `/wallet/gettransactioninfobyid`, bound to the requested transaction.
+class TronTransactionEvidence {
+  const TronTransactionEvidence({
+    required this.transactionId,
+    required this.blockNumber,
+    required this.result,
+  });
+
+  final String transactionId;
+  final int blockNumber;
+  final String result;
+
+  bool get succeeded => result == 'SUCCESS';
+}
+
+/// Rejects stale, misrouted, or incomplete TRON transaction information.
+/// Provider-controlled field values are deliberately omitted from errors.
+TronTransactionEvidence parseTronTransactionEvidence(
+  Map<Object?, Object?> response, {
+  required String expectedTransactionId,
+  Map<Object?, Object?>? transaction,
+}) {
+  if (!_tronTransactionIdPattern.hasMatch(expectedTransactionId)) {
+    throw RpcException('invalid expected TRON transaction id');
+  }
+  final transactionId = response['id'];
+  if (transactionId is! String ||
+      !_tronTransactionIdPattern.hasMatch(transactionId) ||
+      transactionId.toLowerCase() != expectedTransactionId.toLowerCase()) {
+    throw RpcException('malformed TRON transaction id');
+  }
+  final blockNumber = response['blockNumber'];
+  if (blockNumber is! int || blockNumber < 0) {
+    throw RpcException('malformed TRON block number');
+  }
+  final receipt = response['receipt'];
+  final receiptResult = receipt is Map ? receipt['result'] : null;
+  final topLevelResult = response['result'];
+  String normalizedResult;
+  if (receiptResult is String && receiptResult.isNotEmpty) {
+    normalizedResult = receiptResult.toUpperCase();
+  } else if (topLevelResult is String && topLevelResult.isNotEmpty) {
+    if (topLevelResult.toUpperCase() != 'FAILED') {
+      throw RpcException('unknown TRON transaction result');
+    }
+    normalizedResult = 'FAILED';
+  } else {
+    normalizedResult = _parseTronContractResults(
+      transaction,
+      expectedTransactionId: expectedTransactionId,
+    );
+  }
+  if (normalizedResult != 'FAILED' &&
+      !_tronReceiptResults.contains(normalizedResult)) {
+    throw RpcException('unknown TRON receipt result');
+  }
+  return TronTransactionEvidence(
+    transactionId: transactionId,
+    blockNumber: blockNumber,
+    result: normalizedResult,
+  );
+}
+
+String _parseTronContractResults(
+  Map<Object?, Object?>? transaction, {
+  required String expectedTransactionId,
+}) {
+  if (transaction == null || transaction.isEmpty) {
+    throw RpcException('missing TRON transaction result');
+  }
+  final transactionId = transaction['txID'];
+  if (transactionId is! String ||
+      !_tronTransactionIdPattern.hasMatch(transactionId) ||
+      transactionId.toLowerCase() != expectedTransactionId.toLowerCase()) {
+    throw RpcException('malformed TRON transaction result id');
+  }
+  final results = transaction['ret'];
+  if (results is! List || results.isEmpty) {
+    throw RpcException('missing TRON contract result');
+  }
+  var normalizedResult = 'SUCCESS';
+  for (final row in results) {
+    final raw = row is Map ? row['contractRet'] : null;
+    if (raw is! String || raw.isEmpty) {
+      throw RpcException('malformed TRON contract result');
+    }
+    final result = raw.toUpperCase();
+    if (!_tronReceiptResults.contains(result)) {
+      throw RpcException('unknown TRON contract result');
+    }
+    if (result != 'SUCCESS') normalizedResult = result;
+  }
+  return normalizedResult;
+}
+
 /// TRON TronGrid REST client (detailed-design.md §4.3). Broadcast is NOT
 /// retried automatically (double-spend safety) — that policy is enforced by
 /// the caller; this client just posts once.
@@ -61,21 +175,38 @@ class TronRpc {
 
   /// Full-node confirmation result for [txId], or null while the node does not
   /// know it. This bypasses account-history indexing.
-  Future<bool?> transactionSucceeded(String txId) async {
+  Future<TronTransactionEvidence?> transactionEvidence(String txId) async {
     final resp = await transport.postJson(
       '$baseUrl/wallet/gettransactioninfobyid',
       {'value': txId},
     );
     if (resp is! Map) throw RpcException('bad transaction info response');
     if (resp.isEmpty) return null;
+    Map<Object?, Object?>? transaction;
     final receipt = resp['receipt'];
-    final result = receipt is Map ? receipt['result'] : resp['result'];
-    if (result == null || '$result'.isEmpty) {
-      // A non-empty info object without an error result is a successful
-      // included native transaction.
-      return resp['id'] is String && (resp['id'] as String).isNotEmpty;
+    final receiptResult = receipt is Map ? receipt['result'] : null;
+    final topLevelResult = resp['result'];
+    if ((receiptResult is! String || receiptResult.isEmpty) &&
+        (topLevelResult is! String || topLevelResult.isEmpty)) {
+      final tx = await transport.postJson(
+        '$baseUrl/wallet/gettransactionbyid',
+        {'value': txId},
+      );
+      if (tx is! Map) throw RpcException('bad transaction response');
+      transaction = tx;
     }
-    return '$result'.toUpperCase() == 'SUCCESS';
+    return parseTronTransactionEvidence(
+      resp,
+      expectedTransactionId: txId,
+      transaction: transaction,
+    );
+  }
+
+  /// Full-node confirmation result for [txId], or null while the node does not
+  /// know it. System transfers whose receipt omits the protobuf default result
+  /// are verified against the same transaction's `ret.contractRet` evidence.
+  Future<bool?> transactionSucceeded(String txId) async {
+    return (await transactionEvidence(txId))?.succeeded;
   }
 
   /// Latest block ref (refBlockBytes/refBlockHash) for transaction expiration.

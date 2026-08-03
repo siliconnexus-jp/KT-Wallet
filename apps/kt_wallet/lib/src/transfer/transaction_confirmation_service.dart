@@ -85,36 +85,21 @@ class TransactionConfirmationService {
   }
 
   Future<TransactionConfirmation> _checkTron(String hash) async {
-    final response = await _rest.postJson(
-      '${endpoints(Coin.tron)}/wallet/gettransactioninfobyid',
-      {'value': hash},
-    );
-    if (response is! Map) {
-      throw RpcException('malformed TRON transaction info');
-    }
-    if (response.isEmpty) {
+    final rpc = TronRpc(baseUrl: endpoints(Coin.tron), transport: _rest);
+    final evidence = await rpc.transactionEvidence(hash);
+    if (evidence == null) {
       return const TransactionConfirmation(
         status: TxStatus.pending,
         confirmations: 0,
       );
     }
-    final receipt = response['receipt'];
-    final blockNumber = response['blockNumber'];
-    if (receipt is! Map ||
-        receipt['result'] is! String ||
-        blockNumber is! int) {
-      throw RpcException('malformed TRON receipt');
-    }
-    final rpc = TronRpc(baseUrl: endpoints(Coin.tron), transport: _rest);
     final latest = (await rpc.getNowBlock()).number;
-    final confirmations = latest - blockNumber + 1;
+    final confirmations = latest - evidence.blockNumber + 1;
     if (confirmations < 1) {
       throw RpcException('TRON receipt is ahead of the latest block');
     }
     return TransactionConfirmation(
-      status: receipt['result'] == 'SUCCESS'
-          ? TxStatus.confirmed
-          : TxStatus.failed,
+      status: evidence.succeeded ? TxStatus.confirmed : TxStatus.failed,
       confirmations: confirmations,
     );
   }

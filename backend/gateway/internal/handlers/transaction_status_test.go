@@ -185,7 +185,7 @@ func TestTronTransactionStatusUsesFullNodeReceipt(t *testing.T) {
 	grid := newRESTFake(t)
 	grid.routeJSON(
 		"/wallet/gettransactioninfobyid",
-		fmt.Sprintf(`{"id":%q,"receipt":{"result":"SUCCESS"}}`, tronHash),
+		fmt.Sprintf(`{"id":%q,"blockNumber":42,"receipt":{"result":"SUCCESS"}}`, tronHash),
 	)
 	e := newEnv(t, func(cfg *handlers.Config) {
 		cfg.TronURL = grid.srv.URL
@@ -200,11 +200,63 @@ func TestTronTransactionStatusUsesFullNodeReceipt(t *testing.T) {
 	}
 }
 
-func TestTronTransactionStatusMissingReceiptResultIsUnknown(t *testing.T) {
+func TestTronTransactionStatusRejectsReceiptForAnotherTxID(t *testing.T) {
 	grid := newRESTFake(t)
 	grid.routeJSON(
 		"/wallet/gettransactioninfobyid",
-		fmt.Sprintf(`{"id":%q,"receipt":{}}`, tronHash),
+		fmt.Sprintf(`{"id":%q,"blockNumber":42,"receipt":{"result":"SUCCESS"}}`, strings.Repeat("c", 64)),
+	)
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.TronURL = grid.srv.URL
+	})
+
+	assertErrCode(t, e.rpc(
+		"kt_getTransactionStatus",
+		fmt.Sprintf(`{"chain":"tron","hash":%q}`, tronHash),
+	), rpc.CodeUpstream)
+}
+
+func TestTronTransactionStatusRejectsIncompleteReceiptEvidence(t *testing.T) {
+	grid := newRESTFake(t)
+	grid.routeJSON(
+		"/wallet/gettransactioninfobyid",
+		fmt.Sprintf(`{"id":%q,"receipt":{"result":"SUCCESS"}}`, tronHash),
+	)
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.TronURL = grid.srv.URL
+	})
+
+	assertErrCode(t, e.rpc(
+		"kt_getTransactionStatus",
+		fmt.Sprintf(`{"chain":"tron","hash":%q}`, tronHash),
+	), rpc.CodeUpstream)
+}
+
+func TestTronTransactionStatusRejectsUnknownReceiptResult(t *testing.T) {
+	grid := newRESTFake(t)
+	grid.routeJSON(
+		"/wallet/gettransactioninfobyid",
+		fmt.Sprintf(`{"id":%q,"blockNumber":42,"receipt":{"result":"NOT_A_TRON_RESULT"}}`, tronHash),
+	)
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.TronURL = grid.srv.URL
+	})
+
+	assertErrCode(t, e.rpc(
+		"kt_getTransactionStatus",
+		fmt.Sprintf(`{"chain":"tron","hash":%q}`, tronHash),
+	), rpc.CodeUpstream)
+}
+
+func TestTronTransactionStatusUsesCanonicalTransactionResultWhenReceiptOmitsDefault(t *testing.T) {
+	grid := newRESTFake(t)
+	grid.routeJSON(
+		"/wallet/gettransactioninfobyid",
+		fmt.Sprintf(`{"id":%q,"blockNumber":42,"receipt":{}}`, tronHash),
+	)
+	grid.routeJSON(
+		"/wallet/gettransactionbyid",
+		fmt.Sprintf(`{"txID":%q,"ret":[{"contractRet":"SUCCESS"}]}`, tronHash),
 	)
 	e := newEnv(t, func(cfg *handlers.Config) {
 		cfg.TronURL = grid.srv.URL
@@ -214,7 +266,69 @@ func TestTronTransactionStatusMissingReceiptResultIsUnknown(t *testing.T) {
 		"kt_getTransactionStatus",
 		fmt.Sprintf(`{"chain":"tron","hash":%q}`, tronHash),
 	))
-	if res["status"] != "unknown" {
-		t.Fatalf("missing receipt result must stay unknown, got %v", res)
+	if res["status"] != "confirmed" {
+		t.Fatalf("expected confirmed, got %v", res)
+	}
+}
+
+func TestTronTransactionStatusRejectsMismatchedFallbackTransaction(t *testing.T) {
+	grid := newRESTFake(t)
+	grid.routeJSON(
+		"/wallet/gettransactioninfobyid",
+		fmt.Sprintf(`{"id":%q,"blockNumber":42,"receipt":{}}`, tronHash),
+	)
+	grid.routeJSON(
+		"/wallet/gettransactionbyid",
+		fmt.Sprintf(`{"txID":%q,"ret":[{"contractRet":"SUCCESS"}]}`, strings.Repeat("c", 64)),
+	)
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.TronURL = grid.srv.URL
+	})
+
+	assertErrCode(t, e.rpc(
+		"kt_getTransactionStatus",
+		fmt.Sprintf(`{"chain":"tron","hash":%q}`, tronHash),
+	), rpc.CodeUpstream)
+}
+
+func TestTronTransactionStatusMapsCanonicalFallbackFailure(t *testing.T) {
+	grid := newRESTFake(t)
+	grid.routeJSON(
+		"/wallet/gettransactioninfobyid",
+		fmt.Sprintf(`{"id":%q,"blockNumber":42,"receipt":{}}`, tronHash),
+	)
+	grid.routeJSON(
+		"/wallet/gettransactionbyid",
+		fmt.Sprintf(`{"txID":%q,"ret":[{"contractRet":"OUT_OF_ENERGY"}]}`, tronHash),
+	)
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.TronURL = grid.srv.URL
+	})
+
+	res := result(t, e.rpc(
+		"kt_getTransactionStatus",
+		fmt.Sprintf(`{"chain":"tron","hash":%q}`, tronHash),
+	))
+	if res["status"] != "failed" {
+		t.Fatalf("expected failed, got %v", res)
+	}
+}
+
+func TestTronTransactionStatusMapsTopLevelFailureWithoutFallback(t *testing.T) {
+	grid := newRESTFake(t)
+	grid.routeJSON(
+		"/wallet/gettransactioninfobyid",
+		fmt.Sprintf(`{"id":%q,"blockNumber":42,"result":"FAILED","receipt":{}}`, tronHash),
+	)
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.TronURL = grid.srv.URL
+	})
+
+	res := result(t, e.rpc(
+		"kt_getTransactionStatus",
+		fmt.Sprintf(`{"chain":"tron","hash":%q}`, tronHash),
+	))
+	if res["status"] != "failed" {
+		t.Fatalf("expected failed, got %v", res)
 	}
 }

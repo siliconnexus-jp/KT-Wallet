@@ -48,6 +48,10 @@ const _evmHash =
     '0x1111111111111111111111111111111111111111111111111111111111111111';
 const _otherEvmHash =
     '0x2222222222222222222222222222222222222222222222222222222222222222';
+const _tronHash =
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const _otherTronHash =
+    'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
 Map<String, Object?> _evmReceipt({
   String transactionHash = _evmHash,
@@ -487,6 +491,100 @@ void main() {
   });
 
   group('TronRpc', () {
+    test(
+      'transaction status binds complete evidence to requested txID',
+      () async {
+        final responses = <Object?>[
+          <String, Object?>{},
+          {
+            'id': _tronHash,
+            'blockNumber': 42,
+            'receipt': {'result': 'SUCCESS'},
+          },
+          {
+            'id': _tronHash,
+            'blockNumber': 42,
+            'receipt': {'result': 'OUT_OF_ENERGY'},
+          },
+          {'id': _tronHash, 'blockNumber': 42, 'receipt': <String, Object?>{}},
+          {
+            'txID': _tronHash,
+            'ret': [
+              {'contractRet': 'SUCCESS'},
+            ],
+          },
+          {'id': _tronHash, 'blockNumber': 42, 'receipt': <String, Object?>{}},
+          {
+            'txID': _tronHash,
+            'ret': [
+              {'contractRet': 'OUT_OF_ENERGY'},
+            ],
+          },
+          {'id': _tronHash, 'blockNumber': 42, 'result': 'FAILED'},
+        ];
+        final rpc = TronRpc(
+          baseUrl: 'https://api',
+          transport: FakeRest(onPost: (u, b) => responses.removeAt(0)),
+        );
+
+        expect(await rpc.transactionSucceeded(_tronHash), isNull);
+        expect(await rpc.transactionSucceeded(_tronHash), isTrue);
+        expect(await rpc.transactionSucceeded(_tronHash), isFalse);
+        expect(await rpc.transactionSucceeded(_tronHash), isTrue);
+        expect(await rpc.transactionSucceeded(_tronHash), isFalse);
+        expect(await rpc.transactionSucceeded(_tronHash), isFalse);
+      },
+    );
+
+    test(
+      'transaction status rejects mismatched or incomplete evidence',
+      () async {
+        final invalidInfo = <Map<String, Object?>>[
+          {
+            'id': _otherTronHash,
+            'blockNumber': 42,
+            'receipt': {'result': 'SUCCESS'},
+          },
+          {
+            'id': _tronHash,
+            'receipt': {'result': 'SUCCESS'},
+          },
+          {
+            'id': _tronHash,
+            'blockNumber': 42,
+            'receipt': {'result': 'NOT_A_TRON_RESULT'},
+          },
+        ];
+        for (final info in invalidInfo) {
+          expect(
+            () => parseTronTransactionEvidence(
+              info,
+              expectedTransactionId: _tronHash,
+            ),
+            throwsA(isA<RpcException>()),
+          );
+        }
+
+        final responses = <Object?>[
+          {'id': _tronHash, 'blockNumber': 42, 'receipt': <String, Object?>{}},
+          {
+            'txID': _otherTronHash,
+            'ret': [
+              {'contractRet': 'SUCCESS'},
+            ],
+          },
+        ];
+        final rpc = TronRpc(
+          baseUrl: 'https://api',
+          transport: FakeRest(onPost: (u, b) => responses.removeAt(0)),
+        );
+        await expectLater(
+          rpc.transactionSucceeded(_tronHash),
+          throwsA(isA<RpcException>()),
+        );
+      },
+    );
+
     test('getTrxBalance returns 0 for an unactivated account', () async {
       final rpc = TronRpc(
         baseUrl: 'https://api',
