@@ -168,6 +168,17 @@
   无法确认 claim 时在链请求前失败闭合；Redis 只保存指纹和结果元数据，不保存签名交易。
   1.16.3 又对共享记录执行字段不变量校验，空 txHash 的 accepted、错误码与状态不匹配
   等损坏记录一律按 unknown 失败闭合且不访问链节点。
+- [x] 2026-08-04 源码候选继续收紧不可逆广播请求的 JSON schema。旧实现会忽略未知
+  字段，并按 Go `encoding/json` 的大小写不敏感规则把 `Payload` 当作 `payload`；单独
+  别名、`payload/Payload` 冲突和精确重复 `payload` 都会由后值覆盖并各访问上游 1 次。
+  四项确定性红测先完整复现后，`kt_broadcast` 改用共享精确 schema 解码：字段名必须
+  精确匹配，未知字段、大小写别名、大小写冲突和重复键均在 Redis claim 与链节点访问前
+  返回 `-32602`。第二轮复审又发现 TRON 的 `payload` 内嵌 JSON 曾允许顶层重复
+  `txID` 或嵌套重复 `expiration`，本地幂等指纹采用后值而节点接收原始歧义文本；两项
+  红测均证明旧实现访问 TronGrid 1 次。现内层对象也递归拒绝重复键，再进行指纹和转发。
+  六类负例 20 轮与全部广播矩阵通过，静态边界禁止该入口恢复
+  `json.Unmarshal(params, &p)` 或移除 TRON 内层重复键检查。这是本地源码候选证据；
+  生产仍为 Gateway 1.16.15，未部署前不把该修复描述为线上能力。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。

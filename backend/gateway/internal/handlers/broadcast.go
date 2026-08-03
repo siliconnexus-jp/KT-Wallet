@@ -22,7 +22,7 @@ func (g *Gateway) Broadcast(ctx context.Context, params json.RawMessage) (any, *
 		Network string `json:"network"`
 		Payload string `json:"payload"`
 	}
-	if err := json.Unmarshal(params, &p); err != nil || len(params) == 0 {
+	if err := decodeStrictJSON(params, &p); err != nil || len(params) == 0 {
 		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: expected {"chain", "network"?, "payload"}`)
 	}
 	meta, rpcErr := validateChain(p.Chain)
@@ -133,7 +133,9 @@ func canonicalBroadcastPayload(
 		decoder := json.NewDecoder(strings.NewReader(trimmed))
 		decoder.UseNumber()
 		if !strings.HasPrefix(trimmed, "{") ||
-			!json.Valid([]byte(trimmed)) || decoder.Decode(&object) != nil || object == nil {
+			!json.Valid([]byte(trimmed)) ||
+			rejectDuplicateJSONKeys([]byte(trimmed)) != nil ||
+			decoder.Decode(&object) != nil || object == nil {
 			return nil, rpc.Errorf(rpc.CodeInvalidParams,
 				`invalid params: "payload" must be a signed TronGrid transaction JSON object for tron`)
 		}

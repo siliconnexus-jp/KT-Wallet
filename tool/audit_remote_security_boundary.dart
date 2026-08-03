@@ -111,6 +111,7 @@ void main() {
   _auditGatewayVocabulary(failures);
   _auditNetworkFreeSecurityModules(failures);
   _auditHotSigningBoundary(failures);
+  _auditGatewayIrreversibleRequestSchema(failures);
   _auditRiskSignalDirection(failures);
 
   if (failures.isNotEmpty) {
@@ -125,7 +126,8 @@ void main() {
     '${_reviewedGatewayResponseKeys.length} reviewed Gateway fields, '
     '${_networkFreeSecurityFiles.length} network-free security modules, '
     '3 hot-signing families independently verified, '
-    'hot and air-gapped broadcasts hash-bound before success metrics.',
+    'hot and air-gapped broadcasts hash-bound before success metrics, '
+    'Gateway broadcast requests exact-schema decoded.',
   );
 }
 
@@ -345,6 +347,29 @@ void _auditHotSigningBoundary(List<String> failures) {
         '$broadcastPath lost pre-metric local-hash binding: $marker',
       );
     }
+  }
+}
+
+void _auditGatewayIrreversibleRequestSchema(List<String> failures) {
+  const path = 'backend/gateway/internal/handlers/broadcast.go';
+  final source = File(path).readAsStringSync();
+  const strictDecode = 'decodeStrictJSON(params, &p)';
+  if (!source.contains(strictDecode)) {
+    failures.add('$path lost exact-schema broadcast decoding: $strictDecode');
+  }
+  const permissiveDecode = 'json.Unmarshal(params, &p)';
+  if (source.contains(permissiveDecode)) {
+    failures.add(
+      '$path restored permissive irreversible-request decoding: '
+      '$permissiveDecode',
+    );
+  }
+  const tronDuplicateGuard = 'rejectDuplicateJSONKeys([]byte(trimmed))';
+  if (!source.contains(tronDuplicateGuard)) {
+    failures.add(
+      '$path lost nested TRON payload duplicate-key rejection: '
+      '$tronDuplicateGuard',
+    );
   }
 }
 

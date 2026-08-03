@@ -266,6 +266,108 @@ func TestBroadcastMalformedPayloadNeverHitsUpstream(t *testing.T) {
 	}
 }
 
+func TestBroadcastStrictSchemaRejectsUnknownAliasesAndDuplicatesBeforeUpstream(t *testing.T) {
+	otherRawTx := evmRawTx + "00"
+	cases := []struct {
+		name   string
+		params string
+	}{
+		{
+			name: "unknown field",
+			params: fmt.Sprintf(
+				`{"chain":"eth","payload":%q,"memo":"must-not-be-ignored"}`,
+				evmRawTx,
+			),
+		},
+		{
+			name:   "case alias",
+			params: fmt.Sprintf(`{"chain":"eth","Payload":%q}`, evmRawTx),
+		},
+		{
+			name: "case alias collision",
+			params: fmt.Sprintf(
+				`{"chain":"eth","payload":%q,"Payload":%q}`,
+				evmRawTx,
+				otherRawTx,
+			),
+		},
+		{
+			name: "exact duplicate",
+			params: fmt.Sprintf(
+				`{"chain":"eth","payload":%q,"payload":%q}`,
+				evmRawTx,
+				otherRawTx,
+			),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			node := newRPCFake(t)
+			node.result("eth_sendRawTransaction", "0xmust-not-be-used")
+			e := newEnv(t, func(cfg *handlers.Config) {
+				cfg.EthURLs = []string{node.srv.URL}
+			})
+
+			resp := e.rpc("kt_broadcast", tc.params)
+			errObj, ok := resp["error"].(map[string]any)
+			code, codeOK := errObj["code"].(float64)
+			if !ok || !codeOK || int(code) != rpc.CodeInvalidParams {
+				t.Errorf("ambiguous broadcast params must be invalid, got %v", resp)
+			}
+			if calls := node.count("eth_sendRawTransaction"); calls != 0 {
+				t.Errorf("ambiguous broadcast params reached upstream %d time(s)", calls)
+			}
+			if metrics := e.gw.Metrics(); !strings.Contains(
+				metrics,
+				`kt_gateway_broadcast_guard_operations_total{outcome="claim_acquired"} 0`,
+			) {
+				t.Errorf("ambiguous broadcast params reached the idempotency guard:\n%s", metrics)
+			}
+		})
+	}
+}
+
+func TestBroadcastTronDuplicateJSONKeysNeverHitUpstream(t *testing.T) {
+	cases := []struct {
+		name    string
+		payload string
+	}{
+		{
+			name: "top-level duplicate",
+			payload: `{"raw_data":{"contract":[{"type":"TransferContract"}]},` +
+				`"signature":["ab12"],"txID":"first","txID":"second"}`,
+		},
+		{
+			name: "nested duplicate",
+			payload: `{"raw_data":{"expiration":1,"expiration":2,` +
+				`"contract":[{"type":"TransferContract"}]},` +
+				`"signature":["ab12"],"txID":"nested"}`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			grid := newRESTFake(t)
+			grid.routeJSON("/wallet/broadcasttransaction", `{"result":true,"txid":"must-not-be-used"}`)
+			e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
+
+			resp := e.rpc(
+				"kt_broadcast",
+				fmt.Sprintf(`{"chain":"tron","payload":%q}`, tc.payload),
+			)
+			errObj, ok := resp["error"].(map[string]any)
+			code, codeOK := errObj["code"].(float64)
+			if !ok || !codeOK || int(code) != rpc.CodeInvalidParams {
+				t.Errorf("duplicate TRON payload keys must be invalid, got %v", resp)
+			}
+			if calls := len(grid.hitsFor("/wallet/broadcasttransaction")); calls != 0 {
+				t.Errorf("duplicate TRON payload keys reached upstream %d time(s)", calls)
+			}
+		})
+	}
+}
+
 func TestBroadcastDuplicateReturnsStoredResultWithoutSecondUpstreamWrite(t *testing.T) {
 	node := newRPCFake(t)
 	node.result("eth_sendRawTransaction", "0xhash")

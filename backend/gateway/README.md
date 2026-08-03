@@ -614,9 +614,15 @@ answer was lost, the Gateway returns `-32003 submission_unknown`; clients must
 reconcile with the locally derived transaction hash and must not submit again.
 EVM/Solana broadcasts never fail over to another RPC after the first write
 attempt. Malformed payloads are rejected with `-32602` before any upstream
-call. The Gateway atomically deduplicates the canonical signed payload for 24
-hours: accepted/rejected/unknown results are replayed without a second upstream
-write, and a concurrent/crash-left pending claim returns
+call. The outer request is exact-schema decoded: field names are case-sensitive,
+and unknown fields, duplicate keys, aliases such as `Payload`, or
+`payload`/`Payload` collisions are rejected before an idempotency claim or
+upstream write. Because TRON carries a second JSON object inside `payload`,
+duplicate keys at any depth of that signed transaction object are also rejected
+before fingerprinting or forwarding. The Gateway atomically deduplicates the
+canonical signed payload for 24 hours: accepted/rejected/unknown results are
+replayed without a second upstream write, and a concurrent/crash-left pending
+claim returns
 `-32003 submission_unknown`. Production multi-instance deployments must set
 `REDIS_URL`; only a SHA-256 fingerprint and result metadata enter Redis, never
 the signed transaction bytes.
