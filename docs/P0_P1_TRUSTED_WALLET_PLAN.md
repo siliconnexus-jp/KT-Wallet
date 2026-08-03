@@ -625,6 +625,24 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   Dart 与原生 probe 均有 2 秒上限，网络在线、录屏或完整性明确失败仍禁止签名；
   超时、原生错误或无法可靠检测的状态显示“无法确认”，不会悬挂或误报绿色。
 - [ ] iOS 普通钱包、内嵌签名器、KT Cold Signer 的 App Switcher/锁屏/控制中心。
+  - 2026-08-03 严格运行复测发现，Scene 状态机虽然会在
+    `sceneDidEnterBackground` 请求保护，但旧的 `activeWindow()` 只选择
+    `isKeyWindow`；Scene 真正进入后台后窗口已经失去 key 状态，保护页因此可能静默
+    无宿主，任务卡继续保留内部页面。单元测试当时只覆盖事件顺序，没有覆盖窗口选择，
+    不能作为系统快照闭合证据。
+  - 两款 App 现在把触发回调的精确 `UIWindowScene` 传入保护层，并按 key window →
+    可见普通 window → Scene 首个 window → AppDelegate fallback 的顺序选择宿主。
+    `sceneWillEnterForeground` 不移除封面，只有同一 Scene 的
+    `sceneDidBecomeActive` 才恢复原 UI；临时 inactive 仍不安装封面。
+  - 唯一保留的 iPhone 17 Pro（iOS 26.2）已分别验证 KT Wallet 与
+    KT Cold Signer：普通前台 → 首次 App Switcher → 选择另一 App → 再次 App
+    Switcher 显示品牌保护页 → 点击任务卡恢复，共保留 6 张系统截图。首次 App
+    Switcher 时当前 App 仍为 foreground-inactive，不提前遮挡；选择另一 App 后才进入
+    background 并替换快照，符合此前确定的交互。原生 XCTest 现为 Wallet 11/11、
+    Signer 8/8，新增非 key 后台 window 与 fallback 选择负例。
+  - 该项仍保持未完成：控制中心/系统弹窗目前有状态机单测但没有本轮系统截图；锁屏、
+    电话遮挡、真机 App Switcher、恢复闪帧、独立 Signer 与组合 App 内嵌签名模式仍需
+    iOS 零售真机逐项验收。
 - [ ] Android 截图策略、后台保护和系统任务卡。
   - 2026-08-03 严格重测发现，旧实现虽然在 `onUserLeaveHint` 启动了第二个
     `PrivacyActivity`，Android 的任务快照仍可能复用启动前的 Flutter 页面；旧报告中的

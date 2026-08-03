@@ -7,6 +7,23 @@ import XCTest
 
 class RunnerTests: XCTestCase {
 
+  @MainActor
+  func testPrivacyWindowSelectorUsesVisibleNonKeyBackgroundWindow() {
+    let backgroundWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+    backgroundWindow.isHidden = false
+
+    XCTAssertTrue(
+      selectPrivacyHostWindow(from: [backgroundWindow], fallback: nil) === backgroundWindow
+    )
+  }
+
+  @MainActor
+  func testPrivacyWindowSelectorUsesFallbackWhenSceneHasNoWindows() {
+    let fallbackWindow = UIWindow(frame: .zero)
+
+    XCTAssertTrue(selectPrivacyHostWindow(from: [], fallback: fallbackWindow) === fallbackWindow)
+  }
+
   func testScenePrivacyIgnoresTemporaryInactiveTransitions() {
     var state = ScenePrivacyState()
 

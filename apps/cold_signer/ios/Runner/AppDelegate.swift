@@ -4,6 +4,16 @@ import MetricKit
 import Network
 import UIKit
 
+internal func selectPrivacyHostWindow(
+  from windows: [UIWindow],
+  fallback: UIWindow?
+) -> UIWindow? {
+  windows.first(where: \.isKeyWindow)
+    ?? windows.first(where: { !$0.isHidden && $0.windowLevel == .normal })
+    ?? windows.first
+    ?? fallback
+}
+
 /// Pure tri-state policy shared by the native probe and XCTest. Only an
 /// explicitly unsatisfied path proves the signer has no active default route.
 struct DeviceSecurityClassifier {
@@ -166,14 +176,14 @@ final class OneShotDeviceSecurityResult {
     )
   }
 
-  func showPrivacyCover() {
+  func showPrivacyCover(in scene: UIScene? = nil) {
     if let cover = privacyCover {
       cover.isHidden = false
       cover.superview?.bringSubviewToFront(cover)
       CATransaction.flush()
       return
     }
-    guard let hostWindow = activeWindow() else { return }
+    guard let hostWindow = activeWindow(in: scene) else { return }
     let cover = UIView(frame: hostWindow.bounds)
     cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     cover.backgroundColor = UIColor(red: 8/255, green: 12/255, blue: 24/255, alpha: 1)
@@ -227,12 +237,15 @@ final class OneShotDeviceSecurityResult {
     privacyCover?.isHidden = true
   }
 
-  private func activeWindow() -> UIWindow? {
-    let sceneWindow = UIApplication.shared.connectedScenes
+  private func activeWindow(in scene: UIScene? = nil) -> UIWindow? {
+    let scopedWindows = (scene as? UIWindowScene)?.windows ?? []
+    if !scopedWindows.isEmpty {
+      return selectPrivacyHostWindow(from: scopedWindows, fallback: window)
+    }
+    let connectedWindows = UIApplication.shared.connectedScenes
       .compactMap { $0 as? UIWindowScene }
       .flatMap(\.windows)
-      .first(where: \.isKeyWindow)
-    return sceneWindow ?? window
+    return selectPrivacyHostWindow(from: connectedWindows, fallback: window)
   }
 
   private func protectionLabel(

@@ -424,10 +424,12 @@ issues: **1,461/1,461** KT Wallet tests, **570/570** KT Cold Signer tests, and
 **400/400** shared-package tests passed. The Gateway audit, public-secret gate,
 native dependency lock/checksum verification, and OSV scans also passed. These
 numbers are reproducible source evidence. On the same date, the iOS native
-Runner test targets passed **9/9** for KT Wallet and **6/6** for KT Cold Signer
+Runner test targets passed **11/11** for KT Wallet and **8/8** for KT Cold Signer
 on the single retained iPhone 17 Pro simulator, including the Scene privacy
-state tests. This is not a substitute for the outstanding physical-device,
-real-chain, signed-artifact, or independent-audit work below.
+state and non-key background-window selection tests. Both apps were also
+verified by switching to another app, reopening App Switcher, and restoring
+the protected task card. This is not a substitute for the outstanding
+physical-device, real-chain, signed-artifact, or independent-audit work below.
 
 ## Application identities
 

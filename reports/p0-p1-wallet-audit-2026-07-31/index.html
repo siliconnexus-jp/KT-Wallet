@@ -734,13 +734,14 @@
           <tr><td>Core Crypto Privacy Manifest</td><td>AuthGate 的 app-scoped UserDefaults 以 CA92.1 独立声明；CocoaPods resource bundle 与 SwiftPM resource 同时启用，源码 glob 不再吞入 xcprivacy；两份 Podfile 固定并向传递依赖传播 iOS 13 下限</td><td class="pass">podspec lint、21 项门禁定向测试、两款 Simulator 构建及最终 framework bundle 读取通过；相关两类 Xcode 警告为 0</td></tr>
           <tr><td>三语发布门禁</td><td>两款 App 的 ARB 用户键与 ICU placeholder 中英日严格一致；非英文值不得无审阅地与英文 fallback 完全相同，品牌、Nonce、Chain ID、Bluetooth 与占位破折号按 App、语言、key 精确放行；CJK 文案相邻的半角逗号、冒号和分号默认失败，仅代码调用可按 App、语言、key 精确放行；Android default / zh-rCN / ja 原生 strings 同键；iOS 显示名、相机、Face ID 与照片写入权限完整本地化</td><td class="pass">未翻译英文与半角标点门禁均先红后绿；修正 13 条中文及 2 条日文生产文案；真实双 App ARB、check_deps、KT Wallet 1458/1458、test_support 57/57、共享 packages 397/397 通过；既有两款 iOS Simulator 与两份 Android Debug APK 最终资源表证据保持有效</td></tr>
           <tr><td>Cold Signer 品牌一致性</td><td>配对说明、账户扫码提示、观察钱包状态和签名拦截提示按语言统一使用英文/日文 <code>KT Cold Signer</code>、中文 <code>KT冷钱包</code>；通用 ARB 禁用词门禁拒绝退役品牌及中文目录中的英文产品名</td><td class="pass">门禁单测先红后绿，三语 Widget 与 3 张受影响 Golden 人工复核；源码审计 12/12、KT Wallet 1461/1461、KT Cold Signer 570/570、共享 packages 400/400、静态分析 0、Gateway audit 通过</td></tr>
-          <tr><td>HTML 报告浏览器验收</td><td>2026-08-03 使用真实 Chromium 重新以 1280px 桌面与 390×844 移动视口加载 HTTP 报告，并检查 119 张图片、横向溢出、AAB 制品/工具链行及控制台日志；移动端三列表格从被挤成逐字换行修正为纵向证据卡片</td><td class="pass">两端均无横向溢出，119/119 图片可解码，broken image 为 0，控制台 warning/error 为 0；移动截图中两款 APK/AAB 大小、哈希、门禁、producer/lock/runtime 依赖结果与未签名边界可连续阅读</td></tr>
+          <tr><td>HTML 报告浏览器验收</td><td>2026-08-03 使用真实 Chromium 重新以 1280px 桌面与 390×844 移动视口加载 HTTP 报告，并检查 125 张图片、横向溢出、AAB 制品/工具链行及控制台日志；移动端三列表格从被挤成逐字换行修正为纵向证据卡片</td><td class="pass">两端均无横向溢出，125/125 图片可解码，broken image 为 0，控制台 warning/error 为 0；移动截图中两款 APK/AAB 大小、哈希、门禁、producer/lock/runtime 依赖结果与未签名边界可连续阅读</td></tr>
           <tr><td>Android Core Crypto</td><td>12 个原生认证分类与 prompt 启动闭合测试；同步启动异常必须完成 MethodChannel，不能抛出后让 Dart 悬挂</td><td class="pass">12/12 通过</td></tr>
           <tr><td>Android 原生聚合测试边界</td><td>mobile_scanner 的 JUnit 6.1.2 测试 classpath 共 7 个 Gradle module metadata 与 6 个 JAR，逐项比对 <a href="https://repo.maven.apache.org/maven2/org/junit/">Maven Central 官方 SHA-256</a>、全新下载和本机缓存后，以精确哈希和来源加入两款 App；仓库门禁会拒绝缺失、重复、哈希漂移或信任扩张。KT Wallet 与 KT Cold Signer 的根级 <code>testDebugUnitTest --offline</code> 分别通过 298 与 252 个 actionable tasks</td><td class="pass">根级聚合测试已恢复；JUnit 6 仅为测试依赖。JUnit Vintage、built-in Kotlin 与 Mockito agent 仍为上游 warning，provenance 核验不等同安全审计</td></tr>
           <tr><td>Android AGP 9 / Kotlin 迁移</td><td>两个 App 自身均未应用 KGP；移除 <code>android.builtInKotlin=false</code> 后分别执行真实 Debug 构建，Flutter 3.44.2 因当前最新 <code>mobile_scanner 7.4.0</code> 仍条件应用 <code>kotlin-android</code> 而自动写回兼容开关。普通 AGP deprecation warning 同时来自 Core Crypto 与多个 Flutter plugin，但 Flutter 当前明确的未来 hard-fail 列表只点名 mobile_scanner</td><td class="partial">两份 APK 构建通过；未来 Flutter 会阻断，待插件生态完成内建 Kotlin 迁移后关闭告警</td></tr>
           <tr><td>Cold Signer 系统认证错误语义</td><td>只有无凭据、未录入、无硬件或插件缺失允许自动进入 App PIN；取消、超时、锁定、系统/设备错误和未知错误全部失败闭合</td><td class="pass">分类与 UI 21/21；完整 Signer 226/226</td></tr>
           <tr><td>Android 系统认证/隐私页边界</td><td>两款 App 的 local_auth 真系统指纹；KT Wallet 的真实 Wallet Core EVM/TRON canonical 签名、在线强化验签与临时钱包删除；认证期间不把系统 prompt 当成离开 App，真正切后台则进入任务保护状态</td><td class="pass">设备集成 3/3；App guard JVM 3/3；恢复 MainActivity 正常</td></tr>
           <tr><td>Android 任务切换器快照闭合</td><td>移除会错过快照时机的第二个 PrivacyActivity；onPause 不处理通知栏等临时覆盖，onUserLeaveHint/onStop 才保护。API 33+ 禁用 Recents 截图并设置深色 KT task description；API 24–32 使用后台 FLAG_SECURE。敏感路由 secure 状态与后台状态独立合并，resume 不会误清除助记词保护</td><td class="partial">两款 App 各 6 项策略单测、完整原生聚合测试与 API 35 系统截图通过；通知栏保持 topResumed，Home/Recents 无内部像素，任务卡恢复正常。API 24–32 运行时与零售真机矩阵仍待验收</td></tr>
+          <tr><td>iOS 任务切换器快照闭合</td><td>Scene 真正进入 background 后把精确 UIWindowScene 传入保护层；后台窗口即使已失去 key 状态，仍按可见普通 window / Scene 首个 window 失败闭合选择。首次 App Switcher 的 foreground-inactive 不提前遮挡；选择另一 App 后保护快照，并保持到 sceneDidBecomeActive</td><td class="partial">唯一 iPhone 17 Pro Simulator 上双 App 6 张系统截图、Wallet 11/11 与 Signer 8/8 XCTest 通过；控制中心与锁屏系统截图、零售真机及内嵌签名模式仍待验收</td></tr>
           <tr><td>EVM replacement 矩阵</td><td>iOS 原生 Wallet Core + 系统 Face ID；Sepolia、Base Sepolia、Avalanche Fuji、BNB Testnet 分别验证 speed-up/cancel，原候选无 receipt，获胜内容保持 1 wei 或取消为 0 自转</td><td class="pass">四链八组真实链上通过</td></tr>
           <tr><td>Ethereum 离线完整闭环</td><td>iOS 26.2 + Android API 35；八链 AccountExport 严格配对、AIRGAP-V1 请求/结果帧、系统认证、原生 Wallet Core、在线验签、Sepolia 广播/receipt/Gateway 历史</td><td class="pass">ETH + Test USDT 双端四笔通过</td></tr>
           <tr><td>EVM 扩展链离线完整闭环</td><td>Base、Arbitrum、Avalanche、BNB；每链原生币 + 官方测试 Token，iOS 26.2 与隔离 Android API 35 分别执行完整 AIRGAP-V1、系统认证、原生签名、在线验签、广播、receipt 与 Gateway 历史</td><td class="pass">四链双端 16 笔全新交易通过</td></tr>
@@ -757,7 +758,7 @@
           <tr><td>App 匿名运行指标</td><td>固定 12 项名称 allowlist；首帧、Flutter/Platform 错误、市场/历史、交易阶段及原生 fatal/ANR；Android 两款 App 使用前台 10 秒 ANR 看门狗与进程 fatal 观察器，iOS 两款 App 使用 MetricKit；原生桥仅允许单调 ID + fatal/anr，32 条上限，App 先持久化高水位再确认</td><td class="partial">主动同意远程汇总、7 天留存和 info 趋势告警已上线；仍需 iOS/Android 真机故障注入和可信安装基数</td></tr>
           <tr><td>KT Wallet Android Release</td><td>本轮 APK 137,034,241 bytes / SHA-256 <code>394b00…996f</code>；AAB 100,313,693 bytes / SHA-256 <code>e418c4…6982</code>。两者三个 ABI 均含 libTrustWalletCore.so 与 SQLite 3.53.3；全制品 Demo/Mock/凭证/stub 扫描为空，明文流量与备份关闭；AAB producer 与审阅工具链均为 bundletool 1.18.3</td><td class="partial">本轮 APK 与 bundletool AAB guard 通过；<code>walletCore=false</code> 的 assemble/bundle Release 配置负例、真实 stub DEX 和危险 ZIP 符号链接负例均拒绝；APK/AAB 未签名，不能分发或上传</td></tr>
           <tr><td>KT Cold Signer Android Release</td><td>本轮 APK 127,037,785 bytes / SHA-256 <code>259cbf…ba1b</code>；此前同工作区 AAB 91,536,306 bytes / SHA-256 <code>d315ee…937</code>。三个 ABI 均含 libTrustWalletCore.so 与 SQLite 3.53.3；stub、Demo、Mock、本地 E2E 助记词和 provider 凭证标记不存在，无 INTERNET、明文流量与备份关闭</td><td class="partial">本轮 APK guard 通过；此前 AAB 与 bundletool guard 通过。<code>walletCore=false</code> 的 assemble/bundle Release 配置负例拒绝；APK/AAB 未签名，不能分发或上传</td></tr>
-          <tr><td>iOS</td><td>两款 App 的 Simulator、iphoneos Profile 与 Release 无签名 device build；Profile 已使用独立 xcconfig 并包含对应 CocoaPods Profile 设置，门禁会拒绝错误回退到 Release Pod 配置。bundle ID、标准加密声明、Privacy Manifest、NSFileProtectionComplete、WalletCore.framework 与 SQLite 3.53.3 已核对；Release guard 拒绝 Debug snapshot 和旧 SQLite。本轮 KT Wallet Runner.app 为 72.6 MB</td><td class="partial">本轮 KT Wallet iphoneos Release 与最终 App guard 通过；唯一且关机状态的 iPhone 17 Pro Simulator 上 Wallet XCTest 1/1、Signer XCTest 3/3 通过；正式签名 IPA entitlement / provisioning 待验收</td></tr>
+          <tr><td>iOS</td><td>两款 App 的 Simulator、iphoneos Profile 与 Release 无签名 device build；Profile 已使用独立 xcconfig 并包含对应 CocoaPods Profile 设置，门禁会拒绝错误回退到 Release Pod 配置。bundle ID、标准加密声明、Privacy Manifest、NSFileProtectionComplete、WalletCore.framework 与 SQLite 3.53.3 已核对；Release guard 拒绝 Debug snapshot 和旧 SQLite。本轮 KT Wallet Runner.app 为 72.6 MB</td><td class="partial">本轮 KT Wallet iphoneos Release 与最终 App guard 通过；唯一 iPhone 17 Pro Simulator 上 Wallet XCTest 11/11、Signer XCTest 8/8 及双 App 后台任务卡闭合通过；正式签名 IPA entitlement / provisioning 与零售真机矩阵待验收</td></tr>
           <tr><td>非 EVM 动态报价 UI</td><td>TRON TRC-20 与 Solana Token-2022 / ATA；iOS、Android 独立执行</td><td class="pass">双端通过</td></tr>
           <tr><td>测试网法币隔离 UI</td><td>首页、BNB Testnet BUSD 详情、Sepolia 确认页；iOS、Android 独立执行</td><td class="pass">双端通过</td></tr>
           <tr><td>认证设置与生产路由防绕过 UI</td><td>密码设置、当前 PIN、转账认证；缺少 AccountExport/draft/request/result/broadcast hash 的生产深链全部失败闭合；无 Store 的生产组件不会生成联系人、Token 或交易 fixture</td><td class="pass">839 项 Widget、iOS 与 Android 模拟器通过</td></tr>
@@ -786,7 +787,7 @@
         Release APK 与 AAB 再次通过完整二进制、Bundle、Manifest、权限、ABI、凭证和签名状态门禁；
         Android Core Crypto 原生认证/启动闭合测试 12/12、备份向量/格式选择 JVM 7/7、API 35 portable 向量与旧 v1 恢复 2/2、双 App 隐私 guard JVM 3/3、
         真系统指纹与真实 Wallet Core 设备集成 3/3 通过。iOS 原生 XCTest 为
-        Wallet 1/1、Signer 3/3。</p>
+        Wallet 11/11、Signer 8/8。</p>
     </section>
 
     <section>
@@ -813,7 +814,7 @@
         证据支持。新增授权中心 Golden 为确定性 Widget 渲染，只证明隐私同意、风险分级
         与操作可达，不冒充生产 GoPlus 响应或主网撤销。备份 Provider 故障图同样是
         确定性 Widget 注入，只证明失败与取消已分离、错误文本和布局正确，不冒充
-        iCloud Drive 或 Android 文档 Provider 真机故障。报告共引用 119 张截图。</p>
+        iCloud Drive 或 Android 文档 Provider 真机故障。报告共引用 125 张截图。</p>
       <h3>备份 Provider 故障失败闭合 UI</h3>
       <p class="muted">系统文件选择器返回稳定读取失败时，页面保留在恢复流程并给出可操作的
         固定提示；不会静默当作取消，也不会显示 Provider 路径或异常文本。</p>
@@ -858,7 +859,19 @@
         <figure><img src="assets/localized-broadcast-rejection-en.png" alt="Localized bounded broadcast rejection"><figcaption>节点明确拒绝：底层任意文本先映射为结构化 nonce 原因，再由英文 UI 输出可操作提示；截图已经人工检查，无方块字和 Debug 水印。中日文由同一 16 类枚举的逐项测试覆盖。本图不冒充链上成功。</figcaption></figure>
         <figure><img src="assets/broadcast-unknown-recovery-en.png" alt="Broadcast result unknown recovery UI"><figcaption>节点响应丢失：页面明确显示结果未知、保留本地交易 hash、禁止再次发送并继续对账。图中广播时间为测试夹具未注入数据库记录时的 --；生产路径会在首次请求前持久化尝试时间。本图不冒充测试网链上确认。</figcaption></figure>
       </div>
-      <h3>iOS</h3>
+      <h3 id="ios-lifecycle-evidence">iOS · Scene / App Switcher 隐私闭合</h3>
+      <p class="muted">以下为唯一 iPhone 17 Pro（iOS 26.2）Simulator 的系统级截图。
+        测试路径是前台 → 打开 App Switcher → 选择另一 App → 再次打开 App Switcher →
+        点击受保护任务卡恢复；不把首次 foreground-inactive 转场误当成真正 background。</p>
+      <div class="shots">
+        <figure><img src="screenshots/ios-lifecycle-2026-08-03/kt-wallet-foreground.png" alt="KT Wallet iOS foreground baseline"><figcaption>KT Wallet 前台基线：内部页面正常可见；临时 inactive 状态不会预先安装保护页</figcaption></figure>
+        <figure><img src="screenshots/ios-lifecycle-2026-08-03/kt-wallet-app-switcher-protected.png" alt="KT Wallet protected iOS App Switcher card"><figcaption>KT Wallet 选择另一 App 后再次打开 App Switcher：中间任务卡只包含 KT 品牌保护页，不保留 Flutter 页面像素</figcaption></figure>
+        <figure><img src="screenshots/ios-lifecycle-2026-08-03/kt-wallet-resumed.png" alt="KT Wallet restored after protected App Switcher"><figcaption>KT Wallet 点击受保护任务卡恢复：同一 Scene 变为 active 后移除封面，原页面恢复且无封面残留</figcaption></figure>
+        <figure><img src="screenshots/ios-lifecycle-2026-08-03/kt-cold-signer-foreground.png" alt="KT Cold Signer iOS foreground baseline"><figcaption>KT Cold Signer 前台基线：独立 App 正常显示离线 onboarding；本图不含助记词或私钥</figcaption></figure>
+        <figure><img src="screenshots/ios-lifecycle-2026-08-03/kt-cold-signer-app-switcher-protected.png" alt="KT Cold Signer protected iOS App Switcher card"><figcaption>KT Cold Signer 选择另一 App 后再次打开 App Switcher：任务卡替换为品牌保护页，离线钱包 UI 不进入系统快照</figcaption></figure>
+        <figure><img src="screenshots/ios-lifecycle-2026-08-03/kt-cold-signer-resumed.png" alt="KT Cold Signer restored after protected App Switcher"><figcaption>KT Cold Signer 点击受保护任务卡恢复：封面只在 sceneDidBecomeActive 后移除，原页面完整恢复</figcaption></figure>
+      </div>
+      <h3>iOS · 其他 UI 证据</h3>
       <div class="shots">
         <figure><img src="screenshots/ios-secure-storage-wallet-locked.png" alt="KT Wallet secure storage failure remains locked"><figcaption>KT Wallet：安全存储插件异常时保持锁定，只允许重新检查，不展示钱包内容</figcaption></figure>
         <figure><img src="screenshots/ios-secure-storage-signer-locked.png" alt="KT Cold Signer secure storage failure blocks signing"><figcaption>KT Cold Signer：安全存储异常时阻止创建、导入和签名，绝不退回临时内存状态</figcaption></figure>

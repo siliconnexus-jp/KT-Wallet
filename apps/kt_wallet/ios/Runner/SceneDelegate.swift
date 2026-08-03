@@ -35,7 +35,7 @@ class SceneDelegate: FlutterSceneDelegate {
 
   override func sceneDidEnterBackground(_ scene: UIScene) {
     if privacyState.didEnterBackground() == .showCover {
-      (UIApplication.shared.delegate as? AppDelegate)?.showPrivacyCover()
+      (UIApplication.shared.delegate as? AppDelegate)?.showPrivacyCover(in: scene)
     }
     super.sceneDidEnterBackground(scene)
   }
