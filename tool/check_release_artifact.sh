@@ -268,11 +268,16 @@ else
 
   gradle_user_home="${GRADLE_USER_HOME:-$HOME/.gradle}"
   gradle_module_cache="$gradle_user_home/caches/modules-2/files-2.1"
+  toolchain_runtime_cache="${KT_ANDROID_RELEASE_TOOLCHAIN_CACHE:-$repo_root/.dart_tool/android-release-toolchain}"
   bundletool_jar="${BUNDLETOOL_JAR:-}"
   if [[ -z "$bundletool_jar" ]]; then
-    bundletool_jar="$(find \
-      "$gradle_module_cache/com.android.tools.build/bundletool/$bundletool_version" \
-      -type f -name "bundletool-$bundletool_version.jar" -print -quit 2>/dev/null)"
+    if [[ -f "$toolchain_runtime_cache/bundletool-$bundletool_version.jar" ]]; then
+      bundletool_jar="$toolchain_runtime_cache/bundletool-$bundletool_version.jar"
+    else
+      bundletool_jar="$(find \
+        "$gradle_module_cache/com.android.tools.build/bundletool/$bundletool_version" \
+        -type f -name "bundletool-$bundletool_version.jar" -print -quit 2>/dev/null)"
+    fi
   fi
   if [[ -z "$bundletool_jar" || ! -f "$bundletool_jar" ]]; then
     echo "bundletool is required to verify an Android App Bundle" >&2
@@ -327,10 +332,15 @@ else
     if [[ "$dependency_name" == aapt2-proto-*.jar ]]; then
       resolved_dependency_name="$aapt2_dependency_name"
     fi
-    dependency_jar="$(find "$gradle_module_cache" -type f \
-      -name "$resolved_dependency_name" -print -quit 2>/dev/null)"
+    dependency_jar=""
+    if [[ -f "$toolchain_runtime_cache/$resolved_dependency_name" ]]; then
+      dependency_jar="$toolchain_runtime_cache/$resolved_dependency_name"
+    else
+      dependency_jar="$(find "$gradle_module_cache" -type f \
+        -name "$resolved_dependency_name" -print -quit 2>/dev/null)"
+    fi
     if [[ -z "$dependency_jar" ]]; then
-      echo "bundletool runtime dependency is unavailable: $resolved_dependency_name" >&2
+      echo "bundletool runtime dependency is unavailable: $resolved_dependency_name; run tool/bootstrap_android_release_toolchain.sh" >&2
       exit 2
     fi
     expected_dependency_sha="$(xmllint --xpath \

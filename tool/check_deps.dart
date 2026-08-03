@@ -371,6 +371,35 @@ void main() {
       '${androidArtifactGuard.path} does not reject the Wallet Core stub marker',
     );
   }
+  final androidToolchainBootstrap = File(
+    'tool/bootstrap_android_release_toolchain.sh',
+  );
+  final androidToolchainBootstrapSource = androidToolchainBootstrap.existsSync()
+      ? androidToolchainBootstrap.readAsStringSync()
+      : '';
+  for (final marker in const [
+    "--proto '=https' --proto-redir '=https'",
+    r'mktemp -d "$cache_dir/.bootstrap.',
+    r'wallet_sha" != "$signer_sha',
+    'Downloaded Android release dependency failed SHA-256',
+    'Android release toolchain bootstrap passed',
+  ]) {
+    if (!androidToolchainBootstrapSource.contains(marker)) {
+      failures.add(
+        '${androidToolchainBootstrap.path} cannot restore the pinned AAB verifier safely: $marker',
+      );
+    }
+  }
+  for (final marker in const [
+    'KT_ANDROID_RELEASE_TOOLCHAIN_CACHE',
+    'tool/bootstrap_android_release_toolchain.sh',
+  ]) {
+    if (!androidArtifactGuardSource.contains(marker)) {
+      failures.add(
+        '${androidArtifactGuard.path} cannot consume the pinned AAB runtime cache: $marker',
+      );
+    }
+  }
   final appleArtifactGuard = File('tool/check_apple_release_artifact.sh');
   final appleArtifactGuardSource = appleArtifactGuard.existsSync()
       ? appleArtifactGuard.readAsStringSync()

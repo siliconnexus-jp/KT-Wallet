@@ -544,22 +544,28 @@
   与独立 release-toolchain lock 一致，并让 bundletool JAR 同时匹配 lock SHA-256 和各 App
   Gradle verification metadata。执行 bundletool 的 16 个 runtime JAR 也逐个核对 metadata，
   不再选择缓存最高版本。随后校验容器并读取最终 protobuf Manifest；权限、导出组件、
-  凭证与签名规则与 APK 共用。最新 APK 产物：
-  KT Wallet 136,870,401 bytes（SHA-256
-  `c7ffdc3d4560987c8ec75f460f76033b9a122f309844f2846bec841d927c23d5`）；
-  KT Cold Signer 127,021,401 bytes（SHA-256
-  `e1ae4b3b5b04f2af753d2970f3f4b41680688caa20da872515b377bb0c0d2908`）。最终合并
+  凭证与签名规则与 APK 共用。2026-08-04 从当前 HEAD 重建的 APK 产物：
+  KT Wallet 137,150,621 bytes（SHA-256
+  `2d4a5b3d5e18ec7a3da0490af0da38de16c7c4ab1c4c3509fddfb9aae1312ee3`）；
+  KT Cold Signer 127,023,101 bytes（SHA-256
+  `a3c084f8bbaf59dca3966b9054170b4491e97a80dc757ef8d31fd8ad17837e9f`）。最终合并
   Manifest 同时证明两款 App 禁止备份，Cold Signer Release 不含
   `INTERNET`。两款 iOS Simulator App 与
   `iphoneos --release --no-codesign` device App 同时构建通过，bundle ID、英文显示名、
   标准加密声明、App 自有 Privacy Manifest、Data Protection 配置与
   WalletCore.framework 均已核对。
-  两份 AAB 分别为 KT Wallet 100,272,294 bytes（SHA-256
-  `dd554dfdef9cc98c7f0190b9888026fb63dbddd3dc64912fea3497e009a35651`）与
-  KT Cold Signer 91,536,306 bytes（SHA-256
-  `d315eeeeeb91feb47c3d5f34ece9bf1752efbfe2bae1af3cee0e12cf423de937`），bundletool、
-  最终 base Manifest、权限、导出组件、原生库与完整敏感标记门禁均通过；两者刻意未签名，
-  只能用于制品审阅，不能上传商店。
+  两份 AAB 分别为 KT Wallet 100,469,771 bytes（SHA-256
+  `e524a598ecfc252c734cf2125a671568d0dac61cb5833875fd39de1c363de381`）与
+  KT Cold Signer 91,574,923 bytes（SHA-256
+  `e70ccec5f78f9932ba72355863802dc084137277e53d3588499b6edf19690ead`）。首次复核因本机
+  Gradle cache 缺少固定的 `protobuf-java-util-3.22.3.jar` 而按预期失败，没有跳过
+  bundletool。新增显式 `tool/bootstrap_android_release_toolchain.sh`，只从 Google Maven /
+  Maven Central 的 HTTPS 精确坐标恢复 manifest 声明的 16 个 runtime JAR，并要求两款 App
+  verification metadata 的 group/module/version/SHA-256 完全一致；下载先在临时目录校验，
+  再写入 gitignore 的 19 MB 本地缓存。空缓存下载 17/17、第二次纯缓存 17/17；随后四个
+  当前 APK/AAB 的 bundletool、最终 Manifest、权限、导出组件、三 ABI、真实 Wallet Core、
+  SQLite 3.53.3 与完整敏感标记门禁均通过。四者刻意未签名，只能用于制品审阅，不能上传
+  商店。
 - [x] 生产根节点不再暗中提供固定演示钱包：`WalletScope.of` 缺失时直接失败，
   Gallery、Golden 和 Widget 测试必须显式注入测试钱包。Release 中 Wallet App
   不能以 seed controller 启动，Cold Signer 不能以 `/`、`/parse`、`/auth`、

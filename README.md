@@ -473,10 +473,15 @@ Build the applications:
 ```sh
 (cd apps/kt_wallet && flutter build ios --no-codesign)
 (cd apps/kt_wallet && flutter build apk)
+(cd apps/kt_wallet && flutter build appbundle)
 (cd apps/cold_signer && flutter build ios --no-codesign)
 (cd apps/cold_signer && flutter build apk)
+(cd apps/cold_signer && flutter build appbundle)
+tool/bootstrap_android_release_toolchain.sh
 tool/check_release_artifact.sh apps/kt_wallet/build/app/outputs/flutter-apk/app-release.apk
+tool/check_release_artifact.sh apps/kt_wallet/build/app/outputs/bundle/release/app-release.aab
 tool/check_release_artifact.sh apps/cold_signer/build/app/outputs/flutter-apk/app-release.apk
+tool/check_release_artifact.sh apps/cold_signer/build/app/outputs/bundle/release/app-release.aab
 tool/check_apple_release_artifact.sh apps/kt_wallet/build/ios/iphoneos/Runner.app
 tool/check_apple_release_artifact.sh apps/cold_signer/build/ios/iphoneos/Runner.app
 ```

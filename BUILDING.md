@@ -185,6 +185,7 @@ markers, local E2E canaries, credential patterns, archive paths and signing
 identity:
 
 ```sh
+tool/bootstrap_android_release_toolchain.sh
 tool/check_release_artifact.sh \
   apps/kt_wallet/build/app/outputs/flutter-apk/app-release.apk
 tool/check_release_artifact.sh \
@@ -194,6 +195,15 @@ tool/check_release_artifact.sh \
 tool/check_release_artifact.sh \
   apps/cold_signer/build/app/outputs/bundle/release/app-release.aab
 ```
+
+The bootstrap is the only networked step. It downloads the exact bundletool
+and 16 runtime JAR coordinates declared by the pinned lock and both apps'
+Gradle verification metadata, verifies every SHA-256 before an atomic cache
+write, and stores them under the ignored
+`.dart_tool/android-release-toolchain/` directory. Run it once on a fresh
+machine or after clearing that cache. The artifact guard never downloads or
+selects an unpinned dependency; if the verified runtime is incomplete it exits
+with an actionable failure and asks for the explicit bootstrap step.
 
 For AAB input, the guard strictly parses the producer version from
 `BundleConfig.pb` and requires it to match
