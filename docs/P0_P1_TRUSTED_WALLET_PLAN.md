@@ -756,16 +756,17 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   新公开地址为 EVM `0xDc989afaBb7142e607cF275E8C86F46b36A96B2C`、TRON
   `TLosVtHkawwuWffoTxr1CRZcrXQLb2Gm6j`、Solana
   `7Gn3q9giKazyNrazByThiYQudQmvpKvDSXEsj4PaY3DC`；助记词未进入日志、文档或报告。
-- [ ] 2026-08-03 发现上述批次的敏感 JSON 字段名未被一次临时终端脱敏命令匹配，
+- [x] 2026-08-03 发现上述批次的敏感 JSON 字段名未被一次临时终端脱敏命令匹配，
   因而立即视为泄露并作废；旧 host 文件已删除且不得再注资或执行测试。唯一 iPhone
   17 Pro Simulator 无损恢复后，原生 Wallet Core 已轮换生成 14 天批次
   `batch_20260802_3eb2631a3683a40c`，host 文件为 `0600` 且 credential guard 通过，
   公开地址为 EVM `0xfa1B78714280c3DCF70Af6Dc6b4F5D56fB52aD11`、TRON
   `TRn5vEZomUM4MHbvyoRCuxngTWGaFCWJqj`、Solana
   `4Frj8584f3yv5ZAAVRs6yNXV5bXkVJR91EFPuA3p5q3S`。设备侧私密 JSON 已消费删除；
-  临时 native walletId 的删除因生产策略要求 Face ID 而超时，仍需在 Simulator 菜单
-  完成一次匹配后复跑 cleanup-only，未完成前本项保持未勾选且不能宣称原生临时密钥
-  已彻底清理。
+  临时 native walletId 的删除因生产策略要求 Face ID 而第一次超时；保持生产认证策略
+  不变，通过唯一 iPhone 17 Pro Simulator 的系统 Face ID 菜单立即复跑 cleanup-only，
+  原生桥明确返回 `E2E-STALE-NATIVE-KEY-DELETED`，随后集成测试 1/1 退出成功。没有重置
+  Simulator Keychain，也没有读取或打印助记词；当前已知 provisioning 临时密钥已清理。
 - [x] 原生 E2E 钱包生命周期必须闭合。仓库级
   `tool/audit_e2e_wallet_cleanup.dart` 已建立“零新增技术债”门禁：任何新的
   `storeWallet` 测试若没有显式 `deleteWallet` 或

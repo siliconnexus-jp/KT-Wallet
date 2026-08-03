@@ -482,7 +482,8 @@
         <code>TRn5vEZomUM4MHbvyoRCuxngTWGaFCWJqj</code>、Solana
         <code>4Frj8584f3yv5ZAAVRs6yNXV5bXkVJR91EFPuA3p5q3S</code>。host 文件为 0600 且
         credential guard 通过；设备私密 JSON 已删除，iOS provisioning 临时 native
-        walletId 仍等待一次 Face ID 清理确认。当前批次已在 Android API 35 以真实系统
+        walletId 也已通过唯一 iPhone 17 Pro Simulator 的生产 Face ID 策略执行
+        cleanup-only，原生桥返回明确删除成功且集成测试 1/1 通过。当前批次已在 Android API 35 以真实系统
         指纹逐次授权重跑 16 条 Wallet Core 签名、AIRGAP-V1 往返和密码学验签，并在
         teardown 删除 Android 临时原生钱包；尚未完成当前批次 iOS/独立 Cold Signer
         矩阵。当前 EVM 地址经 Gateway 与独立 Amoy RPC 交叉读取均为 0 POL / 0 USDC，
@@ -732,8 +733,8 @@
           <tr><td>加密备份文件输入与 Provider 边界</td><td>原生最多读取 256 KiB + 1 字节；Dart 严格核对 v1/v2 闭合 schema、KDF、cipher、UTC、payload format 与 payload；只有显式 cancelled=true 才静默返回。文件名只显示净化 basename，移除控制/Bidi/零宽字符并限制 80 code points；文件错误与密码错误分离，换文件失败清除旧密码</td><td class="partial">定向 33/33、Android 原生边界通过、iOS build-for-testing 通过；当轮 Simulator SpringBoard 异常退出，iOS XCTest 与物理 Provider 待复验</td></tr>
           <tr><td>跨平台加密备份格式</td><td>backup-v2 在 Android/iOS 统一为 PBKDF2-HMAC-SHA256 210000 rounds + AES-256-GCM，固定 salt16/nonce12/tag16 和 payload 布局；设备本地 Argon2id 与可移植备份分离。Android v1 仅在 portable 认证失败后兼容旧 Argon2id，v2 不允许降级。严审又发现 Android 原实现使用只保证 API 26+ 的 PBKDF2 SecretKeyFactory 别名，与 minSdk 24 冲突；现改由 API 23+ HmacSHA256 按 RFC 8018 直接计算同一 PBKDF2 block，显式使用 UTF-8，文件字节不变，并由依赖门禁防回归</td><td class="partial">Dart 33/33；Android 独立 Unicode key/blob、篡改与格式选择 JVM 7/7，其中新 KDF 定向 3/3；API 35 Unicode portable 向量与真实旧 v1 恢复 2/2；生产 Swift 源码直接编译执行同一向量和负例通过。API 24/25 与 iOS XCTest 当轮未运行，物理双向交叉恢复待验收；<a href="https://developer.android.com/reference/javax/crypto/SecretKeyFactory">Android 官方算法表</a>为兼容性边界依据</td></tr>
           <tr><td>离线备份密码强度</td><td>新建文件要求 14–128 Unicode scalar，拒绝低多样性、1–4 字符周期重复、单调连续和明确常见模式；三语区分过短、过长与可预测。旧文件恢复不套用新规则，避免安全升级锁死历史备份</td><td class="pass">英文/中日韩短语正例与短、超长、重复、连续、常见模式负例；MethodChannel 前失败闭合，W32 Golden 人工复核；Wallet 1424/1424、Core Crypto 39/39</td></tr>
-          <tr><td>测试凭证批次门禁</td><td>版本化批次 ID、UTC 创建/过期时间、最长 14 天、0600、非 symlink、公开 BIP-39 vector 拒绝；交互式输入关闭回显，报告扫描使用本地助记词 canary 且不回显秘密；23 个真实助记词 E2E 入口内置同一门禁</td><td class="partial">当前 14 天批次已由 iOS 原生 Wallet Core 生成，host 文件为 0600；Android 八链 16 条离线矩阵及认证删除通过。iOS provisioning 临时钱包仍等待一次 Simulator Face ID 认证删除，且待注资后重跑真实广播矩阵</td></tr>
-          <tr><td>E2E 原生密钥清理纪律</td><td>仓库级门禁枚举两个 App 的所有 <code>storeWallet</code> 测试；新增原生位置必须显式认证删除。共享 teardown 复用生产 <code>deleteWallet</code> 系统认证，超时直接令测试失败，仅容忍场景已主动删除后的 WALLET_NOT_FOUND，不存在未认证测试后门。仅使用已知 <code>MockCoreCrypto</code> 且无 MethodChannel 的纯内存 UI 测试明确排除，未知实现不豁免</td><td class="pass">6 个分类正负例、仓库门禁和 KT Wallet 1446/1446 通过；初始 24 个原始命中中，23 个真实原生测试已接入认证清理、1 个纯内存 Mock 被精确排除，原生技术债与未跟踪位置均为 0。当前批次 provisioning 遗留 wallet 是门禁建立前失败运行的已知现场，仍需 Face ID 单独删除</td></tr>
+          <tr><td>测试凭证批次门禁</td><td>版本化批次 ID、UTC 创建/过期时间、最长 14 天、0600、非 symlink、公开 BIP-39 vector 拒绝；交互式输入关闭回显，报告扫描使用本地助记词 canary 且不回显秘密；23 个真实助记词 E2E 入口内置同一门禁</td><td class="partial">当前 14 天批次已由 iOS 原生 Wallet Core 生成，host 文件为 0600；Android 八链 16 条离线矩阵及认证删除通过，iOS provisioning 临时钱包也已通过 Simulator Face ID cleanup-only 删除。仍待注资后重跑真实广播矩阵</td></tr>
+          <tr><td>E2E 原生密钥清理纪律</td><td>仓库级门禁枚举两个 App 的所有 <code>storeWallet</code> 测试；新增原生位置必须显式认证删除。共享 teardown 复用生产 <code>deleteWallet</code> 系统认证，超时直接令测试失败，仅容忍场景已主动删除后的 WALLET_NOT_FOUND，不存在未认证测试后门。仅使用已知 <code>MockCoreCrypto</code> 且无 MethodChannel 的纯内存 UI 测试明确排除，未知实现不豁免</td><td class="pass">6 个分类正负例、仓库门禁和 KT Wallet 1446/1446 通过；初始 24 个原始命中中，23 个真实原生测试已接入认证清理、1 个纯内存 Mock 被精确排除，原生技术债与未跟踪位置均为 0。门禁建立前遗留的当前 provisioning wallet 第一次删除按设计超时失败，第二次经系统 Matching Face 后返回 <code>E2E-STALE-NATIVE-KEY-DELETED</code>，cleanup-only 1/1 通过</td></tr>
           <tr><td>Package 公开测试文档</td><td>六个共享 package、Core Crypto podspec 与 example 均说明 API、示例、测试、许可证及安全边界；递归门禁禁止默认 TODO、示例公司/域名和 Flutter 模板描述回归；test_support fixture 从仓库根目录和包目录均可运行</td><td class="pass">文档门禁 + packages 397/397 通过</td></tr>
           <tr><td>Core Crypto Privacy Manifest</td><td>AuthGate 的 app-scoped UserDefaults 以 CA92.1 独立声明；CocoaPods resource bundle 与 SwiftPM resource 同时启用，源码 glob 不再吞入 xcprivacy；两份 Podfile 固定并向传递依赖传播 iOS 13 下限</td><td class="pass">podspec lint、21 项门禁定向测试、两款 Simulator 构建及最终 framework bundle 读取通过；相关两类 Xcode 警告为 0</td></tr>
           <tr><td>三语发布门禁</td><td>两款 App 的 ARB 用户键与 ICU placeholder 中英日严格一致；非英文值不得无审阅地与英文 fallback 完全相同，品牌、Nonce、Chain ID、Bluetooth 与占位破折号按 App、语言、key 精确放行；CJK 文案相邻的半角逗号、冒号和分号默认失败，仅代码调用可按 App、语言、key 精确放行；Android default / zh-rCN / ja 原生 strings 同键；iOS 显示名、相机、Face ID 与照片写入权限完整本地化</td><td class="pass">未翻译英文与半角标点门禁均先红后绿；修正 13 条中文及 2 条日文生产文案；真实双 App ARB、check_deps、KT Wallet 1458/1458、test_support 57/57、共享 packages 397/397 通过；既有两款 iOS Simulator 与两份 Android Debug APK 最终资源表证据保持有效</td></tr>
@@ -1020,8 +1021,9 @@
           为 0600 且门禁验证通过，公开 EVM 地址为
           <code>0xfa1B…aD11</code>；Android API 35 当前批次 16 条未广播矩阵已通过且
           Android 临时钱包已删除；Gateway 与独立 Amoy RPC 均读到 0 POL / 0 USDC，
-          尚未广播。设备侧私密 JSON 已消费删除；iOS provisioning 临时 native walletId 的最终删除仍等待
-          一次 Simulator Face ID 确认，不能把超时描述为完整清理通过。旧 Polygon 地址虽有约 0.000585 POL / 16 USDC，也不得绕过
+          尚未广播。设备侧私密 JSON 已消费删除；iOS provisioning 临时 native walletId
+          第一次 Face ID 删除真实超时失败，第二次立即 Matching Face 后由原生桥明确删除，
+          cleanup-only 1/1 通过。旧 Polygon 地址虽有约 0.000585 POL / 16 USDC，也不得绕过
           批次门禁继续充当新结果；Polygon 两笔测试按当前最大费用最坏预算约
           0.002977 POL。</li>
         <li><b>真机安全矩阵：</b>iOS/Android 真机验证锁屏、App Switcher、录屏、
