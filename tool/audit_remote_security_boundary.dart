@@ -369,9 +369,15 @@ void _auditRiskSignalDirection(List<String> failures) {
   for (final marker in const [
     "(risk != 'unsafe' && risk != 'unknown')",
     'enum GatewayTokenApprovalRisk { unsafe, unknown }',
+    'responseNetwork != expectedNetwork',
+    '_tokenIdentityMatches(chain, contract, responseContract)',
+    'source == \'official_catalog+goplus\'',
+    '_tokenRiskUnsafeResultKeys',
   ]) {
     if (!gateway.contains(marker)) {
-      failures.add('$gatewayPath can elevate remote approval data: $marker');
+      failures.add(
+        '$gatewayPath lost fail-closed remote risk binding: $marker',
+      );
     }
   }
 }

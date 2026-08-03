@@ -566,7 +566,12 @@ defaults to 50 and must be between 1 and 100.
 
 ### `kt_checkTokenRisk` `{"chain": C, "network": N?, "contract": S}`
 
-→ `{"status":"safe"|"unsafe"|"unknown", "category":S?, "source":S}`
+→ `{"status":"safe"|"unsafe"|"unknown", "category":S?, "source":S, "network":N, "contract":S}`
+
+Every successful result echoes the resolved network and normalized contract or
+mint identity. Clients must bind both fields to the request before displaying
+an official identity or acting on an unsafe/unknown result; EVM addresses are
+case-insensitive, while TRON and Solana identities are case-sensitive.
 
 - `unsafe` means the exact network + contract/mint is in the operator risk
   registry; `category` describes the configured reason.

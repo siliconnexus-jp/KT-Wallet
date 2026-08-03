@@ -118,14 +118,24 @@ while IFS="$(printf '\t')" read -r network contract; do
     echo "token risk matrix: oversized response for $network" >&2
     exit 1
   fi
-  if ! jq -e --arg id "$request_id" '
+  if ! jq -e \
+    --arg id "$request_id" \
+    --arg chain "$chain" \
+    --arg network "$network" \
+    --arg contract "$contract" '
       .jsonrpc == "2.0"
       and .id == $id
       and (.error == null)
       and .result.status == "safe"
       and .result.source == "official_catalog+goplus"
+      and .result.network == $network
+      and (.result.contract | type) == "string"
+      and (if ($chain == "tron" or $chain == "solana")
+        then .result.contract == $contract
+        else (.result.contract | ascii_downcase) == ($contract | ascii_downcase)
+        end)
     ' "$response" >/dev/null; then
-    echo "token risk matrix: $network did not return provider-backed safe evidence" >&2
+    echo "token risk matrix: $network did not return identity-bound provider evidence" >&2
     exit 1
   fi
 

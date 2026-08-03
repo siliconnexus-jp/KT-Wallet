@@ -1273,6 +1273,18 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     Prometheus 指标、独立熔断告警和版本化运维 runbook 已通过并发测试、race、
     `promtool` 与生产双实例抓取。发布过程中三次门禁真实触发并成功回滚到 1.15.0，
     修正规则权限、jq 作用域与只读单文件 bind-mount 重建流程后才放行 1.16.0。
+  - [x] 2026-08-04 严审发现 App 只消费 Token 风险的 `status/category/source`，而
+    Gateway 成功回包不携带 `network/contract`；错误缓存、错误路由或被篡改的另一
+    网络/合约 `safe` 结果会被显示为官方身份。现在 Gateway 每个成功结果都回显解析后的
+    network 与规范化 contract/mint；App 使用闭合 schema，独立绑定请求网络和身份，
+    EVM 仅地址大小写不敏感，TRON/Solana 保持大小写敏感，并按 safe/unsafe/unknown
+    精确限制来源与 category。错误网络、错误合约、未知来源、矛盾 category 和未知字段
+    均失败闭合为 unavailable；远程安全门禁锁定该绑定，生产八主网 smoke 同时拒绝
+    缺失/错误 network 或 contract，不能被后续重构或部署遗漏静默删除。
+    负例先稳定复现旧实现放行跨网络 safe 和旧 Gateway 缺少身份字段，修复后 Token 风险
+    定向 3/3、Gateway Client/Services 60/60、KT Wallet 1536/1536、Gateway `make audit`、
+    远程安全边界与静态分析 0 通过。该协议目前是源码候选；生产 1.16.15 尚未回显身份，
+    必须先发布 Gateway 再发布 App，旧服务只会触发“无法检查”，不会降级为 safe。
   - [ ] Alertmanager 通知接收方、供应商长期 SLA/版本监测和用户误报申诉渠道仍未完成；
     一次生产 smoke 与自动熔断不能证明所有链、所有风险类型或供应商长期质量，因此本
     总项保持未完成。
@@ -1299,7 +1311,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     均在 App 再验证；Bidi/零宽控制字符和未知字段失败闭合。Gateway provider 同步把
     decimals 从 255 收紧至 36，并在输出前移除 Bidi/零宽字符。错误网络 UI 明确显示
     unavailable，不会显示“无授权”或撤销按钮。负例先稳定复现旧实现放行，再修复为
-    Gateway Client 32/32、授权 UI 12/12、KT Wallet 1535/1535、Gateway `make audit`、
+    Gateway Client 32/32、授权 UI 12/12、KT Wallet 1536/1536、Gateway `make audit`、
     `check_deps` 与静态分析 0 通过。该 Gateway 变更目前是源码候选，未冒充已部署到
     生产 1.16.15。
   - [ ] 仍需用小额主网钱包完成真实授权发现、热钱包撤销、Cold Signer 撤销、链上
@@ -1406,7 +1418,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     另以 16 个内置网络的精确 `id → name + symbol` 映射锁定运行时名称，不依赖 ARB。
     首轮完整门禁精确捕获 Wallet `assets / connect-cold` 与 Signer `parse` 三张预期
     Golden 差异；逐图复核后只更新这三张基线，第二轮定向与全量复跑通过。最终定向
-    49/49、`test_support` 63/63、KT Wallet 1535/1535、KT Cold Signer 570/570、共享
+    49/49、`test_support` 63/63、KT Wallet 1536/1536、KT Cold Signer 570/570、共享
     packages 415/415、静态分析 0、完整公开测试门禁 13/13。
   - [ ] 真机系统权限弹窗、生命周期保护页及全部生产路由仍需逐页三语语义人工复核，
     因此本总项保持未完成，不能扩大宣称为“全 App 本地化验收完成”。
@@ -1469,7 +1481,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     winner/loser 各 1 条、105 条裁剪为 100 条、进程在 Flutter 观察前退出并重启仍恢复
     confirmed + 唯一指标。故障注入继续证明，SQLite 指标读取失败不得影响启动、终态确认
     或 UI 刷新；终态指标与普通体验指标各自保留最多 100 条，不能相互挤占。KT Wallet
-    1535/1535、KT Cold Signer 570/570、共享 packages 415/415、静态分析 0、完整公开
+    1536/1536、KT Cold Signer 570/570、共享 packages 415/415、静态分析 0、完整公开
     测试/原生依赖/OSV 门禁 13/13 通过。
   - [ ] iOS MetricKit 真正的系统 payload 投递及 Android 真实 ANR/fatal 仍需物理设备
     故障注入验收；匿名未认证样本也不能替代 App Store/Play Console 的可信安装基数或
@@ -1486,9 +1498,11 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     配置/Feature Flag SDK，冻结 Gateway Client 当前 61 个响应字段为逐项复核的闭集，
     并要求 AIRGAP codec、交易认证、PIN、Cold Signer controller 与共享签名验签器五个
     安全模块保持无 HTTP/Gateway import。EVM/TRON/Solana 热钱包签名入口必须使用各自
-    精确 unsigned bytes 与 sender 调用独立验签器；Gateway Token 风险只能把状态提升为
-    `unsafe/unknown`，不能远程制造 `safe`。审计自带 extractor 负例并已纳入
-    `check_deps`，当前输出为 61 fields / 5 network-free modules / 3 signing families。
+    精确 unsigned bytes 与 sender 调用独立验签器；外部威胁供应商只能产生
+    `unsafe/unknown`，不能把资产提升为 `safe`。`safe` 仅允许来自与请求网络及
+    contract/mint 精确绑定的内置官方目录，UI 只解释为“官方身份”，不解释为“合约安全”。
+    审计自带 extractor 负例并已纳入 `check_deps`，当前输出为 61 fields /
+    5 network-free modules / 3 signing families。
   - [ ] 若未来引入远程配置，仍需版本化 allowlist schema、配置签名、防回滚、过期和
     kill-switch 边界测试；未完成前不得添加可影响签名/验签的远程字段。
 - [x] 支持导出脱敏诊断包。About 页先展示“包含/永不包含”并要求显式确认，再导出

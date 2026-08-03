@@ -967,31 +967,36 @@ void main() {
 
   group('Token risk assessment', () {
     test('parses safe, unsafe and unknown without elevating unknown', () async {
+      const requestedEvmContract = '0xAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAa';
       final gateway = _FakeGateway(
         results: {
           'kt_checkTokenRisk': {
             'status': 'unsafe',
             'category': 'phishing',
             'source': 'operator_registry',
+            'network': 'eth-mainnet',
+            'contract': '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           },
         },
       );
 
       final risk = await gateway.client.checkTokenRisk(
         chain: Coin.eth,
-        contract: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        contract: requestedEvmContract,
       );
       expect(risk.status, GatewayTokenRiskStatus.unsafe);
       expect(risk.category, 'phishing');
       expect(risk.source, 'operator_registry');
       expect(gateway.paramsOf('kt_checkTokenRisk').single, {
         'chain': 'eth',
-        'contract': '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        'contract': requestedEvmContract,
       });
 
       gateway.results['kt_checkTokenRisk'] = {
         'status': 'unknown',
         'source': 'operator_registry',
+        'network': 'sol-mainnet',
+        'contract': '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
       };
       final unknown = await gateway.client.checkTokenRisk(
         chain: Coin.solana,
@@ -999,6 +1004,19 @@ void main() {
       );
       expect(unknown.status, GatewayTokenRiskStatus.unknown);
       expect(unknown.category, isNull);
+
+      const tronContract = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+      gateway.results['kt_checkTokenRisk'] = {
+        'status': 'unknown',
+        'source': 'operator_registry',
+        'network': 'tron-mainnet',
+        'contract': tronContract,
+      };
+      final tron = await gateway.client.checkTokenRisk(
+        chain: Coin.tron,
+        contract: tronContract,
+      );
+      expect(tron.status, GatewayTokenRiskStatus.unknown);
     });
 
     test('malformed and unsupported service answers fail closed', () async {
@@ -1017,6 +1035,83 @@ void main() {
         );
       }
     });
+
+    test(
+      'risk answers are bound to the requested identity and source semantics',
+      () async {
+        const contract = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+        final responses = <Map<String, Object?>>[
+          {
+            'status': 'safe',
+            'source': 'official_catalog',
+            'network': 'polygon-mainnet',
+            'contract': contract,
+          },
+          {
+            'status': 'safe',
+            'source': 'official_catalog',
+            'network': 'eth-mainnet',
+            'contract': '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          },
+          {
+            'status': 'safe',
+            'source': 'goplus',
+            'network': 'eth-mainnet',
+            'contract': contract,
+          },
+          {
+            'status': 'unknown',
+            'source': 'official_catalog',
+            'network': 'eth-mainnet',
+            'contract': contract,
+          },
+          {
+            'status': 'safe',
+            'category': 'phishing',
+            'source': 'official_catalog',
+            'network': 'eth-mainnet',
+            'contract': contract,
+          },
+          {
+            'status': 'safe',
+            'source': 'official_catalog',
+            'network': 'eth-mainnet',
+            'contract': contract,
+            'remoteSecurityOverride': true,
+          },
+        ];
+        for (final response in responses) {
+          final gateway = _FakeGateway(
+            results: {'kt_checkTokenRisk': response},
+          );
+          await expectLater(
+            gateway.client.checkTokenRisk(chain: Coin.eth, contract: contract),
+            throwsFormatException,
+            reason: 'remote risk identity must fail closed: $response',
+          );
+        }
+
+        const solanaMint = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+        final solanaGateway = _FakeGateway(
+          results: {
+            'kt_checkTokenRisk': {
+              'status': 'safe',
+              'source': 'official_catalog',
+              'network': 'sol-mainnet',
+              'contract': '${solanaMint.substring(0, 43)}V',
+            },
+          },
+        );
+        await expectLater(
+          solanaGateway.client.checkTokenRisk(
+            chain: Coin.solana,
+            contract: solanaMint,
+          ),
+          throwsFormatException,
+          reason: 'Solana mint identity must remain case-sensitive',
+        );
+      },
+    );
   });
 
   group('prefsGatewayResolver (settings-driven mode switch)', () {

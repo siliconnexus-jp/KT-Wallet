@@ -33,7 +33,7 @@ import 'fiat_math.dart';
 /// - `kt_getHistory` `{chain, network?, address, limit?}` → `{status, records}`
 /// - `kt_searchTokens` `{query?, networks?, limit?}` → verified token catalog
 /// - `kt_checkTokenRisk` `{chain, network?, contract}` →
-///   `{status: safe|unsafe|unknown, category?, source}`
+///   `{status: safe|unsafe|unknown, category?, source, network, contract}`
 /// - `kt_getEvmTokenApprovals`
 ///   `{chain, network?, address, privacyConsent:true}` → outstanding ERC-20
 ///   allowances; provider/unsupported failures never become an empty list
@@ -100,6 +100,24 @@ class GatewayClient {
     'network',
     'approvals',
   };
+  static const _tokenRiskResultKeys = <String>{
+    'status',
+    'source',
+    'network',
+    'contract',
+  };
+  static const _tokenRiskUnsafeResultKeys = <String>{
+    ..._tokenRiskResultKeys,
+    'category',
+  };
+  static const _tokenRiskCategories = <String>{
+    'malicious',
+    'phishing',
+    'spam',
+    'impersonation',
+    'honeypot',
+    'suspicious',
+  };
   static const _approvalRowKeys = <String>{
     'tokenAddress',
     'tokenName',
@@ -118,6 +136,7 @@ class GatewayClient {
   };
   static final _evmAddressPattern = RegExp(r'^0x[0-9a-fA-F]{40}$');
   static final _evmTxHashPattern = RegExp(r'^0x[0-9a-fA-F]{64}$');
+  static final _base58AddressPattern = RegExp(r'^[1-9A-HJ-NP-Za-km-z]+$');
   static final _providerDecimalPattern = RegExp(
     r'^[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$',
   );
@@ -750,6 +769,7 @@ class GatewayClient {
     required String contract,
   }) async {
     final network = await _networkParam(chain);
+    final expectedNetwork = network ?? _mainnetNetworkId(chain);
     final result = await _call('kt_checkTokenRisk', {
       'chain': chainName(chain),
       'network': ?network,
@@ -764,18 +784,36 @@ class GatewayClient {
       'unknown' => GatewayTokenRiskStatus.unknown,
       _ => throw const FormatException('unknown token risk status'),
     };
-    final category = result['category'];
     final source = result['source'];
-    if (category != null && category is! String) {
-      throw const FormatException('bad token risk category');
-    }
-    if (source is! String || source.isEmpty) {
-      throw const FormatException('missing token risk source');
+    final responseNetwork = result['network'];
+    final responseContract = result['contract'];
+    final hasCategory = result.containsKey('category');
+    final expectedKeys = status == GatewayTokenRiskStatus.unsafe
+        ? _tokenRiskUnsafeResultKeys
+        : _tokenRiskResultKeys;
+    final category = hasCategory ? result['category'] : null;
+    final sourceMatchesStatus = switch (status) {
+      GatewayTokenRiskStatus.safe =>
+        source == 'official_catalog' || source == 'official_catalog+goplus',
+      GatewayTokenRiskStatus.unsafe =>
+        source == 'operator_registry' || source == 'goplus',
+      GatewayTokenRiskStatus.unknown =>
+        source == 'operator_registry' || source == 'goplus',
+    };
+    if (!_hasExactStringKeys(result, expectedKeys) ||
+        responseNetwork != expectedNetwork ||
+        responseContract is! String ||
+        !_tokenIdentityMatches(chain, contract, responseContract) ||
+        !sourceMatchesStatus ||
+        (status == GatewayTokenRiskStatus.unsafe &&
+            (category is! String ||
+                !_tokenRiskCategories.contains(category)))) {
+      throw const FormatException('unbound token risk result');
     }
     return GatewayTokenRisk(
       status: status,
       category: category as String?,
-      source: source,
+      source: source as String,
     );
   }
 
@@ -965,6 +1003,43 @@ class GatewayClient {
     return normalized.isNotEmpty &&
         normalized.length <= 128 &&
         _providerDecimalPattern.hasMatch(normalized);
+  }
+
+  static bool _tokenIdentityMatches(
+    Coin chain,
+    String requested,
+    String response,
+  ) {
+    if (requested != requested.trim() || response != response.trim()) {
+      return false;
+    }
+    return switch (chain) {
+      Coin.eth ||
+      Coin.polygon ||
+      Coin.base ||
+      Coin.arbitrum ||
+      Coin.avalanche ||
+      Coin.bnb =>
+        _evmAddressPattern.hasMatch(requested) &&
+            _evmAddressPattern.hasMatch(response) &&
+            requested.toLowerCase() == response.toLowerCase(),
+      Coin.tron =>
+        requested.length == 34 &&
+            response.length == 34 &&
+            requested.startsWith('T') &&
+            response.startsWith('T') &&
+            _base58AddressPattern.hasMatch(requested) &&
+            _base58AddressPattern.hasMatch(response) &&
+            requested == response,
+      Coin.solana =>
+        requested.length >= 32 &&
+            requested.length <= 44 &&
+            response.length >= 32 &&
+            response.length <= 44 &&
+            _base58AddressPattern.hasMatch(requested) &&
+            _base58AddressPattern.hasMatch(response) &&
+            requested == response,
+    };
   }
 
   static bool _isBoundedDisplayText(String value, int maxRunes) {

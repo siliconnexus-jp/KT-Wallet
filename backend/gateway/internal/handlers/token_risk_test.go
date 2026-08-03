@@ -44,6 +44,17 @@ func TestCheckTokenRiskReturnsUnsafeSafeAndUnknown(t *testing.T) {
 	}
 }
 
+func TestCheckTokenRiskBindsEveryResultToTheRequestedIdentity(t *testing.T) {
+	const contract = "0xdac17f958d2ee523a2206206994597c13d831ec7"
+	e := newEnv(t, nil)
+	got := result(t, e.rpc("kt_checkTokenRisk", map[string]any{
+		"chain": "eth", "network": "eth-mainnet", "contract": contract,
+	}))
+	if got["network"] != "eth-mainnet" || got["contract"] != contract {
+		t.Fatalf("risk identity = %v, want exact eth-mainnet + contract", got)
+	}
+}
+
 func TestCheckTokenRiskUsesIndependentProviderAndCachesExplicitThreat(t *testing.T) {
 	const risky = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	provider := newRESTFake(t)

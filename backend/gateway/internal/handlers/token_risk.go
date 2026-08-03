@@ -171,11 +171,9 @@ func (g *Gateway) CheckTokenRisk(ctx context.Context, params json.RawMessage) (a
 	}
 	key := tokenIdentityKey(network, entry.Contract)
 	if risk, found := g.tokenRisks[key]; found {
-		return map[string]any{
-			"status":   "unsafe",
-			"category": risk.Category,
-			"source":   "operator_registry",
-		}, nil
+		return tokenRiskResult(
+			network, entry.Contract, "unsafe", "operator_registry", risk.Category,
+		), nil
 	}
 	_, official := g.officialByNetwork[network][entry.Contract]
 	chainID, supported := goPlusChainIDs[network]
@@ -206,15 +204,13 @@ func (g *Gateway) CheckTokenRisk(ctx context.Context, params json.RawMessage) (a
 		)
 	}
 	if official {
-		return map[string]any{
-			"status": "safe",
-			"source": "official_catalog",
-		}, nil
+		return tokenRiskResult(
+			network, entry.Contract, "safe", "official_catalog", "",
+		), nil
 	}
-	return map[string]any{
-		"status": "unknown",
-		"source": "operator_registry",
-	}, nil
+	return tokenRiskResult(
+		network, entry.Contract, "unknown", "operator_registry", "",
+	), nil
 }
 
 func (g *Gateway) lookupExternalTokenRisk(
@@ -230,7 +226,7 @@ func (g *Gateway) lookupExternalTokenRisk(
 	if cached, ok := g.tokenRiskCache.Get(key); ok {
 		if threat, ok := cached.(upstream.TokenThreat); ok {
 			g.tokenRiskMetrics.cacheHits.Add(1)
-			return externalTokenRiskResult(threat, official), nil
+			return externalTokenRiskResult(network, contract, threat, official), nil
 		}
 	}
 	permit, allowed := circuit.allow()
@@ -253,25 +249,43 @@ func (g *Gateway) lookupExternalTokenRisk(
 	} else {
 		g.tokenRiskMetrics.unknown.Add(1)
 	}
-	return externalTokenRiskResult(threat, official), nil
+	return externalTokenRiskResult(network, contract, threat, official), nil
 }
 
-func externalTokenRiskResult(threat upstream.TokenThreat, official bool) map[string]any {
+func externalTokenRiskResult(
+	network string,
+	contract string,
+	threat upstream.TokenThreat,
+	official bool,
+) map[string]any {
 	if threat.Unsafe {
-		return map[string]any{
-			"status":   "unsafe",
-			"category": threat.Category,
-			"source":   "goplus",
-		}
+		return tokenRiskResult(
+			network, contract, "unsafe", "goplus", threat.Category,
+		)
 	}
 	if official {
-		return map[string]any{
-			"status": "safe",
-			"source": "official_catalog+goplus",
-		}
+		return tokenRiskResult(
+			network, contract, "safe", "official_catalog+goplus", "",
+		)
 	}
-	return map[string]any{
-		"status": "unknown",
-		"source": "goplus",
+	return tokenRiskResult(network, contract, "unknown", "goplus", "")
+}
+
+func tokenRiskResult(
+	network string,
+	contract string,
+	status string,
+	source string,
+	category string,
+) map[string]any {
+	result := map[string]any{
+		"status":   status,
+		"source":   source,
+		"network":  network,
+		"contract": contract,
 	}
+	if category != "" {
+		result["category"] = category
+	}
+	return result
 }
