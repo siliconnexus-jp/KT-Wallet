@@ -8,6 +8,7 @@ import 'package:wallet_data/wallet_data.dart'
     show
         Contact,
         CustomToken,
+        EvmSettlementResult,
         SignMode,
         Transaction,
         TxCheckOutcome,
@@ -385,7 +386,7 @@ class WalletController extends ChangeNotifier {
   /// Persists an asynchronous status result in the wallet scope captured by
   /// the transaction row. Background finality queries must never re-read the
   /// currently selected wallet after awaiting the network.
-  Future<void> updateTransactionStatusForWallet(
+  Future<bool> updateTransactionStatusForWallet(
     String walletId,
     String id,
     TxStatus status, {
@@ -394,13 +395,14 @@ class WalletController extends ChangeNotifier {
     int? lastCheckedAt,
     TxCheckOutcome? lastCheckOutcome,
     bool clearLastCheckOutcome = false,
+    bool onlyIfLive = false,
   }) async {
     final store = _store;
     if (store == null) {
-      if (_allowTestBypass) return;
+      if (_allowTestBypass) return false;
       throw StateError('Wallet storage unavailable');
     }
-    await store.updateTransactionStatus(
+    final applied = await store.updateTransactionStatus(
       walletId,
       id,
       status,
@@ -409,8 +411,10 @@ class WalletController extends ChangeNotifier {
       lastCheckedAt: lastCheckedAt,
       lastCheckOutcome: lastCheckOutcome,
       clearLastCheckOutcome: clearLastCheckOutcome,
+      onlyIfLive: onlyIfLive,
     );
-    notifyListeners();
+    if (applied) notifyListeners();
+    return applied;
   }
 
   Future<bool> setTransactionNonceIfAbsent(String id, String nonce) async {
@@ -450,15 +454,17 @@ class WalletController extends ChangeNotifier {
 
   /// Persists a receipt-backed EVM terminal result and resolves replacement
   /// lineage atomically. Do not use this for local auth or broadcast errors.
-  Future<void> settleEvmTransaction({
+  Future<EvmSettlementResult> settleEvmTransaction({
     required String id,
     required TxStatus status,
     String? hash,
     int? lastCheckedAt,
   }) async {
     final walletId = current?.id;
-    if (walletId == null || _store == null) return;
-    await settleEvmTransactionForWallet(
+    if (walletId == null || _store == null) {
+      return EvmSettlementResult.notApplied;
+    }
+    return settleEvmTransactionForWallet(
       walletId: walletId,
       id: id,
       status: status,
@@ -468,7 +474,7 @@ class WalletController extends ChangeNotifier {
   }
 
   /// Wallet-scoped counterpart used after an awaited chain lookup.
-  Future<void> settleEvmTransactionForWallet({
+  Future<EvmSettlementResult> settleEvmTransactionForWallet({
     required String walletId,
     required String id,
     required TxStatus status,
@@ -476,15 +482,16 @@ class WalletController extends ChangeNotifier {
     int? lastCheckedAt,
   }) async {
     final store = _store;
-    if (store == null) return;
-    await store.settleEvmTransaction(
+    if (store == null) return EvmSettlementResult.notApplied;
+    final result = await store.settleEvmTransaction(
       walletId: walletId,
       id: id,
       status: status,
       hash: hash,
       lastCheckedAt: lastCheckedAt,
     );
-    notifyListeners();
+    if (result.applied) notifyListeners();
+    return result;
   }
 
   int _nextColor() => _palette[_manager.count % _palette.length];

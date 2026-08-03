@@ -74,6 +74,22 @@ class _GatedStatusService extends TransactionStatusService {
   }
 }
 
+class _RacingReplacementStatusService extends TransactionStatusService {
+  final releaseOriginal = Completer<void>();
+
+  @override
+  Future<ChainTransactionStatus> check(Transaction transaction) async {
+    if (transaction.id == 'local-pending') {
+      await releaseOriginal.future;
+      return ChainTransactionStatus.pending;
+    }
+    if (transaction.id == 'local-replacement') {
+      return ChainTransactionStatus.confirmed;
+    }
+    return ChainTransactionStatus.unknown;
+  }
+}
+
 Future<
   ({
     WalletController wallets,
@@ -347,6 +363,70 @@ void main() {
       );
       expect(finality.success, isFalse);
       expect(finality.duration, greaterThan(const Duration(hours: 70)));
+    },
+  );
+
+  test(
+    'late pending evidence cannot undo replacement lineage or hide finality',
+    () async {
+      final statuses = _RacingReplacementStatusService();
+      final fixture = await _fixture(
+        remote: const HistoryResult.ok([]),
+        hashStatus: ChainTransactionStatus.unknown,
+        statusService: statuses,
+      );
+      addTearDown(fixture.history.dispose);
+      addTearDown(fixture.database.close);
+      final now = DateTime.now();
+      await fixture.wallets.saveOutgoingTransaction(
+        id: 'local-replacement',
+        coin: Coin.eth,
+        networkId: 'eth-mainnet',
+        from: '0x1111111111111111111111111111111111111111',
+        to: '0x2222222222222222222222222222222222222222',
+        amountRaw: '1000000000000000',
+        hash: '0x${'b' * 64}',
+        status: TxStatus.pending,
+        signMode: SignMode.local,
+        createdAt: now
+            .subtract(const Duration(hours: 72))
+            .millisecondsSinceEpoch,
+        broadcastAt: now
+            .subtract(const Duration(hours: 71))
+            .millisecondsSinceEpoch,
+        nonce: '7',
+        replacesId: 'local-pending',
+        replacementKind: TxReplacementKind.speedUp,
+      );
+
+      final refresh = fixture.history.refresh();
+      while ((await fixture.wallets.localTransactionById(
+            'local-pending',
+          ))?.status !=
+          TxStatus.replaced) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      statuses.releaseOriginal.complete();
+      await refresh;
+
+      final original = await fixture.wallets.localTransactionById(
+        'local-pending',
+      );
+      final replacement = await fixture.wallets.localTransactionById(
+        'local-replacement',
+      );
+      expect(original?.status, TxStatus.replaced);
+      expect(original?.replacedById, 'local-replacement');
+      expect(replacement?.status, TxStatus.confirmed);
+      final finality = ExperienceMetrics.instance.recent
+          .where(
+            (metric) =>
+                metric.name == ExperienceMetricNames.transactionFinality,
+          )
+          .toList(growable: false);
+      expect(finality, hasLength(2));
+      expect(finality.where((metric) => metric.success), hasLength(1));
+      expect(finality.where((metric) => !metric.success), hasLength(1));
     },
   );
 

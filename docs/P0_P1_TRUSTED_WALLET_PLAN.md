@@ -171,6 +171,20 @@
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。
+- [x] 2026-08-04 并发终态严审发现上述原子 settlement 之后仍有一个跨请求回滚窗口：
+  replacement receipt 先把原交易标记为 `replaced`，较慢返回的原交易 `pending` 查询
+  随后会按旧快照无条件写库，将终态覆盖回 Pending；指标也只留下 winner 的成功，遗漏
+  被替换交易的失败终态。确定性红测先等待数据库出现 replaced，再释放慢 pending，稳定
+  复现该回滚。现 Drift 状态对账使用 live-status compare-and-set，EVM settlement 只允许
+  live target 获胜并在同一事务返回全部被替换竞争者；历史轮询与两个交易详情轮询入口
+  都在 CAS 失败时重载真实数据库状态，不发布旧回包。winner confirmed 与 original
+  replaced 分别且仅记录一条 success/failure finality。继续审阅发现若交易详情页先于
+  HistoryController 落终态，旧详情路径不会记录 finality，且广播结果页的直接 receipt
+  confirmed 因只检查 fallback 状态而未被当作 terminal。现账户历史、hash 轮询、广播
+  结果与交易详情统一在 CAS/settlement 真正落库后调用同一记录器；详情优先的 replacement
+  winner/loser 与直接确认两条 Widget 回归均锁定只记一次。竞态定向 1/1、finality 16/16、
+  详情终态 2/2、wallet_data repository 20/20、KT Wallet 1527/1527、共享 packages
+  409/409、静态分析 0、完整源码/依赖门禁 13/13 通过。
 - [x] 加速/取消构造同时核验 `latest` 完整获胜交易负债与 `pending` 增量负债；余额
   不足或 RPC 无法确认时在签名前失败闭合。
 - [x] Ethereum Sepolia 使用真实 iOS Wallet Core + Face ID 分别完成 speed-up 与

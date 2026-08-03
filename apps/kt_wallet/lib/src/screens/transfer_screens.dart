@@ -52,6 +52,7 @@ import '../market/token_balance_service.dart'
 import '../market/transaction_card.dart';
 import '../market/transaction_status_service.dart';
 import '../observability/experience_metrics.dart';
+import '../observability/transaction_finality_metrics.dart';
 import '../platform/external_actions.dart';
 import '../platform/media_gallery.dart';
 import '../security/biometric_auth.dart';
@@ -3515,10 +3516,12 @@ class BroadcastResultScreen extends StatefulWidget {
   const BroadcastResultScreen({
     super.key,
     this.confirmationService,
+    this.statusService,
     this.pollInterval = const Duration(seconds: 3),
   });
 
   final TransactionConfirmationService? confirmationService;
+  final TransactionStatusService? statusService;
   final Duration pollInterval;
 
   @override
@@ -3549,20 +3552,22 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
     final prefs = AppPrefsScope.maybeOf(context);
     final networks = NetworkScope.maybeOf(context);
     final endpoints = effectiveRpcEndpoints(prefs, networks);
-    _statusService ??= TransactionStatusService(
-      endpoints: endpoints,
-      networkEndpoints: networks == null
-          ? null
-          : effectiveTransactionRpcEndpoints(prefs, networks),
-      gateway: prefsGatewayResolver(prefs, networks),
-      onEvmNonceObserved: (transaction, nonce) async {
-        await WalletScope.of(context).setTransactionNonceIfAbsentForWallet(
-          transaction.walletId,
-          transaction.id,
-          nonce,
+    _statusService ??=
+        widget.statusService ??
+        TransactionStatusService(
+          endpoints: endpoints,
+          networkEndpoints: networks == null
+              ? null
+              : effectiveTransactionRpcEndpoints(prefs, networks),
+          gateway: prefsGatewayResolver(prefs, networks),
+          onEvmNonceObserved: (transaction, nonce) async {
+            await WalletScope.of(context).setTransactionNonceIfAbsentForWallet(
+              transaction.walletId,
+              transaction.id,
+              nonce,
+            );
+          },
         );
-      },
-    );
     _confirmationService ??=
         widget.confirmationService ??
         TransactionConfirmationService(endpoints: endpoints);
@@ -3634,26 +3639,30 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
       _ => directStatus == TxStatus.pending ? TxCheckOutcome.pending : null,
     };
     final terminal =
-        finalityStatus == TxStatus.confirmed ||
-        finalityStatus == TxStatus.failed ||
-        finalityStatus == TxStatus.replaced ||
-        finalityStatus == TxStatus.expired;
+        next == TxStatus.confirmed ||
+        next == TxStatus.failed ||
+        next == TxStatus.replaced ||
+        next == TxStatus.expired;
     final checkedAt = DateTime.now().millisecondsSinceEpoch;
     final changed = next != null && next != tx.status;
     final controller = WalletScope.of(context);
     final persisted = changed ? next : tx.status;
+    var applied = false;
+    var replacedTransactions = const <Transaction>[];
     if (_isEvmCoinName(tx.coin) &&
         changed &&
         (persisted == TxStatus.confirmed || persisted == TxStatus.failed)) {
-      await controller.settleEvmTransactionForWallet(
+      final settlement = await controller.settleEvmTransactionForWallet(
         walletId: tx.walletId,
         id: tx.id,
         status: persisted,
         hash: tx.hash,
         lastCheckedAt: checkedAt,
       );
+      applied = settlement.applied;
+      replacedTransactions = settlement.replacedTransactions;
     } else {
-      await controller.updateTransactionStatusForWallet(
+      applied = await controller.updateTransactionStatusForWallet(
         tx.walletId,
         tx.id,
         persisted,
@@ -3661,9 +3670,24 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
         lastCheckedAt: checkedAt,
         lastCheckOutcome: outcome,
         clearLastCheckOutcome: terminal,
+        onlyIfLive: true,
       );
     }
     if (!mounted) return;
+    if (!applied) {
+      await _reload();
+      return;
+    }
+    if (changed && terminal) {
+      recordTerminalTransactionFinality(tx, persisted, checkedAt);
+      for (final replaced in replacedTransactions) {
+        recordTerminalTransactionFinality(
+          replaced,
+          TxStatus.replaced,
+          checkedAt,
+        );
+      }
+    }
     setState(() {
       _lastCheckedAt = checkedAt;
       _lastCheckOutcome = terminal ? null : outcome;
@@ -3918,6 +3942,8 @@ class TxDetailScreen extends StatefulWidget {
     this.authGate = const LocalTransactionAuthGate(),
     this.tempDirectory,
     this.cardRenderer,
+    this.statusService,
+    this.pollInterval = const Duration(seconds: 8),
   });
 
   final String? transactionId;
@@ -3937,6 +3963,8 @@ class TxDetailScreen extends StatefulWidget {
   /// temporary directory before opening the share sheet.
   final Future<Directory> Function()? tempDirectory;
   final Future<Uint8List> Function(TransactionCardData)? cardRenderer;
+  final TransactionStatusService? statusService;
+  final Duration pollInterval;
 
   /// Demo tx hash of the displayed transaction (matches the broadcast flow).
   static const _txHash = '8f6d2c…a94e07';
@@ -3968,20 +3996,22 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     super.didChangeDependencies();
     final prefs = AppPrefsScope.maybeOf(context);
     final networks = NetworkScope.maybeOf(context);
-    _statusService ??= TransactionStatusService(
-      endpoints: effectiveRpcEndpoints(prefs, networks),
-      networkEndpoints: networks == null
-          ? null
-          : effectiveTransactionRpcEndpoints(prefs, networks),
-      gateway: prefsGatewayResolver(prefs, networks),
-      onEvmNonceObserved: (transaction, nonce) async {
-        await WalletScope.of(context).setTransactionNonceIfAbsentForWallet(
-          transaction.walletId,
-          transaction.id,
-          nonce,
+    _statusService ??=
+        widget.statusService ??
+        TransactionStatusService(
+          endpoints: effectiveRpcEndpoints(prefs, networks),
+          networkEndpoints: networks == null
+              ? null
+              : effectiveTransactionRpcEndpoints(prefs, networks),
+          gateway: prefsGatewayResolver(prefs, networks),
+          onEvmNonceObserved: (transaction, nonce) async {
+            await WalletScope.of(context).setTransactionNonceIfAbsentForWallet(
+              transaction.walletId,
+              transaction.id,
+              nonce,
+            );
+          },
         );
-      },
-    );
     if (widget.transaction == null && _activeId != null) {
       _transaction ??= _loadTransaction();
     }
@@ -4018,12 +4048,9 @@ class _TxDetailScreenState extends State<TxDetailScreen>
   }) {
     _statusTimer?.cancel();
     if (!_awaitingConfirmation(transaction)) return;
-    _statusTimer = Timer(
-      immediately ? Duration.zero : const Duration(seconds: 8),
-      () {
-        _checkStatus(transaction);
-      },
-    );
+    _statusTimer = Timer(immediately ? Duration.zero : widget.pollInterval, () {
+      _checkStatus(transaction);
+    });
   }
 
   Future<void> _checkStatus(Transaction transaction) async {
@@ -4054,18 +4081,22 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     final changed = next != null && next != transaction.status;
     final controller = WalletScope.of(context);
     final persisted = changed ? next : transaction.status;
+    var applied = false;
+    var replacedTransactions = const <Transaction>[];
     if (_isEvmCoinName(transaction.coin) &&
         changed &&
         (persisted == TxStatus.confirmed || persisted == TxStatus.failed)) {
-      await controller.settleEvmTransactionForWallet(
+      final settlement = await controller.settleEvmTransactionForWallet(
         walletId: transaction.walletId,
         id: transaction.id,
         status: persisted,
         hash: transaction.hash,
         lastCheckedAt: checkedAt,
       );
+      applied = settlement.applied;
+      replacedTransactions = settlement.replacedTransactions;
     } else {
-      await controller.updateTransactionStatusForWallet(
+      applied = await controller.updateTransactionStatusForWallet(
         transaction.walletId,
         transaction.id,
         persisted,
@@ -4073,9 +4104,24 @@ class _TxDetailScreenState extends State<TxDetailScreen>
         lastCheckedAt: checkedAt,
         lastCheckOutcome: outcome,
         clearLastCheckOutcome: terminal,
+        onlyIfLive: true,
       );
     }
     if (!mounted) return;
+    if (!applied) {
+      _reload();
+      return;
+    }
+    if (changed && terminal) {
+      recordTerminalTransactionFinality(transaction, persisted, checkedAt);
+      for (final replaced in replacedTransactions) {
+        recordTerminalTransactionFinality(
+          replaced,
+          TxStatus.replaced,
+          checkedAt,
+        );
+      }
+    }
     setState(() {
       _lastCheckedAt = checkedAt;
       _lastCheckOutcome = terminal ? null : outcome;

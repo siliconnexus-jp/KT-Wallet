@@ -330,7 +330,7 @@ class WalletStore {
         replacesId: replacesId,
       );
 
-  Future<void> updateTransactionStatus(
+  Future<bool> updateTransactionStatus(
     String walletId,
     String id,
     db.TxStatus status, {
@@ -339,6 +339,7 @@ class WalletStore {
     int? lastCheckedAt,
     db.TxCheckOutcome? lastCheckOutcome,
     bool clearLastCheckOutcome = false,
+    bool onlyIfLive = false,
   }) => _wallets
       .scoped(walletId)
       .updateTransactionStatus(
@@ -349,6 +350,7 @@ class WalletStore {
         lastCheckedAt: lastCheckedAt,
         lastCheckOutcome: lastCheckOutcome,
         clearLastCheckOutcome: clearLastCheckOutcome,
+        onlyIfLive: onlyIfLive,
       );
 
   Future<bool> setTransactionNonceIfAbsent(
@@ -372,7 +374,7 @@ class WalletStore {
         broadcastAt: broadcastAt,
       );
 
-  Future<void> settleEvmTransaction({
+  Future<db.EvmSettlementResult> settleEvmTransaction({
     required String walletId,
     required String id,
     required db.TxStatus status,

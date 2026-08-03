@@ -15,6 +15,31 @@ class EvmNonceConflict implements Exception {
       'EVM nonce ${existing.nonce} is already reserved by ${existing.id}';
 }
 
+/// Receipt-backed EVM settlement applied in one database transaction.
+/// [replacedTransactions] contains the previously-live nonce competitors that
+/// became terminal as part of the same commit, allowing callers to account for
+/// every finality outcome exactly once.
+class EvmSettlementResult {
+  const EvmSettlementResult({
+    required this.applied,
+    this.replacedTransactions = const [],
+  });
+
+  static const notApplied = EvmSettlementResult(applied: false);
+
+  final bool applied;
+  final List<Transaction> replacedTransactions;
+}
+
+const _liveTransactionStatuses = <TxStatus>[
+  TxStatus.submitted,
+  TxStatus.broadcast,
+  TxStatus.pending,
+];
+
+List<int> get _liveTransactionStatusIndexes =>
+    _liveTransactionStatuses.map((status) => status.index).toList();
+
 /// Manages the wallet list itself (the only cross-wallet surface allowed).
 /// Everything else goes through a [WalletRepository] bound to one walletId, so
 /// there is no API that can read another wallet's data (detailed-design.md
@@ -193,7 +218,7 @@ class WalletRepository {
         .insert(tx.copyWith(walletId: Value(walletId)));
   });
 
-  Future<void> updateTransactionStatus(
+  Future<bool> updateTransactionStatus(
     String id,
     TxStatus status, {
     String? hash,
@@ -201,10 +226,17 @@ class WalletRepository {
     int? lastCheckedAt,
     TxCheckOutcome? lastCheckOutcome,
     bool clearLastCheckOutcome = false,
+    bool onlyIfLive = false,
   }) async {
-    await (_db.update(
-      _db.transactions,
-    )..where((t) => t.walletId.equals(walletId) & t.id.equals(id))).write(
+    final update = _db.update(_db.transactions)
+      ..where((t) {
+        var predicate = t.walletId.equals(walletId) & t.id.equals(id);
+        if (onlyIfLive) {
+          predicate = predicate & t.status.isIn(_liveTransactionStatusIndexes);
+        }
+        return predicate;
+      });
+    final changed = await update.write(
       TransactionsCompanion(
         status: Value(status),
         hash: hash == null ? const Value.absent() : Value(hash),
@@ -221,6 +253,7 @@ class WalletRepository {
             : Value(lastCheckOutcome),
       ),
     );
+    return changed == 1;
   }
 
   /// Backfills an observed EVM nonce without ever overwriting existing
@@ -285,7 +318,7 @@ class WalletRepository {
   /// every still-live replacement becomes `replaced`. Local signing/broadcast
   /// failures must continue to use [updateTransactionStatus] because they do
   /// not prove that any nonce was consumed on-chain.
-  Future<void> settleEvmTransaction({
+  Future<EvmSettlementResult> settleEvmTransaction({
     required String id,
     required TxStatus status,
     String? hash,
@@ -296,52 +329,91 @@ class WalletRepository {
     }
     return _db.transaction(() async {
       final row = await transactionById(id);
-      if (row == null) return;
-      await (_db.update(
-        _db.transactions,
-      )..where((t) => t.walletId.equals(walletId) & t.id.equals(id))).write(
-        TransactionsCompanion(
-          status: Value(status),
-          hash: hash == null ? const Value.absent() : Value(hash),
-          lastCheckedAt: lastCheckedAt == null
-              ? const Value.absent()
-              : Value(lastCheckedAt),
-          lastCheckOutcome: const Value(null),
-        ),
-      );
+      if (row == null || !_liveTransactionStatuses.contains(row.status)) {
+        return EvmSettlementResult.notApplied;
+      }
+      final settled =
+          await (_db.update(_db.transactions)..where(
+                (t) =>
+                    t.walletId.equals(walletId) &
+                    t.id.equals(id) &
+                    t.status.isIn(_liveTransactionStatusIndexes),
+              ))
+              .write(
+                TransactionsCompanion(
+                  status: Value(status),
+                  hash: hash == null ? const Value.absent() : Value(hash),
+                  lastCheckedAt: lastCheckedAt == null
+                      ? const Value.absent()
+                      : Value(lastCheckedAt),
+                  lastCheckOutcome: const Value(null),
+                ),
+              );
+      if (settled != 1) return EvmSettlementResult.notApplied;
 
-      const live = [TxStatus.submitted, TxStatus.broadcast, TxStatus.pending];
-      final liveIndexes = live.map((value) => value.index).toList();
+      final replaced = <String, Transaction>{};
       final originalId = row.replacesId;
       if (originalId != null) {
+        final originals =
+            await (_db.select(_db.transactions)..where(
+                  (t) =>
+                      t.walletId.equals(walletId) &
+                      t.id.equals(originalId) &
+                      t.status.isIn(_liveTransactionStatusIndexes),
+                ))
+                .get();
+        for (final original in originals) {
+          replaced[original.id] = original;
+        }
         await (_db.update(_db.transactions)..where(
               (t) =>
                   t.walletId.equals(walletId) &
                   t.id.equals(originalId) &
-                  t.status.isIn(liveIndexes),
+                  t.status.isIn(_liveTransactionStatusIndexes),
             ))
             .write(
               TransactionsCompanion(
                 status: const Value(TxStatus.replaced),
                 replacedById: Value(id),
+                lastCheckedAt: lastCheckedAt == null
+                    ? const Value.absent()
+                    : Value(lastCheckedAt),
                 lastCheckOutcome: const Value(null),
               ),
             );
       }
 
+      final replacements =
+          await (_db.select(_db.transactions)..where(
+                (t) =>
+                    t.walletId.equals(walletId) &
+                    t.replacesId.equals(id) &
+                    t.status.isIn(_liveTransactionStatusIndexes),
+              ))
+              .get();
+      for (final replacement in replacements) {
+        replaced[replacement.id] = replacement;
+      }
       await (_db.update(_db.transactions)..where(
             (t) =>
                 t.walletId.equals(walletId) &
                 t.replacesId.equals(id) &
-                t.status.isIn(liveIndexes),
+                t.status.isIn(_liveTransactionStatusIndexes),
           ))
           .write(
             TransactionsCompanion(
               status: const Value(TxStatus.replaced),
               replacedById: Value(id),
+              lastCheckedAt: lastCheckedAt == null
+                  ? const Value.absent()
+                  : Value(lastCheckedAt),
               lastCheckOutcome: const Value(null),
             ),
           );
+      return EvmSettlementResult(
+        applied: true,
+        replacedTransactions: List.unmodifiable(replaced.values),
+      );
     });
   }
 

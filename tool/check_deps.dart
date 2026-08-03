@@ -1062,12 +1062,67 @@ void main() {
     '_hasPendingTransactions = remainingPending.isNotEmpty',
     'updateTransactionStatusForWallet(',
     'walletId: transaction.walletId',
+    'replacedTransactions',
   ]) {
     if (!historyFinalityControllerSource.contains(marker)) {
       failures.add(
         '${historyFinalityController.path} can pause or mis-scope inactive-network finality: $marker',
       );
     }
+  }
+  if (RegExp(
+        r'onlyIfLive:\s*true',
+      ).allMatches(historyFinalityControllerSource).length <
+      2) {
+    failures.add(
+      '${historyFinalityController.path} does not CAS both account-history and hash-status writes against live rows',
+    );
+  }
+  if (RegExp(r'onlyIfLive:\s*true').allMatches(transferScreensSource).length <
+      2) {
+    failures.add(
+      '${transferScreens.path} does not CAS both transaction-detail pollers against live rows',
+    );
+  }
+  final finalityMetrics = File(
+    'apps/kt_wallet/lib/src/observability/transaction_finality_metrics.dart',
+  );
+  final finalityMetricsSource = finalityMetrics.existsSync()
+      ? finalityMetrics.readAsStringSync()
+      : '';
+  for (final marker in const [
+    'void recordTerminalTransactionFinality(',
+    'transaction.broadcastAt ?? transaction.createdAt',
+    'ExperienceMetricNames.transactionFinality',
+    'db.TxStatus.replaced',
+    'db.TxStatus.expired',
+  ]) {
+    if (!finalityMetricsSource.contains(marker)) {
+      failures.add(
+        '${finalityMetrics.path} does not centralize durable terminal metrics: $marker',
+      );
+    }
+  }
+  if (RegExp(
+        r'recordTerminalTransactionFinality\(',
+      ).allMatches(historyFinalityControllerSource).length <
+      4) {
+    failures.add(
+      '${historyFinalityController.path} does not record both target and replacement terminal metrics',
+    );
+  }
+  if (RegExp(
+        r'recordTerminalTransactionFinality\(',
+      ).allMatches(transferScreensSource).length <
+      4) {
+    failures.add(
+      '${transferScreens.path} can persist detail-first terminal states without metrics',
+    );
+  }
+  if (!transferScreensSource.contains('next == TxStatus.confirmed')) {
+    failures.add(
+      '${transferScreens.path} does not treat direct confirmation evidence as terminal',
+    );
   }
   for (final entry in const {
     'apps/kt_wallet/lib/src/market/market_controller.dart': [
@@ -1151,6 +1206,10 @@ void main() {
     'TxStatus.submitted.index',
     'TxStatus.broadcast.index',
     'TxStatus.pending.index',
+    'class EvmSettlementResult',
+    'onlyIfLive = false',
+    't.status.isIn(_liveTransactionStatusIndexes)',
+    'replacedTransactions: List.unmodifiable(replaced.values)',
   ]) {
     if (!walletRepositorySource.contains(marker)) {
       failures.add(
@@ -1169,6 +1228,9 @@ void main() {
     'updateTransactionStatusForWallet(',
     'setTransactionNonceIfAbsentForWallet(',
     'settleEvmTransactionForWallet(',
+    'bool onlyIfLive = false',
+    'onlyIfLive: onlyIfLive',
+    'if (result.applied) notifyListeners()',
   ]) {
     if (!walletControllerSource.contains(marker)) {
       failures.add(

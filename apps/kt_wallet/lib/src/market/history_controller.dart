@@ -7,6 +7,7 @@ import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/widgets.dart';
 import 'package:wallet_data/wallet_data.dart' as db;
 
+import '../observability/transaction_finality_metrics.dart';
 import '../state/wallet_controller.dart';
 import '../observability/experience_metrics.dart';
 import 'history_service.dart';
@@ -614,27 +615,37 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
         };
         if (next == null) continue;
         final confirmedHash = hash!;
+        var applied = false;
+        var replacedTransactions = const <db.Transaction>[];
         if (_isEvmCoinName(local.coin)) {
-          await _wallets.settleEvmTransactionForWallet(
+          final settlement = await _wallets.settleEvmTransactionForWallet(
             walletId: local.walletId,
             id: local.id,
             status: next,
             hash: confirmedHash,
           );
+          applied = settlement.applied;
+          replacedTransactions = settlement.replacedTransactions;
         } else {
-          await _wallets.updateTransactionStatusForWallet(
+          applied = await _wallets.updateTransactionStatusForWallet(
             local.walletId,
             local.id,
             next,
             hash: confirmedHash,
             clearLastCheckOutcome: true,
+            onlyIfLive: true,
           );
         }
-        _recordTerminalFinality(
-          local,
-          next,
-          DateTime.now().millisecondsSinceEpoch,
-        );
+        if (!applied) continue;
+        final settledAt = DateTime.now().millisecondsSinceEpoch;
+        recordTerminalTransactionFinality(local, next, settledAt);
+        for (final replaced in replacedTransactions) {
+          recordTerminalTransactionFinality(
+            replaced,
+            db.TxStatus.replaced,
+            settledAt,
+          );
+        }
         _enqueueNotice(
           TransactionStatusNotice(
             hash: confirmedHash,
@@ -768,19 +779,23 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
             status == ChainTransactionStatus.expired;
         final changed = next != null && next != transaction.status;
         final persisted = changed ? next : transaction.status;
+        var applied = false;
+        var replacedTransactions = const <db.Transaction>[];
         if (_isEvmCoinName(transaction.coin) &&
             changed &&
             (persisted == db.TxStatus.confirmed ||
                 persisted == db.TxStatus.failed)) {
-          await _wallets.settleEvmTransactionForWallet(
+          final settlement = await _wallets.settleEvmTransactionForWallet(
             walletId: transaction.walletId,
             id: transaction.id,
             status: persisted,
             hash: transaction.hash,
             lastCheckedAt: checkedAt,
           );
+          applied = settlement.applied;
+          replacedTransactions = settlement.replacedTransactions;
         } else {
-          await _wallets.updateTransactionStatusForWallet(
+          applied = await _wallets.updateTransactionStatusForWallet(
             transaction.walletId,
             transaction.id,
             persisted,
@@ -788,12 +803,20 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
             lastCheckedAt: checkedAt,
             lastCheckOutcome: outcome,
             clearLastCheckOutcome: terminal,
+            onlyIfLive: true,
           );
         }
-        if (changed && terminal) {
-          _recordTerminalFinality(transaction, next, checkedAt);
+        if (applied && changed && terminal) {
+          recordTerminalTransactionFinality(transaction, next, checkedAt);
+          for (final replaced in replacedTransactions) {
+            recordTerminalTransactionFinality(
+              replaced,
+              db.TxStatus.replaced,
+              checkedAt,
+            );
+          }
         }
-        if (changed) {
+        if (applied && changed) {
           if (next == db.TxStatus.confirmed ||
               next == db.TxStatus.failed ||
               next == db.TxStatus.expired) {
@@ -810,29 +833,6 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
           }
         }
       },
-    );
-  }
-
-  void _recordTerminalFinality(
-    db.Transaction transaction,
-    db.TxStatus status,
-    int settledAt,
-  ) {
-    final success = switch (status) {
-      db.TxStatus.confirmed => true,
-      db.TxStatus.failed ||
-      db.TxStatus.replaced ||
-      db.TxStatus.expired => false,
-      _ => null,
-    };
-    if (success == null) return;
-    final startedAt = transaction.broadcastAt ?? transaction.createdAt;
-    final elapsedMs = settledAt - startedAt;
-    if (elapsedMs < 0) return;
-    ExperienceMetrics.instance.record(
-      ExperienceMetricNames.transactionFinality,
-      Duration(milliseconds: elapsedMs),
-      success: success,
     );
   }
 

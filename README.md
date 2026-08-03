@@ -516,7 +516,7 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-04) completed with zero static-analysis
-issues: **1,524/1,524** KT Wallet tests, **570/570** KT Cold Signer tests, and
+issues: **1,527/1,527** KT Wallet tests, **570/570** KT Cold Signer tests, and
 **409/409** shared-package tests passed. The default gate passed **12/12** and
 the native/runtime/OSV `--full` gate passed **13/13**. The Gateway audit,
 public-secret gate, Gateway public-release version gate, native dependency
@@ -534,7 +534,17 @@ persisted: confirmed is successful; failed, replaced, and expired are failed;
 pending and unknown evidence never manufacture a terminal sample. Hash-specific
 terminal evidence wins over weaker account-history reconciliation, and both
 paths use the same persistence-first metric boundary, so slow or unsuccessful
-outcomes cannot disappear from success rate or P95 or be counted twice. On
+outcomes cannot disappear from success rate or P95 or be counted twice.
+
+EVM nonce competitors are settled in one Drift transaction guarded by a live-
+status compare-and-set. A late pending/unknown response cannot overwrite a
+confirmed, failed, replaced, or expired row; the same settlement returns every
+competitor it replaced so each success and failed finality is counted exactly
+once. Account-history reconciliation, hash polling, the broadcast-result page,
+and transaction detail use one persistence-first finality recorder. Detail
+pollers reload when their stale write loses this guard instead of publishing
+the stale response; a direct receipt confirmation is also terminal even when
+the fallback status service is not consulted. On
 2026-08-03, the iOS native
 Runner test targets passed **11/11** for KT Wallet and **8/8** for KT Cold Signer
 on the single retained iPhone 17 Pro simulator, including the Scene privacy

@@ -352,19 +352,45 @@ void main() {
         broadcastAt: 2000,
       );
 
-      await repo.settleEvmTransaction(
+      final settlement = await repo.settleEvmTransaction(
         id: 'replacement',
         status: TxStatus.confirmed,
         hash: '0xnew',
         lastCheckedAt: 3000,
       );
+      expect(settlement.applied, isTrue);
+      expect(settlement.replacedTransactions.map((row) => row.id), [
+        'original',
+      ]);
 
-      final original = await repo.transactionById('original');
-      final replacement = await repo.transactionById('replacement');
+      var original = await repo.transactionById('original');
+      var replacement = await repo.transactionById('replacement');
       expect(original!.status, TxStatus.replaced);
       expect(original.replacedById, 'replacement');
+      expect(original.lastCheckedAt, 3000);
       expect(replacement!.status, TxStatus.confirmed);
       expect(replacement.lastCheckedAt, 3000);
+
+      expect(
+        await repo.updateTransactionStatus(
+          'original',
+          TxStatus.pending,
+          onlyIfLive: true,
+        ),
+        isFalse,
+      );
+      expect(
+        (await repo.settleEvmTransaction(
+          id: 'original',
+          status: TxStatus.confirmed,
+          hash: '0xold',
+        )).applied,
+        isFalse,
+      );
+      original = await repo.transactionById('original');
+      replacement = await repo.transactionById('replacement');
+      expect(original!.status, TxStatus.replaced);
+      expect(replacement!.status, TxStatus.confirmed);
     });
 
     test('confirmed original atomically settles its replacement', () async {
