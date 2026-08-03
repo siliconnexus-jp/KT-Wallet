@@ -131,7 +131,7 @@ class HttpJsonRpcTransport implements JsonRpcTransport {
       if (resp.statusCode != 200) {
         throw RpcException('HTTP ${resp.statusCode}', code: resp.statusCode);
       }
-      return jsonDecode(resp.body);
+      return _validatedJsonRpcResponse(body, jsonDecode(resp.body));
     } on RpcException {
       rethrow;
     } on Object {
@@ -165,7 +165,7 @@ class HttpJsonRpcTransport implements JsonRpcTransport {
         if (resp.statusCode != 200) {
           throw RpcException('HTTP ${resp.statusCode}', code: resp.statusCode);
         }
-        final decoded = jsonDecode(resp.body);
+        final decoded = _validatedJsonRpcResponse(body, jsonDecode(resp.body));
         if (_retryableRpcError(decoded) && candidate != _last(url)) {
           continue;
         }
@@ -188,21 +188,25 @@ class HttpJsonRpcTransport implements JsonRpcTransport {
     if (evmChainId == null && solanaGenesis == null) return false;
     final method = evmChainId != null ? 'eth_chainId' : 'getGenesisHash';
     try {
+      final body = <String, Object?>{
+        'jsonrpc': '2.0',
+        'id': 0,
+        'method': method,
+        'params': const <Object?>[],
+      };
       final response = await _client
           .post(
             Uri.parse(candidate),
             headers: const {'content-type': 'application/json'},
-            body: jsonEncode({
-              'jsonrpc': '2.0',
-              'id': 0,
-              'method': method,
-              'params': const <Object?>[],
-            }),
+            body: jsonEncode(body),
           )
           .timeout(timeout);
       if (response.statusCode != 200) return false;
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map || decoded['error'] != null) return false;
+      final decoded = _validatedJsonRpcResponse(
+        body,
+        jsonDecode(response.body),
+      );
+      if (decoded is! Map || decoded.containsKey('error')) return false;
       final result = decoded['result'];
       if (evmChainId != null) {
         if (result is! String || !result.startsWith('0x')) return false;
@@ -367,6 +371,44 @@ class HttpRestTransport implements RestTransport {
   }
 
   void close() => _client.close();
+}
+
+/// Validates the correlation boundary required by JSON-RPC 2.0.
+///
+/// HTTP connection ordering is not transaction identity: a proxy, cache or
+/// provider can return a stale envelope. Every response therefore has to echo
+/// the request's exact scalar id and carry exactly one result/error member
+/// before any balance, fee, status or broadcast result is trusted.
+Object _validatedJsonRpcResponse(Object request, Object? response) {
+  if (request is! Map ||
+      request['jsonrpc'] != '2.0' ||
+      !request.containsKey('id')) {
+    throw RpcException('invalid JSON-RPC request');
+  }
+  final requestId = request['id'];
+  if (requestId is! int && requestId is! String) {
+    throw RpcException('invalid JSON-RPC request');
+  }
+  if (response is! Map ||
+      response['jsonrpc'] != '2.0' ||
+      !response.containsKey('id')) {
+    throw RpcException('malformed JSON-RPC response');
+  }
+  final responseId = response['id'];
+  final idMatches = switch (requestId) {
+    int() => responseId is int && responseId == requestId,
+    String() => responseId is String && responseId == requestId,
+    _ => false,
+  };
+  if (!idMatches) {
+    throw RpcException('malformed JSON-RPC response');
+  }
+  final hasResult = response.containsKey('result');
+  final hasError = response.containsKey('error');
+  if (hasResult == hasError || (hasError && response['error'] is! Map)) {
+    throw RpcException('malformed JSON-RPC response');
+  }
+  return response;
 }
 
 bool _retryableRpcError(Object? body) {

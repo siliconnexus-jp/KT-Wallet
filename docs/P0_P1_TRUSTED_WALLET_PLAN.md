@@ -105,7 +105,7 @@
   畸形保持 unknown。App 与 Gateway 同时兼容 Blockscout internal 的
   `transactionHash/index`，避免空投、合约退款等内部转入在直连 fallback 消失。两项旧
   行为均以红测复现后转绿；App history 18/18、Gateway upstream/handlers、完整公开源码
-  审计 12/12 通过。生产 1.16.14 的公开 Ethereum 历史只读 smoke 返回 5 条且 5/5 ok。
+  审计 12/12 通过。生产 1.16.15 的公开 Ethereum 历史只读 smoke 返回 5 条且 5/5 ok。
 - [x] EVM hash 专项终态查询不再只信任 receipt 的 `status`：App 直连与 Gateway
   同时要求返回的 `transactionHash` 精确匹配请求 hash，并要求 32-byte `blockHash`、
   canonical `blockNumber` 与 `transactionIndex` 完整；无 receipt 但节点声称仍在 mempool
@@ -113,7 +113,7 @@
   quantity、超过 256-bit 的数量或非 0/1 hex status 在 App 保持 `unknown`，Gateway 返回固定 upstream error，均不会
   伪造 confirmed/failed/pending。三项 App、三项共享 parser 与三项 Gateway 负例先红后绿；
   KT Wallet 1495/1495、chains 181/181、Gateway 普通/race/vet/govulncheck 与静态分析通过。
-  生产 1.16.14 已按 secondary → primary 滚动，公网与双实例均返回 16 网络、ready；
+  生产 1.16.15 已按 secondary → primary 滚动，公网与双实例均返回 16 网络、ready；
   全 `f` 的有效形状假 hash 三处均为 unknown，公开 Ethereum 历史 5/5 status=ok。
   这只能证明 RPC 回包内部身份与包含字段一致，不能把单一 RPC 的区块视为密码学最终性，
   因此不使用无关 UI 截图扩大结论。
@@ -123,13 +123,27 @@
   默认值可能省略该字段时，必须继续读取 `gettransactionbyid`，再次核对同一 `txID`，
   并要求非空且全部已知的 `ret.contractRet`。顶层 `FAILED` 明确映射为失败；错误 txID、
   缺区块、缺结果、未知枚举或错误 fallback 交易在 App 保持 unknown/抛出固定解析错误，
-  Gateway 返回固定 upstream error，均不能生成 confirmed。生产 1.16.14 已按
+  Gateway 返回固定 upstream error，均不能生成 confirmed。生产 1.16.15 已按
   secondary → primary 滚动；双实例与公网对有效形状假 txID 均为 unknown，发布后
   warning+ 为 0，Prometheus 3/3、规则 17/17、0 firing，Alertmanager 0 active。
-  KT Wallet 1498/1498、chains 183/183、共享 packages 409/409、Gateway 普通/race/
+  KT Wallet 1501/1501、chains 183/183、共享 packages 409/409、Gateway 普通/race/
   vet/govulncheck、静态分析 0 与完整公开测试审计 13/13 通过。
   该证据证明交易身份、包含位置与执行结果相互绑定，但 FullNode receipt 仍不等同于
   SolidityNode 固化或密码学最终性。
+- [x] JSON-RPC 响应身份在移动端与 Gateway 双边闭合：响应必须声明
+  `jsonrpc=2.0`、精确回显请求的 String/整数 `id`，并且 `result` 与 `error` 必须恰好
+  存在一个；Gateway 的 error 还必须包含整数 code 与字符串 message。错 ID、缺 ID、
+  null/浮点/string 类型偷换、错版本、同时携带 result/error 或两者都缺失均作为畸形响应，
+  不得归属到余额、价格、手续费、模拟、交易状态或广播请求。只读请求可以换到已验证
+  同链备用节点；写请求即使收到错 ID 也保持 outcome unknown 且不尝试第二节点。该规则
+  依据 [JSON-RPC 2.0 Response Object](https://www.jsonrpc.org/specification#response_object)
+  的 request/response correlation 要求。移动端负例先证明错 ID 广播被当成功，Gateway
+  负例先证明错 ID result 被接受；修复后畸形矩阵、matching string id、null result、
+  合法 error 与 single-shot 写入正负例全部通过，KT Wallet 1501/1501、静态分析 0，
+  Gateway 普通/race/vet/govulncheck 通过。生产 1.16.15 静态制品 8,708,222 bytes、
+  SHA-256 `b9427d2b5639feec1cdb2eeda9a93333bd59b9d3f52ac6334a279f05302a6a88`
+  已按 secondary → primary 滚动；双实例与公网版本/ready/16 网络一致，公开 Ethereum
+  历史 5/5 ok，3/3 targets、17/17 rules、0 firing、0 active alert、warning+ 为 0。
 - [x] TRON：从同一 `getnowblock` 构造并保存 TAPOS reference block 与
   canonical-time expiration；transaction info 缺失且链时间越界后才标记
   `expired`，边界内保持 `unknown`。
@@ -1302,7 +1316,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     现统一为英文/日文 `KT Cold Signer`、中文 `KT冷钱包`；新增通用 ARB 禁用词门禁，
     可按语言拒绝退役品牌和语言不匹配名称。门禁单测先红后绿，三语 Widget 回归及受影响
     Golden 已人工复核；最新公开测试源码审计 12/12、完整依赖审计 13/13、KT Wallet
-    1498/1498、KT Cold Signer 570/570、共享 packages 409/409、静态分析 0、Gateway
+    1501/1501、KT Cold Signer 570/570、共享 packages 409/409、静态分析 0、Gateway
     audit 全部通过。
   - [ ] 真机系统权限弹窗、生命周期保护页及全部生产路由仍需逐页三语语义人工复核，
     因此本总项保持未完成，不能扩大宣称为“全 App 本地化验收完成”。

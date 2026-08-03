@@ -14,9 +14,9 @@ Map<String, Object?> _rpc(String method) => {
   'params': const <Object?>[],
 };
 
-Map<String, Object?> _rpcResult(Object? result) => {
+Map<String, Object?> _rpcResult(Object? result, {Object id = 1}) => {
   'jsonrpc': '2.0',
-  'id': 1,
+  'id': id,
   'result': result,
 };
 
@@ -66,6 +66,86 @@ void main() {
 
     expect(calls, 2);
   });
+
+  test('JSON-RPC responses must bind the exact request envelope', () async {
+    final malformed = <Map<String, Object?>>[
+      {'jsonrpc': '2.0', 'id': 2, 'result': '0x1'},
+      {'jsonrpc': '2.0', 'id': 1.0, 'result': '0x1'},
+      {'jsonrpc': '2.0', 'result': '0x1'},
+      {'jsonrpc': '1.0', 'id': 1, 'result': '0x1'},
+      {'jsonrpc': '2.0', 'id': 1, 'result': '0x1', 'error': null},
+      {'jsonrpc': '2.0', 'id': 1},
+    ];
+
+    for (final response in malformed) {
+      final transport = HttpJsonRpcTransport(
+        client: MockClient(
+          (_) async => http.Response(jsonEncode(response), 200),
+        ),
+      );
+      addTearDown(transport.close);
+
+      await expectLater(
+        transport.post('https://rpc.example', _rpc('eth_getBalance')),
+        throwsA(
+          isA<RpcException>().having(
+            (error) => error.message,
+            'bounded public error',
+            'malformed JSON-RPC response',
+          ),
+        ),
+        reason: '$response must not be attributed to request id 1',
+      );
+    }
+  });
+
+  test(
+    'JSON-RPC envelope accepts matching string ids and null results',
+    () async {
+      final transport = HttpJsonRpcTransport(
+        client: MockClient((request) async {
+          final body = jsonDecode(request.body) as Map<String, Object?>;
+          return http.Response(
+            jsonEncode({'jsonrpc': '2.0', 'id': body['id'], 'result': null}),
+            200,
+          );
+        }),
+      );
+      addTearDown(transport.close);
+
+      final response = await transport.post('https://rpc.example', {
+        ..._rpc('eth_getTransactionReceipt'),
+        'id': 'wallet-1',
+      });
+      expect(response, {'jsonrpc': '2.0', 'id': 'wallet-1', 'result': null});
+    },
+  );
+
+  test(
+    'a mismatched broadcast response stays outcome-unknown and single-shot',
+    () async {
+      var calls = 0;
+      final transport = HttpJsonRpcTransport(
+        client: MockClient((_) async {
+          calls++;
+          return http.Response(
+            jsonEncode({'jsonrpc': '2.0', 'id': 2, 'result': '0xhash'}),
+            200,
+          );
+        }),
+      );
+      addTearDown(transport.close);
+
+      await expectLater(
+        transport.post(
+          'https://ethereum-sepolia-rpc.publicnode.com',
+          _rpc('eth_sendRawTransaction'),
+        ),
+        throwsA(isA<RpcException>()),
+      );
+      expect(calls, 1);
+    },
+  );
 
   test(
     'unknown JSON-RPC methods default to one endpoint and one attempt',
@@ -187,8 +267,9 @@ void main() {
       client: MockClient((request) async {
         urls.add(request.url);
         if (urls.length == 1) return http.Response('unavailable', 503);
+        final body = jsonDecode(request.body) as Map<String, Object?>;
         return http.Response(
-          jsonEncode({'jsonrpc': '2.0', 'id': 1, 'result': '0xaa36a7'}),
+          jsonEncode(_rpcResult('0xaa36a7', id: body['id']!)),
           200,
         );
       }),
@@ -221,12 +302,21 @@ void main() {
           }
           if (request.url.host == 'rpc.sepolia.org') {
             expect(method, 'eth_chainId');
-            return http.Response(jsonEncode(_rpcResult('0x1')), 200);
+            return http.Response(
+              jsonEncode(_rpcResult('0x1', id: body['id']!)),
+              200,
+            );
           }
           if (method == 'eth_chainId') {
-            return http.Response(jsonEncode(_rpcResult('0xaa36a7')), 200);
+            return http.Response(
+              jsonEncode(_rpcResult('0xaa36a7', id: body['id']!)),
+              200,
+            );
           }
-          return http.Response(jsonEncode(_rpcResult('0x2')), 200);
+          return http.Response(
+            jsonEncode(_rpcResult('0x2', id: body['id']!)),
+            200,
+          );
         }),
       );
       addTearDown(transport.close);
@@ -259,7 +349,12 @@ void main() {
             return http.Response('unavailable', 503);
           }
           return http.Response(
-            jsonEncode(_rpcResult(method == 'eth_chainId' ? '0x61' : '0x5')),
+            jsonEncode(
+              _rpcResult(
+                method == 'eth_chainId' ? '0x61' : '0x5',
+                id: body['id']!,
+              ),
+            ),
             200,
           );
         }),
@@ -291,7 +386,10 @@ void main() {
           return http.Response('unavailable', 503);
         }
         expect(method, 'getGenesisHash');
-        return http.Response(jsonEncode(_rpcResult('wrong-genesis')), 200);
+        return http.Response(
+          jsonEncode(_rpcResult('wrong-genesis', id: body['id']!)),
+          200,
+        );
       }),
     );
     addTearDown(transport.close);

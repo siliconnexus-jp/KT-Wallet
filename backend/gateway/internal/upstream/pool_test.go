@@ -409,6 +409,79 @@ func TestMissingJSONRPCResultFailsOverAsMalformed(t *testing.T) {
 	}
 }
 
+func TestJSONRPCResponseEnvelopeMustBindRequest(t *testing.T) {
+	tests := map[string]string{
+		"wrong id":              `{"jsonrpc":"2.0","id":2,"result":"stale"}`,
+		"missing id":            `{"jsonrpc":"2.0","result":"stale"}`,
+		"null id":               `{"jsonrpc":"2.0","id":null,"result":"stale"}`,
+		"string id":             `{"jsonrpc":"2.0","id":"1","result":"stale"}`,
+		"wrong version":         `{"jsonrpc":"1.0","id":1,"result":"stale"}`,
+		"result and null error": `{"jsonrpc":"2.0","id":1,"result":"stale","error":null}`,
+		"result and error":      `{"jsonrpc":"2.0","id":1,"result":"stale","error":{"code":-32000,"message":"wrong"}}`,
+	}
+	for name, payload := range tests {
+		t.Run(name, func(t *testing.T) {
+			malformed := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(payload))
+			})
+			alive := newFakeNode(t, nil)
+			clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+			p := NewPool("eth", []string{malformed.srv.URL, alive.srv.URL}, clk, nil, time.Second)
+
+			result, err := p.Call(context.Background(), "eth_gasPrice", nil)
+			if err != nil || string(result) != `"ok"` {
+				t.Fatalf("malformed envelope must fail over: result=%s err=%v", result, err)
+			}
+			if malformed.hits.Load() != 1 || alive.hits.Load() != 1 {
+				t.Fatalf("expected one malformed and one valid attempt, got %d/%d", malformed.hits.Load(), alive.hits.Load())
+			}
+			if got := p.Health().FailureMetrics.MalformedResponse; got != 1 {
+				t.Fatalf("malformed response count = %d, want 1", got)
+			}
+		})
+	}
+}
+
+func TestCallOnceMismatchedResponseIDDoesNotFailOver(t *testing.T) {
+	wrong := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":2,"result":"0xhash"}`))
+	})
+	alive := newFakeNode(t, nil)
+	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+	p := NewPool("eth", []string{wrong.srv.URL, alive.srv.URL}, clk, nil, time.Second)
+
+	_, err := p.CallOnce(context.Background(), "eth_sendRawTransaction", []any{"0x00"})
+	var unavailable *Unavailable
+	if !errors.As(err, &unavailable) {
+		t.Fatalf("mismatched write response must stay outcome-unknown, got %v", err)
+	}
+	if wrong.hits.Load() != 1 || alive.hits.Load() != 0 {
+		t.Fatalf("write must remain single-shot, got %d/%d", wrong.hits.Load(), alive.hits.Load())
+	}
+}
+
+func TestJSONRPCResponseEnvelopeAllowsNullResultAndValidError(t *testing.T) {
+	nullResult := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":null}`))
+	})
+	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+	result, err := NewPool("eth", []string{nullResult.srv.URL}, clk, nil, time.Second).
+		Call(context.Background(), "eth_getTransactionReceipt", nil)
+	if err != nil || string(result) != "null" {
+		t.Fatalf("null is a valid result: result=%s err=%v", result, err)
+	}
+
+	rejecting := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"nonce too low"}}`))
+	})
+	_, err = NewPool("eth", []string{rejecting.srv.URL}, clk, nil, time.Second).
+		Call(context.Background(), "eth_sendRawTransaction", nil)
+	var nodeErr *NodeError
+	if !errors.As(err, &nodeErr) || nodeErr.Code != -32000 || nodeErr.Message != "nonce too low" {
+		t.Fatalf("valid error envelope was not preserved: %v", err)
+	}
+}
+
 func TestTimeoutHasDedicatedFailureBucket(t *testing.T) {
 	slow := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(25 * time.Millisecond)

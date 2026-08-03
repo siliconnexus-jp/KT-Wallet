@@ -407,11 +407,10 @@ func (p *Pool) attempt(ctx context.Context, u string, body []byte) (result json.
 		}
 	}
 	var out struct {
-		Result json.RawMessage `json:"result"`
-		Error  *struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
-		} `json:"error"`
+		JSONRPC string          `json:"jsonrpc"`
+		ID      json.RawMessage `json:"id"`
+		Result  json.RawMessage `json:"result"`
+		Error   json.RawMessage `json:"error"`
 	}
 	if err := json.Unmarshal(data, &out); err != nil {
 		return nil, nil, &attemptFailure{
@@ -419,14 +418,29 @@ func (p *Pool) attempt(ctx context.Context, u string, body []byte) (result json.
 			err:  fmt.Errorf("invalid JSON-RPC response (HTTP %d)", resp.StatusCode),
 		}
 	}
-	if out.Error != nil {
-		return nil, &NodeError{Code: out.Error.Code, Message: out.Error.Message}, nil
-	}
-	if out.Result == nil {
+	hasResult := len(out.Result) > 0
+	hasError := len(out.Error) > 0
+	if out.JSONRPC != "2.0" ||
+		!bytes.Equal(bytes.TrimSpace(out.ID), []byte("1")) ||
+		hasResult == hasError {
 		return nil, nil, &attemptFailure{
 			kind: failureMalformed,
-			err:  fmt.Errorf("JSON-RPC response is missing result and error (HTTP %d)", resp.StatusCode),
+			err:  fmt.Errorf("invalid JSON-RPC response envelope (HTTP %d)", resp.StatusCode),
 		}
+	}
+	if hasError {
+		var rpcError struct {
+			Code    *int    `json:"code"`
+			Message *string `json:"message"`
+		}
+		if err := json.Unmarshal(out.Error, &rpcError); err != nil ||
+			rpcError.Code == nil || rpcError.Message == nil {
+			return nil, nil, &attemptFailure{
+				kind: failureMalformed,
+				err:  fmt.Errorf("invalid JSON-RPC error envelope (HTTP %d)", resp.StatusCode),
+			}
+		}
+		return nil, &NodeError{Code: *rpcError.Code, Message: *rpcError.Message}, nil
 	}
 	return out.Result, nil, nil
 }
