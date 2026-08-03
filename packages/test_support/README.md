@@ -12,7 +12,9 @@ gates. This package contains no production wallet behavior.
 - `dep_check.dart` implements pure checks used by `tool/check_deps.dart` to
   keep KT Cold Signer offline and verify platform backup protections.
 - `e2e_credentials.dart` validates disposable real-chain credential batches
-  and detects accidental secret disclosure in text reports.
+  and detects accidental secret disclosure in every public repository text
+  artifact, including provider-specific formats and high-entropy values
+  assigned to credential fields.
 
 ```dart
 final report = verifyTransitionTable<State, Event>(

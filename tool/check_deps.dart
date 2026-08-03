@@ -330,7 +330,10 @@ void main() {
     'sk_(live|test)_',
     'AIza',
     'access[_-]?token',
+    'auth[_-]?token',
     'bearer[_-]?token',
+    'client[_-]?secret',
+    'credential|password|secret|token',
   ]) {
     if (!androidArtifactGuardSource.contains(credentialBoundary)) {
       failures.add(

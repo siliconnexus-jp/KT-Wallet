@@ -664,9 +664,19 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   文档，同时依赖共享 `.gitignore` 排除本地凭证、私密 runbook 和构建目录。测试中需要
   验证的令牌形状改为运行时拼接，不降低检测正例强度；第一次全仓扫描实际发现并修正
   3 个测试文件中的 8 类 provider canary。文件选择负例先红后绿，定向 12/12、Faucet
-  10/10、test_support 55/55、共享 packages 395/395、KT Wallet 1458/1458、Cold Signer
+  10/10、test_support 57/57、共享 packages 397/397、KT Wallet 1458/1458、Cold Signer
   568/568、`check_deps` 与完整静态分析 0 问题。该门禁覆盖当前工作树；Git 历史与无前缀
   opaque key 仍必须继续依赖 GitHub Push Protection/专用扫描器。
+- [x] 2026-08-03 在 Provider 前缀和私钥格式之外增加通用高熵凭证赋值检测：只检查
+  `apiKey/accessToken/authToken/bearerToken/clientSecret/credential/password/secret/token`
+  等明确凭证字段中的 20–256 字符 opaque 值，使用字符类别与 Shannon entropy 阈值，
+  同时放行占位符、环境变量和明确的公开 EVM 地址/交易哈希，避免把链上公开标识误报为
+  私钥。先红后绿的正负例 2 项证明无前缀值会被拒绝且占位符/公开标识通过；第一次全仓
+  扫描又实际发现 Gateway 两个测试文件中的 3 个完整 opaque fixture，已改为运行时拼接。
+  Android APK/AAB 与 iOS `.app` 制品门禁同步扩展到通用凭证字段。定向 14/14、
+  test_support 57/57、共享 packages 397/397、Gateway upstream 与 `check_deps` 通过。
+  该启发式仍不声称识别无上下文、无字段名的任意随机字符串，Git 历史与此类值继续依赖
+  GitHub Push Protection/专用 scanner。
 - [x] 2026-08-03 建立可重复的本地公开测试源码验收入口：
   `dart run tool/audit_public_beta.dart` 固定、逐步、失败即停地执行差异完整性、仓库安全/
   秘密/原生清理门禁、完整静态分析、四个纯 Dart package、两个 Flutter package、

@@ -118,7 +118,7 @@ for marker in "${forbidden_markers[@]}"; do
 done
 
 if LC_ALL=C grep -aR -Eq \
-  'github_pat_[A-Za-z0-9_]{12,}|gh[pousr]_[A-Za-z0-9]{20,}|alch_[A-Za-z0-9_-]{12,}|xox[baprs]-[A-Za-z0-9-]{20,}|sk_(live|test)_[A-Za-z0-9]{20,}|AIza[A-Za-z0-9_-]{20,}|(api[_-]?key|access[_-]?token|bearer[_-]?token)[=:][A-Za-z0-9_+./=-]{20,}' \
+  'github_pat_[A-Za-z0-9_]{12,}|gh[pousr]_[A-Za-z0-9]{20,}|alch_[A-Za-z0-9_-]{12,}|xox[baprs]-[A-Za-z0-9-]{20,}|sk_(live|test)_[A-Za-z0-9]{20,}|AIza[A-Za-z0-9_-]{20,}|(api[_-]?key|access[_-]?token|auth[_-]?token|bearer[_-]?token|client[_-]?secret|credential|password|secret|token)["'"'"'[:space:]]*[:=]["'"'"'[:space:]]*[A-Za-z0-9_+./=~-]{20,}' \
   "$apple_app"; then
   echo "FORBIDDEN Apple release credential pattern detected" >&2
   failed=1

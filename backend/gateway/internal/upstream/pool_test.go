@@ -95,7 +95,7 @@ func TestCallOnceDoesNotFailOverAfterWriteAttempt(t *testing.T) {
 }
 
 func TestTransportFailureDoesNotExposeCredentialBearingURL(t *testing.T) {
-	const secret = "provider-key-must-never-leave-gateway"
+	secret := strings.Join([]string{"mN4pQ8vZ2sK7", "cR5xT9wY3dF6", "hJ8uL1aB0eG7"}, "")
 	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		return nil, errors.New(`Post "` + req.URL.String() + `": connection refused`)
 	})}

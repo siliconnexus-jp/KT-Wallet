@@ -11,7 +11,7 @@ import (
 )
 
 func TestCredentialBearingTransportErrorsAreRedactedAcrossClients(t *testing.T) {
-	const secret = "provider-key-must-never-leave-gateway"
+	secret := strings.Join([]string{"mN4pQ8vZ2sK7", "cR5xT9wY3dF6", "hJ8uL1aB0eG7"}, "")
 	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		return nil, fmt.Errorf("dial %s: credential=%s", req.URL.String(), secret)
 	})}
@@ -105,7 +105,7 @@ func TestCredentialBearingTransportErrorsAreRedactedAcrossClients(t *testing.T) 
 }
 
 func TestPublicNodeErrorMessageNeverReflectsUnknownProviderText(t *testing.T) {
-	const secret = "https://rpc.example.invalid/v2/provider-secret"
+	secret := strings.Join([]string{"https://", "mN4pQ8vZ2sK7", "cR5xT9wY3dF6", "hJ8uL1aB0eG7"}, "")
 	if got := PublicNodeErrorMessage("provider internal failure at " + secret); strings.Contains(got, secret) {
 		t.Fatalf("unknown provider text was reflected: %q", got)
 	} else if got != "upstream rejected request" {

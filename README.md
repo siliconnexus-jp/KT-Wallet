@@ -333,7 +333,7 @@ Recent device and simulator evidence is available in:
 
 The latest source gate (2026-08-03) completed with zero static-analysis
 issues: **1,458/1,458** KT Wallet tests, **568/568** KT Cold Signer tests, and
-**395/395** shared-package tests passed. The Gateway audit, public-secret gate,
+**397/397** shared-package tests passed. The Gateway audit, public-secret gate,
 native dependency lock/checksum verification, and OSV scans also passed. These
 numbers are reproducible source evidence, not a substitute for the outstanding
 physical-device, real-chain, signed-artifact, or independent-audit work below.

@@ -5,6 +5,8 @@
 /// mnemonic and detects accidental disclosure in text reports.
 library;
 
+import 'dart:math' as math;
+
 const e2eCredentialSchemaVersion = '1';
 const e2eMnemonicKey = 'SEPOLIA_E2E_MNEMONIC';
 const e2eBatchIdKey = 'KT_E2E_BATCH_ID';
@@ -232,7 +234,72 @@ List<String> findE2eSecretLeakLabels(String contents, {String? mnemonic}) {
   for (final entry in credentialPatterns.entries) {
     if (entry.value.hasMatch(contents)) labels.add(entry.key);
   }
+  if (_containsHighEntropyCredentialAssignment(contents)) {
+    labels.add('high-entropy credential assignment');
+  }
   return labels;
+}
+
+const _credentialFieldPattern =
+    r'(?:api[_-]?key|access[_-]?token|auth[_-]?token|bearer[_-]?token|client[_-]?secret|credential|password|secret|token)';
+
+bool _containsHighEntropyCredentialAssignment(String contents) {
+  final quotedAssignments = RegExp(
+    '''["']?$_credentialFieldPattern["']?\\s*[:=]\\s*(["'])([A-Za-z0-9._~+/=-]{20,256})\\1''',
+    caseSensitive: false,
+  );
+  for (final match in quotedAssignments.allMatches(contents)) {
+    if (_looksLikeOpaqueCredential(match.group(2)!)) return true;
+  }
+
+  final unquotedAssignments = RegExp(
+    '''^[ \\t]*(?:export[ \\t]+)?$_credentialFieldPattern[ \\t]*[:=][ \\t]*([A-Za-z0-9._~+/=-]{20,256})[ \\t]*(?:#.*)?\$''',
+    caseSensitive: false,
+    multiLine: true,
+  );
+  for (final match in unquotedAssignments.allMatches(contents)) {
+    if (_looksLikeOpaqueCredential(match.group(1)!)) return true;
+  }
+  return false;
+}
+
+bool _looksLikeOpaqueCredential(String value) {
+  final normalized = value.trim();
+  if (normalized.length < 20 || normalized.length > 256) return false;
+  if (RegExp(
+    r'^0x(?:[0-9a-f]{40}|[0-9a-f]{64})$',
+    caseSensitive: false,
+  ).hasMatch(normalized)) {
+    return false;
+  }
+  if (const {
+    'redacted',
+    'changeme',
+    'placeholder',
+    'not-configured',
+  }.contains(normalized.toLowerCase())) {
+    return false;
+  }
+
+  final classes = <bool>[
+    RegExp('[a-z]').hasMatch(normalized),
+    RegExp('[A-Z]').hasMatch(normalized),
+    RegExp('[0-9]').hasMatch(normalized),
+    RegExp(r'[._~+/=-]').hasMatch(normalized),
+  ].where((present) => present).length;
+  if (classes < 2) return false;
+
+  final counts = <int, int>{};
+  for (final codeUnit in normalized.codeUnits) {
+    counts.update(codeUnit, (count) => count + 1, ifAbsent: () => 1);
+  }
+  final length = normalized.length.toDouble();
+  var entropy = 0.0;
+  for (final count in counts.values) {
+    final probability = count / length;
+    entropy -= probability * (math.log(probability) / math.ln2);
+  }
+  return entropy >= 3.5;
 }
 
 /// True only for POSIX mode `0600`; type bits in [mode] are ignored.

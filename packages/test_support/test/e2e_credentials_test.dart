@@ -163,6 +163,35 @@ METRICS_BEARER_TOKEN=\${METRICS_BEARER_TOKEN}
         isEmpty,
       );
     });
+
+    test('detects unprefixed high-entropy credential assignments', () {
+      final opaqueCredential = <String>[
+        'mN4pQ8vZ2sK7',
+        'cR5xT9wY3dF6',
+        'hJ8uL1aB0eG7',
+      ].join();
+
+      expect(
+        findE2eSecretLeakLabels('client_secret="$opaqueCredential"'),
+        contains('high-entropy credential assignment'),
+      );
+      expect(
+        findE2eSecretLeakLabels('{"accessToken":"$opaqueCredential"}'),
+        contains('high-entropy credential assignment'),
+      );
+    });
+
+    test('generic entropy check ignores placeholders and public chain IDs', () {
+      expect(
+        findE2eSecretLeakLabels('''
+TOKEN=REDACTED
+CLIENT_SECRET=\${CLIENT_SECRET}
+token=0xb787f3c2f96403b5a73dc66de68e4a6395d4e632
+password=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+'''),
+        isEmpty,
+      );
+    });
   });
 
   test('credential file mode accepts only 0600', () {
