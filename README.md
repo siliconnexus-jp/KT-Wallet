@@ -34,6 +34,22 @@ The responsive English, Simplified Chinese, and Japanese product site is in
 [`website`](website/README.md). Its download cards intentionally remain marked
 as pending until official store artifacts are available.
 
+### Release readiness at a glance
+
+| Evidence area | Current state | What it means |
+|---|---|---|
+| Reproducible source gate | Passed on 2026-08-03 | Static analysis, Flutter/package tests, Gateway tests, secret checks, dependency locks, checksums, and OSV scans passed for the revision described below |
+| iOS native lifecycle tests | Passed on one retained simulator | Scene privacy and native bridge regressions are covered, but simulator evidence does not replace physical-device testing |
+| Android and iOS physical devices | In progress | Biometrics, camera QR, lifecycle privacy, accessibility, recovery, and deletion still need the complete device matrix |
+| Current-batch chain evidence | Partial | Implemented chains and transaction families are listed below; remaining live-network evidence is tracked explicitly and is never inferred from mocks |
+| Store artifacts | Not published | No official App Store or Google Play download is available yet |
+| Independent security audit | Not completed | The project is appropriate for controlled beta evaluation, not large-balance assurance |
+
+“Passed” in this README refers to the stated source revision and environment,
+not a permanent certification of an RPC, indexer, token contract, mobile OS, or
+future build. The detailed evidence and remaining work are linked under
+[Current scope](#current-scope).
+
 ## What is included
 
 KT Wallet can be used in two complementary roles:
@@ -320,6 +336,14 @@ Gateway is unavailable. Users can explicitly select direct mode or configure a
 per-chain RPC override; a custom RPC remains authoritative and is never
 silently replaced. Balance and history failures remain visible instead of
 being converted to zero or an empty success.
+
+Wallet-scoped market and history state is cleared synchronously when a wallet
+is switched or deleted, before cached data or a late provider response can be
+rendered for the next wallet. Pending finality reconciliation is separately
+bounded to four concurrent lookups, isolates a failing hash from its peers, and
+stops queued requests when the owning wallet/network context is no longer
+current. These controls improve responsiveness without treating stale cache or
+unknown chain evidence as a successful result.
 
 Gateway `1.16.9` currently exposes 16 mainnet/testnet network profiles. It uses
 bounded upstream failover and circuit breakers, plus short caches for prices
