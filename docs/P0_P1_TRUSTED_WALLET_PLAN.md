@@ -546,18 +546,18 @@
   不再选择缓存最高版本。随后校验容器并读取最终 protobuf Manifest；权限、导出组件、
   凭证与签名规则与 APK 共用。2026-08-04 从当前 HEAD 重建的 APK 产物：
   KT Wallet 137,150,621 bytes（SHA-256
-  `2d4a5b3d5e18ec7a3da0490af0da38de16c7c4ab1c4c3509fddfb9aae1312ee3`）；
+  `793a1cee174b6510ca035ce732dfc3540a30df974bc05ba1a8476593fb8a396e`）；
   KT Cold Signer 127,023,101 bytes（SHA-256
-  `a3c084f8bbaf59dca3966b9054170b4491e97a80dc757ef8d31fd8ad17837e9f`）。最终合并
+  `1b170a71310be26e2f4a6979a5de7c442cb6480a3eba46861fa8faa3933eea01`）。最终合并
   Manifest 同时证明两款 App 禁止备份，Cold Signer Release 不含
   `INTERNET`。两款 iOS Simulator App 与
   `iphoneos --release --no-codesign` device App 同时构建通过，bundle ID、英文显示名、
   标准加密声明、App 自有 Privacy Manifest、Data Protection 配置与
   WalletCore.framework 均已核对。
-  两份 AAB 分别为 KT Wallet 100,469,771 bytes（SHA-256
-  `e524a598ecfc252c734cf2125a671568d0dac61cb5833875fd39de1c363de381`）与
-  KT Cold Signer 91,574,923 bytes（SHA-256
-  `e70ccec5f78f9932ba72355863802dc084137277e53d3588499b6edf19690ead`）。首次复核因本机
+  两份 AAB 分别为 KT Wallet 100,469,150 bytes（SHA-256
+  `8cb1df20a1505d50be4f7299f4a0bcf4ce6a8d6957fffc173c1060f3f1555ee5`）与
+  KT Cold Signer 91,574,713 bytes（SHA-256
+  `994b114efccc5a695740322f8c405fb35e0c1838d726084a3eb52f5780be3feb`）。首次复核因本机
   Gradle cache 缺少固定的 `protobuf-java-util-3.22.3.jar` 而按预期失败，没有跳过
   bundletool。新增显式 `tool/bootstrap_android_release_toolchain.sh`，只从 Google Maven /
   Maven Central 的 HTTPS 精确坐标恢复 manifest 声明的 16 个 runtime JAR，并要求两款 App
@@ -1380,6 +1380,17 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     Golden 已人工复核；最新公开测试源码审计 12/12、完整依赖审计 13/13、KT Wallet
     1514/1514、KT Cold Signer 570/570、共享 packages 409/409、静态分析 0、Gateway
     audit 全部通过。
+  - [x] 2026-08-04 ARB 语义复审继续发现中文 `From / To / Seed / Symbol` 四处普通
+    UI 文案混排，现分别改为“转出账户 / 收款地址 / 种子 / 符号”。发布门禁新增两类
+    失败闭合规则：中文、日文不分大小写禁止遗留需翻译的普通英文界面词；英文源文案
+    出现 Ethereum、BNB Smart Chain、USDT、PYUSD、PayPal USD、ERC-20、TRC-20、
+    SPL 等受保护技术身份时，本地化版本必须逐字保留。负例证明小写 `password` 及
+    “以太坊 / 泰达币 / 贝宝美元”等漏翻、误译会被拒绝；
+    另以 16 个内置网络的精确 `id → name + symbol` 映射锁定运行时名称，不依赖 ARB。
+    首轮完整门禁精确捕获 Wallet `assets / connect-cold` 与 Signer `parse` 三张预期
+    Golden 差异；逐图复核后只更新这三张基线，第二轮定向与全量复跑通过。最终定向
+    49/49、`test_support` 63/63、KT Wallet 1531/1531、KT Cold Signer 570/570、共享
+    packages 415/415、静态分析 0、完整公开测试门禁 13/13。
   - [ ] 真机系统权限弹窗、生命周期保护页及全部生产路由仍需逐页三语语义人工复核，
     因此本总项保持未完成，不能扩大宣称为“全 App 本地化验收完成”。
 
@@ -1441,7 +1452,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     winner/loser 各 1 条、105 条裁剪为 100 条、进程在 Flutter 观察前退出并重启仍恢复
     confirmed + 唯一指标。故障注入继续证明，SQLite 指标读取失败不得影响启动、终态确认
     或 UI 刷新；终态指标与普通体验指标各自保留最多 100 条，不能相互挤占。KT Wallet
-    1530/1530、KT Cold Signer 570/570、共享 packages 413/413、静态分析 0、完整公开
+    1531/1531、KT Cold Signer 570/570、共享 packages 415/415、静态分析 0、完整公开
     测试/原生依赖/OSV 门禁 13/13 通过。
   - [ ] iOS MetricKit 真正的系统 payload 投递及 Android 真实 ANR/fatal 仍需物理设备
     故障注入验收；匿名未认证样本也不能替代 App Store/Play Console 的可信安装基数或

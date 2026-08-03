@@ -321,7 +321,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectColdSubtitle => '从离线手机导入公开地址，创建观察钱包';
 
   @override
-  String get connectColdSafety => '本机永远不会接收或保存助记词、私钥或 Seed。';
+  String get connectColdSafety => '本机永远不会接收或保存助记词、私钥或种子。';
 
   @override
   String get scanAccountHint => '对准 KT冷钱包的地址二维码';
@@ -850,7 +850,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get biometricFailedRetry => '验证失败，请重试';
 
   @override
-  String get searchAssetHint => '搜索名称 / Symbol / 合约地址';
+  String get searchAssetHint => '搜索名称 / 符号 / 合约地址';
 
   @override
   String get price => '价格';

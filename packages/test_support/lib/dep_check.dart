@@ -222,6 +222,208 @@ List<String> findArbCatalogIssues(
   return issues;
 }
 
+/// Rejects ordinary English interface prose accidentally left inside Chinese
+/// or Japanese ARB messages. Protocol identifiers and reviewed product terms
+/// are intentionally not part of [forbiddenTerms]; this gate targets words a
+/// translator should localize (for example `From`, `Retry`, or `Password`).
+List<String> findUntranslatedCjkProseIssues(
+  Map<String, String> catalogs, {
+  Set<String> forbiddenTerms = const {
+    'Account',
+    'Address',
+    'Amount',
+    'Back',
+    'Balance',
+    'Cancel',
+    'Confirm',
+    'Continue',
+    'Error',
+    'Failed',
+    'Failure',
+    'Fee',
+    'From',
+    'Invalid',
+    'Network',
+    'Next',
+    'Password',
+    'Receive',
+    'Recipient',
+    'Required',
+    'Retry',
+    'Seed',
+    'Send',
+    'Settings',
+    'Symbol',
+    'To',
+    'Unable',
+    'Unavailable',
+    'Unknown',
+    'Warning',
+  },
+  Map<String, Set<String>> allowedKeys = const {},
+}) {
+  final issues = <String>[];
+  final forbiddenLowercase = {
+    for (final term in forbiddenTerms) term.toLowerCase(),
+  };
+  final remainingAllowedKeys = {
+    for (final entry in allowedKeys.entries) entry.key: {...entry.value},
+  };
+  for (final locale in remainingAllowedKeys.keys.where(
+    (locale) => locale != 'zh' && locale != 'ja',
+  )) {
+    issues.add('$locale: unsupported untranslated-prose allowlist locale');
+  }
+  for (final locale in const ['zh', 'ja']) {
+    final contents = catalogs[locale];
+    if (contents == null) continue;
+    Object? decoded;
+    try {
+      decoded = jsonDecode(contents);
+    } on FormatException {
+      continue;
+    }
+    if (decoded is! Map<String, dynamic>) continue;
+    for (final entry in decoded.entries) {
+      if (entry.key.startsWith('@') || entry.value is! String) continue;
+      if (allowedKeys[locale]?.contains(entry.key) ?? false) {
+        remainingAllowedKeys[locale]?.remove(entry.key);
+        continue;
+      }
+      final withoutPlaceholders = (entry.value as String).replaceAll(
+        RegExp(r'\{[^{}]*\}'),
+        '',
+      );
+      final words = RegExp(
+        r'[A-Za-z]+',
+      ).allMatches(withoutPlaceholders).map((match) => match.group(0)!);
+      final found =
+          words
+              .where((word) => forbiddenLowercase.contains(word.toLowerCase()))
+              .toSet()
+              .toList()
+            ..sort();
+      if (found.isNotEmpty) {
+        issues.add('$locale:${entry.key}: untranslated UI prose $found');
+      }
+    }
+  }
+  for (final locale in const ['zh', 'ja']) {
+    for (final key in remainingAllowedKeys[locale] ?? const <String>{}) {
+      issues.add('$locale:$key: stale untranslated-prose allowlist');
+    }
+  }
+  return issues;
+}
+
+/// Keeps official network names, protocol identifiers, and asset symbols
+/// byte-for-byte stable across locales. The rule applies only when the English
+/// source message contains a protected term; surrounding prose remains fully
+/// translatable.
+List<String> findProtectedArbTermIssues(
+  Map<String, String> catalogs, {
+  String defaultLocale = 'en',
+  Set<String> protectedTerms = const {
+    'Ethereum',
+    'Polygon',
+    'Base',
+    'Arbitrum',
+    'Avalanche',
+    'BNB Smart Chain',
+    'TRON',
+    'Solana',
+    'ETH',
+    'POL',
+    'AVAX',
+    'BNB',
+    'TRX',
+    'SOL',
+    'USDT',
+    'USDC',
+    'BUSD',
+    'PYUSD',
+    'DAI',
+    'WETH',
+    'WBTC',
+    'LINK',
+    'UNI',
+    'SHIB',
+    'PEPE',
+    'JUP',
+    'BONK',
+    'Tether USD',
+    'USD Coin',
+    'Dai Stablecoin',
+    'Wrapped Ether',
+    'Wrapped Bitcoin',
+    'Chainlink',
+    'Uniswap',
+    'Shiba Inu',
+    'Pepe',
+    'Binance USD',
+    'PayPal USD',
+    'Jupiter',
+    'Bonk',
+    'ERC-20',
+    'TRC-20',
+    'SPL',
+  },
+}) {
+  final parsed = <String, Map<String, String>>{};
+  for (final catalog in catalogs.entries) {
+    Object? decoded;
+    try {
+      decoded = jsonDecode(catalog.value);
+    } on FormatException {
+      continue;
+    }
+    if (decoded is! Map<String, dynamic>) continue;
+    parsed[catalog.key] = {
+      for (final message in decoded.entries)
+        if (!message.key.startsWith('@') && message.value is String)
+          message.key: message.value as String,
+    };
+  }
+  final source = parsed[defaultLocale];
+  if (source == null) return const [];
+
+  final issues = <String>[];
+  for (final message in source.entries) {
+    final required = protectedTerms
+        .where((term) => _containsBoundedAsciiTerm(message.value, term))
+        .toList();
+    if (required.isEmpty) continue;
+    for (final locale in parsed.entries) {
+      if (locale.key == defaultLocale) continue;
+      final localized = locale.value[message.key];
+      if (localized == null) continue;
+      for (final term in required) {
+        if (!_containsBoundedAsciiTerm(localized, term)) {
+          issues.add(
+            '${locale.key}:${message.key}: missing protected term "$term"',
+          );
+        }
+      }
+    }
+  }
+  return issues;
+}
+
+bool _containsBoundedAsciiTerm(String value, String term) {
+  var start = 0;
+  while (true) {
+    final index = value.indexOf(term, start);
+    if (index < 0) return false;
+    final end = index + term.length;
+    final leftIsWord = index > 0 && _asciiWord.hasMatch(value[index - 1]);
+    final rightIsWord = end < value.length && _asciiWord.hasMatch(value[end]);
+    if (!leftIsWord && !rightIsWord) return true;
+    start = index + 1;
+  }
+}
+
+final _asciiWord = RegExp(r'[A-Za-z0-9]');
+
 Map<String, String> _parseAndroidStrings(String xml) {
   final values = <String, String>{};
   final pattern = RegExp(

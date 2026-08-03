@@ -142,8 +142,8 @@
   "@rawAmountPrecision": {
     "placeholders": { "amount": { "type": "String" }, "precision": { "type": "int" } }
   },
-  "fromAccount": "转出账户（From）",
-  "toAddress": "收款地址（To）",
+  "fromAccount": "转出账户",
+  "toAddress": "收款地址",
   "spenderAddress": "被授权合约",
   "nativeTransferOperation": "原生币转账",
   "tokenTransferOperation": "Token 转账",

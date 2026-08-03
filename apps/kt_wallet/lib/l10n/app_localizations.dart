@@ -685,7 +685,7 @@ abstract class AppLocalizations {
   /// No description provided for @connectColdSafety.
   ///
   /// In zh, this message translates to:
-  /// **'本机永远不会接收或保存助记词、私钥或 Seed。'**
+  /// **'本机永远不会接收或保存助记词、私钥或种子。'**
   String get connectColdSafety;
 
   /// No description provided for @scanAccountHint.
@@ -1663,7 +1663,7 @@ abstract class AppLocalizations {
   /// No description provided for @searchAssetHint.
   ///
   /// In zh, this message translates to:
-  /// **'搜索名称 / Symbol / 合约地址'**
+  /// **'搜索名称 / 符号 / 合约地址'**
   String get searchAssetHint;
 
   /// No description provided for @price.

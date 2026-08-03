@@ -38,6 +38,32 @@ void main() {
     expect(bnbTestnet.evmChainId, 97);
   });
 
+  test('built-in network display identities remain canonical', () {
+    const expected = <String, ({String name, String symbol})>{
+      'eth-mainnet': (name: 'Ethereum', symbol: 'ETH'),
+      'eth-sepolia': (name: 'Sepolia', symbol: 'ETH'),
+      'polygon-mainnet': (name: 'Polygon', symbol: 'POL'),
+      'polygon-amoy': (name: 'Amoy', symbol: 'POL'),
+      'base-mainnet': (name: 'Base', symbol: 'ETH'),
+      'base-sepolia': (name: 'Base Sepolia', symbol: 'ETH'),
+      'arbitrum-mainnet': (name: 'Arbitrum One', symbol: 'ETH'),
+      'arbitrum-sepolia': (name: 'Arbitrum Sepolia', symbol: 'ETH'),
+      'avalanche-mainnet': (name: 'Avalanche C-Chain', symbol: 'AVAX'),
+      'avalanche-fuji': (name: 'Avalanche Fuji', symbol: 'AVAX'),
+      'bnb-mainnet': (name: 'BNB Smart Chain', symbol: 'BNB'),
+      'bnb-testnet': (name: 'BNB Smart Chain Testnet', symbol: 'BNB'),
+      'tron-mainnet': (name: 'TRON', symbol: 'TRX'),
+      'tron-nile': (name: 'Nile', symbol: 'TRX'),
+      'sol-mainnet': (name: 'Solana', symbol: 'SOL'),
+      'sol-devnet': (name: 'Devnet', symbol: 'SOL'),
+    };
+
+    expect({
+      for (final network in builtinNetworks)
+        network.id: (name: network.name, symbol: network.symbol),
+    }, expected);
+  });
+
   test('environment switch flips every chain and clears overrides', () async {
     final c = NetworkController();
     expect(c.activeFor(Chain.ethereum).id, 'eth-mainnet');

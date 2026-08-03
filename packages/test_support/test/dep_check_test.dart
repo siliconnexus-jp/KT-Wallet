@@ -527,6 +527,71 @@ void main() {
       expect(issues, contains('ja:error: ASCII punctuation beside CJK'));
       expect(issues, isNot(contains(contains('zh:call'))));
     });
+
+    test('rejects ordinary English UI prose left inside CJK messages', () {
+      final issues = findUntranslatedCjkProseIssues({
+        'en': '{"@@locale":"en","from":"From account","retry":"Retry"}',
+        'zh': '''{
+          "@@locale":"zh",
+          "from":"转出账户（From）",
+          "retry":"重试",
+          "password":"输入 password"
+        }''',
+        'ja': '{"@@locale":"ja","from":"送金元","retry":"Retry"}',
+      });
+
+      expect(issues, contains('zh:from: untranslated UI prose [From]'));
+      expect(issues, contains('zh:password: untranslated UI prose [password]'));
+      expect(issues, contains('ja:retry: untranslated UI prose [Retry]'));
+
+      final allowlistIssues = findUntranslatedCjkProseIssues(
+        {
+          'zh': '{"@@locale":"zh","from":"转出账户（From）"}',
+          'ja': '{"@@locale":"ja","retry":"再試行"}',
+        },
+        allowedKeys: const {
+          'zh': {'from', 'missing'},
+          'fr': {'from'},
+        },
+      );
+      expect(
+        allowlistIssues,
+        contains('zh:missing: stale untranslated-prose allowlist'),
+      );
+      expect(
+        allowlistIssues,
+        contains('fr: unsupported untranslated-prose allowlist locale'),
+      );
+      expect(allowlistIssues, isNot(contains(contains('zh:from'))));
+    });
+
+    test('preserves official chain names and token symbols across locales', () {
+      final issues = findProtectedArbTermIssues({
+        'en': '''{
+          "@@locale":"en",
+          "send":"Send USDT on Ethereum",
+          "approval":"ERC-20 approval",
+          "pyusd":"PayPal USD (PYUSD)"
+        }''',
+        'zh': '''{
+          "@@locale":"zh",
+          "send":"在以太坊发送泰达币",
+          "approval":"ERC-20 授权",
+          "pyusd":"贝宝美元（PYUSD）"
+        }''',
+        'ja': '''{
+          "@@locale":"ja",
+          "send":"Ethereum で USDT を送信",
+          "approval":"ERC-20 承認",
+          "pyusd":"PayPal USD（PYUSD）"
+        }''',
+      });
+
+      expect(issues, contains('zh:send: missing protected term "Ethereum"'));
+      expect(issues, contains('zh:send: missing protected term "USDT"'));
+      expect(issues, contains('zh:pyusd: missing protected term "PayPal USD"'));
+      expect(issues.where((issue) => issue.startsWith('ja:')), isEmpty);
+    });
   });
 
   group('Android native localization gate', () {

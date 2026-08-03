@@ -739,6 +739,24 @@ void main() {
       failures.add('$app ARB localization drift: $arbIssues');
     }
 
+    final cjkProseIssues = findUntranslatedCjkProseIssues({
+      for (final locale in ['en', 'zh', 'ja'])
+        locale: File('$appRoot/lib/l10n/app_$locale.arb').readAsStringSync(),
+    });
+    if (cjkProseIssues.isNotEmpty) {
+      failures.add('$app untranslated CJK UI prose: $cjkProseIssues');
+    }
+
+    final protectedTermIssues = findProtectedArbTermIssues({
+      for (final locale in ['en', 'zh', 'ja'])
+        locale: File('$appRoot/lib/l10n/app_$locale.arb').readAsStringSync(),
+    });
+    if (protectedTermIssues.isNotEmpty) {
+      failures.add(
+        '$app localized chain/token identity drift: $protectedTermIssues',
+      );
+    }
+
     final brandIssues = findForbiddenLocalizationTermIssues(
       {
         for (final locale in ['en', 'zh', 'ja'])

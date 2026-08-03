@@ -362,10 +362,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get fromAccount => '转出账户（From）';
+  String get fromAccount => '转出账户';
 
   @override
-  String get toAddress => '收款地址（To）';
+  String get toAddress => '收款地址';
 
   @override
   String get spenderAddress => '被授权合约';

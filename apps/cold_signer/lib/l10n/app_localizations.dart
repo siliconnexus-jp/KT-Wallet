@@ -787,13 +787,13 @@ abstract class AppLocalizations {
   /// No description provided for @fromAccount.
   ///
   /// In zh, this message translates to:
-  /// **'转出账户（From）'**
+  /// **'转出账户'**
   String get fromAccount;
 
   /// No description provided for @toAddress.
   ///
   /// In zh, this message translates to:
-  /// **'收款地址（To）'**
+  /// **'收款地址'**
   String get toAddress;
 
   /// No description provided for @spenderAddress.
