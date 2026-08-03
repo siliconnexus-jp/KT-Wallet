@@ -100,6 +100,14 @@ Operational behavior (fixed by contract):
   (base / arbitrum / avalanche / BNB / solana / the testnets) have no failover
   partner out of the box — add more endpoints via that network's `*_RPC_URLS`
   variable to get one.
+- **Upstream response identity** — every EVM/Solana node response must be one
+  exact JSON-RPC 2.0 object with only `jsonrpc`, `id` and exactly one of
+  `result` / `error`. Keys are case-sensitive; aliases, unknown members and
+  duplicate keys are malformed. The id must be the exact request id `1`. An
+  error object accepts only integer `code`, string `message` and optional
+  standard `data`. A malformed read may fail over and is counted separately;
+  a malformed broadcast response remains `submission_unknown` and never
+  submits to a second endpoint.
 - **Reverse proxy** — the maintained production template is
   `ops/haproxy/haproxy.cfg`. It keeps active `/healthz` routing across the two
   Gateway processes but sets `retries 0` and forbids redispatch/retry-on,
@@ -230,6 +238,12 @@ duplicate envelope keys return `-32600` with `id: null` before method routing.
 `params` may be omitted, `null` for compatibility, or a structured object/array;
 other scalar values are rejected. `id` may be a string, number or `null`, never
 a boolean, object or array. Malformed JSON remains a `-32700` parse error.
+
+The same exact-object rule applies independently to JSON-RPC responses from
+configured EVM and Solana nodes. This prevents Go's permissive struct decoder
+from accepting `result` plus `Result`, duplicate ids ending in the expected
+value, or provider-specific unknown fields as authoritative balance, fee,
+status or broadcast results.
 
 All fourteen public methods that accept parameters use an exact, recursive
 request schema. Parameter field names are case-sensitive; unknown fields,

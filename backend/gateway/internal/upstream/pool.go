@@ -406,22 +406,24 @@ func (p *Pool) attempt(ctx context.Context, u string, body []byte) (result json.
 			err:  errors.New(publicFailureMessage(failureTransport)),
 		}
 	}
-	var out struct {
-		JSONRPC string          `json:"jsonrpc"`
-		ID      json.RawMessage `json:"id"`
-		Result  json.RawMessage `json:"result"`
-		Error   json.RawMessage `json:"error"`
-	}
-	if err := json.Unmarshal(data, &out); err != nil {
+	fields, err := decodeExactJSONObject(data, "jsonrpc", "id", "result", "error")
+	if err != nil {
 		return nil, nil, &attemptFailure{
 			kind: failureMalformed,
 			err:  fmt.Errorf("invalid JSON-RPC response (HTTP %d)", resp.StatusCode),
 		}
 	}
-	hasResult := len(out.Result) > 0
-	hasError := len(out.Error) > 0
-	if out.JSONRPC != "2.0" ||
-		!bytes.Equal(bytes.TrimSpace(out.ID), []byte("1")) ||
+	var jsonRPCVersion string
+	if err := json.Unmarshal(fields["jsonrpc"], &jsonRPCVersion); err != nil {
+		return nil, nil, &attemptFailure{
+			kind: failureMalformed,
+			err:  fmt.Errorf("invalid JSON-RPC response envelope (HTTP %d)", resp.StatusCode),
+		}
+	}
+	result, hasResult := fields["result"]
+	rpcErrorRaw, hasError := fields["error"]
+	if jsonRPCVersion != "2.0" ||
+		!bytes.Equal(bytes.TrimSpace(fields["id"]), []byte("1")) ||
 		hasResult == hasError {
 		return nil, nil, &attemptFailure{
 			kind: failureMalformed,
@@ -429,20 +431,26 @@ func (p *Pool) attempt(ctx context.Context, u string, body []byte) (result json.
 		}
 	}
 	if hasError {
-		var rpcError struct {
-			Code    *int    `json:"code"`
-			Message *string `json:"message"`
-		}
-		if err := json.Unmarshal(out.Error, &rpcError); err != nil ||
-			rpcError.Code == nil || rpcError.Message == nil {
+		errorFields, err := decodeExactJSONObject(rpcErrorRaw, "code", "message", "data")
+		if err != nil {
 			return nil, nil, &attemptFailure{
 				kind: failureMalformed,
 				err:  fmt.Errorf("invalid JSON-RPC error envelope (HTTP %d)", resp.StatusCode),
 			}
 		}
-		return nil, &NodeError{Code: *rpcError.Code, Message: *rpcError.Message}, nil
+		var code *int
+		var message *string
+		if err := json.Unmarshal(errorFields["code"], &code); err != nil ||
+			json.Unmarshal(errorFields["message"], &message) != nil ||
+			code == nil || message == nil {
+			return nil, nil, &attemptFailure{
+				kind: failureMalformed,
+				err:  fmt.Errorf("invalid JSON-RPC error envelope (HTTP %d)", resp.StatusCode),
+			}
+		}
+		return nil, &NodeError{Code: *code, Message: *message}, nil
 	}
-	return out.Result, nil, nil
+	return result, nil, nil
 }
 
 func (p *Pool) circuitOpen(ep *endpoint) bool {

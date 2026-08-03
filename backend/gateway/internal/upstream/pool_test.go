@@ -442,6 +442,99 @@ func TestJSONRPCResponseEnvelopeMustBindRequest(t *testing.T) {
 	}
 }
 
+func TestJSONRPCResponseEnvelopeRejectsAliasesUnknownAndDuplicates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		payload string
+	}{
+		{
+			name:    "unknown response member",
+			payload: `{"jsonrpc":"2.0","id":1,"result":"stale","unexpected":true}`,
+		},
+		{
+			name:    "result case alias",
+			payload: `{"jsonrpc":"2.0","id":1,"Result":"stale"}`,
+		},
+		{
+			name:    "result case collision",
+			payload: `{"jsonrpc":"2.0","id":1,"result":"first","Result":"stale"}`,
+		},
+		{
+			name:    "duplicate result",
+			payload: `{"jsonrpc":"2.0","id":1,"result":"first","result":"stale"}`,
+		},
+		{
+			name:    "duplicate id ending in expected value",
+			payload: `{"jsonrpc":"2.0","id":2,"id":1,"result":"stale"}`,
+		},
+		{
+			name:    "jsonrpc case collision ending in expected value",
+			payload: `{"jsonrpc":"1.0","JSONRPC":"2.0","id":1,"result":"stale"}`,
+		},
+		{
+			name:    "error unknown member",
+			payload: `{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"wrong","unexpected":true}}`,
+		},
+		{
+			name:    "error field aliases",
+			payload: `{"jsonrpc":"2.0","id":1,"error":{"Code":-32000,"Message":"wrong"}}`,
+		},
+		{
+			name:    "duplicate error code",
+			payload: `{"jsonrpc":"2.0","id":1,"error":{"code":-1,"code":-32000,"message":"wrong"}}`,
+		},
+		{
+			name:    "duplicate error message",
+			payload: `{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"first","message":"wrong"}}`,
+		},
+		{
+			name:    "null error code",
+			payload: `{"jsonrpc":"2.0","id":1,"error":{"code":null,"message":"wrong"}}`,
+		},
+		{
+			name:    "null error message",
+			payload: `{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":null}}`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			malformed := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(tc.payload))
+			})
+			alive := newFakeNode(t, nil)
+			clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+			p := NewPool("eth", []string{malformed.srv.URL, alive.srv.URL}, clk, nil, time.Second)
+
+			result, err := p.Call(context.Background(), "eth_gasPrice", nil)
+			if err != nil || string(result) != `"ok"` {
+				t.Fatalf("ambiguous envelope must fail over: result=%s err=%v", result, err)
+			}
+			if malformed.hits.Load() != 1 || alive.hits.Load() != 1 {
+				t.Fatalf("expected one malformed and one valid attempt, got %d/%d", malformed.hits.Load(), alive.hits.Load())
+			}
+			if got := p.Health().FailureMetrics.MalformedResponse; got != 1 {
+				t.Fatalf("malformed response count = %d, want 1", got)
+			}
+		})
+	}
+}
+
+func TestJSONRPCResponseErrorAllowsStandardDataMember(t *testing.T) {
+	rejecting := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"nonce too low","data":{"nonce":"0x1"}}}`))
+	})
+	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+	_, err := NewPool("eth", []string{rejecting.srv.URL}, clk, nil, time.Second).
+		Call(context.Background(), "eth_sendRawTransaction", nil)
+	var nodeErr *NodeError
+	if !errors.As(err, &nodeErr) || nodeErr.Code != -32000 || nodeErr.Message != "nonce too low" {
+		t.Fatalf("standard error data member must remain compatible: %v", err)
+	}
+}
+
 func TestCallOnceMismatchedResponseIDDoesNotFailOver(t *testing.T) {
 	wrong := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":2,"result":"0xhash"}`))
@@ -457,6 +550,24 @@ func TestCallOnceMismatchedResponseIDDoesNotFailOver(t *testing.T) {
 	}
 	if wrong.hits.Load() != 1 || alive.hits.Load() != 0 {
 		t.Fatalf("write must remain single-shot, got %d/%d", wrong.hits.Load(), alive.hits.Load())
+	}
+}
+
+func TestCallOnceAmbiguousResponseDoesNotFailOver(t *testing.T) {
+	ambiguous := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":2,"id":1,"result":"0xhash"}`))
+	})
+	alive := newFakeNode(t, nil)
+	clk := clock.NewFake(time.Unix(1_700_000_000, 0))
+	p := NewPool("eth", []string{ambiguous.srv.URL, alive.srv.URL}, clk, nil, time.Second)
+
+	_, err := p.CallOnce(context.Background(), "eth_sendRawTransaction", []any{"0x00"})
+	var unavailable *Unavailable
+	if !errors.As(err, &unavailable) {
+		t.Fatalf("ambiguous write response must stay outcome-unknown, got %v", err)
+	}
+	if ambiguous.hits.Load() != 1 || alive.hits.Load() != 0 {
+		t.Fatalf("ambiguous write response must remain single-shot, got %d/%d", ambiguous.hits.Load(), alive.hits.Load())
 	}
 }
 

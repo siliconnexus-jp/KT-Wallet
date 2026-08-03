@@ -114,6 +114,7 @@ void main() {
   _auditGatewayIrreversibleRequestSchema(failures);
   _auditGatewayPublicRequestSchemas(failures);
   _auditGatewayRPCEnvelope(failures);
+  _auditGatewayUpstreamRPCEnvelope(failures);
   _auditRiskSignalDirection(failures);
 
   if (failures.isNotEmpty) {
@@ -129,8 +130,8 @@ void main() {
     '${_networkFreeSecurityFiles.length} network-free security modules, '
     '3 hot-signing families independently verified, '
     'hot and air-gapped broadcasts hash-bound before success metrics, '
-    'all parameterized public Gateway requests and the JSON-RPC envelope '
-    'exact-schema decoded.',
+    'all parameterized public Gateway requests, inbound JSON-RPC envelopes, '
+    'and upstream node responses exact-schema decoded.',
   );
 }
 
@@ -493,6 +494,49 @@ void _auditGatewayRPCEnvelope(List<String> failures) {
   }
   if (source.contains('json.Unmarshal(body, &req)')) {
     failures.add('$path restored permissive JSON-RPC envelope decoding');
+  }
+}
+
+void _auditGatewayUpstreamRPCEnvelope(List<String> failures) {
+  const poolPath = 'backend/gateway/internal/upstream/pool.go';
+  final pool = File(poolPath).readAsStringSync();
+  for (final marker in const [
+    'decodeExactJSONObject(data, "jsonrpc", "id", "result", "error")',
+    'decodeExactJSONObject(rpcErrorRaw, "code", "message", "data")',
+    'hasResult == hasError',
+    'bytes.Equal(bytes.TrimSpace(fields["id"]), []byte("1"))',
+    'code == nil || message == nil',
+  ]) {
+    if (!pool.contains(marker)) {
+      failures.add(
+        '$poolPath lost exact upstream JSON-RPC response invariant: $marker',
+      );
+    }
+  }
+  for (final permissive in const [
+    'json.Unmarshal(data, &out)',
+    'json.Unmarshal(out.Error, &rpcError)',
+  ]) {
+    if (pool.contains(permissive)) {
+      failures.add(
+        '$poolPath restored permissive upstream JSON-RPC decoding: '
+        '$permissive',
+      );
+    }
+  }
+
+  const decoderPath = 'backend/gateway/internal/upstream/strict_json.go';
+  final decoder = File(decoderPath).readAsStringSync();
+  for (final marker in const [
+    'if _, known := allowed[key]; !known',
+    'if _, duplicate := values[key]; duplicate',
+    'expected JSON object',
+  ]) {
+    if (!decoder.contains(marker)) {
+      failures.add(
+        '$decoderPath lost exact-object response invariant: $marker',
+      );
+    }
   }
 }
 

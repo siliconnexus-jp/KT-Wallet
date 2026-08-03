@@ -199,6 +199,18 @@
   10 项负例及对象/数组/null 兼容正例连续 20 轮，RPC/handlers race、Gateway
   普通/vet/govulncheck/ops 与静态远程安全边界通过；静态门禁禁止恢复
   `json.Unmarshal(body, &req)`。该修复仍是本地源码候选，生产仍为 1.16.15。
+- [x] 2026-08-04 再把相同的精确对象边界下推到 Gateway 的 EVM/Solana 节点响应。
+  旧实现把上游 JSON-RPC 解码到 Go struct，会接受未知成员、`Result`/`JSONRPC`
+  大小写别名或冲突、重复 result/id，以及 error 对象中的未知/别名/重复 code/message。
+  10 类歧义响应红测均证明旧实现会把伪造 result 当作成功，或把歧义 error 当作节点明确
+  拒绝。现共享流式对象解码器只接受精确 `jsonrpc/id/result/error`，error 只接受标准
+  `code/message/data`；要求版本 2.0、响应 id 精确为 1、result/error 恰好一个。读请求将
+  畸形节点计入 malformed 后才可故障转移；广播保持单端点，畸形回包只能进入
+  `submission_unknown`，绝不向第二节点重发。人工差异审阅又用 2 类 null code/message
+  红测捕获并修复 Go 零值回归；10 类旧歧义负例、2 类 null 回归、标准 error data 正例及
+  广播 single-shot 负例连续 20 轮，Gateway 普通/race/vet/govulncheck/ops 与静态边界通过。
+  范围仅覆盖核心 EVM/Solana JSON-RPC pool；Provider 专用 REST/索引解析继续由各自闭合
+  schema 审阅。该修复是本地源码候选，生产仍为 1.16.15。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。
