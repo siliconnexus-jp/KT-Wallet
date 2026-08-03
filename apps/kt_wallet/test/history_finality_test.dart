@@ -48,6 +48,7 @@ _fixture({
   String localNetworkId = 'eth-mainnet',
   String? localHash,
   Coin remoteCoin = Coin.eth,
+  Set<String>? activeNetworkIds,
 }) async {
   final database = WalletDatabase(NativeDatabase.memory());
   final wallet = HotWallet(
@@ -94,7 +95,7 @@ _fixture({
     wallets: wallets,
     service: _History(results: {remoteCoin: remote}),
     statusService: _StatusService(hashStatus),
-    activeNetworkIds: () => {'eth-mainnet', localNetworkId},
+    activeNetworkIds: () => activeNetworkIds ?? {'eth-mainnet', localNetworkId},
     pollInterval: const Duration(days: 1),
   );
   return (wallets: wallets, database: database, history: history);
@@ -304,4 +305,32 @@ void main() {
     expect(finality.success, isFalse);
     expect(finality.duration, greaterThan(const Duration(hours: 70)));
   });
+
+  test(
+    'inactive-network Pending keeps reconciling without entering active history',
+    () async {
+      final fixture = await _fixture(
+        remote: const HistoryResult.ok([]),
+        hashStatus: ChainTransactionStatus.confirmed,
+        localNetworkId: 'eth-sepolia',
+        activeNetworkIds: const {'eth-mainnet'},
+      );
+      addTearDown(fixture.history.dispose);
+      addTearDown(fixture.database.close);
+
+      await fixture.history.refresh();
+
+      final row = await fixture.wallets.localTransactionById('local-pending');
+      expect(
+        row?.status,
+        TxStatus.confirmed,
+        reason: 'network selection must not pause finality reconciliation',
+      );
+      expect(
+        fixture.history.records,
+        isEmpty,
+        reason: 'inactive-network rows must remain hidden from the active list',
+      );
+    },
+  );
 }

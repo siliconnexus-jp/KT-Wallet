@@ -552,5 +552,47 @@ void main() {
       );
       expect(await repo.transactions(networkIds: {'tron-nile'}), isEmpty);
     });
+
+    test(
+      'pending reconciliation query spans networks but excludes terminals',
+      () async {
+        final repo = wallets.scoped('A');
+        await repo.upsertTransaction(
+          _evmTx('sepolia', 'A', networkId: 'eth-sepolia'),
+        );
+        await repo.upsertTransaction(
+          _evmTx('mainnet', 'A', nonce: '8', networkId: 'eth-mainnet'),
+        );
+        await repo.upsertTransaction(
+          _evmTx('confirmed', 'A', nonce: '9', networkId: 'eth-mainnet'),
+        );
+        await repo.updateTransactionStatus(
+          'sepolia',
+          TxStatus.pending,
+          hash: '0x${'a' * 64}',
+        );
+        await repo.updateTransactionStatus(
+          'mainnet',
+          TxStatus.pending,
+          hash: '0x${'b' * 64}',
+        );
+        await repo.updateTransactionStatus(
+          'confirmed',
+          TxStatus.confirmed,
+          hash: '0x${'c' * 64}',
+        );
+
+        expect(
+          (await repo.pendingTransactions()).map((row) => row.id).toSet(),
+          {'sepolia', 'mainnet'},
+        );
+        expect(
+          (await repo.transactions(
+            networkIds: {'eth-mainnet'},
+          )).map((row) => row.id).toSet(),
+          {'mainnet', 'confirmed'},
+        );
+      },
+    );
   });
 }

@@ -288,6 +288,46 @@ void main() {
   );
 
   test(
+    'awaited finality writes stay bound to the originating wallet',
+    () async {
+      final first = _hot('A');
+      final second = _hot('B');
+      await store.save(first);
+      await store.save(second);
+      await store.upsertTransaction(
+        id: 'tx-a',
+        walletId: first.id,
+        coin: Coin.eth,
+        networkId: 'eth-sepolia',
+        from: first.addresses.eth,
+        to: '0xrecipient',
+        amountRaw: '1',
+        hash: '0xhash',
+        status: TxStatus.pending,
+        signMode: SignMode.local,
+        createdAt: 1000,
+      );
+      final controller = WalletController(
+        WalletManager(initial: [first, second]),
+        store: store,
+      )..select(second.id);
+
+      await controller.updateTransactionStatusForWallet(
+        first.id,
+        'tx-a',
+        TxStatus.confirmed,
+        hash: '0xhash',
+      );
+
+      expect(
+        (await store.transactionById(first.id, 'tx-a'))?.status,
+        TxStatus.confirmed,
+      );
+      expect(controller.current?.id, second.id);
+    },
+  );
+
+  test(
     'older local transfers are backfilled into the recipient history',
     () async {
       final sender = _hot('A');

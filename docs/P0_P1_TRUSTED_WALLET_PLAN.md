@@ -72,6 +72,15 @@
   `unknown`，不能无证据推断 replacement/dropped。数据库 v7 额外持久化最近一次
   hash 专项查询的 `pending/unknown` 证据：unknown 时首页、详情和导出凭证明确显示
   “状态暂不可用”并继续轮询；节点重新证明 Pending 后自动恢复“确认中”。
+- [x] 交易状态查询不再跟随用户此刻选择的网络：Gateway 和直连 RPC 都按交易行持久化
+  的 `networkId` 解析原端点；已删除、未知或跨链家族 ID 保持 `unknown` 且不发请求，
+  不会在另一网络根据同 hash/nonce 制造确认、失败或 replacement。
+- [x] 当前网络只过滤可见历史，不再暂停其他网络的 Pending 对账。钱包级专用查询持续
+  读取全部带 hash 的 `submitted/broadcast/pending` 行，每行仍使用自身网络；异步 nonce、
+  状态与 EVM replacement 终态写入显式绑定行内 `walletId`，用户在请求期间切换钱包也
+  不能让结果丢失或落到当前钱包。旧实现在 Sepolia Pending + 主网显示条件下红测保持
+  pending；修复后链状态更新为 confirmed 而主网列表仍为空。钱包数据 20/20、相关
+  Wallet 定向 73/73、静态分析与 `check_deps` 通过。
 - [x] TRON：从同一 `getnowblock` 构造并保存 TAPOS reference block 与
   canonical-time expiration；transaction info 缺失且链时间越界后才标记
   `expired`，边界内保持 `unknown`。
@@ -1142,8 +1151,8 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     签名拦截提示仍使用已停用的 `KT Wallet Cold Signer` 或中文界面中的英文名称。
     现统一为英文/日文 `KT Cold Signer`、中文 `KT冷钱包`；新增通用 ARB 禁用词门禁，
     可按语言拒绝退役品牌和语言不匹配名称。门禁单测先红后绿，三语 Widget 回归及受影响
-    Golden 已人工复核；最终公开测试源码审计 12/12、KT Wallet 1461/1461、KT Cold
-    Signer 570/570、共享 packages 400/400、静态分析 0、Gateway audit 全部通过。
+    Golden 已人工复核；最新公开测试源码审计 12/12、KT Wallet 1467/1467、KT Cold
+    Signer 570/570、共享 packages 401/401、静态分析 0、Gateway audit 全部通过。
   - [ ] 真机系统权限弹窗、生命周期保护页及全部生产路由仍需逐页三语语义人工复核，
     因此本总项保持未完成，不能扩大宣称为“全 App 本地化验收完成”。
 

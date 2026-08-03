@@ -144,6 +144,17 @@ class WalletController extends ChangeNotifier {
     return store.transactions(wallet.id, networkIds: networkIds);
   }
 
+  /// Locally submitted rows that still need finality reconciliation, across
+  /// all networks for the current wallet. This intentionally bypasses the
+  /// active-network display filter; every row is queried using its own
+  /// persisted network identity by [TransactionStatusService].
+  Future<List<Transaction>> localPendingTransactions() async {
+    final wallet = current;
+    final store = _store;
+    if (wallet == null || store == null) return const [];
+    return store.pendingTransactions(wallet.id);
+  }
+
   Future<Transaction?> localTransactionById(String id) async {
     final walletId = current?.id;
     if (walletId == null || _store == null) return null;
@@ -359,7 +370,37 @@ class WalletController extends ChangeNotifier {
       if (_allowTestBypass) return;
       throw StateError('No persistent wallet selected');
     }
-    await _store.updateTransactionStatus(
+    await updateTransactionStatusForWallet(
+      walletId,
+      id,
+      status,
+      hash: hash,
+      broadcastAt: broadcastAt,
+      lastCheckedAt: lastCheckedAt,
+      lastCheckOutcome: lastCheckOutcome,
+      clearLastCheckOutcome: clearLastCheckOutcome,
+    );
+  }
+
+  /// Persists an asynchronous status result in the wallet scope captured by
+  /// the transaction row. Background finality queries must never re-read the
+  /// currently selected wallet after awaiting the network.
+  Future<void> updateTransactionStatusForWallet(
+    String walletId,
+    String id,
+    TxStatus status, {
+    String? hash,
+    int? broadcastAt,
+    int? lastCheckedAt,
+    TxCheckOutcome? lastCheckOutcome,
+    bool clearLastCheckOutcome = false,
+  }) async {
+    final store = _store;
+    if (store == null) {
+      if (_allowTestBypass) return;
+      throw StateError('Wallet storage unavailable');
+    }
+    await store.updateTransactionStatus(
       walletId,
       id,
       status,
@@ -375,7 +416,17 @@ class WalletController extends ChangeNotifier {
   Future<bool> setTransactionNonceIfAbsent(String id, String nonce) async {
     final walletId = current?.id;
     if (walletId == null || _store == null) return false;
-    return _store.setTransactionNonceIfAbsent(walletId, id, nonce);
+    return setTransactionNonceIfAbsentForWallet(walletId, id, nonce);
+  }
+
+  Future<bool> setTransactionNonceIfAbsentForWallet(
+    String walletId,
+    String id,
+    String nonce,
+  ) async {
+    final store = _store;
+    if (store == null) return false;
+    return store.setTransactionNonceIfAbsent(walletId, id, nonce);
   }
 
   Future<bool> recordEvmReplacementBroadcast({
@@ -407,7 +458,26 @@ class WalletController extends ChangeNotifier {
   }) async {
     final walletId = current?.id;
     if (walletId == null || _store == null) return;
-    await _store.settleEvmTransaction(
+    await settleEvmTransactionForWallet(
+      walletId: walletId,
+      id: id,
+      status: status,
+      hash: hash,
+      lastCheckedAt: lastCheckedAt,
+    );
+  }
+
+  /// Wallet-scoped counterpart used after an awaited chain lookup.
+  Future<void> settleEvmTransactionForWallet({
+    required String walletId,
+    required String id,
+    required TxStatus status,
+    String? hash,
+    int? lastCheckedAt,
+  }) async {
+    final store = _store;
+    if (store == null) return;
+    await store.settleEvmTransaction(
       walletId: walletId,
       id: id,
       status: status,

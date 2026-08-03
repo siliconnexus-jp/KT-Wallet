@@ -91,7 +91,11 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
            statusService ??
            TransactionStatusService(
              onEvmNonceObserved: (transaction, nonce) async {
-               await wallets.setTransactionNonceIfAbsent(transaction.id, nonce);
+               await wallets.setTransactionNonceIfAbsentForWallet(
+                 transaction.walletId,
+                 transaction.id,
+                 nonce,
+               );
              },
            ),
        _activeNetworkIds = activeNetworkIds,
@@ -129,6 +133,9 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   Future<List<db.Transaction>> _loadLocalTransactions() =>
       _wallets.localTransactions(networkIds: _activeNetworkIds?.call());
 
+  Future<List<db.Transaction>> _loadPendingTransactions() =>
+      _wallets.localPendingTransactions();
+
   String? _walletId;
   String? _activeSnapshotScope;
   int _generation = 0;
@@ -141,6 +148,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   final List<TransactionStatusNotice> _notices = [];
   Timer? _pollTimer;
   List<db.Transaction> _localTransactions = const [];
+  bool _hasPendingTransactions = false;
 
   Map<Coin, HistoryResult> _results = {
     for (final coin in Coin.values) coin: const HistoryResult.loading(),
@@ -373,6 +381,9 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     }
     _localTransactions = await _loadLocalTransactions();
     if (generation != _generation) return;
+    final pendingTransactions = await _loadPendingTransactions();
+    if (generation != _generation) return;
+    _hasPendingTransactions = pendingTransactions.isNotEmpty;
     // A locally submitted incoming/outgoing row is useful immediately; do not
     // keep it behind the slowest explorer request.
     notifyListeners();
@@ -402,7 +413,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     ]);
     final statusFuture = _refreshPendingStatuses(
       generation,
-      _localTransactions,
+      pendingTransactions,
     );
     final entries = await historyFuture;
     await statusFuture;
@@ -425,6 +436,9 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     };
     _localTransactions = await _loadLocalTransactions();
     if (generation != _generation) return;
+    final remainingPending = await _loadPendingTransactions();
+    if (generation != _generation) return;
+    _hasPendingTransactions = remainingPending.isNotEmpty;
     final remoteByIdentity = <_HistoryIdentity, ChainTxRecord>{};
     for (final result in _results.values) {
       if (result.status != HistoryStatus.ok) continue;
@@ -454,13 +468,15 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
       if (next == null) continue;
       final confirmedHash = hash!;
       if (_isEvmCoinName(local.coin)) {
-        await _wallets.settleEvmTransaction(
+        await _wallets.settleEvmTransactionForWallet(
+          walletId: local.walletId,
           id: local.id,
           status: next,
           hash: confirmedHash,
         );
       } else {
-        await _wallets.updateTransactionStatus(
+        await _wallets.updateTransactionStatusForWallet(
+          local.walletId,
           local.id,
           next,
           hash: confirmedHash,
@@ -561,14 +577,16 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
               changed &&
               (persisted == db.TxStatus.confirmed ||
                   persisted == db.TxStatus.failed)) {
-            await _wallets.settleEvmTransaction(
+            await _wallets.settleEvmTransactionForWallet(
+              walletId: transaction.walletId,
               id: transaction.id,
               status: persisted,
               hash: transaction.hash,
               lastCheckedAt: checkedAt,
             );
           } else {
-            await _wallets.updateTransactionStatus(
+            await _wallets.updateTransactionStatusForWallet(
+              transaction.walletId,
               transaction.id,
               persisted,
               hash: transaction.hash,
@@ -619,13 +637,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   void _schedulePoll() {
     if (_disposed) return;
     _pollTimer?.cancel();
-    final hasPending = _localTransactions.any(
-      (transaction) =>
-          transaction.status == db.TxStatus.submitted ||
-          transaction.status == db.TxStatus.pending ||
-          transaction.status == db.TxStatus.broadcast,
-    );
-    if (!hasPending) return;
+    if (!_hasPendingTransactions) return;
     _pollTimer = Timer(pollInterval, _pollPending);
   }
 
@@ -636,12 +648,16 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
     final generation = _generation;
-    final local = await _loadLocalTransactions();
+    final pending = await _loadPendingTransactions();
     if (generation != _generation) return;
-    await _refreshPendingStatuses(generation, local);
+    _hasPendingTransactions = pending.isNotEmpty;
+    await _refreshPendingStatuses(generation, pending);
     if (generation != _generation) return;
     _localTransactions = await _loadLocalTransactions();
     if (generation != _generation) return;
+    final remainingPending = await _loadPendingTransactions();
+    if (generation != _generation) return;
+    _hasPendingTransactions = remainingPending.isNotEmpty;
     _schedulePoll();
     notifyListeners();
   }

@@ -151,6 +151,12 @@ network was deleted, is unknown, or belongs to another chain family, the status
 remains unknown and no request is sent instead of risking a false confirmation,
 failure, or nonce replacement on a different network.
 
+Changing the visible network only filters the history being displayed. Every
+hashed `submitted`, `broadcast`, or `pending` row for the current wallet keeps
+polling on its own persisted network, and asynchronous nonce/finality writes
+remain bound to that row's original wallet even if the user switches wallets
+while a provider request is in flight.
+
 Broadcasts are single-shot writes. An explicit node rejection is shown as a
 failure, while a timeout, disconnected response, or malformed reply after the
 request starts is kept as an unknown result. The locally derived transaction
@@ -427,8 +433,8 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-03) completed with zero static-analysis
-issues: **1,465/1,465** KT Wallet tests, **570/570** KT Cold Signer tests, and
-**400/400** shared-package tests passed. The Gateway audit, public-secret gate,
+issues: **1,467/1,467** KT Wallet tests, **570/570** KT Cold Signer tests, and
+**401/401** shared-package tests passed. The Gateway audit, public-secret gate,
 native dependency lock/checksum verification, and OSV scans also passed. These
 numbers are reproducible source evidence. On the same date, the iOS native
 Runner test targets passed **11/11** for KT Wallet and **8/8** for KT Cold Signer

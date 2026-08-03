@@ -113,6 +113,33 @@ class WalletRepository {
     return q.get();
   }
 
+  /// Every transaction that still requires chain-authoritative finality
+  /// reconciliation for this wallet, across all network instances.
+  ///
+  /// This query deliberately has no active-network filter. Network selection
+  /// is a presentation concern; switching from Sepolia to mainnet must not
+  /// pause confirmation tracking for a transaction already broadcast on
+  /// Sepolia. Callers resolve each row through its persisted `networkId`.
+  Future<List<Transaction>> pendingTransactions() =>
+      (_db.select(_db.transactions)
+            ..where(
+              (t) =>
+                  t.walletId.equals(walletId) &
+                  t.hash.isNotNull() &
+                  t.status.isIn([
+                    TxStatus.submitted.index,
+                    TxStatus.broadcast.index,
+                    TxStatus.pending.index,
+                  ]),
+            )
+            ..orderBy([
+              (t) => OrderingTerm(
+                expression: t.createdAt,
+                mode: OrderingMode.desc,
+              ),
+            ]))
+          .get();
+
   Future<Transaction?> transactionById(String id) =>
       (_db.select(_db.transactions)
             ..where((t) => t.walletId.equals(walletId) & t.id.equals(id)))

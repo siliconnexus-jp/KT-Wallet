@@ -3538,9 +3538,11 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
           : effectiveTransactionRpcEndpoints(prefs, networks),
       gateway: prefsGatewayResolver(prefs, networks),
       onEvmNonceObserved: (transaction, nonce) async {
-        await WalletScope.of(
-          context,
-        ).setTransactionNonceIfAbsent(transaction.id, nonce);
+        await WalletScope.of(context).setTransactionNonceIfAbsentForWallet(
+          transaction.walletId,
+          transaction.id,
+          nonce,
+        );
       },
     );
     _confirmationService ??=
@@ -3625,14 +3627,16 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
     if (_isEvmCoinName(tx.coin) &&
         changed &&
         (persisted == TxStatus.confirmed || persisted == TxStatus.failed)) {
-      await controller.settleEvmTransaction(
+      await controller.settleEvmTransactionForWallet(
+        walletId: tx.walletId,
         id: tx.id,
         status: persisted,
         hash: tx.hash,
         lastCheckedAt: checkedAt,
       );
     } else {
-      await controller.updateTransactionStatus(
+      await controller.updateTransactionStatusForWallet(
+        tx.walletId,
         tx.id,
         persisted,
         hash: tx.hash,
@@ -3953,9 +3957,11 @@ class _TxDetailScreenState extends State<TxDetailScreen>
           : effectiveTransactionRpcEndpoints(prefs, networks),
       gateway: prefsGatewayResolver(prefs, networks),
       onEvmNonceObserved: (transaction, nonce) async {
-        await WalletScope.of(
-          context,
-        ).setTransactionNonceIfAbsent(transaction.id, nonce);
+        await WalletScope.of(context).setTransactionNonceIfAbsentForWallet(
+          transaction.walletId,
+          transaction.id,
+          nonce,
+        );
       },
     );
     if (widget.transaction == null && _activeId != null) {
@@ -4033,14 +4039,16 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     if (_isEvmCoinName(transaction.coin) &&
         changed &&
         (persisted == TxStatus.confirmed || persisted == TxStatus.failed)) {
-      await controller.settleEvmTransaction(
+      await controller.settleEvmTransactionForWallet(
+        walletId: transaction.walletId,
         id: transaction.id,
         status: persisted,
         hash: transaction.hash,
         lastCheckedAt: checkedAt,
       );
     } else {
-      await controller.updateTransactionStatus(
+      await controller.updateTransactionStatusForWallet(
+        transaction.walletId,
         transaction.id,
         persisted,
         hash: transaction.hash,

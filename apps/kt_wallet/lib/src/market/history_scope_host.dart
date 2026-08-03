@@ -55,6 +55,12 @@ class _HistoryScopeHostState extends State<HistoryScopeHost> {
         widget.networks,
       ),
       gateway: prefsGatewayResolver(widget.prefs, widget.networks),
+      onEvmNonceObserved: (transaction, nonce) =>
+          widget.wallets.setTransactionNonceIfAbsentForWallet(
+            transaction.walletId,
+            transaction.id,
+            nonce,
+          ),
     ),
     canRefresh: () => widget.ready,
     snapshots: WalletHistorySnapshotStore(widget.wallets),

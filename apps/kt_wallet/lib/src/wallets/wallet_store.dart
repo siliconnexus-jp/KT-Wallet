@@ -98,6 +98,11 @@ class WalletStore {
     Set<String>? networkIds,
   }) => _wallets.scoped(walletId).transactions(networkIds: networkIds);
 
+  /// Pending rows are always loaded across every network. The UI may filter
+  /// its visible history, but finality tracking follows each persisted row.
+  Future<List<db.Transaction>> pendingTransactions(String walletId) =>
+      _wallets.scoped(walletId).pendingTransactions();
+
   Future<db.Transaction?> transactionById(String walletId, String id) =>
       _wallets.scoped(walletId).transactionById(id);
 

@@ -873,6 +873,80 @@ void main() {
       failures.add('$path does not wire persisted-network status resolution');
     }
   }
+  final historyFinalityController = File(
+    'apps/kt_wallet/lib/src/market/history_controller.dart',
+  );
+  final historyFinalityControllerSource = historyFinalityController.existsSync()
+      ? historyFinalityController.readAsStringSync()
+      : '';
+  for (final marker in const [
+    'Future<List<db.Transaction>> _loadPendingTransactions()',
+    '_wallets.localPendingTransactions()',
+    '_refreshPendingStatuses(\n      generation,\n      pendingTransactions,',
+    '_hasPendingTransactions = remainingPending.isNotEmpty',
+    'updateTransactionStatusForWallet(',
+    'walletId: transaction.walletId',
+  ]) {
+    if (!historyFinalityControllerSource.contains(marker)) {
+      failures.add(
+        '${historyFinalityController.path} can pause or mis-scope inactive-network finality: $marker',
+      );
+    }
+  }
+  final historyScopeHost = File(
+    'apps/kt_wallet/lib/src/market/history_scope_host.dart',
+  );
+  final historyScopeHostSource = historyScopeHost.existsSync()
+      ? historyScopeHost.readAsStringSync()
+      : '';
+  for (final marker in const [
+    'onEvmNonceObserved: (transaction, nonce)',
+    'setTransactionNonceIfAbsentForWallet(',
+    'transaction.walletId',
+  ]) {
+    if (!historyScopeHostSource.contains(marker)) {
+      failures.add(
+        '${historyScopeHost.path} does not persist observed nonce in the originating wallet: $marker',
+      );
+    }
+  }
+  final walletRepository = File(
+    'packages/wallet_data/lib/src/repositories.dart',
+  );
+  final walletRepositorySource = walletRepository.existsSync()
+      ? walletRepository.readAsStringSync()
+      : '';
+  for (final marker in const [
+    'Future<List<Transaction>> pendingTransactions()',
+    't.hash.isNotNull()',
+    'TxStatus.submitted.index',
+    'TxStatus.broadcast.index',
+    'TxStatus.pending.index',
+  ]) {
+    if (!walletRepositorySource.contains(marker)) {
+      failures.add(
+        '${walletRepository.path} lacks a wallet-scoped all-network pending query: $marker',
+      );
+    }
+  }
+  final walletController = File(
+    'apps/kt_wallet/lib/src/state/wallet_controller.dart',
+  );
+  final walletControllerSource = walletController.existsSync()
+      ? walletController.readAsStringSync()
+      : '';
+  for (final marker in const [
+    'localPendingTransactions()',
+    'updateTransactionStatusForWallet(',
+    'setTransactionNonceIfAbsentForWallet(',
+    'settleEvmTransactionForWallet(',
+  ]) {
+    if (!walletControllerSource.contains(marker)) {
+      failures.add(
+        '${walletController.path} can bind an awaited finality write to the selected wallet: $marker',
+      );
+    }
+  }
   final homeScreen = File('apps/kt_wallet/lib/src/screens/home_screen.dart');
   final homeScreenSource = homeScreen.existsSync()
       ? homeScreen.readAsStringSync()
