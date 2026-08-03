@@ -36,7 +36,7 @@ func (g *Gateway) GetChainParams(ctx context.Context, params json.RawMessage) (a
 		Network string `json:"network"`
 		Address string `json:"address"`
 	}
-	if err := json.Unmarshal(params, &p); err != nil || len(params) == 0 {
+	if err := decodeStrictJSON(params, &p); err != nil || len(params) == 0 {
 		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: expected {"chain", "network"?, "address"}`)
 	}
 	meta, rpcErr := validateChain(p.Chain)

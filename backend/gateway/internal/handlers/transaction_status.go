@@ -21,7 +21,7 @@ func (g *Gateway) GetTransactionStatus(ctx context.Context, params json.RawMessa
 		Network string `json:"network"`
 		Hash    string `json:"hash"`
 	}
-	if err := json.Unmarshal(params, &p); err != nil || len(params) == 0 {
+	if err := decodeStrictJSON(params, &p); err != nil || len(params) == 0 {
 		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: expected {"chain", "network"?, "hash"}`)
 	}
 	meta, rpcErr := validateChain(p.Chain)

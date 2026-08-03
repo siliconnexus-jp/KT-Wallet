@@ -112,6 +112,7 @@ void main() {
   _auditNetworkFreeSecurityModules(failures);
   _auditHotSigningBoundary(failures);
   _auditGatewayIrreversibleRequestSchema(failures);
+  _auditGatewayPublicRequestSchemas(failures);
   _auditRiskSignalDirection(failures);
 
   if (failures.isNotEmpty) {
@@ -127,7 +128,7 @@ void main() {
     '${_networkFreeSecurityFiles.length} network-free security modules, '
     '3 hot-signing families independently verified, '
     'hot and air-gapped broadcasts hash-bound before success metrics, '
-    'Gateway broadcast requests exact-schema decoded.',
+    'all parameterized public Gateway requests exact-schema decoded.',
   );
 }
 
@@ -373,6 +374,102 @@ void _auditGatewayIrreversibleRequestSchema(List<String> failures) {
   }
 }
 
+void _auditGatewayPublicRequestSchemas(List<String> failures) {
+  const expectedRegistrations = <String, String>{
+    'kt_health': 'Health',
+    'kt_getBalances': 'GetBalances',
+    'kt_getPortfolio': 'GetPortfolio',
+    'kt_getPrices': 'GetPrices',
+    'kt_getChainParams': 'GetChainParams',
+    'kt_simulateEvmTransfer': 'SimulateEVMTransfer',
+    'kt_estimateEvmGas': 'EstimateEVMGas',
+    'kt_getEvmSpendableBalances': 'GetEVMSpendableBalances',
+    'kt_getHistory': 'GetHistory',
+    'kt_getTransactionStatus': 'GetTransactionStatus',
+    'kt_searchTokens': 'SearchOfficialTokens',
+    'kt_checkTokenRisk': 'CheckTokenRisk',
+    'kt_getEvmTokenApprovals': 'GetEVMTokenApprovals',
+    'kt_reportDiagnostics': 'ReportAppDiagnostics',
+    'kt_broadcast': 'Broadcast',
+  };
+  const gatewayPath = 'backend/gateway/internal/handlers/gateway.go';
+  final gateway = File(gatewayPath).readAsStringSync();
+  final registrationPattern = RegExp(
+    r's\.Register\("([^"]+)",\s*g\.([A-Za-z0-9_]+)\)',
+  );
+  final actualRegistrations = <String, String>{};
+  for (final match in registrationPattern.allMatches(gateway)) {
+    final method = match.group(1)!;
+    final handler = match.group(2)!;
+    if (actualRegistrations.containsKey(method)) {
+      failures.add('$gatewayPath duplicates public method $method');
+    }
+    actualRegistrations[method] = handler;
+  }
+  if (!_sameStringMap(actualRegistrations, expectedRegistrations)) {
+    failures.add(
+      '$gatewayPath public method registry changed; review every new or '
+      'rebound method request schema',
+    );
+  }
+
+  const expectedStrictParamDecodes = <String, int>{
+    'backend/gateway/internal/handlers/balances.go': 2,
+    'backend/gateway/internal/handlers/prices.go': 1,
+    'backend/gateway/internal/handlers/chainparams.go': 1,
+    // Simulation and estimation share validatedEVMCall; spendable balances
+    // has its own request object.
+    'backend/gateway/internal/handlers/evm_preflight.go': 2,
+    'backend/gateway/internal/handlers/history.go': 1,
+    'backend/gateway/internal/handlers/transaction_status.go': 1,
+    'backend/gateway/internal/handlers/official_tokens.go': 1,
+    'backend/gateway/internal/handlers/token_risk.go': 1,
+    'backend/gateway/internal/handlers/token_approvals.go': 1,
+    'backend/gateway/internal/handlers/broadcast.go': 1,
+  };
+  const strictMarker = 'decodeStrictJSON(params, &p)';
+  for (final entry in expectedStrictParamDecodes.entries) {
+    final source = File(entry.key).readAsStringSync();
+    final actual = strictMarker.allMatches(source).length;
+    if (actual != entry.value) {
+      failures.add(
+        '${entry.key} has $actual exact-schema parameter decodes; '
+        'expected ${entry.value}',
+      );
+    }
+  }
+
+  const diagnosticsPath =
+      'backend/gateway/internal/handlers/app_diagnostics.go';
+  final diagnostics = File(diagnosticsPath).readAsStringSync();
+  if (!diagnostics.contains('decodeStrictJSON(params, &report)')) {
+    failures.add('$diagnosticsPath lost exact-schema diagnostics decoding');
+  }
+
+  final handlers = Directory('backend/gateway/internal/handlers');
+  final permissive = RegExp(r'json\.Unmarshal\s*\(\s*params\b');
+  for (final entity in handlers.listSync()) {
+    if (entity is! File ||
+        !entity.path.endsWith('.go') ||
+        entity.path.endsWith('_test.go')) {
+      continue;
+    }
+    if (permissive.hasMatch(entity.readAsStringSync())) {
+      failures.add(
+        '${entity.path} restored permissive public parameter decoding',
+      );
+    }
+  }
+}
+
+bool _sameStringMap(Map<String, String> left, Map<String, String> right) {
+  if (left.length != right.length) return false;
+  for (final entry in right.entries) {
+    if (left[entry.key] != entry.value) return false;
+  }
+  return true;
+}
+
 void _auditRiskSignalDirection(List<String> failures) {
   const transferPath = 'apps/kt_wallet/lib/src/screens/transfer_screens.dart';
   final transfer = File(transferPath).readAsStringSync();
@@ -500,6 +597,14 @@ List<String> _selfTestFailures() {
   final section = _futureMethodSection(strict, 'signPreparedEvm');
   if (section == null || section.contains('Future<void> next')) {
     failures.add('method boundary extractor is not closed');
+  }
+  if (!_sameStringMap(const {'kt_a': 'A'}, const {'kt_a': 'A'}) ||
+      _sameStringMap(const {'kt_a': 'B'}, const {'kt_a': 'A'}) ||
+      _sameStringMap(
+        const {'kt_a': 'A', 'kt_new': 'New'},
+        const {'kt_a': 'A'},
+      )) {
+    failures.add('public method registry comparison is not exact');
   }
   return failures;
 }

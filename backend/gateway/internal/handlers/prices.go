@@ -51,7 +51,7 @@ func (g *Gateway) GetPrices(ctx context.Context, params json.RawMessage) (any, *
 	var p struct {
 		Symbols []string `json:"symbols"`
 	}
-	if err := json.Unmarshal(params, &p); err != nil || len(params) == 0 {
+	if err := decodeStrictJSON(params, &p); err != nil || len(params) == 0 {
 		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: expected {"symbols": [...]}`)
 	}
 	if len(p.Symbols) == 0 {

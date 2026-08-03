@@ -68,7 +68,7 @@ func (g *Gateway) GetHistory(ctx context.Context, params json.RawMessage) (any, 
 		Address string `json:"address"`
 		Limit   *int   `json:"limit"`
 	}
-	if err := json.Unmarshal(params, &p); err != nil || len(params) == 0 {
+	if err := decodeStrictJSON(params, &p); err != nil || len(params) == 0 {
 		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: expected {"chain", "network"?, "address", "limit"?}`)
 	}
 	meta, rpcErr := validateChain(p.Chain)

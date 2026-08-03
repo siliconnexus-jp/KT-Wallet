@@ -27,7 +27,7 @@ func (g *Gateway) validatedEVMCall(
 	params json.RawMessage,
 ) (evmCallParams, string, *rpc.Error) {
 	var p evmCallParams
-	if err := json.Unmarshal(params, &p); err != nil || len(params) == 0 {
+	if err := decodeStrictJSON(params, &p); err != nil || len(params) == 0 {
 		return p, "", rpc.Errorf(
 			rpc.CodeInvalidParams,
 			`invalid params: expected {"chain", "network"?, "from", "to", "value", "data"}`,
@@ -149,7 +149,7 @@ func (g *Gateway) GetEVMSpendableBalances(
 		Address       string `json:"address"`
 		TokenContract string `json:"tokenContract"`
 	}
-	if err := json.Unmarshal(params, &p); err != nil || len(params) == 0 {
+	if err := decodeStrictJSON(params, &p); err != nil || len(params) == 0 {
 		return nil, rpc.Errorf(
 			rpc.CodeInvalidParams,
 			`invalid params: expected {"chain", "network"?, "address", "tokenContract"?}`,

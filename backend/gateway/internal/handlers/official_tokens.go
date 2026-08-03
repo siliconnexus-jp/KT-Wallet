@@ -200,7 +200,7 @@ func (g *Gateway) SearchOfficialTokens(_ context.Context, params json.RawMessage
 		Limit    *int     `json:"limit"`
 	}
 	if len(params) > 0 {
-		if err := json.Unmarshal(params, &p); err != nil {
+		if err := decodeStrictJSON(params, &p); err != nil {
 			return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: expected {"query"?, "networks"?, "limit"?}`)
 		}
 	}

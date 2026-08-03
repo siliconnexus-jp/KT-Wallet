@@ -48,7 +48,7 @@ func (g *Gateway) GetEVMTokenApprovals(
 		Address        string `json:"address"`
 		PrivacyConsent bool   `json:"privacyConsent"`
 	}
-	if err := json.Unmarshal(params, &p); err != nil || len(params) == 0 {
+	if err := decodeStrictJSON(params, &p); err != nil || len(params) == 0 {
 		return nil, rpc.Errorf(
 			rpc.CodeInvalidParams,
 			`invalid params: expected {"chain", "network"?, "address", "privacyConsent":true}`,

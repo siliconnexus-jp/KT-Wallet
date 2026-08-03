@@ -62,7 +62,7 @@ func (g *Gateway) GetPortfolio(ctx context.Context, params json.RawMessage) (any
 	var p struct {
 		Accounts []portfolioAccount `json:"accounts"`
 	}
-	if err := json.Unmarshal(params, &p); err != nil || len(p.Accounts) == 0 {
+	if err := decodeStrictJSON(params, &p); err != nil || len(p.Accounts) == 0 {
 		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: expected non-empty {"accounts":[...]}`)
 	}
 	if len(p.Accounts) > 16 {
@@ -109,7 +109,7 @@ func (g *Gateway) GetBalances(ctx context.Context, params json.RawMessage) (any,
 		Address string     `json:"address"`
 		Tokens  []tokenRef `json:"tokens"`
 	}
-	if err := json.Unmarshal(params, &p); err != nil || len(params) == 0 {
+	if err := decodeStrictJSON(params, &p); err != nil || len(params) == 0 {
 		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: expected {"chain", "network"?, "address", "tokens"?}`)
 	}
 	meta, rpcErr := validateChain(p.Chain)

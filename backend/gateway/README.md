@@ -224,6 +224,15 @@ requests are NOT supported (error `-32600`). `chain` ∈ `"eth" | "polygon" |
 `Coin` enum names). A request without an `id` (or with `"id": null`) is a
 notification: it executes but gets HTTP 204 and no body.
 
+All fourteen public methods that accept parameters use an exact, recursive
+request schema. Parameter field names are case-sensitive; unknown fields,
+exact duplicate keys and aliases such as `Hash` for `hash` are rejected with
+`-32602` before cache lookup or an upstream request. The rule also applies to
+nested objects and array items. This prevents the client and Gateway from
+interpreting an ambiguous wallet, transaction, risk or privacy request in
+different ways. Optional fields remain optional, but when present their names
+and types must be canonical.
+
 ### Networks
 
 Every chain-scoped method (`kt_getBalances`, `kt_getChainParams`,

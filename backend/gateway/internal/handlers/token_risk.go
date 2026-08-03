@@ -154,7 +154,7 @@ func (g *Gateway) CheckTokenRisk(ctx context.Context, params json.RawMessage) (a
 		Network  string `json:"network"`
 		Contract string `json:"contract"`
 	}
-	if err := json.Unmarshal(params, &p); err != nil {
+	if err := decodeStrictJSON(params, &p); err != nil {
 		return nil, rpc.Errorf(rpc.CodeInvalidParams,
 			`invalid params: expected {"chain", "network"?, "contract"}`)
 	}
