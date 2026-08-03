@@ -141,7 +141,11 @@ Future<String> _sendL1(
     coin: Coin.eth,
     signingInput: unsigned,
   );
-  final result = await broadcaster.broadcast(Chain.ethereum, signed.signedTx);
+  final result = await broadcaster.broadcast(
+    Chain.ethereum,
+    signed.signedTx,
+    expectedTxHash: signed.txHash,
+  );
   expect(result.status, BroadcastStatus.ok, reason: result.message);
   await _waitForReceipt(transport, result.txHash!);
   return result.txHash!;

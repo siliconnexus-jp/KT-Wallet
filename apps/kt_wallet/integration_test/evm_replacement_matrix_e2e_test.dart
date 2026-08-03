@@ -407,9 +407,17 @@ Future<void> _runRapidScenario({
     coin: item.coin,
     unsigned: replacement.unsignedTx,
   );
-  final originalFuture = broadcaster.broadcast(item.chain, originalSigned);
+  final originalFuture = broadcaster.broadcast(
+    item.chain,
+    originalSigned.signedTx,
+    expectedTxHash: originalSigned.txHash,
+  );
   await Future<void>.delayed(const Duration(milliseconds: 1));
-  final winnerFuture = broadcaster.broadcast(item.chain, winnerSigned);
+  final winnerFuture = broadcaster.broadcast(
+    item.chain,
+    winnerSigned.signedTx,
+    expectedTxHash: winnerSigned.txHash,
+  );
   final outcomes = await Future.wait([originalFuture, winnerFuture]);
   expect(outcomes[0].status, BroadcastStatus.ok, reason: outcomes[0].message);
   expect(outcomes[1].status, BroadcastStatus.ok, reason: outcomes[1].message);
@@ -475,12 +483,16 @@ Future<String> _signAndBroadcast({
   required Uint8List unsigned,
 }) async {
   final signed = await _sign(crypto: crypto, coin: coin, unsigned: unsigned);
-  final outcome = await broadcaster.broadcast(chain, signed);
+  final outcome = await broadcaster.broadcast(
+    chain,
+    signed.signedTx,
+    expectedTxHash: signed.txHash,
+  );
   expect(outcome.status, BroadcastStatus.ok, reason: outcome.message);
   return outcome.txHash!;
 }
 
-Future<Uint8List> _sign({
+Future<SignedTransaction> _sign({
   required CoreCrypto crypto,
   required Coin coin,
   required Uint8List unsigned,
@@ -490,7 +502,7 @@ Future<Uint8List> _sign({
     coin: coin,
     signingInput: unsigned,
   );
-  return signed.signedTx;
+  return signed;
 }
 
 Future<int> _readChainId(JsonRpcTransport transport, String rpcUrl) async {

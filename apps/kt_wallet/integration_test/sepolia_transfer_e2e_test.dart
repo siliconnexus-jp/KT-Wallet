@@ -188,7 +188,11 @@ Future<String> _signBroadcastAndConfirm(
     coin: Coin.eth,
     signingInput: unsigned,
   );
-  final outcome = await broadcaster.broadcast(Chain.ethereum, signed.signedTx);
+  final outcome = await broadcaster.broadcast(
+    Chain.ethereum,
+    signed.signedTx,
+    expectedTxHash: signed.txHash,
+  );
   expect(outcome.status, BroadcastStatus.ok, reason: outcome.message);
   final hash = outcome.txHash!;
   final receipt = await _waitForReceipt(transport, hash);

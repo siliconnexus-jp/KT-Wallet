@@ -107,7 +107,11 @@ class _TronTransferRest implements RestTransport {
 
 class _BroadcastCapture extends BroadcastService {
   @override
-  Future<BroadcastOutcome> broadcast(Chain chain, Uint8List signedTx) async {
+  Future<BroadcastOutcome> broadcast(
+    Chain chain,
+    Uint8List signedTx, {
+    required String expectedTxHash,
+  }) async {
     expect(chain, Chain.tron);
     return const BroadcastOutcome.ok('tron-test-signature');
   }

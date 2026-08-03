@@ -757,12 +757,17 @@ void main() {
         final evm = await service.broadcast(
           Chain.ethereum,
           Uint8List.fromList([0x02, 0xab, 0x01]),
+          expectedTxHash: '0xEVM',
         );
         expect(evm.status, BroadcastStatus.ok);
-        expect(evm.txHash, '0xevm');
+        expect(evm.txHash, '0xEVM');
 
         final solanaBytes = Uint8List.fromList([9, 8, 7]);
-        final sol = await service.broadcast(Chain.solana, solanaBytes);
+        final sol = await service.broadcast(
+          Chain.solana,
+          solanaBytes,
+          expectedTxHash: 'solSig',
+        );
         expect(sol.txHash, 'solSig');
 
         final tronJson =
@@ -770,8 +775,9 @@ void main() {
         final tron = await service.broadcast(
           Chain.tron,
           Uint8List.fromList(utf8.encode(tronJson)),
+          expectedTxHash: 'TRONTXID',
         );
-        expect(tron.txHash, 'tronTxid');
+        expect(tron.txHash, 'TRONTXID');
 
         final params = gateway.paramsOf('kt_broadcast');
         expect(params[0], {'chain': 'eth', 'payload': '0x02ab01'});
@@ -802,6 +808,7 @@ void main() {
       final outcome = await service.broadcast(
         Chain.ethereum,
         Uint8List.fromList([0x02, 0x01]),
+        expectedTxHash: '0xlocal',
       );
       expect(outcome.status, BroadcastStatus.error);
       expect(outcome.message, 'transaction nonce is too low');
@@ -834,6 +841,7 @@ void main() {
       final outcome = await service.broadcast(
         Chain.ethereum,
         Uint8List.fromList([0x02, 0x01]),
+        expectedTxHash: '0xlocal',
       );
       expect(outcome.status, BroadcastStatus.unknown);
       expect(outcome.txHash, isNull);
@@ -854,6 +862,7 @@ void main() {
         final outcome = await unreachable.broadcast(
           Chain.ethereum,
           Uint8List.fromList([0x02, 0x01]),
+          expectedTxHash: '0xlocal',
         );
         expect(outcome.status, BroadcastStatus.unknown);
         expect(outcome.txHash, isNull);
@@ -873,6 +882,7 @@ void main() {
         final sol = await unsupported.broadcast(
           Chain.solana,
           Uint8List.fromList([1, 2]),
+          expectedTxHash: 'sig',
         );
         expect(sol.status, BroadcastStatus.ok);
         expect(sol.txHash, 'sig');
@@ -892,6 +902,7 @@ void main() {
         final outcome = await service.broadcast(
           Chain.tron,
           Uint8List.fromList([0x0a, 0x02, 0xff]),
+          expectedTxHash: 'tronTxid',
         );
         expect(outcome.status, BroadcastStatus.unsupported);
         expect(gateway.calls, isEmpty);

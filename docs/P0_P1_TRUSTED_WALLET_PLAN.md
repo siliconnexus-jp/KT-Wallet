@@ -1,6 +1,6 @@
 # KT Wallet P0/P1 可信基础钱包实施方案
 
-更新日期：2026-08-03
+更新日期：2026-08-04
 
 ## 目标与边界
 
@@ -263,6 +263,14 @@
   EVM/TRON 大小写不敏感、Solana base58 大小写敏感，并由远程安全边界审计锁定。
   KT Wallet 1519/1519、KT Cold Signer 570/570、共享 packages 409/409、默认公开测试
   门禁 12/12 与静态分析 0 通过。
+- [x] 2026-08-04 将逐链 hash 绑定下沉到统一 `BroadcastService` 的指标边界。调用方必须
+  传入本地独立验签/持久化的 txHash；空值在任何网络写入前失败，节点或 Gateway 回执
+  不一致时统一返回 outcome unknown。`transaction.broadcast` 只度量绑定后的结果，不能
+  再出现“页面显示待核对、监控却记录成功”。热钱包、观察钱包/KT Cold Signer QR、所有
+  测试网 E2E 与替换交易调用点均使用同一契约，调用方原有二次比较保留为纵深防御。
+  缺失本地 hash 零网络调用、错 hash 指标失败的两项边界测试先红后绿；KT Wallet
+  1521/1521、KT Cold Signer 570/570、共享 packages 409/409、Gateway audit、远程安全
+  边界审计与静态分析 0 通过。
 - [x] KT Wallet 新建/导入热钱包和扫码配对观察钱包的本地 walletId 已从可预测的
   微秒时间戳改为 `Random.secure()` 生成的 144-bit URL-safe 随机值。旧 walletId 继续
   兼容读取；新 ID 在内存已有钱包中连续碰撞 8 次会失败闭合，数据库主键冲突仍由原子

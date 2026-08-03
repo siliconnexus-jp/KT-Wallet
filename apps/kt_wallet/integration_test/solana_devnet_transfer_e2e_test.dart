@@ -115,7 +115,11 @@ Future<String> _signBroadcastAndConfirm(
     coin: Coin.solana,
     signingInput: message.serialize(),
   );
-  final result = await broadcaster.broadcast(Chain.solana, signed.signedTx);
+  final result = await broadcaster.broadcast(
+    Chain.solana,
+    signed.signedTx,
+    expectedTxHash: signed.txHash,
+  );
   expect(result.status, BroadcastStatus.ok, reason: result.message);
   final signature = result.txHash!;
   for (var attempt = 0; attempt < 30; attempt++) {

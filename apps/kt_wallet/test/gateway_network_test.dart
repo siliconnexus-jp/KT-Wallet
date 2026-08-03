@@ -604,9 +604,10 @@ void main() {
       final outcome = await service.broadcast(
         Chain.ethereum,
         Uint8List.fromList([0x02, 0x01]),
+        expectedTxHash: '0xDIRECTHASH',
       );
       expect(outcome.status, BroadcastStatus.ok);
-      expect(outcome.txHash, '0xdirecthash');
+      expect(outcome.txHash, '0xDIRECTHASH');
       // A bypass happens BEFORE any post: the gateway never saw the payload
       // and the direct node saw it exactly once (INV-15).
       expect(gateway.paramsOf('kt_broadcast'), isEmpty);

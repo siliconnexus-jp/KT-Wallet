@@ -404,7 +404,11 @@ Future<({String hash, Map<Object?, Object?> receipt})> _sendThroughAirGap(
   );
   expect(verified.txHash.toLowerCase(), signed.txHash.toLowerCase());
 
-  final outcome = await broadcaster.broadcast(network.chain, verified.signedTx);
+  final outcome = await broadcaster.broadcast(
+    network.chain,
+    verified.signedTx,
+    expectedTxHash: verified.txHash,
+  );
   expect(outcome.status, BroadcastStatus.ok, reason: outcome.message);
   final hash = outcome.txHash!;
   expect(hash.toLowerCase(), verified.txHash.toLowerCase());

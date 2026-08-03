@@ -14,7 +14,8 @@ import 'chain_params_service.dart' show rpcCoinForChain;
 
 /// How a broadcast attempt ended.
 enum BroadcastStatus {
-  /// Accepted by a real node; [BroadcastOutcome.txHash] is the node's answer.
+  /// Accepted by a real node whose answer matched the locally verified hash;
+  /// [BroadcastOutcome.txHash] is the local canonical transaction identity.
   ok,
 
   /// A real node returned a syntactically valid response that explicitly
@@ -101,10 +102,11 @@ class BroadcastService {
   /// Optional gateway (null in direct mode), resolved on every broadcast.
   final GatewayResolver _gateway;
 
-  /// Broadcasts [signedTx] on [chain] and returns the node's transaction
-  /// hash. Outcomes are returned, never thrown. A node rejection is [error],
-  /// while response loss, timeout and malformed transport responses are
-  /// [unknown] because the signed bytes may already have reached the chain.
+  /// Broadcasts [signedTx] on [chain] and returns [expectedTxHash] only after
+  /// the node's transaction identity matches it. Outcomes are returned, never
+  /// thrown. A node rejection is [error], while response loss, timeout,
+  /// malformed responses and identity mismatches are [unknown] because the
+  /// signed bytes may already have reached the chain.
   ///
   /// GATEWAY SEMANTICS: with a gateway configured, `kt_broadcast` is tried
   /// first. A -32000 upstream error means a real node explicitly REJECTED the
@@ -113,12 +115,37 @@ class BroadcastService {
   /// gateway rate limiting are known to happen before forwarding, so only
   /// those may use the direct path. Any other gateway failure is
   /// outcome-unknown and is never re-posted.
-  Future<BroadcastOutcome> broadcast(Chain chain, Uint8List signedTx) =>
-      ExperienceMetrics.instance.measure(
-        ExperienceMetricNames.transactionBroadcast,
-        () => _broadcast(chain, signedTx),
-        isSuccess: (outcome) => outcome.status == BroadcastStatus.ok,
+  Future<BroadcastOutcome> broadcast(
+    Chain chain,
+    Uint8List signedTx, {
+    required String expectedTxHash,
+  }) => ExperienceMetrics.instance.measure(
+    ExperienceMetricNames.transactionBroadcast,
+    () => _broadcastBound(chain, signedTx, expectedTxHash: expectedTxHash),
+    isSuccess: (outcome) => outcome.status == BroadcastStatus.ok,
+  );
+
+  Future<BroadcastOutcome> _broadcastBound(
+    Chain chain,
+    Uint8List signedTx, {
+    required String expectedTxHash,
+  }) async {
+    if (expectedTxHash.trim().isEmpty) {
+      return const BroadcastOutcome.unsupported(
+        'Missing locally verified transaction hash',
       );
+    }
+    final outcome = await _broadcast(chain, signedTx);
+    if (outcome.status != BroadcastStatus.ok) return outcome;
+    final nodeHash = outcome.txHash;
+    if (nodeHash == null ||
+        !transactionHashesMatch(chain, expectedTxHash, nodeHash)) {
+      return const BroadcastOutcome.unknown(
+        'Node returned an inconsistent transaction hash',
+      );
+    }
+    return BroadcastOutcome.ok(expectedTxHash);
+  }
 
   Future<BroadcastOutcome> _broadcast(Chain chain, Uint8List signedTx) async {
     final gateway = _gateway();

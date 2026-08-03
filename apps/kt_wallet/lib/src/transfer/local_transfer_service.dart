@@ -924,7 +924,11 @@ class LocalTransferService {
         'missing locally verified transaction hash',
       );
     }
-    final outcome = await _broadcaster.broadcast(chain, signedTx);
+    final outcome = await _broadcaster.broadcast(
+      chain,
+      signedTx,
+      expectedTxHash: expectedTxHash,
+    );
     switch (outcome.status) {
       case BroadcastStatus.ok:
         final txHash = outcome.txHash;

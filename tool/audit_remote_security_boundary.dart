@@ -125,7 +125,7 @@ void main() {
     '${_reviewedGatewayResponseKeys.length} reviewed Gateway fields, '
     '${_networkFreeSecurityFiles.length} network-free security modules, '
     '3 hot-signing families independently verified, '
-    'hot and air-gapped broadcasts hash-bound.',
+    'hot and air-gapped broadcasts hash-bound before success metrics.',
   );
 }
 
@@ -295,6 +295,7 @@ void _auditHotSigningBoundary(List<String> failures) {
     'transactionHashesMatch(',
     'chainForCoin(result.coin)',
     'result.txHash,',
+    'expectedTxHash: result.txHash',
     '..broadcastTxHash = result.txHash',
     '..broadcastOutcomeUnknown = true',
   ]) {
@@ -315,6 +316,34 @@ void _auditHotSigningBoundary(List<String> failures) {
   ]) {
     if (!broadcast.contains(marker)) {
       failures.add('$broadcastPath lost chain-aware hash comparison: $marker');
+    }
+  }
+
+  final measuredBroadcast = _futureMethodSection(broadcast, 'broadcast');
+  for (final marker in const [
+    'required String expectedTxHash',
+    'ExperienceMetrics.instance.measure(',
+    '() => _broadcastBound(',
+    'isSuccess: (outcome) => outcome.status == BroadcastStatus.ok',
+  ]) {
+    if (measuredBroadcast == null || !measuredBroadcast.contains(marker)) {
+      failures.add(
+        '$broadcastPath measures an unbound broadcast result: $marker',
+      );
+    }
+  }
+  final boundBroadcast = _futureMethodSection(broadcast, '_broadcastBound');
+  for (final marker in const [
+    'if (expectedTxHash.trim().isEmpty)',
+    'final outcome = await _broadcast(chain, signedTx)',
+    '!transactionHashesMatch(chain, expectedTxHash, nodeHash)',
+    'BroadcastOutcome.unknown(',
+    'return BroadcastOutcome.ok(expectedTxHash)',
+  ]) {
+    if (boundBroadcast == null || !boundBroadcast.contains(marker)) {
+      failures.add(
+        '$broadcastPath lost pre-metric local-hash binding: $marker',
+      );
     }
   }
 }

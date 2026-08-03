@@ -3258,6 +3258,7 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
     final outcome = await service.broadcast(
       chainForCoin(result.coin),
       result.signedTx,
+      expectedTxHash: result.txHash,
     );
     if (!mounted) return;
     switch (outcome.status) {

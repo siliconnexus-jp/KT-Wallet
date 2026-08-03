@@ -151,6 +151,52 @@ void main() {
       expect(transactionHashesMatch(Chain.solana, 'AbC123', 'abc123'), isFalse);
     });
 
+    test('missing local hash fails closed before any network write', () async {
+      final transport = _FakeJsonRpc(
+        results: {'eth_sendRawTransaction': _hexHash('b')},
+      );
+      final service = BroadcastService(
+        jsonRpcTransport: transport,
+        endpoints: _endpoint,
+      );
+
+      final outcome = await service.broadcast(
+        Chain.ethereum,
+        Uint8List.fromList([0x02, 0x01]),
+        expectedTxHash: '   ',
+      );
+
+      expect(outcome.status, BroadcastStatus.unsupported);
+      expect(outcome.txHash, isNull);
+      expect(transport.calls, isEmpty);
+      final metric = ExperienceMetrics.instance.recent.single;
+      expect(metric.name, ExperienceMetricNames.transactionBroadcast);
+      expect(metric.success, isFalse);
+    });
+
+    test('node hash mismatch is unknown and never records success', () async {
+      final transport = _FakeJsonRpc(
+        results: {'eth_sendRawTransaction': _hexHash('b')},
+      );
+      final service = BroadcastService(
+        jsonRpcTransport: transport,
+        endpoints: _endpoint,
+      );
+
+      final outcome = await service.broadcast(
+        Chain.ethereum,
+        Uint8List.fromList([0x02, 0x01]),
+        expectedTxHash: _hexHash('a'),
+      );
+
+      expect(outcome.status, BroadcastStatus.unknown);
+      expect(outcome.txHash, isNull);
+      expect(transport.calls, hasLength(1));
+      final metric = ExperienceMetrics.instance.recent.single;
+      expect(metric.name, ExperienceMetricNames.transactionBroadcast);
+      expect(metric.success, isFalse);
+    });
+
     test(
       'EVM success: hex-encoded bytes to eth_sendRawTransaction, node hash back',
       () async {
@@ -165,14 +211,20 @@ void main() {
         final outcome = await service.broadcast(
           Chain.ethereum,
           Uint8List.fromList([0x02, 0xab, 0x01]),
+          expectedTxHash: '0xFEEDBEAD',
         );
         expect(outcome.status, BroadcastStatus.ok);
-        expect(outcome.txHash, '0xfeedbead');
+        expect(outcome.txHash, '0xFEEDBEAD');
         final (url, method, params) = transport.calls.single;
         expect(url, 'https://node.example/eth'); // prefs-style resolver honored
         expect(method, 'eth_sendRawTransaction');
         expect(params.single, '0x02ab01');
-        final metric = ExperienceMetrics.instance.recent.single;
+        final metric = ExperienceMetrics.instance.recent
+            .where(
+              (event) =>
+                  event.name == ExperienceMetricNames.transactionBroadcast,
+            )
+            .single;
         expect(metric.name, ExperienceMetricNames.transactionBroadcast);
         expect(metric.success, isTrue);
       },
@@ -190,6 +242,7 @@ void main() {
       final outcome = await service.broadcast(
         Chain.polygon,
         Uint8List.fromList([0x02, 0x01]),
+        expectedTxHash: _hexHash('a'),
       );
       expect(outcome.status, BroadcastStatus.error);
       expect(outcome.message, 'transaction nonce is too low');
@@ -213,6 +266,7 @@ void main() {
       final outcome = await service.broadcast(
         Chain.ethereum,
         Uint8List.fromList([0x02, 0x01]),
+        expectedTxHash: _hexHash('a'),
       );
 
       expect(outcome.status, BroadcastStatus.unknown);
@@ -252,6 +306,7 @@ void main() {
         final outcome = await service.broadcast(
           Chain.ethereum,
           Uint8List.fromList([0x02, 0x01]),
+          expectedTxHash: _hexHash('a'),
         );
 
         expect(outcome.status, BroadcastStatus.unknown);
@@ -274,6 +329,7 @@ void main() {
         final outcome = await service.broadcast(
           Chain.ethereum,
           Uint8List.fromList([0x02, 0x01]),
+          expectedTxHash: _hexHash('a'),
         );
 
         expect(outcome.status, BroadcastStatus.unknown);
@@ -293,7 +349,11 @@ void main() {
         );
 
         final bytes = Uint8List.fromList([9, 8, 7]);
-        final outcome = await service.broadcast(Chain.solana, bytes);
+        final outcome = await service.broadcast(
+          Chain.solana,
+          bytes,
+          expectedTxHash: 'sig123',
+        );
         expect(outcome.status, BroadcastStatus.ok);
         expect(outcome.txHash, 'sig123');
         final (url, method, params) = transport.calls.single;
@@ -312,6 +372,7 @@ void main() {
       final sol = await solService.broadcast(
         Chain.solana,
         Uint8List.fromList([1, 2, 3]),
+        expectedTxHash: 'sig123',
       );
       expect(sol.status, BroadcastStatus.unknown);
       expect(solTransport.calls, 1);
@@ -324,6 +385,7 @@ void main() {
       final tron = await tronService.broadcast(
         Chain.tron,
         Uint8List.fromList(utf8.encode('{"signature":["aa"]}')),
+        expectedTxHash: 'abc123',
       );
       expect(tron.status, BroadcastStatus.unknown);
       expect(tronTransport.calls, 1);
@@ -345,9 +407,10 @@ void main() {
         final outcome = await service.broadcast(
           Chain.tron,
           Uint8List.fromList(utf8.encode(json.encode(txJson))),
+          expectedTxHash: 'ABC123',
         );
         expect(outcome.status, BroadcastStatus.ok);
-        expect(outcome.txHash, 'abc123');
+        expect(outcome.txHash, 'ABC123');
         final (url, body) = rest.posts.single;
         expect(url, 'https://node.example/tron/wallet/broadcasttransaction');
         expect(body, txJson);
@@ -367,6 +430,7 @@ void main() {
       final outcome = await service.broadcast(
         Chain.tron,
         Uint8List.fromList(utf8.encode('{"signature":["aa"]}')),
+        expectedTxHash: 'abc123',
       );
       expect(outcome.status, BroadcastStatus.error);
       expect(outcome.message, 'transaction signature is invalid');
@@ -384,6 +448,7 @@ void main() {
       final outcome = await service.broadcast(
         Chain.tron,
         Uint8List.fromList([0x0a, 0x02, 0xff]),
+        expectedTxHash: 'abc123',
       );
       expect(outcome.status, BroadcastStatus.unsupported);
       expect(outcome.message, isNotNull);
@@ -497,6 +562,11 @@ void main() {
         expect(session.broadcastTxHash, result.txHash);
         expect(session.broadcastOutcomeUnknown, isTrue);
         expect(jsonRpc.calls, hasLength(1));
+        final metric = ExperienceMetrics.instance.recent.lastWhere(
+          (event) => event.name == ExperienceMetricNames.transactionBroadcast,
+        );
+        expect(metric.name, ExperienceMetricNames.transactionBroadcast);
+        expect(metric.success, isFalse);
       },
     );
 

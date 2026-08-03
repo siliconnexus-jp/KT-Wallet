@@ -289,7 +289,11 @@ Future<String> _sendTron({
     expected: decoded,
     expectedSigner: signer,
   );
-  final outcome = await broadcaster.broadcast(Chain.tron, verified.signedTx);
+  final outcome = await broadcaster.broadcast(
+    Chain.tron,
+    verified.signedTx,
+    expectedTxHash: verified.txHash,
+  );
   expect(outcome.status, BroadcastStatus.ok, reason: outcome.message);
   final hash = outcome.txHash!;
   expect(hash, verified.txHash);
@@ -426,7 +430,11 @@ Future<String> _sendSolana({
     expected: decoded,
     expectedSigner: signer,
   );
-  final outcome = await broadcaster.broadcast(Chain.solana, verified.signedTx);
+  final outcome = await broadcaster.broadcast(
+    Chain.solana,
+    verified.signedTx,
+    expectedTxHash: verified.txHash,
+  );
   expect(outcome.status, BroadcastStatus.ok, reason: outcome.message);
   final hash = outcome.txHash!;
   expect(hash, verified.txHash);

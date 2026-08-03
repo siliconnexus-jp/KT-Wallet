@@ -38,7 +38,7 @@ as pending until official store artifacts are available.
 
 | Evidence area | Current state | What it means |
 |---|---|---|
-| Reproducible source gate | Passed on 2026-08-03 | Static analysis, Flutter/package tests, Gateway tests, secret checks, dependency locks, checksums, and OSV scans passed for the revision described below |
+| Reproducible source gate | Passed on 2026-08-04 | Static analysis, Flutter/package tests, Gateway tests, secret checks, dependency locks, checksums, and OSV scans passed for the revision described below |
 | iOS native lifecycle tests | Passed on one retained simulator | Scene privacy and native bridge regressions are covered, but simulator evidence does not replace physical-device testing |
 | Android and iOS physical devices | In progress | Biometrics, camera QR, lifecycle privacy, accessibility, recovery, and deletion still need the complete device matrix |
 | Current-batch chain evidence | Partial | Implemented chains and transaction families are listed below; remaining live-network evidence is tracked explicitly and is never inferred from mocks |
@@ -515,13 +515,16 @@ Recent device and simulator evidence is available in:
 - [Testnet cryptography report](reports/testnet-real-crypto-2026-07-26/index.html)
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
-The latest source gate (2026-08-03) completed with zero static-analysis
-issues: **1,519/1,519** KT Wallet tests, **570/570** KT Cold Signer tests, and
+The latest source gate (2026-08-04) completed with zero static-analysis
+issues: **1,521/1,521** KT Wallet tests, **570/570** KT Cold Signer tests, and
 **409/409** shared-package tests passed. The default gate passed **12/12** and
 the native/runtime/OSV `--full` gate passed **13/13**. The Gateway audit,
 public-secret gate, Gateway public-release version gate, native dependency
 lock/checksum verification, and OSV scans also passed. These numbers are
-reproducible source evidence. On the same date, the iOS native
+reproducible source evidence. Broadcast acceptance is measured as successful
+only after the node acknowledgement matches the locally verified transaction
+hash; a missing or inconsistent hash is fail-closed/unknown and records a
+failed broadcast metric. On 2026-08-03, the iOS native
 Runner test targets passed **11/11** for KT Wallet and **8/8** for KT Cold Signer
 on the single retained iPhone 17 Pro simulator, including the Scene privacy
 state and non-key background-window selection tests. Both apps were also

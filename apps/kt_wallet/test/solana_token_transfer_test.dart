@@ -113,7 +113,11 @@ class _BroadcastCapture extends BroadcastService {
   Chain? chain;
 
   @override
-  Future<BroadcastOutcome> broadcast(Chain chain, Uint8List signedTx) async {
+  Future<BroadcastOutcome> broadcast(
+    Chain chain,
+    Uint8List signedTx, {
+    required String expectedTxHash,
+  }) async {
     this.chain = chain;
     return const BroadcastOutcome.ok('solana-test-signature');
   }

@@ -129,7 +129,11 @@ Future<String> _signBroadcastAndConfirm({
   );
   // ignore: avoid_print
   print('TRON_NILE_SIGNED_${intent.operation.name}');
-  final result = await broadcaster.broadcast(Chain.tron, signed.signedTx);
+  final result = await broadcaster.broadcast(
+    Chain.tron,
+    signed.signedTx,
+    expectedTxHash: signed.txHash,
+  );
   expect(result.status, BroadcastStatus.ok, reason: result.message);
   final hash = result.txHash!;
   // ignore: avoid_print

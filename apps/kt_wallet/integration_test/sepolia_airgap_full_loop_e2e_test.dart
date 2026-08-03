@@ -301,6 +301,7 @@ Future<({String hash, Map<Object?, Object?> receipt})> _sendThroughAirGap({
   final outcome = await broadcaster.broadcast(
     Chain.ethereum,
     verified.signedTx,
+    expectedTxHash: verified.txHash,
   );
   expect(outcome.status, BroadcastStatus.ok, reason: outcome.message);
   final hash = outcome.txHash!;

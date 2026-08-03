@@ -69,7 +69,11 @@ class _CountingBroadcaster extends BroadcastService {
   int calls = 0;
 
   @override
-  Future<BroadcastOutcome> broadcast(Chain chain, Uint8List signedTx) async {
+  Future<BroadcastOutcome> broadcast(
+    Chain chain,
+    Uint8List signedTx, {
+    required String expectedTxHash,
+  }) async {
     calls++;
     return BroadcastOutcome.ok(returnedHash);
   }

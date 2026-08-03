@@ -163,7 +163,11 @@ Future<String> _signBroadcastAndConfirm(
   );
   // ignore: avoid_print
   print('POLYGON_E2E_STAGE=BROADCAST');
-  final result = await broadcaster.broadcast(Chain.polygon, signed.signedTx);
+  final result = await broadcaster.broadcast(
+    Chain.polygon,
+    signed.signedTx,
+    expectedTxHash: signed.txHash,
+  );
   expect(result.status, BroadcastStatus.ok, reason: result.message);
   final hash = result.txHash!;
   // ignore: avoid_print

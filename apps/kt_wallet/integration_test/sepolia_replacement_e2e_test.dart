@@ -290,7 +290,11 @@ Future<String> _signAndBroadcast({
   );
   _stage('SIGN_DONE');
   _stage('BROADCAST_START');
-  final outcome = await broadcaster.broadcast(Chain.ethereum, signed.signedTx);
+  final outcome = await broadcaster.broadcast(
+    Chain.ethereum,
+    signed.signedTx,
+    expectedTxHash: signed.txHash,
+  );
   _stage('BROADCAST_DONE');
   expect(outcome.status, BroadcastStatus.ok, reason: outcome.message);
   return outcome.txHash!;

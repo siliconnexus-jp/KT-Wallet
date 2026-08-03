@@ -198,7 +198,11 @@ Future<String> _transfer(
     coin: coin,
     signingInput: tx,
   );
-  final result = await broadcaster.broadcast(chain, signed.signedTx);
+  final result = await broadcaster.broadcast(
+    chain,
+    signed.signedTx,
+    expectedTxHash: signed.txHash,
+  );
   expect(result.status, BroadcastStatus.ok, reason: result.message);
   await _waitForReceipt(transport, rpcUrl, result.txHash!);
   return result.txHash!;
