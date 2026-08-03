@@ -43,6 +43,23 @@ class _Rest implements RestTransport {
 
 String _endpoint(Coin coin) => 'https://rpc.example/${coin.name}';
 
+const _evmHash =
+    '0x1111111111111111111111111111111111111111111111111111111111111111';
+const _otherEvmHash =
+    '0x2222222222222222222222222222222222222222222222222222222222222222';
+
+Map<String, Object?> _evmReceipt({
+  String transactionHash = _evmHash,
+  Object? status = '0x1',
+}) => {
+  'transactionHash': transactionHash,
+  'blockHash':
+      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  'blockNumber': '0x64',
+  'transactionIndex': '0x0',
+  'status': status,
+};
+
 void main() {
   group('TransactionConfirmationService', () {
     test('EVM remains pending before a receipt exists', () async {
@@ -61,7 +78,7 @@ void main() {
 
     test('EVM calculates live block confirmation depth', () async {
       final json = _JsonRpc({
-        'eth_getTransactionReceipt': {'status': '0x1', 'blockNumber': '0x64'},
+        'eth_getTransactionReceipt': _evmReceipt(),
         'eth_blockNumber': '0x66',
       });
       final service = TransactionConfirmationService(
@@ -70,18 +87,44 @@ void main() {
         restTransport: _Rest(),
       );
 
-      final confirmed = await service.check(Chain.ethereum, '0xhash');
+      final confirmed = await service.check(Chain.ethereum, _evmHash);
       expect(confirmed.status, TxStatus.confirmed);
       expect(confirmed.confirmations, 3);
 
-      json.results['eth_getTransactionReceipt'] = {
-        'status': '0x0',
-        'blockNumber': '0x64',
-      };
+      json.results['eth_getTransactionReceipt'] = _evmReceipt(status: '0x0');
       json.results['eth_blockNumber'] = '0x67';
-      final failed = await service.check(Chain.ethereum, '0xhash');
+      final failed = await service.check(Chain.ethereum, _evmHash);
       expect(failed.status, TxStatus.failed);
       expect(failed.confirmations, 4);
+    });
+
+    test('EVM rejects mismatched or incomplete receipt evidence', () async {
+      final json = _JsonRpc({
+        'eth_getTransactionReceipt': _evmReceipt(
+          transactionHash: _otherEvmHash,
+        ),
+        'eth_blockNumber': '0x66',
+      });
+      final service = TransactionConfirmationService(
+        endpoints: _endpoint,
+        jsonRpcTransport: json,
+        restTransport: _Rest(),
+      );
+
+      await expectLater(
+        service.check(Chain.ethereum, _evmHash),
+        throwsA(isA<RpcException>()),
+      );
+
+      json.results['eth_getTransactionReceipt'] = {
+        'transactionHash': _evmHash,
+        'blockNumber': '0x64',
+        'status': '0x1',
+      };
+      await expectLater(
+        service.check(Chain.ethereum, _evmHash),
+        throwsA(isA<RpcException>()),
+      );
     });
 
     test('TRON calculates live block confirmation depth', () async {

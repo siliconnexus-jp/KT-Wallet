@@ -1,5 +1,80 @@
 import 'transport.dart';
 
+/// Inclusion evidence returned by `eth_getTransactionReceipt` after every
+/// field needed to bind it to the requested transaction has been validated.
+class EvmReceiptEvidence {
+  const EvmReceiptEvidence({
+    required this.transactionHash,
+    required this.blockHash,
+    required this.blockNumber,
+    required this.transactionIndex,
+    required this.succeeded,
+  });
+
+  final String transactionHash;
+  final String blockHash;
+  final BigInt blockNumber;
+  final BigInt transactionIndex;
+  final bool succeeded;
+}
+
+final RegExp _evmHashPattern = RegExp(r'^0x[0-9a-fA-F]{64}$');
+final RegExp _evmQuantityPattern = RegExp(
+  r'^0x(?:0|[1-9a-fA-F][0-9a-fA-F]{0,63})$',
+);
+
+/// Validates that [receipt] is complete inclusion evidence for
+/// [expectedTransactionHash].
+///
+/// A receipt status alone is not enough: a stale, malformed, or misrouted RPC
+/// response must never confirm a different local transaction. Error messages
+/// deliberately omit provider-controlled field values.
+EvmReceiptEvidence parseEvmReceiptEvidence(
+  Map<Object?, Object?> receipt, {
+  required String expectedTransactionHash,
+}) {
+  if (!_evmHashPattern.hasMatch(expectedTransactionHash)) {
+    throw RpcException('invalid expected EVM transaction hash');
+  }
+  final transactionHash = receipt['transactionHash'];
+  if (transactionHash is! String ||
+      !_evmHashPattern.hasMatch(transactionHash) ||
+      transactionHash.toLowerCase() != expectedTransactionHash.toLowerCase()) {
+    throw RpcException('malformed EVM receipt transaction hash');
+  }
+  final blockHash = receipt['blockHash'];
+  if (blockHash is! String || !_evmHashPattern.hasMatch(blockHash)) {
+    throw RpcException('malformed EVM receipt block hash');
+  }
+  final blockNumber = _parseEvmReceiptQuantity(
+    receipt['blockNumber'],
+    'block number',
+  );
+  final transactionIndex = _parseEvmReceiptQuantity(
+    receipt['transactionIndex'],
+    'transaction index',
+  );
+  final succeeded = switch (receipt['status']) {
+    '0x1' => true,
+    '0x0' => false,
+    _ => throw RpcException('malformed EVM receipt status'),
+  };
+  return EvmReceiptEvidence(
+    transactionHash: transactionHash,
+    blockHash: blockHash,
+    blockNumber: blockNumber,
+    transactionIndex: transactionIndex,
+    succeeded: succeeded,
+  );
+}
+
+BigInt _parseEvmReceiptQuantity(Object? value, String field) {
+  if (value is! String || !_evmQuantityPattern.hasMatch(value)) {
+    throw RpcException('malformed EVM receipt $field');
+  }
+  return BigInt.parse(value.substring(2), radix: 16);
+}
+
 /// Slow / standard / fast EVM fee tiers (EIP-1559).
 class GasFeeEstimate {
   const GasFeeEstimate({

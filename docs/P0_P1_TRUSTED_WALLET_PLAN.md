@@ -105,7 +105,18 @@
   畸形保持 unknown。App 与 Gateway 同时兼容 Blockscout internal 的
   `transactionHash/index`，避免空投、合约退款等内部转入在直连 fallback 消失。两项旧
   行为均以红测复现后转绿；App history 18/18、Gateway upstream/handlers、完整公开源码
-  审计 12/12 通过。生产 1.16.11 的公开 Ethereum 历史只读 smoke 返回 5 条且 5/5 ok。
+  审计 12/12 通过。生产 1.16.13 的公开 Ethereum 历史只读 smoke 返回 5 条且 5/5 ok。
+- [x] EVM hash 专项终态查询不再只信任 receipt 的 `status`：App 直连与 Gateway
+  同时要求返回的 `transactionHash` 精确匹配请求 hash，并要求 32-byte `blockHash`、
+  canonical `blockNumber` 与 `transactionIndex` 完整；无 receipt 但节点声称仍在 mempool
+  时，Gateway 也会核对 `eth_getTransactionByHash.hash`。错交易、缺字段、非 canonical
+  quantity、超过 256-bit 的数量或非 0/1 hex status 在 App 保持 `unknown`，Gateway 返回固定 upstream error，均不会
+  伪造 confirmed/failed/pending。三项 App、三项共享 parser 与三项 Gateway 负例先红后绿；
+  KT Wallet 1495/1495、chains 181/181、Gateway 普通/race/vet/govulncheck 与静态分析通过。
+  生产 1.16.13 已按 secondary → primary 滚动，公网与双实例均返回 16 网络、ready；
+  全 `f` 的有效形状假 hash 三处均为 unknown，公开 Ethereum 历史 5/5 status=ok。
+  这只能证明 RPC 回包内部身份与包含字段一致，不能把单一 RPC 的区块视为密码学最终性，
+  因此不使用无关 UI 截图扩大结论。
 - [x] TRON：从同一 `getnowblock` 构造并保存 TAPOS reference block 与
   canonical-time expiration；transaction info 缺失且链时间越界后才标记
   `expired`，边界内保持 `unknown`。
@@ -858,7 +869,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   store 分支、0 源码清理债务。门禁同时解析统一 helper 本身，要求真实注册 `addTearDown`、
   执行同实例 `deleteWallet(walletId).timeout(timeout)`，并只允许忽略
   `WalletNotFoundException`；空 helper 或吞 TimeoutException 的负例均失败。
-  `check_deps`、完整静态分析、KT Wallet 1492/1492 与完整公开测试审计 13/13 通过。
+  `check_deps`、完整静态分析、KT Wallet 1495/1495 与完整公开测试审计 13/13 通过。
   - [x] Polygon 用例新增只接受 `kt-e2e-*` 的中断自愈 helper：同名 slot 只能经生产
     `deleteWallet` 认证删除后重建；认证失败保留旧密钥并终止，不能覆盖。新建、认证替换、
     非测试命名空间和认证失败保持旧地址 4/4 通过；Analyzer 门禁另以缺命名空间、吞认证
@@ -986,14 +997,14 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     2026-08-03 08:27:18 UTC 使用时间戳备份和 15 秒监听失败回滚门禁发布；80/443 在
     890 ms 内绑定。24,852,234 条 access 历史在 114 秒后台恢复，完成后进程 RSS 约
     64–69 MiB、warning 为 0；后台保留任务随后原子裁剪 27,227 条记录，writer 未停顿。
-    公网 health/ready、Gateway 1.16.11 `kt_health`、Sepolia `kt_getChainParams` 与
+    公网 health/ready、Gateway 1.16.13 `kt_health`、Sepolia `kt_getChainParams` 与
     `im-api.nyxnet.jp/.cc` 两条真实 WebSocket 101 握手均通过。旧生产制品及两次候选
     均保留时间戳备份，当前生产精确 SHA 与上述最终制品一致。
 - [x] Gateway 当前公开版本新增单一来源门禁：生产 Go 配置中的唯一 SemVer 必须与
   backend README health 示例、根 README 状态表及可靠性段落、P0/P1 生产证据和 HTML
   报告的发布徽标/上线标题逐项一致。门禁只匹配这些“当前状态”标记，允许历史发布记录
   保留旧版本。六个公开面同时改旧的负例先红后绿，缺失和重复源码版本也失败闭合；
-  `dep_check` 35/35、test_support 61/61、共享 packages 404/404、默认源码门禁 12/12、
+  `dep_check` 35/35、test_support 61/61、共享 packages 407/407、默认源码门禁 12/12、
   完整依赖门禁 13/13 和静态分析 0 均通过。该检查防止仓库公开证据漂移，不替代公网
   `kt_health`、制品 SHA 或部署目录的运行时核验。
 - [x] `/healthz`、`/readyz`、`kt_health` 匿名 endpoint 汇总、Prometheus
@@ -1278,7 +1289,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     现统一为英文/日文 `KT Cold Signer`、中文 `KT冷钱包`；新增通用 ARB 禁用词门禁，
     可按语言拒绝退役品牌和语言不匹配名称。门禁单测先红后绿，三语 Widget 回归及受影响
     Golden 已人工复核；最新公开测试源码审计 12/12、完整依赖审计 13/13、KT Wallet
-    1492/1492、KT Cold Signer 570/570、共享 packages 404/404、静态分析 0、Gateway
+    1495/1495、KT Cold Signer 570/570、共享 packages 407/407、静态分析 0、Gateway
     audit 全部通过。
   - [ ] 真机系统权限弹窗、生命周期保护页及全部生产路由仍需逐页三语语义人工复核，
     因此本总项保持未完成，不能扩大宣称为“全 App 本地化验收完成”。

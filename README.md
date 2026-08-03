@@ -22,7 +22,7 @@ The project is licensed under [MPL-2.0](LICENSE).
 |---|---:|---|
 | KT Wallet | `1.0.0+1` | Controlled public-beta builds; App Store and Play Store listings are not yet public |
 | KT Cold Signer | `1.0.0+1` | Controlled public-beta builds; source build is available for dedicated offline devices |
-| KT Gateway | `1.16.11` | Production service at `https://gateway.kt-wallet.com` |
+| KT Gateway | `1.16.13` | Production service at `https://gateway.kt-wallet.com` |
 
 Until signed store releases are published, build both apps from this repository
 and do not install APK or IPA files from unofficial mirrors. Start with
@@ -349,7 +349,7 @@ unattended Pending poll retries with a bounded 1×/2×/4×/8× delay instead of
 silently stopping. These controls improve responsiveness without treating stale
 cache or unknown chain evidence as a successful result.
 
-Gateway `1.16.11` currently exposes 16 mainnet/testnet network profiles. It uses
+Gateway `1.16.13` currently exposes 16 mainnet/testnet network profiles. It uses
 bounded upstream failover and circuit breakers, plus short caches for prices
 (30 seconds), display balances (10 seconds), and history (5 seconds). Pending
 nonces, spendable balances, simulations, and transaction-status checks are not
@@ -492,8 +492,8 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-03) completed with zero static-analysis
-issues: **1,492/1,492** KT Wallet tests, **570/570** KT Cold Signer tests, and
-**404/404** shared-package tests passed. The default gate passed **12/12** and
+issues: **1,495/1,495** KT Wallet tests, **570/570** KT Cold Signer tests, and
+**407/407** shared-package tests passed. The default gate passed **12/12** and
 the native/runtime/OSV `--full` gate passed **13/13**. The Gateway audit,
 public-secret gate, Gateway public-release version gate, native dependency
 lock/checksum verification, and OSV scans also passed. These numbers are

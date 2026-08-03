@@ -41,6 +41,23 @@ class _Rest implements RestTransport {
       onPost?.call(url, body) ?? response;
 }
 
+const _evmHash =
+    '0x1111111111111111111111111111111111111111111111111111111111111111';
+const _otherEvmHash =
+    '0x2222222222222222222222222222222222222222222222222222222222222222';
+
+Map<String, Object?> _evmReceipt({
+  String transactionHash = _evmHash,
+  Object? status = '0x1',
+}) => {
+  'transactionHash': transactionHash,
+  'blockHash':
+      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  'blockNumber': '0x64',
+  'transactionIndex': '0x0',
+  'status': status,
+};
+
 Transaction _tx(
   String coin,
   String hash, {
@@ -69,8 +86,23 @@ Transaction _tx(
 
 void main() {
   test('EVM receipt confirms immediately without account history', () async {
+    final rpc = _JsonRpc({'eth_getTransactionReceipt': _evmReceipt()});
+    final service = TransactionStatusService(
+      endpoints: (_) => 'https://rpc.example',
+      jsonRpcTransport: rpc,
+      restTransport: _Rest(null),
+    );
+
+    expect(
+      await service.check(_tx(Coin.avalanche.name, _evmHash)),
+      ChainTransactionStatus.confirmed,
+    );
+    expect(rpc.methods, ['eth_getTransactionReceipt']);
+  });
+
+  test('EVM receipt for another hash is unknown, never confirmed', () async {
     final rpc = _JsonRpc({
-      'eth_getTransactionReceipt': {'status': '0x1'},
+      'eth_getTransactionReceipt': _evmReceipt(transactionHash: _otherEvmHash),
     });
     final service = TransactionStatusService(
       endpoints: (_) => 'https://rpc.example',
@@ -79,19 +111,36 @@ void main() {
     );
 
     expect(
-      await service.check(_tx(Coin.avalanche.name, '0xhash')),
-      ChainTransactionStatus.confirmed,
+      await service.check(_tx(Coin.eth.name, _evmHash)),
+      ChainTransactionStatus.unknown,
     );
-    expect(rpc.methods, ['eth_getTransactionReceipt']);
+  });
+
+  test('EVM receipt without complete block evidence is unknown', () async {
+    final rpc = _JsonRpc({
+      'eth_getTransactionReceipt': {
+        'transactionHash': _evmHash,
+        'blockNumber': '0x64',
+        'status': '0x1',
+      },
+    });
+    final service = TransactionStatusService(
+      endpoints: (_) => 'https://rpc.example',
+      jsonRpcTransport: rpc,
+      restTransport: _Rest(null),
+    );
+
+    expect(
+      await service.check(_tx(Coin.eth.name, _evmHash)),
+      ChainTransactionStatus.unknown,
+    );
   });
 
   test(
     'persisted network selects the exact RPC instead of the active network',
     () async {
       final requested = <String>[];
-      final rpc = _JsonRpc({
-        'eth_getTransactionReceipt': {'status': '0x1'},
-      });
+      final rpc = _JsonRpc({'eth_getTransactionReceipt': _evmReceipt()});
       final service = TransactionStatusService(
         endpoints: (_) => 'https://mainnet.example',
         networkEndpoints: (coin, networkId) {
@@ -104,7 +153,7 @@ void main() {
 
       expect(
         await service.check(
-          _tx(Coin.eth.name, '0xhash', networkId: 'eth-sepolia'),
+          _tx(Coin.eth.name, _evmHash, networkId: 'eth-sepolia'),
         ),
         ChainTransactionStatus.confirmed,
       );
@@ -290,7 +339,7 @@ void main() {
 
   test('EVM malformed receipt status is unknown, never failed', () async {
     final rpc = _JsonRpc({
-      'eth_getTransactionReceipt': {'status': null},
+      'eth_getTransactionReceipt': _evmReceipt(status: null),
     });
     final service = TransactionStatusService(
       endpoints: (_) => 'https://rpc.example',
@@ -299,7 +348,7 @@ void main() {
     );
 
     expect(
-      await service.check(_tx(Coin.eth.name, '0xhash')),
+      await service.check(_tx(Coin.eth.name, _evmHash)),
       ChainTransactionStatus.unknown,
     );
   });

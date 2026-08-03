@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -16,6 +17,11 @@ import (
 
 // balanceOfSelector is the 4-byte selector of ERC-20 balanceOf(address).
 const balanceOfSelector = "0x70a08231"
+
+var (
+	evmReceiptHashPattern     = regexp.MustCompile(`^0x[0-9a-fA-F]{64}$`)
+	evmReceiptQuantityPattern = regexp.MustCompile(`^0x(?:0|[1-9a-fA-F][0-9a-fA-F]{0,63})$`)
+)
 
 // EVM is a JSON-RPC client for an EVM chain, backed by a failover Pool.
 type EVM struct {
@@ -146,9 +152,21 @@ func (e *EVM) TransactionStatus(ctx context.Context, hash string) (string, error
 	}
 	if !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		var receipt struct {
-			Status string `json:"status"`
+			TransactionHash  string `json:"transactionHash"`
+			BlockHash        string `json:"blockHash"`
+			BlockNumber      string `json:"blockNumber"`
+			TransactionIndex string `json:"transactionIndex"`
+			Status           string `json:"status"`
 		}
 		if err := json.Unmarshal(raw, &receipt); err != nil {
+			return "", &Unavailable{Upstream: e.pool.name, Message: "malformed transaction receipt"}
+		}
+		if !evmReceiptHashPattern.MatchString(hash) ||
+			!evmReceiptHashPattern.MatchString(receipt.TransactionHash) ||
+			!strings.EqualFold(receipt.TransactionHash, hash) ||
+			!evmReceiptHashPattern.MatchString(receipt.BlockHash) ||
+			!evmReceiptQuantityPattern.MatchString(receipt.BlockNumber) ||
+			!evmReceiptQuantityPattern.MatchString(receipt.TransactionIndex) {
 			return "", &Unavailable{Upstream: e.pool.name, Message: "malformed transaction receipt"}
 		}
 		switch strings.ToLower(receipt.Status) {
@@ -170,6 +188,14 @@ func (e *EVM) TransactionStatus(ctx context.Context, hash string) (string, error
 	}
 	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		return "unknown", nil
+	}
+	var transaction struct {
+		Hash string `json:"hash"`
+	}
+	if err := json.Unmarshal(raw, &transaction); err != nil ||
+		!evmReceiptHashPattern.MatchString(transaction.Hash) ||
+		!strings.EqualFold(transaction.Hash, hash) {
+		return "", &Unavailable{Upstream: e.pool.name, Message: "malformed transaction response"}
 	}
 	return "pending", nil
 }

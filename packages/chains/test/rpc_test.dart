@@ -44,7 +44,100 @@ Map<String, Object?> _ok(Object? result) => {
   'result': result,
 };
 
+const _evmHash =
+    '0x1111111111111111111111111111111111111111111111111111111111111111';
+const _otherEvmHash =
+    '0x2222222222222222222222222222222222222222222222222222222222222222';
+
+Map<String, Object?> _evmReceipt({
+  String transactionHash = _evmHash,
+  String blockHash =
+      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  Object? blockNumber = '0x64',
+  Object? transactionIndex = '0x0',
+  Object? status = '0x1',
+}) => {
+  'transactionHash': transactionHash,
+  'blockHash': blockHash,
+  'blockNumber': blockNumber,
+  'transactionIndex': transactionIndex,
+  'status': status,
+};
+
 void main() {
+  group('EVM receipt evidence', () {
+    test('binds complete canonical evidence to the requested hash', () {
+      final evidence = parseEvmReceiptEvidence(
+        _evmReceipt(),
+        expectedTransactionHash: _evmHash.toUpperCase().replaceFirst(
+          '0X',
+          '0x',
+        ),
+      );
+
+      expect(evidence.transactionHash, _evmHash);
+      expect(evidence.blockNumber, BigInt.from(100));
+      expect(evidence.transactionIndex, BigInt.zero);
+      expect(evidence.succeeded, isTrue);
+      expect(
+        parseEvmReceiptEvidence(
+          _evmReceipt(status: '0x0'),
+          expectedTransactionHash: _evmHash,
+        ).succeeded,
+        isFalse,
+      );
+    });
+
+    test('rejects a different hash or incomplete inclusion evidence', () {
+      final invalid = [
+        _evmReceipt(transactionHash: _otherEvmHash),
+        {..._evmReceipt()}..remove('transactionHash'),
+        {..._evmReceipt()}..remove('blockHash'),
+        {..._evmReceipt()}..remove('blockNumber'),
+        {..._evmReceipt()}..remove('transactionIndex'),
+      ];
+
+      for (final receipt in invalid) {
+        expect(
+          () => parseEvmReceiptEvidence(
+            receipt,
+            expectedTransactionHash: _evmHash,
+          ),
+          throwsA(isA<RpcException>()),
+        );
+      }
+    });
+
+    test('rejects non-canonical hashes, quantities, and status', () {
+      final invalid = [
+        _evmReceipt(blockHash: '0xabc'),
+        _evmReceipt(blockNumber: '0x00'),
+        _evmReceipt(blockNumber: '100'),
+        _evmReceipt(blockNumber: '0x${'1' * 65}'),
+        _evmReceipt(transactionIndex: '-1'),
+        _evmReceipt(status: 0),
+        _evmReceipt(status: '0x01'),
+      ];
+
+      for (final receipt in invalid) {
+        expect(
+          () => parseEvmReceiptEvidence(
+            receipt,
+            expectedTransactionHash: _evmHash,
+          ),
+          throwsA(isA<RpcException>()),
+        );
+      }
+      expect(
+        () => parseEvmReceiptEvidence(
+          _evmReceipt(),
+          expectedTransactionHash: '0xhash',
+        ),
+        throwsA(isA<RpcException>()),
+      );
+    });
+  });
+
   group('EvmRpc', () {
     test('getBalance parses a hex quantity', () async {
       final rpc = EvmRpc(

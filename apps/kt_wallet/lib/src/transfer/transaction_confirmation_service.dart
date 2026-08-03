@@ -67,12 +67,12 @@ class TransactionConfirmationService {
         confirmations: 0,
       );
     }
-    final status = switch (receipt['status']) {
-      '0x1' || 1 => TxStatus.confirmed,
-      '0x0' || 0 => TxStatus.failed,
-      _ => throw RpcException('malformed EVM receipt status'),
-    };
-    final includedAt = _hexQuantity(receipt['blockNumber'], 'EVM block number');
+    final evidence = parseEvmReceiptEvidence(
+      receipt,
+      expectedTransactionHash: hash,
+    );
+    final status = evidence.succeeded ? TxStatus.confirmed : TxStatus.failed;
+    final includedAt = evidence.blockNumber;
     final latest = await rpc.getBlockNumber();
     final depth = latest - includedAt + BigInt.one;
     if (depth < BigInt.one) {
@@ -163,13 +163,6 @@ class TransactionConfirmationService {
       confirmations: confirmations as int?,
       finalized: confirmationStatus == 'finalized',
     );
-  }
-
-  BigInt _hexQuantity(Object? value, String field) {
-    if (value is! String || !value.startsWith('0x')) {
-      throw RpcException('malformed $field');
-    }
-    return BigInt.parse(value.substring(2), radix: 16);
   }
 
   void close() {

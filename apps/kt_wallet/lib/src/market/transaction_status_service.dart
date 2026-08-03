@@ -127,11 +127,13 @@ class TransactionStatusService {
     final rpc = EvmRpc(url: endpoint, transport: _jsonRpc);
     final receipt = await rpc.getTransactionReceipt(hash);
     if (receipt != null) {
-      return switch (receipt['status']) {
-        '0x1' || 1 => ChainTransactionStatus.confirmed,
-        '0x0' || 0 => ChainTransactionStatus.failed,
-        _ => ChainTransactionStatus.unknown,
-      };
+      final evidence = parseEvmReceiptEvidence(
+        receipt,
+        expectedTransactionHash: hash,
+      );
+      return evidence.succeeded
+          ? ChainTransactionStatus.confirmed
+          : ChainTransactionStatus.failed;
     }
     final remoteTransaction = await rpc.getTransactionByHash(hash);
     if (remoteTransaction != null) {

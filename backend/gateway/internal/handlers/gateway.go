@@ -125,7 +125,7 @@ type Config struct {
 // Defaults returns the production upstream configuration.
 func Defaults() Config {
 	return Config{
-		Version:        "1.16.11",
+		Version:        "1.16.13",
 		Clock:          clock.Real{},
 		AttemptTimeout: 10 * time.Second,
 		EthURLs:        []string{"https://eth.llamarpc.com", "https://cloudflare-eth.com"},
