@@ -1400,6 +1400,15 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     失败四项负例先红后绿，完整成功正例保持通过。进一步发现旧四链钱包全部启用链处于
     测试网时，未启用扩展链的主网配置仍会触发无意义报价请求；现改为只按当前钱包实际
     启用链判断，调用次数负例从 1 降到 0。KT Wallet 1523/1523、静态分析 0 通过。
+  - [x] 2026-08-04 严审交易终态指标发现两条选择性遗漏：hash 状态服务返回
+    `replaced` 已落库但没有写入 `transaction.finality`，以及 hash 状态 unknown、账户
+    历史明确 failed/confirmed 的备用闭合路径也没有写入终态样本。现统一为“终态成功
+    落库后才记录”：confirmed 记成功，failed/replaced/expired 记失败，pending/unknown
+    不制造终态；hash 查询与账户历史闭合共享同一入口且一次刷新只记一次。远端失败和
+    链上替换两项旧实现红测均以 `Bad state: No element` 证明指标缺失。提交前再加入
+    hash=replaced、账户历史=confirmed 的冲突负例，旧实现会把 replaced 改写 confirmed
+    并同时记录失败/成功两个样本；现保持 hash 专项终态、只记录一次失败。finality 定向
+    15/15、KT Wallet 1524/1524、静态分析 0 通过。
   - [ ] iOS MetricKit 真正的系统 payload 投递及 Android 真实 ANR/fatal 仍需物理设备
     故障注入验收；匿名未认证样本也不能替代 App Store/Play Console 的可信安装基数或
     外部崩溃平台。因此本总项仍保持未完成，不能宣称已有完整生产崩溃率监控。

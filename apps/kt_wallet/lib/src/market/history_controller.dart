@@ -597,10 +597,14 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
         // Account-history absence is never finality evidence. An indexer can be
         // delayed, rate-limited or temporarily incomplete, so only the
         // hash-specific status service or an explicit terminal history status
-        // may settle a local row.
+        // may settle a local row. Hash-specific reconciliation runs first; an
+        // already-terminal row must not be rewritten by weaker account-history
+        // evidence or emit a second finality sample.
         if (remoteStatus == null ||
             local.status == db.TxStatus.confirmed ||
-            local.status == db.TxStatus.failed) {
+            local.status == db.TxStatus.failed ||
+            local.status == db.TxStatus.replaced ||
+            local.status == db.TxStatus.expired) {
           continue;
         }
         final next = switch (remoteStatus) {
@@ -626,6 +630,11 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
             clearLastCheckOutcome: true,
           );
         }
+        _recordTerminalFinality(
+          local,
+          next,
+          DateTime.now().millisecondsSinceEpoch,
+        );
         _enqueueNotice(
           TransactionStatusNotice(
             hash: confirmedHash,
@@ -781,19 +790,13 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
             clearLastCheckOutcome: terminal,
           );
         }
+        if (changed && terminal) {
+          _recordTerminalFinality(transaction, next, checkedAt);
+        }
         if (changed) {
           if (next == db.TxStatus.confirmed ||
               next == db.TxStatus.failed ||
               next == db.TxStatus.expired) {
-            final startedAt = transaction.broadcastAt ?? transaction.createdAt;
-            final elapsedMs = checkedAt - startedAt;
-            if (elapsedMs >= 0) {
-              ExperienceMetrics.instance.record(
-                ExperienceMetricNames.transactionFinality,
-                Duration(milliseconds: elapsedMs),
-                success: next == db.TxStatus.confirmed,
-              );
-            }
             _enqueueNotice(
               TransactionStatusNotice(
                 hash: transaction.hash!,
@@ -807,6 +810,29 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
           }
         }
       },
+    );
+  }
+
+  void _recordTerminalFinality(
+    db.Transaction transaction,
+    db.TxStatus status,
+    int settledAt,
+  ) {
+    final success = switch (status) {
+      db.TxStatus.confirmed => true,
+      db.TxStatus.failed ||
+      db.TxStatus.replaced ||
+      db.TxStatus.expired => false,
+      _ => null,
+    };
+    if (success == null) return;
+    final startedAt = transaction.broadcastAt ?? transaction.createdAt;
+    final elapsedMs = settledAt - startedAt;
+    if (elapsedMs < 0) return;
+    ExperienceMetrics.instance.record(
+      ExperienceMetricNames.transactionFinality,
+      Duration(milliseconds: elapsedMs),
+      success: success,
     );
   }
 

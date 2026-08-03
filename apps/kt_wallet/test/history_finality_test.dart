@@ -311,7 +311,44 @@ void main() {
 
     final row = await fixture.wallets.localTransactionById('local-pending');
     expect(row?.status, TxStatus.failed);
+    final finality = ExperienceMetrics.instance.recent.singleWhere(
+      (metric) => metric.name == ExperienceMetricNames.transactionFinality,
+    );
+    expect(finality.success, isFalse);
+    expect(finality.duration, greaterThan(const Duration(hours: 70)));
   });
+
+  test(
+    'chain-authoritative replacement wins over history and records once',
+    () async {
+      final fixture = await _fixture(
+        remote: HistoryResult.ok([
+          ChainTxRecord(
+            coin: Coin.eth,
+            networkId: 'eth-mainnet',
+            hash: '0x${'a' * 64}',
+            outgoing: true,
+            amountText: '0.001 ETH',
+            timestamp: DateTime.now(),
+            status: ChainTxStatus.confirmed,
+          ),
+        ]),
+        hashStatus: ChainTransactionStatus.replaced,
+      );
+      addTearDown(fixture.history.dispose);
+      addTearDown(fixture.database.close);
+
+      await fixture.history.refresh();
+
+      final row = await fixture.wallets.localTransactionById('local-pending');
+      expect(row?.status, TxStatus.replaced);
+      final finality = ExperienceMetrics.instance.recent.singleWhere(
+        (metric) => metric.name == ExperienceMetricNames.transactionFinality,
+      );
+      expect(finality.success, isFalse);
+      expect(finality.duration, greaterThan(const Duration(hours: 70)));
+    },
+  );
 
   test(
     'same hash on another chain cannot settle or hide local Pending',
