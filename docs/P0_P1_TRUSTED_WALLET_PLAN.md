@@ -937,7 +937,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   不变，通过唯一 iPhone 17 Pro Simulator 的系统 Face ID 菜单立即复跑 cleanup-only，
   原生桥明确返回 `E2E-STALE-NATIVE-KEY-DELETED`，随后集成测试 1/1 退出成功。没有重置
   Simulator Keychain，也没有读取或打印助记词；当前已知 provisioning 临时密钥已清理。
-- [ ] 原生 E2E 钱包生命周期必须闭合。仓库级
+- [x] 原生 E2E 钱包生命周期已闭合。仓库级
   `tool/audit_e2e_wallet_cleanup.dart` 已建立“零新增技术债”门禁：任何新的
   `storeWallet` 测试若没有显式 `deleteWallet` 或
   `registerE2eWalletCleanup` 会直接失败；已先修复基础真实派生与 Sepolia 签名测试，
@@ -963,13 +963,19 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   - [x] 原生 canonicality 集成测试已迁移到统一 `kt-e2e-*` 命名与认证 teardown；本轮
     EVM/TRON/Solana 三次真实签名复核后，临时钱包通过系统密码认证删除，测试 1/1 退出
     成功。该证据只覆盖本轮新建的临时 slot，不代表下述两个既有 Polygon slot 已删除。
-  - [ ] 本次复跑暴露的旧 `polygon-amoy-e2e-v2` 与新
-    `kt-e2e-polygon-amoy-v3` 两个已知 Simulator 测试 slot 尚需通过系统 Face ID 的
-    cleanup-only 路径精确删除。没有重置 Keychain，也没有未经用户确认触发不可恢复删除；
-    因此总项暂时恢复为未完成。
+  - [x] 2026-08-04 旧 `polygon-amoy-e2e-v2` 与新
+    `kt-e2e-polygon-amoy-v3` 两个已知 Simulator 测试 slot 已分别通过系统 Face ID、
+    生产 `deleteWallet` 和精确 allowlist 删除；两次集成测试均 1/1 通过，原生桥分别
+    输出对应的 `E2E-RESIDUAL-NATIVE-KEY-DELETED` 标记。没有重置 Keychain、没有读取
+    助记词，也没有降低生产认证策略。验证完成后一次性 cleanup-only 入口及固定删除
+    allowlist 已从仓库移除；常规 E2E 仍由统一认证 teardown 和 Analyzer AST 门禁保证，
+    当前 31 个原生 store 分支、0 清理债务。门禁同时拒绝任何新加入的原生
+    `deleteWallet`-only 集成测试入口；只有两款已逐结构审计的 teardown helper 可以作为
+    无 `storeWallet` 的删除所有者，防止一次性清理工具被静默重新引入。
 - [ ] 新批次尚未补充最小测试网 gas/Token，因此八链真实广播矩阵仍需在注资后重跑；
   旧 EVM 地址关联主网 BNB，只保留在本地安全归档中，不得用于自动化或未授权交易。
-  18:31 JST 的 Polygon Amoy 真实预检仍返回 POL=0，签名/广播均未执行。
+  2026-08-04 再次通过独立 Amoy RPC 读取公开地址，chainId=80002，POL=0、Circle
+  USDC=0；签名/广播均未执行。
 
 ## P1：达到国际“可靠基础钱包”水平
 
