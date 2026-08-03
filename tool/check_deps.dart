@@ -531,6 +531,43 @@ void main() {
     }
   }
 
+  // A cold-cache standalone Signer build reaches metadata variants that are
+  // not necessarily requested by the combined wallet build. Keep the exact
+  // Maven Central bytes pinned so a future metadata regeneration cannot hide
+  // this clean-environment boundary or silently broaden trust.
+  const coldSignerColdCacheArtifacts = <String, String>{
+    'guava-parent-33.3.1-jre.pom':
+        '55441db27e8869dfefe053059bdf478bdc7e95585642bf391f0023345fd56287',
+    'kotlin-gradle-plugins-bom-2.2.0.module':
+        'babd3c497a2971dfc68e50254ff97065a93a23183e8eda3c398f84f60cec12b2',
+    'kotlin-gradle-plugins-bom-2.2.0.pom':
+        'd9c45a2f5730e84e9b84fa42c64a1874dcba6668f212c4fe297bea25dc007878',
+    'kotlinx-coroutines-bom-1.8.0.pom':
+        '1239e9dbe1397cd5971342956b2511bc3ace7b641842e4372a088dcfa8b9ad55',
+    'junit-bom-5.10.2.module':
+        'de23b114b3e4119a8fe6eb17bed5a3852816698bace67071579d6d927ebb080a',
+    'junit-bom-5.11.0-M2.module':
+        '86477abcf490d6ca059aa9973cb108d22a506f49d1a5569bb32cc6cbf43c2cce',
+  };
+  const coldSignerColdCacheOrigin = 'Maven Central SHA-256 verified 2026-08-03';
+  final coldSignerMetadata = File(
+    'apps/cold_signer/android/gradle/verification-metadata.xml',
+  );
+  final coldSignerMetadataSource = coldSignerMetadata.existsSync()
+      ? coldSignerMetadata.readAsStringSync()
+      : '';
+  final coldSignerColdCacheIssues = findReviewedArtifactPinIssues(
+    coldSignerMetadataSource,
+    coldSignerColdCacheArtifacts,
+    origin: coldSignerColdCacheOrigin,
+  );
+  if (coldSignerColdCacheIssues.isNotEmpty) {
+    failures.add(
+      '${coldSignerMetadata.path} cold-cache pin drift: '
+      '$coldSignerColdCacheIssues',
+    );
+  }
+
   for (final podfile in [
     File('apps/kt_wallet/ios/Podfile'),
     File('apps/cold_signer/ios/Podfile'),

@@ -188,7 +188,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   test(
-    'standalone iOS bundle signs and verifies all eight chains',
+    'standalone app bundle signs and verifies all eight chains',
     () async {
       expect(
         _mnemonic,

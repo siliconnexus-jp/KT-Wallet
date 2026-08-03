@@ -640,6 +640,14 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   EVM、TRON、Solana signer 均与当前批次公开地址一致。第 17 次系统 Face ID 成功删除
   独立 App Keychain 域内的矩阵钱包，集成测试 1/1、Cold Signer 全量 570/570、原生
   建钥清理审计 31 处/0 债务通过。该证据不访问 RPC、不广播，也不替代物理相机或真机。
+- [x] 同一测试又在独立 `KT Cold Signer` Android API 35 bundle 内通过：APK manifest
+  精确核对为 `cc.siliconnexus.ktwallet.coldsigner`，16 次系统指纹分别授权八链原生币/
+  Token Wallet Core 签名，第 17 次系统指纹认证删除独立 App Keystore 钱包；AIRGAP-V1
+  请求/结果往返、原始交易解析及 signer/txHash 与当前批次公开地址全部一致，集成测试
+  1/1。清空 Gradle 缓存后的首次构建先失败闭合，暴露 Cold Signer 依赖验证缺少 6 个
+  Kotlin/coroutines/Guava/JUnit BOM metadata；每个构件均从 Maven Central 独立下载计算
+  SHA-256，并与另一 App 已审阅的同版本值交叉核对后精确加入 allowlist，未关闭验证或
+  批量扩展信任。随后冷缓存 Debug APK 与矩阵均通过。
 - [ ] 本矩阵的确定性、未广播交易仍只证明八链离线签名和验签；新批次全部八链仍需
   补充测试资产并保存 explorer txHash、链上确认与双端历史证据。旧批次的 Ethereum、
   Base、Arbitrum、Avalanche、BNB、TRON、Solana 广播闭环保留为历史回归证据；

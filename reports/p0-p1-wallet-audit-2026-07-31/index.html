@@ -486,8 +486,9 @@
         cleanup-only，原生桥返回明确删除成功且集成测试 1/1 通过。当前批次已分别在
         Android API 35 与唯一 iPhone 17 Pro Simulator / iOS 26.2 以真实系统认证重跑
         16 条 Wallet Core 签名、AIRGAP-V1 往返和密码学验签，并在 teardown 认证删除
-        两端矩阵临时钱包；同一批次又在独立 KT Cold Signer iOS bundle 内完成相同
-        16 条矩阵并通过第 17 次 Face ID 删除独立 Keychain 域内临时钱包。当前 EVM 地址经 Gateway
+        两端矩阵临时钱包；同一批次又在独立 KT Cold Signer 的 iOS 与 Android bundle
+        分别完成相同 16 条矩阵，并通过各平台第 17 次系统认证删除独立 Keychain/Keystore
+        域内临时钱包。当前 EVM 地址经 Gateway
         与独立 Amoy RPC 交叉读取均为 0 POL / 0 USDC，
         尚未广播。下表浏览器链接仅属于更早批次的
         历史回归证据，不能冒充新一轮验收。</div>
@@ -701,6 +702,8 @@
           <tr><td>当前批次 Android 八链离线矩阵</td><td><code>batch_20260802_3eb2631a3683a40c</code> 在 Android API 35 通过真实系统指纹逐次授权，执行 Ethereum、Polygon、Base、Arbitrum、Avalanche、BNB 的原生币/Token，以及 TRON/TRC-20、Solana/SPL-ATA 共 16 条 Wallet Core 签名；每条均完成 AIRGAP-V1 多帧聚合、原始交易解析、在线密码学验签与 signer 核对。测试不访问 RPC、不广播，结束时再次经系统指纹删除 Android 临时原生钱包</td><td class="pass">集成测试 1/1；16/16 operation/hash/signer 证据完整。边界：只证明 Android 组合 App；物理相机 QR 与链上广播尚未验收</td></tr>
           <tr><td>当前批次 iOS 八链离线矩阵</td><td>同一批次在唯一 iPhone 17 Pro Simulator / iOS 26.2 逐笔触发系统 Face ID，执行与 Android 相同的 16 条 Wallet Core 签名、AIRGAP-V1 多帧聚合、原始交易解析、在线密码学验签和 signer 核对；测试不访问 RPC、不广播，第 17 次 Face ID 删除矩阵临时原生钱包</td><td class="pass">集成测试 1/1；16/16 operation/hash/signer 与当前批次公开地址一致，认证 teardown 成功。边界：只证明 KT Wallet iOS bundle 的原生矩阵，不替代物理相机 QR 或链上广播</td></tr>
           <tr><td>独立 KT Cold Signer 当前批次 iOS 矩阵</td><td>在独立 App 自己的 iOS bundle 与 Keychain 域内，以同一当前批次创建临时钱包；Ethereum、Polygon、Base、Arbitrum、Avalanche、BNB 原生币/Token、TRON/TRC-20、Solana/SPL-ATA 共 16 条分别通过 Face ID、真实 Wallet Core、AIRGAP-V1 请求/结果多帧往返、原始交易解析和密码学 signer/txHash 核对</td><td class="pass">集成测试 1/1，16/16 signer 与当前批次公开地址一致；第 17 次 Face ID 删除独立 App 临时钱包，Cold Signer 570/570。边界：不访问 RPC、不广播，不替代物理相机或真机</td></tr>
+          <tr><td>独立 KT Cold Signer 当前批次 Android 矩阵</td><td>在唯一 Android API 35 模拟器录入系统 PIN/指纹后，以同一当前批次在独立 App Keystore 域执行与 iOS 相同的 16 条 Wallet Core 签名；APK manifest 精确核对为 <code>cc.siliconnexus.ktwallet.coldsigner</code>，不是组合 App。每条均完成 AIRGAP-V1 请求/结果往返、原始交易解析和密码学 signer/txHash 核对</td><td class="pass">集成测试 1/1，16/16 signer 与当前批次公开地址一致；指纹服务记录 17 次接受，最后一次认证删除临时钱包。系统认证框由 UIAutomator 确认，实际截屏因 <code>FLAG_SECURE</code> 仅保留状态栏与黑色像素。边界：不访问 RPC、不广播，不替代物理相机或零售真机</td></tr>
+          <tr><td>Cold Signer Android 冷缓存供应链构建</td><td>清空 Gradle 缓存后的首次构建保持严格 dependency verification，缺失 metadata 直接失败；没有使用批量生成或关闭验证。Kotlin/coroutines/Guava/JUnit BOM 的 6 个缺失 metadata 分别从 Maven Central 下载计算 SHA-256，并与 KT Wallet 已审阅的同版本值交叉核对后精确加入 Cold Signer allowlist</td><td class="pass">第一次构建按设计失败；补齐 6 个精确哈希后冷缓存 Debug APK 在 154.5 秒构建通过，随后 integration APK 继续通过验证并完成 Android 矩阵。mobile_scanner 的 Built-in Kotlin 迁移仍是上游未来兼容警告</td></tr>
           <tr><td>原生 E2E 钱包清理真实性</td><td>仓库门禁使用 Analyzer AST 逐个核对原生 storeWallet 的 CoreCrypto 实例、walletId 与控制流；只接受同实例/同 ID 的紧邻认证 teardown，或覆盖创建点且不吞异常的 finally。两个 App 的 helper 均必须真实 addTearDown，并调用同实例 deleteWallet(walletId).timeout(timeout)，只允许忽略钱包已不存在。注释、错 ID、错实例、普通路径删除、第二钱包遗漏、空 helper 和捕获删除超时均不能伪装成已清理</td><td class="pass">站点与 helper 绕过先红后绿；真实发现并修复 Sepolia replacement 生命周期，EVM replacement 同步移除静默超时。两款 App integration tests 共 31 个原生 store 站点、0 清理债务；check_deps、分析 0、Cold Signer 570/570 通过。设备实际 Face ID/PIN 仍由 E2E 运行证明</td></tr>
           <tr><td>金额、原生币单位与市场展示精度</td><td>用户十进制金额到链上 base unit 全程使用 BigInt；超 Token decimals 不截断，逗号歧义输入拒绝。EIP-1559 的 chainId、nonce、priority/max fee、gas limit 与 value 在 RLP/哈希前必须小于 2^256。Gateway 不能以响应 metadata 改写 ETH/POL/AVAX/BNB/TRX/SOL 的协议固定 decimals 或 symbol；不一致时整链失败并进入直连回退。运营方 verified Token decimals 只接受 0–36。展示层只接受正且有限的币价/FX 与有限涨跌；BigInt 转法币、换算或合计溢出时显示 --</td><td class="pass">错误 ETH 单位、Portfolio 隔离、六类 EVM 超域标量、255-decimal 官方 Token、负/零市场报价及 4096-bit 极端余额均先红后绿；超过 IEEE-754 的链上金额仍精确往返。chains 178/178、内置 Token 精度 35/35、KT Wallet 1458/1458、分析 0、check_deps 通过。法币 double 仅展示，不进入余额授权或签名</td></tr>
           <tr><td>移动端错误隐私边界</td><td>Core Crypto 的 Android/iOS 原生层不再返回 Throwable、localizedDescription 或认证 Provider 文字；Dart MethodChannel 只保留固定错误码及锁定秒数。Gateway Client、直连 RPC、Solana 水龙头与 EVM/TRON/Solana Provider 错误统一丢弃完整 URI、任意 body 和未知节点文案；广播拒绝再以 16 类结构化原因进入 UI</td><td class="pass">先用助记词、私钥、Provider key、完整 URL、中文混排与异常 canary 证明旧路径；修复后 Core Crypto 20/20、HTTP/Gateway/广播 46/46、chains RPC 34/34、水龙头 10/10、三语映射 16/16、Wallet 860/860 通过，静态隐私门禁已纳入依赖审计</td></tr>
@@ -737,7 +740,7 @@
           <tr><td>加密备份文件输入与 Provider 边界</td><td>原生最多读取 256 KiB + 1 字节；Dart 严格核对 v1/v2 闭合 schema、KDF、cipher、UTC、payload format 与 payload；只有显式 cancelled=true 才静默返回。文件名只显示净化 basename，移除控制/Bidi/零宽字符并限制 80 code points；文件错误与密码错误分离，换文件失败清除旧密码</td><td class="partial">定向 33/33、Android 原生边界通过、iOS build-for-testing 通过；当轮 Simulator SpringBoard 异常退出，iOS XCTest 与物理 Provider 待复验</td></tr>
           <tr><td>跨平台加密备份格式</td><td>backup-v2 在 Android/iOS 统一为 PBKDF2-HMAC-SHA256 210000 rounds + AES-256-GCM，固定 salt16/nonce12/tag16 和 payload 布局；设备本地 Argon2id 与可移植备份分离。Android v1 仅在 portable 认证失败后兼容旧 Argon2id，v2 不允许降级。严审又发现 Android 原实现使用只保证 API 26+ 的 PBKDF2 SecretKeyFactory 别名，与 minSdk 24 冲突；现改由 API 23+ HmacSHA256 按 RFC 8018 直接计算同一 PBKDF2 block，显式使用 UTF-8，文件字节不变，并由依赖门禁防回归</td><td class="partial">Dart 33/33；Android 独立 Unicode key/blob、篡改与格式选择 JVM 7/7，其中新 KDF 定向 3/3；API 35 Unicode portable 向量与真实旧 v1 恢复 2/2；生产 Swift 源码直接编译执行同一向量和负例通过。API 24/25 与 iOS XCTest 当轮未运行，物理双向交叉恢复待验收；<a href="https://developer.android.com/reference/javax/crypto/SecretKeyFactory">Android 官方算法表</a>为兼容性边界依据</td></tr>
           <tr><td>离线备份密码强度</td><td>新建文件要求 14–128 Unicode scalar，拒绝低多样性、1–4 字符周期重复、单调连续和明确常见模式；三语区分过短、过长与可预测。旧文件恢复不套用新规则，避免安全升级锁死历史备份</td><td class="pass">英文/中日韩短语正例与短、超长、重复、连续、常见模式负例；MethodChannel 前失败闭合，W32 Golden 人工复核；Wallet 1424/1424、Core Crypto 39/39</td></tr>
-          <tr><td>测试凭证批次门禁</td><td>版本化批次 ID、UTC 创建/过期时间、最长 14 天、0600、非 symlink、公开 BIP-39 vector 拒绝；交互式输入关闭回显，报告扫描使用本地助记词 canary 且不回显秘密；24 个真实助记词 E2E 入口内置同一门禁</td><td class="partial">当前 14 天批次已由 iOS 原生 Wallet Core 生成，host 文件为 0600；KT Wallet 的 Android/iOS 八链 16 条离线矩阵与独立 KT Cold Signer 的 iOS 16 条矩阵均通过认证、真实 Wallet Core 与认证删除，iOS provisioning 临时钱包也已通过 Simulator Face ID cleanup-only 删除。仍待注资后重跑真实广播矩阵，并补齐独立 Cold Signer Android 当前批次矩阵</td></tr>
+          <tr><td>测试凭证批次门禁</td><td>版本化批次 ID、UTC 创建/过期时间、最长 14 天、0600、非 symlink、公开 BIP-39 vector 拒绝；交互式输入关闭回显，报告扫描使用本地助记词 canary 且不回显秘密；24 个真实助记词 E2E 入口内置同一门禁</td><td class="partial">当前 14 天批次已由 iOS 原生 Wallet Core 生成，host 文件为 0600；KT Wallet 与独立 KT Cold Signer 的 Android/iOS 八链 16 条离线矩阵均通过系统认证、真实 Wallet Core 与认证删除，iOS provisioning 临时钱包也已通过 Simulator Face ID cleanup-only 删除。仍待注资后重跑真实广播矩阵</td></tr>
           <tr><td>E2E 原生密钥清理纪律</td><td>仓库级门禁枚举两个 App 的所有 <code>storeWallet</code> 测试；新增原生位置必须显式认证删除。两个 App 的严格 teardown helper 均复用生产 <code>deleteWallet</code> 系统认证，超时直接令测试失败，仅容忍场景已主动删除后的 WALLET_NOT_FOUND，不存在未认证测试后门。仅使用已知 <code>MockCoreCrypto</code> 且无 MethodChannel 的纯内存 UI 测试明确排除，未知实现不豁免</td><td class="pass">6 个分类正负例、仓库门禁和统一源码审计 12/12 通过；门禁建立时初始 24 个原始命中中的 23 个真实原生测试已接入认证清理、1 个纯内存 Mock 被精确排除。新增独立 Signer 矩阵后，当前两个 App 共 31 个原生 <code>storeWallet</code> 站点、0 个清理债务。门禁建立前遗留的 provisioning wallet 已经系统 Matching Face 认证删除；本轮独立 Signer 临时钱包也在第 17 次 Face ID 后删除</td></tr>
           <tr><td>Package 公开测试文档</td><td>六个共享 package、Core Crypto podspec 与 example 均说明 API、示例、测试、许可证及安全边界；递归门禁禁止默认 TODO、示例公司/域名和 Flutter 模板描述回归；test_support fixture 从仓库根目录和包目录均可运行</td><td class="pass">文档门禁 + packages 397/397 通过</td></tr>
           <tr><td>Core Crypto Privacy Manifest</td><td>AuthGate 的 app-scoped UserDefaults 以 CA92.1 独立声明；CocoaPods resource bundle 与 SwiftPM resource 同时启用，源码 glob 不再吞入 xcprivacy；两份 Podfile 固定并向传递依赖传播 iOS 13 下限</td><td class="pass">podspec lint、21 项门禁定向测试、两款 Simulator 构建及最终 framework bundle 读取通过；相关两类 Xcode 警告为 0</td></tr>
@@ -756,7 +759,7 @@
           <tr><td>EVM 扩展链离线完整闭环</td><td>Base、Arbitrum、Avalanche、BNB；每链原生币 + 官方测试 Token，iOS 26.2 与隔离 Android API 35 分别执行完整 AIRGAP-V1、系统认证、原生签名、在线验签、广播、receipt 与 Gateway 历史</td><td class="pass">四链双端 16 笔全新交易通过</td></tr>
           <tr><td>TRON / Solana 离线完整闭环</td><td>TRON Nile 动态 Bandwidth/Energy/TAPOS + Solana Devnet blockhash/fee/simulation/幂等 ATA owner 绑定；iOS 与 Android 分别执行 AIRGAP-V1、原生签名、验签、广播、确认与 Gateway 历史</td><td class="pass">双链双端 8 笔全新交易通过</td></tr>
           <tr><td>Arbitrum replacement 边界</td><td>官方 first-come-first-served sequencer + 真实并发广播；无法形成 pending 竞争，App 按链隐藏加速/取消</td><td class="pass">明确 unsupported，不误报</td></tr>
-          <tr><td>原生 Cold Signer 矩阵</td><td>八链 × 原生币/Token，共 16 条；真实 Wallet Core、每次系统认证、QR 往返和在线验签；当前批次已在组合 App 的 Android/iOS 及独立 KT Cold Signer iOS bundle 分别执行</td><td class="partial">三个 bundle/device 入口均通过并认证删除临时钱包；未广播、未做物理相机往返</td></tr>
+          <tr><td>原生 Cold Signer 矩阵</td><td>八链 × 原生币/Token，共 16 条；真实 Wallet Core、每次系统认证、QR 往返和在线验签；当前批次已在组合 App 与独立 KT Cold Signer 的 Android/iOS bundle 分别执行</td><td class="partial">四个 bundle/device 入口均通过并认证删除临时钱包；未广播、未做物理相机往返</td></tr>
           <tr><td>发送者绑定负例</td><td>外来 TRON owner 与 Solana fee payer 在调用原生密钥前被拒绝</td><td class="pass">通过</td></tr>
           <tr><td>账户导出与配对</td><td>八链地址/公钥/path 严格绑定；非曲线点、篡改、缺链、重复 coin 与错误 Solana 路径负例</td><td class="pass">通过</td></tr>
           <tr><td>Cold Signer 首页安全状态</td><td>检查中、离线、联网、unknown 与 probe 异常；没有固定绿色或虚构离线天数</td><td class="pass">通过</td></tr>
@@ -950,6 +953,7 @@
         <figure><img src="screenshots/android-22-token-risk-unavailable.png" alt="Android unavailable token risk"><figcaption>风险服务不可用：明确无法确认安全，不误报绿色</figcaption></figure>
         <figure><img src="screenshots/android-23-trust-legal-security.png" alt="Android trust and legal disclosures"><figcaption>About：隐私、风险、许可证、安全政策与报告流程</figcaption></figure>
         <figure><img src="screenshots/android-24-native-cold-signer-flag-secure.png" alt="Android system authentication protected capture"><figcaption>系统凭据认证期间捕获为黑屏；UIAutomator 独立确认原生认证提示存在，不作为普通页全局 FLAG_SECURE 证据</figcaption></figure>
+        <figure><img src="screenshots/android-current-batch-2026-08-03/kt-cold-signer-current-batch-auth.png" alt="Current-batch standalone KT Cold Signer authentication capture blocked by FLAG_SECURE"><figcaption>当前短期批次独立 Android App：UIAutomator 同时确认 KT Cold Signer 的“Authorize transaction signing”系统指纹框；系统截屏仅保留状态栏和黑色画面，证明签名内容与认证弹窗未被捕获</figcaption></figure>
         <figure><img src="screenshots/android-lifecycle-2026-08-03/kt-wallet-foreground-fixed.png" alt="KT Wallet foreground before lifecycle test"><figcaption>KT Wallet 前台基线：内部页面正常可见且普通截图保持允许</figcaption></figure>
         <figure><img src="screenshots/android-lifecycle-2026-08-03/kt-wallet-notification-shade-fixed.png" alt="KT Wallet notification shade without privacy takeover"><figcaption>KT Wallet 完整通知栏：系统层正常展开；dumpsys 证明 MainActivity 仍为 topResumed，不触发任务保护页</figcaption></figure>
         <figure><img src="screenshots/android-lifecycle-2026-08-03/kt-wallet-recents-protected.png" alt="KT Wallet protected Android Recents task"><figcaption>KT Wallet Home → Recents：Android 13+ 系统生成深色 KT 任务卡，无任何钱包页面像素</figcaption></figure>
@@ -1025,7 +1029,7 @@
           为 0600 且门禁验证通过，公开 EVM 地址为
           <code>0xfa1B…aD11</code>；Android API 35 与唯一 iPhone 17 Pro Simulator 的
           当前批次 16 条未广播矩阵均已通过，组合 App 两端矩阵临时钱包均认证删除；
-          独立 KT Cold Signer iOS bundle 也完成 16 条矩阵并认证删除其临时钱包；Gateway 与
+          独立 KT Cold Signer 的 iOS/Android bundle 也分别完成 16 条矩阵并认证删除各自临时钱包；Gateway 与
           独立 Amoy RPC 均读到 0 POL / 0 USDC，
           尚未广播。设备侧私密 JSON 已消费删除；iOS provisioning 临时 native walletId
           第一次 Face ID 删除真实超时失败，第二次立即 Matching Face 后由原生桥明确删除，
@@ -1073,9 +1077,9 @@
       <ul>
         <li>不能宣称经过第三方安全审计或达到 Ledger / OKX / MetaMask 的安全等级。</li>
         <li>不能宣称当前短期批次的八条链 Cold Signer 完整生产闭环已经通过；轮换后的
-          当前批次已在 Android/iOS 组合 App 和独立 KT Cold Signer iOS bundle 重跑
-          16 条离线签名/验签矩阵，但独立 Signer Android、两台物理设备的真实摄像头往返
-          与任何链上广播仍未验收；已作废批次
+          当前批次已在 Android/iOS 组合 App 和独立 KT Cold Signer Android/iOS bundle
+          重跑 16 条离线签名/验签矩阵，但两台物理设备的真实摄像头往返与任何链上广播
+          仍未验收；已作废批次
           的结果不能移植为当前证据，更早七链链上结果也只是历史回归证据。</li>
         <li>不能宣称新批次任何链已完成广播，也不能宣称 Polygon Amoy USDC 曾完整通过。</li>
         <li>不能宣称 Android/iOS 所有真机系统安全场景已验收；当前 UI 截图来自模拟器。</li>
