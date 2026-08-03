@@ -189,18 +189,17 @@ void _scan(Map<String, List<String>> options) {
 }
 
 Iterable<File> _textFiles(String root) sync* {
-  const extensions = {'.html', '.md', '.json', '.txt', '.log', '.xml'};
   final type = FileSystemEntity.typeSync(root, followLinks: false);
   if (type == FileSystemEntityType.file) {
     final file = File(root);
-    if (extensions.any(file.path.endsWith)) yield file;
+    if (isE2eSecretScanTextPath(file.path)) yield file;
     return;
   }
   if (type != FileSystemEntityType.directory) {
     _fail(['scan path does not exist or is a symlink: $root']);
   }
   for (final entity in Directory(root).listSync(recursive: true)) {
-    if (entity is File && extensions.any(entity.path.endsWith)) yield entity;
+    if (entity is File && isE2eSecretScanTextPath(entity.path)) yield entity;
   }
 }
 

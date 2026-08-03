@@ -816,68 +816,38 @@ void main() {
     }
   }
 
-  // Scan every production surface that can be published, deployed or bundled
-  // into a client. Test fixtures deliberately contain fake provider canaries,
-  // so they remain covered by their focused privacy tests instead of being
-  // mistaken for live credentials here.
-  const productionSecretRoots = [
-    '.github',
-    'website',
-    'backend/gateway/cmd',
-    'backend/gateway/config',
-    'backend/gateway/internal',
-    'apps/kt_wallet/lib',
-    'apps/kt_wallet/android/app/src/main',
-    'apps/kt_wallet/ios/Runner',
-    'apps/cold_signer/lib',
-    'apps/cold_signer/android/app/src/main',
-    'apps/cold_signer/ios/Runner',
-  ];
-  const productionTextExtensions = {
-    '.astro',
-    '.dart',
-    '.env',
-    '.go',
-    '.gradle',
-    '.h',
-    '.html',
-    '.js',
-    '.json',
-    '.kt',
-    '.kts',
-    '.m',
-    '.md',
-    '.mm',
-    '.plist',
-    '.properties',
-    '.rs',
-    '.sh',
-    '.swift',
-    '.toml',
-    '.ts',
-    '.txt',
-    '.xcprivacy',
-    '.xml',
-    '.yaml',
-    '.yml',
-  };
-  for (final rootPath in productionSecretRoots) {
-    final root = Directory(rootPath);
-    if (!root.existsSync()) continue;
-    for (final entity in root.listSync(recursive: true, followLinks: false)) {
-      if (entity is! File) continue;
-      final basename = entity.uri.pathSegments.last;
-      final dot = basename.lastIndexOf('.');
-      final extension = dot < 0 ? '' : basename.substring(dot);
-      if (basename != 'Dockerfile' &&
-          !productionTextExtensions.contains(extension)) {
-        continue;
-      }
-      final labels = findE2eSecretLeakLabels(entity.readAsStringSync());
+  // Scan every tracked file plus every non-ignored untracked file that could
+  // be committed. GitHub Push Protection scans tests and tooling too, so fake
+  // provider fixtures must be assembled at runtime instead of exempting whole
+  // test trees. `git ls-files` also keeps funded local credentials and private
+  // runbooks out through the shared .gitignore contract.
+  final publicFiles = Process.runSync('git', [
+    'ls-files',
+    '--cached',
+    '--others',
+    '--exclude-standard',
+    '-z',
+  ]);
+  if (publicFiles.exitCode != 0) {
+    failures.add('could not enumerate public repository files for secret scan');
+  } else {
+    final paths =
+        '${publicFiles.stdout}'
+            .split('\u0000')
+            .where((path) => path.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    for (final path in paths) {
+      if (!isE2eSecretScanTextPath(path)) continue;
+      final file = File(path);
+      if (!file.existsSync()) continue;
+      final labels = findE2eSecretLeakLabels(
+        file.readAsStringSync(),
+        mnemonic: localMnemonic,
+      );
       if (labels.isNotEmpty) {
-        failures.add(
-          '${entity.path} contains production credential material: $labels',
-        );
+        failures.add('$path contains public credential material: $labels');
       }
     }
   }

@@ -656,6 +656,27 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   canary 扫描通过；`check_deps`、脚本语法、test_support 49/49、共享 packages
   389/389 与相关静态分析通过。模式扫描不能识别所有无前缀高熵字符串，正式公开发布
   仍应叠加专用 secret scanner 与 GitHub push protection。
+- [x] 2026-08-03 Push Protection 类覆盖缺口已闭合：旧仓库门禁只遍历生产目录，且
+  `e2e_credential_guard scan` 只识别报告扩展名，因此完整的 provider 测试 fixture
+  可能留在公开 Dart 测试源码中，直到远端 push 才被拦截。新门禁通过
+  `git ls-files --cached --others --exclude-standard -z` 枚举全部已跟踪及可提交的未跟踪
+  文件，并共享一份文本类型 allowlist，覆盖 App、测试、工具、配置、CI、Gateway 与
+  文档，同时依赖共享 `.gitignore` 排除本地凭证、私密 runbook 和构建目录。测试中需要
+  验证的令牌形状改为运行时拼接，不降低检测正例强度；第一次全仓扫描实际发现并修正
+  3 个测试文件中的 8 类 provider canary。文件选择负例先红后绿，定向 12/12、Faucet
+  10/10、test_support 55/55、共享 packages 395/395、KT Wallet 1458/1458、Cold Signer
+  568/568、`check_deps` 与完整静态分析 0 问题。该门禁覆盖当前工作树；Git 历史与无前缀
+  opaque key 仍必须继续依赖 GitHub Push Protection/专用扫描器。
+- [x] 2026-08-03 建立可重复的本地公开测试源码验收入口：
+  `dart run tool/audit_public_beta.dart` 固定、逐步、失败即停地执行差异完整性、仓库安全/
+  秘密/原生清理门禁、完整静态分析、四个纯 Dart package、两个 Flutter package、
+  KT Wallet、KT Cold Signer 和 Gateway audit，共 12 步；`--list` 可在执行前审阅精确
+  命令与工作目录，未知参数固定失败。`--full` 只在 12 步之后追加已固定版本的 Android/
+  Apple runtime、Gradle/CocoaPods、Gateway govulncheck 与五份 lockfile OSV 审计，不修改
+  CI，也不把源码门禁冒充为正式签名、真机、真实广播或外部审计。计划/停止首错/全成功
+  四项测试先红后绿；真实默认执行 12/12 通过，追加依赖脚本又验证 Apple 2 个远程 Pod +
+  SQLite 3.53.3、portable backup Swift vector、Gateway 全套和 Dart 147/npm 293/Go 4/
+  Android 135+134 个 package，已知问题 0。README 与 BUILDING 已指向同一 canonical 命令。
 - [x] 2026-08-02 已由 iOS 原生 Wallet Core 生成并安装新的 14 天短期批次
   `batch_20260802_e56bbf695db00dab`，默认凭证与旧凭证归档均为本地忽略文件且权限
   为 `0600`；模拟器临时凭证文件、新批次原生密钥及首次失败遗留密钥均已删除。

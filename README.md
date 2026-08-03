@@ -270,6 +270,19 @@ flutter pub get
 Run the main test suites:
 
 ```sh
+(dart run tool/audit_public_beta.dart)
+```
+
+That fail-fast command is the canonical local source gate: it runs repository
+security/secret/cleanup checks, static analysis, all six shared packages, both
+Flutter apps, and the Gateway audit in a fixed reviewable order. Add `--full`
+to include pinned native/runtime dependency and OSV audits. It deliberately
+does not replace signed-artifact checks, physical-device review, real-chain
+broadcast evidence, or an independent security audit.
+
+The underlying suites can also be run individually:
+
+```sh
 (cd packages/ui_kit && flutter test)
 (cd packages/chains && flutter test)
 (cd packages/wallet_data && flutter test)
@@ -312,10 +325,18 @@ and release-signing requirements.
 
 Recent device and simulator evidence is available in:
 
+- [P0/P1 trusted-wallet audit and release-readiness report](reports/p0-p1-wallet-audit-2026-07-31/index.html)
 - [Security hardening report](reports/hardening-2026-07-26/index.html)
 - [Pending replacement UI report](reports/pending-replacement-ui-2026-07-26/index.html)
 - [Testnet cryptography report](reports/testnet-real-crypto-2026-07-26/index.html)
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
+
+The latest source gate (2026-08-03) completed with zero static-analysis
+issues: **1,458/1,458** KT Wallet tests, **568/568** KT Cold Signer tests, and
+**395/395** shared-package tests passed. The Gateway audit, public-secret gate,
+native dependency lock/checksum verification, and OSV scans also passed. These
+numbers are reproducible source evidence, not a substitute for the outstanding
+physical-device, real-chain, signed-artifact, or independent-audit work below.
 
 ## Application identities
 
@@ -343,6 +364,31 @@ Launcher names follow the device language: Chinese displays **KT钱包** and
 | `reports` | HTML acceptance reports and screenshots |
 
 ## Current scope
+
+### Public beta status
+
+The current build is suitable for continued TestFlight and controlled public
+beta evaluation with testnet or small-value assets. It must not yet be
+represented as having the assurance level of a mature international wallet or
+as suitable for holding large mainnet balances.
+
+The remaining release evidence includes:
+
+- complete iOS and Android physical-device coverage for biometrics, lifecycle
+  privacy, recovery-phrase protection, deletion, and accessibility;
+- a current-batch Polygon Amoy native/token broadcast and replacement test,
+  plus physical-camera QR round trips between the online wallet and the
+  independent KT Cold Signer;
+- small-value mainnet approval discovery and revoke validation;
+- independent mobile and cryptography security audits;
+- China-mainland multi-carrier, weak-network, and cross-region availability
+  testing, plus an external Alertmanager/on-call receiver and SLA exercise;
+- release-signed artifact inspection before store distribution.
+
+The detailed, evidence-linked backlog is maintained in
+[the P0/P1 trusted-wallet plan](docs/P0_P1_TRUSTED_WALLET_PLAN.md).
+
+### Deliberately deferred features
 
 The following are intentionally outside the current release scope:
 

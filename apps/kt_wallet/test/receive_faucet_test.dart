@@ -117,6 +117,7 @@ void main() {
   testWidgets('devnet: airdrop failure classifies and hides the node message', (
     tester,
   ) async {
+    final providerCanary = <String>['alch', 'airdrop_canary_secret'].join('_');
     final (wallets, _) = await makeWallet();
     final net = NetworkController();
     await net.setEnvironment(NetworkEnvironment.testnet);
@@ -128,8 +129,7 @@ void main() {
           'id': 1,
           'error': {
             'code': -32005,
-            'message':
-                'airdrop limit reached; provider=alch_airdrop_canary_secret',
+            'message': 'airdrop limit reached; provider=$providerCanary',
           },
         }),
         200,
@@ -146,13 +146,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('请求过于频繁，请稍后重试'), findsOneWidget);
-    expect(find.textContaining('alch_airdrop_canary_secret'), findsNothing);
+    expect(find.textContaining(providerCanary), findsNothing);
     expect(find.text('空投成功，余额稍后刷新'), findsNothing);
   });
 
   testWidgets(
     'devnet: airdrop transport failure hides credential-bearing URL',
     (tester) async {
+      final transportCanary = <String>[
+        'alch',
+        'airdrop_transport_secret',
+      ].join('_');
       final (wallets, _) = await makeWallet();
       final net = NetworkController();
       await net.setEnvironment(NetworkEnvironment.testnet);
@@ -160,7 +164,7 @@ void main() {
       final client = MockClient((request) async {
         throw http.ClientException(
           'connection failed',
-          Uri.parse('https://rpc.example/alch_airdrop_transport_secret'),
+          Uri.parse('https://rpc.example/$transportCanary'),
         );
       });
 
@@ -174,10 +178,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('测试币服务暂时不可用'), findsOneWidget);
-      expect(
-        find.textContaining('alch_airdrop_transport_secret'),
-        findsNothing,
-      );
+      expect(find.textContaining(transportCanary), findsNothing);
     },
   );
 

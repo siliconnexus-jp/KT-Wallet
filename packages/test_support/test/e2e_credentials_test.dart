@@ -87,8 +87,9 @@ void main() {
         'legal winner thank year wave sausage worth useful legal winner thank yellow';
 
     test('reports labels without returning secret values', () {
+      final alchemyFixture = <String>['alch', 'abcdefghijklmnop'].join('_');
       final labels = findE2eSecretLeakLabels(
-        'Evidence: $secret and token alch_abcdefghijklmnop',
+        'Evidence: $secret and token $alchemyFixture',
         mnemonic: secret,
       );
       expect(labels, ['configured test mnemonic', 'Alchemy token']);
@@ -120,14 +121,22 @@ void main() {
         'live',
         'abcdefghijklmnopqrstuvwx',
       ].join('_');
+      final etherscanFixture = 'ABCDEFGHIJKLMNOPQRSTUVWX1234567890';
+      final heliusFixture = 'helius-provider-key-1234567890';
+      final goPlusFixture = 'eyJhbGciOiJIUzI1NiJ9.payload.signature';
+      final metricsFixture = '0123456789abcdef0123456789abcdef';
+      final googleFixture = <String>[
+        'AI',
+        'zaSyA1234567890abcdefghijklmnopqrstuv',
+      ].join();
       final labels = findE2eSecretLeakLabels('''
-ETHERSCAN_API_KEY=ABCDEFGHIJKLMNOPQRSTUVWX1234567890
-HELIUS_API_KEY=helius-provider-key-1234567890
-GOPLUS_ACCESS_TOKEN=eyJhbGciOiJIUzI1NiJ9.payload.signature
-METRICS_BEARER_TOKEN=0123456789abcdef0123456789abcdef
+ETHERSCAN_API_KEY=$etherscanFixture
+HELIUS_API_KEY=$heliusFixture
+GOPLUS_ACCESS_TOKEN=$goPlusFixture
+METRICS_BEARER_TOKEN=$metricsFixture
 slack=$slackFixture
 stripe=$stripeFixture
-google=AIzaSyA1234567890abcdefghijklmnopqrstuv
+google=$googleFixture
 ''');
       expect(
         labels,
@@ -160,5 +169,37 @@ METRICS_BEARER_TOKEN=\${METRICS_BEARER_TOKEN}
     expect(hasPrivateCredentialFileMode(0x8180), isTrue); // regular + 0600
     expect(hasPrivateCredentialFileMode(0x81a0), isFalse); // regular + 0640
     expect(hasPrivateCredentialFileMode(0x81a4), isFalse); // regular + 0644
+  });
+
+  group('public secret scan file selection', () {
+    test('includes committed source, test, configuration, and scripts', () {
+      for (final path in const [
+        'apps/kt_wallet/lib/main.dart',
+        'packages/test_support/test/e2e_credentials_test.dart',
+        'backend/gateway/internal/handlers/rpc_test.go',
+        '.github/workflows/ci.yml',
+        'apps/kt_wallet/ios/Runner/Info.plist',
+        'apps/kt_wallet/android/gradle.properties',
+        'backend/gateway/Dockerfile',
+        'backend/gateway/Makefile',
+        'apps/kt_wallet/android/gradlew',
+      ]) {
+        expect(
+          isE2eSecretScanTextPath(path),
+          isTrue,
+          reason: '$path must be scanned before push',
+        );
+      }
+    });
+
+    test('excludes binary artifacts', () {
+      for (final path in const [
+        'assets/icon.png',
+        'apps/kt_wallet/android/gradle/wrapper/gradle-wrapper.jar',
+        'reports/audit.pdf',
+      ]) {
+        expect(isE2eSecretScanTextPath(path), isFalse, reason: path);
+      }
+    });
   });
 }

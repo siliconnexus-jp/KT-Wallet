@@ -5,7 +5,11 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kt_wallet/src/market/airdrop_service.dart';
 
+String _alchemyCanary(String suffix) => <String>['alch', suffix].join('_');
+
 void main() {
+  final rpcCanary = _alchemyCanary('airdrop_test_secret');
+
   Future<AirdropException> failureFor(
     http.Response Function(http.Request request) response,
   ) async {
@@ -16,7 +20,7 @@ void main() {
     );
     try {
       await service.requestAirdrop(
-        rpcUrl: 'https://rpc.example/alch_airdrop_test_secret',
+        rpcUrl: 'https://rpc.example/$rpcCanary',
         address: 'SolanaAddress',
       );
       fail('request should fail');
@@ -45,13 +49,14 @@ void main() {
   });
 
   test('RPC errors are classified without retaining provider text', () async {
+    final bodyCanary = _alchemyCanary('rpc_body_secret');
     final error = await failureFor(
       (_) => http.Response(
         jsonEncode({
           'jsonrpc': '2.0',
           'error': {
             'code': -32000,
-            'message': 'faucet has insufficient funds; alch_rpc_body_secret',
+            'message': 'faucet has insufficient funds; $bodyCanary',
           },
         }),
         200,
@@ -59,7 +64,7 @@ void main() {
     );
 
     expect(error.kind, AirdropFailureKind.insufficientFunds);
-    expect(error.toString(), isNot(contains('alch_rpc_body_secret')));
+    expect(error.toString(), isNot(contains(bodyCanary)));
   });
 
   test('malformed responses have a stable category', () async {
@@ -68,6 +73,7 @@ void main() {
   });
 
   test('transport errors do not retain a credential-bearing URI', () async {
+    final transportCanary = _alchemyCanary('airdrop_transport_secret');
     final service = AirdropService(
       client: MockClient((request) async {
         throw http.ClientException('offline', request.url);
@@ -77,7 +83,7 @@ void main() {
     Object? thrown;
     try {
       await service.requestAirdrop(
-        rpcUrl: 'https://rpc.example/alch_airdrop_transport_secret',
+        rpcUrl: 'https://rpc.example/$transportCanary',
         address: 'SolanaAddress',
       );
     } catch (error) {
@@ -86,6 +92,6 @@ void main() {
 
     expect(thrown, isA<AirdropException>());
     expect((thrown! as AirdropException).kind, AirdropFailureKind.unavailable);
-    expect(thrown.toString(), isNot(contains('alch_airdrop_transport_secret')));
+    expect(thrown.toString(), isNot(contains(transportCanary)));
   });
 }

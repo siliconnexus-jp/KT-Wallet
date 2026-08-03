@@ -119,7 +119,15 @@ graphs as well as the repository gate:
 (cd apps/kt_wallet/android && ./gradlew testDebugUnitTest --offline)
 (cd apps/cold_signer/android && ./gradlew testDebugUnitTest --offline)
 dart run tool/check_deps.dart
+dart run tool/audit_public_beta.dart
 ```
+
+`audit_public_beta.dart` is the canonical fail-fast local source gate. Use
+`--list` to review its exact commands and `--full` to append the pinned
+native/runtime dependency and OSV audit. Passing it is necessary but not
+sufficient for distribution: signed artifact guards, physical-device review,
+real-chain broadcast evidence, and independent security review remain separate
+release evidence.
 
 The gate scans the actual Android Release runtime locks rather than treating
 AGP/Flutter test and lint classpaths as APK code. The full verification metadata

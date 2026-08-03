@@ -19,6 +19,71 @@ const e2eCredentialRequiredKeys = {
   e2eMnemonicKey,
 };
 
+/// Text files that can carry credentials and are safe to decode as UTF-8.
+///
+/// This intentionally includes test source. Fake provider fixtures must be
+/// assembled at runtime so the repository itself never contains a token-shaped
+/// value that GitHub Push Protection would reject.
+const _e2eSecretScanTextExtensions = {
+  '.arb',
+  '.astro',
+  '.conf',
+  '.css',
+  '.dart',
+  '.entitlements',
+  '.env',
+  '.go',
+  '.gradle',
+  '.h',
+  '.html',
+  '.js',
+  '.json',
+  '.kt',
+  '.kts',
+  '.lock',
+  '.log',
+  '.m',
+  '.md',
+  '.mm',
+  '.pbxproj',
+  '.plist',
+  '.podspec',
+  '.properties',
+  '.rs',
+  '.scss',
+  '.sh',
+  '.swift',
+  '.toml',
+  '.ts',
+  '.txt',
+  '.xcconfig',
+  '.xcprivacy',
+  '.xml',
+  '.yaml',
+  '.yml',
+};
+
+const _e2eSecretScanExtensionlessFiles = {
+  'Dockerfile',
+  'Gemfile',
+  'Makefile',
+  'Podfile',
+  'gradlew',
+};
+
+/// Whether [path] is a public text artifact that the repository secret gate
+/// must inspect before commit/push.
+bool isE2eSecretScanTextPath(String path) {
+  final normalized = path.replaceAll('\\', '/');
+  final basename = normalized.substring(normalized.lastIndexOf('/') + 1);
+  if (_e2eSecretScanExtensionlessFiles.contains(basename)) return true;
+  final dot = basename.lastIndexOf('.');
+  if (dot < 0) return false;
+  return _e2eSecretScanTextExtensions.contains(
+    basename.substring(dot).toLowerCase(),
+  );
+}
+
 /// Maximum lifetime of a real-chain test credential batch.
 const e2eCredentialMaximumLifetime = Duration(days: 14);
 

@@ -5,4 +5,5 @@ library;
 
 export 'dep_check.dart';
 export 'fixtures.dart';
+export 'public_beta_audit.dart';
 export 'state_machine_harness.dart';
