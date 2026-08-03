@@ -116,8 +116,13 @@ class _ResponseLostReplacementService extends LocalTransferService {
   }
 
   @override
-  Future<String> broadcastSigned(Chain chain, Uint8List signedTx) async {
+  Future<String> broadcastSigned(
+    Chain chain,
+    Uint8List signedTx, {
+    required String expectedTxHash,
+  }) async {
     broadcastCalls++;
+    expect(expectedTxHash, _localHash);
     throw const LocalTransferUncertainException('response lost');
   }
 }

@@ -185,7 +185,11 @@ class _ResponseLostService extends LocalTransferService {
   }) => _sign();
 
   @override
-  Future<String> broadcastSigned(Chain chain, Uint8List signedTx) async {
+  Future<String> broadcastSigned(
+    Chain chain,
+    Uint8List signedTx, {
+    required String expectedTxHash,
+  }) async {
     broadcastCalls++;
     final id = session.localTransactionId;
     final row = id == null ? null : await wallets.localTransactionById(id);
@@ -193,6 +197,7 @@ class _ResponseLostService extends LocalTransferService {
         row != null &&
         row.status == TxStatus.submitted &&
         row.hash == localHash &&
+        expectedTxHash == localHash &&
         row.broadcastAt != null &&
         signedTx.length == 3;
     // Model the dangerous ambiguity: the node may have accepted the bytes,

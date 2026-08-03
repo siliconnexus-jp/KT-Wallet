@@ -345,7 +345,11 @@ class LocalTransferService {
       crypto: crypto,
       prepared: prepared,
     );
-    return broadcastSigned(prepared.chain, signed.signedTx);
+    return broadcastSigned(
+      prepared.chain,
+      signed.signedTx,
+      expectedTxHash: signed.txHash,
+    );
   }
 
   /// Signs without broadcasting so callers can durably store the locally
@@ -657,7 +661,11 @@ class LocalTransferService {
       expectedNetworkIdentity: expectedNetworkIdentity,
     );
     return NonEvmTransferResult(
-      hash: await broadcastSigned(Chain.tron, signed.signedTx),
+      hash: await broadcastSigned(
+        Chain.tron,
+        signed.signedTx,
+        expectedTxHash: signed.txHash,
+      ),
       referenceBlockHeight: prepared.referenceBlockHeight,
       expiresAt: prepared.expiresAt,
     );
@@ -828,7 +836,11 @@ class LocalTransferService {
       expectedNetworkIdentity: expectedNetworkIdentity,
     );
     return NonEvmTransferResult(
-      hash: await broadcastSigned(Chain.solana, signed.signedTx),
+      hash: await broadcastSigned(
+        Chain.solana,
+        signed.signedTx,
+        expectedTxHash: signed.txHash,
+      ),
       lastValidBlockHeight: prepared.lastValidBlockHeight,
     );
   }
@@ -893,12 +905,25 @@ class LocalTransferService {
     return SignedTransaction(signedTx: signedBytes, txHash: verified.txHash);
   }
 
-  /// Irreversible network boundary. Callers that need crash recovery should
-  /// persist [SignedTransaction.txHash] before invoking this method.
-  Future<String> broadcastSigned(Chain chain, Uint8List signedTx) =>
-      _broadcast(chain, signedTx);
+  /// Irreversible network boundary. Callers must persist [expectedTxHash]
+  /// before invoking this method so a lost or inconsistent node response can
+  /// be reconciled without submitting the signed bytes again.
+  Future<String> broadcastSigned(
+    Chain chain,
+    Uint8List signedTx, {
+    required String expectedTxHash,
+  }) => _broadcast(chain, signedTx, expectedTxHash: expectedTxHash);
 
-  Future<String> _broadcast(Chain chain, Uint8List signedTx) async {
+  Future<String> _broadcast(
+    Chain chain,
+    Uint8List signedTx, {
+    required String expectedTxHash,
+  }) async {
+    if (expectedTxHash.isEmpty) {
+      throw const SignatureVerificationError(
+        'missing locally verified transaction hash',
+      );
+    }
     final outcome = await _broadcaster.broadcast(chain, signedTx);
     switch (outcome.status) {
       case BroadcastStatus.ok:
@@ -908,7 +933,15 @@ class LocalTransferService {
             'The node accepted the request but returned no transaction hash',
           );
         }
-        return txHash;
+        if (!_sameTransactionHash(chain, expectedTxHash, txHash)) {
+          // The signed bytes may have reached the node, so a mismatched answer
+          // is outcome-unknown rather than a rejection. Keep polling the
+          // already persisted local hash and never submit the bytes again.
+          throw const LocalTransferUncertainException(
+            'The node returned an inconsistent transaction hash',
+          );
+        }
+        return expectedTxHash;
       case BroadcastStatus.error:
         throw LocalTransferRejectedException(
           outcome.rejectionKind ?? RpcRejectionKind.rejected,
@@ -954,6 +987,21 @@ class LocalTransferService {
     }
     return expected;
   }
+
+  static bool _sameTransactionHash(
+    Chain chain,
+    String expected,
+    String actual,
+  ) => switch (chain) {
+    Chain.solana => expected == actual,
+    Chain.ethereum ||
+    Chain.polygon ||
+    Chain.base ||
+    Chain.arbitrum ||
+    Chain.avalanche ||
+    Chain.bnb ||
+    Chain.tron => expected.toLowerCase() == actual.toLowerCase(),
+  };
 }
 
 BigInt _replacementBump(BigInt value) {

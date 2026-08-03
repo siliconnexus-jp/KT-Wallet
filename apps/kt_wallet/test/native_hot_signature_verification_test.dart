@@ -63,12 +63,15 @@ class _Ed25519SigningCrypto extends MockCoreCrypto {
 }
 
 class _CountingBroadcaster extends BroadcastService {
+  _CountingBroadcaster({this.returnedHash = 'accepted-hash'});
+
+  final String returnedHash;
   int calls = 0;
 
   @override
   Future<BroadcastOutcome> broadcast(Chain chain, Uint8List signedTx) async {
     calls++;
-    return const BroadcastOutcome.ok('accepted-hash');
+    return BroadcastOutcome.ok(returnedHash);
   }
 }
 
@@ -86,7 +89,9 @@ void main() {
       lamports: BigInt.one,
       recentBlockhash: '11111111111111111111111111111111',
     ).serialize();
-    final broadcaster = _CountingBroadcaster();
+    final signature = await algorithm.sign(message, keyPair: keyPair);
+    final expectedHash = base58Encode(Uint8List.fromList(signature.bytes));
+    final broadcaster = _CountingBroadcaster(returnedHash: expectedHash);
     final service = LocalTransferService(broadcaster: broadcaster);
 
     final result = await service.signAndBroadcastSolana(
@@ -106,8 +111,41 @@ void main() {
       expectedNetworkIdentity: null,
     );
 
-    expect(result.hash, 'accepted-hash');
+    expect(result.hash, expectedHash);
     expect(broadcaster.calls, 1);
+  });
+
+  test(
+    'EVM node hash comparison accepts casing but keeps local form',
+    () async {
+      const expectedHash = '0xABCDEF';
+      final service = LocalTransferService(
+        broadcaster: _CountingBroadcaster(returnedHash: '0xabcdef'),
+      );
+
+      final result = await service.broadcastSigned(
+        Chain.ethereum,
+        Uint8List.fromList(const [1, 2, 3]),
+        expectedTxHash: expectedHash,
+      );
+
+      expect(result, expectedHash);
+    },
+  );
+
+  test('missing local hash fails before network broadcast', () async {
+    final broadcaster = _CountingBroadcaster();
+    final service = LocalTransferService(broadcaster: broadcaster);
+
+    await expectLater(
+      service.broadcastSigned(
+        Chain.tron,
+        Uint8List.fromList(const [1, 2, 3]),
+        expectedTxHash: '',
+      ),
+      throwsA(isA<SignatureVerificationError>()),
+    );
+    expect(broadcaster.calls, 0);
   });
 
   test('native hash disagreement fails before Solana broadcast', () async {
@@ -145,6 +183,49 @@ void main() {
     );
     expect(broadcaster.calls, 0);
   });
+
+  test(
+    'mismatched node hash is uncertain and never replaces local hash',
+    () async {
+      final algorithm = Ed25519();
+      final keyPair = await algorithm.newKeyPairFromSeed(
+        List<int>.filled(32, 9),
+      );
+      final publicKey = await keyPair.extractPublicKey();
+      final signer = base58Encode(Uint8List.fromList(publicKey.bytes));
+      final message = SolanaMessage.systemTransfer(
+        from: signer,
+        to: '11111111111111111111111111111111',
+        lamports: BigInt.one,
+        recentBlockhash: '11111111111111111111111111111111',
+      ).serialize();
+      final broadcaster = _CountingBroadcaster(
+        returnedHash: 'forged-node-hash',
+      );
+      final service = LocalTransferService(broadcaster: broadcaster);
+
+      await expectLater(
+        service.signAndBroadcastSolana(
+          wallet: _wallet(solana: signer),
+          crypto: _Ed25519SigningCrypto(keyPair),
+          prepared: PreparedSolanaTransfer(
+            from: signer,
+            recipient: '11111111111111111111111111111111',
+            amountRaw: BigInt.one,
+            tokenMint: null,
+            tokenProgram: null,
+            networkFeeLamports: BigInt.one,
+            rentDepositLamports: BigInt.zero,
+            lastValidBlockHeight: 1,
+            message: message,
+          ),
+          expectedNetworkIdentity: null,
+        ),
+        throwsA(isA<LocalTransferUncertainException>()),
+      );
+      expect(broadcaster.calls, 1);
+    },
+  );
 
   test('malformed native EVM signature fails before broadcast', () async {
     final broadcaster = _CountingBroadcaster();

@@ -254,6 +254,38 @@ void _auditHotSigningBoundary(List<String> failures) {
       '$path changed native signing ownership; review every sign site',
     );
   }
+
+  final broadcaster = _futureMethodSection(source, 'broadcastSigned');
+  for (final marker in const [
+    'required String expectedTxHash',
+    'expectedTxHash: expectedTxHash',
+  ]) {
+    if (broadcaster == null || !broadcaster.contains(marker)) {
+      failures.add('$path broadcast boundary lost local-hash binding: $marker');
+    }
+  }
+  final irreversibleBoundary = _futureMethodSection(source, '_broadcast');
+  for (final marker in const [
+    "'missing locally verified transaction hash'",
+    '_sameTransactionHash(chain, expectedTxHash, txHash)',
+    "'The node returned an inconsistent transaction hash'",
+    'return expectedTxHash',
+  ]) {
+    if (irreversibleBoundary == null ||
+        !irreversibleBoundary.contains(marker)) {
+      failures.add('$path broadcast result lost local-hash binding: $marker');
+    }
+  }
+  for (final method in const [
+    'signAndBroadcastEvm',
+    'signAndBroadcastTron',
+    'signAndBroadcastSolana',
+  ]) {
+    final section = _futureMethodSection(source, method);
+    if (section == null || !section.contains('expectedTxHash: signed.txHash')) {
+      failures.add('$path $method does not bind node response to signed hash');
+    }
+  }
 }
 
 void _auditRiskSignalDirection(List<String> failures) {

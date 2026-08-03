@@ -147,11 +147,15 @@ class _FakeRevokeService extends LocalTransferService {
   }
 
   @override
-  Future<String> broadcastSigned(Chain chain, Uint8List signedTx) async {
+  Future<String> broadcastSigned(
+    Chain chain,
+    Uint8List signedTx, {
+    required String expectedTxHash,
+  }) async {
     broadcastCalls++;
     final error = broadcastError;
     if (error != null) throw error;
-    return '0x${'1' * 64}';
+    return expectedTxHash;
   }
 }
 

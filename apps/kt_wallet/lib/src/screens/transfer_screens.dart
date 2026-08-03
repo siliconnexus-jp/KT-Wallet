@@ -4724,6 +4724,7 @@ class _TxDetailScreenState extends State<TxDetailScreen>
       final hash = await service.broadcastSigned(
         prepared.chain,
         signed.signedTx,
+        expectedTxHash: signed.txHash,
       );
       broadcastHash = hash;
       final accepted = await controller.recordEvmReplacementBroadcast(
@@ -5705,7 +5706,11 @@ class TransferAuthSheet extends StatelessWidget {
         );
         signedHashPersisted = true;
         broadcastAttempted = true;
-        hash = await service.broadcastSigned(draft.chain, signed.signedTx);
+        hash = await service.broadcastSigned(
+          draft.chain,
+          signed.signedTx,
+          expectedTxHash: signed.txHash,
+        );
         broadcastHash = hash;
         await controller.updateTransactionStatus(
           id,
@@ -5761,7 +5766,11 @@ class TransferAuthSheet extends StatelessWidget {
           );
           signedHashPersisted = true;
           broadcastAttempted = true;
-          hash = await service.broadcastSigned(Chain.tron, signed.signedTx);
+          hash = await service.broadcastSigned(
+            Chain.tron,
+            signed.signedTx,
+            expectedTxHash: signed.txHash,
+          );
           broadcastHash = hash;
         } else {
           final approved = session.validSolanaQuote(
@@ -5805,7 +5814,11 @@ class TransferAuthSheet extends StatelessWidget {
           );
           signedHashPersisted = true;
           broadcastAttempted = true;
-          hash = await service.broadcastSigned(Chain.solana, signed.signedTx);
+          hash = await service.broadcastSigned(
+            Chain.solana,
+            signed.signedTx,
+            expectedTxHash: signed.txHash,
+          );
           broadcastHash = hash;
         }
         await controller.updateTransactionStatus(

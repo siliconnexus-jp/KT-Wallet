@@ -248,6 +248,13 @@
   分别完成 EVM、TRON、Solana 签名与同一共享验签器复核，临时 `kt-e2e-*` wallet 经
   系统认证 teardown 删除，集成测试 1/1 通过。KT Wallet 1514/1514、chains 183/183、
   共享 packages 409/409 与静态分析 0 通过。
+- [x] 热钱包广播成功回包不再以节点/Gateway 返回的任意非空 hash 覆盖本地密码学结果。
+  EVM、TRON 与 Solana 的所有热钱包发送、加速/取消和授权撤销入口现在必须把广播前已
+  持久化的本地 txHash 传入不可逆网络边界；节点返回值只有与它逐链一致时才算 accepted。
+  EVM/TRON 仅忽略十六进制大小写，Solana 签名保持大小写敏感。空本地 hash 在发网前
+  失败；不一致回包因签名字节可能已经送达节点而保持 outcome unknown，继续查询本地
+  hash，禁止自动重发。旧实现“签名 A、节点回 B、UI 跟踪 B”的负例先红后绿；匹配时
+  始终返回本地 canonical 形式。KT Wallet 1517/1517、远程安全边界审计与静态分析通过。
 - [x] KT Wallet 新建/导入热钱包和扫码配对观察钱包的本地 walletId 已从可预测的
   微秒时间戳改为 `Random.secure()` 生成的 144-bit URL-safe 随机值。旧 walletId 继续
   兼容读取；新 ID 在内存已有钱包中连续碰撞 8 次会失败闭合，数据库主键冲突仍由原子

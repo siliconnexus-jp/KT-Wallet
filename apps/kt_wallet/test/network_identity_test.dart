@@ -109,7 +109,7 @@ class _BroadcastCapture extends BroadcastService {
   @override
   Future<BroadcastOutcome> broadcast(Chain chain, Uint8List signedTx) async {
     expect(chain, Chain.tron);
-    return const BroadcastOutcome.ok('tron-hash');
+    return const BroadcastOutcome.ok('tron-test-signature');
   }
 }
 
@@ -292,7 +292,7 @@ void main() {
       expectedNetworkIdentity: tronGenesis,
     );
 
-    expect(result.hash, 'tron-hash');
+    expect(result.hash, 'tron-test-signature');
     expect(result.referenceBlockHeight, 987654);
     expect(
       result.expiresAt,

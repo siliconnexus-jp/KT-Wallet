@@ -384,6 +384,7 @@ class _TokenApprovalsScreenState extends State<TokenApprovalsScreen> {
       final hash = await service.broadcastSigned(
         prepared.chain,
         signed.signedTx,
+        expectedTxHash: signed.txHash,
       );
       broadcastHash = hash;
       await controller.updateTransactionStatus(
