@@ -189,6 +189,16 @@
   拒绝未知字段、大小写别名及任意深度重复键。13 项新负例与 6 项广播负例连续 20 轮、
   Gateway 普通/race/vet/govulncheck 和静态边界通过；门禁还扫描所有生产 handler，禁止
   重新出现 `json.Unmarshal(params, ...)`。这是本地源码候选证据；生产仍为 1.16.15。
+- [x] 2026-08-04 随后把审阅边界上移到 JSON-RPC Request Object。旧服务器直接把完整
+  body `json.Unmarshal` 到 struct，10 类歧义/非法信封——未知成员、`Method`/`JSONRPC`
+  大小写别名或冲突、重复 method/params/id、字符串 params，以及布尔/对象/数组 id——
+  全部返回成功；重复 id 明确回显后值 2。现专用流式解析器只接受精确小写的
+  `jsonrpc/method/params/id`，在路由前拒绝未知、别名和重复成员；params 只允许省略、
+  兼容 null、对象或数组，id 只允许字符串、数字或 null。非法信封固定以
+  `id=null / -32600` 返回，语法损坏仍为 `-32700`，handler 执行次数必须为 0。
+  10 项负例及对象/数组/null 兼容正例连续 20 轮，RPC/handlers race、Gateway
+  普通/vet/govulncheck/ops 与静态远程安全边界通过；静态门禁禁止恢复
+  `json.Unmarshal(body, &req)`。该修复仍是本地源码候选，生产仍为 1.16.15。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。

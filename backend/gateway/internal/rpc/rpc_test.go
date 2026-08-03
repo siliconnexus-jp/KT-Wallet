@@ -132,6 +132,98 @@ func TestInvalidRequest(t *testing.T) {
 	}
 }
 
+func TestRequestEnvelopeRejectsAmbiguityBeforeHandler(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "unknown member",
+			body: `{"jsonrpc":"2.0","id":1,"method":"echo","params":{},"unexpected":true}`,
+		},
+		{
+			name: "case alias",
+			body: `{"jsonrpc":"2.0","id":1,"Method":"echo","params":{}}`,
+		},
+		{
+			name: "case collision",
+			body: `{"jsonrpc":"1.0","JSONRPC":"2.0","id":1,"method":"echo","params":{}}`,
+		},
+		{
+			name: "duplicate method",
+			body: `{"jsonrpc":"2.0","id":1,"method":"echo","method":"side","params":{}}`,
+		},
+		{
+			name: "duplicate params",
+			body: `{"jsonrpc":"2.0","id":1,"method":"echo","params":{"value":1},"params":{"value":2}}`,
+		},
+		{
+			name: "duplicate id",
+			body: `{"jsonrpc":"2.0","id":1,"id":2,"method":"echo","params":{}}`,
+		},
+		{
+			name: "scalar params",
+			body: `{"jsonrpc":"2.0","id":1,"method":"echo","params":"not-structured"}`,
+		},
+		{
+			name: "boolean id",
+			body: `{"jsonrpc":"2.0","id":true,"method":"echo","params":{}}`,
+		},
+		{
+			name: "object id",
+			body: `{"jsonrpc":"2.0","id":{"value":1},"method":"echo","params":{}}`,
+		},
+		{
+			name: "array id",
+			body: `{"jsonrpc":"2.0","id":[1],"method":"echo","params":{}}`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ran := 0
+			s := NewServer(slog.New(slog.NewTextHandler(io.Discard, nil)), nil, 25*time.Second)
+			for _, method := range []string{"echo", "side"} {
+				s.Register(method, func(_ context.Context, _ json.RawMessage) (any, *Error) {
+					ran++
+					return "ok", nil
+				})
+			}
+
+			_, resp := post(t, s, tc.body, "")
+			if code := errCode(t, resp); code != CodeInvalidRequest {
+				t.Fatalf("error code = %v, want %d", code, CodeInvalidRequest)
+			}
+			if resp["id"] != nil {
+				t.Fatalf("ambiguous request must respond with id=null, got %v", resp["id"])
+			}
+			if ran != 0 {
+				t.Fatalf("ambiguous request executed a handler %d time(s)", ran)
+			}
+		})
+	}
+}
+
+func TestRequestEnvelopeAcceptsCompatibleParamsForms(t *testing.T) {
+	for _, params := range []string{`{}`, `[1,2]`, `null`} {
+		_, resp := post(
+			t,
+			testServer(nil),
+			`{"jsonrpc":"2.0","id":1,"method":"echo","params":`+params+`}`,
+			"",
+		)
+		if resp["error"] != nil {
+			t.Fatalf("params %s must remain compatible JSON-RPC: %v", params, resp)
+		}
+		got := resp["result"].(map[string]any)["got"]
+		if got != params {
+			t.Fatalf("handler got params %v, want exact %s", got, params)
+		}
+	}
+}
+
 func TestUnknownMethod(t *testing.T) {
 	_, resp := post(t, testServer(nil), `{"jsonrpc":"2.0","id":1,"method":"kt_nope"}`, "")
 	if c := errCode(t, resp); c != CodeMethodNotFound {

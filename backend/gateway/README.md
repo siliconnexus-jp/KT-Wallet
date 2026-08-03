@@ -224,6 +224,13 @@ requests are NOT supported (error `-32600`). `chain` ∈ `"eth" | "polygon" |
 `Coin` enum names). A request without an `id` (or with `"id": null`) is a
 notification: it executes but gets HTTP 204 and no body.
 
+The JSON-RPC request envelope is itself exact: only `jsonrpc`, `method`,
+`params` and `id` are accepted with that casing. Unknown members, aliases and
+duplicate envelope keys return `-32600` with `id: null` before method routing.
+`params` may be omitted, `null` for compatibility, or a structured object/array;
+other scalar values are rejected. `id` may be a string, number or `null`, never
+a boolean, object or array. Malformed JSON remains a `-32700` parse error.
+
 All fourteen public methods that accept parameters use an exact, recursive
 request schema. Parameter field names are case-sensitive; unknown fields,
 exact duplicate keys and aliases such as `Hash` for `hash` are rejected with

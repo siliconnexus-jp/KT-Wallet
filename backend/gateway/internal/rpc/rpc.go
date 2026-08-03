@@ -2,6 +2,8 @@
 //
 // Protocol notes (fixed contract):
 //   - Single requests only; batch requests are rejected with -32600.
+//   - The request envelope accepts only exact jsonrpc/method/params/id members;
+//     aliases, unknown members and duplicate keys are rejected before routing.
 //   - A request without an id, or with an explicit null id, is treated as a
 //     notification: the method still runs but no response body is returned
 //     (HTTP 204).
@@ -119,6 +121,102 @@ type response struct {
 	Error   *Error          `json:"error,omitempty"`
 }
 
+func decodeRequestEnvelope(body []byte) (request, *Error) {
+	var req request
+	if !json.Valid(body) {
+		return req, Errorf(CodeParse, "parse error: invalid JSON")
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	first, err := decoder.Token()
+	if err != nil {
+		return req, Errorf(CodeParse, "parse error: invalid JSON")
+	}
+	object, ok := first.(json.Delim)
+	if !ok || object != '{' {
+		return req, invalidEnvelopeError()
+	}
+
+	seen := make(map[string]struct{}, 4)
+	for decoder.More() {
+		keyToken, err := decoder.Token()
+		if err != nil {
+			return req, Errorf(CodeParse, "parse error: invalid JSON")
+		}
+		key, ok := keyToken.(string)
+		if !ok {
+			return req, invalidEnvelopeError()
+		}
+		if _, duplicate := seen[key]; duplicate {
+			return req, invalidEnvelopeError()
+		}
+		seen[key] = struct{}{}
+
+		var raw json.RawMessage
+		if err := decoder.Decode(&raw); err != nil {
+			return req, Errorf(CodeParse, "parse error: invalid JSON")
+		}
+		switch key {
+		case "jsonrpc":
+			if err := json.Unmarshal(raw, &req.JSONRPC); err != nil {
+				return request{}, invalidEnvelopeError()
+			}
+		case "method":
+			if err := json.Unmarshal(raw, &req.Method); err != nil {
+				return request{}, invalidEnvelopeError()
+			}
+		case "params":
+			if !isValidParamsValue(raw) {
+				return request{}, invalidEnvelopeError()
+			}
+			req.Params = raw
+		case "id":
+			if !isValidRequestID(raw) {
+				return request{}, invalidEnvelopeError()
+			}
+			req.ID = raw
+		default:
+			return request{}, invalidEnvelopeError()
+		}
+	}
+	end, err := decoder.Token()
+	if err != nil {
+		return request{}, Errorf(CodeParse, "parse error: invalid JSON")
+	}
+	if end != json.Delim('}') {
+		return request{}, invalidEnvelopeError()
+	}
+	return req, nil
+}
+
+func invalidEnvelopeError() *Error {
+	return Errorf(
+		CodeInvalidRequest,
+		"invalid request: request object must use the exact JSON-RPC 2.0 schema",
+	)
+}
+
+func isValidParamsValue(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+	return len(trimmed) > 0 &&
+		(trimmed[0] == '{' || trimmed[0] == '[' || bytes.Equal(trimmed, []byte("null")))
+}
+
+func isValidRequestID(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return false
+	}
+	switch trimmed[0] {
+	case '"', '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+		return true
+	case 'n':
+		return bytes.Equal(trimmed, []byte("null"))
+	default:
+		return false
+	}
+}
+
 // ServeHTTP handles POST /rpc.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
@@ -158,9 +256,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req request
-	if err := json.Unmarshal(body, &req); err != nil {
-		s.writeError(w, nil, Errorf(CodeParse, "parse error: invalid JSON"))
+	req, envelopeErr := decodeRequestEnvelope(body)
+	if envelopeErr != nil {
+		s.writeError(w, nil, envelopeErr)
 		return
 	}
 	if req.JSONRPC != "2.0" || req.Method == "" {

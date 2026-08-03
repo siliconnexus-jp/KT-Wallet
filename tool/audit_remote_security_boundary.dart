@@ -113,6 +113,7 @@ void main() {
   _auditHotSigningBoundary(failures);
   _auditGatewayIrreversibleRequestSchema(failures);
   _auditGatewayPublicRequestSchemas(failures);
+  _auditGatewayRPCEnvelope(failures);
   _auditRiskSignalDirection(failures);
 
   if (failures.isNotEmpty) {
@@ -128,7 +129,8 @@ void main() {
     '${_networkFreeSecurityFiles.length} network-free security modules, '
     '3 hot-signing families independently verified, '
     'hot and air-gapped broadcasts hash-bound before success metrics, '
-    'all parameterized public Gateway requests exact-schema decoded.',
+    'all parameterized public Gateway requests and the JSON-RPC envelope '
+    'exact-schema decoded.',
   );
 }
 
@@ -468,6 +470,30 @@ bool _sameStringMap(Map<String, String> left, Map<String, String> right) {
     if (left[entry.key] != entry.value) return false;
   }
   return true;
+}
+
+void _auditGatewayRPCEnvelope(List<String> failures) {
+  const path = 'backend/gateway/internal/rpc/rpc.go';
+  final source = File(path).readAsStringSync();
+  for (final marker in const [
+    'func decodeRequestEnvelope(',
+    'req, envelopeErr := decodeRequestEnvelope(body)',
+    'if _, duplicate := seen[key]; duplicate',
+    'case "jsonrpc":',
+    'case "method":',
+    'case "params":',
+    'case "id":',
+    'if !isValidParamsValue(raw)',
+    'if !isValidRequestID(raw)',
+    's.writeError(w, nil, envelopeErr)',
+  ]) {
+    if (!source.contains(marker)) {
+      failures.add('$path lost exact JSON-RPC envelope invariant: $marker');
+    }
+  }
+  if (source.contains('json.Unmarshal(body, &req)')) {
+    failures.add('$path restored permissive JSON-RPC envelope decoding');
+  }
 }
 
 void _auditRiskSignalDirection(List<String> failures) {
