@@ -813,6 +813,66 @@ void main() {
       );
     }
   }
+  final transactionStatusService = File(
+    'apps/kt_wallet/lib/src/market/transaction_status_service.dart',
+  );
+  final transactionStatusSource = transactionStatusService.existsSync()
+      ? transactionStatusService.readAsStringSync()
+      : '';
+  final marketScope = File('apps/kt_wallet/lib/src/market/market_scope.dart');
+  final marketScopeSource = marketScope.existsSync()
+      ? marketScope.readAsStringSync()
+      : '';
+  final gatewayClient = File(
+    'apps/kt_wallet/lib/src/market/gateway_client.dart',
+  );
+  final gatewayClientSource = gatewayClient.existsSync()
+      ? gatewayClient.readAsStringSync()
+      : '';
+  for (final marker in const [
+    'TransactionNetworkEndpointResolver',
+    'final persistedNetwork = transaction.networkId',
+    'network: networkEndpoints == null ? null : persistedNetwork',
+  ]) {
+    if (!transactionStatusSource.contains(marker)) {
+      failures.add(
+        '${transactionStatusService.path} can query transaction finality on the active network: $marker',
+      );
+    }
+  }
+  for (final marker in const [
+    'effectiveTransactionRpcEndpoints',
+    'final network = networks.byId(networkId)',
+    'if (network == null || network.chain != chain) return null',
+  ]) {
+    if (!marketScopeSource.contains(marker)) {
+      failures.add(
+        '${marketScope.path} does not resolve persisted transaction networks safely: $marker',
+      );
+    }
+  }
+  for (final marker in const [
+    'String? networkOverride',
+    'final id = networkOverride ?? _networks(chain)',
+    'networkOverride: network',
+  ]) {
+    if (!gatewayClientSource.contains(marker)) {
+      failures.add(
+        '${gatewayClient.path} cannot override active network for transaction status: $marker',
+      );
+    }
+  }
+  for (final path in const [
+    'apps/kt_wallet/lib/src/market/history_scope_host.dart',
+    'apps/kt_wallet/lib/src/screens/home_screen.dart',
+    'apps/kt_wallet/lib/src/screens/transfer_screens.dart',
+  ]) {
+    final file = File(path);
+    final source = file.existsSync() ? file.readAsStringSync() : '';
+    if (!source.contains('effectiveTransactionRpcEndpoints')) {
+      failures.add('$path does not wire persisted-network status resolution');
+    }
+  }
   final homeScreen = File('apps/kt_wallet/lib/src/screens/home_screen.dart');
   final homeScreenSource = homeScreen.existsSync()
       ? homeScreen.readAsStringSync()

@@ -13,6 +13,7 @@ import 'market_controller.dart';
 import 'market_snapshot.dart';
 import 'price_service.dart';
 import 'token_balance_service.dart';
+import 'transaction_status_service.dart';
 
 /// Provides the app-wide [MarketController] and rebuilds dependents when it
 /// notifies. Unlike [WalletScope] there is deliberately NO fallback: screens
@@ -91,6 +92,29 @@ RpcEndpointResolver effectiveRpcEndpoints(
         prefs?.rpcOverride(coin) ??
         networks?.activeFor(chainForRpcCoin(coin)).rpcUrl ??
         defaultRpcEndpointFor(coin);
+
+/// Resolves the RPC endpoint for the transaction's persisted network rather
+/// than whichever network happens to be active when its detail page opens.
+///
+/// A user RPC override is scoped to the active network only. Applying it to an
+/// older transaction from another network could query the same hash/nonce on
+/// the wrong chain and manufacture a false terminal state. Known inactive
+/// networks therefore use their own stored endpoint; deleted or cross-family
+/// ids fail closed with null.
+TransactionNetworkEndpointResolver effectiveTransactionRpcEndpoints(
+  AppPrefsController? prefs,
+  NetworkController? networks,
+) => (Coin coin, String networkId) {
+  if (networks == null) return effectiveRpcEndpoints(prefs, null)(coin);
+  final chain = chainForRpcCoin(coin);
+  final network = networks.byId(networkId);
+  if (network == null || network.chain != chain) return null;
+  final active = networks.activeFor(chain);
+  if (active.id == networkId) {
+    return prefs?.rpcOverride(coin) ?? network.rpcUrl;
+  }
+  return network.rpcUrl;
+};
 
 /// Back-compat name: prefs override → built-in default (no network source).
 RpcEndpointResolver prefsRpcEndpoints(AppPrefsController? prefs) =>

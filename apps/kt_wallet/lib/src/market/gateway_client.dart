@@ -198,8 +198,8 @@ class GatewayClient {
   /// MAINNET. The advertised set is learned once per client from `kt_health`;
   /// if that probe fails the gateway is not answering anyway, so the call is
   /// bypassed and the set is re-probed next time.
-  Future<String?> _networkParam(Coin chain) async {
-    final id = _networks(chain);
+  Future<String?> _networkParam(Coin chain, {String? networkOverride}) async {
+    final id = networkOverride ?? _networks(chain);
     if (id == null) return null;
     final Set<String> advertised;
     try {
@@ -637,11 +637,15 @@ class GatewayClient {
   Future<GatewayTransactionStatus> getTransactionStatus({
     required Coin chain,
     required String hash,
+    String? network,
   }) async {
-    final network = await _networkParam(chain);
+    final resolvedNetwork = await _networkParam(
+      chain,
+      networkOverride: network,
+    );
     final result = await _call('kt_getTransactionStatus', {
       'chain': chainName(chain),
-      'network': ?network,
+      'network': ?resolvedNetwork,
       'hash': hash,
     });
     if (result is! Map || result['status'] is! String) {

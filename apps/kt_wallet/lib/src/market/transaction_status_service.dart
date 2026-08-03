@@ -21,6 +21,11 @@ enum ChainTransactionStatus {
 typedef EvmNonceObserver =
     Future<void> Function(db.Transaction transaction, String nonce);
 
+/// Resolves an endpoint for the exact persisted network of a transaction.
+/// Null means the id is deleted, unknown, or belongs to another chain family.
+typedef TransactionNetworkEndpointResolver =
+    String? Function(Coin coin, String networkId);
+
 /// Looks up a transaction by hash/signature, bypassing account-history
 /// indexers. The configured KT Gateway is preferred so this remains usable
 /// when public RPC endpoints are inaccessible from the device's network.
@@ -30,6 +35,7 @@ class TransactionStatusService {
     GatewayResolver? gateway,
     JsonRpcTransport? jsonRpcTransport,
     RestTransport? restTransport,
+    this.networkEndpoints,
     this.onEvmNonceObserved,
   }) : _endpoints = endpoints ?? defaultRpcEndpointFor,
        _gateway = gateway ?? _noGateway,
@@ -42,6 +48,7 @@ class TransactionStatusService {
   final GatewayResolver _gateway;
   final JsonRpcTransport _jsonRpc;
   final RestTransport _rest;
+  final TransactionNetworkEndpointResolver? networkEndpoints;
   final EvmNonceObserver? onEvmNonceObserved;
 
   Future<ChainTransactionStatus> check(db.Transaction transaction) async {
@@ -53,12 +60,25 @@ class TransactionStatusService {
       return ChainTransactionStatus.unknown;
     }
 
+    final persistedNetwork = transaction.networkId;
+    final endpoint = networkEndpoints == null
+        ? _endpoints(coin)
+        : persistedNetwork == null || persistedNetwork.isEmpty
+        ? null
+        : networkEndpoints!(coin, persistedNetwork);
+    // Once production network wiring is present, a legacy/deleted/cross-chain
+    // network id must never fall back to the currently active RPC or mainnet.
+    if (endpoint == null || endpoint.isEmpty) {
+      return ChainTransactionStatus.unknown;
+    }
+
     final gateway = _gateway();
     if (gateway != null) {
       try {
         final status = await gateway.getTransactionStatus(
           chain: coin,
           hash: hash,
+          network: networkEndpoints == null ? null : persistedNetwork,
         );
         final mapped = switch (status) {
           GatewayTransactionStatus.confirmed =>
@@ -89,9 +109,9 @@ class TransactionStatusService {
         Coin.base ||
         Coin.arbitrum ||
         Coin.avalanche ||
-        Coin.bnb => await _evm(coin, hash, transaction),
-        Coin.tron => await _tron(hash, transaction),
-        Coin.solana => await _solana(hash, transaction),
+        Coin.bnb => await _evm(coin, endpoint, hash, transaction),
+        Coin.tron => await _tron(endpoint, hash, transaction),
+        Coin.solana => await _solana(endpoint, hash, transaction),
       };
     } catch (_) {
       return ChainTransactionStatus.unknown;
@@ -100,10 +120,11 @@ class TransactionStatusService {
 
   Future<ChainTransactionStatus> _evm(
     Coin coin,
+    String endpoint,
     String hash,
     db.Transaction transaction,
   ) async {
-    final rpc = EvmRpc(url: _endpoints(coin), transport: _jsonRpc);
+    final rpc = EvmRpc(url: endpoint, transport: _jsonRpc);
     final receipt = await rpc.getTransactionReceipt(hash);
     if (receipt != null) {
       return switch (receipt['status']) {
@@ -154,10 +175,11 @@ class TransactionStatusService {
   }
 
   Future<ChainTransactionStatus> _tron(
+    String endpoint,
     String hash,
     db.Transaction transaction,
   ) async {
-    final rpc = TronRpc(baseUrl: _endpoints(Coin.tron), transport: _rest);
+    final rpc = TronRpc(baseUrl: endpoint, transport: _rest);
     final ok = await rpc.transactionSucceeded(hash);
     if (ok == null) {
       final expiresAt = transaction.expiresAt;
@@ -178,10 +200,11 @@ class TransactionStatusService {
   }
 
   Future<ChainTransactionStatus> _solana(
+    String endpoint,
     String hash,
     db.Transaction transaction,
   ) async {
-    final rpc = SolanaRpc(url: _endpoints(Coin.solana), transport: _jsonRpc);
+    final rpc = SolanaRpc(url: endpoint, transport: _jsonRpc);
     final result = await rpc.signatureResult(hash);
     if (result == null) {
       final lastValidBlockHeight = transaction.lastValidBlockHeight;

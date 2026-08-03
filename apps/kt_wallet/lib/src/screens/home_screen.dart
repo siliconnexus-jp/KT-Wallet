@@ -568,9 +568,18 @@ class _RecordsScreenState extends State<RecordsScreen> {
         statusService: TransactionStatusService(
           endpoints: effectiveRpcEndpoints(
             AppPrefsScope.maybeOf(context),
-            NetworkScope.maybeOf(context),
+            networks,
           ),
-          gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
+          networkEndpoints: networks == null
+              ? null
+              : effectiveTransactionRpcEndpoints(
+                  AppPrefsScope.maybeOf(context),
+                  networks,
+                ),
+          gateway: prefsGatewayResolver(
+            AppPrefsScope.maybeOf(context),
+            networks,
+          ),
         ),
       );
       _owned = controller..addListener(_onHistoryChanged);

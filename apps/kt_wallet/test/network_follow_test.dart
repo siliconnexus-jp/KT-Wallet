@@ -189,6 +189,25 @@ void main() {
       }
     });
 
+    test('交易状态端点始终按持久化网络解析', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = AppPrefsController();
+      await prefs.setRpcOverride(Coin.eth, 'https://mainnet-override.example');
+      final networks = NetworkController();
+      final resolve = effectiveTransactionRpcEndpoints(prefs, networks);
+
+      // 当前主网允许使用用户为当前网络配置的覆盖。
+      expect(
+        resolve(Coin.eth, ethMainnet.id),
+        'https://mainnet-override.example',
+      );
+      // 非当前 Sepolia 必须使用它自己的 RPC，不能继承主网覆盖。
+      expect(resolve(Coin.eth, ethSepolia.id), ethSepolia.rpcUrl);
+      // 删除的 custom id 与跨协议 id 都失败闭合。
+      expect(resolve(Coin.eth, 'custom-deleted'), isNull);
+      expect(resolve(Coin.eth, solanaDevnet.id), isNull);
+    });
+
     test('BalanceService 经解析器把请求发到测试网端点(假传输断言 URL)', () async {
       final networks = NetworkController(
         initialEnvironment: NetworkEnvironment.testnet,

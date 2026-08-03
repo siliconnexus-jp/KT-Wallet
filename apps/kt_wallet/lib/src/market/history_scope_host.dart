@@ -50,6 +50,10 @@ class _HistoryScopeHostState extends State<HistoryScopeHost> {
     ),
     statusService: TransactionStatusService(
       endpoints: effectiveRpcEndpoints(widget.prefs, widget.networks),
+      networkEndpoints: effectiveTransactionRpcEndpoints(
+        widget.prefs,
+        widget.networks,
+      ),
       gateway: prefsGatewayResolver(widget.prefs, widget.networks),
     ),
     canRefresh: () => widget.ready,

@@ -35,6 +35,7 @@ import '../market/market_scope.dart'
     show
         MarketScope,
         effectiveRpcEndpoints,
+        effectiveTransactionRpcEndpoints,
         formatFiatForContext,
         prefsGatewayResolver;
 import '../market/token_balance_service.dart'
@@ -3527,13 +3528,15 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final endpoints = effectiveRpcEndpoints(
-      AppPrefsScope.maybeOf(context),
-      NetworkScope.maybeOf(context),
-    );
+    final prefs = AppPrefsScope.maybeOf(context);
+    final networks = NetworkScope.maybeOf(context);
+    final endpoints = effectiveRpcEndpoints(prefs, networks);
     _statusService ??= TransactionStatusService(
       endpoints: endpoints,
-      gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
+      networkEndpoints: networks == null
+          ? null
+          : effectiveTransactionRpcEndpoints(prefs, networks),
+      gateway: prefsGatewayResolver(prefs, networks),
       onEvmNonceObserved: (transaction, nonce) async {
         await WalletScope.of(
           context,
@@ -3941,12 +3944,14 @@ class _TxDetailScreenState extends State<TxDetailScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final prefs = AppPrefsScope.maybeOf(context);
+    final networks = NetworkScope.maybeOf(context);
     _statusService ??= TransactionStatusService(
-      endpoints: effectiveRpcEndpoints(
-        AppPrefsScope.maybeOf(context),
-        NetworkScope.maybeOf(context),
-      ),
-      gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
+      endpoints: effectiveRpcEndpoints(prefs, networks),
+      networkEndpoints: networks == null
+          ? null
+          : effectiveTransactionRpcEndpoints(prefs, networks),
+      gateway: prefsGatewayResolver(prefs, networks),
       onEvmNonceObserved: (transaction, nonce) async {
         await WalletScope.of(
           context,

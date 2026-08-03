@@ -14,9 +14,11 @@ class _JsonRpc implements JsonRpcTransport {
 
   final Map<String, Object?> responses;
   final List<String> methods = [];
+  final List<String> urls = [];
 
   @override
   Future<Object?> post(String url, Object body) async {
+    urls.add(url);
     final request = body as Map;
     final method = request['method'] as String;
     methods.add(method);
@@ -42,6 +44,7 @@ class _Rest implements RestTransport {
 Transaction _tx(
   String coin,
   String hash, {
+  String? networkId,
   String? nonce,
   int? expiresAt,
   int? lastValidBlockHeight,
@@ -49,7 +52,7 @@ Transaction _tx(
   id: 'tx',
   walletId: 'wallet',
   coin: coin,
-  networkId: '$coin-mainnet',
+  networkId: networkId ?? '$coin-mainnet',
   operation: TxOperationKind.transfer,
   direction: TxDirection.outgoing,
   fromAddr: 'from',
@@ -80,6 +83,106 @@ void main() {
       ChainTransactionStatus.confirmed,
     );
     expect(rpc.methods, ['eth_getTransactionReceipt']);
+  });
+
+  test(
+    'persisted network selects the exact RPC instead of the active network',
+    () async {
+      final requested = <String>[];
+      final rpc = _JsonRpc({
+        'eth_getTransactionReceipt': {'status': '0x1'},
+      });
+      final service = TransactionStatusService(
+        endpoints: (_) => 'https://mainnet.example',
+        networkEndpoints: (coin, networkId) {
+          requested.add('${coin.name}:$networkId');
+          return networkId == 'eth-sepolia' ? 'https://sepolia.example' : null;
+        },
+        jsonRpcTransport: rpc,
+        restTransport: _Rest(null),
+      );
+
+      expect(
+        await service.check(
+          _tx(Coin.eth.name, '0xhash', networkId: 'eth-sepolia'),
+        ),
+        ChainTransactionStatus.confirmed,
+      );
+      expect(requested, ['eth:eth-sepolia']);
+      expect(rpc.urls, ['https://sepolia.example']);
+    },
+  );
+
+  test(
+    'unknown persisted network never touches gateway or direct RPC',
+    () async {
+      var gatewayCalls = 0;
+      final gateway = GatewayClient(
+        baseUrl: 'https://gateway.example',
+        advertisedNetworks: const {'eth-mainnet', 'eth-sepolia'},
+        client: MockClient((request) async {
+          gatewayCalls++;
+          return http.Response('{}', 500);
+        }),
+      );
+      final rpc = _JsonRpc({
+        'eth_getTransactionReceipt': {'status': '0x1'},
+      });
+      final service = TransactionStatusService(
+        endpoints: (_) => 'https://mainnet.example',
+        networkEndpoints: (_, _) => null,
+        gateway: () => gateway,
+        jsonRpcTransport: rpc,
+        restTransport: _Rest(null),
+      );
+
+      expect(
+        await service.check(
+          _tx(Coin.eth.name, '0xhash', networkId: 'deleted-custom'),
+        ),
+        ChainTransactionStatus.unknown,
+      );
+      expect(gatewayCalls, 0);
+      expect(rpc.methods, isEmpty);
+    },
+  );
+
+  test('gateway status override follows the transaction network', () async {
+    String? observedNetwork;
+    final gateway = GatewayClient(
+      baseUrl: 'https://gateway.example',
+      advertisedNetworks: const {'eth-mainnet', 'eth-sepolia'},
+      networks: (_) => 'eth-mainnet',
+      client: MockClient((request) async {
+        final body = jsonDecode(request.body) as Map<String, Object?>;
+        final params = body['params'] as Map<String, Object?>;
+        observedNetwork = params['network'] as String?;
+        return http.Response(
+          jsonEncode({
+            'jsonrpc': '2.0',
+            'id': body['id'],
+            'result': {'status': 'confirmed'},
+          }),
+          200,
+        );
+      }),
+    );
+    final service = TransactionStatusService(
+      endpoints: (_) => 'https://mainnet.example',
+      networkEndpoints: (_, networkId) =>
+          networkId == 'eth-sepolia' ? 'https://sepolia.example' : null,
+      gateway: () => gateway,
+      jsonRpcTransport: _JsonRpc(const {}),
+      restTransport: _Rest(null),
+    );
+
+    expect(
+      await service.check(
+        _tx(Coin.eth.name, '0xhash', networkId: 'eth-sepolia'),
+      ),
+      ChainTransactionStatus.confirmed,
+    );
+    expect(observedNetwork, 'eth-sepolia');
   });
 
   test('EVM known transaction without receipt remains pending', () async {
