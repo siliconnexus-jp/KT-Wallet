@@ -16,6 +16,24 @@ Source code, issues, and releases:
 [siliconnexus-jp/KT-Wallet](https://github.com/siliconnexus-jp/KT-Wallet).
 The project is licensed under [MPL-2.0](LICENSE).
 
+## Status and downloads
+
+| Component | Current version | Availability |
+|---|---:|---|
+| KT Wallet | `1.0.0+1` | Controlled public-beta builds; App Store and Play Store listings are not yet public |
+| KT Cold Signer | `1.0.0+1` | Controlled public-beta builds; source build is available for dedicated offline devices |
+| KT Gateway | `1.16.9` | Production service at `https://gateway.kt-wallet.com` |
+
+Until signed store releases are published, build both apps from this repository
+and do not install APK or IPA files from unofficial mirrors. Start with
+[Building KT Wallet](BUILDING.md), review the current
+[P0/P1 release-readiness report](reports/p0-p1-wallet-audit-2026-07-31/index.html),
+and read [Security and Risk](SECURITY_AND_RISK.md) before testing with assets.
+
+The responsive English, Simplified Chinese, and Japanese product site is in
+[`website`](website/README.md). Its download cards intentionally remain marked
+as pending until official store artifacts are available.
+
 ## What is included
 
 KT Wallet can be used in two complementary roles:
@@ -251,13 +269,28 @@ targets in [Security Policy](SECURITY.md), never through a public issue.
 
 ## Reliability and data sources
 
-RPC requests use bounded timeouts and per-network endpoint fallback. A custom
-RPC selected by the user remains authoritative and is not silently replaced.
-Balance failures remain visible as errors rather than being converted to zero.
+Fresh installs use the production KT Gateway for supported balance, Token,
+price, history, chain-parameter, simulation, risk, broadcast, and status
+operations. Read paths have a controlled direct-provider fallback when the
+Gateway is unavailable. Users can explicitly select direct mode or configure a
+per-chain RPC override; a custom RPC remains authoritative and is never
+silently replaced. Balance and history failures remain visible instead of
+being converted to zero or an empty success.
 
-History works directly through chain data providers and does not require the
-optional KT Gateway. The gateway can still be configured as an infrastructure
-override.
+Gateway `1.16.9` currently exposes 16 mainnet/testnet network profiles. It uses
+bounded upstream failover and circuit breakers, plus short caches for prices
+(30 seconds), display balances (10 seconds), and history (5 seconds). Pending
+nonces, spendable balances, simulations, and transaction-status checks are not
+read-cached. Broadcasts are never retried or failed over after submission
+starts; a Redis-backed 24-hour payload fingerprint prevents duplicate
+submission across instances without storing raw signed transaction bytes.
+
+The Gateway receives the public address, network, and public contract/mint
+needed for a requested lookup. Recovery phrases, private keys, signatures, raw
+signed transactions, balances, addresses, and transaction hashes are excluded
+from application logs. See the
+[Gateway documentation](backend/gateway/README.md) for its protocol, cache,
+privacy, rate-limit, observability, and deployment boundaries.
 
 ## Build and test
 
@@ -278,7 +311,7 @@ flutter pub get
 Run the main test suites:
 
 ```sh
-(dart run tool/audit_public_beta.dart)
+dart run tool/audit_public_beta.dart
 ```
 
 That fail-fast command is the canonical local source gate: it runs repository
