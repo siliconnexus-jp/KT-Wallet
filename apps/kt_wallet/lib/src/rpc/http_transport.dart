@@ -5,6 +5,7 @@ import 'package:chains/rpc.dart';
 import 'package:http/http.dart' as http;
 
 import 'bounded_http_client.dart';
+import 'json_rpc_envelope.dart';
 
 const _rpcFallbacks = <String, List<String>>{
   'https://ethereum-rpc.publicnode.com': [
@@ -389,26 +390,10 @@ Object _validatedJsonRpcResponse(Object request, Object? response) {
   if (requestId is! int && requestId is! String) {
     throw RpcException('invalid JSON-RPC request');
   }
-  if (response is! Map ||
-      response['jsonrpc'] != '2.0' ||
-      !response.containsKey('id')) {
+  if (!isBoundJsonRpcResponse(request, response)) {
     throw RpcException('malformed JSON-RPC response');
   }
-  final responseId = response['id'];
-  final idMatches = switch (requestId) {
-    int() => responseId is int && responseId == requestId,
-    String() => responseId is String && responseId == requestId,
-    _ => false,
-  };
-  if (!idMatches) {
-    throw RpcException('malformed JSON-RPC response');
-  }
-  final hasResult = response.containsKey('result');
-  final hasError = response.containsKey('error');
-  if (hasResult == hasError || (hasError && response['error'] is! Map)) {
-    throw RpcException('malformed JSON-RPC response');
-  }
-  return response;
+  return response!;
 }
 
 bool _retryableRpcError(Object? body) {

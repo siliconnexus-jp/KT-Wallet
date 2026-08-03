@@ -132,14 +132,20 @@
   SolidityNode 固化或密码学最终性。
 - [x] JSON-RPC 响应身份在移动端与 Gateway 双边闭合：响应必须声明
   `jsonrpc=2.0`、精确回显请求的 String/整数 `id`，并且 `result` 与 `error` 必须恰好
-  存在一个；Gateway 的 error 还必须包含整数 code 与字符串 message。错 ID、缺 ID、
+  存在一个；error 必须包含整数 code 与字符串 message。错 ID、缺 ID、
   null/浮点/string 类型偷换、错版本、同时携带 result/error 或两者都缺失均作为畸形响应，
-  不得归属到余额、价格、手续费、模拟、交易状态或广播请求。只读请求可以换到已验证
+  不得归属到余额、价格、手续费、模拟、交易状态、历史、自定义网络探测、Solana 水龙头、
+  匿名诊断或广播请求。只读请求可以换到已验证
   同链备用节点；写请求即使收到错 ID 也保持 outcome unknown 且不尝试第二节点。该规则
   依据 [JSON-RPC 2.0 Response Object](https://www.jsonrpc.org/specification#response_object)
   的 request/response correlation 要求。移动端负例先证明错 ID 广播被当成功，Gateway
-  负例先证明错 ID result 被接受；修复后畸形矩阵、matching string id、null result、
-  合法 error 与 single-shot 写入正负例全部通过，KT Wallet 1501/1501、静态分析 0，
+  负例先证明错 ID result 被接受；第一轮修复后再次枚举生产 JSON-RPC 所有者，又发现
+  Gateway 主客户端、匿名诊断、Solana 水龙头、Solana 直连历史与自定义 RPC 探测仍绕过
+  统一校验。五条路径负例全部先红后绿，现由共享闭合函数与生产所有权门禁防止新增旁路；
+  最终并发复审又发现 Solana 钱包地址与多个 ATA 历史调用共用固定 id，现改为每次调用
+  递增且不重复，并由 ATA 并发测试锁定全部请求 id 唯一；
+  错 Gateway 广播确认保持 outcome unknown，Gateway 1 次、直连 0 次。matching string
+  id、null result、合法 error 与 single-shot 写入正负例全部通过，KT Wallet 1510/1510、静态分析 0，
   Gateway 普通/race/vet/govulncheck 通过。生产 1.16.15 静态制品 8,708,222 bytes、
   SHA-256 `b9427d2b5639feec1cdb2eeda9a93333bd59b9d3f52ac6334a279f05302a6a88`
   已按 secondary → primary 滚动；双实例与公网版本/ready/16 网络一致，公开 Ethereum
@@ -1316,7 +1322,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     现统一为英文/日文 `KT Cold Signer`、中文 `KT冷钱包`；新增通用 ARB 禁用词门禁，
     可按语言拒绝退役品牌和语言不匹配名称。门禁单测先红后绿，三语 Widget 回归及受影响
     Golden 已人工复核；最新公开测试源码审计 12/12、完整依赖审计 13/13、KT Wallet
-    1501/1501、KT Cold Signer 570/570、共享 packages 409/409、静态分析 0、Gateway
+    1510/1510、KT Cold Signer 570/570、共享 packages 409/409、静态分析 0、Gateway
     audit 全部通过。
   - [ ] 真机系统权限弹窗、生命周期保护页及全部生产路由仍需逐页三语语义人工复核，
     因此本总项保持未完成，不能扩大宣称为“全 App 本地化验收完成”。
@@ -1345,6 +1351,10 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     不保存请求体或原始事件。生产 Prometheus 只监听 loopback，保留 7 天/512 MB；新增
     两条 info 级、`untrusted-client-report` 告警。公网合成 debug 样本已验证
     `accepted=true/rawEventsStored=false`，下一次 scrape 后匿名上传计数为 1。
+  - [x] 匿名上传确认与余额、价格、历史、广播等生产 JSON-RPC 共用响应身份闭合：错
+    `jsonrpc`、错 ID/类型、双 result/error 或畸形 error 均不写本地已发送 digest；上传
+    仍为单次提交且不自动重试。旧实现会把错 ID 确认当成功的负例先红后绿，并进入生产
+    JSON-RPC 所有权门禁。
   - [ ] iOS MetricKit 真正的系统 payload 投递及 Android 真实 ANR/fatal 仍需物理设备
     故障注入验收；匿名未认证样本也不能替代 App Store/Play Console 的可信安装基数或
     外部崩溃平台。因此本总项仍保持未完成，不能宣称已有完整生产崩溃率监控。

@@ -8,7 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:kt_wallet/l10n/app_localizations.dart';
+import 'package:kt_wallet/src/market/gateway_client.dart';
 import 'package:kt_wallet/src/observability/experience_metrics.dart';
 import 'package:kt_wallet/src/screens/transfer_screens.dart';
 import 'package:kt_wallet/src/transfer/airgap_codec.dart';
@@ -206,6 +209,46 @@ void main() {
       expect(outcome.txHash, isNull);
       expect(transport.calls, 1);
     });
+
+    test(
+      'a mismatched Gateway acknowledgement stays unknown without direct retry',
+      () async {
+        var gatewayPosts = 0;
+        final gateway = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: MockClient((request) async {
+            gatewayPosts++;
+            final body = jsonDecode(request.body) as Map<String, Object?>;
+            return http.Response(
+              jsonEncode({
+                'jsonrpc': '2.0',
+                'id': (body['id']! as int) + 1,
+                'result': {'txHash': '0xstale'},
+              }),
+              200,
+            );
+          }),
+        );
+        final direct = _FakeJsonRpc(
+          results: {'eth_sendRawTransaction': '0xdirect'},
+        );
+        final service = BroadcastService(
+          gateway: () => gateway,
+          jsonRpcTransport: direct,
+          endpoints: _endpoint,
+        );
+
+        final outcome = await service.broadcast(
+          Chain.ethereum,
+          Uint8List.fromList([0x02, 0x01]),
+        );
+
+        expect(outcome.status, BroadcastStatus.unknown);
+        expect(outcome.txHash, isNull);
+        expect(gatewayPosts, 1);
+        expect(direct.calls, isEmpty);
+      },
+    );
 
     test(
       'unexpected transport text never reaches the broadcast outcome',

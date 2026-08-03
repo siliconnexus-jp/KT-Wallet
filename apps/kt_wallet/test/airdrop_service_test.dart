@@ -54,6 +54,7 @@ void main() {
       (_) => http.Response(
         jsonEncode({
           'jsonrpc': '2.0',
+          'id': 1,
           'error': {
             'code': -32000,
             'message': 'faucet has insufficient funds; $bodyCanary',
@@ -69,6 +70,16 @@ void main() {
 
   test('malformed responses have a stable category', () async {
     final error = await failureFor((_) => http.Response('{broken', 200));
+    expect(error.kind, AirdropFailureKind.malformedResponse);
+  });
+
+  test('a stale response id cannot become a successful airdrop', () async {
+    final error = await failureFor(
+      (_) => http.Response(
+        jsonEncode({'jsonrpc': '2.0', 'id': 2, 'result': 'signature'}),
+        200,
+      ),
+    );
     expect(error.kind, AirdropFailureKind.malformedResponse);
   });
 

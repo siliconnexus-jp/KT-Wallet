@@ -325,7 +325,8 @@ void main() {
         if (request.url.host.contains('blockscout')) {
           return {'status': '1', 'message': 'OK', 'result': <Object?>[]};
         }
-        return {'jsonrpc': '2.0', 'id': 1, 'result': <Object?>[]};
+        final payload = jsonDecode(request.body) as Map<String, Object?>;
+        return {'jsonrpc': '2.0', 'id': payload['id'], 'result': <Object?>[]};
       },
     );
     for (final coin in [Coin.eth, Coin.polygon, Coin.solana]) {
@@ -333,6 +334,22 @@ void main() {
       expect(result.status, HistoryStatus.ok, reason: '$coin');
       expect(result.records, isEmpty);
     }
+  });
+
+  test('Solana direct history rejects a stale JSON-RPC response id', () async {
+    final service = HistoryService(
+      endpoints: (_) => 'https://api.mainnet-beta.solana.com',
+      client: MockClient(
+        (_) async => http.Response(
+          jsonEncode({'jsonrpc': '2.0', 'id': 2, 'result': <Object?>[]}),
+          200,
+        ),
+      ),
+    );
+
+    final result = await service.fetch(Coin.solana, 'SolanaOwner');
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
   });
 
   test('Avalanche direct history includes native internal receipts', () async {
@@ -480,10 +497,12 @@ void main() {
       const sender = '4Nd1mYtBS4yPPsSycFSCA1WzX7yBW2cVDpn9WzWtLDwT';
       const senderAta = 'Ata222222222222222222222222222222222222222';
       const mint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+      final rpcIds = <Object?>[];
       final service = HistoryService(
         endpoints: (_) => 'https://api.mainnet-beta.solana.com',
         client: MockClient((request) async {
           final payload = jsonDecode(request.body) as Map<String, dynamic>;
+          rpcIds.add(payload['id']);
           final method = payload['method'];
           final params = payload['params'] as List<dynamic>;
           final Object? result;
@@ -566,7 +585,11 @@ void main() {
             fail('unexpected Solana RPC method $method');
           }
           return http.Response(
-            jsonEncode({'jsonrpc': '2.0', 'id': 1, 'result': result}),
+            jsonEncode({
+              'jsonrpc': '2.0',
+              'id': payload['id'],
+              'result': result,
+            }),
             200,
           );
         }),
@@ -581,6 +604,7 @@ void main() {
       expect(record.assetContract, mint);
       expect(record.assetVerified, isTrue);
       expect(record.status, ChainTxStatus.confirmed);
+      expect(rpcIds.toSet(), hasLength(rpcIds.length));
     },
   );
 
@@ -767,7 +791,7 @@ void main() {
           fail('unexpected Solana RPC method $method');
         }
         return http.Response(
-          jsonEncode({'jsonrpc': '2.0', 'id': 1, 'result': result}),
+          jsonEncode({'jsonrpc': '2.0', 'id': payload['id'], 'result': result}),
           200,
         );
       }),

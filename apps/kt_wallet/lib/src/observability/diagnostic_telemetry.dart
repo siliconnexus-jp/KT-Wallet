@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-
-import '../rpc/bounded_http_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app_info.dart';
+import '../rpc/bounded_http_client.dart';
+import '../rpc/json_rpc_envelope.dart';
 import '../state/endpoint_policy.dart';
 import 'diagnostic_bundle.dart';
 import 'experience_metrics.dart';
@@ -220,6 +220,12 @@ class GatewayDiagnosticTelemetryUploader
 
     final ownedClient = this.client == null;
     final client = BoundedHttpClient(this.client ?? http.Client());
+    final request = <String, Object?>{
+      'jsonrpc': '2.0',
+      'id': 1,
+      'method': 'kt_reportDiagnostics',
+      'params': report.toParams(),
+    };
     try {
       final response = await client
           .post(
@@ -228,12 +234,7 @@ class GatewayDiagnosticTelemetryUploader
               'accept': 'application/json',
               'content-type': 'application/json',
             },
-            body: jsonEncode({
-              'jsonrpc': '2.0',
-              'id': 1,
-              'method': 'kt_reportDiagnostics',
-              'params': report.toParams(),
-            }),
+            body: jsonEncode(request),
           )
           .timeout(timeout);
       if (response.statusCode != 200) {
@@ -243,8 +244,9 @@ class GatewayDiagnosticTelemetryUploader
         );
       }
       final body = jsonDecode(response.body);
-      if (body is! Map ||
-          body['error'] != null ||
+      if (!isBoundJsonRpcResponse(request, body) ||
+          body is! Map ||
+          body.containsKey('error') ||
           body['result'] is! Map ||
           (body['result'] as Map)['accepted'] != true ||
           (body['result'] as Map)['rawEventsStored'] != false) {

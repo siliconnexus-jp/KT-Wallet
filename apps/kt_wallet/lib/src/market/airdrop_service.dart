@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../rpc/bounded_http_client.dart';
+import '../rpc/json_rpc_envelope.dart';
 
 /// 1 SOL — the fixed amount the receive screen's one-tap faucet requests.
 const lamportsPerSol = 1000000000;
@@ -83,17 +84,18 @@ class AirdropService {
     int lamports = lamportsPerSol,
   }) async {
     final http.Response resp;
+    final request = <String, Object?>{
+      'jsonrpc': '2.0',
+      'id': 1,
+      'method': 'requestAirdrop',
+      'params': [address, lamports],
+    };
     try {
       resp = await _client
           .post(
             Uri.parse(rpcUrl.trim()),
             headers: const {'content-type': 'application/json'},
-            body: jsonEncode({
-              'jsonrpc': '2.0',
-              'id': 1,
-              'method': 'requestAirdrop',
-              'params': [address, lamports],
-            }),
+            body: jsonEncode(request),
           )
           .timeout(timeout);
     } catch (_) {
@@ -114,7 +116,7 @@ class AirdropService {
     } on FormatException {
       throw const AirdropException(AirdropFailureKind.malformedResponse);
     }
-    if (decoded is! Map) {
+    if (!isBoundJsonRpcResponse(request, decoded) || decoded is! Map) {
       throw const AirdropException(AirdropFailureKind.malformedResponse);
     }
     final error = decoded['error'];

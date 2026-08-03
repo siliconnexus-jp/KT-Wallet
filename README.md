@@ -364,12 +364,17 @@ receipt omits the default result are cross-checked against the same
 transaction's `ret.contractRet`. Missing, mismatched, or unknown evidence never
 becomes a successful transaction.
 
-Every direct EVM/Solana JSON-RPC response and every Gateway upstream response
-must also echo the exact request id, declare JSON-RPC 2.0, and contain exactly
-one of `result` or `error`. A stale, reordered, malformed, or mismatched
-response is never attributed to a balance, fee, status, simulation, or
-broadcast request. Broadcasts remain single-shot when this check fails, so an
-unknown outcome cannot trigger an automatic duplicate submission.
+Every direct JSON-RPC response and every Gateway upstream response must echo
+the exact request id and scalar type, declare JSON-RPC 2.0, and contain exactly
+one of `result` or a standard integer-code/string-message `error`. The same
+rule covers balances, prices, fees, status, simulation, history, custom-network
+probes, Solana airdrops, optional diagnostics, and broadcasts. A stale,
+reordered, malformed, or mismatched response is never attributed to a request.
+Concurrent Solana wallet and associated-token-account history calls also use a
+distinct request id per call, so an out-of-order response cannot satisfy a
+different in-flight lookup.
+Broadcasts remain single-shot when this check fails, so an unknown outcome
+cannot trigger an automatic duplicate submission.
 
 The Gateway receives the public address, network, and public contract/mint
 needed for a requested lookup. Recovery phrases, private keys, signatures, raw
@@ -506,7 +511,7 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-03) completed with zero static-analysis
-issues: **1,501/1,501** KT Wallet tests, **570/570** KT Cold Signer tests, and
+issues: **1,510/1,510** KT Wallet tests, **570/570** KT Cold Signer tests, and
 **409/409** shared-package tests passed. The default gate passed **12/12** and
 the native/runtime/OSV `--full` gate passed **13/13**. The Gateway audit,
 public-secret gate, Gateway public-release version gate, native dependency

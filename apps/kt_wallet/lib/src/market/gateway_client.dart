@@ -6,6 +6,7 @@ import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:http/http.dart' as http;
 
 import '../rpc/bounded_http_client.dart';
+import '../rpc/json_rpc_envelope.dart';
 import 'fiat_math.dart';
 
 /// Thin JSON-RPC 2.0 client for the OPTIONAL KT gateway (`POST {url}/rpc`).
@@ -113,18 +114,19 @@ class GatewayClient {
   /// URL or response body.
   Future<Object?> _call(String method, [Map<String, Object?>? params]) async {
     final id = ++_nextId;
+    final request = <String, Object?>{
+      'jsonrpc': '2.0',
+      'id': id,
+      'method': method,
+      'params': ?params,
+    };
     final http.Response resp;
     try {
       resp = await _client
           .post(
             Uri.parse('$baseUrl/rpc'),
             headers: const {'content-type': 'application/json'},
-            body: jsonEncode({
-              'jsonrpc': '2.0',
-              'id': id,
-              'method': method,
-              'params': ?params,
-            }),
+            body: jsonEncode(request),
           )
           .timeout(timeout);
     } on Object {
@@ -144,8 +146,8 @@ class GatewayClient {
       // FormatException.toString() may include a snippet of the response.
       throw const GatewayTransportException('invalid gateway response');
     }
-    if (decoded is! Map) {
-      throw const FormatException('gateway response is not a JSON object');
+    if (!isBoundJsonRpcResponse(request, decoded) || decoded is! Map) {
+      throw const GatewayTransportException('invalid gateway response');
     }
     final error = decoded['error'];
     if (error is Map) {

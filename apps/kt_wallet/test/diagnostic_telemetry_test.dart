@@ -222,4 +222,49 @@ void main() {
     );
     expect(receipts.digest, isNull);
   });
+
+  test('acknowledgement must bind the exact JSON-RPC request', () async {
+    final malformed = <Map<String, Object?>>[
+      {
+        'jsonrpc': '2.0',
+        'id': 2,
+        'result': {'accepted': true, 'rawEventsStored': false},
+      },
+      {
+        'id': 1,
+        'result': {'accepted': true, 'rawEventsStored': false},
+      },
+      {
+        'jsonrpc': '2.0',
+        'id': 1.0,
+        'result': {'accepted': true, 'rawEventsStored': false},
+      },
+      {
+        'jsonrpc': '2.0',
+        'id': 1,
+        'result': {'accepted': true, 'rawEventsStored': false},
+        'error': null,
+      },
+    ];
+
+    for (final acknowledgement in malformed) {
+      final receipts = _MemoryReceipts();
+      final uploader = GatewayDiagnosticTelemetryUploader(
+        client: MockClient(
+          (_) async => http.Response(jsonEncode(acknowledgement), 200),
+        ),
+        receipts: receipts,
+      );
+
+      await expectLater(
+        uploader.upload(
+          gatewayBaseUrl: 'https://gateway.kt-wallet.com',
+          report: _report(),
+        ),
+        throwsA(isA<FormatException>()),
+        reason: '$acknowledgement must not acknowledge request id 1',
+      );
+      expect(receipts.digest, isNull);
+    }
+  });
 }

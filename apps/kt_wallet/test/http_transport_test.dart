@@ -75,6 +75,17 @@ void main() {
       {'jsonrpc': '1.0', 'id': 1, 'result': '0x1'},
       {'jsonrpc': '2.0', 'id': 1, 'result': '0x1', 'error': null},
       {'jsonrpc': '2.0', 'id': 1},
+      {'jsonrpc': '2.0', 'id': 1, 'error': <String, Object?>{}},
+      {
+        'jsonrpc': '2.0',
+        'id': 1,
+        'error': {'code': -1.0, 'message': 'bad'},
+      },
+      {
+        'jsonrpc': '2.0',
+        'id': 1,
+        'error': {'code': -1, 'message': 1},
+      },
     ];
 
     for (final response in malformed) {
@@ -120,6 +131,31 @@ void main() {
       expect(response, {'jsonrpc': '2.0', 'id': 'wallet-1', 'result': null});
     },
   );
+
+  test('JSON-RPC envelope preserves a valid error object', () async {
+    final transport = HttpJsonRpcTransport(
+      client: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'jsonrpc': '2.0',
+            'id': 1,
+            'error': {'code': -32000, 'message': 'rejected'},
+          }),
+          200,
+        ),
+      ),
+    );
+    addTearDown(transport.close);
+
+    expect(
+      await transport.post('https://rpc.example', _rpc('eth_getBalance')),
+      {
+        'jsonrpc': '2.0',
+        'id': 1,
+        'error': {'code': -32000, 'message': 'rejected'},
+      },
+    );
+  });
 
   test(
     'a mismatched broadcast response stays outcome-unknown and single-shot',

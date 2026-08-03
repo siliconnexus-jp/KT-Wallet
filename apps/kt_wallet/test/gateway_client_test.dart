@@ -139,6 +139,32 @@ void main() {
         throwsA(isA<GatewayTransportException>()),
       );
     });
+
+    test('a stale response id is never attributed to a gateway call', () async {
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: MockClient((request) async {
+          final body = jsonDecode(request.body) as Map<String, Object?>;
+          return http.Response(
+            jsonEncode({
+              'jsonrpc': '2.0',
+              'id': (body['id']! as int) + 1,
+              'result': {
+                'prices': {
+                  'ETH': {'usd': 2500},
+                },
+              },
+            }),
+            200,
+          );
+        }),
+      );
+
+      await expectLater(
+        client.getPrices(const ['ETH']),
+        throwsA(isA<GatewayTransportException>()),
+      );
+    });
   });
 
   group('kt_getBalances', () {

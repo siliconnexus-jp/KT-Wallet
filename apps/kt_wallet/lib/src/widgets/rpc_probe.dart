@@ -4,6 +4,7 @@ import 'package:chains/chains.dart' show Chain;
 import 'package:http/http.dart' as http;
 
 import '../rpc/bounded_http_client.dart';
+import '../rpc/json_rpc_envelope.dart';
 
 /// Outcome of probing a candidate RPC endpoint before it is persisted as a
 /// custom network.
@@ -75,10 +76,7 @@ class RpcProbe {
         case Chain.arbitrum:
         case Chain.avalanche:
         case Chain.bnb:
-          final resp = await _jsonRpc(url, 'eth_chainId');
-          if (resp.statusCode != 200) return const RpcProbeFailure();
-          final decoded = jsonDecode(resp.body);
-          final result = decoded is Map ? decoded['result'] : null;
+          final result = await _jsonRpcResult(url, 'eth_chainId');
           if (result is! String || !result.startsWith('0x')) {
             return const RpcProbeFailure();
           }
@@ -107,12 +105,7 @@ class RpcProbe {
               ? RpcProbeOk(identity)
               : const RpcProbeFailure();
         case Chain.solana:
-          final resp = await _jsonRpc(url, 'getGenesisHash');
-          if (resp.statusCode != 200) return const RpcProbeFailure();
-          final decoded = jsonDecode(resp.body);
-          final identity = decoded is Map && decoded['error'] == null
-              ? decoded['result']
-              : null;
+          final identity = await _jsonRpcResult(url, 'getGenesisHash');
           return identity is String && identity.isNotEmpty
               ? RpcProbeOk(identity)
               : const RpcProbeFailure();
@@ -123,16 +116,27 @@ class RpcProbe {
     }
   }
 
-  Future<http.Response> _jsonRpc(String url, String method) => _client
-      .post(
-        Uri.parse(url),
-        headers: const {'content-type': 'application/json'},
-        body: jsonEncode({
-          'jsonrpc': '2.0',
-          'id': 1,
-          'method': method,
-          'params': const <Object?>[],
-        }),
-      )
-      .timeout(timeout);
+  Future<Object?> _jsonRpcResult(String url, String method) async {
+    final request = <String, Object?>{
+      'jsonrpc': '2.0',
+      'id': 1,
+      'method': method,
+      'params': const <Object?>[],
+    };
+    final response = await _client
+        .post(
+          Uri.parse(url),
+          headers: const {'content-type': 'application/json'},
+          body: jsonEncode(request),
+        )
+        .timeout(timeout);
+    if (response.statusCode != 200) return null;
+    final decoded = jsonDecode(response.body);
+    if (!isBoundJsonRpcResponse(request, decoded) ||
+        decoded is! Map ||
+        decoded.containsKey('error')) {
+      return null;
+    }
+    return decoded['result'];
+  }
 }

@@ -13,6 +13,7 @@ import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:http/http.dart' as http;
 
 import '../rpc/bounded_http_client.dart';
+import '../rpc/json_rpc_envelope.dart';
 import 'balance_service.dart' show RpcEndpointResolver, defaultRpcEndpointFor;
 import 'gateway_client.dart';
 import 'token_balance_service.dart';
@@ -185,6 +186,7 @@ class HistoryService {
   static GatewayClient? _noGateway() => null;
 
   final http.Client _client;
+  int _nextJsonRpcId = 0;
 
   /// Per-chain endpoint resolver (settings overrides in production; the
   /// built-in defaults otherwise). Resolved on every fetch.
@@ -827,23 +829,26 @@ class HistoryService {
     List<Object?> params,
   ) async {
     final uri = Uri.parse(url);
+    final request = <String, Object?>{
+      'jsonrpc': '2.0',
+      'id': ++_nextJsonRpcId,
+      'method': method,
+      'params': params,
+    };
     final response = await _client
         .post(
           uri,
           headers: const {'content-type': 'application/json'},
-          body: jsonEncode({
-            'jsonrpc': '2.0',
-            'id': 1,
-            'method': method,
-            'params': params,
-          }),
+          body: jsonEncode(request),
         )
         .timeout(timeout);
     if (response.statusCode != 200) {
       throw http.ClientException('HTTP ${response.statusCode}', uri);
     }
     final body = jsonDecode(response.body);
-    if (body is! Map || body['error'] != null) {
+    if (!isBoundJsonRpcResponse(request, body) ||
+        body is! Map ||
+        body.containsKey('error')) {
       throw const FormatException('RPC error');
     }
     return body['result'];
