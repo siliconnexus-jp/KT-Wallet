@@ -244,6 +244,22 @@
   race、vet、govulncheck/ops 与静态远程安全边界通过。当前范围扩展到 Helius + Alchemy；
   Etherscan/Blockscout、TronGrid、CoinGecko 与 GoPlus 仍待同等级审阅。该修复是本地源码
   候选，生产仍为 1.16.15。
+- [x] 2026-08-04 继续关闭 Etherscan v2 与 Blockscout/Routescan account history 边界。
+  旧实现把 `status/message/result` 及 normal/token/internal 行直接解码进 Go struct，会接受
+  未知成员、大小写别名/冲突、重复 status/result/hash/value，甚至把 `status=1 + NOTOK`、
+  限流空数组和 `No transactions found + 非空结果` 解释为可用历史；12 类确定性红测证明
+  旧路径全部接受。现信封只接受精确三键，并把 `1 / OK / array` 与官方
+  `0 / No transactions found / []` 作为唯一成功形态。三种 action 分别使用受审字段词汇表，
+  所有被消费的 32-byte hash、EVM 地址、uint256 十进制金额、可安全转毫秒的时间戳、
+  execution flag 与索引都逐项校验；Token 进一步要求正 block、blockHash、transactionIndex、
+  confirmations 和 0–255 decimals。Internal 必须恰好采用 Etherscan `hash/traceId` 或
+  Blockscout `transactionHash/index` 一族，不能混用或缺失。Provider 错误与畸形整页固定
+  失败闭合并进入既有 fallback，不会冒充空历史；与当前钱包无关的 normal/token 行也不会
+  进入记录。12 类旧歧义负例、15 类关键语义负例、官方 Etherscan/Blockscout 正例、两种
+  合法空历史、错误脱敏与 page/offset/sort 绑定连续 20 轮；History handler 连续 10 轮，
+  Gateway 全量、关键包 race、vet、govulncheck/ops 及新增静态退化门禁通过。Provider 严格
+  范围现扩展到 Helius + Alchemy + Etherscan/Blockscout；TronGrid、CoinGecko 与 GoPlus
+  仍待同等级审阅。该修复是本地源码候选，生产仍为 1.16.15。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。

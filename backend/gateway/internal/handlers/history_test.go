@@ -133,11 +133,18 @@ func TestTronHistoryUpstreamFailure(t *testing.T) {
 
 func TestEthHistoryWithoutKeyUsesPublicExplorer(t *testing.T) {
 	explorer := newRESTFake(t)
-	explorer.routeJSON("/", fmt.Sprintf(`{
-		"message":"OK",
-		"result":[
-			{"hash":"0xf1","from":%q,"to":"0x2222222222222222222222222222222222222222","value":"77","timeStamp":"1700000300","isError":"0"}
-		]}`, evmSelf))
+	explorer.route("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("action") != "txlist" {
+			_, _ = fmt.Fprint(w, `{"status":"1","message":"OK","result":[]}`)
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{
+			"status":"1","message":"OK",
+			"result":[
+				{"hash":"0x1111111111111111111111111111111111111111111111111111111111111111","from":%q,"to":"0x2222222222222222222222222222222222222222","value":"77","timeStamp":"1700000300","isError":"0"}
+			]}`, evmSelf)
+	})
 	e := newEnv(t, func(cfg *handlers.Config) {
 		cfg.EVMHistoryFallbackURLs = map[string]string{
 			"eth-mainnet": explorer.srv.URL,
@@ -149,7 +156,7 @@ func TestEthHistoryWithoutKeyUsesPublicExplorer(t *testing.T) {
 		t.Fatalf("status = %v", res["status"])
 	}
 	assertJSONEq(t, `[
-		{"id":"0xf1","hash":"0xf1","direction":"out","from":"0x1111111111111111111111111111111111111111","to":"0x2222222222222222222222222222222222222222","amountRaw":"77","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000300000,"status":"ok"}
+		{"id":"0x1111111111111111111111111111111111111111111111111111111111111111","hash":"0x1111111111111111111111111111111111111111111111111111111111111111","direction":"out","from":"0x1111111111111111111111111111111111111111","to":"0x2222222222222222222222222222222222222222","amountRaw":"77","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000300000,"status":"ok"}
 	]`, res["records"])
 	if explorer.hitCount("/") != 3 {
 		t.Fatal("keyless history must use the configured public explorer")
@@ -165,8 +172,8 @@ func TestEVMHistoryMissingOrContradictoryExecutionEvidenceIsUnknown(t *testing.T
 			return
 		}
 		_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[
-			{"hash":"0xmissing","from":%q,"to":"0x2222222222222222222222222222222222222222","value":"1","timeStamp":"1700000600"},
-			{"hash":"0xconflict","from":%q,"to":"0x3333333333333333333333333333333333333333","value":"2","timeStamp":"1700000500","isError":"0","txreceipt_status":"0"}
+			{"hash":"0x2222222222222222222222222222222222222222222222222222222222222222","from":%q,"to":"0x2222222222222222222222222222222222222222","value":"1","timeStamp":"1700000600"},
+			{"hash":"0x3333333333333333333333333333333333333333333333333333333333333333","from":%q,"to":"0x3333333333333333333333333333333333333333","value":"2","timeStamp":"1700000500","isError":"0","txreceipt_status":"0"}
 		]}`, evmSelf, evmSelf)
 	})
 	e := newEnv(t, func(cfg *handlers.Config) {
@@ -177,8 +184,8 @@ func TestEVMHistoryMissingOrContradictoryExecutionEvidenceIsUnknown(t *testing.T
 
 	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf)))
 	assertJSONEq(t, `[
-		{"id":"0xmissing","hash":"0xmissing","direction":"out","from":"0x1111111111111111111111111111111111111111","to":"0x2222222222222222222222222222222222222222","amountRaw":"1","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000600000,"status":"unknown"},
-		{"id":"0xconflict","hash":"0xconflict","direction":"out","from":"0x1111111111111111111111111111111111111111","to":"0x3333333333333333333333333333333333333333","amountRaw":"2","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000500000,"status":"unknown"}
+		{"id":"0x2222222222222222222222222222222222222222222222222222222222222222","hash":"0x2222222222222222222222222222222222222222222222222222222222222222","direction":"out","from":"0x1111111111111111111111111111111111111111","to":"0x2222222222222222222222222222222222222222","amountRaw":"1","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000600000,"status":"unknown"},
+		{"id":"0x3333333333333333333333333333333333333333333333333333333333333333","hash":"0x3333333333333333333333333333333333333333333333333333333333333333","direction":"out","from":"0x1111111111111111111111111111111111111111","to":"0x3333333333333333333333333333333333333333","amountRaw":"2","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000500000,"status":"unknown"}
 	]`, res["records"])
 }
 
@@ -191,7 +198,7 @@ func TestEVMHistoryAcceptsOfficialIndexedTokenEvidence(t *testing.T) {
 			return
 		}
 		_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[{
-			"hash":"0xtoken","from":%q,"to":"0x2222222222222222222222222222222222222222",
+			"hash":"0x4444444444444444444444444444444444444444444444444444444444444444","from":%q,"to":"0x2222222222222222222222222222222222222222",
 			"value":"2500000","timeStamp":"1700000100","tokenDecimal":"6",
 			"tokenSymbol":"USDT","contractAddress":"0xdAC17F958D2ee523a2206206994597C13D831ec7",
 			"blockNumber":"4730207","blockHash":"0x022c5e6a3d2487a8ccf8946a2ffb74938bf8e5c8a3f6d91b41c56378a96b5c37",
@@ -218,7 +225,7 @@ func TestEVMHistoryAcceptsBlockscoutInternalKeys(t *testing.T) {
 			return
 		}
 		_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[{
-			"transactionHash":"0xairdrop","index":"0_1","from":"0x2222222222222222222222222222222222222222",
+			"transactionHash":"0x5555555555555555555555555555555555555555555555555555555555555555","index":"0_1","from":"0x2222222222222222222222222222222222222222",
 			"to":%q,"value":"5000000000000000","timeStamp":"1700000100","isError":"0"
 		}]}`, evmSelf)
 	})
@@ -227,10 +234,50 @@ func TestEVMHistoryAcceptsBlockscoutInternalKeys(t *testing.T) {
 	})
 
 	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf)))
-	assertJSONEq(t, `[{"id":"0xairdrop:internal:0_1","hash":"0xairdrop","direction":"in",
+	assertJSONEq(t, `[{"id":"0x5555555555555555555555555555555555555555555555555555555555555555:internal:0_1","hash":"0x5555555555555555555555555555555555555555555555555555555555555555","direction":"in",
 		"from":"0x2222222222222222222222222222222222222222","to":"0x1111111111111111111111111111111111111111",
 		"amountRaw":"5000000000000000","decimals":18,"symbol":"ETH","verified":true,
 		"timestampMs":1700000100000,"status":"ok"}]`, res["records"])
+}
+
+func TestEVMHistoryOmitsExplorerRowsUnrelatedToWallet(t *testing.T) {
+	explorer := newRESTFake(t)
+	explorer.route("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("action") {
+		case "txlist":
+			_, _ = fmt.Fprint(w, `{"status":"1","message":"OK","result":[{
+				"hash":"0xabababababababababababababababababababababababababababababababab",
+				"from":"0x2222222222222222222222222222222222222222",
+				"to":"0x3333333333333333333333333333333333333333",
+				"value":"1","timeStamp":"1700000200","isError":"0"
+			}]}`)
+		case "tokentx":
+			_, _ = fmt.Fprint(w, `{"status":"1","message":"OK","result":[{
+				"blockNumber":"123","timeStamp":"1700000100",
+				"hash":"0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+				"blockHash":"0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+				"from":"0x2222222222222222222222222222222222222222",
+				"to":"0x3333333333333333333333333333333333333333","value":"1",
+				"tokenSymbol":"USDC","tokenDecimal":"6",
+				"contractAddress":"0x4444444444444444444444444444444444444444",
+				"transactionIndex":"0","confirmations":"1","logIndex":"0"
+			}]}`)
+		default:
+			_, _ = fmt.Fprint(w, `{"status":"1","message":"OK","result":[]}`)
+		}
+	})
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.EVMHistoryFallbackURLs = map[string]string{"eth-mainnet": explorer.srv.URL}
+	})
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf)))
+	if res["status"] != "ok" {
+		t.Fatalf("status = %v", res["status"])
+	}
+	if records := res["records"].([]any); len(records) != 0 {
+		t.Fatalf("unrelated explorer rows must not enter wallet history: %v", records)
+	}
 }
 
 func TestTronHistoryMissingExecutionEvidenceIsUnknown(t *testing.T) {
@@ -363,7 +410,7 @@ func TestEthHistoryWithKey(t *testing.T) {
 			_, _ = fmt.Fprintf(w, `{
 				"status":"1","message":"OK",
 				"result":[
-					{"hash":"0xh1","logIndex":"7","from":%q,"to":"0x2222222222222222222222222222222222222222",
+					{"hash":"0x6666666666666666666666666666666666666666666666666666666666666666","logIndex":"7","from":%q,"to":"0x2222222222222222222222222222222222222222",
 					 "value":"2500000","timeStamp":"1700000100","tokenDecimal":"6",
 					 "tokenSymbol":"FAKE","contractAddress":"0xdAC17F958D2ee523a2206206994597C13D831ec7",
 					 "blockNumber":"4730207","blockHash":"0x022c5e6a3d2487a8ccf8946a2ffb74938bf8e5c8a3f6d91b41c56378a96b5c37",
@@ -374,8 +421,8 @@ func TestEthHistoryWithKey(t *testing.T) {
 		_, _ = fmt.Fprintf(w, `{
 			"status":"1","message":"OK",
 			"result":[
-				{"hash":"0xh1","from":%q,"to":"0x2222222222222222222222222222222222222222","value":"0","timeStamp":"1700000100","isError":"0"},
-				{"hash":"0xh2","from":"0x2222222222222222222222222222222222222222","to":%q,"value":"2000","timeStamp":"1700000000","isError":"1"}
+				{"hash":"0x6666666666666666666666666666666666666666666666666666666666666666","from":%q,"to":"0x2222222222222222222222222222222222222222","value":"0","timeStamp":"1700000100","isError":"0"},
+				{"hash":"0x7777777777777777777777777777777777777777777777777777777777777777","from":"0x2222222222222222222222222222222222222222","to":%q,"value":"2000","timeStamp":"1700000000","isError":"1"}
 			]}`, evmSelf, evmSelf)
 	})
 	e := newEnv(t, func(cfg *handlers.Config) {
@@ -388,8 +435,8 @@ func TestEthHistoryWithKey(t *testing.T) {
 		t.Fatalf("status = %v", res["status"])
 	}
 	assertJSONEq(t, `[
-		{"id":"0xh1:7","hash":"0xh1","direction":"out","from":"0x1111111111111111111111111111111111111111","to":"0x2222222222222222222222222222222222222222","amountRaw":"2500000","decimals":6,"symbol":"USDT","contract":"0xdac17f958d2ee523a2206206994597c13d831ec7","verified":true,"timestampMs":1700000100000,"status":"ok"},
-		{"id":"0xh2","hash":"0xh2","direction":"in","from":"0x2222222222222222222222222222222222222222","to":"0x1111111111111111111111111111111111111111","amountRaw":"2000","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000000000,"status":"failed"}
+		{"id":"0x6666666666666666666666666666666666666666666666666666666666666666:7","hash":"0x6666666666666666666666666666666666666666666666666666666666666666","direction":"out","from":"0x1111111111111111111111111111111111111111","to":"0x2222222222222222222222222222222222222222","amountRaw":"2500000","decimals":6,"symbol":"USDT","contract":"0xdac17f958d2ee523a2206206994597c13d831ec7","verified":true,"timestampMs":1700000100000,"status":"ok"},
+		{"id":"0x7777777777777777777777777777777777777777777777777777777777777777","hash":"0x7777777777777777777777777777777777777777777777777777777777777777","direction":"in","from":"0x2222222222222222222222222222222222222222","to":"0x1111111111111111111111111111111111111111","amountRaw":"2000","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000000000,"status":"failed"}
 	]`, res["records"])
 
 	hits := scan.hitsFor("/")
@@ -424,17 +471,21 @@ func TestEthHistoryKeepsMultipleLogsAndMarksUnknownToken(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Query().Get("action") == "tokentx" {
 			_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[
-				{"hash":"0xmulti","logIndex":"3","from":%q,"to":%q,
+				{"hash":"0x8888888888888888888888888888888888888888888888888888888888888888","logIndex":"3","from":%q,"to":%q,
 				 "value":"1000000","timeStamp":"1700000100","tokenDecimal":"6",
-				 "tokenSymbol":"USDT","contractAddress":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
-				{"hash":"0xmulti","logIndex":"4","from":%q,"to":%q,
+				 "tokenSymbol":"USDT","contractAddress":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				 "blockNumber":"4730207","blockHash":"0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+				 "transactionIndex":"81","confirmations":"1"},
+				{"hash":"0x8888888888888888888888888888888888888888888888888888888888888888","logIndex":"4","from":%q,"to":%q,
 				 "value":"2000000","timeStamp":"1700000100","tokenDecimal":"6",
-				 "tokenSymbol":"USDT","contractAddress":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
+				 "tokenSymbol":"USDT","contractAddress":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+				 "blockNumber":"4730207","blockHash":"0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+				 "transactionIndex":"81","confirmations":"1"}
 			]}`, evmSelf, other, evmSelf, other)
 			return
 		}
 		_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[
-			{"hash":"0xmulti","from":%q,"to":%q,"value":"0","timeStamp":"1700000100","isError":"0"}
+			{"hash":"0x8888888888888888888888888888888888888888888888888888888888888888","from":%q,"to":%q,"value":"0","timeStamp":"1700000100","isError":"0"}
 		]}`, evmSelf, other)
 	})
 	e := newEnv(t, func(cfg *handlers.Config) {
@@ -465,10 +516,12 @@ func TestOperatorCatalogControlsHistoryVerification(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Query().Get("action") == "tokentx" {
 			_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[
-				{"hash":"0xconfigured","logIndex":"1","from":%q,
+				{"hash":"0x9999999999999999999999999999999999999999999999999999999999999999","logIndex":"1","from":%q,
 				 "to":"0x2222222222222222222222222222222222222222",
 				 "value":"123","timeStamp":"1700000100","tokenDecimal":"18",
-				 "tokenSymbol":"LOOKALIKE","contractAddress":%q}
+				 "tokenSymbol":"LOOKALIKE","contractAddress":%q,
+				 "blockNumber":"4730207","blockHash":"0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+				 "transactionIndex":"81","confirmations":"1"}
 			]}`, evmSelf, contract)
 			return
 		}
@@ -537,11 +590,18 @@ func TestEthHistoryEtherscanFailureFallsBackToPublicExplorer(t *testing.T) {
 	scan := newRESTFake(t)
 	scan.routeJSON("/", `{"status":"0","message":"NOTOK","result":"Max rate limit reached"}`)
 	explorer := newRESTFake(t)
-	explorer.routeJSON("/", fmt.Sprintf(`{
-		"message":"OK",
-		"result":[
-			{"hash":"0xfallback","from":"0x2222222222222222222222222222222222222222","to":%q,"value":"9","timeStamp":"1700000500","isError":"0"}
-		]}`, evmSelf))
+	explorer.route("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("action") != "txlist" {
+			_, _ = fmt.Fprint(w, `{"status":"1","message":"OK","result":[]}`)
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{
+			"status":"1","message":"OK",
+			"result":[
+				{"hash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","from":"0x2222222222222222222222222222222222222222","to":%q,"value":"9","timeStamp":"1700000500","isError":"0"}
+			]}`, evmSelf)
+	})
 	e := newEnv(t, func(cfg *handlers.Config) {
 		cfg.EtherscanURL = scan.srv.URL
 		cfg.EtherscanKey = "bad-or-limited-key"
@@ -552,7 +612,7 @@ func TestEthHistoryEtherscanFailureFallsBackToPublicExplorer(t *testing.T) {
 
 	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf)))
 	assertJSONEq(t, `[
-		{"id":"0xfallback","hash":"0xfallback","direction":"in","from":"0x2222222222222222222222222222222222222222","to":"0x1111111111111111111111111111111111111111","amountRaw":"9","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000500000,"status":"ok"}
+		{"id":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","hash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","direction":"in","from":"0x2222222222222222222222222222222222222222","to":"0x1111111111111111111111111111111111111111","amountRaw":"9","decimals":18,"symbol":"ETH","verified":true,"timestampMs":1700000500000,"status":"ok"}
 	]`, res["records"])
 	// Normal, token and internal feeds are requested concurrently so one slow
 	// explorer does not serialize three full timeout windows.

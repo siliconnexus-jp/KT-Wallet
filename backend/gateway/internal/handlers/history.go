@@ -479,6 +479,11 @@ func evmHistoryResult(
 	records := make([]historyRecord, 0, len(txs)+len(tokenTxs)+len(internalTxs))
 	normalMovements := make(map[string]bool, len(txs))
 	for _, t := range txs {
+		from := strings.ToLower(t.From)
+		to := strings.ToLower(t.To)
+		if from != self && to != self {
+			continue
+		}
 		normalMovements[evmMovementKey(t.Hash, t.From, t.To, t.Value, t.TimeStamp)] = true
 	}
 	// Token transfers are appended first so the ERC-20 amount wins when the
@@ -488,8 +493,13 @@ func evmHistoryResult(
 		if err != nil || decimals < 0 || t.Hash == "" || t.ContractAddress == "" {
 			continue
 		}
+		from := strings.ToLower(t.From)
+		to := strings.ToLower(t.To)
+		if from != self && to != self {
+			continue
+		}
 		dir := "in"
-		if strings.ToLower(t.From) == self {
+		if from == self {
 			dir = "out"
 		}
 		status := historyExecutionStatus(upstream.EtherscanTokenExecutionStatus(t))
@@ -571,10 +581,15 @@ func evmHistoryResult(
 		if t.Value == "" || t.Value == "0" {
 			continue
 		}
+		from := strings.ToLower(t.From)
+		to := strings.ToLower(t.To)
+		if from != self && to != self {
+			continue
+		}
 		// Non-zero native value remains a separate event even when token logs
 		// share the same transaction hash.
 		dir := "in"
-		if strings.ToLower(t.From) == self {
+		if from == self {
 			dir = "out"
 		}
 		status := historyExecutionStatus(

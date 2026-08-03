@@ -594,7 +594,20 @@ false marker as proof that no pending outgoing transaction exists.
   transfer metadata, the timestamp fallback batch also requires unique in-range
   response ids and an exact lowercase hex
   `timestamp`; the surrounding Ethereum block remains forward-compatible but
-  duplicate keys and `Timestamp` aliases fail closed.
+  duplicate keys and `Timestamp` aliases fail closed. Etherscan v2 and the
+  reviewed Blockscout/Routescan fallback dialects are separate trust
+  boundaries: the account envelope accepts only exact `status`, `message` and
+  `result` keys, with either `1 / OK / array` or the documented
+  `0 / No transactions found / []` empty-history form. Normal, ERC-20 and
+  internal rows use action-specific reviewed field vocabularies. Every
+  consumed hash, address, uint256 amount, timestamp, status flag and event
+  index is validated; token rows additionally require a positive block,
+  32-byte block hash, transaction index, confirmations and 0–255 decimals.
+  Internal traces must use exactly one Etherscan `hash/traceId` pair or one
+  Blockscout `transactionHash/index` pair. Unknown members, aliases,
+  duplicates, partial rows, provider errors and invalid financial values
+  reject that provider feed and enter the existing safe fallback path; they
+  never become an empty or successful wallet history.
 - **solana** — Helius `getTransfersByAddress` is preferred when
   `HELIUS_API_KEY` is set. Its JSON-RPC envelope must identify version `2.0`
   and the exact `kt-wallet` request id, with exactly one result/error. The

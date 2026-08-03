@@ -30,6 +30,235 @@ func TestEtherscanNullResultIsUnavailableNotEmptyHistory(t *testing.T) {
 	}
 }
 
+func TestEtherscanResponseRejectsAmbiguousProviderJSON(t *testing.T) {
+	t.Parallel()
+
+	const row = `{"blockNumber":"123","blockHash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",` +
+		`"timeStamp":"1700000000","hash":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",` +
+		`"from":"0x1111111111111111111111111111111111111111",` +
+		`"to":"0x2222222222222222222222222222222222222222","value":"1",` +
+		`"isError":"0","txreceipt_status":"1"}`
+	valid := fmt.Sprintf(`{"status":"1","message":"OK","result":[%s]}`, row)
+	rowUnknown := strings.Replace(row, `"value":"1"`, `"value":"1","unexpected":true`, 1)
+	rowHashAlias := strings.Replace(row, `"hash":`, `"Hash":`, 1)
+	rowDuplicateHash := strings.Replace(row, `"hash":`, `"hash":"0xdead","hash":`, 1)
+	rowDuplicateValue := strings.Replace(row, `"value":"1"`, `"value":"2","value":"1"`, 1)
+
+	tests := []struct {
+		name    string
+		payload string
+	}{
+		{"unknown envelope member", strings.Replace(valid, `,"result":`, `,"unexpected":true,"result":`, 1)},
+		{"status case alias", strings.Replace(valid, `"status":`, `"Status":`, 1)},
+		{"result case alias", strings.Replace(valid, `"result":`, `"Result":`, 1)},
+		{"duplicate status ending success", strings.Replace(valid, `"status":"1"`, `"status":"0","status":"1"`, 1)},
+		{"duplicate result ending valid", strings.Replace(valid, `"result":`, `"result":[],"result":`, 1)},
+		{"success status with rejection message", strings.Replace(valid, `"message":"OK"`, `"message":"NOTOK"`, 1)},
+		{"rate limit disguised as empty result", `{"status":"0","message":"Max rate limit reached","result":[]}`},
+		{"no transactions status with nonempty result", fmt.Sprintf(`{"status":"0","message":"No transactions found","result":[%s]}`, row)},
+		{"unknown transaction member", fmt.Sprintf(`{"status":"1","message":"OK","result":[%s]}`, rowUnknown)},
+		{"transaction hash case alias", fmt.Sprintf(`{"status":"1","message":"OK","result":[%s]}`, rowHashAlias)},
+		{"duplicate transaction hash", fmt.Sprintf(`{"status":"1","message":"OK","result":[%s]}`, rowDuplicateHash)},
+		{"duplicate transaction value", fmt.Sprintf(`{"status":"1","message":"OK","result":[%s]}`, rowDuplicateValue)},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.payload))
+			}))
+			defer server.Close()
+
+			txs, err := NewEtherscan(server.URL, "", server.Client(), time.Second).
+				TxList(context.Background(), 1, "0x1111111111111111111111111111111111111111", 20)
+			if err == nil {
+				t.Fatalf("ambiguous explorer response must fail closed, got %#v", txs)
+			}
+		})
+	}
+}
+
+func TestExplorerAccountEnvelopeAllowsOnlyDocumentedEmptyHistory(t *testing.T) {
+	t.Parallel()
+
+	for _, payload := range []string{
+		`{"status":"1","message":"OK","result":[]}`,
+		`{"status":"0","message":"No transactions found","result":[]}`,
+	} {
+		rows, rejected, err := decodeExplorerAccountEnvelope([]byte(payload))
+		if err != nil || rejected || rows == nil || len(rows) != 0 {
+			t.Fatalf("documented empty history was not preserved: rows=%#v rejected=%v err=%v", rows, rejected, err)
+		}
+	}
+
+	for _, payload := range []string{
+		`{"status":"0","message":"NOTOK","result":"Max rate limit reached"}`,
+		`{"status":"0","message":"chain not supported","result":null}`,
+		`{"status":"0","message":"No transactions found","result":[{}]}`,
+	} {
+		rows, rejected, err := decodeExplorerAccountEnvelope([]byte(payload))
+		if err != nil || !rejected || rows != nil {
+			t.Fatalf("provider rejection was confused with empty history: rows=%#v rejected=%v err=%v", rows, rejected, err)
+		}
+	}
+}
+
+func TestExplorerRowsAllowReviewedEtherscanAndBlockscoutShapes(t *testing.T) {
+	t.Parallel()
+
+	normal := json.RawMessage(`{
+		"blockNumber":"21933251","blockHash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"timeStamp":"1740662711","hash":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"nonce":"328","transactionIndex":"128","from":"0x1111111111111111111111111111111111111111",
+		"to":"0x2222222222222222222222222222222222222222","value":"1000000000000000",
+		"gas":"21000","gasPrice":"1000000000","input":"0x","methodId":"0x","functionName":"",
+		"contractAddress":"","cumulativeGasUsed":"15000000","txreceipt_status":"1","gasUsed":"21000",
+		"confirmations":"42","isError":"0","maxFeePerGas":"2000000000","maxPriorityFeePerGas":"1",
+		"type":"2","l1Fee":"0","l1GasPrice":"0","l1GasUsed":"0","l1FeeScalar":"0",
+		"blobGasUsed":"0","blobGasPrice":"0","authorizationList":[]
+	}`)
+	tx, err := decodeEtherscanTx(normal)
+	if err != nil || tx.Hash == "" || EtherscanExecutionStatus(tx.IsError, tx.ReceiptStatus) != ExecutionConfirmed {
+		t.Fatalf("reviewed normal transaction shape rejected: tx=%#v err=%v", tx, err)
+	}
+
+	token := json.RawMessage(`{
+		"blockNumber":"21933251","timeStamp":"1740662711",
+		"hash":"0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","nonce":"12",
+		"blockHash":"0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+		"from":"0x1111111111111111111111111111111111111111",
+		"contractAddress":"0x3333333333333333333333333333333333333333",
+		"to":"0x2222222222222222222222222222222222222222","value":"2500000",
+		"tokenName":"USD Coin","tokenSymbol":"USDC","tokenDecimal":"6","transactionIndex":"81",
+		"gas":"90000","gasPrice":"1000000000","gasUsed":"52211","cumulativeGasUsed":"15000000",
+		"input":"deprecated","methodId":"0xa9059cbb","functionName":"transfer(address,uint256)",
+		"confirmations":"8","logIndex":"7","maxFeePerGas":"2","maxPriorityFeePerGas":"1","type":"2"
+	}`)
+	tokenTx, err := decodeEtherscanTokenTx(token)
+	if err != nil || tokenTx.LogIndex != "7" || EtherscanTokenExecutionStatus(tokenTx) != ExecutionConfirmed {
+		t.Fatalf("reviewed token transaction shape rejected: tx=%#v err=%v", tokenTx, err)
+	}
+
+	etherscanInternal := json.RawMessage(`{
+		"blockNumber":"21933251","timeStamp":"1740662711",
+		"hash":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+		"from":"0x1111111111111111111111111111111111111111",
+		"to":"0x2222222222222222222222222222222222222222","value":"42","contractAddress":"",
+		"input":"0x","type":"call","gas":"2300","gasUsed":"0","traceId":"0_1","isError":"0","errCode":""
+	}`)
+	internalTx, err := decodeEtherscanInternalTx(etherscanInternal)
+	if err != nil || internalTx.CanonicalTraceID() != "0_1" || internalTx.CanonicalHash() == "" {
+		t.Fatalf("reviewed Etherscan internal shape rejected: tx=%#v err=%v", internalTx, err)
+	}
+
+	blockscoutInternal := json.RawMessage(`{
+		"blockNumber":"21933251","timeStamp":"1740662711",
+		"transactionHash":"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+		"from":"0x1111111111111111111111111111111111111111",
+		"to":"0x2222222222222222222222222222222222222222","value":"42","contractAddress":"",
+		"input":"0x","type":"call","callType":"call","gas":"2300","gasUsed":"0","index":"0_1",
+		"isError":"0","txreceipt_status":"1","errCode":""
+	}`)
+	internalTx, err = decodeEtherscanInternalTx(blockscoutInternal)
+	if err != nil || internalTx.CanonicalTraceID() != "0_1" || internalTx.CanonicalHash() == "" {
+		t.Fatalf("reviewed Blockscout internal shape rejected: tx=%#v err=%v", internalTx, err)
+	}
+}
+
+func TestExplorerRowsRejectInvalidCriticalValues(t *testing.T) {
+	t.Parallel()
+
+	const normal = `{"timeStamp":"1700000000",` +
+		`"hash":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",` +
+		`"from":"0x1111111111111111111111111111111111111111",` +
+		`"to":"0x2222222222222222222222222222222222222222","value":"1","isError":"0"}`
+	const token = `{"blockNumber":"123","timeStamp":"1700000000",` +
+		`"hash":"0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",` +
+		`"blockHash":"0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",` +
+		`"from":"0x1111111111111111111111111111111111111111",` +
+		`"to":"0x2222222222222222222222222222222222222222","value":"1",` +
+		`"tokenSymbol":"USDC","tokenDecimal":"6",` +
+		`"contractAddress":"0x3333333333333333333333333333333333333333",` +
+		`"transactionIndex":"0","confirmations":"1","logIndex":"0"}`
+	const internal = `{"timeStamp":"1700000000",` +
+		`"hash":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",` +
+		`"traceId":"0_1","from":"0x1111111111111111111111111111111111111111",` +
+		`"to":"0x2222222222222222222222222222222222222222","value":"1","isError":"0"}`
+
+	tests := []struct {
+		name   string
+		row    string
+		decode func(json.RawMessage) error
+	}{
+		{"normal short hash", strings.Replace(normal, strings.Repeat("b", 64), "bb", 1), func(raw json.RawMessage) error { _, err := decodeEtherscanTx(raw); return err }},
+		{"normal invalid sender", strings.Replace(normal, "0x1111111111111111111111111111111111111111", "0x1", 1), func(raw json.RawMessage) error { _, err := decodeEtherscanTx(raw); return err }},
+		{"normal negative value", strings.Replace(normal, `"value":"1"`, `"value":"-1"`, 1), func(raw json.RawMessage) error { _, err := decodeEtherscanTx(raw); return err }},
+		{"normal uint256 overflow", strings.Replace(normal, `"value":"1"`, `"value":"`+strings.Repeat("9", 78)+`"`, 1), func(raw json.RawMessage) error { _, err := decodeEtherscanTx(raw); return err }},
+		{"normal timestamp overflow", strings.Replace(normal, `"timeStamp":"1700000000"`, `"timeStamp":"9223372036854776"`, 1), func(raw json.RawMessage) error { _, err := decodeEtherscanTx(raw); return err }},
+		{"normal invalid status", strings.Replace(normal, `"isError":"0"`, `"isError":"false"`, 1), func(raw json.RawMessage) error { _, err := decodeEtherscanTx(raw); return err }},
+		{"token zero block", strings.Replace(token, `"blockNumber":"123"`, `"blockNumber":"0"`, 1), func(raw json.RawMessage) error { _, err := decodeEtherscanTokenTx(raw); return err }},
+		{"token invalid block hash", strings.Replace(token, strings.Repeat("d", 64), "dd", 1), func(raw json.RawMessage) error { _, err := decodeEtherscanTokenTx(raw); return err }},
+		{"token decimal overflow", strings.Replace(token, `"tokenDecimal":"6"`, `"tokenDecimal":"256"`, 1), func(raw json.RawMessage) error { _, err := decodeEtherscanTokenTx(raw); return err }},
+		{"token invalid transaction index", strings.Replace(token, `"transactionIndex":"0"`, `"transactionIndex":"-1"`, 1), func(raw json.RawMessage) error { _, err := decodeEtherscanTokenTx(raw); return err }},
+		{"token invalid log index", strings.Replace(token, `"logIndex":"0"`, `"logIndex":"0x1"`, 1), func(raw json.RawMessage) error { _, err := decodeEtherscanTokenTx(raw); return err }},
+		{"token control character symbol", strings.Replace(token, `"tokenSymbol":"USDC"`, `"tokenSymbol":"USDC\n"`, 1), func(raw json.RawMessage) error { _, err := decodeEtherscanTokenTx(raw); return err }},
+		{"internal both hash families", strings.Replace(internal, `"hash":`, `"transactionHash":"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","hash":`, 1), func(raw json.RawMessage) error { _, err := decodeEtherscanInternalTx(raw); return err }},
+		{"internal both trace families", strings.Replace(internal, `"traceId":`, `"index":"0","traceId":`, 1), func(raw json.RawMessage) error { _, err := decodeEtherscanInternalTx(raw); return err }},
+		{"internal malformed trace", strings.Replace(internal, `"traceId":"0_1"`, `"traceId":"0__1"`, 1), func(raw json.RawMessage) error { _, err := decodeEtherscanInternalTx(raw); return err }},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.decode(json.RawMessage(tc.row)); err == nil {
+				t.Fatal("invalid critical explorer value was accepted")
+			}
+		})
+	}
+}
+
+func TestEtherscanProviderErrorsAreRedactedAndPaginationIsBounded(t *testing.T) {
+	t.Parallel()
+
+	t.Run("provider rejection", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"status":"0","message":"NOTOK","result":"secret provider detail"}`))
+		}))
+		defer server.Close()
+
+		_, err := NewEtherscan(server.URL, "key", server.Client(), time.Second).
+			TxList(context.Background(), 1, "0x1111111111111111111111111111111111111111", 20)
+		var unavailable *Unavailable
+		if !errors.As(err, &unavailable) || err.Error() != "upstream temporarily unavailable" ||
+			unavailable.Message != "explorer rejected request" || strings.Contains(err.Error(), "secret") {
+			t.Fatalf("provider detail crossed the trust boundary: %#v / %v", unavailable, err)
+		}
+	})
+
+	t.Run("newest bounded page", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			query := r.URL.Query()
+			for key, want := range map[string]string{
+				"chainid": "137", "module": "account", "action": "txlist",
+				"address": "0x1111111111111111111111111111111111111111",
+				"page":    "1", "offset": "17", "sort": "desc", "apikey": "key",
+			} {
+				if query.Get(key) != want {
+					t.Errorf("query %s = %q, want %q", key, query.Get(key), want)
+				}
+			}
+			_, _ = w.Write([]byte(`{"status":"1","message":"OK","result":[]}`))
+		}))
+		defer server.Close()
+
+		rows, err := NewEtherscan(server.URL, "key", server.Client(), time.Second).
+			TxList(context.Background(), 137, "0x1111111111111111111111111111111111111111", 17)
+		if err != nil || rows == nil || len(rows) != 0 {
+			t.Fatalf("bounded empty page failed: rows=%#v err=%v", rows, err)
+		}
+	})
+}
+
 func TestHeliusResponseRejectsAmbiguousProviderJSON(t *testing.T) {
 	t.Parallel()
 

@@ -182,7 +182,7 @@ func TestAvalancheHistoryIncludesInternalNativeReceipt(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Query().Get("action") == "txlistinternal" {
 			_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[{
-				"hash":"0xairdrop","traceId":"0_1",
+				"hash":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","traceId":"0_1",
 				"from":"0x2222222222222222222222222222222222222222","to":%q,
 				"value":"5000000000000000","timeStamp":"1700000100","isError":"0"
 			}]}`, evmSelf)
@@ -200,7 +200,7 @@ func TestAvalancheHistoryIncludesInternalNativeReceipt(t *testing.T) {
 		`{"chain":"avalanche","network":"avalanche-fuji","address":%q}`, evmSelf,
 	)))
 	assertJSONEq(t, `[{
-		"id":"0xairdrop:internal:0_1","hash":"0xairdrop","direction":"in",
+		"id":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:internal:0_1","hash":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","direction":"in",
 		"from":"0x2222222222222222222222222222222222222222","to":"0x1111111111111111111111111111111111111111",
 		"amountRaw":"5000000000000000","decimals":18,"symbol":"AVAX",
 		"verified":true,"timestampMs":1700000100000,"status":"ok"

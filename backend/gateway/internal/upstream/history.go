@@ -6,11 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // ExecutionStatus preserves the difference between an explicit terminal
@@ -155,35 +157,388 @@ func (t EtherscanInternalTx) CanonicalTraceID() string {
 	return t.Index
 }
 
+func decodeExplorerAccountEnvelope(data []byte) ([]json.RawMessage, bool, error) {
+	fields, err := decodeExactJSONObject(data, "status", "message", "result")
+	if err != nil {
+		return nil, false, err
+	}
+	var status, message *string
+	if err := json.Unmarshal(fields["status"], &status); err != nil ||
+		json.Unmarshal(fields["message"], &message) != nil ||
+		status == nil || message == nil || len(*message) > 256 {
+		return nil, false, fmt.Errorf("invalid explorer response envelope")
+	}
+	resultRaw, ok := fields["result"]
+	if !ok {
+		return nil, false, fmt.Errorf("explorer response has no result")
+	}
+	var entries []json.RawMessage
+	if err := json.Unmarshal(resultRaw, &entries); err != nil || entries == nil {
+		return nil, true, nil
+	}
+	switch {
+	case *status == "1" && *message == "OK":
+		return entries, false, nil
+	case *status == "0" && *message == "No transactions found" && len(entries) == 0:
+		return entries, false, nil
+	default:
+		return nil, true, nil
+	}
+}
+
+func decodeEtherscanTx(raw json.RawMessage) (EtherscanTx, error) {
+	fields, err := decodeExactJSONObject(
+		raw,
+		"blockNumber", "blockHash", "timeStamp", "hash", "nonce",
+		"transactionIndex", "from", "to", "value", "gas", "gasPrice",
+		"input", "methodId", "functionName", "contractAddress",
+		"cumulativeGasUsed", "txreceipt_status", "gasUsed", "confirmations",
+		"isError", "maxFeePerGas", "maxPriorityFeePerGas", "type",
+		"l1Fee", "l1GasPrice", "l1GasUsed", "l1FeeScalar",
+		"blobGasUsed", "blobGasPrice", "authorizationList",
+	)
+	if err != nil {
+		return EtherscanTx{}, err
+	}
+	hash, err := requiredExplorerString(fields, "hash")
+	if err != nil {
+		return EtherscanTx{}, err
+	}
+	from, err := requiredExplorerString(fields, "from")
+	if err != nil {
+		return EtherscanTx{}, err
+	}
+	to, err := requiredExplorerString(fields, "to")
+	if err != nil {
+		return EtherscanTx{}, err
+	}
+	value, err := requiredExplorerString(fields, "value")
+	if err != nil {
+		return EtherscanTx{}, err
+	}
+	timestamp, err := requiredExplorerString(fields, "timeStamp")
+	if err != nil {
+		return EtherscanTx{}, err
+	}
+	isError, err := optionalExplorerString(fields, "isError")
+	if err != nil {
+		return EtherscanTx{}, err
+	}
+	receiptStatus, err := optionalExplorerString(fields, "txreceipt_status")
+	if err != nil {
+		return EtherscanTx{}, err
+	}
+	if !validExplorerHash(hash) || !validExplorerAddress(from, false) ||
+		!validExplorerAddress(to, true) || !validEVMUnsignedDecimal(value) ||
+		!validExplorerTimestamp(timestamp) ||
+		!validExplorerExecutionFlag(isError) ||
+		!validExplorerExecutionFlag(receiptStatus) {
+		return EtherscanTx{}, fmt.Errorf("invalid explorer normal transaction")
+	}
+	return EtherscanTx{
+		Hash: hash, From: from, To: to, Value: value, TimeStamp: timestamp,
+		IsError: isError, ReceiptStatus: receiptStatus,
+	}, nil
+}
+
+func decodeEtherscanTokenTx(raw json.RawMessage) (EtherscanTokenTx, error) {
+	fields, err := decodeExactJSONObject(
+		raw,
+		"blockNumber", "timeStamp", "hash", "nonce", "blockHash", "from",
+		"contractAddress", "to", "value", "tokenName", "tokenSymbol",
+		"tokenDecimal", "transactionIndex", "gas", "gasPrice", "gasUsed",
+		"cumulativeGasUsed", "input", "methodId", "functionName",
+		"confirmations", "logIndex", "isError", "txreceipt_status",
+		"maxFeePerGas", "maxPriorityFeePerGas", "type", "l1Fee",
+		"l1GasPrice", "l1GasUsed", "l1FeeScalar", "blobGasUsed",
+		"blobGasPrice", "authorizationList",
+	)
+	if err != nil {
+		return EtherscanTokenTx{}, err
+	}
+	values := make(map[string]string, 12)
+	for _, key := range []string{
+		"blockNumber", "timeStamp", "hash", "blockHash", "from", "to",
+		"value", "tokenSymbol", "tokenDecimal", "contractAddress",
+		"transactionIndex", "confirmations",
+	} {
+		value, err := requiredExplorerString(fields, key)
+		if err != nil {
+			return EtherscanTokenTx{}, err
+		}
+		values[key] = value
+	}
+	logIndex, err := optionalExplorerString(fields, "logIndex")
+	if err != nil {
+		return EtherscanTokenTx{}, err
+	}
+	isError, err := optionalExplorerString(fields, "isError")
+	if err != nil {
+		return EtherscanTokenTx{}, err
+	}
+	receiptStatus, err := optionalExplorerString(fields, "txreceipt_status")
+	if err != nil {
+		return EtherscanTokenTx{}, err
+	}
+	decimals, decimalOK := parseExplorerUint(values["tokenDecimal"])
+	block, blockOK := parseExplorerUint(values["blockNumber"])
+	_, txIndexOK := parseExplorerUint(values["transactionIndex"])
+	_, confirmationsOK := parseExplorerUint(values["confirmations"])
+	if !validExplorerHash(values["hash"]) ||
+		!validExplorerHash(values["blockHash"]) ||
+		!validExplorerAddress(values["from"], false) ||
+		!validExplorerAddress(values["to"], false) ||
+		!validExplorerAddress(values["contractAddress"], false) ||
+		!validEVMUnsignedDecimal(values["value"]) ||
+		!validExplorerTimestamp(values["timeStamp"]) ||
+		!validExplorerText(values["tokenSymbol"], 128) ||
+		!decimalOK || decimals > 255 || !blockOK || block == 0 ||
+		!txIndexOK || !confirmationsOK ||
+		(logIndex != "" && !validExplorerIndex(logIndex)) ||
+		!validExplorerExecutionFlag(isError) ||
+		!validExplorerExecutionFlag(receiptStatus) {
+		return EtherscanTokenTx{}, fmt.Errorf("invalid explorer token transaction")
+	}
+	return EtherscanTokenTx{
+		Hash: values["hash"], LogIndex: logIndex,
+		From: values["from"], To: values["to"], Value: values["value"],
+		TimeStamp: values["timeStamp"], TokenDecimal: values["tokenDecimal"],
+		TokenSymbol: values["tokenSymbol"], ContractAddress: values["contractAddress"],
+		IsError: isError, ReceiptStatus: receiptStatus,
+		BlockNumber: values["blockNumber"], BlockHash: values["blockHash"],
+		TransactionIndex: values["transactionIndex"], Confirmations: values["confirmations"],
+	}, nil
+}
+
+func decodeEtherscanInternalTx(raw json.RawMessage) (EtherscanInternalTx, error) {
+	fields, err := decodeExactJSONObject(
+		raw,
+		"blockNumber", "timeStamp", "hash", "transactionHash", "from", "to",
+		"value", "contractAddress", "input", "type", "callType", "gas",
+		"gasUsed", "traceId", "index", "isError", "txreceipt_status", "errCode",
+	)
+	if err != nil {
+		return EtherscanInternalTx{}, err
+	}
+	from, err := requiredExplorerString(fields, "from")
+	if err != nil {
+		return EtherscanInternalTx{}, err
+	}
+	to, err := requiredExplorerString(fields, "to")
+	if err != nil {
+		return EtherscanInternalTx{}, err
+	}
+	value, err := requiredExplorerString(fields, "value")
+	if err != nil {
+		return EtherscanInternalTx{}, err
+	}
+	timestamp, err := requiredExplorerString(fields, "timeStamp")
+	if err != nil {
+		return EtherscanInternalTx{}, err
+	}
+	hash, hasHash, err := presentExplorerString(fields, "hash")
+	if err != nil {
+		return EtherscanInternalTx{}, err
+	}
+	transactionHash, hasTransactionHash, err := presentExplorerString(fields, "transactionHash")
+	if err != nil {
+		return EtherscanInternalTx{}, err
+	}
+	traceID, hasTraceID, err := presentExplorerString(fields, "traceId")
+	if err != nil {
+		return EtherscanInternalTx{}, err
+	}
+	index, hasIndex, err := presentExplorerString(fields, "index")
+	if err != nil {
+		return EtherscanInternalTx{}, err
+	}
+	isError, err := optionalExplorerString(fields, "isError")
+	if err != nil {
+		return EtherscanInternalTx{}, err
+	}
+	receiptStatus, err := optionalExplorerString(fields, "txreceipt_status")
+	if err != nil {
+		return EtherscanInternalTx{}, err
+	}
+	if hasHash == hasTransactionHash || hasTraceID == hasIndex ||
+		!validExplorerHash(firstNonEmpty(hash, transactionHash)) ||
+		!validExplorerTraceID(firstNonEmpty(traceID, index)) ||
+		!validExplorerAddress(from, false) || !validExplorerAddress(to, true) ||
+		!validEVMUnsignedDecimal(value) || !validExplorerTimestamp(timestamp) ||
+		!validExplorerExecutionFlag(isError) ||
+		!validExplorerExecutionFlag(receiptStatus) {
+		return EtherscanInternalTx{}, fmt.Errorf("invalid explorer internal transaction")
+	}
+	return EtherscanInternalTx{
+		Hash: hash, TraceID: traceID, From: from, To: to, Value: value,
+		TimeStamp: timestamp, IsError: isError, ReceiptStatus: receiptStatus,
+		TransactionHash: transactionHash, Index: index,
+	}, nil
+}
+
+func requiredExplorerString(fields map[string]json.RawMessage, key string) (string, error) {
+	value, present, err := presentExplorerString(fields, key)
+	if err != nil || !present {
+		return "", fmt.Errorf("missing or invalid explorer field %q", key)
+	}
+	return value, nil
+}
+
+func optionalExplorerString(fields map[string]json.RawMessage, key string) (string, error) {
+	value, _, err := presentExplorerString(fields, key)
+	return value, err
+}
+
+func presentExplorerString(
+	fields map[string]json.RawMessage,
+	key string,
+) (string, bool, error) {
+	raw, present := fields[key]
+	if !present {
+		return "", false, nil
+	}
+	var value *string
+	if err := json.Unmarshal(raw, &value); err != nil || value == nil {
+		return "", true, fmt.Errorf("invalid explorer field %q", key)
+	}
+	return *value, true, nil
+}
+
+func validExplorerHash(value string) bool {
+	return len(value) == 66 && validHexBytes(value)
+}
+
+func validExplorerAddress(value string, allowEmpty bool) bool {
+	return (allowEmpty && value == "") || (len(value) == 42 && validHexBytes(value))
+}
+
+func validEVMUnsignedDecimal(value string) bool {
+	if len(value) == 0 || len(value) > 78 {
+		return false
+	}
+	for _, digit := range value {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
+	n, ok := new(big.Int).SetString(value, 10)
+	return ok && n.Sign() >= 0 && n.BitLen() <= 256
+}
+
+func validExplorerTimestamp(value string) bool {
+	timestamp, err := strconv.ParseInt(value, 10, 64)
+	return err == nil && timestamp > 0 && timestamp <= 9_223_372_036_854_775
+}
+
+func parseExplorerUint(value string) (uint64, bool) {
+	parsed, err := strconv.ParseUint(value, 10, 64)
+	return parsed, err == nil
+}
+
+func validExplorerIndex(value string) bool {
+	_, ok := parseExplorerUint(value)
+	return ok
+}
+
+func validExplorerExecutionFlag(value string) bool {
+	return value == "" || value == "0" || value == "1"
+}
+
+func validExplorerTraceID(value string) bool {
+	if len(value) == 0 || len(value) > 128 {
+		return false
+	}
+	for _, segment := range strings.Split(value, "_") {
+		if segment == "" {
+			return false
+		}
+		for _, char := range segment {
+			if char < '0' || char > '9' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func validExplorerText(value string, maxBytes int) bool {
+	if len(value) > maxBytes || !utf8.ValidString(value) {
+		return false
+	}
+	for _, char := range value {
+		if char < 0x20 || char == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+func firstNonEmpty(first, second string) string {
+	if first != "" {
+		return first
+	}
+	return second
+}
+
 // TxList fetches the newest `limit` normal transactions for address on the
 // given chain id.
 func (e *Etherscan) TxList(ctx context.Context, chainID int, address string, limit int) ([]EtherscanTx, error) {
-	var txs []EtherscanTx
-	if err := e.accountList(ctx, chainID, address, limit, "txlist", &txs); err != nil {
+	rows, err := e.accountList(ctx, chainID, address, limit, "txlist")
+	if err != nil {
 		return nil, err
+	}
+	txs := make([]EtherscanTx, 0, len(rows))
+	for _, row := range rows {
+		tx, err := decodeEtherscanTx(row)
+		if err != nil {
+			return nil, &Unavailable{Upstream: "etherscan", Message: "malformed explorer transaction row"}
+		}
+		txs = append(txs, tx)
 	}
 	return txs, nil
 }
 
 // TokenTxList fetches the newest ERC-20 transfers involving address.
 func (e *Etherscan) TokenTxList(ctx context.Context, chainID int, address string, limit int) ([]EtherscanTokenTx, error) {
-	var txs []EtherscanTokenTx
-	if err := e.accountList(ctx, chainID, address, limit, "tokentx", &txs); err != nil {
+	rows, err := e.accountList(ctx, chainID, address, limit, "tokentx")
+	if err != nil {
 		return nil, err
+	}
+	txs := make([]EtherscanTokenTx, 0, len(rows))
+	for _, row := range rows {
+		tx, err := decodeEtherscanTokenTx(row)
+		if err != nil {
+			return nil, &Unavailable{Upstream: "etherscan", Message: "malformed explorer token row"}
+		}
+		txs = append(txs, tx)
 	}
 	return txs, nil
 }
 
 // InternalTxList fetches native-value call-trace transfers involving address.
 func (e *Etherscan) InternalTxList(ctx context.Context, chainID int, address string, limit int) ([]EtherscanInternalTx, error) {
-	var txs []EtherscanInternalTx
-	if err := e.accountList(ctx, chainID, address, limit, "txlistinternal", &txs); err != nil {
+	rows, err := e.accountList(ctx, chainID, address, limit, "txlistinternal")
+	if err != nil {
 		return nil, err
+	}
+	txs := make([]EtherscanInternalTx, 0, len(rows))
+	for _, row := range rows {
+		tx, err := decodeEtherscanInternalTx(row)
+		if err != nil {
+			return nil, &Unavailable{Upstream: "etherscan", Message: "malformed explorer internal row"}
+		}
+		txs = append(txs, tx)
 	}
 	return txs, nil
 }
 
-func (e *Etherscan) accountList(ctx context.Context, chainID int, address string, limit int, action string, dest any) error {
+func (e *Etherscan) accountList(
+	ctx context.Context,
+	chainID int,
+	address string,
+	limit int,
+	action string,
+) ([]json.RawMessage, error) {
 	q := url.Values{}
 	q.Set("chainid", fmt.Sprintf("%d", chainID))
 	q.Set("module", "account")
@@ -199,39 +554,28 @@ func (e *Etherscan) accountList(ctx context.Context, chainID int, address string
 	defer cancel()
 	req, err := http.NewRequestWithContext(actx, http.MethodGet, u, nil)
 	if err != nil {
-		return safeRequestCreationFailure("etherscan")
+		return nil, safeRequestCreationFailure("etherscan")
 	}
 	resp, err := e.client.Do(req)
 	if err != nil {
-		return safeRequestFailure("etherscan", actx, err)
+		return nil, safeRequestFailure("etherscan", actx, err)
 	}
 	defer resp.Body.Close()
 	data, err := readBoundedResponse(resp.Body, 8<<20)
 	if err != nil {
-		return safeResponseReadFailure("etherscan")
+		return nil, safeResponseReadFailure("etherscan")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return &Unavailable{Upstream: "etherscan", Message: fmt.Sprintf("Etherscan returned HTTP %d", resp.StatusCode)}
+		return nil, &Unavailable{Upstream: "etherscan", Message: fmt.Sprintf("Etherscan returned HTTP %d", resp.StatusCode)}
 	}
-	var out struct {
-		Status  string          `json:"status"`
-		Message string          `json:"message"`
-		Result  json.RawMessage `json:"result"`
+	rows, rejected, err := decodeExplorerAccountEnvelope(data)
+	if err != nil {
+		return nil, &Unavailable{Upstream: "etherscan", Message: "malformed Etherscan response"}
 	}
-	if err := json.Unmarshal(data, &out); err != nil {
-		return &Unavailable{Upstream: "etherscan", Message: "malformed Etherscan response"}
+	if rejected {
+		return nil, &Unavailable{Upstream: "etherscan", Message: "explorer rejected request"}
 	}
-	trimmedResult := bytes.TrimSpace(out.Result)
-	if len(trimmedResult) == 0 || bytes.Equal(trimmedResult, []byte("null")) {
-		return &Unavailable{Upstream: "etherscan", Message: "explorer returned no result"}
-	}
-	if err := json.Unmarshal(out.Result, dest); err != nil {
-		// status "0" + non-array result carries an error string
-		// ("Max rate limit reached", "Invalid API Key", ...). "No transactions
-		// found" still returns an empty array, which parses above.
-		return &Unavailable{Upstream: "etherscan", Message: "explorer rejected request"}
-	}
-	return nil
+	return rows, nil
 }
 
 // Helius is a client for the Helius transfer-history RPC, used for Solana
