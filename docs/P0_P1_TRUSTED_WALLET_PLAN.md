@@ -799,6 +799,13 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   Kotlin/coroutines/Guava/JUnit BOM metadata；每个构件均从 Maven Central 独立下载计算
   SHA-256，并与另一 App 已审阅的同版本值交叉核对后精确加入 allowlist，未关闭验证或
   批量扩展信任。随后冷缓存 Debug APK 与矩阵均通过。
+- [x] 2026-08-04 清理本机 Gradle 缓存后，完整公开测试门禁又在 KT Wallet 的首次
+  Android 构建中失败闭合，暴露 `org.junit:junit-bom:5.11.0-M2.module` 未进入该 App
+  的 verification metadata。该单一构件从 Maven Central 重新下载计算 SHA-256，和
+  Gradle 本地缓存及 KT Cold Signer 已审阅 pin 三方一致为
+  `86477abcf490d6ca059aa9973cb108d22a506f49d1a5569bb32cc6cbf43c2cce`；仅精确加入
+  KT Wallet allowlist，未使用批量生成或关闭依赖验证。修复后独立原生/OSV 门禁通过，
+  再从第 1 项连续重跑完整公开测试审计 13/13 通过。
 - [ ] 本矩阵的确定性、未广播交易仍只证明八链离线签名和验签；新批次全部八链仍需
   补充测试资产并保存 explorer txHash、链上确认与双端历史证据。旧批次的 Ethereum、
   Base、Arbitrum、Avalanche、BNB、TRON、Solana 广播闭环保留为历史回归证据；
@@ -1282,9 +1289,20 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     均失败闭合为 unavailable；远程安全门禁锁定该绑定，生产八主网 smoke 同时拒绝
     缺失/错误 network 或 contract，不能被后续重构或部署遗漏静默删除。
     负例先稳定复现旧实现放行跨网络 safe 和旧 Gateway 缺少身份字段，修复后 Token 风险
-    定向 3/3、Gateway Client/Services 60/60、KT Wallet 1536/1536、Gateway `make audit`、
+    定向 3/3、Gateway Client/Services 60/60、KT Wallet 1542/1542、Gateway `make audit`、
     远程安全边界与静态分析 0 通过。该协议目前是源码候选；生产 1.16.15 尚未回显身份，
     必须先发布 Gateway 再发布 App，旧服务只会触发“无法检查”，不会降级为 safe。
+  - [x] 2026-08-04 相邻严审发现 Token 搜索只检查 `verified:true` 与基本字段：请求
+    Ethereum 时，错误路由返回的 Polygon 官方条目仍会获得蓝勾；未知字段、查询不匹配、
+    无效合约与重复身份也没有使整次目录查询失败。Gateway 还把 TRON/Solana Base58 mint
+    转为小写匹配，大小写被修改的 JUP mint 会错误命中官方目录。现在 App 对结果和条目
+    使用闭合 schema，逐行绑定请求 network filter 与 query，独立校验链级 contract/mint、
+    symbol/name、decimals、数量上限和唯一 identity；任一异常使整次查询失败，不留下部分
+    蓝勾。Gateway 仅对 EVM 合约不区分大小写，TRON/Solana 保持 Base58 大小写敏感。
+    错网络、错查询、未知字段、无效合约、未知 root 字段与重复身份 6 个负例先红后绿；
+    Token 搜索 7/7、Gateway/服务/目录 UI 定向 79/79、Gateway `make audit`、远程安全边界
+    和静态分析 0 通过。该行为仍是基于公开版本 1.16.15 的未部署源码候选；完整门禁
+    禁止提前提升公开版本或改写生产证据，未把源码修复冒充线上已部署。
   - [ ] Alertmanager 通知接收方、供应商长期 SLA/版本监测和用户误报申诉渠道仍未完成；
     一次生产 smoke 与自动熔断不能证明所有链、所有风险类型或供应商长期质量，因此本
     总项保持未完成。
@@ -1311,7 +1329,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     均在 App 再验证；Bidi/零宽控制字符和未知字段失败闭合。Gateway provider 同步把
     decimals 从 255 收紧至 36，并在输出前移除 Bidi/零宽字符。错误网络 UI 明确显示
     unavailable，不会显示“无授权”或撤销按钮。负例先稳定复现旧实现放行，再修复为
-    Gateway Client 32/32、授权 UI 12/12、KT Wallet 1536/1536、Gateway `make audit`、
+    Gateway Client 32/32、授权 UI 12/12、KT Wallet 1542/1542、Gateway `make audit`、
     `check_deps` 与静态分析 0 通过。该 Gateway 变更目前是源码候选，未冒充已部署到
     生产 1.16.15。
   - [ ] 仍需用小额主网钱包完成真实授权发现、热钱包撤销、Cold Signer 撤销、链上
@@ -1418,7 +1436,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     另以 16 个内置网络的精确 `id → name + symbol` 映射锁定运行时名称，不依赖 ARB。
     首轮完整门禁精确捕获 Wallet `assets / connect-cold` 与 Signer `parse` 三张预期
     Golden 差异；逐图复核后只更新这三张基线，第二轮定向与全量复跑通过。最终定向
-    49/49、`test_support` 63/63、KT Wallet 1536/1536、KT Cold Signer 570/570、共享
+    49/49、`test_support` 63/63、KT Wallet 1542/1542、KT Cold Signer 570/570、共享
     packages 415/415、静态分析 0、完整公开测试门禁 13/13。
   - [ ] 真机系统权限弹窗、生命周期保护页及全部生产路由仍需逐页三语语义人工复核，
     因此本总项保持未完成，不能扩大宣称为“全 App 本地化验收完成”。
@@ -1481,7 +1499,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     winner/loser 各 1 条、105 条裁剪为 100 条、进程在 Flutter 观察前退出并重启仍恢复
     confirmed + 唯一指标。故障注入继续证明，SQLite 指标读取失败不得影响启动、终态确认
     或 UI 刷新；终态指标与普通体验指标各自保留最多 100 条，不能相互挤占。KT Wallet
-    1536/1536、KT Cold Signer 570/570、共享 packages 415/415、静态分析 0、完整公开
+    1542/1542、KT Cold Signer 570/570、共享 packages 415/415、静态分析 0、完整公开
     测试/原生依赖/OSV 门禁 13/13 通过。
   - [ ] iOS MetricKit 真正的系统 payload 投递及 Android 真实 ANR/fatal 仍需物理设备
     故障注入验收；匿名未认证样本也不能替代 App Store/Play Console 的可信安装基数或

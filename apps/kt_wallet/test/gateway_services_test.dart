@@ -925,22 +925,6 @@ void main() {
                 'popular': true,
                 'verified': true,
               },
-              {
-                'network': 'eth-mainnet',
-                'symbol': 'FAKE',
-                'name': 'Untrusted',
-                'contract': '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-                'decimals': 18,
-                'verified': false,
-              },
-              {
-                'network': 'eth-mainnet',
-                'symbol': 'BROKEN',
-                'name': 'Invalid precision',
-                'contract': '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-                'decimals': 255,
-                'verified': true,
-              },
             ],
           },
         },
@@ -963,6 +947,98 @@ void main() {
         'limit': 50,
       });
     });
+
+    for (final (label, result) in <(String, Map<String, Object?>)>[
+      (
+        'wrong requested network',
+        {
+          'tokens': [
+            {
+              'network': 'polygon-mainnet',
+              'symbol': 'USDT',
+              'name': 'Tether USD',
+              'contract': '0xc2132d05d31c914a87c6611c10748aeb04b58e8f',
+              'decimals': 6,
+              'verified': true,
+            },
+          ],
+        },
+      ),
+      (
+        'query mismatch',
+        {
+          'tokens': [
+            {
+              'network': 'eth-mainnet',
+              'symbol': 'USDC',
+              'name': 'USD Coin',
+              'contract': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+              'decimals': 6,
+              'verified': true,
+            },
+          ],
+        },
+      ),
+      (
+        'unknown row field',
+        {
+          'tokens': [
+            {
+              'network': 'eth-mainnet',
+              'symbol': 'USDT',
+              'name': 'Tether USD',
+              'contract': '0xdac17f958d2ee523a2206206994597c13d831ec7',
+              'decimals': 6,
+              'verified': true,
+              'trustedBy': 'remote',
+            },
+          ],
+        },
+      ),
+      (
+        'invalid contract identity',
+        {
+          'tokens': [
+            {
+              'network': 'eth-mainnet',
+              'symbol': 'USDT',
+              'name': 'Tether USD',
+              'contract': '0xnot-an-address',
+              'decimals': 6,
+              'verified': true,
+            },
+          ],
+        },
+      ),
+      ('unknown result field', {'tokens': <Object?>[], 'source': 'remote'}),
+      (
+        'duplicate official identity',
+        {
+          'tokens': [
+            for (var i = 0; i < 2; i++)
+              {
+                'network': 'eth-mainnet',
+                'symbol': 'USDT',
+                'name': 'Tether USD',
+                'contract': '0xdac17f958d2ee523a2206206994597c13d831ec7',
+                'decimals': 6,
+                'verified': true,
+              },
+          ],
+        },
+      ),
+    ]) {
+      test('search fails closed on $label', () async {
+        final gateway = _FakeGateway(results: {'kt_searchTokens': result});
+        await expectLater(
+          gateway.client.searchOfficialTokens(
+            query: 'usdt',
+            networks: const ['eth-mainnet'],
+          ),
+          throwsA(isA<FormatException>()),
+        );
+      });
+    }
   });
 
   group('Token risk assessment', () {

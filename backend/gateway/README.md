@@ -564,6 +564,14 @@ prefixes, then substring matches. An empty query returns popular entries
 first. `networks` optionally limits results to known network ids. `limit`
 defaults to 50 and must be between 1 and 100.
 
+Contract/mint matching follows chain identity rules: EVM addresses are
+case-insensitive, while TRON and Solana Base58 identities are case-sensitive.
+A client displaying the blue identity mark must validate the exact result and
+row schemas, bind every row to the requested network filter and query, validate
+the chain-specific contract/mint shape, reject duplicate identities, and
+enforce the requested result limit. A malformed or mismatched response is a
+catalog failure, not a partial verified result.
+
 ### `kt_checkTokenRisk` `{"chain": C, "network": N?, "contract": S}`
 
 → `{"status":"safe"|"unsafe"|"unknown", "category":S?, "source":S, "network":N, "contract":S}`

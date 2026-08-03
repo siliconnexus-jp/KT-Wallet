@@ -373,6 +373,12 @@ void _auditRiskSignalDirection(List<String> failures) {
     '_tokenIdentityMatches(chain, contract, responseContract)',
     'source == \'official_catalog+goplus\'',
     '_tokenRiskUnsafeResultKeys',
+    '_officialTokenResultKeys',
+    '_officialTokenPopularRowKeys',
+    'requestedNetworks.contains(network)',
+    '_officialTokenMatchesQuery(',
+    '_tokenIdentityMatches(chain, contract, contract)',
+    "FormatException('duplicate official token identity')",
   ]) {
     if (!gateway.contains(marker)) {
       failures.add(

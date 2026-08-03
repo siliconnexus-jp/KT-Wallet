@@ -137,3 +137,47 @@ func TestSearchOfficialTokensValidatesFilters(t *testing.T) {
 		rpc.CodeInvalidParams,
 	)
 }
+
+func TestSearchOfficialTokensKeepsBase58ContractQueriesCaseSensitive(t *testing.T) {
+	e := newEnv(t, nil)
+	for _, tc := range []struct {
+		network  string
+		exact    string
+		modified string
+	}{
+		{
+			network:  "tron-mainnet",
+			exact:    "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+			modified: "tr7nhqjekqxtci8q8zy4pl8otszgjlj6t",
+		},
+		{
+			network:  "sol-mainnet",
+			exact:    "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+			modified: "jupyiwryjfskupiha7hker8vutaefosybkedznsdvcn",
+		},
+	} {
+		exact := result(t, e.rpc("kt_searchTokens", map[string]any{
+			"query": tc.exact, "networks": []string{tc.network},
+		}))
+		if rows := exact["tokens"].([]any); len(rows) != 1 {
+			t.Fatalf("exact Base58 identity %q = %v, want one row", tc.exact, rows)
+		}
+		got := result(t, e.rpc("kt_searchTokens", map[string]any{
+			"query": tc.modified, "networks": []string{tc.network},
+		}))
+		if rows := got["tokens"].([]any); len(rows) != 0 {
+			t.Fatalf("case-modified Base58 identity %q matched official rows: %v", tc.modified, rows)
+		}
+	}
+}
+
+func TestSearchOfficialTokensKeepsEVMContractQueriesCaseInsensitive(t *testing.T) {
+	e := newEnv(t, nil)
+	got := result(t, e.rpc("kt_searchTokens", map[string]any{
+		"query":    "0xDAC17F958D2EE523A2206206994597C13D831EC7",
+		"networks": []string{"eth-mainnet"},
+	}))
+	if rows := got["tokens"].([]any); len(rows) != 1 {
+		t.Fatalf("case-modified EVM identity = %v, want one row", rows)
+	}
+}

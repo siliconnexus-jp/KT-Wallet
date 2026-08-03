@@ -196,7 +196,7 @@ func (g *Gateway) SearchOfficialTokens(_ context.Context, params json.RawMessage
 		networkFilter[network] = true
 	}
 
-	query := strings.ToLower(strings.TrimSpace(p.Query))
+	query := strings.TrimSpace(p.Query)
 	type rankedToken struct {
 		token OfficialToken
 		rank  int
@@ -241,17 +241,25 @@ func tokenSearchRank(token OfficialToken, query string) int {
 		}
 		return 1
 	}
+	foldedQuery := strings.ToLower(query)
 	symbol := strings.ToLower(token.Symbol)
 	name := strings.ToLower(token.Name)
-	contract := strings.ToLower(token.Contract)
+	contract := token.Contract
+	contractQuery := query
+	if meta, ok := networks[token.Network]; ok && chains[meta.Chain].EVM {
+		contract = strings.ToLower(contract)
+		contractQuery = foldedQuery
+	}
 	switch {
-	case query == contract:
+	case contractQuery == contract:
 		return 0
-	case query == symbol:
+	case foldedQuery == symbol:
 		return 1
-	case strings.HasPrefix(symbol, query), strings.HasPrefix(name, query):
+	case strings.HasPrefix(symbol, foldedQuery), strings.HasPrefix(name, foldedQuery):
 		return 2
-	case strings.Contains(symbol, query), strings.Contains(name, query), strings.Contains(contract, query):
+	case strings.Contains(symbol, foldedQuery),
+		strings.Contains(name, foldedQuery),
+		strings.Contains(contract, contractQuery):
 		return 3
 	default:
 		return -1

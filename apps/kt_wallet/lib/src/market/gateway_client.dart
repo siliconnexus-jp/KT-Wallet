@@ -100,6 +100,19 @@ class GatewayClient {
     'network',
     'approvals',
   };
+  static const _officialTokenResultKeys = <String>{'tokens'};
+  static const _officialTokenRowKeys = <String>{
+    'network',
+    'symbol',
+    'name',
+    'contract',
+    'decimals',
+    'verified',
+  };
+  static const _officialTokenPopularRowKeys = <String>{
+    ..._officialTokenRowKeys,
+    'popular',
+  };
   static const _tokenRiskResultKeys = <String>{
     'status',
     'source',
@@ -137,6 +150,7 @@ class GatewayClient {
   static final _evmAddressPattern = RegExp(r'^0x[0-9a-fA-F]{40}$');
   static final _evmTxHashPattern = RegExp(r'^0x[0-9a-fA-F]{64}$');
   static final _base58AddressPattern = RegExp(r'^[1-9A-HJ-NP-Za-km-z]+$');
+  static final _officialTokenSymbolPattern = RegExp(r'^[A-Z0-9._-]{1,12}$');
   static final _providerDecimalPattern = RegExp(
     r'^[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$',
   );
@@ -718,45 +732,82 @@ class GatewayClient {
     List<String> networks = const [],
     int limit = 50,
   }) async {
+    if (limit < 1 || limit > 100) {
+      throw RangeError.range(limit, 1, 100, 'limit');
+    }
+    final requestedNetworks = networks.toSet();
+    if (requestedNetworks.length != networks.length) {
+      throw const FormatException('duplicate token search network');
+    }
     final result = await _call('kt_searchTokens', {
       'query': query,
       if (networks.isNotEmpty) 'networks': networks,
       'limit': limit,
     });
-    if (result is! Map) {
+    if (result is! Map ||
+        !_hasExactStringKeys(result, _officialTokenResultKeys)) {
       throw const FormatException('bad token search result');
     }
     final rows = result['tokens'];
-    if (rows is! List) {
+    if (rows is! List || rows.length > limit) {
       throw const FormatException('missing token search rows');
     }
     final tokens = <GatewayOfficialToken>[];
+    final identities = <String>{};
     for (final row in rows) {
-      if (row is! Map || row['verified'] != true) continue;
+      if (row is! Map) {
+        throw const FormatException('bad official token row');
+      }
+      final expectedKeys = row.containsKey('popular')
+          ? _officialTokenPopularRowKeys
+          : _officialTokenRowKeys;
       final network = row['network'];
       final symbol = row['symbol'];
       final name = row['name'];
       final contract = row['contract'];
       final decimals = row['decimals'];
-      if (network is! String ||
+      final popular = row['popular'];
+      final chain = network is String
+          ? _officialTokenNetworkCoin(network)
+          : null;
+      if (!_hasExactStringKeys(row, expectedKeys) ||
+          row['verified'] != true ||
+          (row.containsKey('popular') && popular is! bool) ||
+          network is! String ||
+          chain == null ||
+          (requestedNetworks.isNotEmpty &&
+              !requestedNetworks.contains(network)) ||
           symbol is! String ||
+          !_officialTokenSymbolPattern.hasMatch(symbol) ||
           name is! String ||
+          !_isBoundedDisplayText(name, 80) ||
+          name.isEmpty ||
           contract is! String ||
+          !_tokenIdentityMatches(chain, contract, contract) ||
           decimals is! int ||
           decimals < 0 ||
-          decimals > Amount.maxDecimals) {
-        continue;
+          decimals > Amount.maxDecimals ||
+          !_officialTokenMatchesQuery(
+            chain: chain,
+            query: query,
+            symbol: symbol,
+            name: name,
+            contract: contract,
+          )) {
+        throw const FormatException('unbound official token row');
       }
-      tokens.add(
-        GatewayOfficialToken(
-          network: network,
-          symbol: symbol,
-          name: name,
-          contract: contract,
-          decimals: decimals,
-          popular: row['popular'] == true,
-        ),
+      final token = GatewayOfficialToken(
+        network: network,
+        symbol: symbol,
+        name: name,
+        contract: contract,
+        decimals: decimals,
+        popular: popular == true,
       );
+      if (!identities.add(token.identityKey)) {
+        throw const FormatException('duplicate official token identity');
+      }
+      tokens.add(token);
     }
     return List.unmodifiable(tokens);
   }
@@ -1039,6 +1090,43 @@ class GatewayClient {
             _base58AddressPattern.hasMatch(requested) &&
             _base58AddressPattern.hasMatch(response) &&
             requested == response,
+    };
+  }
+
+  static Coin? _officialTokenNetworkCoin(String network) => switch (network) {
+    'eth-mainnet' || 'eth-sepolia' => Coin.eth,
+    'polygon-mainnet' || 'polygon-amoy' => Coin.polygon,
+    'base-mainnet' || 'base-sepolia' => Coin.base,
+    'arbitrum-mainnet' || 'arbitrum-sepolia' => Coin.arbitrum,
+    'avalanche-mainnet' || 'avalanche-fuji' => Coin.avalanche,
+    'bnb-mainnet' || 'bnb-testnet' => Coin.bnb,
+    'tron-mainnet' || 'tron-nile' => Coin.tron,
+    'sol-mainnet' || 'sol-devnet' => Coin.solana,
+    _ => null,
+  };
+
+  static bool _officialTokenMatchesQuery({
+    required Coin chain,
+    required String query,
+    required String symbol,
+    required String name,
+    required String contract,
+  }) {
+    final exactQuery = query.trim();
+    if (exactQuery.isEmpty) return true;
+    final foldedQuery = exactQuery.toLowerCase();
+    if (symbol.toLowerCase().contains(foldedQuery) ||
+        name.toLowerCase().contains(foldedQuery)) {
+      return true;
+    }
+    return switch (chain) {
+      Coin.eth ||
+      Coin.polygon ||
+      Coin.base ||
+      Coin.arbitrum ||
+      Coin.avalanche ||
+      Coin.bnb => contract.toLowerCase().contains(foldedQuery),
+      Coin.tron || Coin.solana => contract.contains(exactQuery),
     };
   }
 
