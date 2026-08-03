@@ -56,6 +56,7 @@
     th { color:var(--muted); font-size:12px; letter-spacing:.04em; text-transform:uppercase }
     .pass,.partial,.blocked,.todo { font-weight:750 }
     td { overflow-wrap:anywhere }
+    .scroll td:first-child { min-width:120px; overflow-wrap:normal; word-break:normal }
     .pass { color:var(--green) } .partial { color:var(--amber) }
     .blocked { color:var(--red) } .todo { color:var(--muted) }
     code { background:#f2f4f7; padding:2px 6px; border-radius:6px; font-size:12px }
@@ -89,7 +90,7 @@
       .scroll tr:last-child { margin-bottom:0 }
       .scroll td { padding:5px 0; border:0; overflow-wrap:anywhere }
       .scroll td:first-child { padding:0 0 9px; margin-bottom:4px;
-        border-bottom:1px solid var(--line); font-size:15px; font-weight:800 }
+        border-bottom:1px solid var(--line); min-width:0; font-size:15px; font-weight:800 }
       .scroll td.pass,.scroll td.partial,.scroll td.blocked,.scroll td.todo {
         padding-top:9px }
       code { word-break:break-all }
@@ -104,7 +105,7 @@
       <p class="lead">结论不是“功能数量”比较，而是以资产安全、交易真实性、弱网可靠性、
         双端质量、生态完整度和外部保证为标准，对当前代码与真实测试网证据做审慎评估。</p>
       <div class="stamp">
-        <span>2026-08-03</span><span>基线 c6e72fe · Profile 生产等价门禁</span>
+        <span>2026-08-03</span><span>基线 0c9c5e5 · Gateway 1.16.9 生产发布</span>
         <span>iOS Simulator 26.2</span><span>Android 15 / API 35</span>
         <span>不包含任何私钥或助记词</span>
       </div>
@@ -280,9 +281,9 @@
           不保存签名 bytes。严审后旧有链参数缓存也已移除，pending nonce 每次
           报价都重新读取。Redis 故障会快速回退本地 miss；单主机双实例切换已通过，
           但尚未覆盖跨主机或跨地域。</small></div>
-        <div class="card"><strong>Gateway 发布状态 · 1.16.8 已上线</strong><small>2026-08-02
+        <div class="card"><strong>Gateway 发布状态 · 1.16.9 已上线</strong><small>2026-08-03
           通过 SHA 校验、原子软链接、secondary → primary 滚动和自动回滚门禁部署；生产返回
-          <code>version=1.16.8</code>、16 个网络、<code>/readyz=200</code>，
+          <code>version=1.16.9</code>、16 个网络、<code>/readyz=200</code>，
           <code>kt_getEvmSpendableBalances</code> 已返回 pending/latest 真实余额。
           HAProxy 8118 主动检查两个 Gateway，Redis 6388 共享缓存，Prometheus 9099
           监控两实例及自身，Alertmanager 9098 接收/分组/静默告警；全部只监听 loopback。
@@ -329,11 +330,11 @@
           JSON 导出与远程发送拆分；远程发送每次都要求确认，不后台上传、不自动重试。
           closed schema 只允许 App 版本、平台、大致语言、构建模式与固定 12 项指标的
           count/success/failure/P50/P95；没有设备/会话 ID、准确时间、地址、交易、错误
-          文字或 stack。Gateway 1.16.8 不保留 request body/raw event，Prometheus
+          文字或 stack。Gateway 1.16.9 不保留 request body/raw event，Prometheus
           保留 7 天/512 MB；客户端告警标记为未认证趋势信号，不能冒充可信崩溃率。</small></div>
         <div class="card"><strong>地址投毒防护</strong><small>与联系人、本地钱包或历史地址
           高度相似但不一致时展示风险说明并要求显式确认。</small></div>
-        <div class="card"><strong>独立 Token 威胁情报 · 生产只读启用</strong><small>Gateway 1.16.8
+        <div class="card"><strong>独立 Token 威胁情报 · 生产只读启用</strong><small>Gateway 1.16.9
           在运营方紧急风险表之后接入 GoPlus：六条 EVM 主网、TRON 主网及独立 Solana
           Token Security endpoint 只提交公开 chain id/完整合约或 mint。明确 honeypot、
           fake-token、malicious-address、gas-abuse、恶意 Solana creator/Hook/特权 authority
@@ -344,7 +345,7 @@
           供应商使用相互隔离的 3-failure/30-second 熔断和单一半开探针，并接入独立
           Prometheus 告警与运维 runbook；本地 Alertmanager 路由/收件箱已上线，外部值班
           接收方、长期 SLA 与误报申诉仍待完成。</small></div>
-        <div class="card"><strong>EVM 授权中心 · 生产 API 启用</strong><small>Gateway 1.16.8
+        <div class="card"><strong>EVM 授权中心 · 生产 API 启用</strong><small>Gateway 1.16.9
           通过明确隐私同意查询 Ethereum、Polygon、Base、Arbitrum 与 BNB 主网授权；
           页面区分无限/有限/高风险/未知授权。热钱包使用精确
           <code>approve(spender, 0)</code>，观察钱包走 KT Cold Signer QR、原始字节解析、
@@ -684,10 +685,10 @@
           <tr><td>双端运行时供应链</td><td>Android Wrapper、Release runtime lock 与制品哈希已固定，protobuf-javalite 提升至 3.25.8。Apple 旧 SQLite 3.52.0 精确 commit 扫描命中 4 个 CVE（含与 FTS5 编译路径相关的高危项），已迁移到 sqlite3 native assets / SQLite 3.53.3；两个远程 Pod 与 SQLite 均固定 tag commit、spec/archive/source SHA-256，并查询 exact-commit OSV</td><td class="partial">Android runtime：KT 135、Signer 134 个坐标，OSV 为 0；Apple 三个上游 commit 为 0，双 App 最终 framework 为 3.53.3。构建工具告警、初始基线 provenance、正式签名与外部审计仍待闭合</td></tr>
           <tr id="public-secret-gate"><td>公开发布秘密泄漏门禁</td><td>统一检测 Etherscan、Helius、GoPlus、metrics bearer、完整 GitHub family、Alchemy、Slack、Stripe、Google、私钥模式，以及明确凭证字段中的无前缀高熵 opaque 值；通过 <code>git ls-files --cached --others --exclude-standard -z</code> 枚举全部已跟踪及可提交的未跟踪文本，覆盖两款 App、测试、工具、配置、CI、Gateway、网站与文档。通用检测限定 20–256 字符、字符类别与 Shannon entropy 阈值，并放行占位符、环境变量和公开 EVM 地址/交易哈希；Android APK/AAB 与 iOS app 制品门禁同步覆盖通用凭证字段，本地凭证和私密 runbook 必须留在共享 gitignore</td><td class="pass">Provider 文件选择负例先红后绿后，高熵正负例再次先红后绿；首次新门禁全仓扫描实际发现 Gateway 两个测试文件中的 3 个完整 opaque fixture，已改为运行时拼接。定向 14/14、Faucet 10/10、test_support 57/57、共享 packages 397/397、KT Wallet 1460/1460、Cold Signer 570/570、Gateway upstream、check_deps 与静态分析通过。当前工作树 0 已识别泄漏；无字段上下文的任意随机值和历史 commit 仍由专用 scanner / Push Protection 补足</td></tr>
           <tr id="public-beta-source-gate"><td>公开测试源码统一门禁</td><td><code>dart run tool/audit_public_beta.dart</code> 固定顺序执行差异完整性、仓库安全/秘密/原生钱包清理、完整静态分析、六个共享 package、KT Wallet、KT Cold Signer 与 Gateway audit，共 12 步；任一步非零立即停止。<code>--list</code> 输出精确计划，<code>--full</code> 在其后追加固定版本的 Gradle/CocoaPods、Apple runtime、Gateway 与 OSV 依赖审计。明确不替代正式签名制品、物理设备、真实链上广播或第三方审计</td><td class="pass">计划完整性、唯一 ID、首错停止和全成功 4/4 先红后绿；真实默认门禁 12/12 通过。追加依赖脚本验证 Apple 2 个远程 Pod + SQLite 3.53.3、portable backup Swift vector、Gateway 全套，OSV 扫描 Dart 147、npm 293、Go 4、Android 135+134 个 package，当前已知问题 0</td></tr>
-          <tr><td>Gateway 生产发布</td><td>1.16.8 Go 1.26.5 已通过 diff/gofmt/module、普通 329/329、race/vet/govulncheck 和自动回滚门禁；Linux amd64 静态制品 SHA-256 <code>c6d14f…6e41d2</code>；secondary → primary 滚动完成，生产返回 16 个网络和 <code>/readyz=200</code>，匿名诊断无 consent 失败闭合</td><td class="partial">双实例滚动上线与公网 smoke 通过；中国大陆多运营商和跨地域网络待验收</td></tr>
+          <tr><td>Gateway 生产发布</td><td>1.16.9 Go 1.26.5 已通过普通/race/vet/govulncheck、HAProxy、Alertmanager、Token 风险和自动回滚门禁；Linux amd64 静态制品 8,700,066 bytes / SHA-256 <code>48a05e…5283</code>；secondary → primary 滚动完成，生产返回 16 个网络和 <code>/readyz=200</code></td><td class="partial">双实例、公网价格/大 body、3/3 targets、17/17 rules 与 0 WARN/ERROR 通过；中国大陆多运营商和跨地域网络待验收</td></tr>
           <tr><td>Gateway 错误隐私</td><td>上游 transport/request/read 错误不保留完整 URL；provider body、routing 与畸形值使用固定文案；JSON-RPC read/broadcast 边界再固定 upstream/message；未知 NodeError 不反射，常见交易拒绝映射为有限操作提示</td><td class="pass">八类客户端 + 边界 canary、真实进程 credential-bearing URL 故障注入通过；响应中 secret/URL/port 均 0 命中</td></tr>
           <tr><td>Gateway HTTP 完整性边界</td><td>1.16.8 对 4 MiB 入站请求及 1/2/8 MiB 上游响应读取上限 + 1 字节；超限时丢弃整体，在 JSON 解析、handler、缓存或 provider 结果处理前失败闭合</td><td class="pass">先红后绿 3 项；Gateway 329/329、race/vet/govulncheck/HAProxy guard；公网与两个直连实例 4 MiB+ canary 均为 -32600/id=null</td></tr>
-          <tr><td>Gateway 入站资源限流边界</td><td>2026-08-03 源码把按客户端身份归因的限流移动到请求体读取与 JSON 解析之前；配额耗尽时完全不读取 body，畸形 JSON 同样消耗令牌，已知 Content-Length 超过 4 MiB 时零读取拒绝。早期拒绝无法可信解析调用方 id，因此固定返回 id=null，日志只使用固定 unknown/空路由标签</td><td class="partial">3 项先红后绿；Gateway 336/336、race 及完整 make audit 通过，govulncheck 可达漏洞 0；8,700,066-byte Linux amd64 静态候选 <code>bf7407…c4dee</code> 已生成但未部署。生产 1.16.8 仍待双实例滚动与公网限流/大 body canary</td></tr>
+          <tr id="gateway-inbound-limit-before-body"><td>Gateway 入站资源限流边界</td><td>1.16.9 把按客户端身份归因的限流移动到请求体读取与 JSON 解析之前；配额耗尽时完全不读取 body，畸形 JSON 同样消耗令牌，已知 Content-Length 超过 4 MiB 时零读取拒绝。早期拒绝无法可信解析调用方 id，因此固定返回 id=null，日志只使用固定 unknown/空路由标签</td><td class="pass">3 项先红后绿；Gateway 336/336、race、make audit 与 govulncheck 通过。第一次滚动因即时探测过早自动回滚，使用有界 ready 轮询后发布成功；8119/8120 隔离 IP 均证明耗尽后大 body 返回 -32001/id=null，新 IP 返回 -32600/id=null；公网 1.16.9 与 4 MiB+ canary 通过</td></tr>
           <tr><td>移动端 HTTP 响应硬上限</td><td>KT Wallet 的 Gateway、EVM/Solana JSON-RPC、TRON REST、区块浏览器历史、CoinGecko、Solana Faucet、自定义 RPC 探测和匿名诊断回执统一经过 8 MiB <code>BoundedHttpClient</code>。声明 Content-Length 超限时在缓冲前取消；未知长度、chunked 或解压后正文跨越上限时立即失败，固定错误不保留 URL 或正文。静态门禁覆盖生产全部 <code>http.Client()</code> 所有权点；Cold Signer 仍无联网依赖</td><td class="pass">先红后绿 4 项流式/结构回归；联网定向 120/120、静态分析 0、KT Wallet 全量 1446/1446</td></tr>
           <tr><td>新钱包随机 walletId 与原生路径边界</td><td>KT Wallet 热钱包创建/导入和扫码配对的本地观察钱包统一使用系统安全随机数生成 18 字节、144-bit URL-safe ID；旧 ID 兼容读取。内存连续碰撞 8 次失败闭合，数据库主键冲突不会 upsert 覆盖旧钱包，热钱包事务失败会补偿删除新原生密钥。Android/iOS MethodChannel 在认证和 Keychain/Keystore 访问前独立限制 ASCII <code>[A-Za-z0-9_-]{1,64}</code>；Android BlobStore 组装文件名时再次校验，不能利用直接原生调用实施路径穿越</td><td class="pass">Dart 格式/唯一性/碰撞/配对与原子回滚 15/15；Core Crypto Dart 41/41、Android JVM 24/24；唯一 iPhone 17 Pro 定向原生 XCTest 通过，KT Wallet build-for-testing 与 KT Cold Signer Simulator 构建成功；全量 1446/1446、静态分析 0</td></tr>
           <tr><td>原生 wallet slot 只创建</td><td>重复 walletId 不能替换既有密钥或改变认证策略。iOS 不再先删除 Keychain item，直接用 <code>SecItemAdd</code> 原子拒绝 duplicate；Android 在同一临界区核对 blob 与 Keystore alias，密文写入私有临时文件、flush + fsync 后同目录 rename，文件提交失败补偿刚创建的 key。Dart、Mock 与双原生层统一返回 <code>WALLET_EXISTS</code></td><td class="pass">覆盖尝试后旧助记词/密文字节保持不变；Core Crypto 41/41、Android JVM 24/24、真实 Wallet Core Kotlin 编译；唯一 iPhone 17 Pro 签名 XCTest 真实验证 Keychain duplicate + 原值读取；双 App iOS 构建与全量回归通过</td></tr>
@@ -705,7 +706,7 @@
           <tr><td>Gateway 多实例与代理限流</td><td>生产 Cloudflare → FluxGate → HAProxy 8118 → Gateway 8119/8120，两个实例共享 Redis 6388；服务只监听 loopback。FluxGate clean source 只执行一次 Hyper request，HAProxy 设置 retries 0 并移除 redispatch/retry-on。Cloudflare 官方仍允许多源站特定 52x <a href="https://developers.cloudflare.com/fundamentals/security/protect-your-origin-server/#zero-downtime-failover">Zero-Downtime Failover</a>，因此 Gateway 1.16.4 在链请求前用 Redis SET NX 原子 claim 去重同一签名交易，并对共享结果执行字段不变量校验；读 RPC failover 仍在 Gateway 内。200 个同 XFF 并发请求 90 成功、110 限流，新客户端仍成功</td><td class="partial">公网相同无效 Sepolia payload 连续请求两次：claim +1、replay_rejected +1、endpoint attempt +1；跨主机/跨地域容灾未验收</td></tr>
           <tr><td>FluxGate / Gateway 客户身份与 hop-by-hop 边界</td><td>修正后的 FluxGate 会在 HTTP/WebSocket 两条路径删除客户端原始 <code>Forwarded</code>、XFF、X-Real-IP、X-Client-IP、True-Client-IP 与 CF-Connecting-IP，只向 Gateway 添加一个由可信 socket peer / Cloudflare edge 计算的 XFF。代理遍历全部 <code>Connection</code>/<code>Upgrade</code> field-line 并精确匹配逗号 token，拒绝伪 Upgrade 子串；请求、普通响应和 101 响应都删除固定及动态 hop-by-hop 字段、Proxy-Connection 与 TE，WebSocket 两跳只重新生成规范的 <code>Connection: Upgrade</code> / <code>Upgrade: websocket</code>。握手请求还必须满足 GET、唯一有效 Key 与 version 13；上游非法 101 固定失败为 502。HAProxy 的 <code>option forwardfor</code> 会在现有列表末尾追加自身 XFF，因此 Gateway 按线序展开逗号值和重复 field，完整校验后从右向左跳过可信代理；空、畸形、超长 XFF 与重复 X-Real-IP 退回 socket peer，无效 XFF 不降级读取第二身份头</td><td class="partial">用户确认的真实 FluxGate 目录已重跑：4 项单元边界 + 4 项真实 HTTP/WebSocket 双向回读，admin 118/118、workspace 206 项实际测试通过（9 ignored），fmt、全 target/feature 严格 Clippy、Release 构建及 300 包 OSV 扫描通过；Gateway 6 项身份边界用例、vet 与完整 race suite 通过。本地候选尚未部署，仍需生产普通 HTTP 与 WebSocket 上游回读 canary</td></tr>
           <tr><td>FluxGate 数据面、日志容量与供应链审计</td><td>独立 FluxGate 0.1.12 源码确认数据面仅有一次 Hyper upstream request、无应用层 retry；本地候选删除失败日志中的完整 URL/query 与 connector error。旧 HTTPS accept-all verifier 已替换为 Mozilla WebPKI 根、证书链与请求主机名强校验；可信链通过，错误主机名和未受信链拒绝。生产只读核对发现进程常驻约 5.27 GB、access JSONL 达 6.0 GB：旧小时保留会整文件读取、复制、拼接并造成 writer stall。候选改成 O(cap) 流式尾部恢复；独立 compactor 整理稳定前缀时 writer 继续实时追加，完成后仅合并快照后的新增尾部、持久化并原子替换，再重开 append 句柄。畸形行、不完整尾行保留，失败不覆盖原文件；并发回归证明整理期间 200 条追加全部保留。PEM/JWT/MaxMind 迁移及精确 CI OSV gate 均已加入；<a href="https://google.github.io/osv-scanner/github-action/">OSV Scanner 官方 workflow</a>固定到 v2.3.8 tag commit，300 个 Rust 包扫描为 0</td><td class="partial">用户确认的真实目录重跑格式、全 target/feature 严格 Clippy、Release、workspace 206 项实际测试通过（9 ignored），OSV 已知问题 0；Linux amd64 static-pie 候选仍为 <code>e05013…7b466a</code>。生产仍为旧 <code>2c802f…c4d925</code>，本地候选尚未提交/部署，5.27 GB 常驻内存问题仍在线；KT 当前 loopback HTTP 路径不受 TLS 行为变化影响</td></tr>
-          <tr><td>独立 Token 威胁情报</td><td>GoPlus 仅接收 chain id + 公开合约或 Solana mint；运营方风险表与外部明确恶意证据均高于官方身份目录；Solana creator/Hook/特权 authority 的 malicious-address 会阻止签名，USDC 普通 mint/freeze/metadata 权限不误杀；无证据 unknown，服务失败 unavailable；5 分钟缓存、HTTPS 与禁止凭证/重定向、匿名指标；三个安全 provider 使用独立熔断、单一半开探针和固定标签指标</td><td class="partial">1.16.8 已上线；2026-08-02 八主网官方 Token 生产只读 smoke 8/8 返回 official_catalog+goplus，失败闭合正负例进入 make audit；外部接收方、长期 SLA、恶意/未知样本与误报申诉待完成</td></tr>
+          <tr><td>独立 Token 威胁情报</td><td>GoPlus 仅接收 chain id + 公开合约或 Solana mint；运营方风险表与外部明确恶意证据均高于官方身份目录；Solana creator/Hook/特权 authority 的 malicious-address 会阻止签名，USDC 普通 mint/freeze/metadata 权限不误杀；无证据 unknown，服务失败 unavailable；5 分钟缓存、HTTPS 与禁止凭证/重定向、匿名指标；三个安全 provider 使用独立熔断、单一半开探针和固定标签指标</td><td class="partial">1.16.9 已上线；2026-08-02 八主网官方 Token 生产只读 smoke 8/8 返回 official_catalog+goplus，失败闭合正负例进入 make audit；外部接收方、长期 SLA、恶意/未知样本与误报申诉待完成</td></tr>
           <tr><td>EVM Token 授权中心</td><td>五条 EVM 主网授权查询需显式隐私同意；无限/有限/高风险/未知分级；热钱包与观察钱包 + KT Cold Signer 均构造精确 approve(spender,0)，并覆盖验签、Pending 恢复、历史、speed-up 与 cancel 语义</td><td class="partial">生产无同意拒绝与显式同意 GoPlus 查询通过；真实小额主网撤销待验收</td></tr>
           <tr><td>App 端点配置安全边界</td><td>Gateway/RPC/自定义网络仅接受安全 URL；公开 HTTP、内嵌凭证、fragment、非法旧配置、跨链 override 均失败闭合；中英日错误提示不关闭编辑页</td><td class="pass">10 项端点回归 + 全量套件通过</td></tr>
           <tr><td>自定义网络浏览器真实性</td><td>自定义 EVM、Solana 或 TRON 网络只有显式配置区块浏览器时才显示交易、地址、Token 外链和交易凭证二维码；缺少配置不再回退到同协议主网，避免生成外观有效但链错误的链接。交易哈希、地址与 Token 标识均编码为单一路径段，不能以 query/fragment 改写目标</td><td class="pass">两条单元负例先红后绿；无浏览器 Widget 负例及相关网络/Pending/Token/交易详情 53/53；KT Wallet 1448/1448、flutter analyze 0。第三方浏览器内容与真机分享面板仍属外部/待人工边界</td></tr>

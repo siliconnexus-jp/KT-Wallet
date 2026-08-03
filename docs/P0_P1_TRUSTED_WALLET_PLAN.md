@@ -1,6 +1,6 @@
 # KT Wallet P0/P1 可信基础钱包实施方案
 
-更新日期：2026-08-02
+更新日期：2026-08-03
 
 ## 目标与边界
 
@@ -867,17 +867,22 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   USDT 搜索、pending/latest 可发送余额、Ethereum USDC GoPlus 风险和无授权隐私同意
   拒绝均通过。当时 Prometheus 2/2 target UP、14/14 rules healthy、0 firing，两个 service
   发布后 warning 为 0；公网未认证 metrics 为 404。
-- [ ] 2026-08-03 源码补强 Gateway 入站资源限流边界：限流器现在在读取请求体和
+- [x] 2026-08-03 源码补强并生产发布 Gateway 1.16.9 入站资源限流边界：限流器现在在读取请求体和
   JSON 解析之前执行，因此已耗尽配额的客户端不能继续消耗最多 4 MiB 的读取与解析
   资源，畸形 JSON 同样会消耗入站令牌；已知 `Content-Length` 超过上限时在零读取下
   返回固定 `-32600/id=null`。早期拒绝无法安全解析调用方提供的 JSON-RPC id，因此
   统一使用 `id=null`，日志也只记录固定的 `unknown`/空路由标签。3 项先红后绿回归、
   Gateway 336/336、`go test -race ./...` 与 `go vet ./...` 通过。2026-08-03 补跑完整
   `make audit`：`govulncheck` 可达漏洞 0，HAProxy、Alertmanager 与 Token 风险矩阵
-  门禁全部通过；生成的未部署 Linux amd64 静态候选为 8,700,066 bytes，SHA-256
-  `bf74073db3a5eacf60c7a495e46b751b33860d912e7e73acdaebf928d1dc4dee`。修改尚未获得
-  生产部署授权；线上仍为 1.16.8，完成双实例滚动与公网限流/大 body canary 前不得
-  标记为生产完成。
+  门禁全部通过。Linux amd64 静态制品为 8,700,066 bytes，SHA-256
+  `48a05ed2df9de886957e48383a13515860ac54b6593459db72ea20a609cd5283`；第一次滚动因
+  primary 刚重启尚未监听而触发自动回滚，确认双实例恢复 1.16.8 后改为有界 ready
+  轮询再次发布。最终 release 为
+  `/opt/workspace/kt-wallet/releases/20260803T010057Z-worktree-v1.16.9-inbound-limit`，
+  8120 → 8119 与公网均返回 1.16.9、16 个网络和 ready。两个直连实例分别用隔离测试
+  IP 耗尽配额：后续声明 4 MiB+ 的请求在读取 body 前返回 `-32001/id=null`；新测试 IP
+  的同请求返回 `-32600/id=null`。公网 4 MiB+、ETH/USDC 价格、3/3 Prometheus target、
+  17/17 rules 与 Alertmanager 均通过，发布后真实 WARN/ERROR/panic/fatal 为 0。
 - [x] Gateway 1.16.7 发布版已部署到生产并验证 `kt_getEvmSpendableBalances`。
   2026-08-02 以 SHA 校验、原子软链接、secondary → primary 滚动和自动回滚门禁发布
   `1.16.7`；当时 `kt_health.version=1.16.7`，16 个网络、14 个 JSON-RPC upstream
