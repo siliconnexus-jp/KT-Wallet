@@ -5,6 +5,33 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('non-debug builds never trust the FLUTTER_TEST process marker', () {
+    expect(
+      resolveFlutterTestFallback(
+        isDebugBuild: false,
+        isWeb: false,
+        markerPresent: true,
+      ),
+      isFalse,
+    );
+    expect(
+      resolveFlutterTestFallback(
+        isDebugBuild: true,
+        isWeb: false,
+        markerPresent: true,
+      ),
+      isTrue,
+    );
+    expect(
+      resolveFlutterTestFallback(
+        isDebugBuild: true,
+        isWeb: true,
+        markerPresent: true,
+      ),
+      isFalse,
+    );
+  });
+
   test('flutter test keeps its explicit process-local storage seam', () async {
     final storage = SecureVaultStorage.withTestEnvironment(
       isTestEnvironment: true,

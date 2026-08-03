@@ -58,6 +58,7 @@ import '../security/biometric_auth.dart';
 import '../security/transaction_auth.dart';
 import '../security/wallet_pin.dart';
 import '../state/app_prefs.dart' show AppPrefsScope, AuthMethod;
+import '../state/flutter_test_env.dart' show isFlutterTestEnv;
 import '../state/networks.dart' show Network, NetworkScope;
 import '../transfer/airgap_codec.dart';
 import '../transfer/broadcast_service.dart';
@@ -130,8 +131,7 @@ Future<void> _persistAirgapTransaction(
   session.localTransactionId ??= id;
 }
 
-bool get _isFlutterTest =>
-    !kReleaseMode && Platform.environment.containsKey('FLUTTER_TEST');
+bool get _isFlutterTest => isFlutterTestEnv;
 
 Color _chainDot(Chain chain) => switch (chain) {
   Chain.ethereum => ChainColors.ethereum,

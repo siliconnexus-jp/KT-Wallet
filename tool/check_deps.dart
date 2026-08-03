@@ -73,6 +73,58 @@ void main() {
     }
   }
 
+  // Test-only process markers and constructor overrides must never enable a
+  // process-local PIN/vault in profile or release builds. Keep both the
+  // environment resolver and the final storage decision behind kDebugMode;
+  // checking only one layer would let a future refactor re-open the fallback.
+  for (final environmentBoundary in [
+    File('apps/kt_wallet/lib/src/state/flutter_test_env.dart'),
+    File('apps/cold_signer/lib/src/security/secure_vault.dart'),
+  ]) {
+    final source = environmentBoundary.existsSync()
+        ? environmentBoundary.readAsStringSync()
+        : '';
+    if (!source.contains(
+          "kDebugMode && !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST')",
+        ) ||
+        !source.contains('isDebugBuild && !isWeb && markerPresent')) {
+      failures.add(
+        '${environmentBoundary.path} can trust FLUTTER_TEST outside debug',
+      );
+    }
+  }
+  for (final storageBoundary in [
+    File('apps/kt_wallet/lib/src/security/wallet_pin.dart'),
+    File('apps/cold_signer/lib/src/security/secure_vault.dart'),
+  ]) {
+    final source = storageBoundary.existsSync()
+        ? storageBoundary.readAsStringSync()
+        : '';
+    if (!source.contains(
+      'kDebugMode && (_testEnvironmentOverride ?? isFlutterTestEnv)',
+    )) {
+      failures.add(
+        '${storageBoundary.path} does not compile-time clamp test storage',
+      );
+    }
+  }
+  const testMarker = "Platform.environment.containsKey('FLUTTER_TEST')";
+  const allowedTestMarkerFiles = {
+    'apps/kt_wallet/lib/src/state/flutter_test_env.dart',
+    'apps/cold_signer/lib/src/security/secure_vault.dart',
+  };
+  for (final app in ['apps/kt_wallet/lib', 'apps/cold_signer/lib']) {
+    for (final entity in Directory(app).listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      if (entity.readAsStringSync().contains(testMarker) &&
+          !allowedTestMarkerFiles.contains(entity.path)) {
+        failures.add(
+          '${entity.path} bypasses the compile-mode test-environment gate',
+        );
+      }
+    }
+  }
+
   for (final entitlements in [
     File('apps/kt_wallet/ios/Runner/Runner.entitlements'),
     File('apps/cold_signer/ios/Runner/Runner.entitlements'),

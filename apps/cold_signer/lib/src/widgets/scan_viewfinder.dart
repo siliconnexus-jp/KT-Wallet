@@ -31,9 +31,7 @@ class DeviceCameraAvailability extends CameraAvailability {
 
   @override
   Future<bool> canAttempt() async =>
-      !kIsWeb &&
-      (Platform.isAndroid || Platform.isIOS) &&
-      !Platform.environment.containsKey('FLUTTER_TEST');
+      !kIsWeb && (Platform.isAndroid || Platform.isIOS) && !isFlutterTestEnv;
 }
 
 /// Fixed-answer probe for tests.

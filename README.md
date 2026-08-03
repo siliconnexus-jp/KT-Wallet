@@ -143,8 +143,11 @@ therefore distinguishes signing, broadcasting, and chain confirmation.
 - Dart security metadata uses platform secure storage without a production
   memory fallback. If that plugin is unavailable, KT Wallet stays locked and
   KT Cold Signer blocks onboarding and signing until secure storage recovers.
-  The in-memory implementation is available only to an explicit Flutter test
-  environment.
+  The in-memory implementation is available only when a Flutter test marker is
+  present in a non-Web Debug build. Profile and Release builds reject both the
+  process marker and explicit test-storage overrides at the compile-mode
+  boundary. Repository checks prevent production code from reading that marker
+  outside the two canonical test-environment adapters.
 - A transient native-key or derivation failure never erases the Cold Signer's
   durable wallet identifier. Failed onboarding attempts independently clean
   native key material and every PIN/metadata key; a failure in one cleanup
@@ -332,7 +335,7 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-03) completed with zero static-analysis
-issues: **1,458/1,458** KT Wallet tests, **568/568** KT Cold Signer tests, and
+issues: **1,459/1,459** KT Wallet tests, **569/569** KT Cold Signer tests, and
 **397/397** shared-package tests passed. The Gateway audit, public-secret gate,
 native dependency lock/checksum verification, and OSV scans also passed. These
 numbers are reproducible source evidence, not a substitute for the outstanding

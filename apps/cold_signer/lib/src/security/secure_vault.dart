@@ -7,8 +7,18 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// True inside `flutter test`. MethodChannel plugins are unavailable there:
 /// their futures never even complete under the fake-async test zone, so
 /// plugin-backed stores must be bypassed up front, not caught after the fact.
+/// Release and profile builds reject the process marker at the compile-time
+/// boundary; an environment variable can never enable an in-memory vault in a
+/// distributed app.
 bool get isFlutterTestEnv =>
-    !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
+    kDebugMode && !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
+
+@visibleForTesting
+bool resolveFlutterTestFallback({
+  required bool isDebugBuild,
+  required bool isWeb,
+  required bool markerPresent,
+}) => isDebugBuild && !isWeb && markerPresent;
 
 /// Minimal string key-value contract over the platform secure store
 /// (iOS Keychain / Android Keystore-backed EncryptedSharedPreferences).
@@ -45,7 +55,8 @@ class SecureVaultStorage implements VaultStorage {
   final FlutterSecureStorage _storage;
   final bool? _testEnvironmentOverride;
 
-  bool get _useTestFallback => _testEnvironmentOverride ?? isFlutterTestEnv;
+  bool get _useTestFallback =>
+      kDebugMode && (_testEnvironmentOverride ?? isFlutterTestEnv);
 
   /// Plugin-less fallback (see class doc). Static so every default-constructed
   /// instance in one process shares it, like the real backing store would.

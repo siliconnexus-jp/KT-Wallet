@@ -3,7 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show kDebugMode, visibleForTesting;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../state/flutter_test_env.dart';
@@ -46,7 +46,8 @@ class SecurePinStorage implements PinStorage {
   final FlutterSecureStorage _storage;
   final bool? _testEnvironmentOverride;
 
-  bool get _useTestFallback => _testEnvironmentOverride ?? isFlutterTestEnv;
+  bool get _useTestFallback =>
+      kDebugMode && (_testEnvironmentOverride ?? isFlutterTestEnv);
 
   /// Plugin-less fallback (see class doc). Static so every default-constructed
   /// instance in one process shares it, like the real backing store would.
