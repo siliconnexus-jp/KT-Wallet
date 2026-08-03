@@ -33,12 +33,15 @@ void main() {
 
   final missingCleanup = <String>{};
   var guardedStoreSites = 0;
-  final helper = File(
-    '${root.path}/apps/kt_wallet/integration_test/support/e2e_wallet_cleanup.dart',
-  );
-  if (!helper.existsSync() ||
-      !_cleanupHelperIsStrict(helper.readAsStringSync())) {
-    missingCleanup.add(_relativePath(root.path, helper.path));
+  for (final relativeHelper in const [
+    'apps/kt_wallet/integration_test/support/e2e_wallet_cleanup.dart',
+    'apps/cold_signer/integration_test/support/e2e_wallet_cleanup.dart',
+  ]) {
+    final helper = File('${root.path}/$relativeHelper');
+    if (!helper.existsSync() ||
+        !_cleanupHelperIsStrict(helper.readAsStringSync())) {
+      missingCleanup.add(_relativePath(root.path, helper.path));
+    }
   }
   for (final relativeRoot in const [
     'apps/kt_wallet/integration_test',

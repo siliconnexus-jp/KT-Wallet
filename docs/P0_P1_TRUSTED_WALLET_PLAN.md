@@ -632,7 +632,14 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   矩阵：每笔通过系统 Face ID、原生 Wallet Core、AIRGAP-V1 多帧往返、原始交易解析和
   在线密码学验签，EVM/TRON/Solana signer 均与当前批次公开地址一致；第 17 次系统
   Face ID 成功删除矩阵临时钱包，集成测试 1/1 通过。该证据只覆盖 KT Wallet iOS bundle
-  的确定性未广播矩阵；独立 KT Cold Signer、物理相机 QR 往返及链上广播仍需分别验收。
+  的确定性未广播矩阵；物理相机 QR 往返及链上广播仍需分别验收。
+- [x] 2026-08-03 同一当前批次又在独立 `KT Cold Signer` iOS bundle 内完成相同
+  16 条矩阵。测试直接链接该 App 自己的原生 `core_crypto` 插件，每笔分别触发系统
+  Face ID，经 Wallet Core 生成真实 signed transaction，再执行 AIRGAP-V1 多帧请求/
+  结果往返、原始交易解析、chainId/owner/fee payer 与密码学 signer/txHash 核对；
+  EVM、TRON、Solana signer 均与当前批次公开地址一致。第 17 次系统 Face ID 成功删除
+  独立 App Keychain 域内的矩阵钱包，集成测试 1/1、Cold Signer 全量 570/570、原生
+  建钥清理审计 31 处/0 债务通过。该证据不访问 RPC、不广播，也不替代物理相机或真机。
 - [ ] 本矩阵的确定性、未广播交易仍只证明八链离线签名和验签；新批次全部八链仍需
   补充测试资产并保存 explorer txHash、链上确认与双端历史证据。旧批次的 Ethereum、
   Base、Arbitrum、Avalanche、BNB、TRON、Solana 广播闭环保留为历史回归证据；
@@ -711,7 +718,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
 - [x] 已增加版本化测试凭证批次门禁：批次 ID、UTC 创建/过期时间、最长 14 天、
   `0600`、非符号链接、公开 BIP-39 vector 拒绝和交互式隐藏输入；报告发布前使用
   本地助记词作为 canary，扫描助记词、私钥赋值与常见 provider token，错误日志不
-  回显秘密。23 个读取真实助记词的 E2E 入口全部内置相同的批次有效性检查，直接
+  回显秘密。24 个读取真实助记词的 E2E 入口全部内置相同的批次有效性检查，直接
   执行测试也无法绕过；仓库级门禁同时防止新 E2E 漏接并扫描公开报告。
 - [x] 2026-08-03 公开发布秘密门禁扩展到项目实际使用的 Etherscan、Helius、GoPlus、
   Prometheus bearer，以及常见 GitHub、Alchemy、Slack、Stripe、Google 和私钥格式。
@@ -785,7 +792,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   核对同实例、同 walletId，并只接受紧邻注册的生产认证 teardown，或确实覆盖该创建点且
   不吞异常的 `finally` 删除；纯 `MockCoreCrypto` 通过实际变量初始化识别，不再靠原始文本
   豁免。六类绕过先红后绿，真实扫描发现并修复 Sepolia replacement 生命周期，同时把
-  EVM replacement 的静默 TimeoutException 路径改为统一认证 teardown。当前 30 个原生
+  EVM replacement 的静默 TimeoutException 路径改为统一认证 teardown。当前 31 个原生
   store 站点、0 清理债务。门禁同时解析统一 helper 本身，要求真实注册 `addTearDown`、
   执行同实例 `deleteWallet(walletId).timeout(timeout)`，并只允许忽略
   `WalletNotFoundException`；空 helper 或吞 TimeoutException 的负例均失败。
