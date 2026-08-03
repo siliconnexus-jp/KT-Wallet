@@ -393,6 +393,7 @@ func TestLoadTokenRisksFileRejectsPartialOrAmbiguousRegistry(t *testing.T) {
 		"bad-category":  `[{"network":"eth-mainnet","contract":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","category":"safe"}]`,
 		"unknown-field": `[{"network":"eth-mainnet","contract":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","category":"spam","reason":"operator note"}]`,
 		"duplicate-key": `[{"network":"eth-mainnet","contract":"0xdac17f958d2ee523a2206206994597c13d831ec7","contract":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","category":"spam"}]`,
+		"case-alias":    `[{"network":"eth-mainnet","contract":"0xdac17f958d2ee523a2206206994597c13d831ec7","Contract":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","category":"spam"}]`,
 		"duplicate": `[
  {"network":"eth-mainnet","contract":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","category":"spam"},
  {"network":"eth-mainnet","contract":"0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","category":"phishing"}

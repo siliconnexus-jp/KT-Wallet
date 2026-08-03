@@ -114,3 +114,58 @@ func TestReportAppDiagnosticsRejectsDuplicateJSONKeys(t *testing.T) {
 		t.Fatalf("duplicate-key report mutated counters:\n%s", metrics)
 	}
 }
+
+func TestReportAppDiagnosticsRejectsCaseInsensitiveFieldAlias(t *testing.T) {
+	e := newEnv(t, nil)
+	const params = `{
+		"schemaVersion":1,
+		"consent":false,
+		"Consent":true,
+		"appVersion":"1.0.0+1",
+		"platform":"ios",
+		"locale":"zh",
+		"buildMode":"release",
+		"metrics":[{
+			"name":"app.startup",
+			"count":1,
+			"successCount":1,
+			"failureCount":0,
+			"p50Ms":1,
+			"p95Ms":1
+		}]
+	}`
+	assertErrCode(t, e.rpc("kt_reportDiagnostics", params), -32602)
+	if metrics := e.gw.Metrics(); !strings.Contains(
+		metrics,
+		`kt_gateway_app_diagnostic_uploads_total{platform="ios"} 0`,
+	) {
+		t.Fatalf("case-alias report mutated counters:\n%s", metrics)
+	}
+}
+
+func TestReportAppDiagnosticsRejectsNestedCaseInsensitiveFieldAlias(t *testing.T) {
+	e := newEnv(t, nil)
+	const params = `{
+		"schemaVersion":1,
+		"consent":true,
+		"appVersion":"1.0.0+1",
+		"platform":"ios",
+		"locale":"zh",
+		"buildMode":"release",
+		"metrics":[{
+			"name":"app.startup",
+			"count":1,
+			"SuccessCount":1,
+			"failureCount":0,
+			"p50Ms":1,
+			"p95Ms":1
+		}]
+	}`
+	assertErrCode(t, e.rpc("kt_reportDiagnostics", params), -32602)
+	if metrics := e.gw.Metrics(); !strings.Contains(
+		metrics,
+		`kt_gateway_app_diagnostic_uploads_total{platform="ios"} 0`,
+	) {
+		t.Fatalf("nested case-alias report mutated counters:\n%s", metrics)
+	}
+}

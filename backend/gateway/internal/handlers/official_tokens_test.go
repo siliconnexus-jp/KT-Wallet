@@ -120,6 +120,19 @@ func TestLoadOfficialTokensFileRejectsDuplicateObjectKeys(t *testing.T) {
 	}
 }
 
+func TestLoadOfficialTokensFileRejectsCaseInsensitiveFieldAlias(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "official-tokens.json")
+	const body = `[
+		{"network":"eth-mainnet","symbol":"USDT","name":"Tether USD","Contract":"0xdac17f958d2ee523a2206206994597c13d831ec7","decimals":6}
+	]`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handlers.LoadOfficialTokensFile(path); err == nil {
+		t.Fatal("case-insensitive JSON field aliases must fail closed")
+	}
+}
+
 func TestCheckedInOfficialTokenCatalogLoads(t *testing.T) {
 	tokens, err := handlers.LoadOfficialTokensFile(
 		filepath.Join("..", "..", "config", "official-tokens.json"),

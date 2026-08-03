@@ -414,6 +414,20 @@ void _auditRiskSignalDirection(List<String> failures) {
       );
     }
   }
+
+  const strictJSONPath = 'backend/gateway/internal/handlers/strict_json.go';
+  final strictJSON = File(strictJSONPath).readAsStringSync();
+  for (final marker in const [
+    'rejectNonCanonicalJSONFields(raw, reflect.TypeOf(target))',
+    'decoder.UseNumber()',
+    'unknown or non-canonical JSON field',
+  ]) {
+    if (!strictJSON.contains(marker)) {
+      failures.add(
+        '$strictJSONPath lost exact-case strict JSON binding: $marker',
+      );
+    }
+  }
 }
 
 Set<String> _imports(String source) => {

@@ -272,10 +272,12 @@ unknown, an address has the wrong shape, or a network/contract identity is
 duplicated. This fail-closed behavior prevents an incomplete parse from
 accidentally verifying the wrong asset.
 
-The configuration schema is closed: unknown fields, duplicate JSON object
-keys, trailing JSON values, and the response-derived `verified` field are
-rejected. A misspelled field therefore cannot silently fall back to a zero
-value and still receive a blue verification mark.
+The configuration schema is closed and case-sensitive: every field must match
+the documented JSON spelling exactly. Unknown fields, case aliases such as
+`Contract`, duplicate JSON object keys, trailing JSON values, and the
+response-derived `verified` field are rejected. A misspelled field therefore
+cannot silently fall back to a zero value and still receive a blue verification
+mark.
 
 ### Token risk registry
 
@@ -284,10 +286,11 @@ Set `TOKEN_RISKS_FILE` to an operator-managed copy of
 exact `network`, `contract`/mint and one category: `malicious`, `phishing`,
 `spam`, `impersonation`, `honeypot`, or `suspicious`.
 
-Startup rejects the whole file on malformed JSON, invalid addresses,
-unknown fields, duplicate JSON object keys, unsupported categories or duplicate
-identities. A risk entry always overrides the official-token catalog so an
-operator can revoke a previously verified identity. Invalid programmatic
+Startup rejects the whole file on malformed JSON, invalid addresses, unknown
+or non-canonical-case fields, duplicate JSON object keys, unsupported
+categories or duplicate identities. A risk entry always overrides the
+official-token catalog, so an operator can revoke a previously verified
+identity. Invalid programmatic
 configuration also makes the risk endpoint unavailable; it cannot silently
 drop the denylist and fall through to an official-catalog `safe` result. The
 checked-in file is intentionally empty: it is a configuration surface, not a
@@ -421,9 +424,10 @@ user disclosure and the user explicitly selects **Agree and send**. The App
 does not upload in the background and does not automatically retry an
 ambiguous request. The accepted schema is deliberately closed: app version,
 platform, broad locale, build mode, and count/success/failure/P50/P95 for the
-twelve fixed operation names. Unknown fields, labels, duplicate metrics,
-inconsistent counts and out-of-range values are rejected before any counter is
-changed.
+twelve fixed operation names. Field names must match the documented spelling
+exactly at the report and nested metric levels. Unknown or case-aliased fields,
+labels, duplicate metrics, inconsistent counts and out-of-range values are
+rejected before any counter is changed.
 
 The Gateway converts a valid report directly into fixed-label in-memory
 counters. It does not store request bodies, raw events, exact timestamps,
