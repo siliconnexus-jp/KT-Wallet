@@ -58,6 +58,23 @@ class BroadcastOutcome {
   final RpcRejectionKind? rejectionKind;
 }
 
+/// Compares a node-returned transaction identity with the hash or signature
+/// independently derived from the signed bytes before submission.
+///
+/// EVM and TRON identities are hexadecimal and therefore case-insensitive.
+/// Solana transaction signatures are base58 and remain case-sensitive.
+bool transactionHashesMatch(Chain chain, String expected, String actual) =>
+    switch (chain) {
+      Chain.solana => expected == actual,
+      Chain.ethereum ||
+      Chain.polygon ||
+      Chain.base ||
+      Chain.arbitrum ||
+      Chain.avalanche ||
+      Chain.bnb ||
+      Chain.tron => expected.toLowerCase() == actual.toLowerCase(),
+    };
+
 /// Pushes a signed transaction to the chain's node via the tested
 /// `chains/rpc` clients over injectable transports (production defaults to
 /// the http-backed ones, which own the 10s timeouts). Endpoints resolve

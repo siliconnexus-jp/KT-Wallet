@@ -255,6 +255,14 @@
   失败；不一致回包因签名字节可能已经送达节点而保持 outcome unknown，继续查询本地
   hash，禁止自动重发。旧实现“签名 A、节点回 B、UI 跟踪 B”的负例先红后绿；匹配时
   始终返回本地 canonical 形式。KT Wallet 1517/1517、远程安全边界审计与静态分析通过。
+- [x] 观察钱包 + KT Cold Signer 的 QR 广播页也使用同一逐链 hash 绑定。在线端扫码后
+  已独立验签并持久化本地 txHash；节点/Gateway accepted 回包必须与该值一致，匹配时
+  仍保留离线签名器派生的 canonical 形式。不一致回包不能把交易 A 替换成交易 B，也不
+  写入 pending；因首次提交可能已到达节点，页面进入“结果未知”、继续查询本地 hash 且
+  不提供第二次广播。W8 旧实现红测先稳定复现跳到 B，修复后转绿；共享比较器保持
+  EVM/TRON 大小写不敏感、Solana base58 大小写敏感，并由远程安全边界审计锁定。
+  KT Wallet 1519/1519、KT Cold Signer 570/570、共享 packages 409/409、默认公开测试
+  门禁 12/12 与静态分析 0 通过。
 - [x] KT Wallet 新建/导入热钱包和扫码配对观察钱包的本地 walletId 已从可预测的
   微秒时间戳改为 `Random.secure()` 生成的 144-bit URL-safe 随机值。旧 walletId 继续
   兼容读取；新 ID 在内存已有钱包中连续碰撞 8 次会失败闭合，数据库主键冲突仍由原子

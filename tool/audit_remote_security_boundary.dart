@@ -124,7 +124,8 @@ void main() {
     'Remote security boundary audit passed: '
     '${_reviewedGatewayResponseKeys.length} reviewed Gateway fields, '
     '${_networkFreeSecurityFiles.length} network-free security modules, '
-    '3 hot-signing families independently verified.',
+    '3 hot-signing families independently verified, '
+    'hot and air-gapped broadcasts hash-bound.',
   );
 }
 
@@ -267,7 +268,7 @@ void _auditHotSigningBoundary(List<String> failures) {
   final irreversibleBoundary = _futureMethodSection(source, '_broadcast');
   for (final marker in const [
     "'missing locally verified transaction hash'",
-    '_sameTransactionHash(chain, expectedTxHash, txHash)',
+    'transactionHashesMatch(chain, expectedTxHash, txHash)',
     "'The node returned an inconsistent transaction hash'",
     'return expectedTxHash',
   ]) {
@@ -284,6 +285,36 @@ void _auditHotSigningBoundary(List<String> failures) {
     final section = _futureMethodSection(source, method);
     if (section == null || !section.contains('expectedTxHash: signed.txHash')) {
       failures.add('$path $method does not bind node response to signed hash');
+    }
+  }
+
+  const airgapPath = 'apps/kt_wallet/lib/src/screens/transfer_screens.dart';
+  final airgap = File(airgapPath).readAsStringSync();
+  final airgapBroadcast = _futureMethodSection(airgap, '_broadcast');
+  for (final marker in const [
+    'transactionHashesMatch(',
+    'chainForCoin(result.coin)',
+    'result.txHash,',
+    '..broadcastTxHash = result.txHash',
+    '..broadcastOutcomeUnknown = true',
+  ]) {
+    if (airgapBroadcast == null || !airgapBroadcast.contains(marker)) {
+      failures.add(
+        '$airgapPath lost air-gapped broadcast hash binding: $marker',
+      );
+    }
+  }
+
+  const broadcastPath =
+      'apps/kt_wallet/lib/src/transfer/broadcast_service.dart';
+  final broadcast = File(broadcastPath).readAsStringSync();
+  for (final marker in const [
+    'bool transactionHashesMatch(',
+    'Chain.solana => expected == actual',
+    'expected.toLowerCase() == actual.toLowerCase()',
+  ]) {
+    if (!broadcast.contains(marker)) {
+      failures.add('$broadcastPath lost chain-aware hash comparison: $marker');
     }
   }
 }

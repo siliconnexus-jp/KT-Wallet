@@ -3262,8 +3262,25 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
     if (!mounted) return;
     switch (outcome.status) {
       case BroadcastStatus.ok:
+        final nodeHash = outcome.txHash;
+        if (nodeHash == null ||
+            !transactionHashesMatch(
+              chainForCoin(result.coin),
+              result.txHash,
+              nodeHash,
+            )) {
+          // Submission may already have reached the node. A response for a
+          // different transaction is not proof of rejection or acceptance of
+          // the signed request, so retain the locally verified identity and
+          // reconcile it without offering a second broadcast.
+          session
+            ..broadcastTxHash = result.txHash
+            ..broadcastOutcomeUnknown = true;
+          context.go('/broadcast-result');
+          return;
+        }
         session
-          ..broadcastTxHash = outcome.txHash ?? result.txHash
+          ..broadcastTxHash = result.txHash
           ..broadcastOutcomeUnknown = false;
         try {
           await _persistAirgapTransaction(

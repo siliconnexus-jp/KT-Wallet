@@ -933,7 +933,7 @@ class LocalTransferService {
             'The node accepted the request but returned no transaction hash',
           );
         }
-        if (!_sameTransactionHash(chain, expectedTxHash, txHash)) {
+        if (!transactionHashesMatch(chain, expectedTxHash, txHash)) {
           // The signed bytes may have reached the node, so a mismatched answer
           // is outcome-unknown rather than a rejection. Keep polling the
           // already persisted local hash and never submit the bytes again.
@@ -987,21 +987,6 @@ class LocalTransferService {
     }
     return expected;
   }
-
-  static bool _sameTransactionHash(
-    Chain chain,
-    String expected,
-    String actual,
-  ) => switch (chain) {
-    Chain.solana => expected == actual,
-    Chain.ethereum ||
-    Chain.polygon ||
-    Chain.base ||
-    Chain.arbitrum ||
-    Chain.avalanche ||
-    Chain.bnb ||
-    Chain.tron => expected.toLowerCase() == actual.toLowerCase(),
-  };
 }
 
 BigInt _replacementBump(BigInt value) {

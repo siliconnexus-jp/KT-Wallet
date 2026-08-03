@@ -92,6 +92,8 @@ class _ThrowingRest implements RestTransport {
 
 String _endpoint(Coin coin) => 'https://node.example/${coin.name}';
 
+String _hexHash(String nibble) => '0x${List.filled(64, nibble).join()}';
+
 TransferSession _broadcastSession(SignResult result) {
   final draft = TransferDraft(
     symbol: 'ETH',
@@ -139,6 +141,15 @@ void main() {
 
   group('BroadcastService', () {
     setUp(ExperienceMetrics.instance.clear);
+
+    test('transaction hash equality follows each chain encoding', () {
+      expect(
+        transactionHashesMatch(Chain.ethereum, _hexHash('A'), _hexHash('a')),
+        isTrue,
+      );
+      expect(transactionHashesMatch(Chain.tron, 'ABCDEF', 'abcdef'), isTrue);
+      expect(transactionHashesMatch(Chain.solana, 'AbC123', 'abc123'), isFalse);
+    });
 
     test(
       'EVM success: hex-encoded bytes to eth_sendRawTransaction, node hash back',
@@ -415,41 +426,79 @@ void main() {
       );
     }
 
-    testWidgets('real signature + node acceptance: W9 shows the node hash', (
-      tester,
-    ) async {
-      final jsonRpc = _FakeJsonRpc(
-        results: {'eth_sendRawTransaction': '0xfeedbead'},
-      );
-      final service = BroadcastService(
-        jsonRpcTransport: jsonRpc,
-        endpoints: _endpoint,
-      );
-      final result = SignResult(
-        reqId: Uint8List.fromList(List.filled(AirgapLimits.reqIdLength, 3)),
-        walletId: 'w1',
-        coin: 60,
-        signedTx: Uint8List.fromList([0x02, 0xab, 0x01]),
-        signer: '0x925fEA1c0dbf3B011391bbed682E32861BE73213',
-        txHash: 'prebroadcast-hash',
-      );
-      final session = _broadcastSession(result);
+    testWidgets(
+      'real signature + matching node acceptance keeps the local hash',
+      (tester) async {
+        final localHash = _hexHash('A');
+        final jsonRpc = _FakeJsonRpc(
+          results: {'eth_sendRawTransaction': localHash.toLowerCase()},
+        );
+        final service = BroadcastService(
+          jsonRpcTransport: jsonRpc,
+          endpoints: _endpoint,
+        );
+        final result = SignResult(
+          reqId: Uint8List.fromList(List.filled(AirgapLimits.reqIdLength, 3)),
+          walletId: 'w1',
+          coin: 60,
+          signedTx: Uint8List.fromList([0x02, 0xab, 0x01]),
+          signer: '0x925fEA1c0dbf3B011391bbed682E32861BE73213',
+          txHash: localHash,
+        );
+        final session = _broadcastSession(result);
 
-      await tester.pumpWidget(app(session, service));
-      await tester.pump();
-      await tester.tap(find.byType(KtPrimaryButton));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(app(session, service));
+        await tester.pump();
+        await tester.tap(find.byType(KtPrimaryButton));
+        await tester.pumpAndSettle();
 
-      expect(find.text('交易已提交'), findsOneWidget); // W9
-      expect(session.broadcastTxHash, '0xfeedbead');
-      expect(
-        find.text(truncateMiddle('0xfeedbead', head: 6, tail: 6)),
-        findsOneWidget,
-      );
-      expect(find.text('确认中'), findsOneWidget);
-      expect(find.textContaining(RegExp(r'\(\d+/\d+\)')), findsNothing);
-      expect(jsonRpc.calls, hasLength(1));
-    });
+        expect(find.text('交易已提交'), findsOneWidget); // W9
+        expect(session.broadcastTxHash, localHash);
+        expect(
+          find.text(truncateMiddle(localHash, head: 6, tail: 6)),
+          findsOneWidget,
+        );
+        expect(find.text('确认中'), findsOneWidget);
+        expect(find.textContaining(RegExp(r'\(\d+/\d+\)')), findsNothing);
+        expect(jsonRpc.calls, hasLength(1));
+      },
+    );
+
+    testWidgets(
+      'node hash mismatch stays unknown and keeps the locally verified hash',
+      (tester) async {
+        final localHash = _hexHash('a');
+        final jsonRpc = _FakeJsonRpc(
+          results: {'eth_sendRawTransaction': _hexHash('b')},
+        );
+        final service = BroadcastService(
+          jsonRpcTransport: jsonRpc,
+          endpoints: _endpoint,
+        );
+        final result = SignResult(
+          reqId: Uint8List.fromList(List.filled(AirgapLimits.reqIdLength, 4)),
+          walletId: 'w1',
+          coin: 60,
+          signedTx: Uint8List.fromList([0x02, 0xab, 0x01]),
+          signer: '0x925fEA1c0dbf3B011391bbed682E32861BE73213',
+          txHash: localHash,
+        );
+        final session = _broadcastSession(result);
+
+        await tester.pumpWidget(
+          app(session, service, locale: const Locale('en')),
+        );
+        await tester.pump();
+        await tester.tap(find.byType(KtPrimaryButton));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Broadcast result unknown'), findsOneWidget);
+        expect(find.textContaining('Do not send it again'), findsOneWidget);
+        expect(session.broadcastTxHash, result.txHash);
+        expect(session.broadcastOutcomeUnknown, isTrue);
+        expect(jsonRpc.calls, hasLength(1));
+      },
+    );
 
     testWidgets(
       'real signature + node rejection: stays on W8 with a localized reason',

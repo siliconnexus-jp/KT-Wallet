@@ -286,7 +286,9 @@ therefore distinguishes signing, broadcasting, and chain confirmation.
   the locally verified signed transaction (case-insensitive only for EVM/TRON);
   a mismatch remains outcome-unknown, retains the local hash, and is never
   retried automatically. A failed intent write performs neither signing nor
-  broadcasting.
+  broadcasting. The same response binding applies when the online wallet
+  submits a cryptographically verified QR result from KT Cold Signer: the node
+  cannot replace the transaction identity chosen by the offline signer.
 - Offline safety checks use `safe`, `unsafe`, and `unknown`; an unavailable
   probe is never displayed as a successful check.
 - Signing is blocked when the signer detects an online connection, screen
@@ -514,7 +516,7 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-03) completed with zero static-analysis
-issues: **1,517/1,517** KT Wallet tests, **570/570** KT Cold Signer tests, and
+issues: **1,519/1,519** KT Wallet tests, **570/570** KT Cold Signer tests, and
 **409/409** shared-package tests passed. The default gate passed **12/12** and
 the native/runtime/OSV `--full` gate passed **13/13**. The Gateway audit,
 public-secret gate, Gateway public-release version gate, native dependency
