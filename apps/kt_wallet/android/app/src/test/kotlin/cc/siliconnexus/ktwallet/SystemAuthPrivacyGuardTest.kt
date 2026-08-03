@@ -10,15 +10,15 @@ class SystemAuthPrivacyGuardTest {
         var now = 1_000L
         val guard = SystemAuthPrivacyGuard(clock = { now }, dismissalGraceMs = 500)
 
-        assertFalse(guard.suppressesPrivacyActivity())
+        assertFalse(guard.suppressesTaskPrivacyTransition())
         guard.started()
-        assertTrue(guard.suppressesPrivacyActivity())
+        assertTrue(guard.suppressesTaskPrivacyTransition())
         guard.finished()
-        assertTrue(guard.suppressesPrivacyActivity())
+        assertTrue(guard.suppressesTaskPrivacyTransition())
         now += 499
-        assertTrue(guard.suppressesPrivacyActivity())
+        assertTrue(guard.suppressesTaskPrivacyTransition())
         now += 1
-        assertFalse(guard.suppressesPrivacyActivity())
+        assertFalse(guard.suppressesTaskPrivacyTransition())
     }
 
     @Test
@@ -29,9 +29,9 @@ class SystemAuthPrivacyGuardTest {
         guard.started()
         guard.finished()
         now += 20
-        assertTrue(guard.suppressesPrivacyActivity())
+        assertTrue(guard.suppressesTaskPrivacyTransition())
         guard.finished()
         now += 10
-        assertFalse(guard.suppressesPrivacyActivity())
+        assertFalse(guard.suppressesTaskPrivacyTransition())
     }
 }

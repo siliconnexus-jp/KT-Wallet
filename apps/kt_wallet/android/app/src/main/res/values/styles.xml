@@ -5,6 +5,9 @@
         <!-- Show a splash screen on the activity. Automatically removed when
              the Flutter engine draws its first frame -->
         <item name="android:windowBackground">@drawable/launch_background</item>
+        <item name="android:statusBarColor">#080C18</item>
+        <item name="android:navigationBarColor">#080C18</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
     <!-- Theme applied to the Android Window as soon as the process has started.
          This theme determines the color of the Android Window while your
@@ -14,12 +17,5 @@
          This Theme is only used starting with V2 of Flutter's Android embedding. -->
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">?android:colorBackground</item>
-    </style>
-    <style name="PrivacyTheme" parent="@android:style/Theme.Material.NoActionBar">
-        <item name="android:fontFamily">sans</item>
-        <item name="android:windowBackground">#080C18</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:navigationBarColor">#080C18</item>
-        <item name="android:statusBarColor">#080C18</item>
     </style>
 </resources>

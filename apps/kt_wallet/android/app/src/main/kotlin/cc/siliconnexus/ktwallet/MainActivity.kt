@@ -1,6 +1,7 @@
 package cc.siliconnexus.ktwallet
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.KeyguardManager
 import android.bluetooth.BluetoothAdapter
 import android.content.ContentValues
@@ -58,10 +59,10 @@ class MainActivity : FlutterFragmentActivity(), CoreCryptoAuthLifecycleHost {
     private var privacyCover: View? = null
     private var securityChannel: MethodChannel? = null
     private var screenCaptureCallback: Activity.ScreenCaptureCallback? = null
-    private var activityResumed = false
     private lateinit var nativeIncidentStore: NativeIncidentStore
     private lateinit var nativeAnrWatchdog: NativeAnrWatchdog
     private val systemAuthPrivacyGuard = SystemAuthPrivacyGuard()
+    private val taskPrivacyState = TaskPrivacyState()
 
     // Overlay copy pushed from Dart. The resource strings resolve against the
     // SYSTEM language, which ignores an in-app language override; these win
@@ -75,10 +76,8 @@ class MainActivity : FlutterFragmentActivity(), CoreCryptoAuthLifecycleHost {
         nativeIncidentStore = NativeIncidentStore(applicationContext)
         NativeFatalObserver(nativeIncidentStore).install()
         nativeAnrWatchdog = NativeAnrWatchdog(nativeIncidentStore)
-        // Keep Recents screenshots enabled: onUserLeaveHint installs the
-        // branded privacy cover before Android snapshots the task. Disabling
-        // task screenshots here would make Android reuse an older app frame
-        // instead of capturing the newly installed protection page.
+        configureTaskAppearance()
+        applyScreenCapturePolicy()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -108,11 +107,8 @@ class MainActivity : FlutterFragmentActivity(), CoreCryptoAuthLifecycleHost {
                 when (call.method) {
                     "setSecure" -> {
                         val secure = call.arguments as? Boolean ?: false
-                        if (secure) {
-                            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                        } else {
-                            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                        }
+                        taskPrivacyState.setSensitiveRouteSecure(secure)
+                        applyScreenCapturePolicy()
                         result.success(null)
                     }
                     "setPrivacyStrings" -> {
@@ -244,6 +240,10 @@ class MainActivity : FlutterFragmentActivity(), CoreCryptoAuthLifecycleHost {
     }
 
     override fun onStop() {
+        taskPrivacyState.onStop()
+        refreshPrivacyCover()
+        configureTaskAppearance()
+        applyScreenCapturePolicy()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             screenCaptureCallback?.let(::unregisterScreenCaptureCallback)
             screenCaptureCallback = null
@@ -252,33 +252,34 @@ class MainActivity : FlutterFragmentActivity(), CoreCryptoAuthLifecycleHost {
     }
 
     override fun onPause() {
-        activityResumed = false
+        taskPrivacyState.onPause()
         nativeAnrWatchdog.setForeground(false)
-        refreshPrivacyCover()
         super.onPause()
     }
 
     override fun onUserLeaveHint() {
         // BiometricPrompt can also cause this callback on some Android builds.
-        // Starting PrivacyActivity then steals the FragmentActivity host and
-        // leaves the authentication future unresolved. The in-window cover is
-        // still installed by onPause if the user genuinely backgrounds the
-        // app while a prompt is open.
-        if (systemAuthPrivacyGuard.suppressesPrivacyActivity()) {
+        // Changing the Activity surface while authentication owns the host can
+        // leave the authentication future unresolved. A true onStop still
+        // installs the cover behind the system prompt.
+        if (systemAuthPrivacyGuard.suppressesTaskPrivacyTransition()) {
             super.onUserLeaveHint()
             return
         }
+        // Install the cover in this window. Starting a second Activity after
+        // the task has begun leaving can miss Android's snapshot deadline and
+        // make Recents reuse the sensitive pre-cover frame.
+        taskPrivacyState.onUserLeaveHint()
         showPrivacyCover()
-        startActivity(Intent(this, PrivacyActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
-        })
-        overridePendingTransition(0, 0)
+        configureTaskAppearance()
+        applyScreenCapturePolicy()
         super.onUserLeaveHint()
     }
 
     override fun onResume() {
         super.onResume()
-        activityResumed = true
+        taskPrivacyState.onResume()
+        applyScreenCapturePolicy()
         nativeAnrWatchdog.setForeground(true)
         refreshPrivacyCover()
     }
@@ -301,7 +302,44 @@ class MainActivity : FlutterFragmentActivity(), CoreCryptoAuthLifecycleHost {
     // focus while the Activity is still visible. Banking-style privacy
     // protection should replace Recents/background snapshots, not the live
     // screen under a temporary system overlay.
-    private fun privacyProtectionRequired() = !activityResumed
+    private fun privacyProtectionRequired() = taskPrivacyState.shouldProtect()
+
+    private fun applyScreenCapturePolicy() {
+        val policy = taskPrivacyState.capturePolicy(Build.VERSION.SDK_INT)
+        if (policy.windowSecure) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            setRecentsScreenshotEnabled(policy.recentsScreenshotEnabled == true)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun configureTaskAppearance() {
+        // When task screenshots are disabled Android renders a generated task
+        // card. Give that card the same dark KT privacy surface rather than a
+        // white system default.
+        val brand = Color.rgb(8, 12, 24)
+        val description = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ActivityManager.TaskDescription.Builder()
+                .setLabel(getString(R.string.app_name))
+                .setIcon(R.mipmap.ic_launcher)
+                .setPrimaryColor(brand)
+                .setBackgroundColor(brand)
+                .setStatusBarColor(brand)
+                .setNavigationBarColor(brand)
+                .build()
+        } else {
+            ActivityManager.TaskDescription(
+                getString(R.string.app_name),
+                R.mipmap.ic_launcher,
+                brand,
+            )
+        }
+        setTaskDescription(description)
+    }
 
     private fun refreshPrivacyCover() {
         if (privacyProtectionRequired()) showPrivacyCover() else hidePrivacyCover()

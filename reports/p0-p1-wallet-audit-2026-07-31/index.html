@@ -428,11 +428,12 @@
           切换钱包密码/生物识别和修改 PIN 都必须验证当前身份；启用生物识别会执行真实
           可用性检查与认证请求。无 PIN 且生物识别不可用的旧安装状态不再自动降低保护。
           App 层流程已在 iOS Simulator 与 Android API 35 独立执行。</small></div>
-        <div class="card"><strong>系统认证与任务卡保护兼容</strong><small>部分 Android
-          系统会在 BiometricPrompt 出现时触发 onUserLeaveHint；旧实现因此启动第二个
-          PrivacyActivity 并中断认证。两款 App 现统一协调 local_auth 与原生 Wallet Core
-          的认证生命周期，同时保留 onPause 同窗口隐私封面。真实系统指纹 prompt、
-          Home → Recents 保护和恢复 MainActivity 已在 API 35 分别验证。</small></div>
+        <div class="card"><strong>系统认证与任务卡保护兼容</strong><small>严格重测发现，
+          在 onUserLeaveHint 启动第二个 PrivacyActivity 仍可能错过 Android 快照时机，
+          任务卡复用此前 Flutter 像素。两款 App 已删除该 Activity：临时 onPause 不遮挡，
+          真正离开任务时 Android 13+ 禁用 Recents 截图并显示深色 KT 占位卡，旧系统使用
+          仅后台 FLAG_SECURE；敏感路由的 FLAG_SECURE 不会在恢复时被误清除。API 35
+          已分别验证通知栏、Home → Recents 与恢复 MainActivity。</small></div>
         <div class="card"><strong>生产敏感路由不再伪造成功</strong><small>直接进入
           导入确认、交易确认、签名、broadcast-confirm 或 broadcast-result 时，必须具有
           对应的 AccountExport、draft、request、验签结果及广播证据。签名成功不等于广播
@@ -733,12 +734,13 @@
           <tr><td>Core Crypto Privacy Manifest</td><td>AuthGate 的 app-scoped UserDefaults 以 CA92.1 独立声明；CocoaPods resource bundle 与 SwiftPM resource 同时启用，源码 glob 不再吞入 xcprivacy；两份 Podfile 固定并向传递依赖传播 iOS 13 下限</td><td class="pass">podspec lint、21 项门禁定向测试、两款 Simulator 构建及最终 framework bundle 读取通过；相关两类 Xcode 警告为 0</td></tr>
           <tr><td>三语发布门禁</td><td>两款 App 的 ARB 用户键与 ICU placeholder 中英日严格一致；非英文值不得无审阅地与英文 fallback 完全相同，品牌、Nonce、Chain ID、Bluetooth 与占位破折号按 App、语言、key 精确放行；CJK 文案相邻的半角逗号、冒号和分号默认失败，仅代码调用可按 App、语言、key 精确放行；Android default / zh-rCN / ja 原生 strings 同键；iOS 显示名、相机、Face ID 与照片写入权限完整本地化</td><td class="pass">未翻译英文与半角标点门禁均先红后绿；修正 13 条中文及 2 条日文生产文案；真实双 App ARB、check_deps、KT Wallet 1458/1458、test_support 57/57、共享 packages 397/397 通过；既有两款 iOS Simulator 与两份 Android Debug APK 最终资源表证据保持有效</td></tr>
           <tr><td>Cold Signer 品牌一致性</td><td>配对说明、账户扫码提示、观察钱包状态和签名拦截提示按语言统一使用英文/日文 <code>KT Cold Signer</code>、中文 <code>KT冷钱包</code>；通用 ARB 禁用词门禁拒绝退役品牌及中文目录中的英文产品名</td><td class="pass">门禁单测先红后绿，三语 Widget 与 3 张受影响 Golden 人工复核；源码审计 12/12、KT Wallet 1461/1461、KT Cold Signer 570/570、共享 packages 400/400、静态分析 0、Gateway audit 通过</td></tr>
-          <tr><td>HTML 报告浏览器验收</td><td>2026-08-03 使用真实 Chromium 重新以 1280px 桌面与 390×844 移动视口加载 HTTP 报告，并检查 113 张图片、横向溢出、AAB 制品/工具链行及控制台日志；移动端三列表格从被挤成逐字换行修正为纵向证据卡片</td><td class="pass">两端均无横向溢出，113/113 图片可解码，broken image 为 0，控制台 warning/error 为 0；移动截图中两款 APK/AAB 大小、哈希、门禁、producer/lock/runtime 依赖结果与未签名边界可连续阅读</td></tr>
+          <tr><td>HTML 报告浏览器验收</td><td>2026-08-03 使用真实 Chromium 重新以 1280px 桌面与 390×844 移动视口加载 HTTP 报告，并检查 119 张图片、横向溢出、AAB 制品/工具链行及控制台日志；移动端三列表格从被挤成逐字换行修正为纵向证据卡片</td><td class="pass">两端均无横向溢出，119/119 图片可解码，broken image 为 0，控制台 warning/error 为 0；移动截图中两款 APK/AAB 大小、哈希、门禁、producer/lock/runtime 依赖结果与未签名边界可连续阅读</td></tr>
           <tr><td>Android Core Crypto</td><td>12 个原生认证分类与 prompt 启动闭合测试；同步启动异常必须完成 MethodChannel，不能抛出后让 Dart 悬挂</td><td class="pass">12/12 通过</td></tr>
           <tr><td>Android 原生聚合测试边界</td><td>mobile_scanner 的 JUnit 6.1.2 测试 classpath 共 7 个 Gradle module metadata 与 6 个 JAR，逐项比对 <a href="https://repo.maven.apache.org/maven2/org/junit/">Maven Central 官方 SHA-256</a>、全新下载和本机缓存后，以精确哈希和来源加入两款 App；仓库门禁会拒绝缺失、重复、哈希漂移或信任扩张。KT Wallet 与 KT Cold Signer 的根级 <code>testDebugUnitTest --offline</code> 分别通过 298 与 252 个 actionable tasks</td><td class="pass">根级聚合测试已恢复；JUnit 6 仅为测试依赖。JUnit Vintage、built-in Kotlin 与 Mockito agent 仍为上游 warning，provenance 核验不等同安全审计</td></tr>
           <tr><td>Android AGP 9 / Kotlin 迁移</td><td>两个 App 自身均未应用 KGP；移除 <code>android.builtInKotlin=false</code> 后分别执行真实 Debug 构建，Flutter 3.44.2 因当前最新 <code>mobile_scanner 7.4.0</code> 仍条件应用 <code>kotlin-android</code> 而自动写回兼容开关。普通 AGP deprecation warning 同时来自 Core Crypto 与多个 Flutter plugin，但 Flutter 当前明确的未来 hard-fail 列表只点名 mobile_scanner</td><td class="partial">两份 APK 构建通过；未来 Flutter 会阻断，待插件生态完成内建 Kotlin 迁移后关闭告警</td></tr>
           <tr><td>Cold Signer 系统认证错误语义</td><td>只有无凭据、未录入、无硬件或插件缺失允许自动进入 App PIN；取消、超时、锁定、系统/设备错误和未知错误全部失败闭合</td><td class="pass">分类与 UI 21/21；完整 Signer 226/226</td></tr>
-          <tr><td>Android 系统认证/隐私页边界</td><td>两款 App 的 local_auth 真系统指纹；KT Wallet 的真实 Wallet Core EVM/TRON canonical 签名、在线强化验签与临时钱包删除；认证期间不启动第二个 PrivacyActivity，真实切后台仍覆盖当前窗口</td><td class="pass">设备集成 3/3；App guard JVM 3/3；恢复 MainActivity 正常</td></tr>
+          <tr><td>Android 系统认证/隐私页边界</td><td>两款 App 的 local_auth 真系统指纹；KT Wallet 的真实 Wallet Core EVM/TRON canonical 签名、在线强化验签与临时钱包删除；认证期间不把系统 prompt 当成离开 App，真正切后台则进入任务保护状态</td><td class="pass">设备集成 3/3；App guard JVM 3/3；恢复 MainActivity 正常</td></tr>
+          <tr><td>Android 任务切换器快照闭合</td><td>移除会错过快照时机的第二个 PrivacyActivity；onPause 不处理通知栏等临时覆盖，onUserLeaveHint/onStop 才保护。API 33+ 禁用 Recents 截图并设置深色 KT task description；API 24–32 使用后台 FLAG_SECURE。敏感路由 secure 状态与后台状态独立合并，resume 不会误清除助记词保护</td><td class="partial">两款 App 各 6 项策略单测、完整原生聚合测试与 API 35 系统截图通过；通知栏保持 topResumed，Home/Recents 无内部像素，任务卡恢复正常。API 24–32 运行时与零售真机矩阵仍待验收</td></tr>
           <tr><td>EVM replacement 矩阵</td><td>iOS 原生 Wallet Core + 系统 Face ID；Sepolia、Base Sepolia、Avalanche Fuji、BNB Testnet 分别验证 speed-up/cancel，原候选无 receipt，获胜内容保持 1 wei 或取消为 0 自转</td><td class="pass">四链八组真实链上通过</td></tr>
           <tr><td>Ethereum 离线完整闭环</td><td>iOS 26.2 + Android API 35；八链 AccountExport 严格配对、AIRGAP-V1 请求/结果帧、系统认证、原生 Wallet Core、在线验签、Sepolia 广播/receipt/Gateway 历史</td><td class="pass">ETH + Test USDT 双端四笔通过</td></tr>
           <tr><td>EVM 扩展链离线完整闭环</td><td>Base、Arbitrum、Avalanche、BNB；每链原生币 + 官方测试 Token，iOS 26.2 与隔离 Android API 35 分别执行完整 AIRGAP-V1、系统认证、原生签名、在线验签、广播、receipt 与 Gateway 历史</td><td class="pass">四链双端 16 笔全新交易通过</td></tr>
@@ -811,7 +813,7 @@
         证据支持。新增授权中心 Golden 为确定性 Widget 渲染，只证明隐私同意、风险分级
         与操作可达，不冒充生产 GoPlus 响应或主网撤销。备份 Provider 故障图同样是
         确定性 Widget 注入，只证明失败与取消已分离、错误文本和布局正确，不冒充
-        iCloud Drive 或 Android 文档 Provider 真机故障。报告共引用 113 张截图。</p>
+        iCloud Drive 或 Android 文档 Provider 真机故障。报告共引用 119 张截图。</p>
       <h3>备份 Provider 故障失败闭合 UI</h3>
       <p class="muted">系统文件选择器返回稳定读取失败时，页面保留在恢复流程并给出可操作的
         固定提示；不会静默当作取消，也不会显示 Provider 路径或异常文本。</p>
@@ -926,8 +928,14 @@
         <figure><img src="screenshots/android-22-token-risk-unavailable.png" alt="Android unavailable token risk"><figcaption>风险服务不可用：明确无法确认安全，不误报绿色</figcaption></figure>
         <figure><img src="screenshots/android-23-trust-legal-security.png" alt="Android trust and legal disclosures"><figcaption>About：隐私、风险、许可证、安全政策与报告流程</figcaption></figure>
         <figure><img src="screenshots/android-24-native-cold-signer-flag-secure.png" alt="Android system authentication protected capture"><figcaption>系统凭据认证期间捕获为黑屏；UIAutomator 独立确认原生认证提示存在，不作为普通页全局 FLAG_SECURE 证据</figcaption></figure>
-        <figure><img src="assets/android-security/kt-wallet-recents-protection.png" alt="KT Wallet branded Android Recents protection"><figcaption>KT Wallet：Home → Recents 只显示完整品牌保护页，内部钱包内容不可见</figcaption></figure>
-        <figure><img src="assets/android-security/kt-cold-signer-recents-protection.png" alt="Historical KT Cold Signer Android FLAG_SECURE Recents placeholder"><figcaption>历史策略对照：旧全局 FLAG_SECURE 任务卡为空白；当前仅助记词展示/校验/导入路由启用，普通页任务卡仍待零售真机重新验收</figcaption></figure>
+        <figure><img src="screenshots/android-lifecycle-2026-08-03/kt-wallet-foreground-fixed.png" alt="KT Wallet foreground before lifecycle test"><figcaption>KT Wallet 前台基线：内部页面正常可见且普通截图保持允许</figcaption></figure>
+        <figure><img src="screenshots/android-lifecycle-2026-08-03/kt-wallet-notification-shade-fixed.png" alt="KT Wallet notification shade without privacy takeover"><figcaption>KT Wallet 完整通知栏：系统层正常展开；dumpsys 证明 MainActivity 仍为 topResumed，不触发任务保护页</figcaption></figure>
+        <figure><img src="screenshots/android-lifecycle-2026-08-03/kt-wallet-recents-protected.png" alt="KT Wallet protected Android Recents task"><figcaption>KT Wallet Home → Recents：Android 13+ 系统生成深色 KT 任务卡，无任何钱包页面像素</figcaption></figure>
+        <figure><img src="screenshots/android-lifecycle-2026-08-03/kt-wallet-resumed-fixed.png" alt="KT Wallet restored from protected task"><figcaption>KT Wallet 点击任务卡恢复：原 MainActivity 正常返回，无封面残留或旧页面闪帧</figcaption></figure>
+        <figure><img src="screenshots/android-lifecycle-2026-08-03/kt-cold-signer-foreground-fixed.png" alt="KT Cold Signer foreground before lifecycle test"><figcaption>KT Cold Signer 前台基线：普通页面允许截图；助记词路由仍独立使用 FLAG_SECURE</figcaption></figure>
+        <figure><img src="screenshots/android-lifecycle-2026-08-03/kt-cold-signer-notification-shade-fixed.png" alt="KT Cold Signer notification shade without privacy takeover"><figcaption>KT Cold Signer 完整通知栏：临时系统覆盖不会误切换到隐私页</figcaption></figure>
+        <figure><img src="screenshots/android-lifecycle-2026-08-03/kt-cold-signer-recents-protected.png" alt="KT Cold Signer protected Android Recents task"><figcaption>KT Cold Signer Home → Recents：深色安全任务卡不含离线钱包页面内容</figcaption></figure>
+        <figure><img src="screenshots/android-lifecycle-2026-08-03/kt-cold-signer-resumed-fixed.png" alt="KT Cold Signer restored from protected task"><figcaption>KT Cold Signer 点击任务卡恢复：原 Activity 与页面状态正常返回</figcaption></figure>
         <figure><img src="screenshots/android-cold-security-localized-en.png" alt="Android localized Cold Signer security check"><figcaption>Cold Signer 英文安全检查：确定性安全状态只用于验证无中文混排</figcaption></figure>
         <figure><img src="screenshots/android-cold-delete-phrase-gate.png" alt="Android Cold Signer deletion phrase gate"><figcaption>删除认证：未输入完整确认文字前永久删除按钮保持禁用</figcaption></figure>
         <figure><img src="screenshots/android-cold-delete-pin-required.png" alt="Android Cold Signer deletion PIN gate"><figcaption>删除认证：确认文字后仍强制输入当前 App PIN</figcaption></figure>

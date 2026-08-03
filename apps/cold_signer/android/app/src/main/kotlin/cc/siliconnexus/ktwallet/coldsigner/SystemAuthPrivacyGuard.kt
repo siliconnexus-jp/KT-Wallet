@@ -2,7 +2,7 @@ package cc.siliconnexus.ktwallet.coldsigner
 
 import android.os.SystemClock
 
-/** Keeps the task privacy Activity away from an active system-auth window. */
+/** Prevents a biometric prompt transition from being mistaken for app exit. */
 internal class SystemAuthPrivacyGuard(
     private val clock: () -> Long = SystemClock::elapsedRealtime,
     private val dismissalGraceMs: Long = 1_500,
@@ -22,6 +22,6 @@ internal class SystemAuthPrivacyGuard(
     }
 
     @Synchronized
-    fun suppressesPrivacyActivity(): Boolean =
+    fun suppressesTaskPrivacyTransition(): Boolean =
         activeCount > 0 || clock() < suppressUntil
 }

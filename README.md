@@ -267,9 +267,12 @@ therefore distinguishes signing, broadcasting, and chain confirmation.
   Wallet entropy remains in a passcode-required, this-device-only Keychain
   item. Recovery is through the explicit encrypted backup or recovery phrase,
   not an implicit app-data restore.
-- Both apps replace their content with a branded privacy cover when entering
-  the background or app switcher. Successful screenshots trigger a
-  non-blocking security warning where the operating system supports detection.
+- Both apps install an in-window privacy cover when the task leaves the
+  foreground. On Android 13+, Recents capture is disabled and the system shows
+  a dark KT task placeholder; older Android versions use a background-only
+  secure-window fallback. Pulling a notification shade or another temporary
+  system overlay does not replace the live UI. Successful screenshots trigger
+  a non-blocking security warning where the operating system supports detection.
 - Production routes do not seed sample wallets, fake balances, or simulated
   successful transactions.
 - Online verification recovers the signer from canonical signed bytes and

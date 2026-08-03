@@ -250,12 +250,12 @@
 - [x] App 层 PIN/生物识别切换、旧 PIN 验证后修改、重启偏好恢复、密码优先
   转账认证与生产敏感路由防绕过已在 iOS Simulator 和 Android API 35 独立
   执行并截图；无 PIN 且生物识别不可用的旧状态保持 fail-closed。
-- [x] Android 系统认证与后台隐私 Activity 不再互相抢占：`local_auth` 与原生
-  Wallet Core 的 `BiometricPrompt` 都向宿主报告认证生命周期，认证期间及弹窗关闭
-  后 1.5 秒内禁止启动任务卡 `PrivacyActivity`；若用户确实在认证期间切到后台，
-  `onPause` 仍先安装同窗口隐私封面。API 35 模拟器已使用真实已登记系统指纹分别
-  跑通 KT Wallet、KT Cold Signer 的 `local_auth`，以及 EVM/TRON 原生 Wallet Core
-  签名；普通 Home → Recents 仍只显示保护页，恢复后 MainActivity 正常可用。
+- [x] Android 系统认证与后台任务保护不再互相抢占：`local_auth` 与原生 Wallet Core
+  的 `BiometricPrompt` 都向宿主报告认证生命周期，认证期间及弹窗关闭后 1.5 秒内不把
+  `onUserLeaveHint` 当成真实离开；若用户确实在认证期间切到后台，后续 `onStop` 仍会
+  进入保护状态。实现不再启动第二个 Activity。API 35 模拟器已使用真实已登记系统指纹
+  分别跑通 KT Wallet、KT Cold Signer 的 `local_auth`，以及 EVM/TRON 原生 Wallet Core
+  签名；普通 Home → Recents 只显示深色安全任务卡，恢复后 MainActivity 正常可用。
 - [x] Android 两款 App 显式设置 `allowBackup=false`，并用 Android 11 及以下
   `fullBackupContent` 与 Android 12+ `dataExtractionRules` 同时排除云备份和设备间迁移；
   最终合并 APK 门禁验证该属性，而不只检查源码 Manifest。Cold Signer 的 ML Kit
@@ -626,11 +626,23 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   超时、原生错误或无法可靠检测的状态显示“无法确认”，不会悬挂或误报绿色。
 - [ ] iOS 普通钱包、内嵌签名器、KT Cold Signer 的 App Switcher/锁屏/控制中心。
 - [ ] Android 截图策略、后台保护和系统任务卡。
-  - API 35 模拟器已验证 KT Wallet 任务卡为完整品牌保护页，恢复不丢 Activity；
-    Cold Signer 当前只在助记词展示/校验/导入路由启用 `FLAG_SECURE`，普通页面允许
-    截图并在 API 34+ 成功截屏后提示；旧“全局空白任务卡”截图仅是历史策略，不作为
-    当前验收。该项仍保持未完成，等待零售 Android 真机覆盖普通页与助记词页的 Home、
-    Recents、锁屏、截图、录屏和认证弹窗期间切后台。
+  - 2026-08-03 严格重测发现，旧实现虽然在 `onUserLeaveHint` 启动了第二个
+    `PrivacyActivity`，Android 的任务快照仍可能复用启动前的 Flutter 页面；旧报告中的
+    品牌页截图不能证明每次任务卡都安全。现在两款 App 已删除该第二 Activity，并把
+    `onPause` 与真正离开任务分开：通知栏、权限层等临时系统覆盖不隐藏当前画面；
+    `onUserLeaveHint/onStop` 才进入保护状态。
+  - Android 13+ 在保护状态使用官方 `setRecentsScreenshotEnabled(false)`，任务描述背景
+    固定为 KT 深色并显示 App 图标；Android 12 及以下使用仅后台生效的
+    `FLAG_SECURE` 回退。助记词路由的独立 `FLAG_SECURE` 与后台状态取并集，恢复前台
+    不能误清除敏感路由保护。普通前台截图仍允许，API 34+ 成功截屏后继续提示。
+  - API 35 单一模拟器已分别验证 KT Wallet 与 KT Cold Signer：前台、完整通知栏、
+    Home → Recents 深色安全任务卡、点击任务卡恢复共 8 张系统截图；`dumpsys` 证明通知栏
+    展开时原 MainActivity 仍是 `topResumedActivity`，Recents 中没有任何 App 内部像素，
+    恢复后没有封面残留。每个 App 的 6 项纯状态单测覆盖 API 33+ 与 API 32 回退、
+    临时 pause、stop、resume 和敏感路由保持；双端原生聚合测试及源码门禁 12/12 通过。
+  - 该项仍保持未完成：API 24–32 当前只有策略单测、没有对应系统运行截图；还需零售
+    Android 真机覆盖普通页与助记词页的 Home、Recents、锁屏、截图、录屏和认证弹窗
+    期间切后台。
 - [ ] iOS 截图提醒真机通知。
 - [x] 自动化已证明 root/jailbreak、录屏、网络状态无法确认时显示 `unknown`；各厂商
   ROM / 越狱工具的真机检测覆盖仍归上方真机矩阵，不能据此宣称完整检测率。
