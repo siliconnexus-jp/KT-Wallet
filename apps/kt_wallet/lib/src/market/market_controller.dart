@@ -71,6 +71,7 @@ class MarketController extends ChangeNotifier {
   bool _refreshing = false;
   bool _hasRefreshed = false;
   bool _showingCachedData = false;
+  bool _disposed = false;
   DateTime? _lastUpdatedAt;
 
   Map<Coin, BalanceResult> _results = {
@@ -288,7 +289,7 @@ class MarketController extends ChangeNotifier {
   /// First-entry refresh: no-op if one already ran or is running (wallet
   /// switches and pull-to-refresh call [refresh] directly).
   void refreshIfNeeded() {
-    if (!_canRefresh() || _hasRefreshed || _refreshing) return;
+    if (_disposed || !_canRefresh() || _hasRefreshed || _refreshing) return;
     refresh();
   }
 
@@ -296,7 +297,7 @@ class MarketController extends ChangeNotifier {
   /// A refresh superseded by a newer one (e.g. wallet switched mid-flight)
   /// discards its results.
   Future<void> refresh() async {
-    if (!_canRefresh()) return;
+    if (_disposed || !_canRefresh()) return;
     final wallet = _wallets.current;
     if (wallet == null) return;
     final metricStopwatch = Stopwatch()..start();
@@ -484,13 +485,44 @@ class MarketController extends ChangeNotifier {
   }
 
   void _onWalletsChanged() {
+    if (_disposed) return;
     final id = _wallets.current?.id;
     if (id == _walletId) return;
-    if (id != null) refresh();
+    if (id == null) {
+      _clearWalletState();
+      return;
+    }
+    refresh();
+  }
+
+  /// Invalidates every request owned by the deleted wallet before removing
+  /// its balances from memory. A late provider response must not repopulate a
+  /// screen after the final wallet (and its public account identity) is gone.
+  void _clearWalletState() {
+    _generation++;
+    _walletId = null;
+    _activeSnapshotScope = null;
+    _refreshing = false;
+    _hasRefreshed = false;
+    _showingCachedData = false;
+    _lastUpdatedAt = null;
+    _results = {
+      for (final coin in Coin.values) coin: const BalanceResult.loading(),
+    };
+    _tokenResults = {
+      for (final token in tokens) token.id: const BalanceResult.loading(),
+    };
+    _pricesUsd = null;
+    notifyListeners();
   }
 
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    // Balance/price futures cannot be cancelled. Supersede their callbacks so
+    // no late provider result can notify a controller after route teardown.
+    _generation++;
     _wallets.removeListener(_onWalletsChanged);
     super.dispose();
   }

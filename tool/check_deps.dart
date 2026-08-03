@@ -893,6 +893,33 @@ void main() {
       );
     }
   }
+  for (final entry in const {
+    'apps/kt_wallet/lib/src/market/market_controller.dart': [
+      'if (id == null) {\n      _clearWalletState();',
+      'void _clearWalletState()',
+      'if (_disposed || !_canRefresh()) return;',
+      'Supersede their callbacks so',
+      '_generation++;',
+      '_pricesUsd = null;',
+    ],
+    'apps/kt_wallet/lib/src/market/history_controller.dart': [
+      'if (id == null) {\n      _clearWalletState();',
+      'void _clearWalletState()',
+      'Wallet/network identity changes are a synchronous privacy boundary.',
+      '_generation++;',
+      '_localTransactions = const [];',
+      '_notices.clear();',
+    ],
+  }.entries) {
+    final source = File(entry.key).readAsStringSync();
+    for (final marker in entry.value) {
+      if (!source.contains(marker)) {
+        failures.add(
+          '${entry.key} can retain deleted-wallet data after the final wallet is removed: $marker',
+        );
+      }
+    }
+  }
   final historyScopeHost = File(
     'apps/kt_wallet/lib/src/market/history_scope_host.dart',
   );

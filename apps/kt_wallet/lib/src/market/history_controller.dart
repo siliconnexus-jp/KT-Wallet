@@ -354,6 +354,13 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     _loadingMore = loadingMore;
     final coins = wallet.addresses.enabledCoins;
     if (contextChanged) {
+      // Wallet/network identity changes are a synchronous privacy boundary.
+      // Remove the previous wallet's local rows and queued status notices
+      // before any snapshot or database await can yield back to the UI.
+      _pollTimer?.cancel();
+      _localTransactions = const [];
+      _hasPendingTransactions = false;
+      _notices.clear();
       _remoteLimit = HistoryService.pageSize;
       _hasRefreshed = false;
       _showingCachedData = false;
@@ -361,6 +368,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
       _results = {
         for (final coin in coins) coin: const HistoryResult.loading(),
       };
+      notifyListeners();
     }
 
     if (contextChanged && _snapshots != null) {
@@ -680,10 +688,36 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     if (_disposed) return;
     final id = _wallets.current?.id;
     if (id == _walletId) return;
-    if (id != null) {
-      _refreshing = false;
-      refresh();
+    if (id == null) {
+      _clearWalletState();
+      return;
     }
+    _refreshing = false;
+    refresh();
+  }
+
+  /// Clears every wallet-derived row and invalidates in-flight explorer/RPC
+  /// work when deletion removes the final wallet. Without the generation
+  /// change, a late response could restore the deleted wallet's history.
+  void _clearWalletState() {
+    _generation++;
+    _walletId = null;
+    _activeSnapshotScope = null;
+    _refreshRequested = false;
+    _refreshing = false;
+    _loadingMore = false;
+    _hasRefreshed = false;
+    _showingCachedData = false;
+    _lastUpdatedAt = null;
+    _remoteLimit = HistoryService.pageSize;
+    _pollTimer?.cancel();
+    _localTransactions = const [];
+    _hasPendingTransactions = false;
+    _notices.clear();
+    _results = {
+      for (final coin in Coin.values) coin: const HistoryResult.loading(),
+    };
+    notifyListeners();
   }
 
   void _onNetworkChanged() {

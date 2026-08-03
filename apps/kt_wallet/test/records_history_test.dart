@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:core_crypto/core_crypto.dart' show ChainAddresses, Coin;
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/l10n/app_localizations.dart';
@@ -14,6 +15,8 @@ import 'package:kt_wallet/src/screens/home_screen.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
 import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
+import 'package:kt_wallet/src/wallets/wallet_store.dart';
+import 'package:wallet_data/wallet_data.dart';
 
 /// Real history page wiring: live rows when fetch succeeds, honest empty/error
 /// states otherwise, and no design fixtures on any wallet-facing path.
@@ -113,6 +116,26 @@ WalletController _wallets() => WalletController(
   ),
 );
 
+WalletController _singleWatchWallet() => WalletController(
+  WalletManager(
+    initial: [
+      WatchWallet(
+        id: 'watch-only',
+        name: 'Watch only',
+        avatarColor: 0xFF000000,
+        addresses: const ChainAddresses(
+          eth: '0xwatch',
+          polygon: '0xwatch',
+          tron: 'Twatch',
+          solana: 'watch',
+        ),
+        coldWalletId: 'cold-watch-only',
+        protocolVersion: 1,
+      ),
+    ],
+  ),
+);
+
 HistoryController _controller(Map<Coin, HistoryResult> results) =>
     HistoryController(
       wallets: _wallets(),
@@ -130,6 +153,113 @@ Widget _app(HistoryController controller) => MaterialApp(
 const _unsupported = HistoryResult.unsupported();
 
 void main() {
+  test(
+    'switching wallets hides the previous local history synchronously',
+    () async {
+      final database = WalletDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final first = WatchWallet(
+        id: 'watch-a',
+        name: 'Watch A',
+        avatarColor: 0xFF000000,
+        addresses: const ChainAddresses(
+          eth: '0xaaaa',
+          polygon: '0xaaaa',
+          tron: 'Taaaa',
+          solana: 'aaaa',
+        ),
+        coldWalletId: 'cold-a',
+        protocolVersion: 1,
+      );
+      final second = WatchWallet(
+        id: 'watch-b',
+        name: 'Watch B',
+        avatarColor: 0xFF000000,
+        addresses: const ChainAddresses(
+          eth: '0xbbbb',
+          polygon: '0xbbbb',
+          tron: 'Tbbbb',
+          solana: 'bbbb',
+        ),
+        sortOrder: 1,
+        coldWalletId: 'cold-b',
+        protocolVersion: 1,
+      );
+      final store = WalletStore(database);
+      await store.save(first);
+      await store.save(second);
+      final wallets = WalletController(
+        WalletManager(initial: [first, second]),
+        store: store,
+      );
+      await wallets.saveOutgoingTransaction(
+        id: 'watch-a-confirmed',
+        coin: Coin.eth,
+        networkId: 'eth-mainnet',
+        from: first.addresses.eth,
+        to: '0xcccc',
+        amountRaw: '1',
+        hash: '0x${'a' * 64}',
+        status: TxStatus.confirmed,
+        signMode: SignMode.airgap,
+        createdAt: DateTime(2026, 8, 3).millisecondsSinceEpoch,
+      );
+      final controller = HistoryController(
+        wallets: wallets,
+        service: _FakeHistoryService({
+          for (final coin in Coin.values) coin: _unsupported,
+        }),
+      );
+      addTearDown(controller.dispose);
+      await controller.refresh();
+      expect(controller.records, hasLength(1));
+
+      wallets.select(second.id);
+
+      expect(
+        controller.records,
+        isEmpty,
+        reason: 'wallet A rows must disappear before wallet B I/O completes',
+      );
+      while (controller.isRefreshing) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    },
+  );
+
+  test(
+    'removing the last wallet clears history and drops late explorer rows',
+    () async {
+      final service = _DelayedHistoryService();
+      final wallets = _singleWatchWallet();
+      final controller = HistoryController(wallets: wallets, service: service);
+      addTearDown(controller.dispose);
+
+      final refresh = controller.refresh();
+      await service.started.future;
+      await wallets.remove('watch-only');
+      service.result.complete(
+        HistoryResult.ok([
+          ChainTxRecord(
+            coin: Coin.eth,
+            networkId: 'eth-mainnet',
+            hash: '0xlate',
+            outgoing: false,
+            amountText: '1 ETH',
+            timestamp: DateTime(2026, 8, 3),
+            confirmed: true,
+          ),
+        ]),
+      );
+      await refresh;
+
+      expect(wallets.current, isNull);
+      expect(controller.isLoading, isTrue);
+      expect(controller.records, isEmpty);
+      expect(controller.notice, isNull);
+    },
+  );
+
   test(
     'disposing while explorer requests are in flight drops every late answer',
     () async {

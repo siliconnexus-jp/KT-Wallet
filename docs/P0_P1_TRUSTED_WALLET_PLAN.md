@@ -244,6 +244,13 @@
 - [x] Wallet Data 删除事务覆盖账户、Token、余额、Pending/历史、地址簿、
   SignRequest 与 wallet settings；Cold Signer 控制器测试覆盖密钥、PIN、
   lockout、metadata 与防重放记录清理。
+- [x] 删除最后一个钱包会同步清空余额、Token、价格关联、历史、本地 Pending 和状态通知
+  的控制器内存，并递增 generation 作废删除前已经发出的余额、Indexer 与 RPC 请求；晚到
+  响应不能重新填回已删除账户。钱包 A 切换到 B 时也会在任何 await 前同步隐藏 A 的本地
+  历史和排队通知，再加载 B 的快照/数据库；余额控制器销毁时递增同一 generation，所有
+  晚到 provider callback 直接丢弃，不能向已 dispose 的 notifier 发布。四个竞态回归均在
+  旧实现先红、修复后转绿；相关 Market/History 34/34、静态分析、`check_deps` 与完整
+  源码审计 12/12 通过。
 - [x] Cold Signer 删除页不再是仅展示的危险操作说明：生产钱包必须先输入当前语言下的
   完整确认文字，再验证当前 App PIN；启用系统认证时还必须通过系统生物识别/设备凭据，
   才能进入最终不可恢复确认。错误 PIN、系统认证失败和未输入确认文字都不会删除钱包；
@@ -1151,7 +1158,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     签名拦截提示仍使用已停用的 `KT Wallet Cold Signer` 或中文界面中的英文名称。
     现统一为英文/日文 `KT Cold Signer`、中文 `KT冷钱包`；新增通用 ARB 禁用词门禁，
     可按语言拒绝退役品牌和语言不匹配名称。门禁单测先红后绿，三语 Widget 回归及受影响
-    Golden 已人工复核；最新公开测试源码审计 12/12、KT Wallet 1467/1467、KT Cold
+    Golden 已人工复核；最新公开测试源码审计 12/12、KT Wallet 1471/1471、KT Cold
     Signer 570/570、共享 packages 401/401、静态分析 0、Gateway audit 全部通过。
   - [ ] 真机系统权限弹窗、生命周期保护页及全部生产路由仍需逐页三语语义人工复核，
     因此本总项保持未完成，不能扩大宣称为“全 App 本地化验收完成”。

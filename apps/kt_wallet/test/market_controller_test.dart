@@ -174,6 +174,21 @@ WalletController _wallets() => WalletController(
   ),
 );
 
+WalletController _singleWatchWallet() => WalletController(
+  WalletManager(
+    initial: [
+      WatchWallet(
+        id: 'watch-only',
+        name: 'Watch only',
+        avatarColor: 0xFF000000,
+        addresses: _addr('watch'),
+        coldWalletId: 'cold-watch-only',
+        protocolVersion: 1,
+      ),
+    ],
+  ),
+);
+
 Map<Coin, BalanceResult> _okResults() => {
   Coin.eth: BalanceResult.ok(
     Amount(
@@ -209,6 +224,58 @@ const _prices = {
 };
 
 void main() {
+  test(
+    'disposing during a balance refresh drops every late callback',
+    () async {
+      final gate = Completer<void>();
+      final balances = FakeBalanceService(_okResults())..gate = gate;
+      final controller = MarketController(
+        wallets: _wallets(),
+        balances: balances,
+        prices: FakePriceService(_prices),
+      );
+
+      final refresh = controller.refresh();
+      while (balances.calls == 0) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      controller.dispose();
+      gate.complete();
+
+      await expectLater(refresh, completes);
+    },
+  );
+
+  test(
+    'removing the last wallet clears market state and drops late responses',
+    () async {
+      final gate = Completer<void>();
+      final balances = FakeBalanceService(_okResults())..gate = gate;
+      final wallets = _singleWatchWallet();
+      final controller = MarketController(
+        wallets: wallets,
+        balances: balances,
+        prices: FakePriceService(_prices),
+      );
+      addTearDown(controller.dispose);
+
+      final refresh = controller.refresh();
+      while (balances.calls == 0) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      await wallets.remove('watch-only');
+      gate.complete();
+      await refresh;
+
+      expect(wallets.current, isNull);
+      expect(controller.hasRefreshed, isFalse);
+      expect(controller.totalUsd, isNull);
+      for (final coin in Coin.values) {
+        expect(controller.balanceFor(coin).status, BalanceStatus.loading);
+      }
+    },
+  );
+
   test('initial state: loading rows, no total, not offline', () {
     final controller = MarketController(
       wallets: _wallets(),

@@ -211,7 +211,14 @@ therefore distinguishes signing, broadcasting, and chain confirmation.
 - Wallet deletion is crash-recoverable across native key storage and the Dart
   database. Both apps durably record deletion intent before erasing a key,
   hide any pending-deletion wallet on restart, and idempotently finish metadata,
-  PIN, lockout, transaction, and signer-record cleanup.
+  PIN, lockout, transaction, and signer-record cleanup. When the final wallet
+  is removed, KT Wallet also invalidates every in-flight balance/history request
+  and clears wallet-derived controller state before a late response can restore
+  deleted account data in memory. Switching wallets synchronously hides the
+  previous wallet's local history and queued transaction notices before any
+  snapshot or database read for the new wallet can yield. Disposing the market
+  route also invalidates provider callbacks, so a late balance cannot publish
+  through a destroyed controller.
 - Wallet names, avatar colors, backup status, and ordering are published to
   the UI only after durable storage succeeds. Reordering writes every affected
   wallet in one Drift transaction, so a failure cannot persist a partial order.
@@ -433,7 +440,7 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-03) completed with zero static-analysis
-issues: **1,467/1,467** KT Wallet tests, **570/570** KT Cold Signer tests, and
+issues: **1,471/1,471** KT Wallet tests, **570/570** KT Cold Signer tests, and
 **401/401** shared-package tests passed. The Gateway audit, public-secret gate,
 native dependency lock/checksum verification, and OSV scans also passed. These
 numbers are reproducible source evidence. On the same date, the iOS native
