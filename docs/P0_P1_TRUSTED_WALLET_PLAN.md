@@ -934,7 +934,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     FluxGate、HAProxy、客户端或两个 Gateway 实例即使重复送达相同 POST，也不会产生第二次
     链 RPC write。这里只证明单物理主机冗余，不等同于多地域容灾。
   - [x] 2026-08-03 对独立 FluxGate 仓库完成数据面边界复核：生产基线源码只有一次
-    Hyper upstream request、无应用层 retry；本地候选进一步删除上游失败日志中的完整
+    Hyper upstream request、无应用层 retry；最终版本进一步删除上游失败日志中的完整
     URL/query 与 connector error，只保留 bounded upstream name，并加入禁止重复转发和
     动态错误泄漏的结构回归。继续严审发现旧 HTTPS upstream 使用 accept-all verifier；
     现已改为编译内置 Mozilla WebPKI 根并强制证书链与请求主机名校验，运行时正例接受
@@ -948,13 +948,20 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     继续保留。结构回归禁止整文件 `read_to_string`/`join`，并覆盖最新有效尾部、裁剪、
     原子替换、整理期间 200 条实时追加、替换后追加和不完整尾行。
     OSV Scanner 2.3.8 对 300 个 Rust 包结果为 0，CI action 固定到已复核 commit；
-    格式、严格 Clippy、Release 构建与工作区 199 项实际执行测试通过，7 项基准/长耗时测试
-    明确 ignored。Linux amd64 musl static-pie 候选 SHA-256 为
-    `e05013c329466981fc9e3a2501339408136f6ad1ea5b072bc7e35aa2787b466a`。
-    该修复尚未提交/部署；只读核对证明生产仍运行旧 SHA-256
-    `2c802f33a06593eb28d998813fcff34e112636363aebd2a66ca6dc82d6c4d925`，因此生产状态
-    不得写成已修复，生产 5.27 GB 常驻内存与旧日志裁剪行为也仍存在。KT 当前 loopback
-    HTTP 路径本身不受 TLS 行为变化影响。
+    最终格式、全 target/feature 严格 Clippy、Release 构建与工作区 209 项实际执行测试
+    通过，9 项基准/长耗时/doc 测试明确 ignored。第一次把同步恢复候选部署到生产时，
+    systemd 虽 active，但 6.55 GB access JSONL 使 80/443 延迟约 53 秒才绑定，公网探针
+    返回 521，发布门禁随即恢复旧 SHA-256。源码随后改为在 writer/retention 启动前固定
+    完整 JSONL 前缀的只读 inode，并将恢复完全放入后台；启动后的实时记录始终位于历史
+    尾部之前，原子替换路径也不能使恢复线程重开新 inode 并重复计数。最终修复已记录为
+    FluxGate commit `7e68008`，Linux amd64 musl static-pie 为 16,467,488 bytes，SHA-256
+    `3436f9b2ea062e5d31085b0b2cc0b370863a272e397c9be3661f8229d57adb86`。
+    2026-08-03 08:27:18 UTC 使用时间戳备份和 15 秒监听失败回滚门禁发布；80/443 在
+    890 ms 内绑定。24,852,234 条 access 历史在 114 秒后台恢复，完成后进程 RSS 约
+    64–69 MiB、warning 为 0；后台保留任务随后原子裁剪 27,227 条记录，writer 未停顿。
+    公网 health/ready、Gateway 1.16.11 `kt_health`、Sepolia `kt_getChainParams` 与
+    `im-api.nyxnet.jp/.cc` 两条真实 WebSocket 101 握手均通过。旧生产制品及两次候选
+    均保留时间戳备份，当前生产精确 SHA 与上述最终制品一致。
 - [x] `/healthz`、`/readyz`、`kt_health` 匿名 endpoint 汇总、Prometheus
   `/metrics` 与结构化 RPC 日志完成；指标只含 network、匿名位置、结果、错误类型
   和延迟，不含钱包数据或 provider 凭证。1.14.1 默认关闭 `/metrics`；只有配置至少
@@ -1019,7 +1026,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   - [x] FluxGate + Cloudflare 实测会丢弃伪造 XFF/X-Real-IP，并向 loopback Gateway
     传递与 WAF 日志一致的清洗后 XFF；生产只信任 `127.0.0.1/32,::1/128`，没有信任
     公网代理段。公网 `/metrics` 无凭证为 404，服务器本地带随机 256-bit Token 为 200。
-  - [ ] 2026-08-03 使用修正后的真实 FluxGate 工作区
+  - [x] 2026-08-03 使用修正后的真实 FluxGate 工作区
     `/Users/github/Documents/workspace/FluxGate` 复核源码，发现数据平面虽会追加可信
     `X-Forwarded-For`，但旧实现仍可能把客户端原始的 `Forwarded`、XFF、X-Real-IP、
     CF-Connecting-IP 等身份头一并发给上游，且没有删除 `Connection` 动态声明的
@@ -1033,15 +1040,20 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     上游 101 缺少合法 Upgrade 语义时固定失败为 502，不能被代理规范化成成功握手。
     4 项单元边界及 4 项真实 HTTP/WebSocket 数据面回读通过。2026-08-03 在用户确认的
     `/Users/github/Documents/workspace/FluxGate` 重新执行完整门禁：FluxGate admin
-    118/118、workspace 合计 206 项实际测试通过（9 项 benchmark/doc 用例按设计 ignored），
+    121/121、workspace 合计 209 项实际测试通过（9 项 benchmark/doc 用例按设计 ignored），
     fmt、全 target/feature Clippy `-D warnings`、本机 Release 构建及 OSV Scanner 2.3.8
     对 Cargo.lock 300 个包的扫描均通过，已知问题为 0。HAProxy 官方文档确认
     `option forwardfor` 会把自身
     XFF 追加到现有 header list 末尾，因此 Gateway 会按线序展开逗号值和重复 XFF field，
     完整校验后从右向左跳过可信代理；空、畸形、超长 XFF 与重复 X-Real-IP 仍退回可信
     socket peer，且无效 XFF 不会降级读取第二身份头。新增 6 项身份边界用例，Gateway
-    `go vet` 与完整 race suite 通过。生产尚未重新部署并用真实上游回读头集合
-    复核，故本项保持未完成，不能用源码测试替代线上证据。
+    `go vet` 与完整 race suite 通过。最终 FluxGate commit `7e68008` / static-pie
+    `3436f9b2…adb86` 已使用时间戳备份、15 秒监听和失败回滚门禁部署；80/443 在 890 ms
+    内绑定。公网 Gateway health/ready、16-network `kt_health`、真实 Sepolia fee/nonce
+    读取以及 `im-api.nyxnet.jp`、`im-api.nyxnet.cc` 两条 101 WebSocket 握手均通过。
+    6.55 GB access log 的 24,852,234 条历史在后台恢复期间公网持续可用，完成后 RSS
+    约 64–69 MiB、warning 为 0；保留线程再原子裁剪 27,227 条记录。本项已有生产证据，
+    不再用源码测试替代线上验证。
   - [ ] 中国大陆多运营商真机网络、持续弱网和跨地域可达性仍需单独验收；生产上线
     证明不等同于大陆网络质量已经达标。
 - [ ] 告警规则、监控采集部署及多实例/多地域演练：

@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -50,6 +50,8 @@
     .card small,.muted { color:var(--muted) }
     .meter { height:8px; background:#edf0f6; border-radius:10px; overflow:hidden; margin-top:12px }
     .meter i { display:block; height:100%; background:var(--blue); border-radius:inherit }
+    .meter .w92 { width:92% } .meter .w91 { width:91% }
+    .meter .w84 { width:84% } .meter .w35 { width:35% } .meter .w25 { width:25% }
     table { width:100%; border-collapse:collapse; font-size:14px }
     th,td { text-align:left; border-bottom:1px solid var(--line); padding:13px 10px;
       vertical-align:top }
@@ -106,6 +108,7 @@
         双端质量、生态完整度和外部保证为标准，对当前代码与真实测试网证据做审慎评估。</p>
       <div class="stamp">
         <span>2026-08-03</span><span>最新源码门禁 12/12 · Gateway 1.16.11 生产发布</span>
+        <span>FluxGate 7e68008 · 生产 static-pie 已验证</span>
         <span>iOS Simulator 26.2</span><span>Android 15 / API 35</span>
         <span>不包含任何私钥或助记词</span>
       </div>
@@ -137,7 +140,7 @@
           PIN/生物识别错误分类、Cold Signer 架构已有；Ethereum、Base、Arbitrum、
           Avalanche、BNB、TRON、Solana 已完成 iOS/Android 原生币与 Token 双端离线
           广播闭环。外部密码学审计、Polygon 和物理摄像头闭环仍缺。</small>
-          <div class="meter"><i style="width:92%"></i></div></div>
+          <div class="meter"><i class="w92"></i></div></div>
         <div class="card"><strong>交易正确性 · 91%</strong><small>动态费用、链上状态、
           网络身份锁定、Pending 持久化、地址投毒提示已增强；TRON 与 Solana
           过期边界已持久化并失败闭合；EVM、TRON、Solana 的确认页与签名均使用
@@ -145,27 +148,27 @@
           已通过；EVM 授权撤销在热钱包及观察钱包 + Cold Signer 路径均保持精确
           calldata 与 operation 语义；Amoy 待补燃料，Arbitrum 按 sequencer 语义明确
           不提供 replacement。</small>
-          <div class="meter"><i style="width:91%"></i></div></div>
+          <div class="meter"><i class="w91"></i></div></div>
         <div class="card"><strong>数据可靠性 · 84%</strong><small>可信缓存、Gateway fallback、
           请求合并、节点熔断、错误链拦截、交易预执行代理及匿名 endpoint
           P50/P95/失败分桶已具备；生产已建立单主机双实例、共享 Redis、主动健康切换与
           Prometheus 与 loopback Alertmanager 收件箱，外部值班接收方和跨地域 SLA 尚未建立。签名前可发送余额读取链上实时状态；
           Solana ATA rent 与 TRON Energy/Bandwidth/激活费均进入确认报价；测试网
           原生币与 Token 不会复用主网法币价格或 24h 涨跌。</small>
-          <div class="meter"><i style="width:84%"></i></div></div>
+          <div class="meter"><i class="w84"></i></div></div>
         <div class="card"><strong>核心 UX · 84%</strong><small>中英日、缓存首屏、交易与资产页面
           已接近消费级；Pending 在回到前台后立即续查，多个状态变化按队列一次性通知。
           KT Wallet 34 页与独立 Cold Signer 21 页均已通过自动语义标签、双平台触控尺寸、
           WCAG 对比度和小屏/横屏溢出门禁；两个 App 的 200% 动态字体门禁也全部通过。
           Android API 35 已使用系统 TalkBack 跑通真实 Solana Devnet 转账；iOS
           VoiceOver、物理设备逐页读屏/大字、极端弱网与全量真机矩阵仍不足。</small>
-          <div class="meter"><i style="width:84%"></i></div></div>
+          <div class="meter"><i class="w84"></i></div></div>
         <div class="card"><strong>安全保证 · 35%</strong><small>内部测试不等于安全认证。
           缺独立移动端审计、密码学审计、漏洞赏金、真机 root/jailbreak 失败闭合证据。</small>
-          <div class="meter"><i style="width:35%"></i></div></div>
+          <div class="meter"><i class="w35"></i></div></div>
         <div class="card"><strong>生态与覆盖 · 25%</strong><small>尚未覆盖 BTC 等关键原生链，
           且本阶段明确排除 WalletConnect、DApp、Swap、NFT、质押。</small>
-          <div class="meter"><i style="width:25%"></i></div></div>
+          <div class="meter"><i class="w25"></i></div></div>
       </div>
       <p class="muted">百分比是基于当前仓库与本轮证据的工程判断，不是第三方认证或安全评分。</p>
     </section>
@@ -714,8 +717,8 @@
           <tr><td>Gateway 可观测性</td><td>生产 healthz、readyz、kt_health 与认证 Prometheus metrics 已验证；Prometheus 3.12.0 只监听 loopback，30 秒抓取两个 Gateway 和自身，保留 7 天/512 MB；P50/P95、7 类失败分桶和 17 条告警不含 endpoint URL/API key。新增广播 guard、三类 Alertmanager 投递管线告警，两条客户端趋势告警显式标为 untrusted；metrics 未认证时公网 404。Alertmanager 0.32.1 固定官方 digest，只监听 9098，使用 UTF-8 strict、四类 route、严重度抑制、5 天保留和 silence 上限</td><td class="partial">3/3 target UP、17/17 rule health=ok、Prometheus 发现 1 个 Alertmanager；临时 critical canary 经真实 notification queue 到达后恢复正式规则。外部邮件/Webhook/值班接收方及长期阈值校准待完成</td></tr>
           <tr><td>匿名诊断闭环</td><td>用户每次主动确认 → App fixed-schema 聚合 → 安全 HTTPS Gateway → 无 raw event 固定标签计数 → Prometheus 7d/512MB；重复 digest 不重发、直接模式不上传、失败不自动重试。公网合成 debug 样本不含钱包/交易数据</td><td class="pass">客户端/隐私/UI 21/21；Android+iOS 定向 UI；公网 accepted=true，抓取后 counter=1</td></tr>
           <tr><td>Gateway 多实例与代理限流</td><td>生产 Cloudflare → FluxGate → HAProxy 8118 → Gateway 8119/8120，两个实例共享 Redis 6388；服务只监听 loopback。FluxGate clean source 只执行一次 Hyper request，HAProxy 设置 retries 0 并移除 redispatch/retry-on。Cloudflare 官方仍允许多源站特定 52x <a href="https://developers.cloudflare.com/fundamentals/security/protect-your-origin-server/#zero-downtime-failover">Zero-Downtime Failover</a>，因此 Gateway 1.16.4 在链请求前用 Redis SET NX 原子 claim 去重同一签名交易，并对共享结果执行字段不变量校验；读 RPC failover 仍在 Gateway 内。200 个同 XFF 并发请求 90 成功、110 限流，新客户端仍成功</td><td class="partial">公网相同无效 Sepolia payload 连续请求两次：claim +1、replay_rejected +1、endpoint attempt +1；跨主机/跨地域容灾未验收</td></tr>
-          <tr><td>FluxGate / Gateway 客户身份与 hop-by-hop 边界</td><td>修正后的 FluxGate 会在 HTTP/WebSocket 两条路径删除客户端原始 <code>Forwarded</code>、XFF、X-Real-IP、X-Client-IP、True-Client-IP 与 CF-Connecting-IP，只向 Gateway 添加一个由可信 socket peer / Cloudflare edge 计算的 XFF。代理遍历全部 <code>Connection</code>/<code>Upgrade</code> field-line 并精确匹配逗号 token，拒绝伪 Upgrade 子串；请求、普通响应和 101 响应都删除固定及动态 hop-by-hop 字段、Proxy-Connection 与 TE，WebSocket 两跳只重新生成规范的 <code>Connection: Upgrade</code> / <code>Upgrade: websocket</code>。握手请求还必须满足 GET、唯一有效 Key 与 version 13；上游非法 101 固定失败为 502。HAProxy 的 <code>option forwardfor</code> 会在现有列表末尾追加自身 XFF，因此 Gateway 按线序展开逗号值和重复 field，完整校验后从右向左跳过可信代理；空、畸形、超长 XFF 与重复 X-Real-IP 退回 socket peer，无效 XFF 不降级读取第二身份头</td><td class="partial">用户确认的真实 FluxGate 目录已重跑：4 项单元边界 + 4 项真实 HTTP/WebSocket 双向回读，admin 118/118、workspace 206 项实际测试通过（9 ignored），fmt、全 target/feature 严格 Clippy、Release 构建及 300 包 OSV 扫描通过；Gateway 6 项身份边界用例、vet 与完整 race suite 通过。本地候选尚未部署，仍需生产普通 HTTP 与 WebSocket 上游回读 canary</td></tr>
-          <tr><td>FluxGate 数据面、日志容量与供应链审计</td><td>独立 FluxGate 0.1.12 源码确认数据面仅有一次 Hyper upstream request、无应用层 retry；本地候选删除失败日志中的完整 URL/query 与 connector error。旧 HTTPS accept-all verifier 已替换为 Mozilla WebPKI 根、证书链与请求主机名强校验；可信链通过，错误主机名和未受信链拒绝。生产只读核对发现进程常驻约 5.27 GB、access JSONL 达 6.0 GB：旧小时保留会整文件读取、复制、拼接并造成 writer stall。候选改成 O(cap) 流式尾部恢复；独立 compactor 整理稳定前缀时 writer 继续实时追加，完成后仅合并快照后的新增尾部、持久化并原子替换，再重开 append 句柄。畸形行、不完整尾行保留，失败不覆盖原文件；并发回归证明整理期间 200 条追加全部保留。PEM/JWT/MaxMind 迁移及精确 CI OSV gate 均已加入；<a href="https://google.github.io/osv-scanner/github-action/">OSV Scanner 官方 workflow</a>固定到 v2.3.8 tag commit，300 个 Rust 包扫描为 0</td><td class="partial">用户确认的真实目录重跑格式、全 target/feature 严格 Clippy、Release、workspace 206 项实际测试通过（9 ignored），OSV 已知问题 0；Linux amd64 static-pie 候选仍为 <code>e05013…7b466a</code>。生产仍为旧 <code>2c802f…c4d925</code>，本地候选尚未提交/部署，5.27 GB 常驻内存问题仍在线；KT 当前 loopback HTTP 路径不受 TLS 行为变化影响</td></tr>
+          <tr><td>FluxGate / Gateway 客户身份与 hop-by-hop 边界</td><td>修正后的 FluxGate 会在 HTTP/WebSocket 两条路径删除客户端原始 <code>Forwarded</code>、XFF、X-Real-IP、X-Client-IP、True-Client-IP 与 CF-Connecting-IP，只向 Gateway 添加一个由可信 socket peer / Cloudflare edge 计算的 XFF。代理遍历全部 <code>Connection</code>/<code>Upgrade</code> field-line 并精确匹配逗号 token，拒绝伪 Upgrade 子串；请求、普通响应和 101 响应都删除固定及动态 hop-by-hop 字段、Proxy-Connection 与 TE，WebSocket 两跳只重新生成规范的 <code>Connection: Upgrade</code> / <code>Upgrade: websocket</code>。握手请求还必须满足 GET、唯一有效 Key 与 version 13；上游非法 101 固定失败为 502。HAProxy 的 <code>option forwardfor</code> 会在现有列表末尾追加自身 XFF，因此 Gateway 按线序展开逗号值和重复 field，完整校验后从右向左跳过可信代理；空、畸形、超长 XFF 与重复 X-Real-IP 退回 socket peer，无效 XFF 不降级读取第二身份头</td><td class="pass">FluxGate commit <code>7e68008</code> 已部署；admin 121/121、workspace 209 项实际测试通过（9 ignored），fmt、全 target/feature 严格 Clippy、Release static-pie 及 300 包 OSV 扫描通过。公网 Gateway 普通 HTTP、Sepolia 动态费用读取，以及 <code>im-api.nyxnet.jp</code> / <code>im-api.nyxnet.cc</code> 两条真实 WebSocket route 均回读规范 <code>101 Switching Protocols</code>；Gateway 6 项身份边界、vet 与完整 race suite 同步通过</td></tr>
+          <tr><td>FluxGate 数据面、日志容量与供应链审计</td><td>独立 FluxGate 0.1.12 源码确认数据面仅有一次 Hyper upstream request、无应用层 retry；失败日志不再保留完整 URL/query 或 connector error。旧 HTTPS accept-all verifier 已替换为 Mozilla WebPKI 根、证书链与请求主机名强校验；可信链通过，错误主机名和未受信链拒绝。旧生产进程曾因 6.55 GB access JSONL 常驻约 5.27 GB，小时保留还会整文件读取、复制、拼接并造成 writer stall。最终实现先固定完整启动前缀的只读 inode，再在后台以 O(cap) 内存恢复；路径即使被 compactor 原子替换，也不会重开新 inode 或重复读入实时追加。独立 compactor 流式整理稳定前缀时 writer 继续追加，完成后只合并快照尾部、fsync、原子替换并重开 O_APPEND；畸形行、不完整尾行和失败闭合均有回归。PEM/JWT/MaxMind 迁移与固定 OSV gate 同步完成</td><td class="pass">第一次同步恢复候选上线后 53 秒才绑定并触发公网 521，发布门禁立即回滚；修复后最终 16,467,488-byte static-pie <code>3436f9b2…adb86</code> 于 08:27 UTC 使用时间戳备份和 15 秒失败回滚门禁发布，80/443 在 890 ms 内绑定。24,852,234 条历史在 114 秒后台恢复，期间公网持续可用；完成后 RSS 约 64–69 MiB、warning 为 0，随后原子裁剪 27,227 条记录且无 writer stall。最终源码已提交为 <code>7e68008</code>，300 个 Rust 包已知问题 0</td></tr>
           <tr><td>独立 Token 威胁情报</td><td>GoPlus 仅接收 chain id + 公开合约或 Solana mint；运营方风险表与外部明确恶意证据均高于官方身份目录；Solana creator/Hook/特权 authority 的 malicious-address 会阻止签名，USDC 普通 mint/freeze/metadata 权限不误杀；无证据 unknown，服务失败 unavailable；5 分钟缓存、HTTPS 与禁止凭证/重定向、匿名指标；三个安全 provider 使用独立熔断、单一半开探针和固定标签指标</td><td class="partial">1.16.11 已上线；2026-08-02 八主网官方 Token 生产只读 smoke 8/8 返回 official_catalog+goplus，失败闭合正负例进入 make audit；外部接收方、长期 SLA、恶意/未知样本与误报申诉待完成</td></tr>
           <tr><td>EVM Token 授权中心</td><td>五条 EVM 主网授权查询需显式隐私同意；无限/有限/高风险/未知分级；热钱包与观察钱包 + KT Cold Signer 均构造精确 approve(spender,0)，并覆盖验签、Pending 恢复、历史、speed-up 与 cancel 语义</td><td class="partial">生产无同意拒绝与显式同意 GoPlus 查询通过；真实小额主网撤销待验收</td></tr>
           <tr><td>App 端点配置安全边界</td><td>Gateway/RPC/自定义网络仅接受安全 URL；公开 HTTP、内嵌凭证、fragment、非法旧配置、跨链 override 均失败闭合；中英日错误提示不关闭编辑页</td><td class="pass">10 项端点回归 + 全量套件通过</td></tr>
