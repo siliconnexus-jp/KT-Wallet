@@ -784,21 +784,21 @@ func TestSolanaHeliusFailureFallsBackToRPC(t *testing.T) {
 func TestSolanaHistoryWithHeliusKey(t *testing.T) {
 	hel := newRESTFake(t)
 	hel.routeJSON("/", fmt.Sprintf(`{"jsonrpc":"2.0","id":"kt-wallet","result":{"data":[
-		{"signature":"sig1","blockTime":1700000200,"type":"transfer",
+		{"signature":"sig1","slot":1001,"blockTime":1700000200,"type":"transfer",
 		 "fromUserAccount":%q,"toUserAccount":%q,
 		 "mint":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-		 "amount":"2500000","decimals":6,"confirmationStatus":"finalized",
+		 "amount":"2500000","decimals":6,"uiAmount":"2.5","confirmationStatus":"finalized",
 		 "transactionIdx":1,"instructionIdx":2,"innerInstructionIdx":0},
-		{"signature":"sig2","blockTime":1700000100,"type":"transfer",
+		{"signature":"sig2","slot":1002,"blockTime":1700000100,"type":"transfer",
 		 "fromUserAccount":%q,"toUserAccount":%q,
 		 "mint":"So11111111111111111111111111111111111111111",
-		 "amount":"123","decimals":9,"confirmationStatus":"finalized",
-		 "transactionIdx":2,"instructionIdx":3},
-		{"signature":"sig3","blockTime":1700000050,"type":"transfer",
+		 "amount":"123","decimals":9,"uiAmount":"0.000000123","confirmationStatus":"finalized",
+		 "transactionIdx":2,"instructionIdx":3,"innerInstructionIdx":null},
+		{"signature":"sig3","slot":1003,"blockTime":1700000050,"type":"transfer",
 		 "fromUserAccount":%q,"toUserAccount":%q,
 		 "mint":"Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
-		 "amount":"42000000","decimals":6,"confirmationStatus":"finalized",
-		 "transactionIdx":3,"instructionIdx":4}
+		 "amount":"42000000","decimals":6,"uiAmount":"42","confirmationStatus":"finalized",
+		 "transactionIdx":3,"instructionIdx":4,"innerInstructionIdx":null}
 	]}}`, solSelf, solOther, solOther, solSelf, solOther, solSelf))
 	e := newEnv(t, func(cfg *handlers.Config) {
 		cfg.HeliusURL = hel.srv.URL

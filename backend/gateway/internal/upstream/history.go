@@ -271,6 +271,214 @@ type HeliusTransfer struct {
 	InnerInstructionIdx *int   `json:"innerInstructionIdx"`
 }
 
+func decodeHeliusTransfers(data []byte) ([]HeliusTransfer, bool, error) {
+	fields, err := decodeExactJSONObject(data, "jsonrpc", "id", "result", "error")
+	if err != nil {
+		return nil, false, err
+	}
+	var version, id string
+	if err := json.Unmarshal(fields["jsonrpc"], &version); err != nil {
+		return nil, false, err
+	}
+	if err := json.Unmarshal(fields["id"], &id); err != nil {
+		return nil, false, err
+	}
+	resultRaw, hasResult := fields["result"]
+	errorRaw, hasError := fields["error"]
+	if version != "2.0" || id != "kt-wallet" || hasResult == hasError {
+		return nil, false, fmt.Errorf("invalid Helius JSON-RPC response envelope")
+	}
+	if hasError {
+		errorFields, err := decodeExactJSONObject(errorRaw, "code", "message", "data")
+		if err != nil {
+			return nil, false, err
+		}
+		var code *int
+		var message *string
+		if err := json.Unmarshal(errorFields["code"], &code); err != nil ||
+			json.Unmarshal(errorFields["message"], &message) != nil ||
+			code == nil || message == nil {
+			return nil, false, fmt.Errorf("invalid Helius JSON-RPC error object")
+		}
+		return nil, true, nil
+	}
+
+	resultFields, err := decodeExactJSONObject(resultRaw, "data", "paginationToken")
+	if err != nil {
+		return nil, false, err
+	}
+	if paginationRaw, ok := resultFields["paginationToken"]; ok {
+		var paginationToken string
+		if err := json.Unmarshal(paginationRaw, &paginationToken); err != nil ||
+			paginationToken == "" || len(paginationToken) > 512 {
+			return nil, false, fmt.Errorf("invalid Helius pagination token")
+		}
+	}
+	dataRaw, ok := resultFields["data"]
+	if !ok {
+		return nil, false, fmt.Errorf("Helius result has no data")
+	}
+	var entries []json.RawMessage
+	if err := json.Unmarshal(dataRaw, &entries); err != nil || entries == nil {
+		return nil, false, fmt.Errorf("Helius result data is not an array")
+	}
+	transfers := make([]HeliusTransfer, 0, len(entries))
+	for _, entry := range entries {
+		transfer, err := decodeHeliusTransfer(entry)
+		if err != nil {
+			return nil, false, err
+		}
+		transfers = append(transfers, transfer)
+	}
+	return transfers, false, nil
+}
+
+func decodeHeliusTransfer(raw json.RawMessage) (HeliusTransfer, error) {
+	fields, err := decodeExactJSONObject(
+		raw,
+		"signature",
+		"slot",
+		"blockTime",
+		"type",
+		"fromUserAccount",
+		"toUserAccount",
+		"fromTokenAccount",
+		"toTokenAccount",
+		"mint",
+		"amount",
+		"decimals",
+		"uiAmount",
+		"feeAmount",
+		"feeUiAmount",
+		"confirmationStatus",
+		"transactionIdx",
+		"instructionIdx",
+		"innerInstructionIdx",
+	)
+	if err != nil {
+		return HeliusTransfer{}, err
+	}
+	for _, required := range []string{
+		"signature",
+		"slot",
+		"blockTime",
+		"type",
+		"fromUserAccount",
+		"toUserAccount",
+		"mint",
+		"amount",
+		"decimals",
+		"uiAmount",
+		"confirmationStatus",
+		"transactionIdx",
+		"instructionIdx",
+		"innerInstructionIdx",
+	} {
+		if _, ok := fields[required]; !ok {
+			return HeliusTransfer{}, fmt.Errorf("incomplete Helius transfer row")
+		}
+	}
+	type transferWire struct {
+		Signature           *string `json:"signature"`
+		Slot                *uint64 `json:"slot"`
+		BlockTime           *int64  `json:"blockTime"`
+		Type                *string `json:"type"`
+		FromUserAccount     *string `json:"fromUserAccount"`
+		ToUserAccount       *string `json:"toUserAccount"`
+		FromTokenAccount    *string `json:"fromTokenAccount"`
+		ToTokenAccount      *string `json:"toTokenAccount"`
+		Mint                *string `json:"mint"`
+		Amount              *string `json:"amount"`
+		Decimals            *int    `json:"decimals"`
+		UIAmount            *string `json:"uiAmount"`
+		FeeAmount           *string `json:"feeAmount"`
+		FeeUIAmount         *string `json:"feeUiAmount"`
+		ConfirmationStatus  *string `json:"confirmationStatus"`
+		TransactionIndex    *int    `json:"transactionIdx"`
+		InstructionIndex    *int    `json:"instructionIdx"`
+		InnerInstructionIdx *int    `json:"innerInstructionIdx"`
+	}
+	var wire transferWire
+	if err := json.Unmarshal(raw, &wire); err != nil ||
+		wire.Signature == nil || wire.Slot == nil || wire.BlockTime == nil || wire.Type == nil ||
+		(wire.FromUserAccount == nil && wire.ToUserAccount == nil) || wire.Mint == nil ||
+		wire.Amount == nil || wire.Decimals == nil || wire.UIAmount == nil ||
+		wire.ConfirmationStatus == nil ||
+		wire.TransactionIndex == nil || wire.InstructionIndex == nil {
+		return HeliusTransfer{}, fmt.Errorf("incomplete Helius transfer row")
+	}
+	if bytes.Equal(bytes.TrimSpace(fields["innerInstructionIdx"]), []byte("null")) {
+		wire.InnerInstructionIdx = nil
+	} else if wire.InnerInstructionIdx == nil {
+		return HeliusTransfer{}, fmt.Errorf("invalid Helius inner instruction index")
+	}
+	if *wire.Signature == "" || *wire.Mint == "" || !validUnsignedProviderInteger(*wire.Amount) ||
+		!validProviderDecimal(*wire.UIAmount) || *wire.Decimals < 0 || *wire.Decimals > 36 ||
+		*wire.BlockTime < 0 ||
+		*wire.TransactionIndex < 0 || *wire.InstructionIndex < 0 ||
+		(wire.InnerInstructionIdx != nil && *wire.InnerInstructionIdx < 0) {
+		return HeliusTransfer{}, fmt.Errorf("invalid Helius transfer value")
+	}
+	switch *wire.Type {
+	case "transfer", "mint", "burn", "wrap", "unwrap", "changeOwner", "withdrawWithheldFee":
+	default:
+		return HeliusTransfer{}, fmt.Errorf("invalid Helius transfer type")
+	}
+	if (wire.FromUserAccount != nil && *wire.FromUserAccount == "") ||
+		(wire.ToUserAccount != nil && *wire.ToUserAccount == "") {
+		return HeliusTransfer{}, fmt.Errorf("invalid Helius owner account")
+	}
+	for key, value := range map[string]*string{
+		"fromTokenAccount": wire.FromTokenAccount,
+		"toTokenAccount":   wire.ToTokenAccount,
+	} {
+		if _, present := fields[key]; present && (value == nil || *value == "") {
+			return HeliusTransfer{}, fmt.Errorf("invalid Helius token account")
+		}
+	}
+	_, hasFeeAmount := fields["feeAmount"]
+	_, hasFeeUIAmount := fields["feeUiAmount"]
+	if hasFeeAmount != hasFeeUIAmount ||
+		(hasFeeAmount && (wire.FeeAmount == nil || wire.FeeUIAmount == nil ||
+			!validUnsignedProviderInteger(*wire.FeeAmount) ||
+			!validProviderDecimal(*wire.FeeUIAmount))) {
+		return HeliusTransfer{}, fmt.Errorf("invalid Helius transfer fee")
+	}
+	fromUserAccount, toUserAccount := "", ""
+	if wire.FromUserAccount != nil {
+		fromUserAccount = *wire.FromUserAccount
+	}
+	if wire.ToUserAccount != nil {
+		toUserAccount = *wire.ToUserAccount
+	}
+	return HeliusTransfer{
+		Signature:           *wire.Signature,
+		BlockTime:           *wire.BlockTime,
+		Type:                *wire.Type,
+		FromUserAccount:     fromUserAccount,
+		ToUserAccount:       toUserAccount,
+		Mint:                *wire.Mint,
+		Amount:              *wire.Amount,
+		Decimals:            *wire.Decimals,
+		ConfirmationStatus:  *wire.ConfirmationStatus,
+		TransactionIndex:    *wire.TransactionIndex,
+		InstructionIndex:    *wire.InstructionIndex,
+		InnerInstructionIdx: wire.InnerInstructionIdx,
+	}, nil
+}
+
+func validUnsignedProviderInteger(value string) bool {
+	if len(value) == 0 || len(value) > 128 {
+		return false
+	}
+	for _, digit := range value {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // Transfers fetches normalized transfer rows for a wallet owner address using
 // Helius' current getTransfersByAddress RPC.
 func (h *Helius) Transfers(ctx context.Context, address string, limit int) ([]HeliusTransfer, error) {
@@ -314,19 +522,12 @@ func (h *Helius) Transfers(ctx context.Context, address string, limit int) ([]He
 	if resp.StatusCode != http.StatusOK {
 		return nil, &Unavailable{Upstream: "helius", Message: fmt.Sprintf("Helius returned HTTP %d", resp.StatusCode)}
 	}
-	var out struct {
-		Result struct {
-			Data []HeliusTransfer `json:"data"`
-		} `json:"result"`
-		Error *struct {
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(data, &out); err != nil {
+	transfers, rejected, err := decodeHeliusTransfers(data)
+	if err != nil {
 		return nil, &Unavailable{Upstream: "helius", Message: "malformed Helius response"}
 	}
-	if out.Error != nil {
+	if rejected {
 		return nil, &Unavailable{Upstream: "helius", Message: "history provider rejected request"}
 	}
-	return out.Result.Data, nil
+	return transfers, nil
 }

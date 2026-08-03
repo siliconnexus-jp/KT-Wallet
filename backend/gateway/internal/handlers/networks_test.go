@@ -257,11 +257,11 @@ func TestSolDevnetHistoryUsesDevnetHelius(t *testing.T) {
 	mainHel := newRESTFake(t) // must never be called
 	devHel := newRESTFake(t)
 	devHel.routeJSON("/", fmt.Sprintf(`{"jsonrpc":"2.0","id":"kt-wallet","result":{"data":[
-		{"signature":"dsig1","blockTime":1700000300,"type":"transfer",
+		{"signature":"dsig1","slot":2001,"blockTime":1700000300,"type":"transfer",
 		 "fromUserAccount":%q,"toUserAccount":%q,
 		 "mint":"So11111111111111111111111111111111111111111",
-		 "amount":"42","decimals":9,"confirmationStatus":"finalized",
-		 "transactionIdx":1,"instructionIdx":2}
+		 "amount":"42","decimals":9,"uiAmount":"0.000000042","confirmationStatus":"finalized",
+		 "transactionIdx":1,"instructionIdx":2,"innerInstructionIdx":null}
 	]}}`, solSelf, solOther))
 	e := newEnv(t, func(cfg *handlers.Config) {
 		cfg.HeliusURL = mainHel.srv.URL

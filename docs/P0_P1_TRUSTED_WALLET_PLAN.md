@@ -211,6 +211,22 @@
   广播 single-shot 负例连续 20 轮，Gateway 普通/race/vet/govulncheck/ops 与静态边界通过。
   范围仅覆盖核心 EVM/Solana JSON-RPC pool；Provider 专用 REST/索引解析继续由各自闭合
   schema 审阅。该修复是本地源码候选，生产仍为 1.16.15。
+- [x] 2026-08-04 继续进入 Provider 专用历史路径，先关闭 Helius
+  `getTransfersByAddress`。旧实现完全忽略 JSON-RPC 版本与响应 id，并把信封、result 和
+  transfer 直接解码到 Go struct；错/缺 id、错版本、未知成员、`Result`/`Data`/`Amount`
+  大小写别名或冲突，以及重复 id/result/data/amount 共 14 类歧义回包全部被接受为真实
+  Solana 历史。现信封要求 `jsonrpc=2.0`、字符串 id 精确等于 `kt-wallet`、result/error
+  恰好一个；result 只接受 data 和官方可选 paginationToken，error 只接受标准
+  code/message/data。人工对照当前 Helius 官方文档发现首版候选过严：真实回包还包含
+  slot、uiAmount、可选 token account、Token-2022 fee 字段，mint/burn 等一侧 owner 合法
+  为 null；在进入门禁前已改为完整的官方字段词汇表与对应可空语义。所有基础字段必须
+  存在且类型正确，原始金额必须是有界无符号十进制整数，手续费必须成对，未知字段、
+  别名、重复键、部分记录或无效语义使整个 Provider 响应失败并进入标准 Solana RPC
+  回退。合法空数组保持空历史。14 类旧歧义负例、11 类语义负例、标准 error data、空
+  数组及当前官方扩展回包正例连续 20 轮，三类 handler 路由/回退连续 10 轮通过；
+  Gateway 全量/race/vet/govulncheck/ops 和静态边界通过。
+  当前范围仅为 Helius；Alchemy、Etherscan/Blockscout、TronGrid、CoinGecko 与 GoPlus
+  专用响应仍按各自风险继续审阅。该修复是本地源码候选，生产仍为 1.16.15。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。

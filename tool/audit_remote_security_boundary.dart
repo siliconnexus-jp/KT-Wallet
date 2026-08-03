@@ -115,6 +115,7 @@ void main() {
   _auditGatewayPublicRequestSchemas(failures);
   _auditGatewayRPCEnvelope(failures);
   _auditGatewayUpstreamRPCEnvelope(failures);
+  _auditGatewayHeliusResponseSchema(failures);
   _auditRiskSignalDirection(failures);
 
   if (failures.isNotEmpty) {
@@ -131,7 +132,8 @@ void main() {
     '3 hot-signing families independently verified, '
     'hot and air-gapped broadcasts hash-bound before success metrics, '
     'all parameterized public Gateway requests, inbound JSON-RPC envelopes, '
-    'and upstream node responses exact-schema decoded.',
+    'upstream node responses, and Helius history responses exact-schema '
+    'decoded.',
   );
 }
 
@@ -537,6 +539,29 @@ void _auditGatewayUpstreamRPCEnvelope(List<String> failures) {
         '$decoderPath lost exact-object response invariant: $marker',
       );
     }
+  }
+}
+
+void _auditGatewayHeliusResponseSchema(List<String> failures) {
+  const path = 'backend/gateway/internal/upstream/history.go';
+  final source = File(path).readAsStringSync();
+  for (final marker in const [
+    'func decodeHeliusTransfers(',
+    'decodeExactJSONObject(data, "jsonrpc", "id", "result", "error")',
+    'version != "2.0" || id != "kt-wallet" || hasResult == hasError',
+    'decodeExactJSONObject(errorRaw, "code", "message", "data")',
+    'decodeExactJSONObject(resultRaw, "data", "paginationToken")',
+    'func decodeHeliusTransfer(',
+    'validUnsignedProviderInteger(*wire.Amount)',
+    'hasFeeAmount != hasFeeUIAmount',
+    'transfers, rejected, err := decodeHeliusTransfers(data)',
+  ]) {
+    if (!source.contains(marker)) {
+      failures.add('$path lost exact Helius response invariant: $marker');
+    }
+  }
+  if (source.contains('Data []HeliusTransfer `json:"data"`')) {
+    failures.add('$path restored permissive Helius history decoding');
   }
 }
 

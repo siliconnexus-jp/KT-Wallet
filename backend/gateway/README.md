@@ -582,11 +582,21 @@ false marker as proof that no pending outgoing transaction exists.
   `uniqueId`, so multiple transfers in one transaction are not lost. Token
   symbols/decimals are authoritative only for registered contracts.
 - **solana** — Helius `getTransfersByAddress` is preferred when
-  `HELIUS_API_KEY` is set. Without it, standard Solana RPC loads signatures
-  and transaction details and derives native/SPL balance deltas. Unknown SPL
-  mints remain visible as unverified `SPL` rows carrying the mint; pure
-  program activity with no asset movement is omitted instead of being
-  mislabeled as an incoming `0 SOL` transfer.
+  `HELIUS_API_KEY` is set. Its JSON-RPC envelope must identify version `2.0`
+  and the exact `kt-wallet` request id, with exactly one result/error. The
+  result accepts exact `data` plus the documented optional `paginationToken`;
+  every row accepts the reviewed current Helius field vocabulary, including
+  slot/UI amount, optional token accounts, Token-2022 fee fields and instruction
+  positions. Base fields must be present and well typed; owner fields must both
+  exist but one may be `null` for documented mint/burn/wrap cases, optional
+  token accounts must be omitted rather than null, and fee fields must occur as
+  a valid pair. Aliases, unknown members, duplicates, partial rows or invalid
+  raw amounts reject the provider response. A valid empty data array remains
+  an empty history. Without Helius, or when its response is rejected, standard
+  Solana RPC loads signatures and transaction details and derives native/SPL
+  balance deltas. Unknown SPL mints remain visible as unverified `SPL` rows
+  carrying the mint; pure program activity with no asset movement is omitted
+  instead of being mislabeled as an incoming `0 SOL` transfer.
 
 `id` identifies the transfer event, while `hash` remains the explorer
 transaction identifier. `verified:false` means the contract/mint is not in
