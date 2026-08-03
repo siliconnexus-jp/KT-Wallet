@@ -220,6 +220,7 @@ type Gateway struct {
 	officialTokens       []OfficialToken
 	officialByNetwork    map[string]map[string]tokenMeta
 	tokenRisks           map[string]TokenRisk
+	tokenRiskRegistryOK  bool
 	tokenRiskMetrics     tokenRiskProviderMetrics
 	tokenApprovalMetrics tokenApprovalProviderMetrics
 	appDiagnostics       *appDiagnosticMetrics
@@ -333,10 +334,12 @@ func New(cfg Config) *Gateway {
 		officialTokens = []OfficialToken{}
 	}
 	tokenRisks, err := normalizeTokenRisks(cfg.TokenRisks)
+	tokenRiskRegistryOK := err == nil
 	if err != nil {
-		// Same fail-closed policy as the official catalog: invalid in-process
-		// configuration can never accidentally mark an address safe. The
-		// command validates external files before constructing the Gateway.
+		// The command rejects invalid external files before constructing the
+		// Gateway. Other embedders still get an operational instance, but its
+		// risk endpoint remains unavailable instead of silently dropping the
+		// denylist and allowing the official catalog to return safe.
 		cfg.Log.Error("invalid token risk registry", "err", err)
 		tokenRisks = map[string]TokenRisk{}
 	}
@@ -425,6 +428,7 @@ func New(cfg Config) *Gateway {
 		officialTokens:      officialTokens,
 		officialByNetwork:   officialTokenIndex(officialTokens),
 		tokenRisks:          tokenRisks,
+		tokenRiskRegistryOK: tokenRiskRegistryOK,
 		appDiagnostics:      newAppDiagnosticMetrics(),
 		broadcastGuard:      newBroadcastGuard(clk, cfg.BroadcastStore),
 	}

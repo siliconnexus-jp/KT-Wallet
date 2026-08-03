@@ -285,11 +285,14 @@ exact `network`, `contract`/mint and one category: `malicious`, `phishing`,
 `spam`, `impersonation`, `honeypot`, or `suspicious`.
 
 Startup rejects the whole file on malformed JSON, invalid addresses,
-unsupported categories or duplicate identities. A risk entry always overrides
-the official-token catalog so an operator can revoke a previously verified
-identity. The checked-in file is intentionally empty: it is a configuration
-surface, not a claim that KT Wallet currently subscribes to a continuously
-maintained threat-intelligence provider.
+unknown fields, duplicate JSON object keys, unsupported categories or duplicate
+identities. A risk entry always overrides the official-token catalog so an
+operator can revoke a previously verified identity. Invalid programmatic
+configuration also makes the risk endpoint unavailable; it cannot silently
+drop the denylist and fall through to an official-catalog `safe` result. The
+checked-in file is intentionally empty: it is a configuration surface, not a
+claim that KT Wallet currently subscribes to a continuously maintained
+threat-intelligence provider.
 
 ### `kt_getEvmTokenApprovals`
 

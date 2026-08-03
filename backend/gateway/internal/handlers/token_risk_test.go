@@ -341,6 +341,26 @@ func TestTokenRiskOverridesOfficialCatalog(t *testing.T) {
 	}
 }
 
+func TestInvalidProgrammaticTokenRiskRegistryNeverFallsThroughToOfficialSafe(t *testing.T) {
+	const contract = "0xdac17f958d2ee523a2206206994597c13d831ec7"
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.OfficialTokens = []handlers.OfficialToken{{
+			Network: "eth-mainnet", Symbol: "USDT", Name: "Tether USD",
+			Contract: contract, Decimals: 6,
+		}}
+		cfg.TokenRisks = []handlers.TokenRisk{{
+			Network: "eth-mainnet", Contract: contract, Category: "safe",
+		}}
+	})
+	err := assertErrCode(t, e.rpc("kt_checkTokenRisk", map[string]any{
+		"chain": "eth", "network": "eth-mainnet", "contract": contract,
+	}), rpc.CodeUpstream)
+	data := err["data"].(map[string]any)
+	if data["upstream"] != "operator_registry" {
+		t.Fatalf("invalid registry error must name the fixed source: %v", err)
+	}
+}
+
 func TestCheckTokenRiskValidatesNetworkAndContract(t *testing.T) {
 	e := newEnv(t, nil)
 	assertErrCode(t, e.rpc("kt_checkTokenRisk", map[string]any{
@@ -369,8 +389,10 @@ func TestLoadTokenRisksFileRejectsPartialOrAmbiguousRegistry(t *testing.T) {
 	}
 
 	for name, body := range map[string]string{
-		"not-array":    `{}`,
-		"bad-category": `[{"network":"eth-mainnet","contract":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","category":"safe"}]`,
+		"not-array":     `{}`,
+		"bad-category":  `[{"network":"eth-mainnet","contract":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","category":"safe"}]`,
+		"unknown-field": `[{"network":"eth-mainnet","contract":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","category":"spam","reason":"operator note"}]`,
+		"duplicate-key": `[{"network":"eth-mainnet","contract":"0xdac17f958d2ee523a2206206994597c13d831ec7","contract":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","category":"spam"}]`,
 		"duplicate": `[
  {"network":"eth-mainnet","contract":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","category":"spam"},
  {"network":"eth-mainnet","contract":"0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","category":"phishing"}

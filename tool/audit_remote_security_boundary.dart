@@ -386,6 +386,34 @@ void _auditRiskSignalDirection(List<String> failures) {
       );
     }
   }
+
+  const gatewayHandlerPath = 'backend/gateway/internal/handlers/gateway.go';
+  final gatewayHandler = File(gatewayHandlerPath).readAsStringSync();
+  for (final marker in const [
+    'tokenRiskRegistryOK  bool',
+    'tokenRiskRegistryOK := err == nil',
+    'tokenRiskRegistryOK: tokenRiskRegistryOK',
+  ]) {
+    if (!gatewayHandler.contains(marker)) {
+      failures.add(
+        '$gatewayHandlerPath lost invalid-registry fail-closed state: $marker',
+      );
+    }
+  }
+
+  const tokenRiskPath = 'backend/gateway/internal/handlers/token_risk.go';
+  final tokenRisk = File(tokenRiskPath).readAsStringSync();
+  for (final marker in const [
+    'decodeStrictJSON(raw, &entries)',
+    'if !g.tokenRiskRegistryOK',
+    'upstreamError("operator_registry"',
+  ]) {
+    if (!tokenRisk.contains(marker)) {
+      failures.add(
+        '$tokenRiskPath lost strict registry failure binding: $marker',
+      );
+    }
+  }
 }
 
 Set<String> _imports(String source) => {

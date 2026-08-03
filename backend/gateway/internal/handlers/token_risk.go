@@ -58,7 +58,7 @@ func LoadTokenRisksFile(path string) ([]TokenRisk, error) {
 		return nil, err
 	}
 	var entries []TokenRisk
-	if err := json.Unmarshal(raw, &entries); err != nil {
+	if err := decodeStrictJSON(raw, &entries); err != nil {
 		return nil, fmt.Errorf("decode token risks: %w", err)
 	}
 	index, err := normalizeTokenRisks(entries)
@@ -168,6 +168,12 @@ func (g *Gateway) CheckTokenRisk(ctx context.Context, params json.RawMessage) (a
 	if err != nil {
 		return nil, rpc.Errorf(rpc.CodeInvalidParams,
 			`invalid params: "contract" is not valid for %s`, network)
+	}
+	if !g.tokenRiskRegistryOK {
+		return nil, upstreamError("operator_registry", &upstream.Unavailable{
+			Upstream: "operator_registry",
+			Message:  "invalid operator risk registry",
+		})
 	}
 	key := tokenIdentityKey(network, entry.Contract)
 	if risk, found := g.tokenRisks[key]; found {
