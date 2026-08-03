@@ -29,7 +29,7 @@ func TestGoPlusApprovalsRequiresExplicitPublicOwnerRequestAndSanitizesRows(t *te
 		_, _ = fmt.Fprint(w, `{
           "code":1,"message":"ok","result":[{
             "token_address":"0x55d398326f99059ff775485246999027b3197955",
-            "token_name":"Tether\nUSD","token_symbol":"USDT","decimals":18,
+            "token_name":"Tether\n\u202eUSD","token_symbol":"USDT","decimals":18,
             "balance":"12.5","malicious_address":0,"malicious_behavior":[],
             "approved_list":[{
               "approved_contract":"0x10ed43c718714eb63d5aa57b78b54704e256024e",
@@ -99,11 +99,12 @@ func TestGoPlusApprovalsEmptyIsValidOnlyForCompleteResponse(t *testing.T) {
 
 func TestGoPlusApprovalsFailsClosedOnPartialMalformedAndOversizedData(t *testing.T) {
 	tests := map[string]string{
-		"partial":   `{"code":2,"result":[]}`,
-		"not-list":  `{"code":1,"result":{}}`,
-		"bad-owner": `{"code":1,"result":[{"token_address":"bad","decimals":18,"balance":"0","approved_list":[]}]}`,
-		"bad-row":   `{"code":1,"result":[{"token_address":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","token_name":"A","token_symbol":"A","decimals":18,"balance":"0","approved_list":[{"approved_contract":"bad","approved_amount":"1","approved_time":1,"hash":""}]}]}`,
-		"oversized": strings.Repeat("x", maxGoPlusResponseBytes+1),
+		"partial":      `{"code":2,"result":[]}`,
+		"not-list":     `{"code":1,"result":{}}`,
+		"bad-owner":    `{"code":1,"result":[{"token_address":"bad","decimals":18,"balance":"0","approved_list":[]}]}`,
+		"bad-decimals": `{"code":1,"result":[{"token_address":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","token_name":"A","token_symbol":"A","decimals":37,"balance":"0","approved_list":[]}]}`,
+		"bad-row":      `{"code":1,"result":[{"token_address":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","token_name":"A","token_symbol":"A","decimals":18,"balance":"0","approved_list":[{"approved_contract":"bad","approved_amount":"1","approved_time":1,"hash":""}]}]}`,
+		"oversized":    strings.Repeat("x", maxGoPlusResponseBytes+1),
 	}
 	for name, body := range tests {
 		t.Run(name, func(t *testing.T) {

@@ -291,6 +291,48 @@ void main() {
     expect(find.byKey(const ValueKey('approval-empty')), findsNothing);
   });
 
+  testWidgets(
+    'wrong-network approval response is unavailable and never actionable',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'prefs.security.externalApprovalScanConsent': true,
+      });
+      final prefs = AppPrefsController();
+      await prefs.load();
+      final gateway = _gateway((request) async {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response(
+          jsonEncode({
+            'jsonrpc': '2.0',
+            'id': body['id'],
+            'result': {
+              'status': 'ok',
+              'source': 'goplus',
+              'network': 'polygon-mainnet',
+              'approvals': <Object?>[],
+            },
+          }),
+          200,
+        );
+      });
+
+      await tester.pumpWidget(
+        _app(prefs: prefs, networks: NetworkController(), gateway: gateway),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('approval-scan-action')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('approval-unavailable')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('approval-empty')), findsNothing);
+      expect(find.byKey(const ValueKey('approval-results')), findsNothing);
+      expect(find.text('Revoke approval'), findsNothing);
+    },
+  );
+
   testWidgets('testnet is explicitly unsupported without contacting provider', (
     tester,
   ) async {

@@ -1291,6 +1291,17 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     `approve(spender, 0)`，cancel 明确变为同 nonce 的 0 原生币自转。
   - [x] 生产授权 API 已上线：无 `privacyConsent:true` 的查询明确拒绝；显式同意后对
     公开零地址的只读查询返回 `source=goplus`，证明隐私门禁和 provider 路径同时生效。
+  - [x] 2026-08-04 严审发现 App 虽检查授权字段类型，却没有把 Gateway 回包的
+    `network/source` 绑定到请求，也没有独立复核合约、spender、decimals、交易哈希、
+    `unlimited/amount` 一致性；错误网络或畸形远端行可能进入撤销草稿并浪费 Gas。
+    现以闭合 schema 只接受精确 `goplus + 请求网络`，限制 500 条并拒绝重复
+    `token|spender`，地址、哈希、非负时间、0–36 decimals、128 字符数值及远端显示文本
+    均在 App 再验证；Bidi/零宽控制字符和未知字段失败闭合。Gateway provider 同步把
+    decimals 从 255 收紧至 36，并在输出前移除 Bidi/零宽字符。错误网络 UI 明确显示
+    unavailable，不会显示“无授权”或撤销按钮。负例先稳定复现旧实现放行，再修复为
+    Gateway Client 32/32、授权 UI 12/12、KT Wallet 1535/1535、Gateway `make audit`、
+    `check_deps` 与静态分析 0 通过。该 Gateway 变更目前是源码候选，未冒充已部署到
+    生产 1.16.15。
   - [ ] 仍需用小额主网钱包完成真实授权发现、热钱包撤销、Cold Signer 撤销、链上
     确认与历史回填，并建立第三方限流、告警、回滚和隐私运营流程，因此本总项保持未完成。
 
@@ -1395,7 +1406,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     另以 16 个内置网络的精确 `id → name + symbol` 映射锁定运行时名称，不依赖 ARB。
     首轮完整门禁精确捕获 Wallet `assets / connect-cold` 与 Signer `parse` 三张预期
     Golden 差异；逐图复核后只更新这三张基线，第二轮定向与全量复跑通过。最终定向
-    49/49、`test_support` 63/63、KT Wallet 1531/1531、KT Cold Signer 570/570、共享
+    49/49、`test_support` 63/63、KT Wallet 1535/1535、KT Cold Signer 570/570、共享
     packages 415/415、静态分析 0、完整公开测试门禁 13/13。
   - [ ] 真机系统权限弹窗、生命周期保护页及全部生产路由仍需逐页三语语义人工复核，
     因此本总项保持未完成，不能扩大宣称为“全 App 本地化验收完成”。
@@ -1458,7 +1469,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     winner/loser 各 1 条、105 条裁剪为 100 条、进程在 Flutter 观察前退出并重启仍恢复
     confirmed + 唯一指标。故障注入继续证明，SQLite 指标读取失败不得影响启动、终态确认
     或 UI 刷新；终态指标与普通体验指标各自保留最多 100 条，不能相互挤占。KT Wallet
-    1531/1531、KT Cold Signer 570/570、共享 packages 415/415、静态分析 0、完整公开
+    1535/1535、KT Cold Signer 570/570、共享 packages 415/415、静态分析 0、完整公开
     测试/原生依赖/OSV 门禁 13/13 通过。
   - [ ] iOS MetricKit 真正的系统 payload 投递及 Android 真实 ANR/fatal 仍需物理设备
     故障注入验收；匿名未认证样本也不能替代 App Store/Play Console 的可信安装基数或

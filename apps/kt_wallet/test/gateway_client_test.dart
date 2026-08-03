@@ -893,6 +893,154 @@ void main() {
         );
       },
     );
+
+    test(
+      'binds approval responses to the requested network and source',
+      () async {
+        Map<String, Object?> response({
+          String network = 'eth-mainnet',
+          String source = 'goplus',
+        }) => {
+          'status': 'ok',
+          'source': source,
+          'network': network,
+          'approvals': <Object?>[],
+        };
+
+        for (final result in <Map<String, Object?>>[
+          response(network: 'polygon-mainnet'),
+          response(source: 'operator-override'),
+        ]) {
+          final recorder = _Recorder()
+            ..results = {'kt_getEvmTokenApprovals': result};
+          final client = GatewayClient(
+            baseUrl: 'https://gw.example',
+            client: recorder.client,
+            networks: (_) => 'eth-mainnet',
+            advertisedNetworks: const {'eth-mainnet'},
+          );
+          await expectLater(
+            client.getEvmTokenApprovals(
+              chain: Coin.eth,
+              address: '0x85f6be9460291e86e0fb49b07d0a83cc5f7206cd',
+              privacyConsent: true,
+            ),
+            throwsFormatException,
+          );
+        }
+      },
+    );
+
+    test(
+      'rejects approval rows that could change revocation semantics',
+      () async {
+        Map<String, Object?> validRow() => {
+          'tokenAddress': '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          'tokenName': 'Token',
+          'tokenSymbol': 'TOK',
+          'decimals': 18,
+          'balance': '5',
+          'spender': '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          'spenderName': 'Router',
+          'spenderTag': 'Example',
+          'spenderTrusted': false,
+          'amount': 'Unlimited',
+          'unlimited': true,
+          'approvedAt': 1700000000,
+          'transaction':
+              '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+          'risk': 'unsafe',
+        };
+
+        final invalidRows = <Map<String, Object?>>[
+          validRow()..['tokenAddress'] = '0x1234',
+          validRow()..['spender'] = '0x1234',
+          validRow()..['decimals'] = 37,
+          validRow()..['balance'] = '-1',
+          validRow()
+            ..['amount'] = '1'
+            ..['unlimited'] = true,
+          validRow()..['approvedAt'] = -1,
+          validRow()..['transaction'] = '0x1234',
+          validRow()..['tokenSymbol'] = 'T' * 33,
+          validRow()..['tokenName'] = 'USDT\u202eTDSU',
+          validRow()..['unexpectedSecurityOverride'] = true,
+        ];
+        for (final row in invalidRows) {
+          final recorder = _Recorder()
+            ..results = {
+              'kt_getEvmTokenApprovals': {
+                'status': 'ok',
+                'source': 'goplus',
+                'network': 'eth-mainnet',
+                'approvals': [row],
+              },
+            };
+          final client = GatewayClient(
+            baseUrl: 'https://gw.example',
+            client: recorder.client,
+            networks: (_) => 'eth-mainnet',
+            advertisedNetworks: const {'eth-mainnet'},
+          );
+          await expectLater(
+            client.getEvmTokenApprovals(
+              chain: Coin.eth,
+              address: '0x85f6be9460291e86e0fb49b07d0a83cc5f7206cd',
+              privacyConsent: true,
+            ),
+            throwsFormatException,
+            reason: 'invalid row must not become a revocation draft: $row',
+          );
+        }
+      },
+    );
+
+    test('rejects duplicate and oversized approval lists', () async {
+      final row = <String, Object?>{
+        'tokenAddress': '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        'tokenName': 'Token',
+        'tokenSymbol': 'TOK',
+        'decimals': 18,
+        'balance': '5',
+        'spender': '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        'spenderName': 'Router',
+        'spenderTag': 'Example',
+        'spenderTrusted': false,
+        'amount': '1',
+        'unlimited': false,
+        'approvedAt': 1700000000,
+        'transaction': '',
+        'risk': 'unknown',
+      };
+      for (final approvals in <List<Object?>>[
+        [row, Map<String, Object?>.from(row)],
+        List<Object?>.generate(501, (_) => row),
+      ]) {
+        final recorder = _Recorder()
+          ..results = {
+            'kt_getEvmTokenApprovals': {
+              'status': 'ok',
+              'source': 'goplus',
+              'network': 'eth-mainnet',
+              'approvals': approvals,
+            },
+          };
+        final client = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: recorder.client,
+          networks: (_) => 'eth-mainnet',
+          advertisedNetworks: const {'eth-mainnet'},
+        );
+        await expectLater(
+          client.getEvmTokenApprovals(
+            chain: Coin.eth,
+            address: '0x85f6be9460291e86e0fb49b07d0a83cc5f7206cd',
+            privacyConsent: true,
+          ),
+          throwsFormatException,
+        );
+      }
+    });
   });
 
   group('kt_broadcast and error mapping', () {

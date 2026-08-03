@@ -180,7 +180,10 @@ func parseApprovalToken(token approvalTokenRecord) ([]TokenApproval, error) {
 	if !evmAddressPattern.MatchString(token.TokenAddress) {
 		return nil, errors.New("invalid token address")
 	}
-	decimals, ok := boundedJSONInt(token.Decimals, 0, 255)
+	// Match the mobile Amount boundary. A provider-controlled scale above 36
+	// is not useful for supported ERC-20 assets and can create misleading or
+	// pathological UI values even though the revoke calldata itself is zero.
+	decimals, ok := boundedJSONInt(token.Decimals, 0, 36)
 	if !ok || !validProviderDecimal(token.Balance) {
 		return nil, errors.New("invalid token metadata")
 	}
@@ -257,7 +260,7 @@ func boundedDisplayText(value string, maxRunes int) string {
 	value = strings.TrimSpace(value)
 	clean := make([]rune, 0, len(value))
 	for _, r := range value {
-		if r < 0x20 || r == 0x7f {
+		if r < 0x20 || r == 0x7f || unsafeDisplayRune(r) {
 			continue
 		}
 		clean = append(clean, r)
@@ -266,4 +269,11 @@ func boundedDisplayText(value string, maxRunes int) string {
 		}
 	}
 	return string(clean)
+}
+
+func unsafeDisplayRune(r rune) bool {
+	return (r >= 0x200b && r <= 0x200f) ||
+		(r >= 0x202a && r <= 0x202e) ||
+		(r >= 0x2060 && r <= 0x2069) ||
+		r == 0xfeff
 }

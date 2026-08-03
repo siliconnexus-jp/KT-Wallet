@@ -94,6 +94,34 @@ class GatewayClient {
     'sol-mainnet',
   };
 
+  static const _approvalResultKeys = <String>{
+    'status',
+    'source',
+    'network',
+    'approvals',
+  };
+  static const _approvalRowKeys = <String>{
+    'tokenAddress',
+    'tokenName',
+    'tokenSymbol',
+    'decimals',
+    'balance',
+    'spender',
+    'spenderName',
+    'spenderTag',
+    'spenderTrusted',
+    'amount',
+    'unlimited',
+    'approvedAt',
+    'transaction',
+    'risk',
+  };
+  static final _evmAddressPattern = RegExp(r'^0x[0-9a-fA-F]{40}$');
+  static final _evmTxHashPattern = RegExp(r'^0x[0-9a-fA-F]{64}$');
+  static final _providerDecimalPattern = RegExp(
+    r'^[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$',
+  );
+
   int _nextId = 0;
 
   static String _stripTrailingSlash(String url) {
@@ -768,6 +796,7 @@ class GatewayClient {
       );
     }
     final network = await _networkParam(chain);
+    final expectedNetwork = network ?? _mainnetNetworkId(chain);
     final result = await _call('kt_getEvmTokenApprovals', {
       'chain': chainName(chain),
       'network': ?network,
@@ -775,15 +804,21 @@ class GatewayClient {
       'privacyConsent': true,
     });
     if (result is! Map ||
+        !_hasExactStringKeys(result, _approvalResultKeys) ||
         result['status'] != 'ok' ||
-        result['source'] is! String ||
-        result['network'] is! String ||
+        result['source'] != 'goplus' ||
+        result['network'] != expectedNetwork ||
         result['approvals'] is! List) {
       throw const FormatException('bad token approvals result');
     }
+    final rawRows = result['approvals'] as List;
+    if (rawRows.length > 500) {
+      throw const FormatException('too many token approval rows');
+    }
     final rows = <GatewayTokenApproval>[];
-    for (final raw in result['approvals'] as List) {
-      if (raw is! Map) {
+    final identities = <String>{};
+    for (final raw in rawRows) {
+      if (raw is! Map || !_hasExactStringKeys(raw, _approvalRowKeys)) {
         throw const FormatException('bad token approval row');
       }
       final tokenAddress = raw['tokenAddress'];
@@ -815,6 +850,26 @@ class GatewayClient {
           transaction is! String ||
           (risk != 'unsafe' && risk != 'unknown')) {
         throw const FormatException('bad token approval row');
+      }
+      final identity = '${tokenAddress.toLowerCase()}|${spender.toLowerCase()}';
+      final validUnlimited = unlimited
+          ? amount.trim().toLowerCase() == 'unlimited'
+          : _isProviderDecimal(amount);
+      if (!_evmAddressPattern.hasMatch(tokenAddress) ||
+          !_evmAddressPattern.hasMatch(spender) ||
+          decimals < 0 ||
+          decimals > Amount.maxDecimals ||
+          !_isProviderDecimal(balance) ||
+          !validUnlimited ||
+          approvedAt < 0 ||
+          (transaction.isNotEmpty &&
+              !_evmTxHashPattern.hasMatch(transaction)) ||
+          !_isBoundedDisplayText(tokenName, 80) ||
+          !_isBoundedDisplayText(tokenSymbol, 32) ||
+          !_isBoundedDisplayText(spenderName, 80) ||
+          !_isBoundedDisplayText(spenderTag, 80) ||
+          !identities.add(identity)) {
+        throw const FormatException('invalid token approval semantics');
       }
       rows.add(
         GatewayTokenApproval(
@@ -887,6 +942,44 @@ class GatewayClient {
   static String _string(Object? value) {
     if (value is! String) throw const FormatException('missing string');
     return value;
+  }
+
+  static String _mainnetNetworkId(Coin chain) => switch (chain) {
+    Coin.eth => 'eth-mainnet',
+    Coin.polygon => 'polygon-mainnet',
+    Coin.base => 'base-mainnet',
+    Coin.arbitrum => 'arbitrum-mainnet',
+    Coin.avalanche => 'avalanche-mainnet',
+    Coin.bnb => 'bnb-mainnet',
+    Coin.tron => 'tron-mainnet',
+    Coin.solana => 'sol-mainnet',
+  };
+
+  static bool _hasExactStringKeys(
+    Map<Object?, Object?> value,
+    Set<String> keys,
+  ) => value.length == keys.length && value.keys.every(keys.contains);
+
+  static bool _isProviderDecimal(String value) {
+    final normalized = value.trim();
+    return normalized.isNotEmpty &&
+        normalized.length <= 128 &&
+        _providerDecimalPattern.hasMatch(normalized);
+  }
+
+  static bool _isBoundedDisplayText(String value, int maxRunes) {
+    if (value != value.trim() || value.runes.length > maxRunes) return false;
+    for (final rune in value.runes) {
+      if (rune < 0x20 ||
+          rune == 0x7f ||
+          (rune >= 0x200b && rune <= 0x200f) ||
+          (rune >= 0x202a && rune <= 0x202e) ||
+          (rune >= 0x2060 && rune <= 0x2069) ||
+          rune == 0xfeff) {
+        return false;
+      }
+    }
+    return true;
   }
 }
 
