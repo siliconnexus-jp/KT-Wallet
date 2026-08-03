@@ -322,166 +322,205 @@ class MarketController extends ChangeNotifier {
     }
     notifyListeners();
 
-    if (contextChanged && _snapshots != null) {
-      final snapshot = await _snapshots.load(wallet.id, scope);
-      if (generation != _generation) return;
-      if (snapshot != null) {
-        final tokenIds = {for (final token in tokens) token.id};
-        _results = {
-          for (final coin in Coin.values)
-            coin:
-                snapshot.native[coin] ??
-                _results[coin] ??
-                const BalanceResult.loading(),
-        };
-        _tokenResults = {
-          for (final token in tokens)
-            token.id:
-                (tokenIds.contains(token.id)
-                    ? snapshot.tokens[token.id]
-                    : null) ??
-                const BalanceResult.loading(),
-        };
-        _prices.restoreLastGood(
-          nativeUsd: snapshot.nativePrices,
-          tokenUsd: snapshot.tokenPrices,
-          nativeChange24h: snapshot.nativeChanges,
-          tokenChange24h: snapshot.tokenChanges,
-          fiatPerUsd: snapshot.fiatPerUsd,
-        );
-        _pricesUsd = snapshot.nativePrices.isEmpty
-            ? null
-            : snapshot.nativePrices;
-        _showingCachedData = true;
-        _lastUpdatedAt = snapshot.savedAt;
+    try {
+      if (contextChanged && _snapshots != null) {
+        MarketSnapshot? snapshot;
+        try {
+          snapshot = await _snapshots.load(wallet.id, scope);
+        } catch (_) {
+          // This is a display-only acceleration cache. A corrupt value or
+          // transient cache-store failure must never block the authoritative
+          // live balance refresh.
+          snapshot = null;
+        }
+        if (generation != _generation) return;
+        if (snapshot != null) {
+          final tokenIds = {for (final token in tokens) token.id};
+          _results = {
+            for (final coin in Coin.values)
+              coin:
+                  snapshot.native[coin] ??
+                  _results[coin] ??
+                  const BalanceResult.loading(),
+          };
+          _tokenResults = {
+            for (final token in tokens)
+              token.id:
+                  (tokenIds.contains(token.id)
+                      ? snapshot.tokens[token.id]
+                      : null) ??
+                  const BalanceResult.loading(),
+          };
+          _prices.restoreLastGood(
+            nativeUsd: snapshot.nativePrices,
+            tokenUsd: snapshot.tokenPrices,
+            nativeChange24h: snapshot.nativeChanges,
+            tokenChange24h: snapshot.tokenChanges,
+            fiatPerUsd: snapshot.fiatPerUsd,
+          );
+          _pricesUsd = snapshot.nativePrices.isEmpty
+              ? null
+              : snapshot.nativePrices;
+          _showingCachedData = true;
+          _lastUpdatedAt = snapshot.savedAt;
+          notifyListeners();
+        }
+      }
+
+      final tokenService = _tokens;
+      // With every active chain on a testnet there is nothing to price — skip
+      // the fetch entirely (an unpriceable quote must not even be requested).
+      // Mixed environments still fetch once; testnet chains ignore the result
+      // via the fiat guards above.
+      final skipPrices = Coin.values.every(_isTestnet);
+      void revealNative(Coin coin, BalanceResult result) {
+        if (generation != _generation) return;
+        _results = {..._results, coin: result};
         notifyListeners();
       }
-    }
 
-    final tokenService = _tokens;
-    // With every active chain on a testnet there is nothing to price — skip
-    // the fetch entirely (an unpriceable quote must not even be requested).
-    // Mixed environments still fetch once; testnet chains ignore the result
-    // via the fiat guards above.
-    final skipPrices = Coin.values.every(_isTestnet);
-    void revealNative(Coin coin, BalanceResult result) {
-      if (generation != _generation) return;
-      _results = {..._results, coin: result};
-      notifyListeners();
-    }
-
-    late final Future<TokenBalanceBatch> tokenFuture;
-    late final Future<Map<Coin, BalanceResult>> balanceFuture;
-    if (tokenService != null && tokenService.gatewayEnabled) {
-      tokenFuture = tokenService.fetchAllWithNative(
-        wallet.addresses,
-        onNativeResult: revealNative,
-      );
-      balanceFuture = tokenFuture.then((batch) async {
-        final missing = wallet.addresses.enabledCoins
-            .where((coin) => !batch.native.containsKey(coin))
-            .toList();
-        if (missing.isEmpty) return batch.native;
-        final fallback = await _balances.fetchCoins(
+      late final Future<TokenBalanceBatch> tokenFuture;
+      late final Future<Map<Coin, BalanceResult>> balanceFuture;
+      if (tokenService != null && tokenService.gatewayEnabled) {
+        tokenFuture = tokenService.fetchAllWithNative(
           wallet.addresses,
-          missing,
+          onNativeResult: revealNative,
+        );
+        balanceFuture = tokenFuture.then((batch) async {
+          final missing = wallet.addresses.enabledCoins
+              .where((coin) => !batch.native.containsKey(coin))
+              .toList();
+          if (missing.isEmpty) return batch.native;
+          final fallback = await _balances.fetchCoins(
+            wallet.addresses,
+            missing,
+            onResult: revealNative,
+            skipGateway: batch.gatewayFailedChains,
+          );
+          return {...batch.native, ...fallback};
+        });
+      } else {
+        balanceFuture = _balances.fetchAll(
+          wallet.addresses,
           onResult: revealNative,
-          skipGateway: batch.gatewayFailedChains,
         );
-        return {...batch.native, ...fallback};
-      });
-    } else {
-      balanceFuture = _balances.fetchAll(
-        wallet.addresses,
-        onResult: revealNative,
-      );
-      tokenFuture = tokenService == null
-          ? Future.value(const TokenBalanceBatch(tokens: {}))
-          : tokenService
-                .fetchAll(wallet.addresses)
-                .then((results) => TokenBalanceBatch(tokens: results));
-    }
-
-    final (balances, prices, tokenBatch) = await (
-      balanceFuture,
-      skipPrices
-          ? Future<Map<Coin, double>?>.value(null)
-          : _prices.fetchUsdPrices(),
-      tokenFuture,
-    ).wait;
-
-    if (generation != _generation) return; // superseded — drop stale results
-    final liveFetchSucceeded =
-        balances.values.any((result) => result.status == BalanceStatus.ok) ||
-        tokenBatch.tokens.values.any(
-          (result) => result.status == BalanceStatus.ok,
-        );
-    var retainedStale = false;
-    BalanceResult retainLastGood(BalanceResult? previous, BalanceResult fresh) {
-      if (fresh.status == BalanceStatus.error &&
-          previous?.status == BalanceStatus.ok) {
-        retainedStale = true;
-        return previous!;
+        tokenFuture = tokenService == null
+            ? Future.value(const TokenBalanceBatch(tokens: {}))
+            : tokenService
+                  .fetchAll(wallet.addresses)
+                  .then((results) => TokenBalanceBatch(tokens: results));
       }
-      return fresh;
-    }
 
-    _results = {
-      for (final coin in Coin.values)
-        coin: retainLastGood(
-          _results[coin],
-          balances[coin] ?? const BalanceResult.unsupported(),
-        ),
-    };
-    _tokenResults = {
-      for (final token in tokens)
-        token.id: retainLastGood(
-          _tokenResults[token.id],
-          tokenBatch.tokens[token.id] ?? const BalanceResult.unsupported(),
-        ),
-    };
-    // A failed price fetch falls back to the session's last good quotes.
-    // Mark that state stale too; otherwise fiat values could silently look
-    // current while only the native/token balance calls succeeded.
-    if (!skipPrices &&
-        prices == null &&
-        (_pricesUsd != null || _prices.lastGoodUsd != null)) {
-      retainedStale = true;
-    }
-    // In an all-testnet environment a missing quote is intentional, not a
-    // failed refresh. Do not publish the session's mainnet last-good prices
-    // into this generation or persist them under the testnet snapshot scope.
-    _pricesUsd = skipPrices
-        ? null
-        : prices ?? _pricesUsd ?? _prices.lastGoodUsd;
-    _refreshing = false;
-    _hasRefreshed = true;
-    _showingCachedData = retainedStale;
-    final now = DateTime.now();
-    _lastUpdatedAt = retainedStale ? (_lastUpdatedAt ?? now) : now;
-    notifyListeners();
+      final (balances, prices, tokenBatch) = await (
+        balanceFuture,
+        skipPrices
+            ? Future<Map<Coin, double>?>.value(null)
+            : _prices.fetchUsdPrices(),
+        tokenFuture,
+      ).wait;
 
-    if (_snapshots != null && hasLiveBalances) {
-      final snapshot = MarketSnapshot(
-        scope: scope,
-        savedAt: _lastUpdatedAt!,
-        native: _results,
-        tokens: _tokenResults,
-        nativePrices: _pricesUsd ?? const {},
-        tokenPrices: skipPrices
-            ? const {}
-            : _prices.lastGoodTokenUsd ?? const {},
-        nativeChanges: skipPrices ? const {} : _prices.lastGoodChange24h,
-        tokenChanges: skipPrices ? const {} : _prices.lastGoodTokenChange24h,
-        fiatPerUsd: _prices.lastGoodFiatPerUsd,
+      if (generation != _generation) return; // superseded — drop stale results
+      final liveFetchSucceeded =
+          balances.values.any((result) => result.status == BalanceStatus.ok) ||
+          tokenBatch.tokens.values.any(
+            (result) => result.status == BalanceStatus.ok,
+          );
+      var retainedStale = false;
+      BalanceResult retainLastGood(
+        BalanceResult? previous,
+        BalanceResult fresh,
+      ) {
+        if (fresh.status == BalanceStatus.error &&
+            previous?.status == BalanceStatus.ok) {
+          retainedStale = true;
+          return previous!;
+        }
+        return fresh;
+      }
+
+      _results = {
+        for (final coin in Coin.values)
+          coin: retainLastGood(
+            _results[coin],
+            balances[coin] ?? const BalanceResult.unsupported(),
+          ),
+      };
+      _tokenResults = {
+        for (final token in tokens)
+          token.id: retainLastGood(
+            _tokenResults[token.id],
+            tokenBatch.tokens[token.id] ?? const BalanceResult.unsupported(),
+          ),
+      };
+      // A failed price fetch falls back to the session's last good quotes.
+      // Mark that state stale too; otherwise fiat values could silently look
+      // current while only the native/token balance calls succeeded.
+      if (!skipPrices &&
+          prices == null &&
+          (_pricesUsd != null || _prices.lastGoodUsd != null)) {
+        retainedStale = true;
+      }
+      // In an all-testnet environment a missing quote is intentional, not a
+      // failed refresh. Do not publish the session's mainnet last-good prices
+      // into this generation or persist them under the testnet snapshot scope.
+      _pricesUsd = skipPrices
+          ? null
+          : prices ?? _pricesUsd ?? _prices.lastGoodUsd;
+      _refreshing = false;
+      _hasRefreshed = true;
+      _showingCachedData = retainedStale;
+      final now = DateTime.now();
+      _lastUpdatedAt = retainedStale ? (_lastUpdatedAt ?? now) : now;
+      notifyListeners();
+
+      if (_snapshots != null && hasLiveBalances) {
+        final snapshot = MarketSnapshot(
+          scope: scope,
+          savedAt: _lastUpdatedAt!,
+          native: _results,
+          tokens: _tokenResults,
+          nativePrices: _pricesUsd ?? const {},
+          tokenPrices: skipPrices
+              ? const {}
+              : _prices.lastGoodTokenUsd ?? const {},
+          nativeChanges: skipPrices ? const {} : _prices.lastGoodChange24h,
+          tokenChanges: skipPrices ? const {} : _prices.lastGoodTokenChange24h,
+          fiatPerUsd: _prices.lastGoodFiatPerUsd,
+        );
+        _snapshots.save(wallet.id, snapshot).ignore();
+      }
+      ExperienceMetrics.instance.record(
+        ExperienceMetricNames.marketRefresh,
+        metricStopwatch.elapsed,
+        success: liveFetchSucceeded,
       );
-      _snapshots.save(wallet.id, snapshot).ignore();
+    } catch (_) {
+      if (_disposed || generation != _generation) return;
+      // Provider contracts normally return explicit error results. Keep this
+      // boundary for unexpected transport/plugin failures so the portfolio
+      // cannot remain on an infinite skeleton and a later refresh may retry.
+      _results = {
+        for (final entry in _results.entries)
+          entry.key: entry.value.status == BalanceStatus.loading
+              ? const BalanceResult.error()
+              : entry.value,
+      };
+      _tokenResults = {
+        for (final entry in _tokenResults.entries)
+          entry.key: entry.value.status == BalanceStatus.loading
+              ? const BalanceResult.error()
+              : entry.value,
+      };
+      _refreshing = false;
+      _hasRefreshed = true;
+      _showingCachedData = _lastUpdatedAt != null && hasLiveBalances;
+      notifyListeners();
+      ExperienceMetrics.instance.record(
+        ExperienceMetricNames.marketRefresh,
+        metricStopwatch.elapsed,
+        success: false,
+      );
     }
-    ExperienceMetrics.instance.record(
-      ExperienceMetricNames.marketRefresh,
-      metricStopwatch.elapsed,
-      success: liveFetchSucceeded,
-    );
   }
 
   void _onWalletsChanged() {

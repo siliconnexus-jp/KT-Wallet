@@ -837,6 +837,16 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   网络 generation 改变或页面销毁时，排队 worker 会在出网前停止；前 4 条阻塞时销毁页面
   的红测证明后 8 条不再查询。定向 11/11、静态分析、`check_deps` 与完整源码审计 12/12
   通过。
+- [x] 市场/历史刷新异常不再把页面永久锁在 skeleton 或 load-more：展示快照实现即使因
+  损坏或本地存储异常直接抛错，控制器也只把它当作 cache miss 并继续实时余额/历史；余额
+  Provider、Indexer 或 Drift 的未预期异常会把尚未解析的 loading 行转为明确 error，复位
+  `isRefreshing/isLoadingMore`，保留已有 last-good 行且不伪造新更新时间，下一次显式刷新
+  可立即重试。无人 await 的 Pending 定时轮询也捕获数据库/插件异常并按 1×/2×/4×/8×
+  上限退避，成功或钱包 context 改变后清零，不再因一次本地错误永久停止 finality。
+  7 项快照/Provider/Indexer/数据库/结构化并发/轮询故障注入先红后绿，Market + History
+  定向 41/41、KT Wallet 1,481/1,481、静态分析 0、`check_deps` 与公开测试源码审计
+  12/12 通过。这是
+  非视觉状态机与故障恢复证据，不用模拟器截图代替。
 - [x] Gateway 多实例无状态部署、共享缓存或一致缓存键。
   - [x] 源码已支持可选 Redis local-first 共享缓存：价格、展示余额和历史保持
     5–30 秒原 TTL；第二 Gateway 实例可命中第一实例写入的数据。共享 key 使用固定

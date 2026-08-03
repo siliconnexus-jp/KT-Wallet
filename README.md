@@ -342,8 +342,12 @@ is switched or deleted, before cached data or a late provider response can be
 rendered for the next wallet. Pending finality reconciliation is separately
 bounded to four concurrent lookups, isolates a failing hash from its peers, and
 stops queued requests when the owning wallet/network context is no longer
-current. These controls improve responsiveness without treating stale cache or
-unknown chain evidence as a successful result.
+current. A corrupt display snapshot is treated as a cache miss rather than a
+live-data failure. Unexpected provider or database exceptions close the loading
+state into an explicit error and leave refresh immediately retryable; an
+unattended Pending poll retries with a bounded 1×/2×/4×/8× delay instead of
+silently stopping. These controls improve responsiveness without treating stale
+cache or unknown chain evidence as a successful result.
 
 Gateway `1.16.9` currently exposes 16 mainnet/testnet network profiles. It uses
 bounded upstream failover and circuit breakers, plus short caches for prices
@@ -468,7 +472,7 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-03) completed with zero static-analysis
-issues: **1,474/1,474** KT Wallet tests, **570/570** KT Cold Signer tests, and
+issues: **1,481/1,481** KT Wallet tests, **570/570** KT Cold Signer tests, and
 **401/401** shared-package tests passed. The Gateway audit, public-secret gate,
 native dependency lock/checksum verification, and OSV scans also passed. These
 numbers are reproducible source evidence. On the same date, the iOS native

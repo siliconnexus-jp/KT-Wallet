@@ -11,6 +11,7 @@ import 'package:kt_wallet/src/market/history_service.dart';
 import 'package:kt_wallet/src/market/history_snapshot.dart';
 import 'package:kt_wallet/src/market/token_balance_service.dart'
     show usdtEthToken;
+import 'package:kt_wallet/src/market/transaction_status_service.dart';
 import 'package:kt_wallet/src/screens/home_screen.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
 import 'package:kt_wallet/src/wallets/wallet_manager.dart';
@@ -97,6 +98,90 @@ class _HistorySnapshotMemory implements HistorySnapshotStore {
   }
 }
 
+class _ThrowingHistorySnapshotStore implements HistorySnapshotStore {
+  int loadCalls = 0;
+
+  @override
+  Future<HistorySnapshot?> load(String walletId, String scope) async {
+    loadCalls++;
+    throw StateError('corrupt display cache');
+  }
+
+  @override
+  Future<void> save(String walletId, HistorySnapshot snapshot) async {}
+}
+
+class _ThrowOnceHistoryService extends HistoryService {
+  bool failed = false;
+
+  @override
+  Future<HistoryResult> fetch(
+    Coin coin,
+    String address, {
+    int limit = HistoryService.pageSize,
+    String? networkId,
+  }) async {
+    if (!failed) {
+      failed = true;
+      throw StateError('temporary indexer failure');
+    }
+    return const HistoryResult.unsupported();
+  }
+}
+
+class _ThrowNextWalletStore extends WalletStore {
+  _ThrowNextWalletStore(super.database);
+
+  bool throwNextMirror = false;
+  bool throwNextPending = false;
+  int pendingCalls = 0;
+
+  @override
+  Future<void> mirrorIncomingTransactions({
+    required String targetWalletId,
+    required Map<String, String> addressesByCoin,
+    Set<String>? networkIds,
+  }) async {
+    if (throwNextMirror) {
+      throwNextMirror = false;
+      throw StateError('temporary database failure');
+    }
+    await super.mirrorIncomingTransactions(
+      targetWalletId: targetWalletId,
+      addressesByCoin: addressesByCoin,
+      networkIds: networkIds,
+    );
+  }
+
+  @override
+  Future<List<Transaction>> pendingTransactions(String walletId) async {
+    pendingCalls++;
+    if (throwNextPending) {
+      throwNextPending = false;
+      throw StateError('temporary pending-query failure');
+    }
+    return super.pendingTransactions(walletId);
+  }
+}
+
+class _AlwaysPendingStatusService extends TransactionStatusService {
+  @override
+  Future<ChainTransactionStatus> check(Transaction transaction) async =>
+      ChainTransactionStatus.pending;
+}
+
+class _BlockingPendingStatusService extends TransactionStatusService {
+  final started = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  Future<ChainTransactionStatus> check(Transaction transaction) async {
+    if (!started.isCompleted) started.complete();
+    await release.future;
+    return ChainTransactionStatus.pending;
+  }
+}
+
 WalletController _wallets() => WalletController(
   WalletManager(
     initial: [
@@ -153,6 +238,201 @@ Widget _app(HistoryController controller) => MaterialApp(
 const _unsupported = HistoryResult.unsupported();
 
 void main() {
+  test(
+    'a broken history snapshot is ignored and live history still loads',
+    () async {
+      final snapshots = _ThrowingHistorySnapshotStore();
+      final liveRecord = ChainTxRecord(
+        coin: Coin.eth,
+        networkId: 'eth-mainnet',
+        hash: '0xlive',
+        outgoing: false,
+        amountText: '1 ETH',
+        timestamp: DateTime(2026, 8, 3),
+        confirmed: true,
+      );
+      final controller = HistoryController(
+        wallets: _wallets(),
+        service: _FakeHistoryService({
+          for (final coin in Coin.values)
+            coin: coin == Coin.eth
+                ? HistoryResult.ok([liveRecord])
+                : _unsupported,
+        }),
+        snapshots: snapshots,
+        snapshotScope: () => 'mainnet',
+      );
+      addTearDown(controller.dispose);
+
+      await controller.refresh();
+
+      expect(snapshots.loadCalls, 1);
+      expect(controller.isRefreshing, isFalse);
+      expect(controller.isLoading, isFalse);
+      expect(controller.records.map((record) => record.hash), ['0xlive']);
+      expect(controller.showingCachedData, isFalse);
+    },
+  );
+
+  test('an unexpected indexer failure closes honestly and can retry', () async {
+    final controller = HistoryController(
+      wallets: _wallets(),
+      service: _ThrowOnceHistoryService(),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.refresh();
+
+    expect(controller.isRefreshing, isFalse);
+    expect(controller.isLoading, isFalse);
+    expect(controller.resultFor(Coin.eth).status, HistoryStatus.error);
+
+    await controller.refresh();
+
+    expect(controller.isRefreshing, isFalse);
+    expect(controller.resultFor(Coin.eth).status, HistoryStatus.unsupported);
+  });
+
+  test('an indexer failure still joins the in-flight status refresh', () async {
+    final database = WalletDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final wallet = HotWallet(
+      id: 'joined-failure-wallet',
+      name: 'Joined failure wallet',
+      avatarColor: 0xFF000000,
+      addresses: const ChainAddresses(
+        eth: '0x1111111111111111111111111111111111111111',
+        polygon: '0x1111111111111111111111111111111111111111',
+        tron: 'TJRabPrwbZy45sbavfcjinPJC18kjpRTv8',
+        solana: '11111111111111111111111111111111',
+      ),
+      backedUp: true,
+    );
+    final store = WalletStore(database);
+    await store.save(wallet);
+    final wallets = WalletController(
+      WalletManager(initial: [wallet]),
+      store: store,
+    );
+    await wallets.saveOutgoingTransaction(
+      id: 'joined-failure-pending',
+      coin: Coin.eth,
+      networkId: 'eth-mainnet',
+      from: wallet.addresses.eth,
+      to: '0x2222222222222222222222222222222222222222',
+      amountRaw: '1',
+      hash: '0x${'b' * 64}',
+      status: TxStatus.pending,
+      signMode: SignMode.local,
+      createdAt: DateTime(2026, 8, 3).millisecondsSinceEpoch,
+    );
+    final statusService = _BlockingPendingStatusService();
+    final controller = HistoryController(
+      wallets: wallets,
+      service: _ThrowOnceHistoryService(),
+      statusService: statusService,
+    );
+    addTearDown(controller.dispose);
+
+    var completed = false;
+    final refresh = controller.refresh().whenComplete(() => completed = true);
+    await statusService.started.future;
+    await Future<void>.delayed(Duration.zero);
+
+    expect(completed, isFalse);
+    statusService.release.complete();
+    await refresh;
+
+    expect(completed, isTrue);
+    expect(controller.isRefreshing, isFalse);
+    expect(controller.resultFor(Coin.eth).status, HistoryStatus.error);
+  });
+
+  test('a database failure cannot latch load-more or block retry', () async {
+    final database = WalletDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final store = _ThrowNextWalletStore(database);
+    final wallets = WalletController(
+      WalletManager(initial: _wallets().wallets),
+      store: store,
+    );
+    final controller = HistoryController(
+      wallets: wallets,
+      service: _PagedHistoryService(),
+    );
+    addTearDown(controller.dispose);
+    await controller.refresh();
+
+    store.throwNextMirror = true;
+    await controller.loadMore();
+
+    expect(controller.isRefreshing, isFalse);
+    expect(controller.isLoadingMore, isFalse);
+    expect(controller.isLoading, isFalse);
+
+    await controller.refresh();
+    expect(controller.isRefreshing, isFalse);
+    expect(controller.records, isNotEmpty);
+  });
+
+  test('a polling database failure backs off and resumes finality', () async {
+    final database = WalletDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final wallet = HotWallet(
+      id: 'poll-wallet',
+      name: 'Poll wallet',
+      avatarColor: 0xFF000000,
+      addresses: const ChainAddresses(
+        eth: '0x1111111111111111111111111111111111111111',
+        polygon: '0x1111111111111111111111111111111111111111',
+        tron: 'TJRabPrwbZy45sbavfcjinPJC18kjpRTv8',
+        solana: '11111111111111111111111111111111',
+      ),
+      backedUp: true,
+    );
+    final store = _ThrowNextWalletStore(database);
+    await store.save(wallet);
+    final wallets = WalletController(
+      WalletManager(initial: [wallet]),
+      store: store,
+    );
+    await wallets.saveOutgoingTransaction(
+      id: 'poll-pending',
+      coin: Coin.eth,
+      networkId: 'eth-mainnet',
+      from: wallet.addresses.eth,
+      to: '0x2222222222222222222222222222222222222222',
+      amountRaw: '1',
+      hash: '0x${'a' * 64}',
+      status: TxStatus.pending,
+      signMode: SignMode.local,
+      createdAt: DateTime(2026, 8, 3).millisecondsSinceEpoch,
+    );
+    final controller = HistoryController(
+      wallets: wallets,
+      service: _FakeHistoryService({
+        for (final coin in Coin.values) coin: _unsupported,
+      }),
+      statusService: _AlwaysPendingStatusService(),
+      pollInterval: const Duration(milliseconds: 5),
+    );
+    addTearDown(controller.dispose);
+    await controller.refresh();
+    final baseline = store.pendingCalls;
+
+    store.throwNextPending = true;
+    controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    final deadline = DateTime.now().add(const Duration(milliseconds: 250));
+    while (store.pendingCalls < baseline + 2 &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+
+    expect(store.pendingCalls, greaterThanOrEqualTo(baseline + 2));
+    expect(controller.isRefreshing, isFalse);
+    expect(controller.records, isNotEmpty);
+  });
+
   test(
     'switching wallets hides the previous local history synchronously',
     () async {

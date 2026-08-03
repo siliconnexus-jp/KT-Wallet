@@ -174,6 +174,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   int _remoteLimit = HistoryService.pageSize;
   final List<TransactionStatusNotice> _notices = [];
   Timer? _pollTimer;
+  int _pollFailureCount = 0;
   List<db.Transaction> _localTransactions = const [];
   bool _hasPendingTransactions = false;
 
@@ -385,6 +386,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
       // Remove the previous wallet's local rows and queued status notices
       // before any snapshot or database await can yield back to the UI.
       _pollTimer?.cancel();
+      _pollFailureCount = 0;
       _localTransactions = const [];
       _hasPendingTransactions = false;
       _notices.clear();
@@ -398,168 +400,205 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
       notifyListeners();
     }
 
-    if (contextChanged && _snapshots != null) {
-      final snapshot = await _snapshots.load(wallet.id, scope);
+    try {
+      if (contextChanged && _snapshots != null) {
+        HistorySnapshot? snapshot;
+        try {
+          snapshot = await _snapshots.load(wallet.id, scope);
+        } catch (_) {
+          // Snapshot state is display-only. Treat cache corruption or a
+          // transient settings read as a cache miss and continue to the live
+          // explorer/database sources.
+          snapshot = null;
+        }
+        if (generation != _generation) return;
+        if (snapshot != null) {
+          _results = {
+            for (final coin in coins)
+              coin:
+                  snapshot.results[coin] ??
+                  _results[coin] ??
+                  const HistoryResult.loading(),
+          };
+          _hasRefreshed = true;
+          _showingCachedData = true;
+          _lastUpdatedAt = snapshot.savedAt;
+        }
+      }
+      _localTransactions = await _loadLocalTransactions();
       if (generation != _generation) return;
-      if (snapshot != null) {
-        _results = {
-          for (final coin in coins)
-            coin:
-                snapshot.results[coin] ??
-                _results[coin] ??
-                const HistoryResult.loading(),
-        };
-        _hasRefreshed = true;
-        _showingCachedData = true;
-        _lastUpdatedAt = snapshot.savedAt;
-      }
-    }
-    _localTransactions = await _loadLocalTransactions();
-    if (generation != _generation) return;
-    final pendingTransactions = await _loadPendingTransactions();
-    if (generation != _generation) return;
-    _hasPendingTransactions = pendingTransactions.isNotEmpty;
-    // A locally submitted incoming/outgoing row is useful immediately; do not
-    // keep it behind the slowest explorer request.
-    notifyListeners();
+      final pendingTransactions = await _loadPendingTransactions();
+      if (generation != _generation) return;
+      _hasPendingTransactions = pendingTransactions.isNotEmpty;
+      // A locally submitted incoming/outgoing row is useful immediately; do not
+      // keep it behind the slowest explorer request.
+      notifyListeners();
 
-    final historyFuture = Future.wait([
-      for (final coin in coins)
-        _service
-            .fetch(
-              coin,
-              wallet.addresses.forCoin(coin),
-              limit: _remoteLimit,
-              networkId: _activeNetworkId?.call(coin),
-            )
-            .then((result) {
-              if (generation == _generation) {
-                final previous = _results[coin];
-                // Keep a restored/last-good chain visible while its live
-                // explorer call fails. The final merge marks it stale.
-                if (!(result.status == HistoryStatus.error &&
-                    previous?.status == HistoryStatus.ok)) {
-                  _results = {..._results, coin: result};
+      final historyFuture = Future.wait([
+        for (final coin in coins)
+          _service
+              .fetch(
+                coin,
+                wallet.addresses.forCoin(coin),
+                limit: _remoteLimit,
+                networkId: _activeNetworkId?.call(coin),
+              )
+              .then((result) {
+                if (generation == _generation) {
+                  final previous = _results[coin];
+                  // Keep a restored/last-good chain visible while its live
+                  // explorer call fails. The final merge marks it stale.
+                  if (!(result.status == HistoryStatus.error &&
+                      previous?.status == HistoryStatus.ok)) {
+                    _results = {..._results, coin: result};
+                  }
+                  notifyListeners();
                 }
-                notifyListeners();
-              }
-              return (coin, result);
-            }),
-    ]);
-    final statusFuture = _refreshPendingStatuses(
-      generation,
-      pendingTransactions,
-    );
-    final entries = await historyFuture;
-    await statusFuture;
+                return (coin, result);
+              }),
+      ]);
+      final statusFuture = _refreshPendingStatuses(
+        generation,
+        pendingTransactions,
+      );
+      final (entries, _) = await (historyFuture, statusFuture).wait;
 
-    if (generation != _generation) return; // superseded — drop stale results
-    final liveFetchSucceeded = entries.any(
-      (entry) => entry.$2.status == HistoryStatus.ok,
-    );
-    var retainedCached = false;
-    _results = {
-      for (final (coin, result) in entries)
-        coin:
-            result.status == HistoryStatus.error &&
-                _results[coin]?.status == HistoryStatus.ok
-            ? () {
-                retainedCached = true;
-                return _results[coin]!;
-              }()
-            : result,
-    };
-    _localTransactions = await _loadLocalTransactions();
-    if (generation != _generation) return;
-    final remainingPending = await _loadPendingTransactions();
-    if (generation != _generation) return;
-    _hasPendingTransactions = remainingPending.isNotEmpty;
-    final remoteByIdentity = <_HistoryIdentity, ChainTxRecord>{};
-    for (final result in _results.values) {
-      if (result.status != HistoryStatus.ok) continue;
-      for (final record in result.records) {
-        final identity = _recordIdentity(record);
-        if (identity != null) remoteByIdentity[identity] = record;
-      }
-    }
-    for (final local in _localTransactions) {
-      final hash = local.hash;
-      final identity = _transactionIdentity(local);
-      final remote = identity == null ? null : remoteByIdentity[identity];
-      // Account-history absence is never finality evidence. An indexer can be
-      // delayed, rate-limited or temporarily incomplete, so only the
-      // hash-specific status service or an explicit terminal history status
-      // may settle a local row.
-      if (remote == null ||
-          local.status == db.TxStatus.confirmed ||
-          local.status == db.TxStatus.failed) {
-        continue;
-      }
-      final next = switch (remote.status) {
-        ChainTxStatus.confirmed => db.TxStatus.confirmed,
-        ChainTxStatus.failed => db.TxStatus.failed,
-        ChainTxStatus.pending || ChainTxStatus.unknown => null,
+      if (generation != _generation) return; // superseded — drop stale results
+      final liveFetchSucceeded = entries.any(
+        (entry) => entry.$2.status == HistoryStatus.ok,
+      );
+      var retainedCached = false;
+      _results = {
+        for (final (coin, result) in entries)
+          coin:
+              result.status == HistoryStatus.error &&
+                  _results[coin]?.status == HistoryStatus.ok
+              ? () {
+                  retainedCached = true;
+                  return _results[coin]!;
+                }()
+              : result,
       };
-      if (next == null) continue;
-      final confirmedHash = hash!;
-      if (_isEvmCoinName(local.coin)) {
-        await _wallets.settleEvmTransactionForWallet(
-          walletId: local.walletId,
-          id: local.id,
-          status: next,
-          hash: confirmedHash,
-        );
-      } else {
-        await _wallets.updateTransactionStatusForWallet(
-          local.walletId,
-          local.id,
-          next,
-          hash: confirmedHash,
-          clearLastCheckOutcome: true,
+      _localTransactions = await _loadLocalTransactions();
+      if (generation != _generation) return;
+      final remainingPending = await _loadPendingTransactions();
+      if (generation != _generation) return;
+      _hasPendingTransactions = remainingPending.isNotEmpty;
+      final remoteByIdentity = <_HistoryIdentity, ChainTxRecord>{};
+      for (final result in _results.values) {
+        if (result.status != HistoryStatus.ok) continue;
+        for (final record in result.records) {
+          final identity = _recordIdentity(record);
+          if (identity != null) remoteByIdentity[identity] = record;
+        }
+      }
+      for (final local in _localTransactions) {
+        final hash = local.hash;
+        final identity = _transactionIdentity(local);
+        final remote = identity == null ? null : remoteByIdentity[identity];
+        // Account-history absence is never finality evidence. An indexer can be
+        // delayed, rate-limited or temporarily incomplete, so only the
+        // hash-specific status service or an explicit terminal history status
+        // may settle a local row.
+        if (remote == null ||
+            local.status == db.TxStatus.confirmed ||
+            local.status == db.TxStatus.failed) {
+          continue;
+        }
+        final next = switch (remote.status) {
+          ChainTxStatus.confirmed => db.TxStatus.confirmed,
+          ChainTxStatus.failed => db.TxStatus.failed,
+          ChainTxStatus.pending || ChainTxStatus.unknown => null,
+        };
+        if (next == null) continue;
+        final confirmedHash = hash!;
+        if (_isEvmCoinName(local.coin)) {
+          await _wallets.settleEvmTransactionForWallet(
+            walletId: local.walletId,
+            id: local.id,
+            status: next,
+            hash: confirmedHash,
+          );
+        } else {
+          await _wallets.updateTransactionStatusForWallet(
+            local.walletId,
+            local.id,
+            next,
+            hash: confirmedHash,
+            clearLastCheckOutcome: true,
+          );
+        }
+        _enqueueNotice(
+          TransactionStatusNotice(
+            hash: confirmedHash,
+            coin: Coin.values.firstWhere(
+              (coin) => coin.name == local.coin,
+              orElse: () => Coin.eth,
+            ),
+            confirmed: next == db.TxStatus.confirmed,
+          ),
         );
       }
-      _enqueueNotice(
-        TransactionStatusNotice(
-          hash: confirmedHash,
-          coin: Coin.values.firstWhere(
-            (coin) => coin.name == local.coin,
-            orElse: () => Coin.eth,
-          ),
-          confirmed: next == db.TxStatus.confirmed,
-        ),
+      _localTransactions = await _loadLocalTransactions();
+      if (generation != _generation) return;
+      _refreshing = false;
+      _loadingMore = false;
+      _hasRefreshed = true;
+      _showingCachedData = retainedCached;
+      final now = DateTime.now();
+      _lastUpdatedAt = retainedCached ? (_lastUpdatedAt ?? now) : now;
+      _pollFailureCount = 0;
+      _schedulePoll();
+      notifyListeners();
+
+      if (_snapshots != null &&
+          _results.values.any((result) => result.status == HistoryStatus.ok)) {
+        _snapshots
+            .save(
+              wallet.id,
+              HistorySnapshot(
+                scope: scope,
+                savedAt: _lastUpdatedAt!,
+                results: _results,
+              ),
+            )
+            .ignore();
+      }
+      ExperienceMetrics.instance.record(
+        loadingMore
+            ? ExperienceMetricNames.historyLoadMore
+            : ExperienceMetricNames.historyRefresh,
+        metricStopwatch.elapsed,
+        success: liveFetchSucceeded,
+      );
+    } catch (_) {
+      if (_disposed || generation != _generation) return;
+      // Database and explorer contracts normally return explicit outcomes,
+      // but an unexpected exception must not permanently latch refresh or
+      // load-more. Preserve last-good rows, expose unresolved rows as errors,
+      // and leave the controller immediately retryable.
+      _results = {
+        for (final entry in _results.entries)
+          entry.key: entry.value.status == HistoryStatus.loading
+              ? const HistoryResult.error()
+              : entry.value,
+      };
+      _refreshing = false;
+      _loadingMore = false;
+      _hasRefreshed = true;
+      _showingCachedData =
+          _lastUpdatedAt != null &&
+          _results.values.any((result) => result.status == HistoryStatus.ok);
+      _schedulePoll();
+      notifyListeners();
+      ExperienceMetrics.instance.record(
+        loadingMore
+            ? ExperienceMetricNames.historyLoadMore
+            : ExperienceMetricNames.historyRefresh,
+        metricStopwatch.elapsed,
+        success: false,
       );
     }
-    _localTransactions = await _loadLocalTransactions();
-    if (generation != _generation) return;
-    _refreshing = false;
-    _loadingMore = false;
-    _hasRefreshed = true;
-    _showingCachedData = retainedCached;
-    final now = DateTime.now();
-    _lastUpdatedAt = retainedCached ? (_lastUpdatedAt ?? now) : now;
-    _schedulePoll();
-    notifyListeners();
-
-    if (_snapshots != null &&
-        _results.values.any((result) => result.status == HistoryStatus.ok)) {
-      _snapshots
-          .save(
-            wallet.id,
-            HistorySnapshot(
-              scope: scope,
-              savedAt: _lastUpdatedAt!,
-              results: _results,
-            ),
-          )
-          .ignore();
-    }
-    ExperienceMetrics.instance.record(
-      loadingMore
-          ? ExperienceMetricNames.historyLoadMore
-          : ExperienceMetricNames.historyRefresh,
-      metricStopwatch.elapsed,
-      success: liveFetchSucceeded,
-    );
   }
 
   /// Expands the per-chain history window by one page. The service and
@@ -682,11 +721,16 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     if (!duplicate) _notices.add(notice);
   }
 
-  void _schedulePoll() {
+  void _schedulePoll({bool retryAfterFailure = false}) {
     if (_disposed) return;
     _pollTimer?.cancel();
-    if (!_hasPendingTransactions) return;
-    _pollTimer = Timer(pollInterval, _pollPending);
+    if (!_hasPendingTransactions && !retryAfterFailure) return;
+    final exponent = math.min(math.max(_pollFailureCount - 1, 0), 3);
+    final multiplier = retryAfterFailure ? 1 << exponent : 1;
+    final delay = Duration(
+      milliseconds: math.max(1, pollInterval.inMilliseconds * multiplier),
+    );
+    _pollTimer = Timer(delay, () => unawaited(_pollPending()));
   }
 
   Future<void> _pollPending() async {
@@ -696,18 +740,28 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
     final generation = _generation;
-    final pending = await _loadPendingTransactions();
-    if (generation != _generation) return;
-    _hasPendingTransactions = pending.isNotEmpty;
-    await _refreshPendingStatuses(generation, pending);
-    if (generation != _generation) return;
-    _localTransactions = await _loadLocalTransactions();
-    if (generation != _generation) return;
-    final remainingPending = await _loadPendingTransactions();
-    if (generation != _generation) return;
-    _hasPendingTransactions = remainingPending.isNotEmpty;
-    _schedulePoll();
-    notifyListeners();
+    try {
+      final pending = await _loadPendingTransactions();
+      if (generation != _generation) return;
+      _hasPendingTransactions = pending.isNotEmpty;
+      await _refreshPendingStatuses(generation, pending);
+      if (generation != _generation) return;
+      _localTransactions = await _loadLocalTransactions();
+      if (generation != _generation) return;
+      final remainingPending = await _loadPendingTransactions();
+      if (generation != _generation) return;
+      _hasPendingTransactions = remainingPending.isNotEmpty;
+      _pollFailureCount = 0;
+      _schedulePoll();
+      notifyListeners();
+    } catch (_) {
+      if (_disposed || generation != _generation) return;
+      // Timer callbacks have no caller to surface a database/plugin failure
+      // to. Keep the last-known transaction state and retry with a bounded
+      // 1x/2x/4x/8x delay instead of silently ending finality tracking.
+      _pollFailureCount++;
+      _schedulePoll(retryAfterFailure: true);
+    }
   }
 
   @override
@@ -751,6 +805,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     _lastUpdatedAt = null;
     _remoteLimit = HistoryService.pageSize;
     _pollTimer?.cancel();
+    _pollFailureCount = 0;
     _localTransactions = const [];
     _hasPendingTransactions = false;
     _notices.clear();

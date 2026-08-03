@@ -97,6 +97,41 @@ class FakeSnapshotStore implements MarketSnapshotStore {
   }
 }
 
+class ThrowingMarketSnapshotStore implements MarketSnapshotStore {
+  int loadCalls = 0;
+
+  @override
+  Future<MarketSnapshot?> load(String walletId, String scope) async {
+    loadCalls++;
+    throw StateError('corrupt display cache');
+  }
+
+  @override
+  Future<void> save(String walletId, MarketSnapshot snapshot) async {}
+}
+
+class ThrowOnceBalanceService extends BalanceService {
+  ThrowOnceBalanceService(this.results);
+
+  final Map<Coin, BalanceResult> results;
+  bool failed = false;
+
+  @override
+  Future<Map<Coin, BalanceResult>> fetchAll(
+    ChainAddresses addresses, {
+    BalanceResultCallback? onResult,
+  }) async {
+    if (!failed) {
+      failed = true;
+      throw StateError('temporary upstream failure');
+    }
+    for (final entry in results.entries) {
+      onResult?.call(entry.key, entry.value);
+    }
+    return results;
+  }
+}
+
 class ProgressiveBalanceService extends BalanceService {
   final ethReady = Completer<void>();
   final finish = Completer<void>();
@@ -224,6 +259,52 @@ const _prices = {
 };
 
 void main() {
+  test(
+    'a broken display snapshot is ignored and live balances still load',
+    () async {
+      final snapshots = ThrowingMarketSnapshotStore();
+      final controller = MarketController(
+        wallets: _wallets(),
+        balances: FakeBalanceService(_okResults()),
+        prices: FakePriceService(_prices),
+        snapshots: snapshots,
+        snapshotScope: () => 'mainnet',
+      );
+      addTearDown(controller.dispose);
+
+      await controller.refresh();
+
+      expect(snapshots.loadCalls, 1);
+      expect(controller.isRefreshing, isFalse);
+      expect(controller.hasRefreshed, isTrue);
+      expect(controller.balanceFor(Coin.eth).status, BalanceStatus.ok);
+      expect(controller.showingCachedData, isFalse);
+    },
+  );
+
+  test('an unexpected balance failure closes honestly and can retry', () async {
+    final balances = ThrowOnceBalanceService(_okResults());
+    final controller = MarketController(
+      wallets: _wallets(),
+      balances: balances,
+      prices: FakePriceService(_prices),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.refresh();
+
+    expect(controller.isRefreshing, isFalse);
+    expect(controller.hasRefreshed, isTrue);
+    expect(controller.balanceFor(Coin.eth).status, BalanceStatus.error);
+    expect(controller.totalUsd, isNull);
+
+    await controller.refresh();
+
+    expect(controller.isRefreshing, isFalse);
+    expect(controller.balanceFor(Coin.eth).status, BalanceStatus.ok);
+    expect(controller.totalUsd, closeTo(2051.5, 1e-9));
+  });
+
   test(
     'disposing during a balance refresh drops every late callback',
     () async {

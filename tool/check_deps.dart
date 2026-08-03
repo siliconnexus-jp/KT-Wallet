@@ -887,7 +887,8 @@ void main() {
     'status = await _statusService.check(transaction);',
     'unknown evidence for this hash',
     '_wallets.localPendingTransactions()',
-    '_refreshPendingStatuses(\n      generation,\n      pendingTransactions,',
+    'final statusFuture = _refreshPendingStatuses(',
+    'pendingTransactions,',
     '_hasPendingTransactions = remainingPending.isNotEmpty',
     'updateTransactionStatusForWallet(',
     'walletId: transaction.walletId',
@@ -921,6 +922,32 @@ void main() {
       if (!source.contains(marker)) {
         failures.add(
           '${entry.key} can retain deleted-wallet data after the final wallet is removed: $marker',
+        );
+      }
+    }
+  }
+  for (final entry in const {
+    'apps/kt_wallet/lib/src/market/market_controller.dart': [
+      'display-only acceleration cache',
+      'cannot remain on an infinite skeleton',
+      "entry.value.status == BalanceStatus.loading\n              ? const BalanceResult.error()",
+    ],
+    'apps/kt_wallet/lib/src/market/history_controller.dart': [
+      'Snapshot state is display-only.',
+      'must not permanently latch refresh or',
+      "entry.value.status == HistoryStatus.loading\n              ? const HistoryResult.error()",
+      '_loadingMore = false;',
+      'final (entries, _) = await (historyFuture, statusFuture).wait;',
+      '_pollFailureCount++',
+      '_schedulePoll(retryAfterFailure: true)',
+      '1x/2x/4x/8x delay',
+    ],
+  }.entries) {
+    final source = File(entry.key).readAsStringSync();
+    for (final marker in entry.value) {
+      if (!source.contains(marker)) {
+        failures.add(
+          '${entry.key} can latch a failed refresh/finality poll: $marker',
         );
       }
     }
