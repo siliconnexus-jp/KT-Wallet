@@ -68,12 +68,39 @@ _HistoryIdentity? _transactionIdentity(db.Transaction transaction) {
   );
 }
 
+Future<void> _forEachBounded<T>(
+  List<T> values, {
+  required int concurrency,
+  required Future<void> Function(T value) action,
+}) async {
+  if (values.isEmpty) return;
+  if (concurrency <= 0) throw ArgumentError.value(concurrency, 'concurrency');
+  var nextIndex = 0;
+
+  Future<void> worker() async {
+    while (nextIndex < values.length) {
+      // Dart runs this read/increment without an await, so workers cannot
+      // claim the same item even though their network work overlaps.
+      final value = values[nextIndex++];
+      await action(value);
+    }
+  }
+
+  await Future.wait([
+    for (var i = 0; i < math.min(concurrency, values.length); i++) worker(),
+  ]);
+}
+
 /// Live transaction history for the current wallet, per chain. Mirrors the
 /// [MarketController] lifecycle patterns (generation-guarded refresh, wallet
 /// switch listener) but is owned by the history surface, not `main.dart` — it
 /// is mounted lazily when the full history page or an asset history section
 /// builds under a live market context.
 class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
+  /// Keeps a large restored Pending set from exhausting the device HTTP pool
+  /// or triggering a synchronized Gateway/RPC rate-limit burst.
+  static const pendingStatusConcurrency = 4;
+
   HistoryController({
     required WalletController wallets,
     HistoryService? service,
@@ -549,88 +576,101 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     int generation,
     List<db.Transaction> transactions,
   ) async {
-    final pending = transactions.where(
-      (transaction) =>
-          transaction.hash != null &&
-          (transaction.status == db.TxStatus.submitted ||
-              transaction.status == db.TxStatus.pending ||
-              transaction.status == db.TxStatus.broadcast),
-    );
-    await Future.wait([
-      for (final transaction in pending)
-        _statusService.check(transaction).then((status) async {
-          if (generation != _generation) return;
-          final checkedAt = DateTime.now().millisecondsSinceEpoch;
-          final next = switch (status) {
-            ChainTransactionStatus.confirmed => db.TxStatus.confirmed,
-            ChainTransactionStatus.failed => db.TxStatus.failed,
-            ChainTransactionStatus.pending => db.TxStatus.pending,
-            ChainTransactionStatus.replaced => db.TxStatus.replaced,
-            ChainTransactionStatus.expired => db.TxStatus.expired,
-            ChainTransactionStatus.unknown => null,
-          };
-          final outcome = switch (status) {
-            ChainTransactionStatus.pending => db.TxCheckOutcome.pending,
-            ChainTransactionStatus.unknown => db.TxCheckOutcome.unknown,
-            _ => null,
-          };
-          final terminal =
-              status == ChainTransactionStatus.confirmed ||
-              status == ChainTransactionStatus.failed ||
-              status == ChainTransactionStatus.replaced ||
-              status == ChainTransactionStatus.expired;
-          final changed = next != null && next != transaction.status;
-          final persisted = changed ? next : transaction.status;
-          if (_isEvmCoinName(transaction.coin) &&
-              changed &&
-              (persisted == db.TxStatus.confirmed ||
-                  persisted == db.TxStatus.failed)) {
-            await _wallets.settleEvmTransactionForWallet(
-              walletId: transaction.walletId,
-              id: transaction.id,
-              status: persisted,
-              hash: transaction.hash,
-              lastCheckedAt: checkedAt,
-            );
-          } else {
-            await _wallets.updateTransactionStatusForWallet(
-              transaction.walletId,
-              transaction.id,
-              persisted,
-              hash: transaction.hash,
-              lastCheckedAt: checkedAt,
-              lastCheckOutcome: outcome,
-              clearLastCheckOutcome: terminal,
-            );
-          }
-          if (changed) {
-            if (next == db.TxStatus.confirmed ||
-                next == db.TxStatus.failed ||
-                next == db.TxStatus.expired) {
-              final startedAt =
-                  transaction.broadcastAt ?? transaction.createdAt;
-              final elapsedMs = checkedAt - startedAt;
-              if (elapsedMs >= 0) {
-                ExperienceMetrics.instance.record(
-                  ExperienceMetricNames.transactionFinality,
-                  Duration(milliseconds: elapsedMs),
-                  success: next == db.TxStatus.confirmed,
-                );
-              }
-              _enqueueNotice(
-                TransactionStatusNotice(
-                  hash: transaction.hash!,
-                  coin: Coin.values.firstWhere(
-                    (coin) => coin.name == transaction.coin,
-                    orElse: () => Coin.eth,
-                  ),
-                  confirmed: next == db.TxStatus.confirmed,
-                ),
+    final pending = transactions
+        .where(
+          (transaction) =>
+              transaction.hash != null &&
+              (transaction.status == db.TxStatus.submitted ||
+                  transaction.status == db.TxStatus.pending ||
+                  transaction.status == db.TxStatus.broadcast),
+        )
+        .toList(growable: false);
+    await _forEachBounded(
+      pending,
+      concurrency: pendingStatusConcurrency,
+      action: (transaction) async {
+        // Do not even start a queued network lookup after wallet/network
+        // context changed or the owning route was disposed.
+        if (generation != _generation) return;
+        var status = ChainTransactionStatus.unknown;
+        try {
+          status = await _statusService.check(transaction);
+        } catch (_) {
+          // One malformed provider/resolver implementation is still only
+          // unknown evidence for this hash. It cannot abort peer lookups or
+          // invent a terminal state for the transaction.
+        }
+        if (generation != _generation) return;
+        final checkedAt = DateTime.now().millisecondsSinceEpoch;
+        final next = switch (status) {
+          ChainTransactionStatus.confirmed => db.TxStatus.confirmed,
+          ChainTransactionStatus.failed => db.TxStatus.failed,
+          ChainTransactionStatus.pending => db.TxStatus.pending,
+          ChainTransactionStatus.replaced => db.TxStatus.replaced,
+          ChainTransactionStatus.expired => db.TxStatus.expired,
+          ChainTransactionStatus.unknown => null,
+        };
+        final outcome = switch (status) {
+          ChainTransactionStatus.pending => db.TxCheckOutcome.pending,
+          ChainTransactionStatus.unknown => db.TxCheckOutcome.unknown,
+          _ => null,
+        };
+        final terminal =
+            status == ChainTransactionStatus.confirmed ||
+            status == ChainTransactionStatus.failed ||
+            status == ChainTransactionStatus.replaced ||
+            status == ChainTransactionStatus.expired;
+        final changed = next != null && next != transaction.status;
+        final persisted = changed ? next : transaction.status;
+        if (_isEvmCoinName(transaction.coin) &&
+            changed &&
+            (persisted == db.TxStatus.confirmed ||
+                persisted == db.TxStatus.failed)) {
+          await _wallets.settleEvmTransactionForWallet(
+            walletId: transaction.walletId,
+            id: transaction.id,
+            status: persisted,
+            hash: transaction.hash,
+            lastCheckedAt: checkedAt,
+          );
+        } else {
+          await _wallets.updateTransactionStatusForWallet(
+            transaction.walletId,
+            transaction.id,
+            persisted,
+            hash: transaction.hash,
+            lastCheckedAt: checkedAt,
+            lastCheckOutcome: outcome,
+            clearLastCheckOutcome: terminal,
+          );
+        }
+        if (changed) {
+          if (next == db.TxStatus.confirmed ||
+              next == db.TxStatus.failed ||
+              next == db.TxStatus.expired) {
+            final startedAt = transaction.broadcastAt ?? transaction.createdAt;
+            final elapsedMs = checkedAt - startedAt;
+            if (elapsedMs >= 0) {
+              ExperienceMetrics.instance.record(
+                ExperienceMetricNames.transactionFinality,
+                Duration(milliseconds: elapsedMs),
+                success: next == db.TxStatus.confirmed,
               );
             }
+            _enqueueNotice(
+              TransactionStatusNotice(
+                hash: transaction.hash!,
+                coin: Coin.values.firstWhere(
+                  (coin) => coin.name == transaction.coin,
+                  orElse: () => Coin.eth,
+                ),
+                confirmed: next == db.TxStatus.confirmed,
+              ),
+            );
           }
-        }),
-    ]);
+        }
+      },
+    );
   }
 
   void _enqueueNotice(TransactionStatusNotice notice) {

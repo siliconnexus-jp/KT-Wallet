@@ -881,6 +881,11 @@ void main() {
       : '';
   for (final marker in const [
     'Future<List<db.Transaction>> _loadPendingTransactions()',
+    'static const pendingStatusConcurrency = 4;',
+    'await _forEachBounded(',
+    'Do not even start a queued network lookup',
+    'status = await _statusService.check(transaction);',
+    'unknown evidence for this hash',
     '_wallets.localPendingTransactions()',
     '_refreshPendingStatuses(\n      generation,\n      pendingTransactions,',
     '_hasPendingTransactions = remainingPending.isNotEmpty',

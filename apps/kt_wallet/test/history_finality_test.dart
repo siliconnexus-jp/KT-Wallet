@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:core_crypto/core_crypto.dart' show ChainAddresses, Coin;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -34,6 +36,44 @@ class _StatusService extends TransactionStatusService {
   Future<ChainTransactionStatus> check(Transaction transaction) async => status;
 }
 
+class _ConcurrencyStatusService extends TransactionStatusService {
+  int active = 0;
+  int maxActive = 0;
+  int calls = 0;
+
+  @override
+  Future<ChainTransactionStatus> check(Transaction transaction) async {
+    calls++;
+    active++;
+    if (active > maxActive) maxActive = active;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    active--;
+    return ChainTransactionStatus.pending;
+  }
+}
+
+class _PartiallyThrowingStatusService extends TransactionStatusService {
+  @override
+  Future<ChainTransactionStatus> check(Transaction transaction) async {
+    if (transaction.id == 'local-pending-1') {
+      throw StateError('provider implementation failed');
+    }
+    return ChainTransactionStatus.pending;
+  }
+}
+
+class _GatedStatusService extends TransactionStatusService {
+  final gate = Completer<void>();
+  int calls = 0;
+
+  @override
+  Future<ChainTransactionStatus> check(Transaction transaction) async {
+    calls++;
+    await gate.future;
+    return ChainTransactionStatus.pending;
+  }
+}
+
 Future<
   ({
     WalletController wallets,
@@ -49,6 +89,8 @@ _fixture({
   String? localHash,
   Coin remoteCoin = Coin.eth,
   Set<String>? activeNetworkIds,
+  int pendingCount = 1,
+  TransactionStatusService? statusService,
 }) async {
   final database = WalletDatabase(NativeDatabase.memory());
   final wallet = HotWallet(
@@ -69,32 +111,38 @@ _fixture({
     WalletManager(initial: [wallet]),
     store: store,
   );
-  await wallets.saveOutgoingTransaction(
-    id: 'local-pending',
-    coin: localCoin,
-    networkId: localNetworkId,
-    from: switch (localCoin) {
-      Coin.polygon => wallet.addresses.polygon,
-      Coin.solana => wallet.addresses.solana,
-      Coin.tron => wallet.addresses.tron,
-      _ => wallet.addresses.eth,
-    },
-    to: '0x2222222222222222222222222222222222222222',
-    amountRaw: '1000000000000000',
-    hash: localHash ?? '0x${'a' * 64}',
-    status: TxStatus.pending,
-    signMode: SignMode.local,
-    createdAt: DateTime.now()
-        .subtract(const Duration(hours: 72))
-        .millisecondsSinceEpoch,
-    broadcastAt: DateTime.now()
-        .subtract(const Duration(hours: 71))
-        .millisecondsSinceEpoch,
-  );
+  for (var index = 0; index < pendingCount; index++) {
+    await wallets.saveOutgoingTransaction(
+      id: index == 0 ? 'local-pending' : 'local-pending-$index',
+      coin: localCoin,
+      networkId: localNetworkId,
+      from: switch (localCoin) {
+        Coin.polygon => wallet.addresses.polygon,
+        Coin.solana => wallet.addresses.solana,
+        Coin.tron => wallet.addresses.tron,
+        _ => wallet.addresses.eth,
+      },
+      to: '0x2222222222222222222222222222222222222222',
+      amountRaw: '1000000000000000',
+      hash:
+          localHash ??
+          (index == 0
+              ? '0x${'a' * 64}'
+              : '0x${index.toRadixString(16).padLeft(64, '0')}'),
+      status: TxStatus.pending,
+      signMode: SignMode.local,
+      createdAt: DateTime.now()
+          .subtract(Duration(hours: 72, seconds: index))
+          .millisecondsSinceEpoch,
+      broadcastAt: DateTime.now()
+          .subtract(Duration(hours: 71, seconds: index))
+          .millisecondsSinceEpoch,
+    );
+  }
   final history = HistoryController(
     wallets: wallets,
     service: _History(results: {remoteCoin: remote}),
-    statusService: _StatusService(hashStatus),
+    statusService: statusService ?? _StatusService(hashStatus),
     activeNetworkIds: () => activeNetworkIds ?? {'eth-mainnet', localNetworkId},
     pollInterval: const Duration(days: 1),
   );
@@ -105,6 +153,70 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(ExperienceMetrics.instance.clear);
+
+  test('Pending finality checks use bounded concurrency', () async {
+    final statuses = _ConcurrencyStatusService();
+    final fixture = await _fixture(
+      remote: const HistoryResult.ok([]),
+      hashStatus: ChainTransactionStatus.pending,
+      pendingCount: 12,
+      statusService: statuses,
+    );
+    addTearDown(fixture.history.dispose);
+    addTearDown(fixture.database.close);
+
+    await fixture.history.refresh();
+
+    expect(statuses.calls, 12);
+    expect(statuses.maxActive, HistoryController.pendingStatusConcurrency);
+  });
+
+  test('superseded reconciliation never starts queued hash lookups', () async {
+    final statuses = _GatedStatusService();
+    final fixture = await _fixture(
+      remote: const HistoryResult.ok([]),
+      hashStatus: ChainTransactionStatus.pending,
+      pendingCount: 12,
+      statusService: statuses,
+    );
+    addTearDown(fixture.database.close);
+
+    final refresh = fixture.history.refresh();
+    while (statuses.calls < HistoryController.pendingStatusConcurrency) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    fixture.history.dispose();
+    statuses.gate.complete();
+    await refresh;
+
+    expect(statuses.calls, HistoryController.pendingStatusConcurrency);
+  });
+
+  test(
+    'one status provider exception stays unknown and does not abort peers',
+    () async {
+      final fixture = await _fixture(
+        remote: const HistoryResult.ok([]),
+        hashStatus: ChainTransactionStatus.pending,
+        pendingCount: 3,
+        statusService: _PartiallyThrowingStatusService(),
+      );
+      addTearDown(fixture.history.dispose);
+      addTearDown(fixture.database.close);
+
+      await fixture.history.refresh();
+
+      final failedLookup = await fixture.wallets.localTransactionById(
+        'local-pending-1',
+      );
+      final healthyPeer = await fixture.wallets.localTransactionById(
+        'local-pending-2',
+      );
+      expect(failedLookup?.status, TxStatus.pending);
+      expect(failedLookup?.lastCheckOutcome, TxCheckOutcome.unknown);
+      expect(healthyPeer?.lastCheckOutcome, TxCheckOutcome.pending);
+    },
+  );
 
   test('a 72-hour history miss never invents a dropped transaction', () async {
     final fixture = await _fixture(

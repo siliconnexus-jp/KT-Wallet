@@ -155,7 +155,11 @@ Changing the visible network only filters the history being displayed. Every
 hashed `submitted`, `broadcast`, or `pending` row for the current wallet keeps
 polling on its own persisted network, and asynchronous nonce/finality writes
 remain bound to that row's original wallet even if the user switches wallets
-while a provider request is in flight.
+while a provider request is in flight. Reconciliation runs with four bounded
+workers instead of issuing every restored Pending lookup at once. An unexpected
+error in one hash lookup is persisted as unknown evidence for that row and does
+not abort status updates for its peers. If the wallet/network context changes
+or the route is disposed, queued workers stop before sending another old hash.
 
 Broadcasts are single-shot writes. An explicit node rejection is shown as a
 failure, while a timeout, disconnected response, or malformed reply after the
@@ -440,7 +444,7 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-03) completed with zero static-analysis
-issues: **1,471/1,471** KT Wallet tests, **570/570** KT Cold Signer tests, and
+issues: **1,474/1,474** KT Wallet tests, **570/570** KT Cold Signer tests, and
 **401/401** shared-package tests passed. The Gateway audit, public-secret gate,
 native dependency lock/checksum verification, and OSV scans also passed. These
 numbers are reproducible source evidence. On the same date, the iOS native
