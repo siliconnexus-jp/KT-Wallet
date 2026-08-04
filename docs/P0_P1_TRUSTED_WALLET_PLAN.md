@@ -105,7 +105,7 @@
   畸形保持 unknown。App 与 Gateway 同时兼容 Blockscout internal 的
   `transactionHash/index`，避免空投、合约退款等内部转入在直连 fallback 消失。两项旧
   行为均以红测复现后转绿；App history 18/18、Gateway upstream/handlers、完整公开源码
-  审计 12/12 通过。生产 1.16.15 的公开 Ethereum 历史只读 smoke 返回 5 条且 5/5 ok。
+  审计 12/12 通过。生产 1.16.16 的公开 Ethereum 历史只读 smoke 返回 5 条且 5/5 ok。
 - [x] EVM hash 专项终态查询不再只信任 receipt 的 `status`：App 直连与 Gateway
   同时要求返回的 `transactionHash` 精确匹配请求 hash，并要求 32-byte `blockHash`、
   canonical `blockNumber` 与 `transactionIndex` 完整；无 receipt 但节点声称仍在 mempool
