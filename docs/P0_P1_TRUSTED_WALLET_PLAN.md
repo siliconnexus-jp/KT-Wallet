@@ -2,8 +2,8 @@
 
 更新日期：2026-08-04
 
-当前 Gateway 源码版本 1.16.17；当前生产 Gateway 1.16.16。源码候选新增严格的
-链身份接口，只有完成发布门禁和滚动部署后才能把线上版本改为 1.16.17。
+当前 Gateway 源码版本 1.16.17；当前生产 Gateway 1.16.17。2026-08-04 已完成 secondary → primary
+滚动部署，生产 Gateway-first 链身份与 TRON/Solana 余额严格解析均已启用。
 
 ## 目标与边界
 
@@ -343,7 +343,7 @@
   相邻输入审计同时确认 Gateway 旧 `validateAddress` 只验证 EVM，TRON/Solana 任意非空
   字符串都会进入缓存键和上游请求；六个非法地址红测先完整失败。现公开参数在出网前要求
   TRON 为 34 字符 checksum-valid Base58Check、Solana Base58 解码后精确 32 bytes，合法
-  系统程序与普通公钥保持通过。该修复属于 Gateway 1.16.17 源码候选，尚未部署。
+  系统程序与普通公钥保持通过。该修复已随 Gateway 1.16.17 滚动部署上线。
 - [x] 2026-08-04 同一轮把 Solana 资产余额从宽松 struct 解码收紧为请求身份与当前官方
   `getBalance` / `getTokenAccountsByOwner` `jsonParsed` 形态绑定。Native 必须携带唯一
   `context/value`、非负 u64 slot 与 lamports；SPL/Token-2022 每行必须具有唯一且有效的
@@ -351,7 +351,7 @@
   精确绑定请求。Raw amount、decimals 与规范 `uiAmountString` 必须一致，重复账户和 u64
   聚合溢出整体失败闭合。旧实现接受的 10 类 native 歧义与 13 类 Token 身份/金额歧义
   现全部拒绝；当前官方形态、合法聚合与非法请求出网前拒绝通过，Gateway 全量、关键包
-  race、vet、固定 govulncheck 与全部 ops 门禁通过。该项属于 1.16.17 源码候选，尚未部署。
+  race、vet、固定 govulncheck 与全部 ops 门禁通过。该项已随 Gateway 1.16.17 上线。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。
@@ -1196,14 +1196,14 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   新增写方法在未分类时被重复发送；广播方法明确不合并、不自动重试。
 - [x] EVM `eth_chainId`、Solana genesis hash、TRON block-0 identity 在 RPC
   配置探测和交易构造前双重校验，错误网络在读取 nonce/费用及签名前失败闭合。
-- [x] 预签网络身份改为 Gateway-first：源码候选 1.16.17 新增
+- [x] 预签网络身份改为 Gateway-first：Gateway 1.16.17 新增
   `kt_getNetworkIdentity`，由 Gateway 实时读取 EVM chain id、TRON block-0 ID 或
   Solana genesis hash，并与服务端受审 registry 精确绑定。App 对内置网络优先调用该
   方法，Gateway 不可用或旧版本不支持时才执行不含钱包地址的直连只读探针；Gateway
   明确返回错网络时失败闭合，不能用直连结果覆盖。这样中国大陆设备即使无法访问官方
   RPC，只要 Gateway 可达仍能完成预签身份检查。custom/未广告网络继续以用户配置的
-  RPC 为权威。三链成功、错网和旧 Gateway 回退均有确定性测试；生产仍为 1.16.16，
-  本项在 1.16.17 滚动上线前只代表源码候选。
+  RPC 为权威。三链成功、错网和旧 Gateway 回退均有确定性测试；1.16.17 已完成滚动
+  上线，公网 EVM、TRON 与 Solana 三链身份只读 smoke 均返回受审 identity。
 - [x] App 直连备用节点在发送钱包地址、交易标识或其他原请求 metadata 前先执行链身份
   探针：EVM 校验 `eth_chainId`，Solana 校验 genesis hash，TRON 校验 block 0 ID；
   错链或错误路由的备用节点直接跳过。2026-08-03 在东京当前网络只读验证 Amoy dRPC、
