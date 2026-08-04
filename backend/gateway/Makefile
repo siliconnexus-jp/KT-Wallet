@@ -40,6 +40,7 @@ proxy-guard:
 alertmanager-guard:
 	sh ops/verify-alertmanager.sh
 	sh ops/verify-alertmanager_test.sh
+	sh ops/verify-alertmanager-external_test.sh
 
 token-risk-matrix-test:
 	sh ops/verify-token-risk-matrix_test.sh
@@ -48,6 +49,7 @@ monitoring-container-audit: alertmanager-guard
 	docker run --rm --entrypoint /bin/amtool \
 		-v "$(CURDIR)/ops/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro" \
 		$(ALERTMANAGER_IMAGE) check-config /etc/alertmanager/alertmanager.yml
+	sh ops/verify-alertmanager-external-container.sh "$(ALERTMANAGER_IMAGE)"
 	docker run --rm --entrypoint /bin/promtool \
 		-v "$(CURDIR)/ops/prometheus:/work:ro" -w /work \
 		$(PROMETHEUS_IMAGE) check rules kt-wallet-gateway-alerts.yml

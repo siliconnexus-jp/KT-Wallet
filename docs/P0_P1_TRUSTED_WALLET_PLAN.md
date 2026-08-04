@@ -1382,8 +1382,21 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     严重度按同 environment/service 抑制较低严重度。这里证明本地收件箱、分组、静默与
     投递链路，不冒充外部值班人员已经收到通知。
   - [x] 单主机进程故障、Redis 故障、实例恢复及公网切换演练已通过。
+  - [x] 外部 Webhook 的安全配置路径已实现，但尚未在生产启用。仓库继续保留
+    destination-free 基线；renderer 从该唯一基线生成 mode 0600 候选，critical/warning
+    使用同一 root-owned `url_file`，default 与匿名 untrusted 趋势仍只进入本地收件箱。
+    URL 文件必须无 world 权限（0400/0440/0600/0640）、非 symlink、单行有界 HTTPS、
+    无 userinfo/fragment；官方容器以 `nobody` 运行，因此生产需使用 dedicated group 只读
+    挂载并以实际 service UID/GID 验证可读，不能把 root-only 0400 当成已部署方案。
+    candidate 禁止 inline URL、禁止 redirect、单次最多 20 条且 10 秒超时，并拒绝覆盖
+    既有文件或 dangling symlink。先红证明缺少 renderer 时门禁失败；实现后 2 正 + 14
+    负配置、固定
+    Alertmanager 0.32.1 `check-config` 及 critical/warning/default/untrusted 四条真实 route
+    选择全部通过；额外锁定 severity=critical 的 untrusted client report 仍留在本地、不能
+    呼叫值班。该证据只证明安全配置与路由，不冒充外部系统或值班人员已收到通知。
   - [ ] 外部 Alertmanager 邮件/Webhook/值班接收方、生产阈值长期校准，以及跨主机/
-    跨地域演练仍未完成；仓库配置刻意不含任何通知目标或凭证。
+    跨地域演练仍未完成；需由运营方提供 root-owned Webhook URL 文件、部署候选，并以
+    firing + resolved canary 在接收方确认后才能关闭本项。仓库不含任何通知目标或凭证。
 
 验收：故障注入单节点 429/超时/错误链/错误 JSON，页面保留最后可信快照并显示
 数据时间；不会跨网络返回缓存。

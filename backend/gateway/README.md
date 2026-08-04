@@ -441,7 +441,10 @@ Production-ready example files live under `ops/prometheus/`:
 - `../alertmanager/alertmanager.yml` is a destination-free routing baseline for
   severity grouping, inhibition, silences and a separate untrusted-client
   route. `../alertmanager/README.md` documents its loopback-only deployment and
-  the operator-owned external receiver overlay.
+  the deterministic external-webhook candidate renderer. Critical and warning
+  routes use a root-owned `url_file`; default and anonymous client-trend alerts
+  remain local-only. Inline destinations, HTTP URLs, redirects, unsafe file
+  modes, route drift and accidental overwrite fail closed.
 
 The security-provider failure, rollback and recovery procedure is documented
 in [`ops/RISK_PROVIDER_RUNBOOK.md`](ops/RISK_PROVIDER_RUNBOOK.md). It preserves
@@ -451,8 +454,10 @@ the mobile signing rules.
 
 Run `make monitoring-container-audit` to validate Alertmanager 0.32.1 with the
 official `amtool`, validate all Prometheus rules, and execute their unit tests.
-The receiver-neutral configuration is also checked by `make audit` so a
-credential or destination cannot be committed accidentally.
+The receiver-neutral configuration and the external candidate renderer are
+checked by `make audit` so a credential or destination cannot be committed
+accidentally. `make monitoring-container-audit` also validates the rendered
+candidate and all four route outcomes with the pinned Alertmanager image.
 
 The current production host runs Alertmanager 0.32.1 on `127.0.0.1:9098` with
 UTF-8 strict matchers, five-day retention and bounded silences. Prometheus
