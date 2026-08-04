@@ -2,8 +2,8 @@
 
 更新日期：2026-08-04
 
-当前 Gateway 源码版本 1.16.21；当前生产 Gateway 1.16.20。生产 Gateway-first 链身份、
-TRON/Solana/EVM 余额、Solana 交易终态及 EVM 动态手续费回包严格解析均已启用。
+当前 Gateway 源码版本 1.16.21；当前生产 Gateway 1.16.21。生产 Gateway-first 链身份、
+TRON/Solana/EVM 余额、Solana 交易终态、EVM 动态手续费及签名前预执行回包严格解析均已启用。
 
 ## 目标与边界
 
@@ -384,6 +384,15 @@ TRON/Solana/EVM 余额、Solana 交易终态及 EVM 动态手续费回包严格�
   `eth_feeHistory` 只读 smoke 已通过。Gateway 1.16.20 已按 secondary → primary 滚动
   上线；8118/8119/8120 与公网均返回 1.16.20，公网 Ethereum 主网费用三档关系通过，
   Prometheus 3/3 UP、17/17 规则健康且 0 firing。App 严格直连回退仍属于待签名发布源码。
+- [x] 2026-08-04 继续审阅 EVM 签名前 Gateway 结果绑定。`kt_getChainParams`、
+  `kt_simulateEvmTransfer`、`kt_estimateEvmGas` 与 `kt_getEvmSpendableBalances` 的旧
+  App 解析会接受未知字段、错误账户或不一致余额别名，且服务端没有回显完整请求身份。
+  失败优先测试证明错误 `from` 仍会被当成成功模拟、错误账户/矛盾 native alias 仍会被
+  当成可用余额。现四类结果均使用精确字段集，绑定 resolved network、账户、Token、
+  规范化 value/data/blockTag；nonce、gas、余额及费率只接受有界规范无符号整数，三档
+  费用保持单调且 priority 不得高于 maxFee。Gateway 1.16.21 已按 secondary 8120 →
+  primary 8119 滚动上线；公网 Sepolia 公开燃烧地址的 nonce、余额、`eth_call` 和
+  `eth_estimateGas=21000` 只读 smoke 及 App 真实严格解析 2/2 通过，无签名或广播。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。
@@ -1807,13 +1816,13 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   - [x] 当前版本没有远程配置下载或控制面；签名、验签、认证、风险阻断和交易一致性
     规则均为本地编译代码，Gateway/RPC 用户覆盖又受上述端点策略约束，因此运营端目前
     无法远程开启“跳过验签/允许未知网络”等降级开关。新增的结构审计同时禁止常见远程
-    配置/Feature Flag SDK，冻结 Gateway Client 当前 62 个响应字段为逐项复核的闭集，
+    配置/Feature Flag SDK，冻结 Gateway Client 当前 66 个响应字段为逐项复核的闭集，
     并要求 AIRGAP codec、交易认证、PIN、Cold Signer controller 与共享签名验签器五个
     安全模块保持无 HTTP/Gateway import。EVM/TRON/Solana 热钱包签名入口必须使用各自
     精确 unsigned bytes 与 sender 调用独立验签器；外部威胁供应商只能产生
     `unsafe/unknown`，不能把资产提升为 `safe`。`safe` 仅允许来自与请求网络及
     contract/mint 精确绑定的内置官方目录，UI 只解释为“官方身份”，不解释为“合约安全”。
-    审计自带 extractor 负例并已纳入 `check_deps`，当前输出为 62 fields /
+    审计自带 extractor 负例并已纳入 `check_deps`，当前输出为 66 fields /
     5 network-free modules / 3 signing families。
   - [ ] 若未来引入远程配置，仍需版本化 allowlist schema、配置签名、防回滚、过期和
     kill-switch 边界测试；未完成前不得添加可影响签名/验签的远程字段。
@@ -2016,3 +2025,15 @@ internal trace 可同时保留 TRX 与 TRC-10，确定性事件 ID 防止误去�
 13/13 通过。Gateway 后端没有变化，线上 1.16.20 保持健康；App 修复仍须随下一版移动端
 制品发布。本轮没有视觉 UI 变化，因此没有用模拟器截图替代协议攻击向量和真实 HTTP
 回包证据；method-specific result schema 的剩余差异继续保留为后续 P1 工作，不扩大宣称。
+
+同日继续闭合 EVM 签名关键 Gateway 结果。`kt_getChainParams`、预执行、gas 估算和
+spendable balance 现在由生产端回显 resolved network 与规范化请求身份，App 使用精确
+schema 逐项核对账户、Token、value、data 与 blockTag；未知字段、错误 signer、错误网络、
+矛盾 native alias、负数/溢出 nonce、零 gas、priority 高于 maxFee 或不单调费率全部失败
+闭合。Gateway Client 37/37、受影响服务 121/121、KT Wallet 1598/1598（另有 7 项显式
+opt-in 线上/设备测试默认跳过）、KT Cold Signer 570/570、共享 packages 429/429、静态分析
+0、Gateway 普通/race/vet/govulncheck/ops 与完整公开门禁 13/13 通过。Gateway 1.16.21
+静态制品 8,900,770 bytes / SHA-256 `290c2e6c…9e185` 已按 secondary → primary 发布；
+双实例、HAProxy 与公网均为 1.16.21，生产严格客户端只读测试 2/2、监控 3/3 targets UP、
+17/17 规则健康、0 firing、Alertmanager 0 active，发布后双实例 warning+ 为 0。该证据不
+替代签名移动制品、物理设备、真实链上广播或独立安全审计。
