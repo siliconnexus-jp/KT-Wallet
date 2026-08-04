@@ -626,10 +626,16 @@ void main() {
         endpoints: effectiveRpcEndpoints(null, networks),
         client: MockClient((request) async {
           seen.add(request.url.toString());
-          return http.Response(jsonEncode({'data': <Object?>[]}), 200);
+          return http.Response(
+            jsonEncode({'data': <Object?>[], 'success': true}),
+            200,
+          );
         }),
       );
-      final result = await service.fetch(Coin.tron, 'TTronAddr');
+      final result = await service.fetch(
+        Coin.tron,
+        'TJmmqjb1DK9TTZbQXzRQ2AuA94z4gKAPFh',
+      );
       expect(result.status, HistoryStatus.ok);
       expect(seen, hasLength(3)); // trc20 + native + internal,并发三条
       for (final url in seen) {

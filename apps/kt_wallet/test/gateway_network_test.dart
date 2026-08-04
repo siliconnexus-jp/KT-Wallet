@@ -631,11 +631,17 @@ void main() {
         client: MockClient((request) async {
           tronGridHits++;
           expect(request.url.host, 'api.trongrid.io');
-          return http.Response(jsonEncode({'data': <Object?>[]}), 200);
+          return http.Response(
+            jsonEncode({'data': <Object?>[], 'success': true}),
+            200,
+          );
         }),
         gateway: () => gateway.client,
       );
-      final result = await service.fetch(Coin.tron, 'TTronAddr');
+      final result = await service.fetch(
+        Coin.tron,
+        'TJmmqjb1DK9TTZbQXzRQ2AuA94z4gKAPFh',
+      );
       expect(result.status, HistoryStatus.ok);
       expect(tronGridHits, 3); // trc20 + native + internal
       expect(gateway.paramsOf('kt_getHistory'), isEmpty);

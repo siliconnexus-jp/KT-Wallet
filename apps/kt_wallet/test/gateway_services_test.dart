@@ -738,7 +738,10 @@ void main() {
           client: MockClient((request) async {
             tronGridHits++;
             expect(request.url.host, 'api.trongrid.io');
-            return http.Response(jsonEncode({'data': <Object?>[]}), 200);
+            return http.Response(
+              jsonEncode({'data': <Object?>[], 'success': true}),
+              200,
+            );
           }),
           gateway: _deadGateway,
         );
@@ -794,7 +797,10 @@ void main() {
                 200,
               );
             }
-            return http.Response(jsonEncode({'data': <Object?>[]}), 200);
+            return http.Response(
+              jsonEncode({'data': <Object?>[], 'success': true}),
+              200,
+            );
           }),
           gateway: () => null,
         );
@@ -815,7 +821,10 @@ void main() {
           HistoryStatus.ok,
         );
         expect(
-          (await service.fetch(Coin.tron, 'TTronAddr')).status,
+          (await service.fetch(
+            Coin.tron,
+            'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+          )).status,
           HistoryStatus.ok,
         );
       },

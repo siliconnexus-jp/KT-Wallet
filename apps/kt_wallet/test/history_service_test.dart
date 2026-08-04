@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:chains/chains.dart' show solanaTokenProgram;
+import 'package:chains/chains.dart' show Amount, solanaTokenProgram;
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -17,6 +17,17 @@ const _me = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 const _meHex = '41a614f803b6fd780986a42c78ec9c7f77e6ded13c';
 const _other = 'TVjsyZ7fYF3qLF6BQgPmTEZy1xrNNyVAAA';
 const _otherHex = '41b3dcf27c251da9363f1a4888257c16676cf54edf';
+const _tronBurn = 'T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb';
+const _tronHashA =
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const _tronHashB =
+    'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const _tronHashC =
+    'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
+const _tronHashD =
+    'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd';
+const _tronTrace =
+    'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
 const _solanaOwner = '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin';
 const _solanaRecipient = '4Nd1mYtBS4yPPsSycFSCA1WzX7yBW2cVDpn9WzWtLDwT';
 const _solanaAta = 'BGocb4GEpbTFm8UFV2VsDSaBXHELPfAXrvd4vtt8QWrA';
@@ -221,11 +232,10 @@ void main() {
   test('tronAddressHex decodes base58check to the 41-prefixed hex form', () {
     expect(tronAddressHex(_me), _meHex);
     expect(tronHexAddressToBase58(_meHex), _me);
-    // Structurally invalid inputs (wrong length / bad alphabet) return null.
-    // NOTE: the checksum is deliberately NOT verified — the hex form is only
-    // used for direction comparison, so a right-length decode is enough.
+    // Wrong length, alphabet, or Base58Check checksum return null.
     expect(tronAddressHex('Ta'), isNull);
     expect(tronAddressHex('0OIl'), isNull);
+    expect(tronAddressHex('${_me.substring(0, _me.length - 1)}m'), isNull);
   });
 
   test(
@@ -240,14 +250,9 @@ void main() {
             expect(request.url.queryParameters['only_confirmed'], 'true');
             return {
               'data': [
+                _trc20Item(hash: _tronHashA, from: _me, to: _other, ts: 3000),
                 _trc20Item(
-                  hash: 'tx-out-usdt',
-                  from: _me,
-                  to: _other,
-                  ts: 3000,
-                ),
-                _trc20Item(
-                  hash: 'tx-in-usdt',
+                  hash: _tronHashB,
                   from: _other,
                   to: _me,
                   ts: 1000,
@@ -268,20 +273,16 @@ void main() {
           expect(request.url.queryParameters['only_confirmed'], 'true');
           return {
             'data': [
+              _nativeTransferItem(hash: _tronHashC, ownerHex: _meHex, ts: 2000),
               _nativeTransferItem(
-                hash: 'tx-out-trx',
-                ownerHex: _meHex,
-                ts: 2000,
-              ),
-              _nativeTransferItem(
-                hash: 'tx-in-trx-failed',
+                hash: _tronHashD,
                 ownerHex: '41b3dcf27c251da9363f1a4888257c16676cf54edf',
                 ts: 500,
                 amount: 1000000,
                 contractRet: 'REVERT',
               ),
               // TRC-20 wrapper duplicate of tx-out-usdt: skipped (not a TransferContract).
-              _nativeTriggerItem(hash: 'tx-out-usdt', ts: 3000),
+              _nativeTriggerItem(hash: _tronHashA, ts: 3000),
             ],
             'success': true,
             'meta': {'at': 1, 'page_size': 3},
@@ -300,10 +301,10 @@ void main() {
       });
       // Merged newest-first; the TRC-20 wrapper is not a second transfer.
       expect(result.records.map((r) => r.hash), [
-        'tx-out-usdt',
-        'tx-out-trx',
-        'tx-in-usdt',
-        'tx-in-trx-failed',
+        _tronHashA,
+        _tronHashC,
+        _tronHashB,
+        _tronHashD,
       ]);
 
       final outUsdt = result.records[0];
@@ -316,7 +317,10 @@ void main() {
       expect(outUsdt.assetVerified, isTrue);
       expect(outUsdt.impersonatesProtectedSymbol, isFalse);
       expect(outUsdt.confirmed, isTrue);
-      expect(outUsdt.timestamp, DateTime.fromMillisecondsSinceEpoch(3000));
+      expect(
+        outUsdt.timestamp,
+        DateTime.fromMillisecondsSinceEpoch(3000, isUtc: true),
+      );
 
       final outTrx = result.records[1];
       expect(outTrx.outgoing, isTrue); // owner_address (hex) == our address
@@ -349,36 +353,81 @@ void main() {
             return {
               'data': [
                 _trc20Item(
-                  hash: 'spoof-usdt',
+                  hash: _tronHashA,
                   from: _other,
                   to: _me,
                   ts: 100,
-                  contract: 'TFakeUSDTContract1111111111111111111',
+                  contract: _tronBurn,
                 ),
               ],
+              'success': true,
             };
           }
-          return {'data': <Object?>[]};
+          return {'data': <Object?>[], 'success': true};
         },
       );
 
       final record = (await service.fetch(Coin.tron, _me)).records.single;
       expect(record.amountText, '120.5 USDT');
       expect(record.assetSymbol, 'USDT');
-      expect(record.assetContract, 'TFakeUSDTContract1111111111111111111');
+      expect(record.assetContract, _tronBurn);
       expect(record.assetVerified, isFalse);
       expect(record.impersonatesProtectedSymbol, isTrue);
     },
   );
 
   test(
-    'TRON: unparseable token amount yields a null amountText, not a crash',
+    'TRON keeps native movement sharing a hash with a TRC-20 event',
+    () async {
+      final service = _service(
+        body: (request) {
+          if (request.url.path.endsWith('/transactions/trc20')) {
+            return {
+              'data': [
+                _trc20Item(
+                  hash: _tronHashA,
+                  from: _other,
+                  to: _me,
+                  ts: 1700000000000,
+                ),
+              ],
+              'success': true,
+            };
+          }
+          if (request.url.path.endsWith('/internal-transactions')) {
+            return {'data': <Object?>[], 'success': true};
+          }
+          return {
+            'data': [
+              _nativeTransferItem(
+                hash: _tronHashA,
+                ownerHex: _meHex,
+                ts: 1700000000000,
+              ),
+            ],
+            'success': true,
+          };
+        },
+      );
+
+      final result = await service.fetch(Coin.tron, _me);
+      expect(result.status, HistoryStatus.ok);
+      expect(result.records, hasLength(2));
+      expect(result.records.map((record) => record.assetSymbol), {
+        'USDT',
+        null,
+      });
+    },
+  );
+
+  test(
+    'TRON: unparseable token amount fails closed, not partial history',
     () async {
       final service = _service(
         body: (request) {
           if (request.url.path.endsWith('/trc20')) {
             final item = _trc20Item(
-              hash: 'tx-weird',
+              hash: _tronHashA,
               from: _other,
               to: _me,
               ts: 100,
@@ -393,8 +442,8 @@ void main() {
         },
       );
       final result = await service.fetch(Coin.tron, _me);
-      expect(result.status, HistoryStatus.ok);
-      expect(result.records.single.amountText, isNull);
+      expect(result.status, HistoryStatus.error);
+      expect(result.records, isEmpty);
     },
   );
 
@@ -1036,6 +1085,45 @@ void main() {
   });
 
   test(
+    'EVM direct history rejects token decimals the UI cannot render',
+    () async {
+      final service = HistoryService(
+        endpoints: (_) => 'https://rpc.ankr.com/eth',
+        client: MockClient((request) async {
+          final result = request.url.queryParameters['action'] == 'tokentx'
+              ? [
+                  {
+                    'hash': _evmHash,
+                    'from': _evmOther,
+                    'to': _evmOwner,
+                    'value': '1',
+                    'timeStamp': '1700000200',
+                    'tokenDecimal': '${Amount.maxDecimals + 1}',
+                    'tokenSymbol': 'CUSTOM',
+                    'contractAddress':
+                        '0x2222222222222222222222222222222222222222',
+                    'blockNumber': '4730207',
+                    'blockHash':
+                        '0x022c5e6a3d2487a8ccf8946a2ffb74938bf8e5c8a3f6d91b41c56378a96b5c37',
+                    'transactionIndex': '81',
+                    'confirmations': '1',
+                  },
+                ]
+              : <Object?>[];
+          return http.Response(
+            jsonEncode({'status': '1', 'message': 'OK', 'result': result}),
+            200,
+          );
+        }),
+      );
+
+      final result = await service.fetch(Coin.eth, _evmOwner);
+      expect(result.status, HistoryStatus.error);
+      expect(result.records, isEmpty);
+    },
+  );
+
+  test(
     'EVM token event without canonical block evidence fails closed',
     () async {
       const address = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -1256,14 +1344,14 @@ void main() {
       final service = _service(
         body: (request) {
           if (request.url.path.endsWith('/transactions/trc20')) {
-            return {'data': <Object?>[]};
+            return {'data': <Object?>[], 'success': true};
           }
           if (request.url.path.endsWith('/internal-transactions')) {
             return {
               'data': [
                 {
-                  'tx_id': 'parent',
-                  'internal_tx_id': 'trace-1',
+                  'tx_id': _tronHashA,
+                  'internal_tx_id': _tronTrace,
                   'from_address': '41b3dcf27c251da9363f1a4888257c16676cf54edf',
                   'to_address': _meHex,
                   'block_timestamp': 3000,
@@ -1273,10 +1361,11 @@ void main() {
                   },
                 },
               ],
+              'success': true,
             };
           }
           final trc10 = _nativeTransferItem(
-            hash: 'trc10',
+            hash: _tronHashB,
             ownerHex: _meHex,
             ts: 2000,
             amount: 42,
@@ -1284,18 +1373,21 @@ void main() {
           final contract =
               ((trc10['raw_data'] as Map)['contract'] as List).first as Map;
           contract['type'] = 'TransferAssetContract';
-          ((contract['parameter'] as Map)['value'] as Map)['asset_name'] =
-              '1002000';
+          final parameter = contract['parameter'] as Map;
+          parameter['type_url'] =
+              'type.googleapis.com/protocol.TransferAssetContract';
+          (parameter['value'] as Map)['asset_name'] = '1002000';
           return {
             'data': [trc10],
+            'success': true,
           };
         },
       );
 
       final records = (await service.fetch(Coin.tron, _me)).records;
       expect(records.map((record) => record.id), [
-        'parent:internal:trace-1',
-        'trc10:trc10:1002000',
+        '$_tronHashA:internal:$_tronTrace',
+        '$_tronHashB:trc10:1002000',
       ]);
       expect(records.first.amountText, '2.5 TRX');
       expect(records.first.status, ChainTxStatus.confirmed);
@@ -1347,6 +1439,306 @@ void main() {
     final service = _service(body: (_) => http.Response('not json', 200));
     expect((await service.fetch(Coin.tron, _me)).status, HistoryStatus.error);
   });
+
+  test(
+    'TRON direct history validates checksum before network access',
+    () async {
+      var requests = 0;
+      final service = _service(
+        body: (_) {
+          requests += 1;
+          return {'data': <Object?>[], 'success': true};
+        },
+      );
+
+      final invalidChecksum = '${_me.substring(0, _me.length - 1)}m';
+      final result = await service.fetch(Coin.tron, invalidChecksum);
+      expect(result.status, HistoryStatus.error);
+      expect(result.records, isEmpty);
+      expect(requests, 0);
+    },
+  );
+
+  test('TRON direct history rejects duplicate envelope members', () async {
+    final service = HistoryService(
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('/transactions/trc20')) {
+          return http.Response('{"data":[],"data":[],"success":true}', 200);
+        }
+        return http.Response(
+          jsonEncode({'data': <Object?>[], 'success': true}),
+          200,
+        );
+      }),
+    );
+
+    final result = await service.fetch(Coin.tron, _me);
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
+  });
+
+  test('TRON direct history rejects success=false', () async {
+    final service = _service(
+      body: (_) => {'data': <Object?>[], 'success': false},
+    );
+
+    final result = await service.fetch(Coin.tron, _me);
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
+  });
+
+  test('TRON direct history rejects unknown TRC-20 row members', () async {
+    final service = _service(
+      body: (request) {
+        if (request.url.path.endsWith('/transactions/trc20')) {
+          return {
+            'data': [
+              {
+                ..._trc20Item(
+                  hash: _tronHashA,
+                  from: _other,
+                  to: _me,
+                  ts: 1700000000000,
+                ),
+                'Value': '1',
+              },
+            ],
+            'success': true,
+          };
+        }
+        return {'data': <Object?>[], 'success': true};
+      },
+    );
+
+    final result = await service.fetch(Coin.tron, _me);
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
+  });
+
+  test('TRON direct history rejects rows not bound to the owner', () async {
+    final service = _service(
+      body: (request) {
+        if (request.url.path.endsWith('/transactions/trc20')) {
+          return {
+            'data': [
+              _trc20Item(
+                hash: _tronHashA,
+                from: _other,
+                to: _tronBurn,
+                ts: 1700000000000,
+              ),
+            ],
+            'success': true,
+          };
+        }
+        return {'data': <Object?>[], 'success': true};
+      },
+    );
+
+    final result = await service.fetch(Coin.tron, _me);
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
+  });
+
+  test('TRON direct history rejects responses larger than requested', () async {
+    final service = _service(
+      body: (request) {
+        if (request.url.path.endsWith('/transactions/trc20')) {
+          return {
+            'data': [
+              _trc20Item(
+                hash: _tronHashA,
+                from: _other,
+                to: _me,
+                ts: 1700000000000,
+              ),
+              _trc20Item(
+                hash: _tronHashB,
+                from: _other,
+                to: _me,
+                ts: 1700000000001,
+              ),
+            ],
+            'success': true,
+          };
+        }
+        return {'data': <Object?>[], 'success': true};
+      },
+    );
+
+    final result = await service.fetch(Coin.tron, _me, limit: 1);
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
+  });
+
+  test(
+    'TRON direct history rejects official-token decimals mismatch',
+    () async {
+      final service = _service(
+        body: (request) {
+          if (request.url.path.endsWith('/transactions/trc20')) {
+            return {
+              'data': [
+                _trc20Item(
+                  hash: _tronHashA,
+                  from: _other,
+                  to: _me,
+                  ts: 1700000000000,
+                  decimals: 18,
+                ),
+              ],
+              'success': true,
+            };
+          }
+          return {'data': <Object?>[], 'success': true};
+        },
+      );
+
+      final result = await service.fetch(Coin.tron, _me);
+      expect(result.status, HistoryStatus.error);
+      expect(result.records, isEmpty);
+    },
+  );
+
+  test('TRON direct history rejects ambiguous pagination metadata', () async {
+    final service = _service(
+      body: (_) => {
+        'data': <Object?>[],
+        'success': true,
+        'meta': {'page_size': 0, 'Page_size': 0},
+      },
+    );
+
+    final result = await service.fetch(Coin.tron, _me);
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
+  });
+
+  test('TRON direct history rejects unknown native row members', () async {
+    final service = _service(
+      body: (request) {
+        if (request.url.path.endsWith('/transactions') &&
+            !request.url.path.endsWith('/internal-transactions')) {
+          return {
+            'data': [
+              {
+                ..._nativeTransferItem(
+                  hash: _tronHashA,
+                  ownerHex: _otherHex,
+                  ts: 1700000000000,
+                ),
+                'TxID': _tronHashB,
+              },
+            ],
+            'success': true,
+          };
+        }
+        return {'data': <Object?>[], 'success': true};
+      },
+    );
+
+    final result = await service.fetch(Coin.tron, _me);
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
+  });
+
+  test('TRON direct history rejects unknown internal data members', () async {
+    final service = _service(
+      body: (request) {
+        if (request.url.path.endsWith('/internal-transactions')) {
+          return {
+            'data': [
+              {
+                'tx_id': _tronHashA,
+                'internal_tx_id': _tronTrace,
+                'from_address': _otherHex,
+                'to_address': _meHex,
+                'block_timestamp': 1700000000000,
+                'data': {
+                  'rejected': false,
+                  'call_value': {'_': 1},
+                  'Rejected': true,
+                },
+              },
+            ],
+            'success': true,
+          };
+        }
+        return {'data': <Object?>[], 'success': true};
+      },
+    );
+
+    final result = await service.fetch(Coin.tron, _me);
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
+  });
+
+  test('TRON approval events are not asset history', () async {
+    final service = _service(
+      body: (request) {
+        if (request.url.path.endsWith('/transactions/trc20')) {
+          return {
+            'data': [
+              {'type': 'Approval'},
+            ],
+            'success': true,
+          };
+        }
+        return {'data': <Object?>[], 'success': true};
+      },
+    );
+
+    final result = await service.fetch(Coin.tron, _me);
+    expect(result.status, HistoryStatus.ok);
+    expect(result.records, isEmpty);
+  });
+
+  test(
+    'TRON internal history preserves TRX and TRC-10 from one trace',
+    () async {
+      final service = _service(
+        body: (request) {
+          expect(
+            request.url.queryParameters['order_by'],
+            'block_timestamp,desc',
+          );
+          if (request.url.path.endsWith('/internal-transactions')) {
+            return {
+              'data': [
+                {
+                  'tx_id': _tronHashA,
+                  'internal_tx_id': _tronTrace,
+                  'from_address': _otherHex,
+                  'to_address': _meHex,
+                  'block_timestamp': 1700000000000,
+                  'data': {
+                    'rejected': false,
+                    'call_value': {'_': '2500000'},
+                    'call_token_value': {'_': '7'},
+                    'token_id': '1002000',
+                  },
+                },
+              ],
+              'success': true,
+            };
+          }
+          return {'data': <Object?>[], 'success': true};
+        },
+      );
+
+      final result = await service.fetch(Coin.tron, _me);
+      expect(result.status, HistoryStatus.ok);
+      expect(result.records, hasLength(2));
+      expect(result.records.map((record) => record.id), {
+        '$_tronHashA:internal:$_tronTrace',
+        '$_tronHashA:internal:$_tronTrace:trc10:1002000',
+      });
+      expect(result.records.map((record) => record.amountText), {
+        '2.5 TRX',
+        '7 TRC10',
+      });
+    },
+  );
 
   test(
     'EVM direct history keeps missing or contradictory execution evidence unknown',
@@ -1453,7 +1845,7 @@ void main() {
     'TRON direct native and internal rows require explicit execution evidence',
     () async {
       final native = _nativeTransferItem(
-        hash: 'native-missing-status',
+        hash: _tronHashA,
         ownerHex: _meHex,
         ts: 2000,
       )..remove('ret');
@@ -1461,14 +1853,14 @@ void main() {
         body: (request) {
           expect(request.url.queryParameters['only_confirmed'], 'true');
           if (request.url.path.endsWith('/transactions/trc20')) {
-            return {'data': <Object?>[]};
+            return {'data': <Object?>[], 'success': true};
           }
           if (request.url.path.endsWith('/internal-transactions')) {
             return {
               'data': [
                 {
-                  'tx_id': 'internal-missing-status',
-                  'internal_tx_id': 'trace-unknown',
+                  'tx_id': _tronHashB,
+                  'internal_tx_id': _tronTrace,
                   'from_address': _otherHex,
                   'to_address': _meHex,
                   'block_timestamp': 3000,
@@ -1477,10 +1869,12 @@ void main() {
                   },
                 },
               ],
+              'success': true,
             };
           }
           return {
             'data': [native],
+            'success': true,
           };
         },
       );

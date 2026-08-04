@@ -3,7 +3,9 @@ import 'dart:typed_data';
 
 import 'package:chains/chains.dart'
     show
+        Addresses,
         Amount,
+        Chain,
         base58Decode,
         base58Encode,
         sha256,
@@ -883,42 +885,42 @@ class HistoryService {
   /// concurrently and merged newest-first.
   Future<HistoryResult> _fetchTron(String address, int limit) async {
     try {
+      final validation = Addresses.validate(Chain.tron, address);
+      if (!validation.isValid) {
+        throw const FormatException('invalid TRON history owner');
+      }
+      final myHex = tronAddressHex(address);
+      if (myHex == null) {
+        throw const FormatException('invalid TRON history owner');
+      }
       final (trc20, native, internal) = await (
-        _getData(
+        _getTronData(
           '$tronApiUrl/v1/accounts/$address/transactions/trc20'
-          '?limit=$limit&only_confirmed=true',
+          '?limit=$limit&only_confirmed=true&order_by=block_timestamp,desc',
+          limit,
         ),
-        _getData(
+        _getTronData(
           '$tronApiUrl/v1/accounts/$address/transactions'
-          '?limit=$limit&only_confirmed=true',
+          '?limit=$limit&only_confirmed=true&order_by=block_timestamp,desc',
+          limit,
         ),
-        _getData(
+        _getTronData(
           '$tronApiUrl/v1/accounts/$address/internal-transactions'
-          '?limit=$limit&only_confirmed=true',
+          '?limit=$limit&only_confirmed=true&order_by=block_timestamp,desc',
+          limit,
         ),
       ).wait;
 
-      final myHex = tronAddressHex(address);
       final records = <ChainTxRecord>[];
-      final tokenHashes = <String>{};
       for (final item in trc20) {
-        final record = item is Map ? _parseTrc20(item, address) : null;
-        if (record != null) {
-          records.add(record);
-          tokenHashes.add(record.hash);
-        }
+        final record = _parseTrc20(item, address, myHex);
+        if (record != null) records.add(record);
       }
       for (final item in native) {
-        final record = item is Map ? _parseNative(item, myHex, address) : null;
-        if (record != null && !tokenHashes.contains(record.hash)) {
-          records.add(record);
-        }
+        records.addAll(_parseNative(item, myHex, address));
       }
       for (final item in internal) {
-        final record = item is Map
-            ? _parseTronInternal(item, myHex, address)
-            : null;
-        if (record != null) records.add(record);
+        records.addAll(_parseTronInternal(item, myHex, address));
       }
       records.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       final seen = <String>{};
@@ -930,74 +932,127 @@ class HistoryService {
       return HistoryResult.ok(List.unmodifiable(deduped));
     } catch (_) {
       // ClientException / TimeoutException / FormatException / a 4xx for the
-      // demo mock addresses — all mean "no trustworthy history".
+      // Invalid or checksum-failing addresses mean "no trustworthy history".
       return const HistoryResult.error();
     }
   }
 
-  /// GETs a TronGrid endpoint and returns its `data` list, throwing on any
-  /// non-200 / malformed response.
-  Future<List<Object?>> _getData(String url) async {
+  /// GETs one TronGrid history endpoint and returns its complete first page.
+  /// Duplicate/unknown members, provider-declared failure and pages larger
+  /// than the requested limit all fail closed.
+  Future<List<Map<Object?, Object?>>> _getTronData(
+    String url,
+    int limit,
+  ) async {
     final resp = await _client.get(Uri.parse(url)).timeout(timeout);
     if (resp.statusCode != 200) {
       throw http.ClientException('HTTP ${resp.statusCode}', Uri.parse(url));
     }
-    final body = jsonDecode(resp.body);
-    if (body is! Map) throw const FormatException('non-object body');
-    final data = body['data'];
-    if (data is! List) throw const FormatException('missing data list');
-    return data;
+    return _tronHistoryRows(
+      decodeJsonWithoutDuplicateKeys(resp.body),
+      limit: limit,
+    );
   }
 
   /// One item of `/v1/accounts/{addr}/transactions/trc20`:
   /// `{transaction_id, token_info: {symbol, decimals, ...}, block_timestamp,
   ///   from, to, type, value}` (addresses in base58).
-  ChainTxRecord? _parseTrc20(Map<dynamic, dynamic> item, String address) {
-    final hash = item['transaction_id'];
-    final ts = item['block_timestamp'];
-    if (hash is! String || ts is! int) return null;
-    String? amountText;
-    String? assetSymbol;
-    String? assetContract;
-    var assetVerified = false;
-    final info = item['token_info'];
-    final value = item['value'];
-    if (info is Map && value is String) {
-      var decimals = info['decimals'];
-      var symbol = info['symbol'];
-      final contract = info['address'];
-      if (contract is String && contract.trim().isNotEmpty) {
-        assetContract = contract.trim();
-        for (final token in _tokenRegistry()) {
-          final sameContract = token.contract.toLowerCase().startsWith('0x')
-              ? token.contract.toLowerCase() == assetContract.toLowerCase()
-              : token.contract == assetContract;
-          if (sameContract) {
-            symbol = token.symbol;
-            decimals = token.decimals;
-            assetVerified = true;
-            break;
-          }
-        }
+  ChainTxRecord? _parseTrc20(
+    Map<Object?, Object?> raw,
+    String address,
+    String myHex,
+  ) {
+    final item = _tronExactMap(
+      raw,
+      allowed: const {
+        'transaction_id',
+        'token_info',
+        'block_timestamp',
+        'from',
+        'to',
+        'type',
+        'value',
+      },
+      required: const {'type'},
+      schema: 'TRC-20 history row',
+    );
+    final type = _tronRequiredString(item, 'type');
+    _tronText(type, 'TRC-20 event type', 64);
+    // Approval and NFT events are not fungible asset movements.
+    if (type != 'Transfer') return null;
+
+    final hash = _tronTransactionId(
+      _tronRequiredString(item, 'transaction_id'),
+      'TRC-20 transaction id',
+    );
+    final from = _tronRequiredString(item, 'from');
+    final to = _tronRequiredString(item, 'to');
+    final fromHex = _tronAddressHexStrict(from, 'TRC-20 sender');
+    final toHex = _tronAddressHexStrict(to, 'TRC-20 recipient');
+    if (fromHex != myHex && toHex != myHex) {
+      throw const FormatException('TRC-20 row is not bound to owner');
+    }
+    final valueText = _tronRequiredString(item, 'value');
+    final value = _tronUint(valueText, 256, 'TRC-20 value');
+    final ts = _tronTimestampMs(item['block_timestamp']);
+
+    final info = _tronExactMap(
+      item['token_info'],
+      allowed: const {'symbol', 'address', 'decimals', 'name'},
+      required: const {'symbol', 'address', 'decimals'},
+      schema: 'TRC-20 token info',
+    );
+    final claimedSymbol = _tronRequiredString(info, 'symbol');
+    _tronText(claimedSymbol, 'TRC-20 token symbol', 128, allowEmpty: true);
+    if (info.containsKey('name')) {
+      _tronText(
+        _tronRequiredString(info, 'name'),
+        'TRC-20 token name',
+        256,
+        allowEmpty: true,
+      );
+    }
+    final contract = _tronRequiredString(info, 'address');
+    _tronAddressHexStrict(contract, 'TRC-20 contract');
+    final claimedDecimals = _tronUint(
+      info['decimals'],
+      8,
+      'TRC-20 decimals',
+    ).toInt();
+    if (claimedDecimals > Amount.maxDecimals) {
+      throw const FormatException('unsupported TRC-20 decimals');
+    }
+
+    TokenInfo? official;
+    for (final token in _tokenRegistry()) {
+      if (token.chain == Coin.tron && token.contract == contract) {
+        official = token;
+        break;
       }
-      final raw = BigInt.tryParse(value);
-      if (decimals is int && symbol is String && raw != null) {
-        assetSymbol = symbol.toUpperCase();
-        amountText = _formatAmount(raw, decimals, symbol);
-      }
+    }
+    if (official != null && official.decimals != claimedDecimals) {
+      throw const FormatException('official TRC-20 decimals mismatch');
+    }
+    final decimals = official?.decimals ?? claimedDecimals;
+    final symbol =
+        official?.symbol ??
+        (claimedSymbol.isEmpty ? 'TOKEN' : claimedSymbol.toUpperCase());
+    final amountText = _formatAmount(value, decimals, symbol);
+    if (amountText == null) {
+      throw const FormatException('unrenderable TRC-20 amount');
     }
     return ChainTxRecord(
       coin: Coin.tron,
-      id: '$hash:trc20:${assetContract ?? 'unknown'}',
+      id: _tronTrc20EventId(hash, contract, from, to, valueText),
       hash: hash,
-      outgoing: item['from'] == address,
-      fromAddress: item['from'] is String ? item['from'] as String : null,
-      toAddress: item['to'] is String ? item['to'] as String : null,
+      outgoing: fromHex == myHex,
+      fromAddress: fromHex == myHex ? address : _tronDisplayAddress(from),
+      toAddress: toHex == myHex ? address : _tronDisplayAddress(to),
       amountText: amountText,
-      assetContract: assetContract,
-      assetSymbol: assetSymbol,
-      assetVerified: assetVerified,
-      timestamp: DateTime.fromMillisecondsSinceEpoch(ts),
+      assetContract: contract,
+      assetSymbol: symbol,
+      assetVerified: official != null,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(ts, isUtc: true),
       // The trc20 endpoint serves confirmed transfer events.
       confirmed: true,
     );
@@ -1008,148 +1063,296 @@ class HistoryService {
   ///   [{type, parameter: {value: {amount, owner_address, to_address}}}]}}`
   /// (addresses in 41-prefixed hex). Supports native TRX TransferContract and
   /// TRC-10 TransferAssetContract; TRC-20 events come from their own endpoint.
-  ChainTxRecord? _parseNative(
-    Map<dynamic, dynamic> item,
-    String? myHex,
+  List<ChainTxRecord> _parseNative(
+    Map<Object?, Object?> raw,
+    String myHex,
     String myAddress,
   ) {
-    final hash = item['txID'];
-    final ts = item['block_timestamp'];
-    if (hash is! String || ts is! int) return null;
-    final rawData = item['raw_data'];
-    final contracts = rawData is Map ? rawData['contract'] : null;
-    if (contracts is! List || contracts.isEmpty) return null;
-    final contract = contracts.first;
-    if (contract is! Map) return null;
-    final type = contract['type'];
-    if (type != 'TransferContract' && type != 'TransferAssetContract') {
-      return null;
-    }
-    final parameter = contract['parameter'];
-    final value = parameter is Map ? parameter['value'] : null;
-    if (value is! Map) return null;
-
-    final status = _tronContractExecutionStatus(item);
-    final amount = _parseChainInteger(value['amount']);
-    if (amount == null || amount.isNegative) return null;
-    final owner = value['owner_address'];
-    final recipient = value['to_address'];
-    final ownerHex = owner is String ? owner.toLowerCase() : '';
-    final recipientHex = recipient is String ? recipient.toLowerCase() : '';
-    if (myHex != null && ownerHex != myHex && recipientHex != myHex) {
-      return null;
-    }
-    final ownerText = owner is String
-        ? (ownerHex == myHex
-              ? myAddress
-              : tronHexAddressToBase58(owner) ?? owner)
-        : null;
-    final recipientText = recipient is String
-        ? (recipientHex == myHex
-              ? myAddress
-              : tronHexAddressToBase58(recipient) ?? recipient)
-        : null;
-    final tokenId = type == 'TransferAssetContract'
-        ? '${value['asset_name'] ?? ''}'.trim()
-        : '';
-    final isTrc10 = tokenId.isNotEmpty;
-    return ChainTxRecord(
-      coin: Coin.tron,
-      id: isTrc10 ? '$hash:trc10:$tokenId' : hash,
-      hash: hash,
-      // Hex owner vs our base58-decoded address; an undecodable address (the
-      // demo mocks) can't match, so those rows read as incoming — moot in
-      // practice because TronGrid rejects mock addresses before this point.
-      outgoing: myHex != null && ownerHex == myHex,
-      fromAddress: ownerText,
-      toAddress: recipientText,
-      amountText: _formatAmount(
-        amount,
-        isTrc10 ? 0 : 6,
-        isTrc10 ? 'TRC10' : 'TRX',
-      ),
-      assetContract: isTrc10 ? tokenId : null,
-      assetSymbol: isTrc10 ? 'TRC10' : null,
-      assetVerified: !isTrc10,
-      timestamp: DateTime.fromMillisecondsSinceEpoch(ts),
-      status: status,
-    );
-  }
-
-  ChainTxStatus _tronContractExecutionStatus(Map<dynamic, dynamic> item) {
-    final ret = item['ret'];
-    if (ret is! List || ret.isEmpty || ret.first is! Map) {
-      return ChainTxStatus.unknown;
-    }
-    final value = (ret.first as Map)['contractRet'];
-    if (value is! String || value.trim().isEmpty) {
-      return ChainTxStatus.unknown;
-    }
-    return value.trim().toUpperCase() == 'SUCCESS'
-        ? ChainTxStatus.confirmed
-        : ChainTxStatus.failed;
-  }
-
-  ChainTxRecord? _parseTronInternal(
-    Map<dynamic, dynamic> item,
-    String? myHex,
-    String myAddress,
-  ) {
-    final hash = item['tx_id'];
-    final internalId = item['internal_tx_id'];
-    final timestamp = item['block_timestamp'];
-    final from = '${item['from_address'] ?? ''}'.toLowerCase();
-    final to = '${item['to_address'] ?? ''}'.toLowerCase();
-    if (hash is! String ||
-        internalId is! String ||
-        timestamp is! int ||
-        myHex == null ||
-        (from != myHex && to != myHex)) {
-      return null;
-    }
-    final data = item['data'];
-    if (data is! Map) return null;
-    final tokenId = '${data['token_id'] ?? ''}'.trim();
-    final isTrc10 = tokenId.isNotEmpty;
-    final valueContainer = isTrc10
-        ? data['call_token_value']
-        : data['call_value'];
-    final amount = valueContainer is Map
-        ? _parseChainInteger(valueContainer['_'])
-        : _parseChainInteger(valueContainer);
-    if (amount == null || amount == BigInt.zero || amount.isNegative) {
-      return null;
-    }
-    return ChainTxRecord(
-      coin: Coin.tron,
-      id: '$hash:internal:$internalId',
-      hash: hash,
-      outgoing: from == myHex,
-      fromAddress: from == myHex
-          ? myAddress
-          : tronHexAddressToBase58(from) ?? from,
-      toAddress: to == myHex ? myAddress : tronHexAddressToBase58(to) ?? to,
-      amountText: _formatAmount(
-        amount,
-        isTrc10 ? 0 : 6,
-        isTrc10 ? 'TRC10' : 'TRX',
-      ),
-      assetContract: isTrc10 ? tokenId : null,
-      assetSymbol: isTrc10 ? 'TRC10' : null,
-      assetVerified: !isTrc10,
-      timestamp: DateTime.fromMillisecondsSinceEpoch(timestamp),
-      status: switch (data['rejected']) {
-        false => ChainTxStatus.confirmed,
-        true => ChainTxStatus.failed,
-        _ => ChainTxStatus.unknown,
+    final item = _tronExactMap(
+      raw,
+      allowed: const {
+        'ret',
+        'signature',
+        'txID',
+        'net_usage',
+        'raw_data_hex',
+        'net_fee',
+        'energy_usage',
+        'blockNumber',
+        'block_timestamp',
+        'energy_fee',
+        'energy_usage_total',
+        'raw_data',
+        'internal_transactions',
+        'fee_limit',
+        'ref_block_bytes',
+        'ref_block_hash',
+        'expiration',
+        'timestamp',
       },
+      required: const {'txID', 'block_timestamp', 'raw_data'},
+      schema: 'TRON native history row',
     );
+    final hash = _tronTransactionId(
+      _tronRequiredString(item, 'txID'),
+      'TRON transaction id',
+    );
+    final ts = _tronTimestampMs(item['block_timestamp']);
+    final status = _tronContractExecutionStatus(item);
+    final rawData = _tronExactMap(
+      item['raw_data'],
+      allowed: const {
+        'contract',
+        'ref_block_bytes',
+        'ref_block_hash',
+        'expiration',
+        'timestamp',
+        'fee_limit',
+        'data',
+      },
+      required: const {'contract'},
+      schema: 'TRON raw transaction',
+    );
+    final contracts = rawData['contract'];
+    if (contracts is! List || contracts.length > 64) {
+      throw const FormatException('invalid TRON contract list');
+    }
+    final records = <ChainTxRecord>[];
+    for (final (index, rawContract) in contracts.indexed) {
+      final contract = _tronExactMap(
+        rawContract,
+        allowed: const {'parameter', 'type', 'Permission_id', 'permission_id'},
+        required: const {'parameter', 'type'},
+        schema: 'TRON transaction contract',
+      );
+      if (contract.containsKey('Permission_id') &&
+          contract.containsKey('permission_id')) {
+        throw const FormatException('ambiguous TRON permission id');
+      }
+      final type = _tronRequiredString(contract, 'type');
+      _tronText(type, 'TRON contract type', 128);
+      final parameter = _tronExactMap(
+        contract['parameter'],
+        allowed: const {'value', 'type_url'},
+        required: const {'value'},
+        schema: 'TRON contract parameter',
+      );
+      final valueRaw = parameter['value'];
+      if (valueRaw is! Map) {
+        throw const FormatException('invalid TRON contract value');
+      }
+      if (type != 'TransferContract' && type != 'TransferAssetContract') {
+        continue;
+      }
+      if (parameter.containsKey('type_url')) {
+        final typeUrl = _tronRequiredString(parameter, 'type_url');
+        if (typeUrl != 'type.googleapis.com/protocol.$type') {
+          throw const FormatException('mismatched TRON contract type URL');
+        }
+      }
+      final value = _tronExactMap(
+        valueRaw,
+        allowed: const {'amount', 'owner_address', 'to_address', 'asset_name'},
+        required: const {'amount', 'owner_address', 'to_address'},
+        schema: 'TRON transfer value',
+      );
+      final amount = _tronUint(value['amount'], 63, 'TRON transfer amount');
+      final owner = _tronRequiredString(value, 'owner_address');
+      final recipient = _tronRequiredString(value, 'to_address');
+      final ownerHex = _tronAddressHexStrict(owner, 'TRON transfer sender');
+      final recipientHex = _tronAddressHexStrict(
+        recipient,
+        'TRON transfer recipient',
+      );
+      if (ownerHex != myHex && recipientHex != myHex) {
+        throw const FormatException('TRON transfer is not bound to owner');
+      }
+      var tokenId = '';
+      if (type == 'TransferAssetContract') {
+        tokenId = _tronRequiredString(value, 'asset_name');
+        _tronUint(tokenId, 64, 'TRC-10 token id');
+      } else if (value.containsKey('asset_name')) {
+        throw const FormatException('TRX transfer carries asset id');
+      }
+      final isTrc10 = tokenId.isNotEmpty;
+      var id = hash;
+      if (index > 0) id += ':contract:$index';
+      if (isTrc10) id += ':trc10:$tokenId';
+      records.add(
+        ChainTxRecord(
+          coin: Coin.tron,
+          id: id,
+          hash: hash,
+          outgoing: ownerHex == myHex,
+          fromAddress: ownerHex == myHex
+              ? myAddress
+              : _tronDisplayAddress(owner),
+          toAddress: recipientHex == myHex
+              ? myAddress
+              : _tronDisplayAddress(recipient),
+          amountText: _formatAmount(
+            amount,
+            isTrc10 ? 0 : 6,
+            isTrc10 ? 'TRC10' : 'TRX',
+          ),
+          assetContract: isTrc10 ? tokenId : null,
+          assetSymbol: isTrc10 ? 'TRC10' : null,
+          assetVerified: !isTrc10,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(ts, isUtc: true),
+          status: status,
+        ),
+      );
+    }
+    return records;
   }
 
-  static BigInt? _parseChainInteger(Object? value) {
-    if (value is int) return BigInt.from(value);
-    if (value is String) return BigInt.tryParse(value);
-    return BigInt.tryParse('$value');
+  ChainTxStatus _tronContractExecutionStatus(Map<Object?, Object?> item) {
+    if (!item.containsKey('ret')) return ChainTxStatus.unknown;
+    final ret = item['ret'];
+    if (ret is! List || ret.length > 64) {
+      throw const FormatException('invalid TRON receipt list');
+    }
+    if (ret.isEmpty) return ChainTxStatus.unknown;
+    var status = ChainTxStatus.confirmed;
+    for (final raw in ret) {
+      final row = _tronExactMap(
+        raw,
+        allowed: const {'contractRet', 'fee'},
+        required: const {'contractRet'},
+        schema: 'TRON receipt',
+      );
+      final result = _tronRequiredString(
+        row,
+        'contractRet',
+      ).trim().toUpperCase();
+      if (!_tronReceiptResults.contains(result)) {
+        throw const FormatException('unknown TRON receipt result');
+      }
+      if (result != 'SUCCESS') status = ChainTxStatus.failed;
+      if (row.containsKey('fee')) {
+        _tronUint(row['fee'], 63, 'TRON receipt fee');
+      }
+    }
+    return status;
+  }
+
+  List<ChainTxRecord> _parseTronInternal(
+    Map<Object?, Object?> raw,
+    String myHex,
+    String myAddress,
+  ) {
+    final item = _tronExactMap(
+      raw,
+      allowed: const {
+        'internal_tx_id',
+        'data',
+        'block_timestamp',
+        'to_address',
+        'tx_id',
+        'from_address',
+      },
+      required: const {
+        'internal_tx_id',
+        'data',
+        'block_timestamp',
+        'to_address',
+        'tx_id',
+        'from_address',
+      },
+      schema: 'TRON internal history row',
+    );
+    final hash = _tronTransactionId(
+      _tronRequiredString(item, 'tx_id'),
+      'TRON internal parent id',
+    );
+    final internalId = _tronTransactionId(
+      _tronRequiredString(item, 'internal_tx_id'),
+      'TRON internal trace id',
+    );
+    final from = _tronRequiredString(item, 'from_address');
+    final to = _tronRequiredString(item, 'to_address');
+    final fromHex = _tronAddressHexStrict(from, 'TRON internal sender');
+    final toHex = _tronAddressHexStrict(to, 'TRON internal recipient');
+    if (fromHex != myHex && toHex != myHex) {
+      throw const FormatException('TRON internal row is not bound to owner');
+    }
+    final timestamp = _tronTimestampMs(item['block_timestamp']);
+    final data = _tronExactMap(
+      item['data'],
+      allowed: const {
+        'note',
+        'rejected',
+        'call_value',
+        'call_token_value',
+        'token_id',
+      },
+      required: const {},
+      schema: 'TRON internal data',
+    );
+    if (data.containsKey('note')) {
+      _tronText(
+        _tronRequiredString(data, 'note'),
+        'TRON internal note',
+        256,
+        allowEmpty: true,
+      );
+    }
+    final status = switch (data['rejected']) {
+      null => ChainTxStatus.unknown,
+      false => ChainTxStatus.confirmed,
+      true => ChainTxStatus.failed,
+      _ => throw const FormatException('invalid TRON rejected flag'),
+    };
+    final trx = _tronOptionalScalar(
+      data['call_value'],
+      63,
+      'TRON internal TRX value',
+    );
+    final token = _tronOptionalScalar(
+      data['call_token_value'],
+      63,
+      'TRON internal token value',
+    );
+    final tokenIdValue = _tronOptionalScalar(
+      data['token_id'],
+      64,
+      'TRON internal token id',
+    );
+    if (token != null &&
+        token != BigInt.zero &&
+        (tokenIdValue == null || tokenIdValue == BigInt.zero)) {
+      throw const FormatException('missing TRON internal token id');
+    }
+    final records = <ChainTxRecord>[];
+    ChainTxRecord record(BigInt amount, {String? tokenId}) {
+      final isTrc10 = tokenId != null;
+      var id = '$hash:internal:$internalId';
+      if (isTrc10) id += ':trc10:$tokenId';
+      return ChainTxRecord(
+        coin: Coin.tron,
+        id: id,
+        hash: hash,
+        outgoing: fromHex == myHex,
+        fromAddress: fromHex == myHex ? myAddress : _tronDisplayAddress(from),
+        toAddress: toHex == myHex ? myAddress : _tronDisplayAddress(to),
+        amountText: _formatAmount(
+          amount,
+          isTrc10 ? 0 : 6,
+          isTrc10 ? 'TRC10' : 'TRX',
+        ),
+        assetContract: tokenId,
+        assetSymbol: isTrc10 ? 'TRC10' : null,
+        assetVerified: !isTrc10,
+        timestamp: DateTime.fromMillisecondsSinceEpoch(timestamp, isUtc: true),
+        status: status,
+      );
+    }
+
+    if (trx != null && trx != BigInt.zero) records.add(record(trx));
+    if (token != null && token != BigInt.zero) {
+      records.add(record(token, tokenId: tokenIdValue.toString()));
+    }
+    return records;
   }
 
   /// "120.5 USDT"-style text, or null when the values don't form a valid
@@ -1164,6 +1367,201 @@ class HistoryService {
   }
 
   void close() => _client.close();
+}
+
+const Set<String> _tronReceiptResults = {
+  'SUCCESS',
+  'REVERT',
+  'BAD_JUMP_DESTINATION',
+  'OUT_OF_MEMORY',
+  'PRECOMPILED_CONTRACT',
+  'STACK_TOO_SMALL',
+  'STACK_TOO_LARGE',
+  'ILLEGAL_OPERATION',
+  'STACK_OVERFLOW',
+  'OUT_OF_ENERGY',
+  'OUT_OF_TIME',
+  'JVM_STACK_OVER_FLOW',
+  'TRANSFER_FAILED',
+  'INVALID_CODE',
+};
+
+List<Map<Object?, Object?>> _tronHistoryRows(
+  Object? raw, {
+  required int limit,
+}) {
+  final envelope = _tronExactMap(
+    raw,
+    allowed: const {'data', 'success', 'meta'},
+    required: const {'data', 'success'},
+    schema: 'TronGrid history envelope',
+  );
+  if (envelope['success'] != true) {
+    throw const FormatException('TronGrid history was not successful');
+  }
+  final data = envelope['data'];
+  if (data is! List || data.length > limit) {
+    throw const FormatException('invalid TronGrid history data');
+  }
+  if (envelope.containsKey('meta')) {
+    final meta = _tronExactMap(
+      envelope['meta'],
+      allowed: const {'at', 'page_size', 'fingerprint', 'links'},
+      required: const {},
+      schema: 'TronGrid history meta',
+    );
+    for (final key in const ['at', 'page_size']) {
+      if (meta.containsKey(key)) {
+        _tronUint(meta[key], 64, 'TronGrid meta $key');
+      }
+    }
+    if (meta.containsKey('fingerprint')) {
+      _tronText(
+        _tronRequiredString(meta, 'fingerprint'),
+        'TronGrid fingerprint',
+        2048,
+      );
+    }
+    if (meta.containsKey('links')) {
+      final links = _tronExactMap(
+        meta['links'],
+        allowed: const {'next'},
+        required: const {'next'},
+        schema: 'TronGrid history links',
+      );
+      _tronText(_tronRequiredString(links, 'next'), 'TronGrid next link', 8192);
+    }
+  }
+  final rows = <Map<Object?, Object?>>[];
+  for (final row in data) {
+    if (row is! Map || row.keys.any((key) => key is! String)) {
+      throw const FormatException('bad TronGrid history row');
+    }
+    rows.add(row);
+  }
+  return rows;
+}
+
+Map<Object?, Object?> _tronExactMap(
+  Object? raw, {
+  required Set<String> allowed,
+  required Set<String> required,
+  required String schema,
+}) {
+  if (raw is! Map ||
+      raw.keys.any((key) => key is! String || !allowed.contains(key)) ||
+      required.any((key) => !raw.containsKey(key))) {
+    throw FormatException('bad $schema');
+  }
+  return raw;
+}
+
+String _tronRequiredString(Map<Object?, Object?> row, String key) {
+  final value = row[key];
+  if (value is! String) throw FormatException('bad TronGrid field $key');
+  return value;
+}
+
+BigInt _tronUint(Object? raw, int bits, String label) {
+  final value = switch (raw) {
+    final int number when number >= 0 => '$number',
+    final String text => text,
+    _ => throw FormatException('bad $label'),
+  };
+  if (value.isEmpty || value.length > 78) throw FormatException('bad $label');
+  for (final code in value.codeUnits) {
+    if (code < 0x30 || code > 0x39) throw FormatException('bad $label');
+  }
+  final parsed = BigInt.tryParse(value);
+  if (parsed == null || parsed.isNegative || parsed.bitLength > bits) {
+    throw FormatException('bad $label');
+  }
+  return parsed;
+}
+
+BigInt? _tronOptionalScalar(Object? raw, int bits, String label) {
+  if (raw == null) return null;
+  Object? value = raw;
+  if (value is Map) {
+    final scalar = _tronExactMap(
+      value,
+      allowed: const {'_'},
+      required: const {'_'},
+      schema: '$label scalar',
+    );
+    value = scalar['_'];
+  }
+  return _tronUint(value, bits, label);
+}
+
+int _tronTimestampMs(Object? raw) {
+  final value = _tronUint(raw, 63, 'TronGrid timestamp');
+  if (value == BigInt.zero || value > BigInt.from(253402300799999)) {
+    throw const FormatException('bad TronGrid timestamp');
+  }
+  return value.toInt();
+}
+
+String _tronTransactionId(String value, String label) {
+  if (value.length != 64) throw FormatException('bad $label');
+  for (final code in value.codeUnits) {
+    final digit = code >= 0x30 && code <= 0x39;
+    final lower = code >= 0x61 && code <= 0x66;
+    final upper = code >= 0x41 && code <= 0x46;
+    if (!digit && !lower && !upper) throw FormatException('bad $label');
+  }
+  return value;
+}
+
+String _tronAddressHexStrict(String value, String label) {
+  final normalized = value;
+  if (normalized.length == 42 && normalized.toLowerCase().startsWith('41')) {
+    for (final code in normalized.codeUnits) {
+      final digit = code >= 0x30 && code <= 0x39;
+      final lower = code >= 0x61 && code <= 0x66;
+      final upper = code >= 0x41 && code <= 0x46;
+      if (!digit && !lower && !upper) throw FormatException('bad $label');
+    }
+    return normalized.toLowerCase();
+  }
+  final validation = Addresses.validate(Chain.tron, normalized);
+  final hex = validation.isValid ? tronAddressHex(normalized) : null;
+  if (hex == null) throw FormatException('bad $label');
+  return hex;
+}
+
+String _tronDisplayAddress(String value) =>
+    tronHexAddressToBase58(value) ?? value;
+
+void _tronText(
+  String value,
+  String label,
+  int maxBytes, {
+  bool allowEmpty = false,
+}) {
+  if ((!allowEmpty && value.isEmpty) || utf8.encode(value).length > maxBytes) {
+    throw FormatException('bad $label');
+  }
+  for (final rune in value.runes) {
+    if (rune < 0x20 || rune == 0x7f) throw FormatException('bad $label');
+  }
+}
+
+String _tronTrc20EventId(
+  String hash,
+  String contract,
+  String from,
+  String to,
+  String value,
+) {
+  final digest = sha256(
+    utf8.encode([hash.toLowerCase(), contract, from, to, value].join('\u0000')),
+  );
+  final suffix = digest
+      .take(8)
+      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+      .join();
+  return '$hash:trc20:$contract:$suffix';
 }
 
 const Set<String> _evmNormalFields = {
@@ -1337,7 +1735,7 @@ Map<Object?, Object?> _evmTokenRow(Object? raw) {
     _evmRequiredString(row, 'tokenDecimal'),
     'token decimals',
   );
-  if (decimals > BigInt.from(255)) {
+  if (decimals > BigInt.from(Amount.maxDecimals)) {
     throw const FormatException('bad token decimals');
   }
   _evmUnsigned64(
@@ -2195,9 +2593,10 @@ bool _deepJsonEquals(Object? left, Object? right) {
 
 /// Decodes a base58check TRON address ("T...") to its lowercase 21-byte hex
 /// form ("41..."), as used in TronGrid raw_data. Returns null for anything
-/// that isn't a well-formed address (e.g. the demo mock placeholders).
+/// that isn't a checksum-valid TRON address.
 String? tronAddressHex(String address) {
   try {
+    if (!Addresses.validate(Chain.tron, address).isValid) return null;
     final bytes = base58Decode(address);
     // 21-byte payload (0x41 prefix + 20-byte key hash) + 4-byte checksum.
     if (bytes.length != 25 || bytes[0] != 0x41) return null;

@@ -1982,3 +1982,16 @@ Routescan Avalanche Fuji 对公开地址的三路真实只读测试 1/1 通过�
 被明确拒绝。最终 KT Wallet 1578/1578、KT Cold Signer 570/570、共享 packages 429/429、
 静态分析 0、完整公开门禁 13/13；本轮没有 Gateway 源码变化，不需要后端部署，App 修复仍
 须随下一版移动端制品发布。
+
+同日继续关闭 App 在 Gateway 故障时使用的 TRON 直连历史边界。查询账户必须在出网前
+通过 Base58Check；TronGrid 的 TRC-20、原生交易和 internal 三路响应只接受精确
+`data/success/meta`，要求 `success=true`、返回数量不超过请求 limit，并对分页 metadata、
+规范 32-byte 交易哈希、地址、时间、执行结果和金额逐层校验。TRC-20 必须绑定查询账户，
+官方 Token decimals 必须匹配注册表，所有 decimals 还必须落在钱包可准确展示的 0–36；
+Approval 等非 Transfer 事件不会冒充资产记录。原生交易支持同一交易的多个 contract，
+internal trace 可同时保留 TRX 与 TRC-10，确定性事件 ID 防止误去重。三路任一失败、出现
+未知/重复字段、错账户、超 limit、无效金融值或歧义分页时整次失败闭合，不把部分数据伪装
+成完整历史。失败优先与回归共 History 49/49、相关 Gateway service 36/36 通过；公开 TRON
+主网账户的三路真实只读测试 1/1 通过，没有加载私钥、签名或广播。最终 KT Wallet
+1592/1592、KT Cold Signer 570/570、共享 packages 429/429、静态分析 0、完整公开门禁
+13/13；Gateway 仍为 1.16.20 且本轮无后端源码变化，移动端修复须随下一版 App 构建发布。
