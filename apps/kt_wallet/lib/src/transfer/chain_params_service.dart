@@ -79,8 +79,10 @@ class EvmSpendableBalances {
 /// same prefs-aware resolver the market services use, so a persisted RPC
 /// override in network settings applies here too.
 ///
-/// Only EVM chains fetch today — TRON/Solana transactions still use their
-/// documented placeholder encodings, so there is nothing real to parameterize.
+/// This service owns the EVM-specific parameter set. TRON and Solana obtain
+/// their real reference block / blockhash, fees, simulation and spendable
+/// balances through [LocalTransferService]'s protocol-specific preparation
+/// paths rather than through this EVM-shaped API.
 class ChainParamsService {
   ChainParamsService({
     JsonRpcTransport? jsonRpcTransport,

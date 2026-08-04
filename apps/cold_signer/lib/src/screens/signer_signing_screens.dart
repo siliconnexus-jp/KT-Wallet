@@ -1034,9 +1034,9 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
         return;
       }
       request = payload;
-      // Steps 2–6 of the acceptance check (validator.dart). V1's transaction
-      // whitelist is stubbed to "TRON transfers only" until the chains
-      // package supplies the real parser.
+      // Steps 2–6 of the acceptance check (validator.dart). The structural
+      // whitelist below parses and binds every currently supported EVM,
+      // TRON and Solana signing envelope before the request reaches review.
       final localWalletId = controller?.localWalletId;
       if (controller?.hasWallet == true && localWalletId == null) {
         unawaited(context.push('/risk'));

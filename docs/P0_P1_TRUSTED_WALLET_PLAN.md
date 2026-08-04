@@ -2,6 +2,9 @@
 
 更新日期：2026-08-04
 
+当前 Gateway 源码版本 1.16.17；当前生产 Gateway 1.16.16。源码候选新增严格的
+链身份接口，只有完成发布门禁和滚动部署后才能把线上版本改为 1.16.17。
+
 ## 目标与边界
 
 本方案将 KT Wallet 提升到可以公开测试、且核心资产链路能够被独立复核的
@@ -1148,7 +1151,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   - [x] 八链 air-gap、非 EVM、EVM 扩展、加速/取消及双 L2 bridge 等多笔广播入口
     均在第一笔签名前完成整批动态费用与余额预检；仓库门禁按源码顺序强制预检调用早于
     首个 broadcast，删除、漏接或事后调用会失败。门禁正反例 2/2、KT Wallet
-    1553/1553、KT Cold Signer 570/570、公开测试源码门禁 12/12、原生/OSV 依赖审计
+    1560/1560、KT Cold Signer 570/570、公开测试源码门禁 12/12、原生/OSV 依赖审计
     （Dart 147、npm 293、Go 4、Android 135+134）已知问题 0。
   - [x] 纯主机资金 CLI 的 import 与隐式配置边界已纳入 `check_deps`：只允许
     `dart:convert`、`dart:io`、HTTP client 与纯 Dart 模型；Flutter/App runtime、
@@ -1169,6 +1172,14 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   新增写方法在未分类时被重复发送；广播方法明确不合并、不自动重试。
 - [x] EVM `eth_chainId`、Solana genesis hash、TRON block-0 identity 在 RPC
   配置探测和交易构造前双重校验，错误网络在读取 nonce/费用及签名前失败闭合。
+- [x] 预签网络身份改为 Gateway-first：源码候选 1.16.17 新增
+  `kt_getNetworkIdentity`，由 Gateway 实时读取 EVM chain id、TRON block-0 ID 或
+  Solana genesis hash，并与服务端受审 registry 精确绑定。App 对内置网络优先调用该
+  方法，Gateway 不可用或旧版本不支持时才执行不含钱包地址的直连只读探针；Gateway
+  明确返回错网络时失败闭合，不能用直连结果覆盖。这样中国大陆设备即使无法访问官方
+  RPC，只要 Gateway 可达仍能完成预签身份检查。custom/未广告网络继续以用户配置的
+  RPC 为权威。三链成功、错网和旧 Gateway 回退均有确定性测试；生产仍为 1.16.16，
+  本项在 1.16.17 滚动上线前只代表源码候选。
 - [x] App 直连备用节点在发送钱包地址、交易标识或其他原请求 metadata 前先执行链身份
   探针：EVM 校验 `eth_chainId`，Solana 校验 genesis hash，TRON 校验 block 0 ID；
   错链或错误路由的备用节点直接跳过。2026-08-03 在东京当前网络只读验证 Amoy dRPC、
@@ -1205,6 +1216,12 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   网络 generation 改变或页面销毁时，排队 worker 会在出网前停止；前 4 条阻塞时销毁页面
   的红测证明后 8 条不再查询。定向 11/11、静态分析、`check_deps` 与完整源码审计 12/12
   通过。
+- [x] 广播结果页的终态读取改为 Gateway-first。旧实现会先等待设备直连公共 RPC 的
+  confirmation depth（最长约 10 秒），再查询 Gateway；中国大陆直连被阻断时，即使
+  Gateway 已确认也会暂时显示 Pending。现先调用按交易持久化网络解析的状态服务，
+  confirmed/failed/replaced/expired 立即 CAS 落库并更新 UI；直接 RPC 深度仅在终态后
+  异步补充展示，失败或阻塞不改变状态。确定性红测以永不返回的直连服务稳定复现旧页面
+  pending，修复后 Gateway confirmed 立即生效；定向 3/3，并加入仓库级源码顺序门禁。
 - [x] 市场/历史刷新异常不再把页面永久锁在 skeleton 或 load-more：展示快照实现即使因
   损坏或本地存储异常直接抛错，控制器也只把它当作 cache miss 并继续实时余额/历史；余额
   Provider、Indexer 或 Drift 的未预期异常会把尚未解析的 loading 行转为明确 error，复位
@@ -1725,13 +1742,13 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   - [x] 当前版本没有远程配置下载或控制面；签名、验签、认证、风险阻断和交易一致性
     规则均为本地编译代码，Gateway/RPC 用户覆盖又受上述端点策略约束，因此运营端目前
     无法远程开启“跳过验签/允许未知网络”等降级开关。新增的结构审计同时禁止常见远程
-    配置/Feature Flag SDK，冻结 Gateway Client 当前 61 个响应字段为逐项复核的闭集，
+    配置/Feature Flag SDK，冻结 Gateway Client 当前 62 个响应字段为逐项复核的闭集，
     并要求 AIRGAP codec、交易认证、PIN、Cold Signer controller 与共享签名验签器五个
     安全模块保持无 HTTP/Gateway import。EVM/TRON/Solana 热钱包签名入口必须使用各自
     精确 unsigned bytes 与 sender 调用独立验签器；外部威胁供应商只能产生
     `unsafe/unknown`，不能把资产提升为 `safe`。`safe` 仅允许来自与请求网络及
     contract/mint 精确绑定的内置官方目录，UI 只解释为“官方身份”，不解释为“合约安全”。
-    审计自带 extractor 负例并已纳入 `check_deps`，当前输出为 61 fields /
+    审计自带 extractor 负例并已纳入 `check_deps`，当前输出为 62 fields /
     5 network-free modules / 3 signing families。
   - [ ] 若未来引入远程配置，仍需版本化 allowlist schema、配置签名、防回滚、过期和
     kill-switch 边界测试；未完成前不得添加可影响签名/验签的远程字段。

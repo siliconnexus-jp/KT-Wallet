@@ -123,6 +123,7 @@ class LocalTransferService {
                    jsonRpcTransport: jsonRpcTransport,
                    restTransport: restTransport,
                    endpoints: endpoints,
+                   gateway: gateway,
                  ));
 
   final ChainParamsService _params;

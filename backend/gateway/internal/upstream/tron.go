@@ -123,6 +123,30 @@ func (t *Tron) GetAccount(ctx context.Context, addr string) (*Account, error) {
 	return acct, nil
 }
 
+// GenesisBlockID returns block zero's canonical id for network binding.
+func (t *Tron) GenesisBlockID(ctx context.Context) (string, error) {
+	body, err := json.Marshal(map[string]int{"num": 0})
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		BlockID     string `json:"blockID"`
+		BlockHeader struct {
+			RawData struct {
+				Number int64 `json:"number"`
+			} `json:"raw_data"`
+		} `json:"block_header"`
+	}
+	if err := t.do(ctx, http.MethodPost, "/wallet/getblockbynum", body, &out); err != nil {
+		return "", err
+	}
+	decoded, decodeErr := hex.DecodeString(out.BlockID)
+	if decodeErr != nil || len(decoded) != 32 || out.BlockHeader.RawData.Number != 0 {
+		return "", t.unavailable("malformed genesis block")
+	}
+	return strings.ToLower(out.BlockID), nil
+}
+
 // TransactionStatus queries the full-node receipt directly. TronGrid returns
 // an empty object while a tx is unknown/pending, and a receipt once included.
 // The returned status is one of "confirmed", "failed", "pending", "unknown".

@@ -1205,6 +1205,9 @@ void main() {
       '${transferScreens.path} does not treat direct confirmation evidence as terminal',
     );
   }
+  for (final issue in findGatewayFirstFinalityIssues(transferScreensSource)) {
+    failures.add('${transferScreens.path} can block Gateway finality: $issue');
+  }
   for (final entry in const {
     'apps/kt_wallet/lib/src/market/market_controller.dart': [
       'if (id == null) {\n      _clearWalletState();',

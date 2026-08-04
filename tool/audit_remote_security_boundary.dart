@@ -31,6 +31,7 @@ const _reviewedGatewayResponseKeys = <String>{
   'gas',
   'hash',
   'id',
+  'identity',
   'maxFeePerGas',
   'maxPriorityFeePerGas',
   'message',
@@ -111,6 +112,7 @@ void main() {
   _auditGatewayVocabulary(failures);
   _auditNetworkFreeSecurityModules(failures);
   _auditHotSigningBoundary(failures);
+  _auditGatewayFirstNetworkIdentity(failures);
   _auditGatewayIrreversibleRequestSchema(failures);
   _auditGatewayPublicRequestSchemas(failures);
   _auditGatewayRPCEnvelope(failures);
@@ -363,6 +365,46 @@ void _auditHotSigningBoundary(List<String> failures) {
   }
 }
 
+void _auditGatewayFirstNetworkIdentity(List<String> failures) {
+  const verifierPath = 'apps/kt_wallet/lib/src/transfer/network_identity.dart';
+  final verifier = File(verifierPath).readAsStringSync();
+  for (final marker in const [
+    "import '../market/gateway_client.dart';",
+    'return await gateway.getNetworkIdentity(chain: coin);',
+    'on GatewayNetworkUnsupported',
+    'on GatewayTransportException',
+    'if (error.code == -32601) return null;',
+    'rethrow;',
+    '_requireMatch(chain, expected, gatewayIdentity);',
+    '_requireMatch(Chain.tron, expectedGenesisBlockId, gatewayIdentity);',
+    '_requireMatch(Chain.solana, expectedGenesisHash, gatewayIdentity);',
+  ]) {
+    if (!verifier.contains(marker)) {
+      failures.add(
+        '$verifierPath can bypass Gateway-first network identity: $marker',
+      );
+    }
+  }
+  if ('final gatewayIdentity = await _gatewayIdentity('
+          .allMatches(verifier)
+          .length !=
+      3) {
+    failures.add(
+      '$verifierPath does not Gateway-check all three signing families',
+    );
+  }
+
+  const transferPath =
+      'apps/kt_wallet/lib/src/transfer/local_transfer_service.dart';
+  final transfer = File(transferPath).readAsStringSync();
+  if (!transfer.contains('RpcNetworkIdentityVerifier(') ||
+      !transfer.contains('gateway: gateway,')) {
+    failures.add(
+      '$transferPath does not pass the production Gateway into pre-sign identity verification',
+    );
+  }
+}
+
 void _auditGatewayIrreversibleRequestSchema(List<String> failures) {
   const path = 'backend/gateway/internal/handlers/broadcast.go';
   final source = File(path).readAsStringSync();
@@ -398,6 +440,7 @@ void _auditGatewayPublicRequestSchemas(List<String> failures) {
     'kt_getEvmSpendableBalances': 'GetEVMSpendableBalances',
     'kt_getHistory': 'GetHistory',
     'kt_getTransactionStatus': 'GetTransactionStatus',
+    'kt_getNetworkIdentity': 'GetNetworkIdentity',
     'kt_searchTokens': 'SearchOfficialTokens',
     'kt_checkTokenRisk': 'CheckTokenRisk',
     'kt_getEvmTokenApprovals': 'GetEVMTokenApprovals',
@@ -434,6 +477,7 @@ void _auditGatewayPublicRequestSchemas(List<String> failures) {
     'backend/gateway/internal/handlers/evm_preflight.go': 2,
     'backend/gateway/internal/handlers/history.go': 1,
     'backend/gateway/internal/handlers/transaction_status.go': 1,
+    'backend/gateway/internal/handlers/network_identity.go': 1,
     'backend/gateway/internal/handlers/official_tokens.go': 1,
     'backend/gateway/internal/handlers/token_risk.go': 1,
     'backend/gateway/internal/handlers/token_approvals.go': 1,

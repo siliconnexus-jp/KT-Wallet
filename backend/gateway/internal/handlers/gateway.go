@@ -125,7 +125,7 @@ type Config struct {
 // Defaults returns the production upstream configuration.
 func Defaults() Config {
 	return Config{
-		Version:        "1.16.16",
+		Version:        "1.16.17",
 		Clock:          clock.Real{},
 		AttemptTimeout: 10 * time.Second,
 		EthURLs:        []string{"https://eth.llamarpc.com", "https://cloudflare-eth.com"},
@@ -502,6 +502,7 @@ func (g *Gateway) Register(s *rpc.Server) {
 	s.Register("kt_getEvmSpendableBalances", g.GetEVMSpendableBalances)
 	s.Register("kt_getHistory", g.GetHistory)
 	s.Register("kt_getTransactionStatus", g.GetTransactionStatus)
+	s.Register("kt_getNetworkIdentity", g.GetNetworkIdentity)
 	s.Register("kt_searchTokens", g.SearchOfficialTokens)
 	s.Register("kt_checkTokenRisk", g.CheckTokenRisk)
 	s.Register("kt_getEvmTokenApprovals", g.GetEVMTokenApprovals)

@@ -57,6 +57,20 @@ func NewSolana(urls []string, clk clock.Clock, client *http.Client, attemptTimeo
 
 func (s *Solana) Health() PoolHealth { return s.pool.Health() }
 
+// GenesisHash returns the live cluster identity used to bind signing to the
+// configured Solana network.
+func (s *Solana) GenesisHash(ctx context.Context) (string, error) {
+	raw, err := s.pool.Call(ctx, "getGenesisHash", []any{})
+	if err != nil {
+		return "", err
+	}
+	var hash string
+	if err := json.Unmarshal(raw, &hash); err != nil || len(hash) < 32 || len(hash) > 128 {
+		return "", &Unavailable{Upstream: "solana", Message: "malformed genesis hash"}
+	}
+	return hash, nil
+}
+
 // GetBalance returns the lamport balance of address.
 func (s *Solana) GetBalance(ctx context.Context, address string) (*big.Int, error) {
 	raw, err := s.pool.Call(ctx, "getBalance", []any{address})

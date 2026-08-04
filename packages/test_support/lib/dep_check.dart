@@ -768,12 +768,13 @@ List<String> findDocumentationPlaceholders(String contents) => [
     if (contents.contains(marker)) marker,
 ];
 
-/// Keeps the production Gateway version in code and current public release
-/// surfaces synchronized.
+/// Keeps the Gateway source version and the separately deployed production
+/// version synchronized across their respective public evidence surfaces.
 ///
-/// Historical notes may legitimately mention older versions, so this checks
-/// exact status-table, reliability, release-badge and deployment headings
-/// instead of merely looking for the current number somewhere in each file.
+/// A source candidate can legitimately be ahead of production before a
+/// reviewed rollout. Conflating those values forces documentation to claim an
+/// undeployed build is live, so both are checked independently. Historical
+/// notes may still mention older versions.
 List<String> findGatewayReleaseVersionIssues({
   required String gatewaySource,
   required String backendReadme,
@@ -788,38 +789,51 @@ List<String> findGatewayReleaseVersionIssues({
   if (matches.length != 1) {
     return ['Gateway source must declare exactly one release version'];
   }
-  final version = matches.single.group(1)!;
+  final sourceVersion = matches.single.group(1)!;
+  final deployedMatches = RegExp(
+    r'^\| KT Gateway \| `([0-9]+\.[0-9]+\.[0-9]+)` \| Production service ',
+    multiLine: true,
+  ).allMatches(rootReadme).toList(growable: false);
+  if (deployedMatches.length != 1) {
+    return ['root README must declare exactly one production Gateway version'];
+  }
+  final deployedVersion = deployedMatches.single.group(1)!;
   final issues = <String>[];
   final requiredMarkers = <(String, String, String)>[
     (
       backendReadme,
-      '"version":"$version"',
-      'backend README health example is not $version',
+      '"version":"$sourceVersion"',
+      'backend README health example is not source $sourceVersion',
     ),
     (
       rootReadme,
-      '| KT Gateway | `$version` |',
-      'root README status table is not $version',
+      'Gateway source version: `$sourceVersion`',
+      'root README source marker is not $sourceVersion',
     ),
     (
       rootReadme,
-      'Gateway `$version` currently exposes',
-      'root README reliability section is not $version',
+      'Gateway `$deployedVersion` currently exposes',
+      'root README reliability section is not production $deployedVersion',
     ),
     (
       readinessPlan,
-      '生产 $version 的公开 Ethereum 历史只读 smoke',
-      'P0/P1 readiness plan production evidence is not $version',
+      '当前 Gateway 源码版本 $sourceVersion',
+      'P0/P1 readiness plan source marker is not $sourceVersion',
+    ),
+    (
+      readinessPlan,
+      '当前生产 Gateway $deployedVersion',
+      'P0/P1 readiness plan production marker is not $deployedVersion',
     ),
     (
       htmlReport,
-      'Gateway $version 生产发布',
-      'HTML report release badge is not $version',
+      'Gateway 源码版本 · $sourceVersion',
+      'HTML report source marker is not $sourceVersion',
     ),
     (
       htmlReport,
-      'Gateway 发布状态 · $version 已上线',
-      'HTML report deployed section is not $version',
+      'Gateway 发布状态 · $deployedVersion 已上线',
+      'HTML report deployed section is not $deployedVersion',
     ),
   ];
   for (final (contents, marker, issue) in requiredMarkers) {
@@ -867,6 +881,34 @@ bool multiBroadcastE2eHasFundingPreflight(String path, String contents) {
       broadcastIndex >= 0 &&
       guardIndex < signatureIndex &&
       guardIndex < broadcastIndex;
+}
+
+/// Keeps the post-broadcast result screen usable where public chain RPCs are
+/// blocked or slow but the configured KT Gateway remains reachable.
+///
+/// Finality must be resolved through the Gateway-first status service before
+/// any direct-RPC confirmation-depth enrichment. Depth is display-only and
+/// therefore must be launched without awaiting it; otherwise a confirmed
+/// transaction can remain visibly pending for the whole direct timeout.
+List<String> findGatewayFirstFinalityIssues(String contents) {
+  const statusMarker = 'final chainStatus = await _statusService?.check(tx);';
+  const nonBlockingDepthMarker = 'unawaited(_readConfirmationDepth());';
+  final statusIndex = contents.indexOf(statusMarker);
+  final depthIndex = contents.indexOf(nonBlockingDepthMarker);
+  final issues = <String>[];
+
+  if (statusIndex < 0) {
+    issues.add('missing Gateway-first transaction status lookup');
+  }
+  if (depthIndex < 0) {
+    issues.add('confirmation depth is not a non-blocking enrichment');
+  } else if (statusIndex >= 0 && depthIndex < statusIndex) {
+    issues.add('confirmation depth starts before Gateway-first finality');
+  }
+  if (contents.contains('= await _readConfirmationDepth()')) {
+    issues.add('direct confirmation depth blocks finality persistence');
+  }
+  return issues;
 }
 
 /// Keeps the funding preflight runnable by the standalone Dart VM.

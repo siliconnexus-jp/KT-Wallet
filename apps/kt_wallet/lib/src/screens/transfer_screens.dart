@@ -3612,30 +3612,25 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
 
   Future<void> _check(Transaction tx) async {
     if (!mounted || !_pending(tx)) return;
-    final directStatus = await _readConfirmationDepth();
-    // A direct "pending / 0 confirmations" only means this endpoint cannot
-    // currently find an inclusion. The finality service also knows the exact
-    // TRON expiration / Solana last-valid height, so it must still run before
-    // we decide to keep waiting.
-    final fallbackStatus =
-        directStatus == null || directStatus == TxStatus.pending
-        ? await _statusService?.check(tx)
-        : null;
+    // Finality is the user-visible truth and must use the Gateway-first
+    // service before attempting a device-to-public-RPC depth lookup. The old
+    // order waited for an unreachable public RPC (notably on mainland-China
+    // networks) before accepting an already-confirmed Gateway result, leaving
+    // the screen visibly pending for a full direct timeout.
+    final chainStatus = await _statusService?.check(tx);
     if (!mounted) return;
-    final finalityStatus = switch (fallbackStatus) {
+    final next = switch (chainStatus) {
       ChainTransactionStatus.confirmed => TxStatus.confirmed,
       ChainTransactionStatus.failed => TxStatus.failed,
+      ChainTransactionStatus.pending => TxStatus.pending,
       ChainTransactionStatus.replaced => TxStatus.replaced,
       ChainTransactionStatus.expired => TxStatus.expired,
-      ChainTransactionStatus.pending ||
-      ChainTransactionStatus.unknown ||
-      null => null,
+      ChainTransactionStatus.unknown || null => null,
     };
-    final next = finalityStatus ?? directStatus;
-    final outcome = switch (fallbackStatus) {
+    final outcome = switch (chainStatus) {
       ChainTransactionStatus.unknown => TxCheckOutcome.unknown,
       ChainTransactionStatus.pending => TxCheckOutcome.pending,
-      _ => directStatus == TxStatus.pending ? TxCheckOutcome.pending : null,
+      _ => null,
     };
     final terminal =
         next == TxStatus.confirmed ||
@@ -3680,6 +3675,14 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
       _lastCheckedAt = checkedAt;
       _lastCheckOutcome = terminal ? null : outcome;
     });
+    // Confirmation depth is presentation-only. Fetch it after authoritative
+    // terminal state has been persisted, and never let a blocked public RPC
+    // delay the status transition. A missing depth remains honestly absent.
+    if (terminal &&
+        (chainStatus == ChainTransactionStatus.confirmed ||
+            chainStatus == ChainTransactionStatus.failed)) {
+      unawaited(_readConfirmationDepth());
+    }
     if (changed) {
       await _reload();
       return;
@@ -3691,10 +3694,9 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
     _scheduleCheck(tx);
   }
 
-  /// Reads the direct chain receipt/status so the number shown on screen is
-  /// an actual block/slot depth. If direct RPC is unavailable, the caller
-  /// falls back to [TransactionStatusService], which can use the Gateway for
-  /// status reconciliation but never invents a confirmation count.
+  /// Reads the direct chain receipt/status only to enrich the terminal screen
+  /// with an actual block/slot depth. Finality itself is resolved first by
+  /// [TransactionStatusService]; this best-effort request never gates it.
   Future<TxStatus?> _readConfirmationDepth() async {
     if (_checkingConfirmations) return null;
     final session = TransferSessionScope.maybeOf(context);

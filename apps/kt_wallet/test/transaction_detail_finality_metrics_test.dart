@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chains/chains.dart';
 import 'package:core_crypto/core_crypto.dart';
 import 'package:drift/native.dart';
@@ -40,6 +42,21 @@ class _ConfirmedConfirmationService extends TransactionConfirmationService {
         status: TxStatus.confirmed,
         confirmations: 1,
       );
+}
+
+class _BlockingConfirmationService extends TransactionConfirmationService {
+  _BlockingConfirmationService() : super(endpoints: (_) => 'https://unused');
+
+  final release = Completer<void>();
+
+  @override
+  Future<TransactionConfirmation> check(Chain chain, String hash) async {
+    await release.future;
+    return const TransactionConfirmation(
+      status: TxStatus.confirmed,
+      confirmations: 1,
+    );
+  }
 }
 
 HotWallet _wallet() => HotWallet(
@@ -252,6 +269,87 @@ void main() {
         ),
         hasLength(1),
       );
+    },
+  );
+
+  testWidgets(
+    'gateway finality is not blocked by an unreachable direct RPC depth lookup',
+    (tester) async {
+      final database = WalletDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final store = WalletStore(database);
+      final wallet = _wallet();
+      await store.save(wallet);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await store.upsertTransaction(
+        id: 'gateway-first-result',
+        walletId: _walletId,
+        coin: Coin.eth,
+        networkId: 'eth-mainnet',
+        from: _owner,
+        to: _recipient,
+        amountRaw: '1',
+        hash: _replacementHash,
+        status: TxStatus.pending,
+        signMode: SignMode.local,
+        createdAt: now - 1000,
+        broadcastAt: now - 900,
+        nonce: '9',
+      );
+      final wallets = WalletController(
+        WalletManager(initial: [wallet]),
+        store: store,
+      );
+      addTearDown(wallets.dispose);
+      final session = TransferSession()
+        ..begin(
+          TransferDraft(
+            symbol: 'ETH',
+            networkLabel: 'Ethereum',
+            chain: Chain.ethereum,
+            recipient: _recipient,
+            amount: Amount(raw: BigInt.one, decimals: 18, symbol: 'ETH'),
+            feeTier: 1,
+          ),
+        )
+        ..localTransactionId = 'gateway-first-result'
+        ..broadcastTxHash = _replacementHash;
+      final depth = _BlockingConfirmationService();
+      addTearDown(() {
+        if (!depth.release.isCompleted) depth.release.complete();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: WalletScope(
+            controller: wallets,
+            child: NetworkScope(
+              controller: NetworkController(),
+              child: TransferSessionScope(
+                session: session,
+                child: BroadcastResultScreen(
+                  confirmationService: depth,
+                  statusService: _ConfirmedStatusService(),
+                  pollInterval: const Duration(days: 1),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 20));
+
+      expect(
+        (await wallets.localTransactionById('gateway-first-result'))?.status,
+        TxStatus.confirmed,
+      );
+
+      depth.release.complete();
+      await tester.pumpAndSettle();
     },
   );
 }

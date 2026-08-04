@@ -24,6 +24,8 @@ import 'fiat_math.dart';
 /// - `kt_getPrices` `{symbols}` → `{prices: {SYM: {usd: F}}, cachedAtMs}`
 /// - `kt_getChainParams` `{chain, network?, address}` → decimal nonce +
 ///   3-tier fees
+/// - `kt_getNetworkIdentity` `{chain, network?}` → live chain id / genesis
+///   identity, already checked against the Gateway's reviewed network registry
 /// - `kt_simulateEvmTransfer` `{chain, network?, from, to, value, data}` →
 ///   exact pending-state `eth_call` return bytes
 /// - `kt_estimateEvmGas` `{chain, network?, from, to, value, data}` →
@@ -149,6 +151,8 @@ class GatewayClient {
   };
   static final _evmAddressPattern = RegExp(r'^0x[0-9a-fA-F]{40}$');
   static final _evmTxHashPattern = RegExp(r'^0x[0-9a-fA-F]{64}$');
+  static final _evmChainIdPattern = RegExp(r'^[1-9][0-9]{0,19}$');
+  static final _tronGenesisPattern = RegExp(r'^[0-9a-f]{64}$');
   static final _base58AddressPattern = RegExp(r'^[1-9A-HJ-NP-Za-km-z]+$');
   static final _officialTokenSymbolPattern = RegExp(r'^[A-Z0-9._-]{1,12}$');
   static final _providerDecimalPattern = RegExp(
@@ -514,6 +518,41 @@ class GatewayClient {
         fast: tier('fast'),
       ),
     );
+  }
+
+  /// `kt_getNetworkIdentity` — asks the selected Gateway upstream for its live
+  /// signing-domain identity. The Gateway also binds the answer to its
+  /// reviewed network registry; the App independently compares it with the
+  /// active [Network] before any native key access.
+  Future<String> getNetworkIdentity({required Coin chain}) async {
+    final network = await _networkParam(chain);
+    final expectedNetwork = network ?? _mainnetNetworkId(chain);
+    final result = await _call('kt_getNetworkIdentity', {
+      'chain': chainName(chain),
+      'network': ?network,
+    });
+    if (result is! Map ||
+        !_hasExactStringKeys(result, const {'network', 'identity'}) ||
+        result['network'] != expectedNetwork ||
+        result['identity'] is! String) {
+      throw const FormatException('bad network identity result');
+    }
+    final identity = result['identity'] as String;
+    final valid = switch (chain) {
+      Coin.eth ||
+      Coin.polygon ||
+      Coin.base ||
+      Coin.arbitrum ||
+      Coin.avalanche ||
+      Coin.bnb => _evmChainIdPattern.hasMatch(identity),
+      Coin.tron => _tronGenesisPattern.hasMatch(identity),
+      Coin.solana =>
+        identity.length >= 32 &&
+            identity.length <= 128 &&
+            _base58AddressPattern.hasMatch(identity),
+    };
+    if (!valid) throw const FormatException('invalid network identity');
+    return identity;
   }
 
   /// Exact `eth_call` through the gateway. New transfers use `pending` while

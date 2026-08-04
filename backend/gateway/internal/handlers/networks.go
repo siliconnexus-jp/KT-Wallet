@@ -9,6 +9,7 @@ type networkMeta struct {
 	Chain            string // owning chain family
 	Mainnet          bool   // the family's default network
 	EtherscanChainID int    // Etherscan v2 chainid (EVM networks only)
+	Identity         string // decimal chain id, genesis block id or genesis hash
 }
 
 // networkOrder is the canonical listing order (kt_health, error messages).
@@ -26,22 +27,26 @@ var networkOrder = []string{
 }
 
 var networks = map[string]networkMeta{
-	"eth-mainnet":       {Chain: "eth", Mainnet: true, EtherscanChainID: 1},
-	"eth-sepolia":       {Chain: "eth", EtherscanChainID: 11155111},
-	"polygon-mainnet":   {Chain: "polygon", Mainnet: true, EtherscanChainID: 137},
-	"polygon-amoy":      {Chain: "polygon", EtherscanChainID: 80002},
-	"base-mainnet":      {Chain: "base", Mainnet: true, EtherscanChainID: 8453},
-	"base-sepolia":      {Chain: "base", EtherscanChainID: 84532},
-	"arbitrum-mainnet":  {Chain: "arbitrum", Mainnet: true, EtherscanChainID: 42161},
-	"arbitrum-sepolia":  {Chain: "arbitrum", EtherscanChainID: 421614},
-	"avalanche-mainnet": {Chain: "avalanche", Mainnet: true, EtherscanChainID: 43114},
-	"avalanche-fuji":    {Chain: "avalanche", EtherscanChainID: 43113},
-	"bnb-mainnet":       {Chain: "bnb", Mainnet: true, EtherscanChainID: 56},
-	"bnb-testnet":       {Chain: "bnb", EtherscanChainID: 97},
-	"tron-mainnet":      {Chain: "tron", Mainnet: true},
-	"tron-nile":         {Chain: "tron"},
-	"sol-mainnet":       {Chain: "solana", Mainnet: true},
-	"sol-devnet":        {Chain: "solana"},
+	"eth-mainnet":       {Chain: "eth", Mainnet: true, EtherscanChainID: 1, Identity: "1"},
+	"eth-sepolia":       {Chain: "eth", EtherscanChainID: 11155111, Identity: "11155111"},
+	"polygon-mainnet":   {Chain: "polygon", Mainnet: true, EtherscanChainID: 137, Identity: "137"},
+	"polygon-amoy":      {Chain: "polygon", EtherscanChainID: 80002, Identity: "80002"},
+	"base-mainnet":      {Chain: "base", Mainnet: true, EtherscanChainID: 8453, Identity: "8453"},
+	"base-sepolia":      {Chain: "base", EtherscanChainID: 84532, Identity: "84532"},
+	"arbitrum-mainnet":  {Chain: "arbitrum", Mainnet: true, EtherscanChainID: 42161, Identity: "42161"},
+	"arbitrum-sepolia":  {Chain: "arbitrum", EtherscanChainID: 421614, Identity: "421614"},
+	"avalanche-mainnet": {Chain: "avalanche", Mainnet: true, EtherscanChainID: 43114, Identity: "43114"},
+	"avalanche-fuji":    {Chain: "avalanche", EtherscanChainID: 43113, Identity: "43113"},
+	"bnb-mainnet":       {Chain: "bnb", Mainnet: true, EtherscanChainID: 56, Identity: "56"},
+	"bnb-testnet":       {Chain: "bnb", EtherscanChainID: 97, Identity: "97"},
+	"tron-mainnet": {Chain: "tron", Mainnet: true,
+		Identity: "00000000000000001ebf88508a03865c71d452e25f4d51194196a1d22b6653dc"},
+	"tron-nile": {Chain: "tron",
+		Identity: "0000000000000000d698d4192c56cb6be724a558448e2684802de4d6cd8690dc"},
+	"sol-mainnet": {Chain: "solana", Mainnet: true,
+		Identity: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d"},
+	"sol-devnet": {Chain: "solana",
+		Identity: "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG"},
 }
 
 // mainnetOf maps a chain family to its default network id.

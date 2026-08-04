@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:chains/chains.dart';
@@ -6,6 +7,9 @@ import 'package:core_crypto/core_crypto.dart'
     show ChainAddresses, Coin, CoreCrypto, SignedTransaction;
 import 'package:core_crypto/testing.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:kt_wallet/src/market/gateway_client.dart';
 import 'package:kt_wallet/src/transfer/broadcast_service.dart';
 import 'package:kt_wallet/src/transfer/local_transfer_service.dart';
 import 'package:kt_wallet/src/transfer/network_identity.dart';
@@ -42,6 +46,24 @@ class _RestTransport implements RestTransport {
     return {'blockID': blockId};
   }
 }
+
+GatewayClient _identityGateway(String identity) => GatewayClient(
+  baseUrl: 'https://gateway.invalid',
+  networks: (_) => 'eth-mainnet',
+  advertisedNetworks: const {'eth-mainnet'},
+  client: MockClient((request) async {
+    final body = jsonDecode(request.body) as Map<String, Object?>;
+    expect(body['method'], 'kt_getNetworkIdentity');
+    return http.Response(
+      jsonEncode({
+        'jsonrpc': '2.0',
+        'id': body['id'],
+        'result': {'network': 'eth-mainnet', 'identity': identity},
+      }),
+      200,
+    );
+  }),
+);
 
 class _TronTransferRest implements RestTransport {
   _TronTransferRest({
@@ -216,6 +238,105 @@ void main() {
     );
     expect(json.methods, ['eth_chainId']);
   });
+
+  test('Gateway identity avoids a device-to-public-RPC request', () async {
+    final direct = _JsonTransport(const {});
+    final gateway = _identityGateway('1');
+    addTearDown(gateway.close);
+    final verifier = RpcNetworkIdentityVerifier(
+      jsonRpcTransport: direct,
+      endpoints: (_) => 'https://blocked-public-rpc.invalid',
+      gateway: () => gateway,
+    );
+
+    await verifier.verifyEvm(Chain.ethereum, 1);
+    expect(direct.methods, isEmpty);
+  });
+
+  test(
+    'Gateway identity mismatch fails closed without direct override',
+    () async {
+      final direct = _JsonTransport({'eth_chainId': '0x1'});
+      final gateway = _identityGateway('2');
+      addTearDown(gateway.close);
+      final verifier = RpcNetworkIdentityVerifier(
+        jsonRpcTransport: direct,
+        endpoints: (_) => 'https://rpc.invalid',
+        gateway: () => gateway,
+      );
+
+      await expectLater(
+        verifier.verifyEvm(Chain.ethereum, 1),
+        throwsA(
+          isA<NetworkIdentityException>()
+              .having((e) => e.expected, 'expected', '1')
+              .having((e) => e.actual, 'actual', '2'),
+        ),
+      );
+      expect(direct.methods, isEmpty);
+    },
+  );
+
+  test(
+    'unavailable Gateway identity safely falls back to direct RPC',
+    () async {
+      final direct = _JsonTransport({'eth_chainId': '0x1'});
+      final gateway = GatewayClient(
+        baseUrl: 'https://gateway.invalid',
+        networks: (_) => 'eth-mainnet',
+        advertisedNetworks: const {'eth-mainnet'},
+        client: MockClient((_) async => http.Response('unavailable', 503)),
+      );
+      addTearDown(gateway.close);
+      final verifier = RpcNetworkIdentityVerifier(
+        jsonRpcTransport: direct,
+        endpoints: (_) => 'https://rpc.invalid',
+        gateway: () => gateway,
+      );
+
+      await verifier.verifyEvm(Chain.ethereum, 1);
+      expect(direct.methods, ['eth_chainId']);
+    },
+  );
+
+  test(
+    'malformed Gateway identity fails closed without direct override',
+    () async {
+      final direct = _JsonTransport({'eth_chainId': '0x1'});
+      final gateway = GatewayClient(
+        baseUrl: 'https://gateway.invalid',
+        networks: (_) => 'eth-mainnet',
+        advertisedNetworks: const {'eth-mainnet'},
+        client: MockClient((request) async {
+          final body = jsonDecode(request.body) as Map<String, Object?>;
+          return http.Response(
+            jsonEncode({
+              'jsonrpc': '2.0',
+              'id': body['id'],
+              'result': {
+                'network': 'eth-mainnet',
+                'identity': '1',
+                'unreviewed': true,
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      addTearDown(gateway.close);
+      final verifier = RpcNetworkIdentityVerifier(
+        jsonRpcTransport: direct,
+        endpoints: (_) => 'https://rpc.invalid',
+        gateway: () => gateway,
+      );
+
+      await expectLater(
+        verifier.verifyEvm(Chain.ethereum, 1),
+        throwsA(isA<FormatException>()),
+      );
+      expect(direct.methods, isEmpty);
+    },
+  );
 
   test('Solana genesis hash is pinned', () async {
     final json = _JsonTransport({'getGenesisHash': solanaGenesis});

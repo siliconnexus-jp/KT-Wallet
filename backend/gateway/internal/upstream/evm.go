@@ -70,6 +70,18 @@ func (e *EVM) quantity(ctx context.Context, method string, params ...any) (*big.
 	return parseQuantity(raw)
 }
 
+// ChainID returns the live eth_chainId as a canonical decimal string.
+func (e *EVM) ChainID(ctx context.Context) (string, error) {
+	id, err := e.quantity(ctx, "eth_chainId")
+	if err != nil {
+		return "", err
+	}
+	if id.Sign() <= 0 {
+		return "", &Unavailable{Upstream: e.pool.name, Message: "invalid eth_chainId"}
+	}
+	return id.String(), nil
+}
+
 // GetBalance returns the native balance in wei.
 func (e *EVM) GetBalance(ctx context.Context, address string) (*big.Int, error) {
 	return e.GetBalanceAt(ctx, address, "latest")

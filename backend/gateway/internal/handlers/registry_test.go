@@ -7,6 +7,9 @@ import "testing"
 func TestEveryNetworkHasAnUpstreamPool(t *testing.T) {
 	g := New(Config{})
 	for id, meta := range networks {
+		if meta.Identity == "" {
+			t.Errorf("network %q has no pinned live identity", id)
+		}
 		chain, ok := chains[meta.Chain]
 		if !ok {
 			t.Fatalf("network %q belongs to unknown chain family %q", id, meta.Chain)

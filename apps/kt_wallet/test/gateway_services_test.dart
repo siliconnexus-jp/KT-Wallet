@@ -157,6 +157,59 @@ Map<String, Object?> _zeroNative(Coin coin, {List<Object?>? tokens}) {
 }
 
 void main() {
+  group('Gateway network identity', () {
+    test('parses exact EVM, TRON and Solana mainnet identities', () async {
+      const tronGenesis =
+          '00000000000000001ebf88508a03865c71d452e25f4d51194196a1d22b6653dc';
+      const solanaGenesis = '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d';
+      final gateway = _FakeGateway(
+        results: {
+          'kt_getNetworkIdentity': [
+            {'network': 'eth-mainnet', 'identity': '1'},
+            {'network': 'tron-mainnet', 'identity': tronGenesis},
+            {'network': 'sol-mainnet', 'identity': solanaGenesis},
+          ],
+        },
+      );
+
+      expect(await gateway.client.getNetworkIdentity(chain: Coin.eth), '1');
+      expect(
+        await gateway.client.getNetworkIdentity(chain: Coin.tron),
+        tronGenesis,
+      );
+      expect(
+        await gateway.client.getNetworkIdentity(chain: Coin.solana),
+        solanaGenesis,
+      );
+    });
+
+    test('rejects network mismatch and additive response fields', () async {
+      final wrongNetwork = _FakeGateway(
+        results: {
+          'kt_getNetworkIdentity': {'network': 'eth-sepolia', 'identity': '1'},
+        },
+      );
+      await expectLater(
+        wrongNetwork.client.getNetworkIdentity(chain: Coin.eth),
+        throwsA(isA<FormatException>()),
+      );
+
+      final extraField = _FakeGateway(
+        results: {
+          'kt_getNetworkIdentity': {
+            'network': 'eth-mainnet',
+            'identity': '1',
+            'trusted': true,
+          },
+        },
+      );
+      await expectLater(
+        extraField.client.getNetworkIdentity(chain: Coin.eth),
+        throwsA(isA<FormatException>()),
+      );
+    });
+  });
+
   group('BalanceService gateway mode', () {
     test('one kt_getBalances per chain, direct transports untouched', () async {
       final gateway = _FakeGateway(

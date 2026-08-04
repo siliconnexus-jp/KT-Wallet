@@ -286,13 +286,14 @@ GatewayConfig{
 ''';
     const backendReadme = '{"result":{"version":"1.2.3"}}';
     const rootReadme = '''
-| KT Gateway | `1.2.3` | Production service |
-Gateway `1.2.3` currently exposes 16 mainnet/testnet network profiles.
+| KT Gateway | `1.2.2` | Production service at `https://gateway.example` |
+Gateway source version: `1.2.3`
+Gateway `1.2.2` currently exposes 16 mainnet/testnet network profiles.
 ''';
-    const readinessPlan = '生产 1.2.3 的公开 Ethereum 历史只读 smoke 返回 5 条且 5/5 ok。';
+    const readinessPlan = '当前 Gateway 源码版本 1.2.3；当前生产 Gateway 1.2.2。';
     const report = '''
-<span>Gateway 1.2.3 生产发布</span>
-<strong>Gateway 发布状态 · 1.2.3 已上线</strong>
+<span>Gateway 源码版本 · 1.2.3</span>
+<strong>Gateway 发布状态 · 1.2.2 已上线</strong>
 ''';
 
     test('accepts one source version and exact current public markers', () {
@@ -308,30 +309,52 @@ Gateway `1.2.3` currently exposes 16 mainnet/testnet network profiles.
       );
     });
 
-    test('rejects stale current markers even if history mentions the version', () {
-      final issues = findGatewayReleaseVersionIssues(
-        gatewaySource: source,
-        backendReadme:
-            '${backendReadme.replaceAll('1.2.3', '1.2.2')}\nHistorical 1.2.3 notes.',
-        rootReadme:
-            '${rootReadme.replaceAll('1.2.3', '1.2.2')}\nHistorical 1.2.3 notes.',
-        readinessPlan:
-            '${readinessPlan.replaceAll('1.2.3', '1.2.2')}\nHistorical 1.2.3 notes.',
-        htmlReport:
-            '${report.replaceAll('1.2.3', '1.2.2')}\nHistorical Gateway 1.2.3.',
-      );
+    test(
+      'rejects stale current markers even if history mentions the version',
+      () {
+        final issues = findGatewayReleaseVersionIssues(
+          gatewaySource: source,
+          backendReadme:
+              '${backendReadme.replaceAll('1.2.3', '1.2.2')}\nHistorical 1.2.3 notes.',
+          rootReadme: rootReadme
+              .replaceFirst(
+                'Gateway source version: `1.2.3`',
+                'Gateway source version: `1.2.1`',
+              )
+              .replaceFirst(
+                'Gateway `1.2.2` currently exposes',
+                'Gateway `1.2.1` currently exposes',
+              ),
+          readinessPlan: readinessPlan
+              .replaceFirst('源码版本 1.2.3', '源码版本 1.2.1')
+              .replaceFirst('生产 Gateway 1.2.2', '生产 Gateway 1.2.1'),
+          htmlReport: report
+              .replaceFirst('源码版本 · 1.2.3', '源码版本 · 1.2.1')
+              .replaceFirst('发布状态 · 1.2.2', '发布状态 · 1.2.1'),
+        );
 
-      expect(issues, contains('backend README health example is not 1.2.3'));
-      expect(issues, contains('root README status table is not 1.2.3'));
-      expect(issues, contains('root README reliability section is not 1.2.3'));
-      expect(
-        issues,
-        contains('P0/P1 readiness plan production evidence is not 1.2.3'),
-      );
-      expect(issues, contains('HTML report release badge is not 1.2.3'));
-      expect(issues, contains('HTML report deployed section is not 1.2.3'));
-      expect(issues, hasLength(6));
-    });
+        expect(
+          issues,
+          contains('backend README health example is not source 1.2.3'),
+        );
+        expect(issues, contains('root README source marker is not 1.2.3'));
+        expect(
+          issues,
+          contains('root README reliability section is not production 1.2.2'),
+        );
+        expect(
+          issues,
+          contains('P0/P1 readiness plan source marker is not 1.2.3'),
+        );
+        expect(
+          issues,
+          contains('P0/P1 readiness plan production marker is not 1.2.2'),
+        );
+        expect(issues, contains('HTML report source marker is not 1.2.3'));
+        expect(issues, contains('HTML report deployed section is not 1.2.2'));
+        expect(issues, hasLength(7));
+      },
+    );
 
     test('rejects missing or ambiguous source versions', () {
       expect(
@@ -483,6 +506,45 @@ await broadcaster.broadcast(chain, signedTx);
         );
       },
     );
+  });
+
+  group('Gateway-first transaction finality', () {
+    test(
+      'accepts status-first finality with non-blocking depth enrichment',
+      () {
+        const source = '''
+final chainStatus = await _statusService?.check(tx);
+await persist(chainStatus);
+unawaited(_readConfirmationDepth());
+''';
+        expect(findGatewayFirstFinalityIssues(source), isEmpty);
+      },
+    );
+
+    test('rejects the old direct-RPC-first blocking order', () {
+      const source = '''
+final directStatus = await _readConfirmationDepth();
+final chainStatus = await _statusService?.check(tx);
+''';
+      expect(
+        findGatewayFirstFinalityIssues(source),
+        containsAll(<String>[
+          'confirmation depth is not a non-blocking enrichment',
+          'direct confirmation depth blocks finality persistence',
+        ]),
+      );
+    });
+
+    test('rejects non-blocking depth when it starts before status', () {
+      const source = '''
+unawaited(_readConfirmationDepth());
+final chainStatus = await _statusService?.check(tx);
+''';
+      expect(
+        findGatewayFirstFinalityIssues(source),
+        contains('confirmation depth starts before Gateway-first finality'),
+      );
+    });
   });
 
   group('host funding CLI boundary', () {

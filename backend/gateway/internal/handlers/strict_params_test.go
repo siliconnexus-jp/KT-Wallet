@@ -70,6 +70,11 @@ func TestParameterizedPublicMethodsRejectNonCanonicalJSON(t *testing.T) {
 			params: `{"chain":"eth","network":"eth-mainnet","Hash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`,
 		},
 		{
+			name:   "network identity unknown field",
+			method: "kt_getNetworkIdentity",
+			params: `{"chain":"eth","network":"eth-mainnet","unexpected":true}`,
+		},
+		{
 			name:   "token search unknown field",
 			method: "kt_searchTokens",
 			params: `{"query":"USDT","unexpected":true}`,

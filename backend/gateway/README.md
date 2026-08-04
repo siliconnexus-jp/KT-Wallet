@@ -40,7 +40,7 @@ curl -s localhost:8080/rpc -d '{"jsonrpc":"2.0","id":1,"method":"kt_health"}'
 curl -s localhost:8080/healthz
 curl -s localhost:8080/readyz
 curl -s -H "Authorization: Bearer $METRICS_BEARER_TOKEN" localhost:8080/metrics
-# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.16"}}
+# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.17"}}
 ```
 
 ## Environment
@@ -255,7 +255,7 @@ from accepting `result` plus `Result`, duplicate ids ending in the expected
 value, or provider-specific unknown fields as authoritative balance, fee,
 status or broadcast results.
 
-All fourteen public methods that accept parameters use an exact, recursive
+All fifteen public methods that accept parameters use an exact, recursive
 request schema. Parameter field names are case-sensitive; unknown fields,
 exact duplicate keys and aliases such as `Hash` for `hash` are rejected with
 `-32602` before cache lookup or an upstream request. The rule also applies to
@@ -382,6 +382,22 @@ bounded before entering cache or JSON-RPC output. The Gateway never
 signs or broadcasts revocations: the App constructs the exact token-contract
 call `approve(spender, 0)`, authenticates/signs it locally or through KT Cold
 Signer, verifies the signed bytes and broadcasts via the normal transaction
+path.
+
+### `kt_getNetworkIdentity` `{"chain": C, "network": N?}`
+
+Returns the selected network's live canonical identity as the exact object
+`{"network":"<network-id>","identity":"<identity>"}`. The Gateway reads
+`eth_chainId` for EVM networks, block zero for TRON, or `getGenesisHash` for
+Solana, then compares that value with the reviewed identity pinned in its
+network registry. A wrong upstream route therefore fails as a fixed upstream
+error instead of being presented to the App as the requested network.
+
+The method does not accept wallet addresses, transaction identifiers, API
+keys, or signed payloads, and its response is not cached. EVM identities are
+positive decimal chain ids, TRON identities are lowercase 32-byte block ids,
+and Solana identities are bounded Base58 genesis hashes. Custom networks are
+not advertised by `kt_health` and remain the App's direct, user-authoritative
 path.
 
 ### `kt_health` ()
