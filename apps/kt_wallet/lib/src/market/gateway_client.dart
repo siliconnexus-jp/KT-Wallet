@@ -1160,12 +1160,21 @@ class GatewayClient {
     if (limit < 1 || limit > 100) {
       throw RangeError.range(limit, 1, 100, 'limit');
     }
+    final normalizedQuery = query.trim();
+    if (!_isBoundedDisplayText(normalizedQuery, 128)) {
+      throw ArgumentError.value(query, 'query', 'unsafe or too long');
+    }
     final requestedNetworks = networks.toSet();
     if (requestedNetworks.length != networks.length) {
       throw const FormatException('duplicate token search network');
     }
+    for (final network in requestedNetworks) {
+      if (_officialTokenNetworkCoin(network) == null) {
+        throw ArgumentError.value(network, 'networks', 'unsupported network');
+      }
+    }
     final result = await _call('kt_searchTokens', {
-      'query': query,
+      'query': normalizedQuery,
       if (networks.isNotEmpty) 'networks': networks,
       'limit': limit,
     });
@@ -1214,7 +1223,7 @@ class GatewayClient {
           decimals > Amount.maxDecimals ||
           !_officialTokenMatchesQuery(
             chain: chain,
-            query: query,
+            query: normalizedQuery,
             symbol: symbol,
             name: name,
             contract: contract,
@@ -1653,7 +1662,7 @@ class GatewayClient {
     if (value != value.trim() || value.runes.length > maxRunes) return false;
     for (final rune in value.runes) {
       if (rune < 0x20 ||
-          rune == 0x7f ||
+          (rune >= 0x7f && rune <= 0x9f) ||
           (rune >= 0x200b && rune <= 0x200f) ||
           (rune >= 0x202a && rune <= 0x202e) ||
           (rune >= 0x2060 && rune <= 0x2069) ||

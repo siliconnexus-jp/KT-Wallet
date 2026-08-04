@@ -1375,7 +1375,7 @@ void main() {
       );
 
       final rows = await gateway.client.searchOfficialTokens(
-        query: 'usdt',
+        query: '  usdt  ',
         networks: const ['eth-mainnet'],
       );
       expect(rows, hasLength(1));
@@ -1390,6 +1390,28 @@ void main() {
         'networks': ['eth-mainnet'],
         'limit': 50,
       });
+    });
+
+    test('search rejects unsafe input before the network boundary', () async {
+      for (final query in <String>[
+        List.filled(129, 'a').join(),
+        'usd\u202eT',
+        'usd\u0000t',
+      ]) {
+        final gateway = _FakeGateway();
+        await expectLater(
+          gateway.client.searchOfficialTokens(query: query),
+          throwsArgumentError,
+        );
+        expect(gateway.calls, isEmpty);
+      }
+
+      final gateway = _FakeGateway();
+      await expectLater(
+        gateway.client.searchOfficialTokens(networks: const ['not-a-network']),
+        throwsArgumentError,
+      );
+      expect(gateway.calls, isEmpty);
     });
 
     for (final (label, result) in <(String, Map<String, Object?>)>[

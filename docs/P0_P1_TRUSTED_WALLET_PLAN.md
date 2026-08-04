@@ -2,7 +2,7 @@
 
 更新日期：2026-08-05
 
-当前 Gateway 源码版本 1.16.26；当前生产 Gateway 1.16.26。生产 Gateway-first 链身份、
+当前 Gateway 源码版本 1.16.27；当前生产 Gateway 1.16.26。生产 Gateway-first 链身份、
 TRON/Solana/EVM 余额与 Portfolio 身份、Solana 交易终态、EVM 动态手续费及签名前预执行回包严格解析均已启用。
 
 ## 目标与边界
@@ -2328,3 +2328,15 @@ KT Cold Signer 570/570、共享 packages 438/438、静态分析 0、Gateway audi
 全部 approvedAt 位于新边界内；未使用用户地址、未加载钱包/私钥且未广播。Gateway 服务端和
 正常视觉 UI 均未变化，无需部署后端，也没有适用的 UI 截图；移动修复须随下一版签名制品
 发布。
+
+同日继续闭合官方 Token 搜索输入和运营目录文本。旧 App 会把未去空格、超长或含控制/Bidi
+字符的 query 直接发往 Gateway，也不在出网前拒绝未知 network；旧 Gateway 同样接受这些
+query，并把重复 network 静默合并。运营目录的 Token 名称还按 UTF-8 byte 长度检查且允许
+不可见方向控制符。失败优先用例先复现原始 query 出网、未知网络出网、服务端四类非法 filter
+成功，以及恶意目录名称成功加载。修复后 App 与 Gateway 共同采用 128-rune 可见文本边界，
+App 先 trim、限制输入并在出网前拒绝未知网络；Gateway 拒绝重复网络，目录名称按 80 rune
+校验并拒绝控制、零宽和 Bidi 字符。静态门禁锁定双端契约。官方 Token 定向 9/9、目录 UI
+1/1、KT Wallet 1658/1658（另有 11 项显式线上/设备测试默认跳过）、KT Cold Signer
+570/570、共享 packages 438/438、静态分析 0、Gateway 普通/race/vet/govulncheck/运维守卫
+及完整门禁 13/13 通过。Gateway 源码候选为 1.16.27，生产发布和公网复核完成前仍明确保留
+1.16.26 状态；本项没有可见设计变化，不使用无关截图冒充协议证据。

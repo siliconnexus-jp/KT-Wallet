@@ -1098,6 +1098,12 @@ void main() {
   final gatewayClientSource = gatewayClient.existsSync()
       ? gatewayClient.readAsStringSync()
       : '';
+  final officialTokensHandler = File(
+    'backend/gateway/internal/handlers/official_tokens.go',
+  );
+  final officialTokensHandlerSource = officialTokensHandler.existsSync()
+      ? officialTokensHandler.readAsStringSync()
+      : '';
   for (final marker in const [
     'TransactionNetworkEndpointResolver',
     'final persistedNetwork = transaction.networkId',
@@ -1184,6 +1190,32 @@ void main() {
       failures.add(
         '${gatewayClient.path} does not independently bound approval '
         'evidence time: $approvalEvidenceBoundary',
+      );
+    }
+  }
+  for (final tokenSearchBoundary in const [
+    'final normalizedQuery = query.trim()',
+    '_isBoundedDisplayText(normalizedQuery, 128)',
+    '_officialTokenNetworkCoin(network) == null',
+    "'query': normalizedQuery",
+  ]) {
+    if (!gatewayClientSource.contains(tokenSearchBoundary)) {
+      failures.add(
+        '${gatewayClient.path} does not bound official-token search input: '
+        '$tokenSearchBoundary',
+      );
+    }
+  }
+  for (final tokenSearchBoundary in const [
+    'maxTokenSearchQueryRunes',
+    'isSafeBoundedDisplayText(query, maxTokenSearchQueryRunes, true)',
+    'duplicate "networks" value',
+    'isSafeBoundedDisplayText(token.Name, maxOfficialTokenNameRunes, false)',
+  ]) {
+    if (!officialTokensHandlerSource.contains(tokenSearchBoundary)) {
+      failures.add(
+        '${officialTokensHandler.path} does not bound official-token search '
+        'or catalog text: $tokenSearchBoundary',
       );
     }
   }

@@ -1,8 +1,10 @@
 package handlers_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"ktwallet/gateway/internal/handlers"
@@ -133,6 +135,29 @@ func TestLoadOfficialTokensFileRejectsCaseInsensitiveFieldAlias(t *testing.T) {
 	}
 }
 
+func TestLoadOfficialTokensFileRejectsUnsafeOrOversizedName(t *testing.T) {
+	for _, name := range []string{
+		"USD\u202e Token",
+		"USD\x00 Token",
+		strings.Repeat("界", 81),
+	} {
+		path := filepath.Join(t.TempDir(), "official-tokens.json")
+		body, err := json.Marshal([]map[string]any{{
+			"network": "eth-mainnet", "symbol": "TEST", "name": name,
+			"contract": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "decimals": 6,
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, body, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := handlers.LoadOfficialTokensFile(path); err == nil {
+			t.Fatalf("unsafe or oversized name %q must fail closed", name)
+		}
+	}
+}
+
 func TestCheckedInOfficialTokenCatalogLoads(t *testing.T) {
 	tokens, err := handlers.LoadOfficialTokensFile(
 		filepath.Join("..", "..", "config", "official-tokens.json"),
@@ -188,6 +213,18 @@ func TestSearchOfficialTokensValidatesFilters(t *testing.T) {
 		e.rpc("kt_searchTokens", `{"limit":101}`),
 		rpc.CodeInvalidParams,
 	)
+	for _, params := range []any{
+		map[string]any{"networks": []string{"eth-mainnet", "eth-mainnet"}},
+		map[string]any{"query": strings.Repeat("a", 129)},
+		map[string]any{"query": "usd\u202eT"},
+		map[string]any{"query": "usd\x00t"},
+	} {
+		assertErrCode(
+			t,
+			e.rpc("kt_searchTokens", params),
+			rpc.CodeInvalidParams,
+		)
+	}
 }
 
 func TestSearchOfficialTokensKeepsBase58ContractQueriesCaseSensitive(t *testing.T) {

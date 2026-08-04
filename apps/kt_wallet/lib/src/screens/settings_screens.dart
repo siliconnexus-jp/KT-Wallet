@@ -1298,6 +1298,7 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
           child: TextField(
             controller: _searchController,
             onChanged: _onSearchChanged,
+            maxLength: 128,
             textInputAction: TextInputAction.search,
             autocorrect: false,
             enableSuggestions: false,
@@ -1306,6 +1307,7 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(vertical: 14),
               border: InputBorder.none,
+              counterText: '',
               hintText: l10n.searchTokenHint,
               hintStyle: const TextStyle(
                 fontSize: 14,

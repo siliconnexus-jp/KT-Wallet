@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"ktwallet/gateway/internal/rpc"
 )
@@ -17,8 +18,10 @@ import (
 var base58TokenAddressRe = regexp.MustCompile(`^[1-9A-HJ-NP-Za-km-z]+$`)
 
 const (
-	defaultTokenSearchLimit = 50
-	maxTokenSearchLimit     = 100
+	defaultTokenSearchLimit   = 50
+	maxTokenSearchLimit       = 100
+	maxTokenSearchQueryRunes  = 128
+	maxOfficialTokenNameRunes = 80
 )
 
 // OfficialToken is one contract/mint identity trusted by the KT Wallet
@@ -140,7 +143,7 @@ func normalizeOfficialTokens(tokens []OfficialToken) ([]OfficialToken, error) {
 				return nil, fmt.Errorf("token %d: invalid symbol %q", i, token.Symbol)
 			}
 		}
-		if token.Name == "" || len(token.Name) > 80 {
+		if !isSafeBoundedDisplayText(token.Name, maxOfficialTokenNameRunes, false) {
 			return nil, fmt.Errorf("token %d: invalid name", i)
 		}
 		if err := validateAddress(meta.Chain, token.Contract); err != nil {
@@ -216,10 +219,20 @@ func (g *Gateway) SearchOfficialTokens(_ context.Context, params json.RawMessage
 		if _, ok := networks[network]; !ok {
 			return nil, rpc.Errorf(rpc.CodeInvalidParams, `unknown "networks" value %q`, network)
 		}
+		if networkFilter[network] {
+			return nil, rpc.Errorf(rpc.CodeInvalidParams, `duplicate "networks" value %q`, network)
+		}
 		networkFilter[network] = true
 	}
 
 	query := strings.TrimSpace(p.Query)
+	if !isSafeBoundedDisplayText(query, maxTokenSearchQueryRunes, true) {
+		return nil, rpc.Errorf(
+			rpc.CodeInvalidParams,
+			`"query" must be at most %d visible characters`,
+			maxTokenSearchQueryRunes,
+		)
+	}
 	type rankedToken struct {
 		token OfficialToken
 		rank  int
@@ -255,6 +268,25 @@ func (g *Gateway) SearchOfficialTokens(_ context.Context, params json.RawMessage
 		}
 	}
 	return map[string]any{"tokens": result}, nil
+}
+
+func isSafeBoundedDisplayText(value string, maxRunes int, allowEmpty bool) bool {
+	if !utf8.ValidString(value) || utf8.RuneCountInString(value) > maxRunes {
+		return false
+	}
+	if value == "" {
+		return allowEmpty
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) ||
+			(r >= 0x200b && r <= 0x200f) ||
+			(r >= 0x202a && r <= 0x202e) ||
+			(r >= 0x2060 && r <= 0x2069) ||
+			r == 0xfeff {
+			return false
+		}
+	}
+	return true
 }
 
 func tokenSearchRank(token OfficialToken, query string) int {
