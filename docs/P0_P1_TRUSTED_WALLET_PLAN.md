@@ -1226,6 +1226,15 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
 - [x] App 内同 URL/JSON-RPC 读请求合并；只有显式只读/模拟 allowlist 允许 endpoint
   failover。未知 JSON-RPC 方法与未知 TRON POST 路径默认单端点、单次提交，避免未来
   新增写方法在未分类时被重复发送；广播方法明确不合并、不自动重试。
+- [x] 移动端 Gateway 响应在进入 JSON-RPC envelope 校验前使用 duplicate-safe 解码：
+  递归拒绝同层重复成员及 Unicode 转义后的等价名称，因此两份 `result`、两份 `id`
+  或嵌套重复 `error.code` 不会被 Dart 标准解码器静默采用最后值；随后仍要求响应版本、
+  id 类型和值、`result/error` 二选一及闭合错误结构全部与请求绑定。四类攻击向量先在旧
+  实现复现为错误接受，再修复为 `GatewayTransportException`；静态门禁同时禁止
+  `GatewayClient` 退回 `jsonDecode(resp.body)`。生产 Gateway 只读健康测试通过新边界
+  1/1，未发送地址、密钥或交易。该项只证明公共 envelope 唯一性；余额、Portfolio、
+  价格、费用、历史、状态及广播等 method-specific `result` 仍须按各自任务继续完成
+  闭合 schema 复核，不能据此宣称全部 Gateway 业务回包都已严格解码。
 - [x] EVM `eth_chainId`、Solana genesis hash、TRON block-0 identity 在 RPC
   配置探测和交易构造前双重校验，错误网络在读取 nonce/费用及签名前失败闭合。
 - [x] 预签网络身份改为 Gateway-first：Gateway 1.16.17 新增
@@ -1993,5 +2002,17 @@ internal trace 可同时保留 TRX 与 TRC-10，确定性事件 ID 防止误去�
 未知/重复字段、错账户、超 limit、无效金融值或歧义分页时整次失败闭合，不把部分数据伪装
 成完整历史。失败优先与回归共 History 49/49、相关 Gateway service 36/36 通过；公开 TRON
 主网账户的三路真实只读测试 1/1 通过，没有加载私钥、签名或广播。最终 KT Wallet
-1592/1592、KT Cold Signer 570/570、共享 packages 429/429、静态分析 0、完整公开门禁
+1594/1594（另有 6 项显式 opt-in 线上/设备测试默认跳过）、KT Cold Signer 570/570、
+共享 packages 429/429、静态分析 0、完整公开门禁
 13/13；Gateway 仍为 1.16.20 且本轮无后端源码变化，移动端修复须随下一版 App 构建发布。
+
+同日继续闭合移动端 Gateway 公共响应 envelope。旧实现直接调用 Dart `jsonDecode`，会在
+校验 JSON-RPC 字段前把同层重复键静默折叠为最后值，因此伪造的第二份 `result`、转义
+等价 `re\u0073ult`、先错后对的重复 `id` 与重复 `error.code` 都可能穿过既有闭合字段
+检查。四个失败优先向量在旧实现中实际返回价格结果，修复后统一在解码阶段拒绝；
+`check_deps` 固定 duplicate-safe 调用并禁止原始 response decoder 回归。Gateway Client
+与 envelope ownership 定向 34/34、生产 Gateway 只读 smoke 1/1、KT Wallet
+1594/1594、KT Cold Signer 570/570、共享 packages 429/429、静态分析 0、完整公开门禁
+13/13 通过。Gateway 后端没有变化，线上 1.16.20 保持健康；App 修复仍须随下一版移动端
+制品发布。本轮没有视觉 UI 变化，因此没有用模拟器截图替代协议攻击向量和真实 HTTP
+回包证据；method-specific result schema 的剩余差异继续保留为后续 P1 工作，不扩大宣称。

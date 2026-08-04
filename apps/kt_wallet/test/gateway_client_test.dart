@@ -165,6 +165,44 @@ void main() {
         throwsA(isA<GatewayTransportException>()),
       );
     });
+
+    test(
+      'duplicate JSON members are rejected before envelope binding',
+      () async {
+        final responses = <String Function(int)>[
+          (id) =>
+              '{"jsonrpc":"2.0","id":$id,'
+              '"result":{"prices":{"ETH":{"usd":1}}},'
+              '"result":{"prices":{"ETH":{"usd":2}}}}',
+          (id) =>
+              '{"jsonrpc":"2.0","id":$id,'
+              '"result":{"prices":{"ETH":{"usd":1}}},'
+              r'"re\u0073ult":{"prices":{"ETH":{"usd":2}}}}',
+          (id) =>
+              '{"jsonrpc":"2.0","id":${id + 1},"id":$id,'
+              '"result":{"prices":{"ETH":{"usd":1}}}}',
+          (id) =>
+              '{"jsonrpc":"2.0","id":$id,"error":{'
+              '"code":-32000,"code":-32003,'
+              '"message":"submission_unknown"}}',
+        ];
+
+        for (final rawResponse in responses) {
+          final client = GatewayClient(
+            baseUrl: 'https://gw.example',
+            client: MockClient((request) async {
+              final body = jsonDecode(request.body) as Map<String, Object?>;
+              return http.Response(rawResponse(body['id']! as int), 200);
+            }),
+          );
+
+          await expectLater(
+            client.getPrices(const ['ETH']),
+            throwsA(isA<GatewayTransportException>()),
+          );
+        }
+      },
+    );
   });
 
   group('kt_getBalances', () {

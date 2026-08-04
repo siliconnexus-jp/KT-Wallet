@@ -1094,12 +1094,19 @@ void main() {
     'String? networkOverride',
     'final id = networkOverride ?? _networks(chain)',
     'networkOverride: network',
+    'decodeJsonWithoutDuplicateKeys(resp.body)',
   ]) {
     if (!gatewayClientSource.contains(marker)) {
       failures.add(
         '${gatewayClient.path} cannot override active network for transaction status: $marker',
       );
     }
+  }
+  if (gatewayClientSource.contains('jsonDecode(resp.body)')) {
+    failures.add(
+      '${gatewayClient.path} decodes an untrusted gateway response without '
+      'duplicate-member rejection',
+    );
   }
   for (final path in const [
     'apps/kt_wallet/lib/src/market/history_scope_host.dart',

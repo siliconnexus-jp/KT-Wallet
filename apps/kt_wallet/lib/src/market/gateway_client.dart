@@ -206,7 +206,7 @@ class GatewayClient {
     }
     final Object? decoded;
     try {
-      decoded = jsonDecode(resp.body);
+      decoded = decodeJsonWithoutDuplicateKeys(resp.body);
     } on Object {
       // FormatException.toString() may include a snippet of the response.
       throw const GatewayTransportException('invalid gateway response');
