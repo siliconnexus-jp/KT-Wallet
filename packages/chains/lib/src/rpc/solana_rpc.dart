@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../base58.dart';
+import '../solana_tx.dart' show solanaToken2022Program, solanaTokenProgram;
 import 'transport.dart';
 
 /// Solana JSON-RPC client (detailed-design.md §4.3).
@@ -33,16 +34,26 @@ class SolanaRpc {
 
   /// Lamport balance.
   Future<BigInt> getBalance(String address) async {
-    final result = await _call('getBalance', [address]);
-    if (result is! Map || result['value'] is! int) {
-      throw RpcException('bad getBalance');
-    }
-    return BigInt.from(result['value'] as int);
+    _solanaPublicKey(address, 'balance account');
+    final result = await _call('getBalance', [
+      address,
+      {'commitment': 'confirmed'},
+    ]);
+    final envelope = _solanaValueEnvelope(result, 'balance');
+    return BigInt.from(_u64(envelope['value'], 'balance'));
   }
 
   /// Sum of all SPL token accounts owned by [owner] for [mint].
-  Future<BigInt> getTokenBalance(String owner, String mint) async {
-    final accounts = await getTokenAccounts(owner, mint);
+  Future<BigInt> getTokenBalance(
+    String owner,
+    String mint, {
+    int? expectedDecimals,
+  }) async {
+    final accounts = await getTokenAccounts(
+      owner,
+      mint,
+      expectedDecimals: expectedDecimals,
+    );
     var total = BigInt.zero;
     for (final account in accounts) {
       total += account.amount;
@@ -53,30 +64,50 @@ class SolanaRpc {
   /// Parsed SPL token accounts owned by [owner] for [mint].
   Future<List<SolanaTokenAccount>> getTokenAccounts(
     String owner,
-    String mint,
-  ) async {
+    String mint, {
+    int? expectedDecimals,
+  }) async {
+    _solanaPublicKey(owner, 'token owner');
+    _solanaPublicKey(mint, 'token mint');
+    if (expectedDecimals != null &&
+        (expectedDecimals < 0 || expectedDecimals > 255)) {
+      throw RpcException('bad expected token decimals');
+    }
     final result = await _call('getTokenAccountsByOwner', [
       owner,
       {'mint': mint},
       {'encoding': 'jsonParsed', 'commitment': 'confirmed'},
     ]);
-    final value = result is Map ? result['value'] : null;
-    if (value is! List) throw RpcException('bad token account response');
+    final envelope = _solanaValueEnvelope(result, 'token accounts');
+    final value = envelope['value'];
+    if (value is! List || value.length > 10000) {
+      throw RpcException('bad token account response');
+    }
     final accounts = <SolanaTokenAccount>[];
+    final seen = <String>{};
+    var total = BigInt.zero;
     for (final entry in value) {
-      final pubkey = entry is Map ? entry['pubkey'] : null;
-      final account = entry is Map ? entry['account'] : null;
-      final data = account is Map ? account['data'] : null;
-      final parsed = data is Map ? data['parsed'] : null;
-      final info = parsed is Map ? parsed['info'] : null;
-      final tokenAmount = info is Map ? info['tokenAmount'] : null;
-      final amount = tokenAmount is Map ? tokenAmount['amount'] : null;
-      if (pubkey is! String || amount is! String) {
-        throw RpcException('bad token account');
-      }
-      accounts.add(
-        SolanaTokenAccount(address: pubkey, amount: BigInt.parse(amount)),
+      final row = _exactMap(
+        entry,
+        allowed: const {'account', 'pubkey'},
+        required: const {'account', 'pubkey'},
+        label: 'token account row',
       );
+      final pubkey = _solanaPublicKey(row['pubkey'], 'token account identity');
+      if (!seen.add(pubkey)) {
+        throw RpcException('duplicate token account identity');
+      }
+      final account = _parseTokenAccount(
+        row['account'],
+        requestedOwner: owner,
+        requestedMint: mint,
+        expectedDecimals: expectedDecimals,
+      );
+      total += account.amount;
+      if (total > _maximumU64) {
+        throw RpcException('token account balance overflow');
+      }
+      accounts.add(account.withAddress(pubkey));
     }
     return List.unmodifiable(accounts);
   }
@@ -306,10 +337,29 @@ class SolanaSimulationResult {
 }
 
 class SolanaTokenAccount {
-  const SolanaTokenAccount({required this.address, required this.amount});
+  const SolanaTokenAccount({
+    required this.address,
+    required this.amount,
+    required this.decimals,
+    required this.state,
+  });
+
   final String address;
   final BigInt amount;
+  final int decimals;
+  final SolanaTokenAccountState state;
+
+  SolanaTokenAccount withAddress(String value) => SolanaTokenAccount(
+    address: value,
+    amount: amount,
+    decimals: decimals,
+    state: state,
+  );
 }
+
+enum SolanaTokenAccountState { initialized, frozen }
+
+final BigInt _maximumU64 = (BigInt.one << 64) - BigInt.one;
 
 Map<Object?, Object?> _solanaValueEnvelope(Object? raw, String label) {
   final envelope = _exactMap(
@@ -351,12 +401,167 @@ Map<Object?, Object?> _exactMap(
 }
 
 int _u64(Object? raw, String label) {
-  if (raw is! int ||
-      raw < 0 ||
-      BigInt.from(raw) > (BigInt.one << 64) - BigInt.one) {
+  if (raw is! int || raw < 0 || BigInt.from(raw) > _maximumU64) {
     throw RpcException('bad $label');
   }
   return raw;
+}
+
+SolanaTokenAccount _parseTokenAccount(
+  Object? raw, {
+  required String requestedOwner,
+  required String requestedMint,
+  required int? expectedDecimals,
+}) {
+  final account = _exactMap(
+    raw,
+    allowed: const {
+      'data',
+      'executable',
+      'lamports',
+      'owner',
+      'rentEpoch',
+      'space',
+    },
+    required: const {'data', 'executable', 'lamports', 'owner', 'rentEpoch'},
+    label: 'token account',
+  );
+  if (account['executable'] != false) {
+    throw RpcException('bad executable token account');
+  }
+  _u64(account['lamports'], 'token account lamports');
+  _unsignedJsonNumber(account['rentEpoch'], 'token account rent epoch');
+  final accountSpace = account['space'] == null
+      ? null
+      : _u64(account['space'], 'token account space');
+  final tokenProgram = _solanaPublicKey(
+    account['owner'],
+    'token program owner',
+  );
+  if (tokenProgram != solanaTokenProgram &&
+      tokenProgram != solanaToken2022Program) {
+    throw RpcException('unexpected token program owner');
+  }
+
+  final data = _exactMap(
+    account['data'],
+    allowed: const {'parsed', 'program', 'space'},
+    required: const {'parsed', 'program'},
+    label: 'parsed token account data',
+  );
+  final parsedProgram = data['program'];
+  if (parsedProgram is! String ||
+      (parsedProgram != 'spl-token' && parsedProgram != 'spl-token-2022') ||
+      (tokenProgram == solanaTokenProgram && parsedProgram != 'spl-token')) {
+    throw RpcException('token program identity mismatch');
+  }
+  final dataSpace = data['space'] == null
+      ? null
+      : _u64(data['space'], 'parsed token account space');
+  if (accountSpace != null && dataSpace != null && accountSpace != dataSpace) {
+    throw RpcException('token account space mismatch');
+  }
+  final parsed = _exactMap(
+    data['parsed'],
+    allowed: const {'info', 'type'},
+    required: const {'info', 'type'},
+    label: 'parsed token account',
+  );
+  if (parsed['type'] != 'account') {
+    throw RpcException('unexpected parsed token account type');
+  }
+  final info = _tokenInfoMap(parsed['info']);
+  if (info['isNative'] is! bool) {
+    throw RpcException('bad native token flag');
+  }
+  if (_solanaPublicKey(info['mint'], 'token account mint') != requestedMint) {
+    throw RpcException('token mint identity mismatch');
+  }
+  if (_solanaPublicKey(info['owner'], 'token account owner') !=
+      requestedOwner) {
+    throw RpcException('token owner identity mismatch');
+  }
+  final state = switch (info['state']) {
+    'initialized' => SolanaTokenAccountState.initialized,
+    'frozen' => SolanaTokenAccountState.frozen,
+    _ => throw RpcException('bad token account state'),
+  };
+  final amount = _parseTokenAmount(
+    info['tokenAmount'],
+    expectedDecimals: expectedDecimals,
+  );
+  return SolanaTokenAccount(
+    address: '',
+    amount: amount.$1,
+    decimals: amount.$2,
+    state: state,
+  );
+}
+
+Map<Object?, Object?> _tokenInfoMap(Object? raw) {
+  if (raw is! Map || raw.length > 64 || raw.keys.any((key) => key is! String)) {
+    throw RpcException('bad token account info');
+  }
+  const consumed = {'isNative', 'mint', 'owner', 'state', 'tokenAmount'};
+  for (final key in raw.keys.cast<String>()) {
+    for (final canonical in consumed) {
+      if (key.toLowerCase() == canonical.toLowerCase() && key != canonical) {
+        throw RpcException('ambiguous token account info');
+      }
+    }
+  }
+  if (consumed.any((key) => !raw.containsKey(key))) {
+    throw RpcException('incomplete token account info');
+  }
+  return raw;
+}
+
+(BigInt, int) _parseTokenAmount(Object? raw, {required int? expectedDecimals}) {
+  final value = _exactMap(
+    raw,
+    allowed: const {'amount', 'decimals', 'uiAmount', 'uiAmountString'},
+    required: const {'amount', 'decimals', 'uiAmount', 'uiAmountString'},
+    label: 'token amount',
+  );
+  final amountRaw = value['amount'];
+  if (amountRaw is! String ||
+      amountRaw.isEmpty ||
+      amountRaw.length > 20 ||
+      !RegExp(r'^(0|[1-9][0-9]*)$').hasMatch(amountRaw)) {
+    throw RpcException('bad token amount');
+  }
+  final amount = BigInt.parse(amountRaw);
+  if (amount > _maximumU64) throw RpcException('bad token amount');
+  final decimals = value['decimals'];
+  if (decimals is! int || decimals < 0 || decimals > 255) {
+    throw RpcException('bad token decimals');
+  }
+  if (expectedDecimals != null && decimals != expectedDecimals) {
+    throw RpcException('token decimals mismatch');
+  }
+  final uiAmount = value['uiAmount'];
+  if (uiAmount != null &&
+      (uiAmount is! num || !uiAmount.isFinite || uiAmount < 0)) {
+    throw RpcException('bad UI token amount');
+  }
+  final uiAmountString = value['uiAmountString'];
+  if (uiAmountString is! String ||
+      uiAmountString != _canonicalTokenAmount(amount, decimals)) {
+    throw RpcException('inconsistent UI token amount');
+  }
+  return (amount, decimals);
+}
+
+String _canonicalTokenAmount(BigInt amount, int decimals) {
+  var digits = amount.toString();
+  if (decimals == 0) return digits;
+  if (digits.length <= decimals) {
+    digits = '${'0' * (decimals - digits.length + 1)}$digits';
+  }
+  final point = digits.length - decimals;
+  final whole = digits.substring(0, point);
+  final fraction = digits.substring(point).replaceFirst(RegExp(r'0+$'), '');
+  return fraction.isEmpty ? whole : '$whole.$fraction';
 }
 
 String _solanaPublicKey(Object? raw, String label) {

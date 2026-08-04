@@ -524,8 +524,8 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-04) completed with zero static-analysis
-issues: **1,562/1,562** KT Wallet tests, **570/570** KT Cold Signer tests, and
-**426/426** shared-package tests passed. The default gate passed **12/12** and
+issues: **1,563/1,563** KT Wallet tests, **570/570** KT Cold Signer tests, and
+**429/429** shared-package tests passed. The default gate passed **12/12** and
 the native/runtime/OSV `--full` gate passed **13/13**. The Gateway audit,
 public-secret gate, Gateway public-release version gate, native dependency
 lock/checksum verification, and OSV scans also passed. These numbers are

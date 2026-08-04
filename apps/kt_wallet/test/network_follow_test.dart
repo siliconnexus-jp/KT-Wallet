@@ -127,7 +127,7 @@ const _addresses = ChainAddresses(
   eth: '0xEthAddr',
   polygon: '0xPolyAddr',
   tron: 'TTronAddr',
-  solana: 'SolAddr',
+  solana: '47eFuHR9ste9kopiJ9eRxcwahmE62JovbKe5r7AjANut',
 );
 
 WalletController _wallets() => WalletController(
@@ -214,7 +214,10 @@ void main() {
       );
       final jsonRpc = _FakeJsonRpc(
         (url, body) async => (body as Map)['method'] == 'getBalance'
-            ? _rpcResult({'context': <String, Object?>{}, 'value': 0})
+            ? _rpcResult({
+                'context': <String, Object?>{'slot': 1},
+                'value': 0,
+              })
             : _rpcResult('0x0'),
       );
       final rest = _FakeRest((url) async => {'data': <Object?>[]});
@@ -292,7 +295,10 @@ void main() {
           return {
             'jsonrpc': '2.0',
             'id': request['id'],
-            'result': {'value': <Object>[]},
+            'result': {
+              'context': <String, Object?>{'slot': 1},
+              'value': <Object>[],
+            },
           };
         }
         return _rpcResult('0x${'0' * 64}');

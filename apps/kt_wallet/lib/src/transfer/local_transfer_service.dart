@@ -749,9 +749,17 @@ class LocalTransferService {
       if (mint == null) {
         throw const LocalTransferException('Missing SPL token mint');
       }
-      final sources = await rpc.getTokenAccounts(from, mint);
+      final sources = await rpc.getTokenAccounts(
+        from,
+        mint,
+        expectedDecimals: draft.decimals,
+      );
       final source = sources
-          .where((account) => account.amount >= draft.amount.raw)
+          .where(
+            (account) =>
+                account.state == SolanaTokenAccountState.initialized &&
+                account.amount >= draft.amount.raw,
+          )
           .firstOrNull;
       if (source == null) {
         throw const LocalTransferException(

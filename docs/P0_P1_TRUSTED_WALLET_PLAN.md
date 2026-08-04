@@ -1944,3 +1944,12 @@ Solana Devnet 的真实 blockhash、fee 与未签名 simulation 只读测试通�
 调用广播。最终 KT Wallet 1562/1562、KT Cold Signer 570/570、共享 packages 426/426、
 静态分析 0、完整公开门禁 13/13；本轮没有 Gateway 源码变更，也没有生成新的移动端签名
 制品，仍不替代物理设备、真实广播或正式签名发布验收。
+
+同日继续闭合 App 仍可达的 Solana 直连余额备用路径：原生余额只接受唯一
+`context/value` 且 slot/lamports 为 u64；SPL / Token-2022 账户逐行绑定请求 owner、mint、
+Token Program、公钥、state、decimals 与规范 raw/UI amount，拒绝重复账户、总额溢出、
+冻结账户作为发送 source 及 decimals 与 Token 注册表不一致。缺 context、错身份、别名、
+重复金融值和溢出等负例先红后绿；PYUSD Token-2022、JUP、ATA 创建与冻结 source 回归
+通过。官方 Solana Devnet 的真实 SOL 余额与 Devnet USDC 账户只读测试 2/2 通过，没有
+私钥和广播。最终 KT Wallet 1563/1563、KT Cold Signer 570/570、共享 packages 429/429、
+静态分析 0、完整公开门禁 13/13；本轮仍无 Gateway 源码变化。

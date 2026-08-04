@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:chains/chains.dart';
 import 'package:chains/rpc.dart';
 import 'package:test/test.dart';
 
@@ -52,6 +53,58 @@ const _tronHash =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const _otherTronHash =
     'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const _solanaOwner = 'A1TMhSGzQxMr1TboBKtgixKz1sS6REASMxPo1qsyTSJd';
+const _solanaOtherOwner = '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin';
+const _solanaMint = '2cHr7QS3xfuSV8wdxo3ztuF4xbiarF6Nrgx3qpx3HzXR';
+const _solanaOtherMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+const _solanaTokenAccount = 'BGocb4GEpbTFm8UFV2VsDSaBXHELPfAXrvd4vtt8QWrA';
+
+Map<String, Object?> _solanaTokenAccountRow({
+  String pubkey = _solanaTokenAccount,
+  String owner = _solanaOwner,
+  String mint = _solanaMint,
+  String amount = '420000000000000',
+  int decimals = 6,
+  Object? uiAmount = 420000000.0,
+  String uiAmountString = '420000000',
+  String state = 'initialized',
+  String accountProgram = solanaTokenProgram,
+  String parsedProgram = 'spl-token',
+  bool executable = false,
+}) => {
+  'pubkey': pubkey,
+  'account': {
+    'data': {
+      'program': parsedProgram,
+      'parsed': {
+        'info': {
+          'isNative': false,
+          'mint': mint,
+          'owner': owner,
+          'state': state,
+          'tokenAmount': {
+            'amount': amount,
+            'decimals': decimals,
+            'uiAmount': uiAmount,
+            'uiAmountString': uiAmountString,
+          },
+        },
+        'type': 'account',
+      },
+      'space': 165,
+    },
+    'executable': executable,
+    'lamports': 2039280,
+    'owner': accountProgram,
+    'rentEpoch': 1.8446744073709552e19,
+    'space': 165,
+  },
+};
+
+Map<String, Object?> _solanaTokenResult({List<Object?>? rows}) => {
+  'context': {'apiVersion': '4.1.2', 'slot': 341197933},
+  'value': rows ?? [_solanaTokenAccountRow()],
+};
 
 Map<String, Object?> _evmReceipt({
   String transactionHash = _evmHash,
@@ -486,13 +539,198 @@ void main() {
   });
 
   group('SolanaRpc', () {
-    test('getBalance reads value from result map', () async {
-      final rpc = SolanaRpc(
-        url: 'x',
-        transport: FakeJsonRpc((m, p) => _ok({'value': 42})),
-      );
-      expect(await rpc.getBalance('addr'), BigInt.from(42));
-    });
+    test(
+      'getBalance binds the current official context and u64 value',
+      () async {
+        final rpc = SolanaRpc(
+          url: 'x',
+          transport: FakeJsonRpc(
+            (m, p) => _ok({
+              'context': {'apiVersion': '4.1.2', 'slot': 90},
+              'value': 42,
+            }),
+          ),
+        );
+        expect(await rpc.getBalance(_solanaOwner), BigInt.from(42));
+      },
+    );
+
+    test(
+      'getBalance rejects ambiguous identities and financial values',
+      () async {
+        final invalid = <Object?>[
+          {'value': 42},
+          {
+            'context': {'slot': 90},
+            'value': 42,
+            'provider': 'node-a',
+          },
+          {
+            'context': {'slot': -1},
+            'value': 42,
+          },
+          {
+            'context': {'slot': 90},
+            'value': '42',
+          },
+          {
+            'context': {'slot': 90},
+            'value': -1,
+          },
+        ];
+        for (final response in invalid) {
+          final rpc = SolanaRpc(
+            url: 'x',
+            transport: FakeJsonRpc((m, p) => _ok(response)),
+          );
+          await expectLater(
+            rpc.getBalance(_solanaOwner),
+            throwsA(isA<RpcException>()),
+            reason: '$response',
+          );
+        }
+
+        final transport = FakeJsonRpc((m, p) => throw StateError('network'));
+        await expectLater(
+          SolanaRpc(url: 'x', transport: transport).getBalance('not-a-key'),
+          throwsA(isA<RpcException>()),
+        );
+        expect(transport.requests, isEmpty);
+      },
+    );
+
+    test(
+      'token accounts bind owner mint program state and exact amount',
+      () async {
+        final rpc = SolanaRpc(
+          url: 'x',
+          transport: FakeJsonRpc((m, p) => _ok(_solanaTokenResult())),
+        );
+
+        final accounts = await rpc.getTokenAccounts(_solanaOwner, _solanaMint);
+        expect(accounts, hasLength(1));
+        expect(accounts.single.address, _solanaTokenAccount);
+        expect(accounts.single.amount, BigInt.parse('420000000000000'));
+        expect(accounts.single.decimals, 6);
+        expect(accounts.single.state, SolanaTokenAccountState.initialized);
+        expect(
+          await rpc.getTokenBalance(_solanaOwner, _solanaMint),
+          BigInt.parse('420000000000000'),
+        );
+
+        final frozen = SolanaRpc(
+          url: 'x',
+          transport: FakeJsonRpc(
+            (m, p) => _ok(
+              _solanaTokenResult(
+                rows: [_solanaTokenAccountRow(state: 'frozen')],
+              ),
+            ),
+          ),
+        );
+        expect(
+          (await frozen.getTokenAccounts(
+            _solanaOwner,
+            _solanaMint,
+          )).single.state,
+          SolanaTokenAccountState.frozen,
+        );
+      },
+    );
+
+    test(
+      'token accounts reject unbound, malformed, duplicate and overflowing data',
+      () async {
+        final duplicate = _solanaTokenAccountRow();
+        final invalid = <Object?>[
+          {'value': <Object?>[]},
+          {..._solanaTokenResult(), 'provider': 'node-a'},
+          _solanaTokenResult(
+            rows: [_solanaTokenAccountRow(owner: _solanaOtherOwner)],
+          ),
+          _solanaTokenResult(
+            rows: [_solanaTokenAccountRow(mint: _solanaOtherMint)],
+          ),
+          _solanaTokenResult(
+            rows: [_solanaTokenAccountRow(pubkey: 'not-a-key')],
+          ),
+          _solanaTokenResult(rows: [duplicate, duplicate]),
+          _solanaTokenResult(
+            rows: [_solanaTokenAccountRow(accountProgram: solanaSystemProgram)],
+          ),
+          _solanaTokenResult(
+            rows: [_solanaTokenAccountRow(parsedProgram: 'spl-token-2022')],
+          ),
+          _solanaTokenResult(rows: [_solanaTokenAccountRow(executable: true)]),
+          _solanaTokenResult(rows: [_solanaTokenAccountRow(amount: '-1')]),
+          _solanaTokenResult(
+            rows: [_solanaTokenAccountRow(amount: '18446744073709551616')],
+          ),
+          _solanaTokenResult(
+            rows: [
+              _solanaTokenAccountRow(
+                amount: '1200000',
+                uiAmount: 1.2,
+                uiAmountString: '1.3',
+              ),
+            ],
+          ),
+          _solanaTokenResult(
+            rows: [
+              _solanaTokenAccountRow(
+                amount: '18446744073709551615',
+                decimals: 0,
+                uiAmount: null,
+                uiAmountString: '18446744073709551615',
+              ),
+              _solanaTokenAccountRow(
+                pubkey: _solanaOtherOwner,
+                amount: '1',
+                decimals: 0,
+                uiAmount: 1,
+                uiAmountString: '1',
+              ),
+            ],
+          ),
+        ];
+        for (final response in invalid) {
+          final rpc = SolanaRpc(
+            url: 'x',
+            transport: FakeJsonRpc((m, p) => _ok(response)),
+          );
+          await expectLater(
+            rpc.getTokenAccounts(_solanaOwner, _solanaMint),
+            throwsA(isA<RpcException>()),
+            reason: '$response',
+          );
+        }
+
+        final transport = FakeJsonRpc((m, p) => throw StateError('network'));
+        final rpc = SolanaRpc(url: 'x', transport: transport);
+        await expectLater(
+          rpc.getTokenAccounts('not-an-owner', _solanaMint),
+          throwsA(isA<RpcException>()),
+        );
+        await expectLater(
+          rpc.getTokenAccounts(_solanaOwner, 'not-a-mint'),
+          throwsA(isA<RpcException>()),
+        );
+        expect(transport.requests, isEmpty);
+
+        final decimals = SolanaRpc(
+          url: 'x',
+          transport: FakeJsonRpc((m, p) => _ok(_solanaTokenResult())),
+        );
+        await expectLater(
+          decimals.getTokenAccounts(
+            _solanaOwner,
+            _solanaMint,
+            expectedDecimals: 9,
+          ),
+          throwsA(isA<RpcException>()),
+        );
+      },
+    );
 
     test('getLatestBlockhash extracts nested blockhash', () async {
       final rpc = SolanaRpc(

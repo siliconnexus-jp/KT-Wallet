@@ -31,7 +31,7 @@ const _addresses = ChainAddresses(
   eth: '0xEthAddr',
   polygon: '0xPolyAddr',
   tron: 'TTronAddr',
-  solana: 'SolAddr',
+  solana: '47eFuHR9ste9kopiJ9eRxcwahmE62JovbKe5r7AjANut',
 );
 
 Map<String, Object?> _rpcResult(Object? result) => {
@@ -56,7 +56,7 @@ void main() {
           if (url == defaultSolanaRpcUrl) {
             expect(method, 'getBalance');
             return _rpcResult({
-              'context': <String, Object?>{},
+              'context': <String, Object?>{'slot': 1},
               'value': 500000000,
             }); // 0.5 SOL
           }
@@ -100,7 +100,10 @@ void main() {
             };
           }
           if (url == defaultPolygonRpcUrl) return _rpcResult('0x0');
-          return _rpcResult({'context': <String, Object?>{}, 'value': 0});
+          return _rpcResult({
+            'context': <String, Object?>{'slot': 1},
+            'value': 0,
+          });
         }),
         restTransport: _FakeRest(onGet: (url) async => {'data': <Object?>[]}),
       );
@@ -153,7 +156,10 @@ void main() {
           jsonRpcTransport: _FakeJsonRpc((url, body) async {
             seenJsonUrls.add(url);
             return (body as Map)['method'] == 'getBalance'
-                ? _rpcResult({'context': <String, Object?>{}, 'value': 0})
+                ? _rpcResult({
+                    'context': <String, Object?>{'slot': 1},
+                    'value': 0,
+                  })
                 : _rpcResult('0x0');
           }),
           restTransport: _FakeRest(

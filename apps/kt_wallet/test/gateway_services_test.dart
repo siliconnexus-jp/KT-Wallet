@@ -26,7 +26,7 @@ const _addresses = ChainAddresses(
   eth: '0xEthAddr',
   polygon: '0xPolyAddr',
   tron: 'TTronAddr',
-  solana: 'SolAddr',
+  solana: '47eFuHR9ste9kopiJ9eRxcwahmE62JovbKe5r7AjANut',
 );
 
 /// A scripted gateway: records every JSON-RPC call and answers per-method.
@@ -255,7 +255,10 @@ void main() {
     test('gateway failure falls back to the direct path per chain', () async {
       final direct = _FakeJsonRpc(
         (url, body) async => (body as Map)['method'] == 'getBalance'
-            ? _rpcResult({'context': <String, Object?>{}, 'value': 0})
+            ? _rpcResult({
+                'context': <String, Object?>{'slot': 1},
+                'value': 0,
+              })
             : _rpcResult('0x0'),
       );
       final rest = _FakeRest(onGet: (url) async => {'data': <Object?>[]});
@@ -277,7 +280,10 @@ void main() {
     test('direct mode (null resolver) never contacts the gateway', () async {
       final direct = _FakeJsonRpc(
         (url, body) async => (body as Map)['method'] == 'getBalance'
-            ? _rpcResult({'context': <String, Object?>{}, 'value': 0})
+            ? _rpcResult({
+                'context': <String, Object?>{'slot': 1},
+                'value': 0,
+              })
             : _rpcResult('0x0'),
       );
       final service = BalanceService(
@@ -717,7 +723,10 @@ void main() {
         client: MockClient((request) async => fail('no direct contact')),
         gateway: () => gateway.client,
       );
-      final result = await service.fetch(Coin.solana, 'SolAddr');
+      final result = await service.fetch(
+        Coin.solana,
+        '47eFuHR9ste9kopiJ9eRxcwahmE62JovbKe5r7AjANut',
+      );
       expect(result.status, HistoryStatus.unsupported);
     });
 
@@ -745,7 +754,10 @@ void main() {
         // error (the gateway WAS configured), never a silent "unsupported".
         final eth = await service.fetch(Coin.eth, '0xEthAddr');
         expect(eth.status, HistoryStatus.error);
-        final solana = await service.fetch(Coin.solana, 'SolAddr');
+        final solana = await service.fetch(
+          Coin.solana,
+          '47eFuHR9ste9kopiJ9eRxcwahmE62JovbKe5r7AjANut',
+        );
         expect(solana.status, HistoryStatus.error);
       },
     );
@@ -1292,7 +1304,10 @@ void main() {
         // prefs on EVERY fetch, so the same service instance switches modes.
         final direct = _FakeJsonRpc(
           (url, body) async => (body as Map)['method'] == 'getBalance'
-              ? _rpcResult({'context': <String, Object?>{}, 'value': 0})
+              ? _rpcResult({
+                  'context': <String, Object?>{'slot': 1},
+                  'value': 0,
+                })
               : _rpcResult('0x0'),
         );
         final rest = _FakeRest(onGet: (url) async => {'data': <Object?>[]});

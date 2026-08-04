@@ -869,7 +869,11 @@ class TokenBalanceService {
           url: _endpoints(token.chain),
           transport: _jsonRpc,
         );
-        return rpc.getTokenBalance(addresses.solana, token.contract);
+        return rpc.getTokenBalance(
+          addresses.solana,
+          token.contract,
+          expectedDecimals: token.decimals,
+        );
     }
   }
 

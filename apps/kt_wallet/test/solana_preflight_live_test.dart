@@ -47,4 +47,28 @@ void main() {
     skip: live ? false : 'set KT_LIVE_SOLANA_PREFLIGHT=1',
     timeout: const Timeout(Duration(seconds: 60)),
   );
+
+  test(
+    'official Solana Devnet balance and SPL accounts match strict schema',
+    () async {
+      final transport = HttpJsonRpcTransport(
+        timeout: const Duration(seconds: 20),
+      );
+      addTearDown(transport.close);
+      final rpc = SolanaRpc(
+        url: 'https://api.devnet.solana.com',
+        transport: transport,
+      );
+
+      const owner = '47eFuHR9ste9kopiJ9eRxcwahmE62JovbKe5r7AjANut';
+      const devnetUsdcMint = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+      expect(await rpc.getBalance(owner), greaterThan(BigInt.zero));
+      expect(
+        await rpc.getTokenBalance(owner, devnetUsdcMint, expectedDecimals: 6),
+        greaterThanOrEqualTo(BigInt.zero),
+      );
+    },
+    skip: live ? false : 'set KT_LIVE_SOLANA_PREFLIGHT=1',
+    timeout: const Timeout(Duration(seconds: 60)),
+  );
 }

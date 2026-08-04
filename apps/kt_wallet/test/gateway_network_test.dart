@@ -38,7 +38,7 @@ const _addresses = ChainAddresses(
   eth: '0xEthAddr',
   polygon: '0xPolyAddr',
   tron: 'TTronAddr',
-  solana: 'SolAddr',
+  solana: '47eFuHR9ste9kopiJ9eRxcwahmE62JovbKe5r7AjANut',
 );
 
 /// Every network id the current Go service advertises via `kt_health`.
@@ -503,7 +503,10 @@ void main() {
       }
       final direct = _FakeJsonRpc(
         (url, body) async => (body as Map)['method'] == 'getBalance'
-            ? _rpcResult({'context': <String, Object?>{}, 'value': 0})
+            ? _rpcResult({
+                'context': <String, Object?>{'slot': 1},
+                'value': 0,
+              })
             : _rpcResult('0x2a'),
       );
       final service = BalanceService(

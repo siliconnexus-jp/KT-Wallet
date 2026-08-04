@@ -23,10 +23,12 @@ class _SolanaTransport implements JsonRpcTransport {
   _SolanaTransport({
     this.recipientAtaExists = false,
     this.simulationFee = 5000,
+    this.frozenSource = false,
   });
 
   final bool recipientAtaExists;
   final int? simulationFee;
+  final bool frozenSource;
   Uint8List? simulatedMessage;
   Map<Object?, Object?>? simulationConfig;
 
@@ -48,40 +50,53 @@ class _SolanaTransport implements JsonRpcTransport {
         break;
       case 'getTokenAccountsByOwner':
         final address = params.first;
-        result = {
-          'value': address == _owner
-              ? [
-                  {
-                    'pubkey': _source,
-                    'account': {
-                      'data': {
-                        'parsed': {
-                          'info': {
-                            'tokenAmount': {'amount': '2000000'},
-                          },
-                        },
-                      },
-                    },
+        final mint = (params[1] as Map)['mint'] as String;
+        final token2022 = mint == _mint;
+        Map<String, Object?> tokenAccount(String pubkey, String amount) => {
+          'pubkey': pubkey,
+          'account': {
+            'data': {
+              'program': token2022 ? 'spl-token-2022' : 'spl-token',
+              'parsed': {
+                'info': {
+                  'isNative': false,
+                  'mint': mint,
+                  'owner': address,
+                  'state': frozenSource ? 'frozen' : 'initialized',
+                  'tokenAmount': {
+                    'amount': amount,
+                    'decimals': 6,
+                    'uiAmount': amount == '0' ? 0 : 2,
+                    'uiAmountString': amount == '0' ? '0' : '2',
                   },
-                ]
+                },
+                'type': 'account',
+              },
+              'space': 165,
+            },
+            'executable': false,
+            'lamports': 2039280,
+            'owner': token2022 ? solanaToken2022Program : solanaTokenProgram,
+            'rentEpoch': 1.8446744073709552e19,
+            'space': 165,
+          },
+        };
+        result = {
+          'context': {'apiVersion': '4.1.2', 'slot': 123000},
+          'value': address == _owner
+              ? [tokenAccount(_source, '2000000')]
               : recipientAtaExists && address == _recipient
               ? [
-                  {
-                    'pubkey': SolanaMessage.associatedTokenAddress(
+                  tokenAccount(
+                    SolanaMessage.associatedTokenAddress(
                       owner: _recipient,
-                      mint: _mint,
-                      tokenProgram: solanaToken2022Program,
+                      mint: mint,
+                      tokenProgram: token2022
+                          ? solanaToken2022Program
+                          : solanaTokenProgram,
                     ),
-                    'account': {
-                      'data': {
-                        'parsed': {
-                          'info': {
-                            'tokenAmount': {'amount': '0'},
-                          },
-                        },
-                      },
-                    },
-                  },
+                    '0',
+                  ),
                 ]
               : <Object?>[],
         };
@@ -93,7 +108,10 @@ class _SolanaTransport implements JsonRpcTransport {
         };
         break;
       case 'getBalance':
-        result = {'value': 100000000};
+        result = {
+          'context': {'slot': 123000},
+          'value': 100000000,
+        };
         break;
       case 'simulateTransaction':
         final wire = base64Decode(params.first as String);
@@ -380,6 +398,37 @@ void main() {
           (error) => error.message,
           'message',
           contains('inconsistent network fee'),
+        ),
+      ),
+    );
+  });
+
+  test('a frozen SPL account is never selected as a transfer source', () async {
+    final service = LocalTransferService(
+      endpoints: (_) => 'https://solana.test',
+      jsonRpcTransport: _SolanaTransport(frozenSource: true),
+    );
+
+    await expectLater(
+      service.prepareSolana(
+        draft: TransferDraft(
+          symbol: 'PYUSD',
+          networkLabel: 'Solana',
+          chain: Chain.solana,
+          recipient: _recipient,
+          amount: Amount.parse('1', 6, symbol: 'PYUSD'),
+          feeTier: 1,
+          tokenContract: _mint,
+          tokenProgram: solanaToken2022Program,
+        ),
+        from: _owner,
+        expectedNetworkIdentity: _genesisHash,
+      ),
+      throwsA(
+        isA<LocalTransferException>().having(
+          (error) => error.message,
+          'message',
+          contains('No SPL token account'),
         ),
       ),
     );
