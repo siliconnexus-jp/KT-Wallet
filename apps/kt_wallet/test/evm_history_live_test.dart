@@ -1,10 +1,13 @@
 import 'dart:io';
 
+import 'package:chains/chains.dart' show Chain;
 import 'package:chains/rpc.dart';
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/src/market/history_service.dart';
 import 'package:kt_wallet/src/rpc/http_transport.dart';
+import 'package:kt_wallet/src/transfer/transaction_confirmation_service.dart';
+import 'package:wallet_data/wallet_data.dart' show TxStatus;
 
 void main() {
   final live = Platform.environment['KT_LIVE_EVM_HISTORY'] == '1';
@@ -56,6 +59,18 @@ void main() {
       expect(evidence!.transactionHash.toLowerCase(), bscHash);
       expect(evidence.from.toLowerCase(), owner);
       expect(evidence.nonce, BigInt.from(5));
+
+      // Exercise the same receipt + latest-height path used to enrich the
+      // broadcast result screen. This is still read-only and uses only the
+      // already public transaction hash.
+      final confirmation = TransactionConfirmationService(
+        endpoints: (_) => 'https://bsc-testnet-dataseed.bnbchain.org',
+        jsonRpcTransport: transport,
+      );
+      addTearDown(confirmation.close);
+      final snapshot = await confirmation.check(Chain.bnb, bscHash);
+      expect(snapshot.status, TxStatus.confirmed);
+      expect(snapshot.confirmations, greaterThan(0));
     },
     skip: live ? false : 'set KT_LIVE_EVM_HISTORY=1',
     timeout: const Timeout(Duration(seconds: 60)),

@@ -71,16 +71,22 @@ class TransactionConfirmationService {
       expectedTransactionHash: hash,
     );
     final status = evidence.succeeded ? TxStatus.confirmed : TxStatus.failed;
-    final includedAt = evidence.blockNumber;
-    final latest = await rpc.getBlockNumber();
-    final depth = latest - includedAt + BigInt.one;
-    if (depth < BigInt.one) {
-      throw RpcException('EVM receipt is ahead of the latest block');
-    }
     return TransactionConfirmation(
       status: status,
-      confirmations: depth.toInt(),
+      confirmations: await _evmConfirmationDepth(rpc, evidence.blockNumber),
     );
+  }
+
+  /// A hash-bound terminal receipt is authoritative for execution status.
+  /// Latest-height lookup only enriches the UI, so a lagging or unavailable
+  /// provider must not hide a proven confirmed/failed result.
+  Future<int?> _evmConfirmationDepth(EvmRpc rpc, BigInt includedAt) async {
+    try {
+      final latest = await rpc.getBlockNumber();
+      return _boundedDepth(latest - includedAt + BigInt.one);
+    } on RpcException {
+      return null;
+    }
   }
 
   Future<TransactionConfirmation> _checkTron(String hash) async {
@@ -92,15 +98,21 @@ class TransactionConfirmationService {
         confirmations: 0,
       );
     }
-    final latest = (await rpc.getNowBlock()).number;
-    final confirmations = latest - evidence.blockNumber + 1;
-    if (confirmations < 1) {
-      throw RpcException('TRON receipt is ahead of the latest block');
-    }
     return TransactionConfirmation(
       status: evidence.succeeded ? TxStatus.confirmed : TxStatus.failed,
-      confirmations: confirmations,
+      confirmations: await _tronConfirmationDepth(rpc, evidence.blockNumber),
     );
+  }
+
+  Future<int?> _tronConfirmationDepth(TronRpc rpc, int includedAt) async {
+    try {
+      final latest = (await rpc.getNowBlock()).number;
+      return _boundedDepth(
+        BigInt.from(latest) - BigInt.from(includedAt) + BigInt.one,
+      );
+    } on RpcException {
+      return null;
+    }
   }
 
   Future<TransactionConfirmation> _checkSolana(String hash) async {
@@ -124,6 +136,11 @@ class TransactionConfirmationService {
       confirmations: result.confirmations,
       finalized: confirmationStatus == 'finalized',
     );
+  }
+
+  static int? _boundedDepth(BigInt depth) {
+    if (depth < BigInt.one || depth > BigInt.from(0x7fffffff)) return null;
+    return depth.toInt();
   }
 
   void close() {

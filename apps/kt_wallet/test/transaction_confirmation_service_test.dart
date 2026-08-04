@@ -104,6 +104,30 @@ void main() {
       expect(failed.confirmations, 4);
     });
 
+    test(
+      'EVM preserves terminal receipt when depth enrichment fails',
+      () async {
+        final json = _JsonRpc({
+          'eth_getTransactionReceipt': _evmReceipt(),
+          'eth_blockNumber': 'not-a-canonical-quantity',
+        });
+        final service = TransactionConfirmationService(
+          endpoints: _endpoint,
+          jsonRpcTransport: json,
+          restTransport: _Rest(),
+        );
+
+        final confirmed = await service.check(Chain.ethereum, _evmHash);
+        expect(confirmed.status, TxStatus.confirmed);
+        expect(confirmed.confirmations, isNull);
+
+        json.results['eth_getTransactionReceipt'] = _evmReceipt(status: '0x0');
+        final failed = await service.check(Chain.ethereum, _evmHash);
+        expect(failed.status, TxStatus.failed);
+        expect(failed.confirmations, isNull);
+      },
+    );
+
     test('EVM rejects mismatched or incomplete receipt evidence', () async {
       final json = _JsonRpc({
         'eth_getTransactionReceipt': _evmReceipt(
@@ -176,6 +200,38 @@ void main() {
       expect(nativeConfirmed.status, TxStatus.confirmed);
       expect(nativeConfirmed.confirmations, 2);
     });
+
+    test(
+      'TRON preserves terminal receipt when depth enrichment fails',
+      () async {
+        final rest = _Rest({
+          '/wallet/gettransactioninfobyid': {
+            'id': _tronHash,
+            'blockNumber': 100,
+            'receipt': {'result': 'SUCCESS'},
+          },
+          '/wallet/getnowblock': <String, Object?>{},
+        });
+        final service = TransactionConfirmationService(
+          endpoints: _endpoint,
+          jsonRpcTransport: _JsonRpc(),
+          restTransport: rest,
+        );
+
+        final confirmed = await service.check(Chain.tron, _tronHash);
+        expect(confirmed.status, TxStatus.confirmed);
+        expect(confirmed.confirmations, isNull);
+
+        rest.responses['/wallet/gettransactioninfobyid'] = {
+          'id': _tronHash,
+          'blockNumber': 100,
+          'receipt': {'result': 'FAILED'},
+        };
+        final failed = await service.check(Chain.tron, _tronHash);
+        expect(failed.status, TxStatus.failed);
+        expect(failed.confirmations, isNull);
+      },
+    );
 
     test('TRON rejects mismatched or incomplete receipt evidence', () async {
       final rest = _Rest({

@@ -576,7 +576,7 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-05) completed with zero static-analysis
-issues: **1,631/1,631** KT Wallet tests, **570/570** KT Cold Signer tests, and
+issues: **1,633/1,633** KT Wallet tests, **570/570** KT Cold Signer tests, and
 **438/438** shared-package tests passed. The default gate passed **12/12** and
 the native/runtime/OSV `--full` gate passed **13/13**. The Gateway audit,
 public-secret gate, Gateway public-release version gate, native dependency
@@ -620,6 +620,15 @@ negative, leading-zero, oversized, or otherwise malformed values remain
 unknown. An opt-in read-only BNB Smart Chain Testnet smoke verifies this parser
 against a previously confirmed public test transaction without loading a key
 or broadcasting.
+
+Direct public-RPC confirmation depth is display-only enrichment. Once a
+hash-bound EVM receipt or TRON execution result proves confirmed/failed, an
+unavailable, malformed, or lagging latest-height response cannot delay or undo
+that terminal state; the UI keeps the terminal result and honestly leaves the
+numeric confirmation depth unavailable.
+The opt-in BNB Smart Chain Testnet smoke also reads that public transaction's
+real receipt and latest height through this production confirmation service;
+it never loads a key or broadcasts.
 
 EVM nonce competitors are settled in one Drift transaction guarded by a live-
 status compare-and-set. A late pending/unknown response cannot overwrite a

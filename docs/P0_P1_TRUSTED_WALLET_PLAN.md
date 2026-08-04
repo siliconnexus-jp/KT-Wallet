@@ -2230,3 +2230,18 @@ KT Cold Signer 570/570、共享 packages 438/438、静态分析 0、`check_deps`
 门禁 13/13 通过。公开 BSC Testnet 既有交易只读 smoke 1/1 证明真实节点对象兼容严格
 hash/from/nonce 解析；未加载私钥且未广播。本轮没有 Gateway 或视觉 UI 变化，无需部署
 后端，也不使用无关截图冒充协议证据；App 修复须随下一版移动端制品发布。
+
+同日继续复审广播结果页的确认数补充链路。终态状态本来已由 Gateway-first 严格
+`TransactionStatusService` 落库，直接 RPC 只用于展示区块/slot 深度；但 EVM 已取得
+hash-bound receipt、TRON 已取得同 txID 的执行证据后，如果紧接的 latest block 查询返回
+畸形数据、节点落后或临时不可用，`TransactionConfirmationService` 仍会抛错并丢弃本次
+终态快照，使确认数长期显示 `--`，也让复用该服务的调用方无法得到已证明的 confirmed/
+failed。两组失败优先测试分别稳定复现 `expected hex quantity` 与 `bad block header`。
+修复后收据/交易执行证据独立决定终态，latest height 只做有界的 best-effort 深度增强；
+不可用、倒退或超过 32-bit 合理展示上限时返回 `confirmations=null`，绝不伪造确认数、降级
+终态或吞掉收据身份校验错误。EVM/TRON 正常深度与错 hash/不完整收据的严格拒绝回归保持
+通过。最终 KT Wallet 1633/1633（另有 11 项显式线上/设备测试默认跳过）、KT Cold Signer
+570/570、共享 packages 438/438、静态分析 0、Gateway audit 与完整依赖/OSV 门禁 13/13
+通过。公开 BSC Testnet 既有交易只读 smoke 还通过同一生产确认服务读取真实 receipt 与
+latest height，确认 confirmed 且深度为正；未加载私钥且未广播。本轮没有 Gateway 服务端
+或视觉 UI 变化，无需部署后端；App 修复须随下一版移动端制品发布。
