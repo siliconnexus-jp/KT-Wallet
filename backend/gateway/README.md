@@ -125,7 +125,10 @@ Operational behavior (fixed by contract):
   states require their matching RPC code. Corrupt records fail closed instead
   of returning an empty success. This is the final defense against a client,
   CDN or outer proxy replaying the same POST.
-- **Caching** — prices 30 s; display balances 10 s keyed (network, address,
+- **Caching** — prices 30 s, but only after the complete requested CoinGecko
+  set passes exact-schema, freshness and cross-currency consistency checks;
+  malformed or partial market responses never populate the cache. Display
+  balances 10 s keyed (network, address,
   tokenset-hash); history 5 s. Chain params (including pending nonce),
   spendable balances, simulation and direct transaction-status checks are
   never read-cached. Broadcast keeps only the hashed idempotency claim and its
@@ -516,6 +519,21 @@ same 30-second cache entry. `cachedAtMs` is the time the underlying data was
 fetched (cache hits report the original fetch time). Prices are mainnet-only
 and take no `network` param — testnet clients shouldn't ask (see
 [Networks](#networks)).
+
+The upstream request is bound to exact lowercase CoinGecko ids and asks for
+`precision=full`, `include_24hr_change=true` and
+`include_last_updated_at=true`. The response must contain exactly one complete
+quote for every requested id and no extras. Every quote must contain positive
+finite USD/CNY/JPY prices, nullable but bounded currency-specific 24-hour
+changes, and an integer source timestamp no more than 15 minutes old (with at
+most 5 minutes of future clock skew). Unknown members, aliases, duplicate keys,
+missing ids or fields, impossible FX ranges and material cross-quote FX
+disagreement reject the whole response. CNY/JPY per-USD rates are taken from
+the deterministic median of the mutually consistent full-precision quotes,
+not whichever symbol happens to sort first. This follows CoinGecko's
+[Simple Price response contract](https://docs.coingecko.com/reference/simple-price)
+while preventing a partial provider answer from becoming a real portfolio
+valuation.
 
 ### `kt_getChainParams` `{"chain": C, "network": N?, "address": A}`
 

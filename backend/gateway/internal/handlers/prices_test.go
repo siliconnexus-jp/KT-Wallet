@@ -2,8 +2,10 @@ package handlers_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -20,13 +22,23 @@ func newCoinGeckoFake(t *testing.T, table map[string]float64) *restFake {
 		if r.URL.Query().Get("include_24hr_change") != "true" {
 			t.Errorf("include_24hr_change must be true, got %q", r.URL.Query().Get("include_24hr_change"))
 		}
-		out := map[string]map[string]float64{}
+		if r.URL.Query().Get("include_last_updated_at") != "true" {
+			t.Errorf("include_last_updated_at must be true, got %q", r.URL.Query().Get("include_last_updated_at"))
+		}
+		if r.URL.Query().Get("precision") != "full" {
+			t.Errorf("precision must be full, got %q", r.URL.Query().Get("precision"))
+		}
+		out := map[string]map[string]any{}
 		for _, id := range strings.Split(r.URL.Query().Get("ids"), ",") {
 			if usd, ok := table[id]; ok {
-				out[id] = map[string]float64{
-					"usd": usd,
-					"cny": usd * 7,
-					"jpy": usd * 150,
+				out[id] = map[string]any{
+					"usd":             usd,
+					"usd_24h_change":  nil,
+					"cny":             usd * 7,
+					"cny_24h_change":  nil,
+					"jpy":             usd * 150,
+					"jpy_24h_change":  nil,
+					"last_updated_at": time.Now().Unix(),
 				}
 			}
 		}
@@ -43,11 +55,11 @@ func TestPricesInclude24HourChangeAndPreserveUnknown(t *testing.T) {
 			t.Errorf("include_24hr_change must be true, got %q", r.URL.Query().Get("include_24hr_change"))
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{
-			"ethereum":{"usd":2000,"cny":14000,"jpy":300000,"usd_24h_change":3.25},
-			"tether":{"usd":0.999,"cny":6.993,"jpy":149.85,"usd_24h_change":-0.08},
-			"usd-coin":{"usd":1.001,"cny":7.007,"jpy":150.15,"usd_24h_change":null}
-		}`))
+		_, _ = fmt.Fprintf(w, `{
+			"ethereum":{"usd":2000,"cny":14000,"jpy":300000,"usd_24h_change":3.25,"cny_24h_change":3.2,"jpy_24h_change":3.1,"last_updated_at":%d},
+			"tether":{"usd":0.999,"cny":6.993,"jpy":149.85,"usd_24h_change":-0.08,"cny_24h_change":-0.07,"jpy_24h_change":-0.06,"last_updated_at":%d},
+			"usd-coin":{"usd":1.001,"cny":7.007,"jpy":150.15,"usd_24h_change":null,"cny_24h_change":null,"jpy_24h_change":null,"last_updated_at":%d}
+		}`, time.Now().Unix(), time.Now().Unix(), time.Now().Unix())
 	})
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.CoinGeckoURL = f.srv.URL })
 
@@ -112,6 +124,29 @@ func TestPricesMixedFetch(t *testing.T) {
 	if u.Query().Get("include_24hr_change") != "true" {
 		t.Fatalf("include_24hr_change must be true, got %q", u.Query().Get("include_24hr_change"))
 	}
+}
+
+func TestPricesUsesDeterministicMedianFiatRate(t *testing.T) {
+	f := newRESTFake(t)
+	f.route("/api/v3/simple/price", func(w http.ResponseWriter, _ *http.Request) {
+		now := time.Now().Unix()
+		quote := func(usd, cnyRate, jpyRate float64) string {
+			return fmt.Sprintf(`{"usd":%g,"usd_24h_change":null,`+
+				`"cny":%g,"cny_24h_change":null,`+
+				`"jpy":%g,"jpy_24h_change":null,"last_updated_at":%d}`,
+				usd, usd*cnyRate, usd*jpyRate, now)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"avalanche-2":%s,"ethereum":%s,"solana":%s}`,
+			quote(20, 6.99, 149.9),
+			quote(2000, 7.00, 150.0),
+			quote(100, 7.01, 150.1),
+		)
+	})
+	e := newEnv(t, func(cfg *handlers.Config) { cfg.CoinGeckoURL = f.srv.URL })
+
+	res := result(t, e.rpc("kt_getPrices", `{"symbols":["AVAX","ETH","SOL"]}`))
+	assertJSONEq(t, `{"USD":1,"CNY":7,"JPY":150}`, res["fiatPerUsd"])
 }
 
 func TestPricesUnknownSymbolOmitted(t *testing.T) {
@@ -207,5 +242,56 @@ func TestPricesUpstreamFailure(t *testing.T) {
 	d := errData(t, errObj)
 	if d["upstream"] != "coingecko" {
 		t.Fatalf("expected coingecko upstream in error data, got %v", d)
+	}
+}
+
+func TestPricesMalformedResponseDoesNotPoisonCache(t *testing.T) {
+	f := newRESTFake(t)
+	var calls int
+	f.route("/api/v3/simple/price", func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		if calls == 1 {
+			_, _ = w.Write([]byte(`{"ethereum":{"usd":2000,"cny":14000,"jpy":300000}}`))
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"ethereum":{`+
+			`"usd":2000,"usd_24h_change":null,`+
+			`"cny":14000,"cny_24h_change":null,`+
+			`"jpy":300000,"jpy_24h_change":null,`+
+			`"last_updated_at":%d}}`, time.Now().Unix())
+	})
+	e := newEnv(t, func(cfg *handlers.Config) { cfg.CoinGeckoURL = f.srv.URL })
+
+	assertErrCode(t, e.rpc("kt_getPrices", `{"symbols":["ETH"]}`), rpc.CodeUpstream)
+	res := result(t, e.rpc("kt_getPrices", `{"symbols":["ETH"]}`))
+	assertJSONEq(t, `{"ETH":{"usd":2000}}`, res["prices"])
+	if calls != 2 {
+		t.Fatalf("malformed response must not populate cache, calls=%d", calls)
+	}
+}
+
+func TestPricesLiveSupportedCatalog(t *testing.T) {
+	if os.Getenv("KT_LIVE_COINGECKO") != "1" {
+		t.Skip("set KT_LIVE_COINGECKO=1 for the read-only supported catalog smoke test")
+	}
+	symbols := []string{
+		"ETH", "POL", "AVAX", "BNB", "TRX", "SOL", "USDT", "USDC", "BUSD",
+		"DAI", "WETH", "WBTC", "LINK", "UNI", "SHIB", "PEPE", "JUP", "BONK", "PYUSD",
+	}
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.CoinGeckoURL = "https://api.coingecko.com"
+		cfg.AttemptTimeout = 15 * time.Second
+	})
+
+	res := result(t, e.rpc("kt_getPrices", map[string]any{"symbols": symbols}))
+	prices, ok := res["prices"].(map[string]any)
+	if !ok || len(prices) != len(symbols) {
+		t.Fatalf("live supported price count=%d, want %d: %v", len(prices), len(symbols), res["prices"])
+	}
+	for _, symbol := range symbols {
+		if _, present := prices[symbol]; !present {
+			t.Fatalf("live supported price is missing %s", symbol)
+		}
 	}
 }

@@ -280,6 +280,24 @@
   mainnet 三条 limit=1 回包，三者顶层/row/meta 字段均与受审词汇表一致。Provider 严格范围现扩展到 Helius + Alchemy +
   Etherscan/Blockscout + TronGrid；CoinGecko 与 GoPlus 仍待同等级审阅。该修复是本地源码
   候选，生产仍为 1.16.15。
+- [x] 2026-08-04 继续关闭 CoinGecko Simple Price 的资产估值边界。旧实现把动态
+  coin-id 对象直接 `json.Unmarshal` 到 `map[string]MarketQuote`，会静默接受请求外币种、
+  大小写别名、重复顶层/价格键、未知字段、缺少请求币种或价格字段、零/负价格、非法
+  涨跌与任意/过期源时间；23 类确定性坏回包在修复前均被接受或进入可缓存结果。现请求
+  只接受 1–50 个唯一规范 coin id，固定 `usd,cny,jpy`、`precision=full`、24h 涨跌与
+  `last_updated_at`；响应顶层必须与请求集合精确相等，每个 quote 只接受官方当前七字段，
+  三币种价格必须正且有限，三币种 24h 涨跌必须为 null 或有限且不低于 -100%，源时间
+  只能是 15 分钟内的整数 Unix 秒并容忍最多 5 分钟时钟偏差。缺失、额外、别名、重复、
+  部分或陈旧响应整体失败，不能写入 30 秒 cache。人工差异审阅又以两币种互相冲突的
+  CNY/JPY 报价让首版候选先红；现所有 quote 的 USD 交叉汇率必须处于广义合理范围且在
+  0.5% 内一致，Gateway 使用一致集合的确定性中位数，不再用排序后第一个币决定全钱包
+  FX。14 类 schema/request 绑定、11 类金融值/新鲜度、跨 quote 污染、nullable 涨跌、
+  缓存不污染与完整参数正反例通过；upstream 连续 20/20、handler 10/10，实时官方
+  ETH/SOL/USDC 解析 smoke 1/1 与全部 19 个内置 symbol 的 Gateway 只读 smoke 19/19，
+  Gateway 全量、关键包 race、vet、固定 govulncheck/ops、
+  远程安全边界和公开源码 12/12 全部通过。Provider 严格范围现扩展到 Helius + Alchemy +
+  Etherscan/Blockscout + TronGrid + CoinGecko；仅 GoPlus 仍待同等级响应审阅。该项仍是
+  本地源码候选，未部署，生产仍为 1.16.15。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。

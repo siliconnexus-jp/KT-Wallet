@@ -119,6 +119,7 @@ void main() {
   _auditGatewayAlchemyResponseSchema(failures);
   _auditGatewayExplorerResponseSchema(failures);
   _auditGatewayTronHistoryResponseSchema(failures);
+  _auditGatewayCoinGeckoResponseSchema(failures);
   _auditRiskSignalDirection(failures);
 
   if (failures.isNotEmpty) {
@@ -135,9 +136,9 @@ void main() {
     '3 hot-signing families independently verified, '
     'hot and air-gapped broadcasts hash-bound before success metrics, '
     'all parameterized public Gateway requests, inbound JSON-RPC envelopes, '
-    'upstream node responses, Helius, Alchemy, Etherscan/Blockscout, and '
-    'TronGrid '
-    'history responses plus fallback block timestamps exact-schema '
+    'upstream node responses, Helius, Alchemy, Etherscan/Blockscout, '
+    'TronGrid history, and CoinGecko market responses plus fallback block '
+    'timestamps exact-schema '
     'decoded.',
   );
 }
@@ -696,6 +697,55 @@ void _auditGatewayTronHistoryResponseSchema(List<String> failures) {
   }
   if (handler.contains('tokenHashes[t.TransactionID]')) {
     failures.add('$handlerPath restored hash-wide TRC-20/native suppression');
+  }
+}
+
+void _auditGatewayCoinGeckoResponseSchema(List<String> failures) {
+  const clientPath = 'backend/gateway/internal/upstream/prices.go';
+  final client = File(clientPath).readAsStringSync();
+  for (final marker in const [
+    'validateCoinGeckoIDs(ids)',
+    'q.Set("include_last_updated_at", "true")',
+    'q.Set("precision", "full")',
+    'decodeCoinGeckoQuotes(data, expectedIDs, time.Now())',
+    'func decodeCoinGeckoQuotes(',
+    'objects, err := decodeUniqueJSONObject(data)',
+    'len(objects) != len(expectedIDs)',
+    'if _, requested := expectedIDs[id]; !requested',
+    'func decodeCoinGeckoQuote(',
+    '"usd", "usd_24h_change",',
+    '"cny", "cny_24h_change",',
+    '"jpy", "jpy_24h_change",',
+    '"last_updated_at",',
+    'parsePositiveFiniteJSONNumber(',
+    'parseNullableCoinGeckoChange(',
+    'parseCoinGeckoTimestamp(',
+    'validateCoinGeckoFXConsistency(out)',
+  ]) {
+    if (!client.contains(marker)) {
+      failures.add(
+        '$clientPath lost exact CoinGecko response invariant: $marker',
+      );
+    }
+  }
+  if (client.contains('json.Unmarshal(data, &out)')) {
+    failures.add('$clientPath restored permissive CoinGecko decoding');
+  }
+
+  const handlerPath = 'backend/gateway/internal/handlers/prices.go';
+  final handler = File(handlerPath).readAsStringSync();
+  for (final marker in const [
+    'cnyRates = append(cnyRates, quote.CNY/quote.USD)',
+    'jpyRates = append(jpyRates, quote.JPY/quote.USD)',
+    'fiatPerUSD["CNY"] = medianRate(cnyRates)',
+    'fiatPerUSD["JPY"] = medianRate(jpyRates)',
+    'func medianRate(',
+  ]) {
+    if (!handler.contains(marker)) {
+      failures.add(
+        '$handlerPath lost deterministic CoinGecko FX invariant: $marker',
+      );
+    }
   }
 }
 

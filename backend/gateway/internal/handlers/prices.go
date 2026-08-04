@@ -98,6 +98,15 @@ func (g *Gateway) GetPrices(ctx context.Context, params json.RawMessage) (any, *
 			if err != nil {
 				return nil, upstreamError("coingecko", err)
 			}
+			cnyRates := make([]float64, 0, len(fetch))
+			jpyRates := make([]float64, 0, len(fetch))
+			for _, sym := range fetch {
+				quote := res[geckoIDs[sym]]
+				cnyRates = append(cnyRates, quote.CNY/quote.USD)
+				jpyRates = append(jpyRates, quote.JPY/quote.USD)
+			}
+			fiatPerUSD["CNY"] = medianRate(cnyRates)
+			fiatPerUSD["JPY"] = medianRate(jpyRates)
 			fetched := make(map[string]usdPrice)
 			for _, sym := range fetch {
 				if quote, ok := res[geckoIDs[sym]]; ok {
@@ -107,14 +116,6 @@ func (g *Gateway) GetPrices(ctx context.Context, params json.RawMessage) (any, *
 					}
 					fetched[sym] = price
 					out[sym] = price
-					if quote.USD > 0 {
-						if _, exists := fiatPerUSD["CNY"]; !exists && quote.CNY > 0 {
-							fiatPerUSD["CNY"] = quote.CNY / quote.USD
-						}
-						if _, exists := fiatPerUSD["JPY"]; !exists && quote.JPY > 0 {
-							fiatPerUSD["JPY"] = quote.JPY / quote.USD
-						}
-					}
 				}
 			}
 			cachedAt = g.clk.Now()
@@ -131,4 +132,14 @@ func (g *Gateway) GetPrices(ctx context.Context, params json.RawMessage) (any, *
 		"fiatPerUsd": fiatPerUSD,
 		"cachedAtMs": cachedAt.UnixMilli(),
 	}, nil
+}
+
+func medianRate(rates []float64) float64 {
+	sorted := append([]float64(nil), rates...)
+	sort.Float64s(sorted)
+	middle := len(sorted) / 2
+	if len(sorted)%2 == 1 {
+		return sorted[middle]
+	}
+	return (sorted[middle-1] + sorted[middle]) / 2
 }
