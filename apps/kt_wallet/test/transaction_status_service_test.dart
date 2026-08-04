@@ -49,6 +49,8 @@ const _tronHash =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const _otherTronHash =
     'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const _solanaSignature =
+    '4cdd1oX7cfVALfr26tP52BZ6cSzrgnNGtYD7BFhm6FFeZV5sPTnRvg6NRn8yC6DbEikXcrNChBM5vVJnTgKhGhVu';
 
 Map<String, Object?> _evmReceipt({
   String transactionHash = _evmHash,
@@ -402,10 +404,16 @@ void main() {
   test('Solana execution error is failed, not confirmed', () async {
     final rpc = _JsonRpc({
       'getSignatureStatuses': {
+        'context': {'slot': 82},
         'value': [
           {
+            'slot': 48,
+            'confirmations': null,
             'confirmationStatus': 'finalized',
             'err': {'InstructionError': 0},
+            'status': {
+              'Err': {'InstructionError': 0},
+            },
           },
         ],
       },
@@ -417,16 +425,78 @@ void main() {
     );
 
     expect(
-      await service.check(_tx(Coin.solana.name, 'signature')),
+      await service.check(_tx(Coin.solana.name, _solanaSignature)),
       ChainTransactionStatus.failed,
     );
   });
+
+  test(
+    'malformed Solana status stays unknown and never invents confirmation',
+    () async {
+      final rpc = _JsonRpc({
+        'getSignatureStatuses': {
+          'value': [
+            {'confirmationStatus': 'finalized', 'err': null},
+          ],
+        },
+        'getBlockHeight': 101,
+      });
+      final service = TransactionStatusService(
+        endpoints: (_) => 'https://rpc.example',
+        jsonRpcTransport: rpc,
+        restTransport: _Rest(null),
+      );
+
+      expect(
+        await service.check(
+          _tx(Coin.solana.name, _solanaSignature, lastValidBlockHeight: 100),
+        ),
+        ChainTransactionStatus.unknown,
+      );
+      expect(rpc.methods, ['getSignatureStatuses']);
+    },
+  );
+
+  test(
+    'known Solana status with nullable confirmation never expires as missing',
+    () async {
+      final rpc = _JsonRpc({
+        'getSignatureStatuses': {
+          'context': {'slot': 82},
+          'value': [
+            {
+              'slot': 48,
+              'confirmations': 0,
+              'confirmationStatus': null,
+              'err': null,
+              'status': {'Ok': null},
+            },
+          ],
+        },
+        'getBlockHeight': 101,
+      });
+      final service = TransactionStatusService(
+        endpoints: (_) => 'https://rpc.example',
+        jsonRpcTransport: rpc,
+        restTransport: _Rest(null),
+      );
+
+      expect(
+        await service.check(
+          _tx(Coin.solana.name, _solanaSignature, lastValidBlockHeight: 100),
+        ),
+        ChainTransactionStatus.pending,
+      );
+      expect(rpc.methods, ['getSignatureStatuses']);
+    },
+  );
 
   test(
     'missing Solana signature expires only beyond persisted block height',
     () async {
       final rpc = _JsonRpc({
         'getSignatureStatuses': {
+          'context': {'slot': 100},
           'value': [null],
         },
         'getBlockHeight': 101,
@@ -439,7 +509,7 @@ void main() {
 
       expect(
         await service.check(
-          _tx(Coin.solana.name, 'signature', lastValidBlockHeight: 100),
+          _tx(Coin.solana.name, _solanaSignature, lastValidBlockHeight: 100),
         ),
         ChainTransactionStatus.expired,
       );
@@ -450,6 +520,7 @@ void main() {
   test('Solana remains unknown at its last valid block height', () async {
     final rpc = _JsonRpc({
       'getSignatureStatuses': {
+        'context': {'slot': 100},
         'value': [null],
       },
       'getBlockHeight': 100,
@@ -462,7 +533,7 @@ void main() {
 
     expect(
       await service.check(
-        _tx(Coin.solana.name, 'signature', lastValidBlockHeight: 100),
+        _tx(Coin.solana.name, _solanaSignature, lastValidBlockHeight: 100),
       ),
       ChainTransactionStatus.unknown,
     );

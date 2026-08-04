@@ -41,7 +41,6 @@ class TransactionConfirmationService {
   final RestTransport _rest;
   final bool _ownsJsonRpc;
   final bool _ownsRest;
-  int _requestId = 0;
 
   Future<TransactionConfirmation> check(Chain chain, String hash) =>
       switch (chain) {
@@ -105,39 +104,16 @@ class TransactionConfirmationService {
   }
 
   Future<TransactionConfirmation> _checkSolana(String hash) async {
-    final response = await _jsonRpc.post(endpoints(Coin.solana), {
-      'jsonrpc': '2.0',
-      'id': ++_requestId,
-      'method': 'getSignatureStatuses',
-      'params': [
-        [hash],
-        {'searchTransactionHistory': true},
-      ],
-    });
-    if (response is! Map || response['error'] != null) {
-      throw RpcException('malformed Solana signature status');
-    }
-    final result = response['result'];
-    final values = result is Map ? result['value'] : null;
-    if (values is! List || values.length != 1) {
-      throw RpcException('malformed Solana signature status');
-    }
-    final status = values.single;
-    if (status == null) {
+    final rpc = SolanaRpc(url: endpoints(Coin.solana), transport: _jsonRpc);
+    final result = await rpc.signatureResult(hash);
+    if (result == null) {
       return const TransactionConfirmation(
         status: TxStatus.pending,
         confirmations: 0,
       );
     }
-    if (status is! Map) {
-      throw RpcException('malformed Solana signature entry');
-    }
-    final confirmationStatus = status['confirmationStatus'];
-    final confirmations = status['confirmations'];
-    if (confirmations != null && confirmations is! int) {
-      throw RpcException('malformed Solana confirmation count');
-    }
-    final txStatus = status['err'] != null
+    final confirmationStatus = result.confirmationStatus;
+    final txStatus = result.failed
         ? TxStatus.failed
         : switch (confirmationStatus) {
             'confirmed' || 'finalized' => TxStatus.confirmed,
@@ -145,7 +121,7 @@ class TransactionConfirmationService {
           };
     return TransactionConfirmation(
       status: txStatus,
-      confirmations: confirmations as int?,
+      confirmations: result.confirmations,
       finalized: confirmationStatus == 'finalized',
     );
   }

@@ -204,6 +204,16 @@ Repeated or concurrent POSTs across CDN, proxy, or Gateway instances reuse the
 first outcome and never submit the same signed transaction twice; raw signed
 bytes are not stored.
 
+Solana direct reconciliation and the post-send confirmation view share one
+strict `getSignatureStatuses` parser. It accepts exactly one result for the
+requested canonical 64-byte Base58 signature, binds the entry slot to the RPC
+context, validates confirmations and the official confirmation-state vocabulary,
+requires rooted/finalized and counted/non-finalized evidence to agree, and
+requires the legacy `status` result to agree with `err`. Only an explicit
+single `null` entry means “not found”; incomplete, contradictory, oversized, or
+ambiguous responses stay unknown instead of inventing confirmation, failure, or
+expiry.
+
 Pending EVM transactions support:
 
 - **Speed up** — sends a replacement with the same nonce, recipient, value, and
@@ -566,8 +576,8 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-05) completed with zero static-analysis
-issues: **1,627/1,627** KT Wallet tests, **570/570** KT Cold Signer tests, and
-**431/431** shared-package tests passed. The default gate passed **12/12** and
+issues: **1,630/1,630** KT Wallet tests, **570/570** KT Cold Signer tests, and
+**435/435** shared-package tests passed. The default gate passed **12/12** and
 the native/runtime/OSV `--full` gate passed **13/13**. The Gateway audit,
 public-secret gate, Gateway public-release version gate, native dependency
 lock/checksum verification, and OSV scans also passed. These numbers are

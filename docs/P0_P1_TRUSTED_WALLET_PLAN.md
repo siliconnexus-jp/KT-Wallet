@@ -101,6 +101,14 @@ TRON/Solana/EVM 余额与 Portfolio 身份、Solana 交易终态、EVM 动态手
   但缺少 `err` 时的假确认。App 3 项与 Gateway 5 项负例均先红后绿；缺证据只展示
   unknown 并继续按 hash 对账，明确成功/失败回归仍保持终态。该项是解析与协议不变量，
   不以无关截图代替畸形 Provider 回包证据。
+- [x] App 的 Solana hash 专项续查与刚广播后的确认深度展示共用同一个严格
+  `getSignatureStatuses` 解析器：请求签名必须是规范 Base58 编码的 64 bytes；响应必须
+  含精确 context 与单元素 value，已找到条目必须完整绑定 slot、confirmations、err、
+  legacy status 和 confirmationStatus，且 finality 与 confirmations、status 与 err
+  分别一致。只有显式 `[null]`
+  表示当前未找到；缺 context/字段、附加字段、错 slot、未知状态、矛盾错误或超限嵌套
+  全部失败闭合为 unknown，不能制造 confirmed/failed，也不能错误触发过期。静态边界
+  同时锁定两条生产入口不得恢复手工宽松解析。
 - [x] 对照 Etherscan 官方 tokentx schema 与真实 Blockscout 响应继续复审后，修复
   “安全但不可用”的第二层回归：ERC-20 事件本来不返回 normal transaction 的执行字段，
   现在只有区块号、32-byte block hash、交易索引与非负确认数字段完整时，才把已索引
@@ -2181,3 +2189,20 @@ Golden、广播/热钱包持久化/replacement/授权撤销定向 69/69 与 chai
 KT Cold Signer 570/570、共享 packages 431/431、静态分析 0、完整依赖/OSV 门禁 13/13
 通过。本项没有服务端改动，无需部署 Gateway；
 截图是确定性故障注入 UI，只证明“未知不重发”和“确定拒绝仍失败”，不宣称新增链上交易。
+
+同日继续复审 Solana 直连交易状态。旧共享 RPC 只宽松读取 value 第一项的
+`confirmationStatus/err`，不要求 context、slot、confirmations 或 legacy status；刚广播后的
+确认深度服务还维护了另一份更宽松的手工解析。失败优先测试用缺少 context/slot/status 的
+`finalized + err:null` 响应稳定得到 `expected unknown / actual confirmed`，并证明一个实际已
+存在但 confirmationStatus 暂为 null 的条目会被误当成缺失，继而可能按 lastValidBlockHeight
+错误过期。修复后两条生产入口统一使用共享严格解析器：输入签名必须是规范 Base58 64 bytes，
+响应只能是精确 context + 单元素 value；已找到条目必须完整绑定 slot、confirmations、err、
+legacy status 与 confirmationStatus，slot 不超过 context，finalized 与 confirmations 的
+rooted/null 语义必须一致，Ok/Err 与 err 必须按有界 JSON
+逐字段一致。只有显式 `[null]` 才允许进入未找到/过期判断，畸形证据保持 unknown。静态远程
+安全边界同步锁定两个入口不得恢复手工解析。包级 51/51、两条 App 状态入口 29/29、chains
+196/196、KT Wallet 1630/1630（另有 11 项显式线上/设备测试默认跳过）、KT Cold Signer
+570/570、共享 packages 435/435、静态分析 0 与完整依赖/OSV 门禁 13/13 通过；官方 Solana
+Devnet 的 blockhash、fee、未签名 simulation 与一笔既有 finalized signature 真实只读 smoke
+1/1 通过，未加载私钥且未广播。本轮没有 Gateway 或视觉 UI 变化，无需部署后端，也不使用
+无关截图冒充协议响应证据；App 修复须随下一版移动端制品发布。

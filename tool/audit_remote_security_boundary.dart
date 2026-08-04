@@ -119,6 +119,7 @@ void main() {
   _auditGatewayVocabulary(failures);
   _auditNetworkFreeSecurityModules(failures);
   _auditHotSigningBoundary(failures);
+  _auditSolanaStatusEvidence(failures);
   _auditGatewayFirstNetworkIdentity(failures);
   _auditGatewayIrreversibleRequestSchema(failures);
   _auditGatewayPublicRequestSchemas(failures);
@@ -153,6 +154,39 @@ void main() {
     'security responses plus fallback block timestamps exact-schema '
     'decoded.',
   );
+}
+
+void _auditSolanaStatusEvidence(List<String> failures) {
+  const rpcPath = 'packages/chains/lib/src/rpc/solana_rpc.dart';
+  final rpc = File(rpcPath).readAsStringSync();
+  final signatureResult = _futureMethodSection(rpc, 'signatureResult');
+  for (final marker in const [
+    '_solanaTransactionSignature(signature)',
+    "_solanaValueEnvelope(result, 'signature status')",
+    'value.length != 1',
+    'final rawEntry = value.single',
+    "'slot',",
+    "'confirmations',",
+    "'err',",
+    "'status',",
+    "'confirmationStatus',",
+    "rawConfirmationStatus == 'finalized' && confirmations != null",
+    '_boundedJsonEquivalent(legacyError, rawError)',
+  ]) {
+    if (signatureResult == null || !signatureResult.contains(marker)) {
+      failures.add('$rpcPath lost Solana status evidence invariant: $marker');
+    }
+  }
+
+  for (final path in const [
+    'apps/kt_wallet/lib/src/market/transaction_status_service.dart',
+    'apps/kt_wallet/lib/src/transfer/transaction_confirmation_service.dart',
+  ]) {
+    final source = File(path).readAsStringSync();
+    if (!source.contains('.signatureResult(hash)')) {
+      failures.add('$path bypasses the strict Solana status parser');
+    }
+  }
 }
 
 void _auditRemoteSdkDependencies(List<String> failures) {

@@ -51,6 +51,8 @@ const _tronHash =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const _otherTronHash =
     'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const _solanaSignature =
+    '4cdd1oX7cfVALfr26tP52BZ6cSzrgnNGtYD7BFhm6FFeZV5sPTnRvg6NRn8yC6DbEikXcrNChBM5vVJnTgKhGhVu';
 
 Map<String, Object?> _evmReceipt({
   String transactionHash = _evmHash,
@@ -219,6 +221,7 @@ void main() {
     test('Solana status maps pending, confirmed, and failed', () async {
       final json = _JsonRpc({
         'getSignatureStatuses': {
+          'context': {'slot': 100},
           'value': [null],
         },
       });
@@ -228,30 +231,66 @@ void main() {
         restTransport: _Rest(),
       );
 
-      final pending = await service.check(Chain.solana, 'sig');
+      final pending = await service.check(Chain.solana, _solanaSignature);
       expect(pending.status, TxStatus.pending);
       expect(pending.confirmations, 0);
       json.results['getSignatureStatuses'] = {
+        'context': {'slot': 100},
         'value': [
-          {'err': null, 'confirmations': 7, 'confirmationStatus': 'confirmed'},
+          {
+            'slot': 99,
+            'err': null,
+            'status': {'Ok': null},
+            'confirmations': 7,
+            'confirmationStatus': 'confirmed',
+          },
         ],
       };
-      final confirmed = await service.check(Chain.solana, 'sig');
+      final confirmed = await service.check(Chain.solana, _solanaSignature);
       expect(confirmed.status, TxStatus.confirmed);
       expect(confirmed.confirmations, 7);
       json.results['getSignatureStatuses'] = {
+        'context': {'slot': 100},
         'value': [
           {
+            'slot': 98,
             'err': {'InstructionError': 1},
+            'status': {
+              'Err': {'InstructionError': 1},
+            },
             'confirmations': 8,
             'confirmationStatus': 'confirmed',
           },
         ],
       };
-      final failed = await service.check(Chain.solana, 'sig');
+      final failed = await service.check(Chain.solana, _solanaSignature);
       expect(failed.status, TxStatus.failed);
       expect(failed.confirmations, 8);
       expect(json.method, 'getSignatureStatuses');
+    });
+
+    test('Solana confirmation rejects incomplete evidence', () async {
+      final json = _JsonRpc({
+        'getSignatureStatuses': {
+          'value': [
+            {
+              'err': null,
+              'confirmations': 7,
+              'confirmationStatus': 'confirmed',
+            },
+          ],
+        },
+      });
+      final service = TransactionConfirmationService(
+        endpoints: _endpoint,
+        jsonRpcTransport: json,
+        restTransport: _Rest(),
+      );
+
+      await expectLater(
+        service.check(Chain.solana, _solanaSignature),
+        throwsA(isA<RpcException>()),
+      );
     });
   });
 }

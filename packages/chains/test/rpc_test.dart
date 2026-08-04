@@ -58,6 +58,8 @@ const _solanaOtherOwner = '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin';
 const _solanaMint = '2cHr7QS3xfuSV8wdxo3ztuF4xbiarF6Nrgx3qpx3HzXR';
 const _solanaOtherMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const _solanaTokenAccount = 'BGocb4GEpbTFm8UFV2VsDSaBXHELPfAXrvd4vtt8QWrA';
+const _solanaSignature =
+    '4cdd1oX7cfVALfr26tP52BZ6cSzrgnNGtYD7BFhm6FFeZV5sPTnRvg6NRn8yC6DbEikXcrNChBM5vVJnTgKhGhVu';
 
 Map<String, Object?> _solanaTokenAccountRow({
   String pubkey = _solanaTokenAccount,
@@ -104,6 +106,20 @@ Map<String, Object?> _solanaTokenAccountRow({
 Map<String, Object?> _solanaTokenResult({List<Object?>? rows}) => {
   'context': {'apiVersion': '4.1.2', 'slot': 341197933},
   'value': rows ?? [_solanaTokenAccountRow()],
+};
+
+Map<String, Object?> _solanaSignatureStatusResult({
+  int contextSlot = 82,
+  Object? entry = const {
+    'slot': 48,
+    'confirmations': null,
+    'err': null,
+    'status': {'Ok': null},
+    'confirmationStatus': 'finalized',
+  },
+}) => {
+  'context': {'slot': contextSlot},
+  'value': [entry],
 };
 
 Map<String, Object?> _evmReceipt({
@@ -787,16 +803,143 @@ void main() {
       expect(await rpc.getBlockHeight(), 123456);
     });
 
-    test('signatureStatus null when unknown', () async {
+    test(
+      'signature status binds the official single-signature shape',
+      () async {
+        final rpc = SolanaRpc(
+          url: 'x',
+          transport: FakeJsonRpc((m, p) => _ok(_solanaSignatureStatusResult())),
+        );
+        final result = await rpc.signatureResult(_solanaSignature);
+        expect(result, isNotNull);
+        expect(result!.slot, 48);
+        expect(result.confirmations, isNull);
+        expect(result.confirmationStatus, 'finalized');
+        expect(result.failed, isFalse);
+      },
+    );
+
+    test('signatureStatus null only for one explicit null result', () async {
       final rpc = SolanaRpc(
         url: 'x',
         transport: FakeJsonRpc(
-          (m, p) => _ok({
-            'value': [null],
-          }),
+          (m, p) => _ok(_solanaSignatureStatusResult(entry: null)),
         ),
       );
-      expect(await rpc.signatureStatus('sig'), isNull);
+      expect(await rpc.signatureResult(_solanaSignature), isNull);
+    });
+
+    test('signature status preserves a canonical execution failure', () async {
+      const error = {
+        'InstructionError': [1, 'InvalidArgument'],
+      };
+      final row = {
+        'slot': 48,
+        'confirmations': 2,
+        'err': error,
+        'status': {'Err': error},
+        'confirmationStatus': null,
+      };
+      final rpc = SolanaRpc(
+        url: 'x',
+        transport: FakeJsonRpc(
+          (m, p) => _ok(_solanaSignatureStatusResult(entry: row)),
+        ),
+      );
+
+      final result = await rpc.signatureResult(_solanaSignature);
+      expect(result, isNotNull);
+      expect(result!.slot, 48);
+      expect(result.confirmations, 2);
+      expect(result.confirmationStatus, isNull);
+      expect(result.failed, isTrue);
+    });
+
+    test(
+      'signature status rejects ambiguous or inconsistent evidence',
+      () async {
+        final ok = _solanaSignatureStatusResult()['value']! as List<Object?>;
+        final row = Map<String, Object?>.from(ok.single! as Map);
+        final oversizedError = {'message': List.filled(4097, 'x').join()};
+        final invalid = <Object?>[
+          {
+            'value': [row],
+          },
+          {..._solanaSignatureStatusResult(), 'provider': 'node-a'},
+          {..._solanaSignatureStatusResult(), 'value': <Object?>[]},
+          {
+            ..._solanaSignatureStatusResult(),
+            'value': [row, null],
+          },
+          _solanaSignatureStatusResult(entry: {...row, 'provider': 'node-a'}),
+          _solanaSignatureStatusResult(entry: {...row}..remove('slot')),
+          _solanaSignatureStatusResult(entry: {...row, 'slot': -1}),
+          _solanaSignatureStatusResult(contextSlot: 47),
+          _solanaSignatureStatusResult(entry: {...row, 'confirmations': -1}),
+          _solanaSignatureStatusResult(entry: {...row, 'confirmations': '1'}),
+          _solanaSignatureStatusResult(
+            entry: {...row, 'confirmationStatus': 'accepted'},
+          ),
+          _solanaSignatureStatusResult(
+            entry: {...row, 'confirmationStatus': 'confirmed'},
+          ),
+          _solanaSignatureStatusResult(entry: {...row, 'confirmations': 1}),
+          _solanaSignatureStatusResult(
+            entry: {
+              ...row,
+              'err': {'InstructionError': 0},
+            },
+          ),
+          _solanaSignatureStatusResult(
+            entry: {
+              ...row,
+              'status': {
+                'Err': {'InstructionError': 0},
+              },
+            },
+          ),
+          _solanaSignatureStatusResult(
+            entry: {
+              ...row,
+              'err': {'InstructionError': 0},
+              'status': {
+                'Err': {'InstructionError': 1},
+              },
+            },
+          ),
+          _solanaSignatureStatusResult(
+            entry: {
+              ...row,
+              'err': oversizedError,
+              'status': {'Err': oversizedError},
+            },
+          ),
+        ];
+        for (final response in invalid) {
+          final rpc = SolanaRpc(
+            url: 'x',
+            transport: FakeJsonRpc((m, p) => _ok(response)),
+          );
+          await expectLater(
+            rpc.signatureResult(_solanaSignature),
+            throwsA(isA<RpcException>()),
+            reason: '$response',
+          );
+        }
+      },
+    );
+
+    test('signature status rejects a non-canonical txid before RPC', () async {
+      final transport = FakeJsonRpc(
+        (m, p) => _ok(_solanaSignatureStatusResult()),
+      );
+      final rpc = SolanaRpc(url: 'x', transport: transport);
+
+      await expectLater(
+        rpc.signatureResult('not-a-signature'),
+        throwsA(isA<RpcException>()),
+      );
+      expect(transport.requests, isEmpty);
     });
 
     test('fee and simulation use the exact serialized message', () async {

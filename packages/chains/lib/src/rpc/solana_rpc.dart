@@ -286,20 +286,93 @@ class SolanaRpc {
   /// RPC's `err` field, so callers never mistake an included failed
   /// transaction for a successful confirmation.
   Future<SolanaSignatureStatus?> signatureResult(String signature) async {
+    _solanaTransactionSignature(signature);
     final result = await _call('getSignatureStatuses', [
       [signature],
       {'searchTransactionHistory': true},
     ]);
-    final value = result is Map ? result['value'] : null;
-    if (value is! List || value.isEmpty) return null;
-    final entry = value.first;
-    if (entry is! Map) return null;
-    final status = entry['confirmationStatus'];
-    if (status == null) return null;
-    if (status is! String) throw RpcException('bad confirmationStatus');
+    final envelope = _solanaValueEnvelope(result, 'signature status');
+    final value = envelope['value'];
+    if (value is! List || value.length != 1) {
+      throw RpcException('bad signature status response');
+    }
+    final rawEntry = value.single;
+    if (rawEntry == null) return null;
+    final entry = _exactMap(
+      rawEntry,
+      allowed: const {
+        'slot',
+        'confirmations',
+        'err',
+        'status',
+        'confirmationStatus',
+      },
+      required: const {
+        'slot',
+        'confirmations',
+        'err',
+        'status',
+        'confirmationStatus',
+      },
+      label: 'signature status entry',
+    );
+    final context = envelope['context']! as Map;
+    final contextSlot = _u64(context['slot'], 'signature status context slot');
+    final slot = _u64(entry['slot'], 'signature status slot');
+    if (slot > contextSlot) {
+      throw RpcException('bad signature status slot');
+    }
+    final rawConfirmations = entry['confirmations'];
+    final confirmations = rawConfirmations == null
+        ? null
+        : _u64(rawConfirmations, 'signature status confirmations');
+    final rawConfirmationStatus = entry['confirmationStatus'];
+    if (rawConfirmationStatus != null &&
+        (rawConfirmationStatus is! String ||
+            !const {
+              'processed',
+              'confirmed',
+              'finalized',
+            }.contains(rawConfirmationStatus))) {
+      throw RpcException('bad confirmationStatus');
+    }
+    if ((rawConfirmationStatus == 'finalized' && confirmations != null) ||
+        ((rawConfirmationStatus == 'processed' ||
+                rawConfirmationStatus == 'confirmed') &&
+            confirmations == null)) {
+      throw RpcException('inconsistent signature confirmations');
+    }
+
+    final legacyStatus = _exactMap(
+      entry['status'],
+      allowed: const {'Ok', 'Err'},
+      required: const {},
+      label: 'signature status result',
+    );
+    if (legacyStatus.length != 1) {
+      throw RpcException('bad signature status result');
+    }
+    final rawError = entry['err'];
+    final bool failed;
+    if (legacyStatus.containsKey('Ok')) {
+      if (legacyStatus['Ok'] != null || rawError != null) {
+        throw RpcException('inconsistent successful signature status');
+      }
+      failed = false;
+    } else {
+      final legacyError = legacyStatus['Err'];
+      if (legacyError == null ||
+          rawError == null ||
+          !_boundedJsonEquivalent(legacyError, rawError)) {
+        throw RpcException('inconsistent failed signature status');
+      }
+      failed = true;
+    }
     return SolanaSignatureStatus(
-      confirmationStatus: status,
-      failed: entry['err'] != null,
+      slot: slot,
+      confirmations: confirmations,
+      confirmationStatus: rawConfirmationStatus as String?,
+      failed: failed,
     );
   }
 }
@@ -316,11 +389,15 @@ class SolanaLatestBlockhash {
 
 class SolanaSignatureStatus {
   const SolanaSignatureStatus({
+    required this.slot,
+    required this.confirmations,
     required this.confirmationStatus,
     required this.failed,
   });
 
-  final String confirmationStatus;
+  final int slot;
+  final int? confirmations;
+  final String? confirmationStatus;
   final bool failed;
 }
 
@@ -405,6 +482,43 @@ int _u64(Object? raw, String label) {
     throw RpcException('bad $label');
   }
   return raw;
+}
+
+bool _boundedJsonEquivalent(Object? left, Object? right, [int depth = 0]) {
+  if (depth > 32) return false;
+  if (left == null || right == null) return left == right;
+  if (left is bool || left is String || left is num) {
+    if (left is String && left.length > 4096) return false;
+    if (left is num && !left.isFinite) return false;
+    return left.runtimeType == right.runtimeType && left == right;
+  }
+  if (left is List) {
+    if (right is! List || left.length != right.length || left.length > 256) {
+      return false;
+    }
+    for (var index = 0; index < left.length; index++) {
+      if (!_boundedJsonEquivalent(left[index], right[index], depth + 1)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (left is Map) {
+    if (right is! Map || left.length != right.length || left.length > 64) {
+      return false;
+    }
+    for (final entry in left.entries) {
+      final key = entry.key;
+      if (key is! String || key.length > 128 || !right.containsKey(key)) {
+        return false;
+      }
+      if (!_boundedJsonEquivalent(entry.value, right[key], depth + 1)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
 }
 
 SolanaTokenAccount _parseTokenAccount(
@@ -573,6 +687,21 @@ String _solanaPublicKey(Object? raw, String label) {
     }
   } on Base58Error {
     throw RpcException('bad $label');
+  }
+  return raw;
+}
+
+String _solanaTransactionSignature(Object? raw) {
+  if (raw is! String || raw.length > 128) {
+    throw RpcException('bad transaction signature');
+  }
+  try {
+    final decoded = base58Decode(raw);
+    if (decoded.length != 64 || base58Encode(decoded) != raw) {
+      throw RpcException('bad transaction signature');
+    }
+  } on Base58Error {
+    throw RpcException('bad transaction signature');
   }
   return raw;
 }

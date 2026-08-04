@@ -45,6 +45,17 @@ void main() {
       expect(simulated.accountLamports[payer], greaterThan(BigInt.zero));
       expect(simulated.feeLamports, fee);
       expect(simulated.unitsConsumed, isNotNull);
+
+      // Previously confirmed, public Devnet transaction from the repository's
+      // test report. This is a read-only compatibility check for the official
+      // getSignatureStatuses shape; it never loads a key or broadcasts.
+      const knownSignature =
+          '23J1Vn2WniBbsdmGYVgoViGhZmrgErjUKbaQ1eikWEhiW4KjTAVjNL6ZwmuYtWro8L1oXxyPBGAJwAUCEgXvzzbX';
+      final status = await rpc.signatureResult(knownSignature);
+      expect(status, isNotNull);
+      expect(status!.slot, greaterThan(0));
+      expect(status.confirmationStatus, 'finalized');
+      expect(status.failed, isFalse);
     },
     skip: live ? false : 'set KT_LIVE_SOLANA_PREFLIGHT=1',
     timeout: const Timeout(Duration(seconds: 60)),
