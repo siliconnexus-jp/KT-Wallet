@@ -2,9 +2,8 @@
 
 更新日期：2026-08-04
 
-当前 Gateway 源码版本 1.16.20；当前生产 Gateway 1.16.19。生产 Gateway-first 链身份、
-TRON/Solana/EVM 余额严格解析与 Solana 交易终态回包闭合均已启用；源码候选继续闭合
-EVM 动态手续费回包。
+当前 Gateway 源码版本 1.16.20；当前生产 Gateway 1.16.20。生产 Gateway-first 链身份、
+TRON/Solana/EVM 余额、Solana 交易终态及 EVM 动态手续费回包严格解析均已启用。
 
 ## 目标与边界
 
@@ -382,7 +381,9 @@ EVM 动态手续费回包。
   `maxFee` 与 Gateway 统一为 `2 × nextBaseFee + priority`；所有 EVM JSON quantity 限制为
   canonical uint256，ERC-20 `balanceOf` 只接受精确 32-byte ABI word。Gateway 16 类负例、
   App 8 类 feeHistory 歧义、quantity/ABI 边界、当前官方正例及真实 Ethereum 主网
-  `eth_feeHistory` 只读 smoke 已通过。该项属于 Gateway 1.16.20 / App 源码候选，尚未发布。
+  `eth_feeHistory` 只读 smoke 已通过。Gateway 1.16.20 已按 secondary → primary 滚动
+  上线；8118/8119/8120 与公网均返回 1.16.20，公网 Ethereum 主网费用三档关系通过，
+  Prometheus 3/3 UP、17/17 规则健康且 0 firing。App 严格直连回退仍属于待签名发布源码。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。
