@@ -298,6 +298,32 @@
   远程安全边界和公开源码 12/12 全部通过。Provider 严格范围现扩展到 Helius + Alchemy +
   Etherscan/Blockscout + TronGrid + CoinGecko；仅 GoPlus 仍待同等级响应审阅。该项仍是
   本地源码候选，未部署，生产仍为 1.16.15。
+- [x] 2026-08-04 完成最后一组 provider 专用边界：GoPlus EVM/TRON Token
+  Security、Solana Token Security 与 opt-in EVM Approval Security。旧实现三条路径
+  都使用普通 struct/map `json.Unmarshal`，会吞掉 envelope/result/风险字段重复键与别名；
+  EVM 会接受请求外 contract、把畸形 flag 当 false，并且仍按旧字符串形态解析当前官方
+  `fake_token` 对象；Solana 读取已过时的 `creator` 单数字段，漏掉当前 `creators` 恶意
+  创建者，且部分权限记录可成为非恶意结果；Approval 忽略回包 `chain_id` 与大量当前
+  必需字段，畸形风险 flag、错误网络和重复证据可进入 sanitized/cache 路径。红测证明旧
+  实现至少接受或误判 28 类确定性坏输入，并直接证明官方身份在 provider 空结果时仍被
+  错标为 `official_catalog+goplus / safe`。现三条共用 duplicate/alias-safe 精确 envelope，
+  非空 result 只能有与请求绑定的唯一身份；EVM 只接受严格 0/1 信号，按当前
+  `fake_token.{true_token_address,value}` 解码，且只有明确返回 `is_honeypot=0` 的受审记录
+  才能为官方身份补充 provider-backed safe。Solana 绑定大小写敏感 mint，完整验证
+  `creators` 与九个权限域、每个 status/authority/address/malicious flag，缺失或畸形整体
+  失败。Approval 对 envelope/token/allowance/address_info 四层实行闭合 schema，响应
+  `chain_id` 必须等于请求，0/1 风险、hash、时间、decimal、文本与数组均有类型/上限，
+  重复 token 身份及 token+spender 都会拒绝而不是合并互相冲突的元数据或显示两次。
+  新增 7 类嵌套/身份证据回归；upstream 20/20、
+  handler 10/10、关键包 race、Gateway 全量、vet、固定 govulncheck/HAProxy/
+  Alertmanager/risk-matrix 与远程安全边界全部通过。当前官方只读样本中 EVM/TRON 七身份
+  首轮 schema smoke 7/7、Solana 五个内置主网币 5/5、公开零地址 Approval 1/1；紧接的
+  provider-backed 重跑在 Arbitrum 遇到官方 `code=4029 too many requests` 且正确失败为
+  unavailable，不把配额错误算作安全结果。冷却后再次执行要求 `Found && !Unsafe` 的
+  完整 provider-backed 套件，Approval、Solana 5/5 与 EVM/TRON 7/7 全部通过。Provider
+  专用严格响应审阅至此覆盖 Helius、
+  Alchemy、Etherscan/Blockscout、TronGrid、CoinGecko 与 GoPlus 三接口。该项仍是本地
+  源码候选，未部署，生产仍为 1.16.15。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。

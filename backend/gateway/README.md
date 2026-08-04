@@ -193,16 +193,23 @@ Operational behavior (fixed by contract):
 - **Token threat intelligence** — the exact operator denylist always wins.
   Supported EVM/TRON mainnets are then checked against GoPlus using only chain
   id + public contract; `sol-mainnet` uses the provider's separate Solana beta
-  endpoint with only the exact public mint. Explicit external malicious evidence
-  overrides an official identity entry. EVM/TRON promote only honeypot,
-  fake-token, malicious-address or gas-abuse evidence. Solana promotes only an
-  explicit `malicious_address` attached to the creator, transfer hook, or a
-  privileged authority; mintable, freezable and mutable-metadata capabilities
-  alone do not block legitimate tokens such as USDC. No evidence remains
-  `unknown`; an official catalog match becomes `safe` only after that check
-  finds no explicit malicious evidence. Timeout/429/malformed responses become
-  an upstream error so the App displays “unable to check” instead of a green
-  state. Testnets retain local registry/catalog behavior and never inherit
+  endpoint with only the exact public mint. Every provider envelope rejects
+  unknown/case-aliased/duplicate members, and a non-empty result must contain
+  exactly the requested identity with no extras. Explicit external malicious
+  evidence overrides an official identity entry. EVM/TRON promote only
+  honeypot, documented `fake_token.value`, malicious-address or gas-abuse
+  evidence; malformed binary flags fail closed. Omission of `is_honeypot`
+  remains unknown because GoPlus documents that omission for unevaluated
+  contracts. Solana requires the complete reviewed `creators` plus nine
+  privileged-authority fields and validates every nested status, authority
+  address and malicious flag without duplicates. It promotes only an explicit
+  malicious authority; mintable, freezable and mutable-metadata capabilities
+  alone do not block legitimate tokens such as USDC. No record or no decisive
+  evidence remains `unknown`; an official catalog match becomes provider-backed
+  `safe` only when the exact bound record was actually evaluated. Timeout,
+  provider quota codes, 429, partial/malformed responses or identity mismatch
+  become an upstream error so the App displays “unable to check” instead of a
+  green state. Testnets retain local registry/catalog behavior and never inherit
   mainnet provider evidence.
 - **Eight-mainnet risk smoke** — operators can run
   `sh ops/verify-token-risk-matrix.sh https://gateway.example` to select one
@@ -365,7 +372,13 @@ Supported networks are `eth-mainnet`, `polygon-mainnet`, `base-mainnet`,
 `arbitrum-mainnet` and `bnb-mainnet`. Missing consent or an invalid address is
 `-32602`; unsupported networks are `-32002`; provider timeout, rate limit,
 malformed response or incomplete data is an upstream error. Only a complete
-successful provider response may produce an empty array. The Gateway never
+successful provider response may produce an empty array. The response uses a
+closed, duplicate-free schema at envelope, token, allowance and spender-info
+levels. Every token row must bind its `chain_id` to the requested network; all
+security flags are exact `0/1`, evidence hashes/times are bounded and typed,
+and duplicate `token + spender` rows reject the whole response rather than
+showing the same revoke twice. Provider display strings remain sanitized and
+bounded before entering cache or JSON-RPC output. The Gateway never
 signs or broadcasts revocations: the App constructs the exact token-contract
 call `approve(spender, 0)`, authenticates/signs it locally or through KT Cold
 Signer, verifies the signed bytes and broadcasts via the normal transaction

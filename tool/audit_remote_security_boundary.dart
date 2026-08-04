@@ -120,6 +120,7 @@ void main() {
   _auditGatewayExplorerResponseSchema(failures);
   _auditGatewayTronHistoryResponseSchema(failures);
   _auditGatewayCoinGeckoResponseSchema(failures);
+  _auditGatewayGoPlusResponseSchema(failures);
   _auditRiskSignalDirection(failures);
 
   if (failures.isNotEmpty) {
@@ -137,8 +138,8 @@ void main() {
     'hot and air-gapped broadcasts hash-bound before success metrics, '
     'all parameterized public Gateway requests, inbound JSON-RPC envelopes, '
     'upstream node responses, Helius, Alchemy, Etherscan/Blockscout, '
-    'TronGrid history, and CoinGecko market responses plus fallback block '
-    'timestamps exact-schema '
+    'TronGrid history, CoinGecko market responses, and all three GoPlus '
+    'security responses plus fallback block timestamps exact-schema '
     'decoded.',
   );
 }
@@ -746,6 +747,110 @@ void _auditGatewayCoinGeckoResponseSchema(List<String> failures) {
         '$handlerPath lost deterministic CoinGecko FX invariant: $marker',
       );
     }
+  }
+}
+
+void _auditGatewayGoPlusResponseSchema(List<String> failures) {
+  const commonPath = 'backend/gateway/internal/upstream/goplus_response.go';
+  final common = File(commonPath).readAsStringSync();
+  for (final marker in const [
+    'decodeExactJSONObject(data, "code", "message", "result")',
+    'func decodeBoundGoPlusRecord(',
+    'if len(result) != 1',
+    'func parseBinaryFlag(',
+    'func decodeMaliciousBehaviors(',
+    'func validateGoPlusTokenIdentity(',
+    'func validateGoPlusApprovalIdentity(',
+    'func validateSolanaMint(',
+  ]) {
+    if (!common.contains(marker)) {
+      failures.add('$commonPath lost strict GoPlus invariant: $marker');
+    }
+  }
+
+  const evmPath = 'backend/gateway/internal/upstream/goplus.go';
+  final evm = File(evmPath).readAsStringSync();
+  for (final marker in const [
+    'validateGoPlusTokenIdentity(chainID, contract)',
+    'decodeGoPlusEnvelope(data)',
+    'decodeBoundGoPlusRecord(',
+    'explicitTokenThreatCategory(recordRaw)',
+    'parseGoPlusFakeToken(',
+    'decodeExactJSONObject(raw, "true_token_address", "value")',
+    'return "", honeypotPresent, nil',
+  ]) {
+    if (!evm.contains(marker)) {
+      failures.add('$evmPath lost strict GoPlus EVM invariant: $marker');
+    }
+  }
+  for (final banned in const [
+    'json.Unmarshal(data, &envelope)',
+    'var record map[string]any',
+    'func flagIsOne(',
+  ]) {
+    if (evm.contains(banned)) {
+      failures.add('$evmPath restored permissive GoPlus EVM parsing: $banned');
+    }
+  }
+
+  const solanaPath = 'backend/gateway/internal/upstream/goplus_solana.go';
+  final solana = File(solanaPath).readAsStringSync();
+  for (final marker in const [
+    'validateSolanaMint(mint)',
+    'decodeGoPlusEnvelope(data)',
+    'decodeBoundGoPlusRecord(envelope.Result, mint, false)',
+    '{name: "creators", array: true}',
+    'func parseSolanaCapability(',
+    'decodeExactJSONObject(raw, "status", authorityKey)',
+    'func parseSolanaAuthorityArray(',
+    'decodeExactJSONObject(row, "address", "malicious_address")',
+  ]) {
+    if (!solana.contains(marker)) {
+      failures.add('$solanaPath lost strict GoPlus Solana invariant: $marker');
+    }
+  }
+  if (solana.contains('json.Unmarshal(data, &envelope)') ||
+      solana.contains('"creator",')) {
+    failures.add('$solanaPath restored permissive or singular creator parsing');
+  }
+
+  const approvalsPath = 'backend/gateway/internal/upstream/goplus_approvals.go';
+  final approvals = File(approvalsPath).readAsStringSync();
+  for (final marker in const [
+    'validateGoPlusApprovalIdentity(chainID, address)',
+    'decodeGoPlusEnvelope(data)',
+    'parseApprovalToken(token, chainID, maxEvidenceTime)',
+    'chainID != expectedChainID',
+    'func parseApprovalContract(',
+    'func parseApprovalAddressInfo(',
+    'decodeExactJSONObject(',
+    'duplicate approval token',
+    'duplicate approval record',
+  ]) {
+    if (!approvals.contains(marker)) {
+      failures.add(
+        '$approvalsPath lost strict GoPlus approval invariant: $marker',
+      );
+    }
+  }
+  for (final banned in const [
+    'json.Unmarshal(data, &envelope)',
+    'func rawFlagIsOne(',
+    'type approvalEnvelope struct',
+  ]) {
+    if (approvals.contains(banned)) {
+      failures.add(
+        '$approvalsPath restored permissive GoPlus approval parsing: $banned',
+      );
+    }
+  }
+
+  const handlerPath = 'backend/gateway/internal/handlers/token_risk.go';
+  final handler = File(handlerPath).readAsStringSync();
+  if (!handler.contains('if official && threat.Found')) {
+    failures.add(
+      '$handlerPath can mark an official identity provider-checked without a bound record',
+    );
   }
 }
 

@@ -269,7 +269,7 @@ func externalTokenRiskResult(
 			network, contract, "unsafe", "goplus", threat.Category,
 		)
 	}
-	if official {
+	if official && threat.Found {
 		return tokenRiskResult(
 			network, contract, "safe", "official_catalog+goplus", "",
 		)

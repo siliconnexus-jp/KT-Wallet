@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -29,14 +30,19 @@ func TestGoPlusApprovalsRequiresExplicitPublicOwnerRequestAndSanitizesRows(t *te
 		_, _ = fmt.Fprint(w, `{
           "code":1,"message":"ok","result":[{
             "token_address":"0x55d398326f99059ff775485246999027b3197955",
+			"chain_id":"56",
             "token_name":"Tether\n\u202eUSD","token_symbol":"USDT","decimals":18,
-            "balance":"12.5","malicious_address":0,"malicious_behavior":[],
+			"balance":"12.5","is_open_source":1,"malicious_address":0,"malicious_behavior":[],
             "approved_list":[{
               "approved_contract":"0x10ed43c718714eb63d5aa57b78b54704e256024e",
               "approved_amount":"Unlimited","approved_time":1737626832,
+			  "initial_approval_time":1737626800,
+			  "initial_approval_hash":"0x5cc9b7fb572b65b932b56167079883fd0e1ba349750c68c9fa260a09cc4e1dbb",
               "hash":"0x5cc9b7fb572b65b932b56167079883fd0e1ba349750c68c9fa260a09cc4e1dbb",
               "address_info":{"contract_name":"PancakeRouter","tag":"Pancakeswap",
-                "doubt_list":0,"trust_list":1,"malicious_behavior":[]}
+				"creator_address":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				"is_contract":1,"doubt_list":0,"malicious_behavior":[],
+				"deployed_time":1600000000,"trust_list":1,"is_open_source":1}
             }]
           }]}`)
 	}))
@@ -66,12 +72,15 @@ func TestGoPlusApprovalsSurfacesTokenAndSpenderRiskWithoutCallingZeroSafe(t *tes
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = fmt.Fprint(w, `{"code":1,"result":[{
           "token_address":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          "token_name":"Risk","token_symbol":"RISK","decimals":"18","balance":"0",
+		  "chain_id":"1","token_name":"Risk","token_symbol":"RISK","decimals":18,"balance":"0",
+		  "is_open_source":1,
           "malicious_address":"1","malicious_behavior":["gas_abuse"],
           "approved_list":[{"approved_contract":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "approved_amount":"1.25E+9","approved_time":"1","hash":"",
+			"approved_amount":"1.25E+9","approved_time":1,
+			"initial_approval_time":1,"initial_approval_hash":"","hash":"",
             "address_info":{"contract_name":null,"tag":null,"doubt_list":"1",
-              "trust_list":"0","malicious_behavior":["phishing"]}}]}]}`)
+			  "creator_address":null,"is_contract":0,"malicious_behavior":["phishing"],
+			  "deployed_time":null,"trust_list":"0","is_open_source":0}}]}]}`)
 	}))
 	defer server.Close()
 
@@ -151,5 +160,148 @@ func TestGoPlusApprovalsDoesNotFollowRedirectOrForwardCredentials(t *testing.T) 
 		TokenApprovals(context.Background(), "1", testApprovalOwner)
 	if err == nil || hits != 0 {
 		t.Fatalf("err=%v destination hits=%d", err, hits)
+	}
+}
+
+func validApprovalTokenJSON(chainID string) string {
+	return validApprovalTokenWithRowsJSON(chainID, "")
+}
+
+func validApprovalTokenWithRowsJSON(chainID, rows string) string {
+	return `{"token_address":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",` +
+		`"chain_id":"` + chainID + `","token_name":"Token","token_symbol":"TOK",` +
+		`"decimals":18,"balance":"1","is_open_source":1,` +
+		`"malicious_address":0,"malicious_behavior":[],"approved_list":[` + rows + `]}`
+}
+
+func validApprovalRowJSON() string {
+	return `{"approved_contract":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",` +
+		`"approved_amount":"1","approved_time":1,"initial_approval_time":1,` +
+		`"initial_approval_hash":"","hash":"","address_info":` + validApprovalAddressInfoJSON() + `}`
+}
+
+func validApprovalAddressInfoJSON() string {
+	return `{"contract_name":"Router","tag":"App",` +
+		`"creator_address":"0xcccccccccccccccccccccccccccccccccccccccc",` +
+		`"is_contract":1,"doubt_list":0,"malicious_behavior":[],` +
+		`"deployed_time":1,"trust_list":1,"is_open_source":1}`
+}
+
+func TestGoPlusApprovalsRejectsAmbiguousNestedEvidenceAndDuplicateRows(t *testing.T) {
+	row := validApprovalRowJSON()
+	tests := map[string]string{
+		"unknown approval member": strings.Replace(
+			row,
+			`"address_info":`,
+			`"extra":1,"address_info":`,
+			1,
+		),
+		"unknown address-info member": strings.Replace(
+			row,
+			`"contract_name":`,
+			`"extra":1,"contract_name":`,
+			1,
+		),
+		"invalid spender risk flag": strings.Replace(
+			row,
+			`"doubt_list":0`,
+			`"doubt_list":"yes"`,
+			1,
+		),
+		"future evidence time": strings.Replace(
+			row,
+			`"approved_time":1`,
+			`"approved_time":4102444800`,
+			1,
+		),
+		"missing initial evidence": strings.Replace(
+			row,
+			`"initial_approval_time":1,"initial_approval_hash":"",`,
+			``,
+			1,
+		),
+		"duplicate token spender": row + `,` + row,
+	}
+	for name, rows := range tests {
+		t.Run(name, func(t *testing.T) {
+			body := `{"code":1,"message":"ok","result":[` +
+				validApprovalTokenWithRowsJSON("1", rows) + `]}`
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(body))
+			}))
+			defer server.Close()
+			if _, err := NewGoPlusApprovals(server.URL, "", server.Client(), time.Second).
+				TokenApprovals(context.Background(), "1", testApprovalOwner); err == nil {
+				t.Fatal("ambiguous nested approval evidence must fail closed")
+			}
+		})
+	}
+}
+
+func TestGoPlusApprovalsRejectsDuplicateTokenIdentity(t *testing.T) {
+	first := validApprovalTokenWithRowsJSON("1", validApprovalRowJSON())
+	second := validApprovalTokenWithRowsJSON(
+		"1",
+		strings.Replace(
+			validApprovalRowJSON(),
+			"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			"0xdddddddddddddddddddddddddddddddddddddddd",
+			1,
+		),
+	)
+	body := `{"code":1,"message":"ok","result":[` + first + `,` + second + `]}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+	if _, err := NewGoPlusApprovals(server.URL, "", server.Client(), time.Second).
+		TokenApprovals(context.Background(), "1", testApprovalOwner); err == nil {
+		t.Fatal("duplicate token identity with conflicting rows must fail closed")
+	}
+}
+
+func TestGoPlusLiveApprovalContract(t *testing.T) {
+	if os.Getenv("KT_LIVE_GOPLUS") != "1" {
+		t.Skip("set KT_LIVE_GOPLUS=1 for the read-only public zero-address approval smoke test")
+	}
+	_, err := NewGoPlusApprovals(
+		"https://api.gopluslabs.io/api/v2/token_approval_security",
+		"",
+		http.DefaultClient,
+		15*time.Second,
+	).TokenApprovals(
+		context.Background(),
+		"1",
+		"0x0000000000000000000000000000000000000000",
+	)
+	if err != nil {
+		t.Fatalf("live GoPlus approval response rejected: %v", err)
+	}
+}
+
+func TestGoPlusApprovalsRejectsAmbiguousUnboundOrMalformedRiskData(t *testing.T) {
+	valid := validApprovalTokenJSON("1")
+	tests := map[string]string{
+		"unknown envelope member": `{"code":1,"message":"ok","result":[` + valid + `],"extra":1}`,
+		"duplicate envelope code": `{"code":2,"code":1,"message":"ok","result":[` + valid + `]}`,
+		"wrong response chain":    `{"code":1,"message":"ok","result":[` + validApprovalTokenJSON("56") + `]}`,
+		"unknown token member": `{"code":1,"message":"ok","result":[` +
+			strings.Replace(valid, `"approved_list":[]`, `"extra":1,"approved_list":[]`, 1) + `]}`,
+		"invalid token risk flag": `{"code":1,"message":"ok","result":[` +
+			strings.Replace(valid, `"malicious_address":0`, `"malicious_address":"yes"`, 1) + `]}`,
+		"duplicate token risk flag": `{"code":1,"message":"ok","result":[` +
+			strings.Replace(valid, `"malicious_address":0`, `"malicious_address":1,"malicious_address":0`, 1) + `]}`,
+	}
+	for name, body := range tests {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(body))
+			}))
+			defer server.Close()
+			if _, err := NewGoPlusApprovals(server.URL, "", server.Client(), time.Second).
+				TokenApprovals(context.Background(), "1", testApprovalOwner); err == nil {
+				t.Fatal("ambiguous, request-unbound or malformed approval response must fail closed")
+			}
+		})
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -81,8 +80,8 @@ func (g *GoPlusApprovals) TokenApprovals(
 	if err := ValidateGoPlusURL(g.baseURL); err != nil {
 		return nil, &Unavailable{Upstream: "goplus-approvals", Message: "invalid provider endpoint"}
 	}
-	if !evmAddressPattern.MatchString(address) {
-		return nil, errors.New("invalid EVM owner address")
+	if err := validateGoPlusApprovalIdentity(chainID, address); err != nil {
+		return nil, errors.New("invalid EVM approval identity")
 	}
 	endpoint, err := url.Parse(g.baseURL + "/" + url.PathEscape(chainID))
 	if err != nil || endpoint.Scheme == "" || endpoint.Host == "" {
@@ -125,130 +124,271 @@ func (g *GoPlusApprovals) TokenApprovals(
 		return nil, &Unavailable{Upstream: "goplus-approvals", Message: "could not read provider response"}
 	}
 
-	var envelope approvalEnvelope
-	if err := json.Unmarshal(data, &envelope); err != nil ||
-		envelope.Code != 1 || envelope.Result == nil {
+	envelope, err := decodeGoPlusEnvelope(data)
+	if err != nil || envelope.Code != 1 {
+		return nil, &Unavailable{Upstream: "goplus-approvals", Message: "malformed or incomplete provider response"}
+	}
+	tokens, err := decodeRawJSONArray(envelope.Result, maxGoPlusApprovalRows)
+	if err != nil {
 		return nil, &Unavailable{Upstream: "goplus-approvals", Message: "malformed or incomplete provider response"}
 	}
 	rows := make([]TokenApproval, 0)
-	for _, token := range envelope.Result {
-		parsed, err := parseApprovalToken(token)
+	seen := make(map[string]struct{})
+	seenTokens := make(map[string]struct{})
+	maxEvidenceTime := time.Now().Add(24 * time.Hour).Unix()
+	for _, token := range tokens {
+		tokenIdentity, err := approvalTokenIdentity(token)
+		if err != nil {
+			return nil, &Unavailable{Upstream: "goplus-approvals", Message: "malformed approval record"}
+		}
+		if _, duplicate := seenTokens[tokenIdentity]; duplicate {
+			return nil, &Unavailable{Upstream: "goplus-approvals", Message: "duplicate approval token"}
+		}
+		seenTokens[tokenIdentity] = struct{}{}
+		parsed, err := parseApprovalToken(token, chainID, maxEvidenceTime)
 		if err != nil {
 			return nil, &Unavailable{Upstream: "goplus-approvals", Message: "malformed approval record"}
 		}
 		if len(rows)+len(parsed) > maxGoPlusApprovalRows {
 			return nil, &Unavailable{Upstream: "goplus-approvals", Message: "provider returned too many approvals"}
 		}
-		rows = append(rows, parsed...)
+		for _, row := range parsed {
+			key := row.TokenAddress + "|" + row.Spender
+			if _, duplicate := seen[key]; duplicate {
+				return nil, &Unavailable{Upstream: "goplus-approvals", Message: "duplicate approval record"}
+			}
+			seen[key] = struct{}{}
+			rows = append(rows, row)
+		}
 	}
 	return rows, nil
 }
 
-type approvalEnvelope struct {
-	Code   int                   `json:"code"`
-	Result []approvalTokenRecord `json:"result"`
+func approvalTokenIdentity(raw json.RawMessage) (string, error) {
+	fields, err := decodeUniqueJSONObject(raw)
+	if err != nil {
+		return "", err
+	}
+	addressRaw, present := fields["token_address"]
+	if !present {
+		return "", errors.New("missing token address")
+	}
+	address, err := decodeBoundedString(addressRaw, 42, false)
+	if err != nil || !evmAddressPattern.MatchString(address) {
+		return "", errors.New("invalid token address")
+	}
+	return strings.ToLower(address), nil
 }
 
-type approvalTokenRecord struct {
-	TokenAddress     string                   `json:"token_address"`
-	TokenName        string                   `json:"token_name"`
-	TokenSymbol      string                   `json:"token_symbol"`
-	Decimals         json.RawMessage          `json:"decimals"`
-	Balance          string                   `json:"balance"`
-	MaliciousAddress json.RawMessage          `json:"malicious_address"`
-	Malicious        []string                 `json:"malicious_behavior"`
-	Approved         []approvalContractRecord `json:"approved_list"`
-}
-
-type approvalContractRecord struct {
-	Contract    string              `json:"approved_contract"`
-	Amount      string              `json:"approved_amount"`
-	ApprovedAt  json.RawMessage     `json:"approved_time"`
-	Transaction string              `json:"hash"`
-	AddressInfo approvalAddressInfo `json:"address_info"`
-}
-
-type approvalAddressInfo struct {
-	ContractName string          `json:"contract_name"`
-	Tag          string          `json:"tag"`
-	DoubtList    json.RawMessage `json:"doubt_list"`
-	TrustList    json.RawMessage `json:"trust_list"`
-	Malicious    []string        `json:"malicious_behavior"`
-}
-
-func parseApprovalToken(token approvalTokenRecord) ([]TokenApproval, error) {
-	if !evmAddressPattern.MatchString(token.TokenAddress) {
+func parseApprovalToken(
+	raw json.RawMessage,
+	expectedChainID string,
+	maxEvidenceTime int64,
+) ([]TokenApproval, error) {
+	fields, err := decodeExactJSONObject(
+		raw,
+		"token_address", "chain_id", "token_name", "token_symbol",
+		"decimals", "balance", "is_open_source", "malicious_address",
+		"malicious_behavior", "approved_list",
+	)
+	if err != nil || requireJSONFields(
+		fields,
+		"token_address", "chain_id", "token_name", "token_symbol",
+		"decimals", "balance", "is_open_source", "malicious_address",
+		"malicious_behavior", "approved_list",
+	) != nil {
+		return nil, errors.New("invalid approval token schema")
+	}
+	tokenAddress, err := decodeBoundedString(fields["token_address"], 42, false)
+	if err != nil || !evmAddressPattern.MatchString(tokenAddress) {
 		return nil, errors.New("invalid token address")
+	}
+	chainID, err := decodeBoundedString(fields["chain_id"], 20, false)
+	if err != nil || chainID != expectedChainID {
+		return nil, errors.New("approval response chain mismatch")
+	}
+	tokenName, err := decodeBoundedString(fields["token_name"], 512, false)
+	if err != nil {
+		return nil, errors.New("invalid token name")
+	}
+	tokenSymbol, err := decodeBoundedString(fields["token_symbol"], 256, false)
+	if err != nil {
+		return nil, errors.New("invalid token symbol")
 	}
 	// Match the mobile Amount boundary. A provider-controlled scale above 36
 	// is not useful for supported ERC-20 assets and can create misleading or
 	// pathological UI values even though the revoke calldata itself is zero.
-	decimals, ok := boundedJSONInt(token.Decimals, 0, 36)
-	if !ok || !validProviderDecimal(token.Balance) {
+	decimals, err := parseExactJSONInt(fields["decimals"], 0, 36)
+	balance, balanceErr := decodeBoundedString(fields["balance"], 128, false)
+	if err != nil || balanceErr != nil || !validProviderDecimal(balance) {
 		return nil, errors.New("invalid token metadata")
 	}
-	tokenRisky := rawFlagIsOne(token.MaliciousAddress) || len(token.Malicious) > 0
-	rows := make([]TokenApproval, 0, len(token.Approved))
-	for _, approval := range token.Approved {
-		if !evmAddressPattern.MatchString(approval.Contract) {
-			return nil, errors.New("invalid spender address")
+	if _, err := parseBinaryFlag(fields["is_open_source"]); err != nil {
+		return nil, errors.New("invalid token open-source flag")
+	}
+	maliciousAddress, err := parseBinaryFlag(fields["malicious_address"])
+	if err != nil {
+		return nil, errors.New("invalid token risk flag")
+	}
+	malicious, err := decodeMaliciousBehaviors(fields["malicious_behavior"])
+	if err != nil {
+		return nil, err
+	}
+	approved, err := decodeRawJSONArray(fields["approved_list"], maxGoPlusApprovalRows)
+	if err != nil {
+		return nil, errors.New("invalid approved list")
+	}
+	rows := make([]TokenApproval, 0, len(approved))
+	for _, approval := range approved {
+		row, err := parseApprovalContract(
+			approval,
+			strings.ToLower(tokenAddress),
+			boundedDisplayText(tokenName, 80),
+			boundedDisplayText(tokenSymbol, 32),
+			decimals,
+			strings.TrimSpace(balance),
+			maliciousAddress || len(malicious) > 0,
+			maxEvidenceTime,
+		)
+		if err != nil {
+			return nil, err
 		}
-		unlimited := strings.EqualFold(strings.TrimSpace(approval.Amount), "Unlimited")
-		if !unlimited && !validProviderDecimal(approval.Amount) {
-			return nil, errors.New("invalid approval amount")
-		}
-		approvedAt, ok := boundedJSONInt64(approval.ApprovedAt, 0, 1<<62)
-		if !ok || (approval.Transaction != "" && !txHashPattern.MatchString(approval.Transaction)) {
-			return nil, errors.New("invalid approval evidence")
-		}
-		rows = append(rows, TokenApproval{
-			TokenAddress:   strings.ToLower(token.TokenAddress),
-			TokenName:      boundedDisplayText(token.TokenName, 80),
-			TokenSymbol:    boundedDisplayText(token.TokenSymbol, 32),
-			Decimals:       decimals,
-			Balance:        strings.TrimSpace(token.Balance),
-			TokenRisky:     tokenRisky,
-			Spender:        strings.ToLower(approval.Contract),
-			SpenderName:    boundedDisplayText(approval.AddressInfo.ContractName, 80),
-			SpenderTag:     boundedDisplayText(approval.AddressInfo.Tag, 80),
-			SpenderRisky:   rawFlagIsOne(approval.AddressInfo.DoubtList) || len(approval.AddressInfo.Malicious) > 0,
-			SpenderTrusted: rawFlagIsOne(approval.AddressInfo.TrustList),
-			Amount:         strings.TrimSpace(approval.Amount),
-			Unlimited:      unlimited,
-			ApprovedAt:     approvedAt,
-			Transaction:    strings.ToLower(approval.Transaction),
-		})
+		rows = append(rows, row)
 	}
 	return rows, nil
 }
 
-func rawFlagIsOne(raw json.RawMessage) bool {
-	if len(raw) == 0 {
-		return false
+func parseApprovalContract(
+	raw json.RawMessage,
+	tokenAddress, tokenName, tokenSymbol string,
+	decimals int,
+	balance string,
+	tokenRisky bool,
+	maxEvidenceTime int64,
+) (TokenApproval, error) {
+	fields, err := decodeExactJSONObject(
+		raw,
+		"approved_contract", "approved_amount", "approved_time",
+		"initial_approval_time", "initial_approval_hash", "hash", "address_info",
+	)
+	if err != nil || requireJSONFields(
+		fields,
+		"approved_contract", "approved_amount", "approved_time",
+		"initial_approval_time", "initial_approval_hash", "hash", "address_info",
+	) != nil {
+		return TokenApproval{}, errors.New("invalid approval row schema")
 	}
-	var value any
-	return json.Unmarshal(raw, &value) == nil && flagIsOne(value)
+	contract, err := decodeBoundedString(fields["approved_contract"], 42, false)
+	if err != nil || !evmAddressPattern.MatchString(contract) {
+		return TokenApproval{}, errors.New("invalid spender address")
+	}
+	amount, err := decodeBoundedString(fields["approved_amount"], 128, false)
+	amount = strings.TrimSpace(amount)
+	unlimited := strings.EqualFold(amount, "Unlimited")
+	if err != nil || (!unlimited && !validProviderDecimal(amount)) {
+		return TokenApproval{}, errors.New("invalid approval amount")
+	}
+	approvedAt, err := parseExactJSONInt64(fields["approved_time"], 0, maxEvidenceTime)
+	if err != nil {
+		return TokenApproval{}, errors.New("invalid approval time")
+	}
+	initialAt, err := parseExactJSONInt64(fields["initial_approval_time"], 0, maxEvidenceTime)
+	if err != nil || (approvedAt > 0 && initialAt > approvedAt) {
+		return TokenApproval{}, errors.New("invalid initial approval time")
+	}
+	transaction, err := decodeBoundedString(fields["hash"], 66, false)
+	if err != nil || (transaction != "" && !txHashPattern.MatchString(transaction)) {
+		return TokenApproval{}, errors.New("invalid approval transaction")
+	}
+	initialHash, err := decodeBoundedString(fields["initial_approval_hash"], 66, false)
+	if err != nil || (initialHash != "" && !txHashPattern.MatchString(initialHash)) {
+		return TokenApproval{}, errors.New("invalid initial approval transaction")
+	}
+	info, err := parseApprovalAddressInfo(fields["address_info"], maxEvidenceTime)
+	if err != nil {
+		return TokenApproval{}, err
+	}
+	return TokenApproval{
+		TokenAddress:   tokenAddress,
+		TokenName:      tokenName,
+		TokenSymbol:    tokenSymbol,
+		Decimals:       decimals,
+		Balance:        balance,
+		TokenRisky:     tokenRisky,
+		Spender:        strings.ToLower(contract),
+		SpenderName:    info.name,
+		SpenderTag:     info.tag,
+		SpenderRisky:   info.risky,
+		SpenderTrusted: info.trusted,
+		Amount:         amount,
+		Unlimited:      unlimited,
+		ApprovedAt:     approvedAt,
+		Transaction:    strings.ToLower(transaction),
+	}, nil
 }
 
-func boundedJSONInt(raw json.RawMessage, min, max int) (int, bool) {
-	value, ok := boundedJSONInt64(raw, int64(min), int64(max))
-	return int(value), ok
+type parsedApprovalAddressInfo struct {
+	name    string
+	tag     string
+	risky   bool
+	trusted bool
 }
 
-func boundedJSONInt64(raw json.RawMessage, min, max int64) (int64, bool) {
-	if len(raw) == 0 {
-		return 0, false
+func parseApprovalAddressInfo(raw json.RawMessage, maxEvidenceTime int64) (parsedApprovalAddressInfo, error) {
+	fields, err := decodeExactJSONObject(
+		raw,
+		"contract_name", "tag", "creator_address", "is_contract",
+		"doubt_list", "malicious_behavior", "deployed_time", "trust_list",
+		"is_open_source",
+	)
+	if err != nil || requireJSONFields(
+		fields,
+		"contract_name", "tag", "creator_address", "is_contract",
+		"doubt_list", "malicious_behavior", "deployed_time", "trust_list",
+		"is_open_source",
+	) != nil {
+		return parsedApprovalAddressInfo{}, errors.New("invalid approval address-info schema")
 	}
-	var number json.Number
-	if err := json.Unmarshal(raw, &number); err != nil {
-		var text string
-		if err := json.Unmarshal(raw, &text); err != nil {
-			return 0, false
+	name, err := decodeBoundedString(fields["contract_name"], 512, true)
+	if err != nil {
+		return parsedApprovalAddressInfo{}, err
+	}
+	tag, err := decodeBoundedString(fields["tag"], 512, true)
+	if err != nil {
+		return parsedApprovalAddressInfo{}, err
+	}
+	creator, err := decodeBoundedString(fields["creator_address"], 42, true)
+	if err != nil || (creator != "" && !evmAddressPattern.MatchString(creator)) {
+		return parsedApprovalAddressInfo{}, errors.New("invalid approval creator address")
+	}
+	for _, key := range []string{"is_contract", "is_open_source"} {
+		if _, err := parseBinaryFlag(fields[key]); err != nil {
+			return parsedApprovalAddressInfo{}, errors.New("invalid approval address flag")
 		}
-		number = json.Number(text)
 	}
-	value, err := strconv.ParseInt(number.String(), 10, 64)
-	return value, err == nil && value >= min && value <= max
+	doubt, err := parseBinaryFlag(fields["doubt_list"])
+	if err != nil {
+		return parsedApprovalAddressInfo{}, errors.New("invalid approval doubt flag")
+	}
+	trusted, err := parseBinaryFlag(fields["trust_list"])
+	if err != nil {
+		return parsedApprovalAddressInfo{}, errors.New("invalid approval trust flag")
+	}
+	malicious, err := decodeMaliciousBehaviors(fields["malicious_behavior"])
+	if err != nil {
+		return parsedApprovalAddressInfo{}, err
+	}
+	if !isJSONNull(fields["deployed_time"]) {
+		if _, err := parseExactJSONInt64(fields["deployed_time"], 0, maxEvidenceTime); err != nil {
+			return parsedApprovalAddressInfo{}, errors.New("invalid approval deployment time")
+		}
+	}
+	return parsedApprovalAddressInfo{
+		name:    boundedDisplayText(name, 80),
+		tag:     boundedDisplayText(tag, 80),
+		risky:   doubt || len(malicious) > 0,
+		trusted: trusted,
+	}, nil
 }
 
 func validProviderDecimal(value string) bool {

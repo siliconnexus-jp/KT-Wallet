@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -57,20 +58,17 @@ func TestGoPlusDoesNotTreatLegitimateAdminCapabilitiesAsMalicious(t *testing.T) 
 	}
 }
 
-func TestGoPlusMissingRecordIsUnknownAndBase58IdentityIsCaseSensitive(t *testing.T) {
+func TestGoPlusRejectsCaseChangedBase58ResultIdentity(t *testing.T) {
 	const tronContract = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = fmt.Fprintf(w, `{"code":1,"result":{"%s":{"is_honeypot":"1"}}}`, strings.ToLower(tronContract))
 	}))
 	defer server.Close()
 
-	got, err := NewGoPlus(server.URL, "", server.Client(), time.Second).
+	_, err := NewGoPlus(server.URL, "", server.Client(), time.Second).
 		TokenRisk(context.Background(), "tron", tronContract)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Found || got.Unsafe {
-		t.Fatalf("case-changed Base58 identity must not match: %#v", got)
+	if err == nil {
+		t.Fatal("case-changed Base58 result identity must fail closed")
 	}
 }
 
@@ -174,5 +172,130 @@ func TestGoPlusDoesNotForwardCredentialsThroughRedirects(t *testing.T) {
 	}
 	if redirectHits != 0 {
 		t.Fatalf("redirect destination hits = %d", redirectHits)
+	}
+}
+
+func TestGoPlusRejectsAmbiguousOrRequestUnboundResponses(t *testing.T) {
+	tests := map[string]string{
+		"unknown envelope member": `{"code":1,"message":"OK","result":{` +
+			`"` + testTokenContract + `":{"is_honeypot":"0"}},"extra":true}`,
+		"duplicate envelope code": `{"code":2,"code":1,"message":"OK","result":{` +
+			`"` + testTokenContract + `":{"is_honeypot":"0"}}}`,
+		"envelope member alias": `{"Code":2,"code":1,"message":"OK","result":{` +
+			`"` + testTokenContract + `":{"is_honeypot":"0"}}}`,
+		"unexpected result identity": `{"code":1,"message":"OK","result":{` +
+			`"` + testTokenContract + `":{"is_honeypot":"0"},` +
+			`"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb":{"is_honeypot":"1"}}}`,
+		"duplicate result identity": `{"code":1,"message":"OK","result":{` +
+			`"` + testTokenContract + `":{"is_honeypot":"1"},` +
+			`"` + testTokenContract + `":{"is_honeypot":"0"}}}`,
+		"invalid threat flag": `{"code":1,"message":"OK","result":{` +
+			`"` + testTokenContract + `":{"is_honeypot":"yes"}}}`,
+		"duplicate threat flag": `{"code":1,"message":"OK","result":{` +
+			`"` + testTokenContract + `":{"is_honeypot":"1","is_honeypot":"0"}}}`,
+	}
+	for name, body := range tests {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(body))
+			}))
+			defer server.Close()
+			if _, err := NewGoPlus(server.URL, "", server.Client(), time.Second).
+				TokenRisk(context.Background(), "1", testTokenContract); err == nil {
+				t.Fatal("ambiguous or request-unbound response must fail closed")
+			}
+		})
+	}
+}
+
+func TestGoPlusParsesDocumentedFakeTokenObject(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprintf(w, `{"code":1,"message":"OK","result":{%q:{`+
+			`"is_honeypot":"0","fake_token":{`+
+			`"true_token_address":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","value":1}}}}`,
+			testTokenContract)
+	}))
+	defer server.Close()
+
+	got, err := NewGoPlus(server.URL, "", server.Client(), time.Second).
+		TokenRisk(context.Background(), "1", testTokenContract)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Found || !got.Unsafe || got.Category != "impersonation" {
+		t.Fatalf("documented fake_token object = %#v", got)
+	}
+}
+
+func TestGoPlusIncompleteNonMaliciousRecordStaysUnknown(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprintf(w, `{"code":1,"message":"OK","result":{%q:{"is_mintable":"1"}}}`,
+			testTokenContract)
+	}))
+	defer server.Close()
+
+	got, err := NewGoPlus(server.URL, "", server.Client(), time.Second).
+		TokenRisk(context.Background(), "1", testTokenContract)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Found || got.Unsafe {
+		t.Fatalf("record without a reviewed decisive signal must stay unknown: %#v", got)
+	}
+}
+
+func TestGoPlusRejectsInvalidIdentityBeforeNetwork(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		calls++
+	}))
+	defer server.Close()
+	client := NewGoPlus(server.URL, "", server.Client(), time.Second)
+	for _, tc := range []struct {
+		chainID  string
+		contract string
+	}{
+		{"../1", testTokenContract},
+		{"1", "0x1234"},
+		{"tron", strings.ToLower("TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")},
+	} {
+		if _, err := client.TokenRisk(context.Background(), tc.chainID, tc.contract); err == nil {
+			t.Fatalf("invalid identity %#v must fail before network", tc)
+		}
+	}
+	if calls != 0 {
+		t.Fatalf("invalid identities reached provider %d times", calls)
+	}
+}
+
+func TestGoPlusLiveSupportedTokenRiskCatalog(t *testing.T) {
+	if os.Getenv("KT_LIVE_GOPLUS") != "1" {
+		t.Skip("set KT_LIVE_GOPLUS=1 for the read-only GoPlus token catalog smoke test")
+	}
+	client := NewGoPlus(
+		"https://api.gopluslabs.io/api/v1/token_security",
+		"",
+		http.DefaultClient,
+		15*time.Second,
+	)
+	for _, tc := range []struct {
+		chainID string
+		token   string
+	}{
+		{"1", "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"},
+		{"137", "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359"},
+		{"8453", "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"},
+		{"42161", "0xaf88d065e77c8cc2239327c5edb3a432268e5831"},
+		{"43114", "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e"},
+		{"56", "0xe9e7cea3dedca5984780bafc599bd69add087d56"},
+		{"tron", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"},
+	} {
+		got, err := client.TokenRisk(context.Background(), tc.chainID, tc.token)
+		if err != nil {
+			t.Fatalf("live GoPlus response for %s/%s rejected: %v", tc.chainID, tc.token, err)
+		}
+		if !got.Found || got.Unsafe {
+			t.Fatalf("reviewed official token lacks a clean evaluated record: %s/%s %#v", tc.chainID, tc.token, got)
+		}
 	}
 }

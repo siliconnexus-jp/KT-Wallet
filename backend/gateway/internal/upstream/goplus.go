@@ -1,7 +1,6 @@
 package upstream
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,8 +15,9 @@ import (
 const maxGoPlusResponseBytes = 2 << 20
 
 // TokenThreat is the deliberately narrow conclusion KT Wallet accepts from
-// an external token-intelligence provider. Found only means the provider
-// returned a record for the exact contract; it never means the token is safe.
+// an external token-intelligence provider. Found means the response was bound
+// to the exact contract and contained the reviewed decisive fields; it never
+// means a non-official token is safe.
 type TokenThreat struct {
 	Found    bool
 	Unsafe   bool
@@ -84,6 +84,9 @@ func (g *GoPlus) TokenRisk(ctx context.Context, chainID, contract string) (Token
 	if err := ValidateGoPlusURL(g.baseURL); err != nil {
 		return TokenThreat{}, &Unavailable{Upstream: "goplus", Message: "invalid provider endpoint"}
 	}
+	if err := validateGoPlusTokenIdentity(chainID, contract); err != nil {
+		return TokenThreat{}, &Unavailable{Upstream: "goplus", Message: "invalid token identity"}
+	}
 	endpoint, err := url.Parse(g.baseURL + "/" + url.PathEscape(chainID))
 	if err != nil || endpoint.Scheme == "" || endpoint.Host == "" {
 		return TokenThreat{}, &Unavailable{Upstream: "goplus", Message: "invalid provider endpoint"}
@@ -127,42 +130,39 @@ func (g *GoPlus) TokenRisk(ctx context.Context, chainID, contract string) (Token
 	if err != nil {
 		return TokenThreat{}, &Unavailable{Upstream: "goplus", Message: "could not read provider response"}
 	}
-	var envelope struct {
-		Code   int                        `json:"code"`
-		Result map[string]json.RawMessage `json:"result"`
-	}
-	if err := json.Unmarshal(data, &envelope); err != nil {
+	envelope, err := decodeGoPlusEnvelope(data)
+	if err != nil {
 		return TokenThreat{}, &Unavailable{Upstream: "goplus", Message: "malformed or incomplete provider response"}
 	}
 	// The provider documents 2020 (not a contract) and 2021 (no information)
 	// as valid no-data outcomes. They do not establish safety.
 	if envelope.Code == 2020 || envelope.Code == 2021 {
+		if !isJSONNull(envelope.Result) {
+			return TokenThreat{}, &Unavailable{Upstream: "goplus", Message: "malformed or incomplete provider response"}
+		}
 		return TokenThreat{Found: false}, nil
 	}
-	if envelope.Code != 1 || envelope.Result == nil {
+	if envelope.Code != 1 {
 		return TokenThreat{}, &Unavailable{Upstream: "goplus", Message: "malformed or incomplete provider response"}
 	}
-	lookupKey := contract
-	if strings.HasPrefix(strings.ToLower(contract), "0x") {
-		lookupKey = strings.ToLower(contract)
+	recordRaw, found, err := decodeBoundGoPlusRecord(
+		envelope.Result,
+		contract,
+		chainID != "tron",
+	)
+	if err != nil {
+		return TokenThreat{}, &Unavailable{Upstream: "goplus", Message: "malformed or incomplete provider response"}
 	}
-	recordRaw, found := envelope.Result[lookupKey]
-	if !found && strings.HasPrefix(lookupKey, "0x") {
-		for key, value := range envelope.Result {
-			if strings.EqualFold(key, contract) {
-				recordRaw, found = value, true
-				break
-			}
-		}
-	}
-	if !found || len(bytes.TrimSpace(recordRaw)) == 0 || bytes.Equal(bytes.TrimSpace(recordRaw), []byte("null")) {
+	if !found {
 		return TokenThreat{Found: false}, nil
 	}
-	var record map[string]any
-	if err := json.Unmarshal(recordRaw, &record); err != nil {
+	category, evaluated, err := explicitTokenThreatCategory(recordRaw)
+	if err != nil {
 		return TokenThreat{}, &Unavailable{Upstream: "goplus", Message: "malformed token risk record"}
 	}
-	category := explicitTokenThreatCategory(record)
+	if !evaluated {
+		return TokenThreat{Found: false}, nil
+	}
 	return TokenThreat{
 		Found:    true,
 		Unsafe:   category != "",
@@ -170,28 +170,73 @@ func (g *GoPlus) TokenRisk(ctx context.Context, chainID, contract string) (Token
 	}, nil
 }
 
-func explicitTokenThreatCategory(record map[string]any) string {
-	if flagIsOne(record["is_honeypot"]) || flagIsOne(record["honeypot_with_same_creator"]) {
-		return "honeypot"
+func explicitTokenThreatCategory(recordRaw json.RawMessage) (string, bool, error) {
+	record, err := decodeUniqueJSONObject(recordRaw)
+	if err != nil {
+		return "", false, err
 	}
-	if flagIsOne(record["fake_token"]) {
-		return "impersonation"
+	if err := rejectConsumedFieldAliases(
+		record,
+		"is_honeypot",
+		"honeypot_with_same_creator",
+		"fake_token",
+		"malicious_address",
+		"gas_abuse",
+	); err != nil {
+		return "", false, err
 	}
-	if flagIsOne(record["malicious_address"]) || flagIsOne(record["gas_abuse"]) {
-		return "malicious"
+
+	honeypotPresent, honeypot, err := parseOptionalBinaryFlag(record, "is_honeypot")
+	if err != nil {
+		return "", false, err
 	}
-	return ""
+	_, relatedHoneypot, err := parseOptionalBinaryFlag(record, "honeypot_with_same_creator")
+	if err != nil {
+		return "", false, err
+	}
+	_, maliciousAddress, err := parseOptionalBinaryFlag(record, "malicious_address")
+	if err != nil {
+		return "", false, err
+	}
+	_, gasAbuse, err := parseOptionalBinaryFlag(record, "gas_abuse")
+	if err != nil {
+		return "", false, err
+	}
+	fakeToken, err := parseGoPlusFakeToken(record["fake_token"])
+	if err != nil {
+		return "", false, err
+	}
+
+	if honeypot || relatedHoneypot {
+		return "honeypot", true, nil
+	}
+	if fakeToken {
+		return "impersonation", true, nil
+	}
+	if maliciousAddress || gasAbuse {
+		return "malicious", true, nil
+	}
+	// GoPlus documents omission of is_honeypot as unknown (for example for
+	// closed-source or proxy contracts). Only an explicit zero establishes that
+	// this reviewed signal was actually evaluated.
+	return "", honeypotPresent, nil
 }
 
-func flagIsOne(value any) bool {
-	switch value := value.(type) {
-	case string:
-		return strings.TrimSpace(value) == "1"
-	case float64:
-		return value == 1
-	case bool:
-		return value
-	default:
-		return false
+func parseGoPlusFakeToken(raw json.RawMessage) (bool, error) {
+	if len(raw) == 0 {
+		return false, nil
 	}
+	fields, err := decodeExactJSONObject(raw, "true_token_address", "value")
+	if err != nil {
+		return false, err
+	}
+	trueAddressRaw, hasAddress := fields["true_token_address"]
+	valueRaw, hasValue := fields["value"]
+	if !hasAddress || !hasValue {
+		return false, errors.New("incomplete GoPlus fake_token object")
+	}
+	if _, err := decodeBoundedString(trueAddressRaw, 1024, false); err != nil {
+		return false, err
+	}
+	return parseBinaryFlag(valueRaw)
 }

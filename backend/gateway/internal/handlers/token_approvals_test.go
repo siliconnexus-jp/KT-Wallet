@@ -37,14 +37,19 @@ func TestTokenApprovalsReturnSanitizedRiskRowsAndUseLocalCache(t *testing.T) {
 			t.Fatalf("unexpected query = %v", r.URL.Query())
 		}
 		_, _ = w.Write([]byte(`{"code":1,"result":[{
-          "token_address":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          "token_name":"Token","token_symbol":"TOK","decimals":18,"balance":"5",
-          "malicious_address":0,"malicious_behavior":[],"approved_list":[{
-            "approved_contract":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "approved_amount":"Unlimited","approved_time":1700000000,
-            "hash":"0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-            "address_info":{"contract_name":"Router","tag":"Example","doubt_list":1,
-              "trust_list":0,"malicious_behavior":["phishing"]}}]}]}`))
+	          "token_address":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	          "chain_id":"1","token_name":"Token","token_symbol":"TOK","decimals":18,"balance":"5",
+	          "is_open_source":1,
+	          "malicious_address":0,"malicious_behavior":[],"approved_list":[{
+	            "approved_contract":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+	            "approved_amount":"Unlimited","approved_time":1700000000,
+	            "initial_approval_time":1699999999,
+	            "initial_approval_hash":"0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+	            "hash":"0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+	            "address_info":{"contract_name":"Router","tag":"Example",
+	              "creator_address":"0xdddddddddddddddddddddddddddddddddddddddd","is_contract":1,
+	              "doubt_list":1,"malicious_behavior":["phishing"],"deployed_time":1600000000,
+	              "trust_list":0,"is_open_source":1}}]}]}`))
 	})
 	e := newEnv(t, func(cfg *handlers.Config) {
 		cfg.DisableExternalApprovals = false

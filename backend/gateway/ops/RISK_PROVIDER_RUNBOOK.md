@@ -42,7 +42,11 @@ caches never turn an error into a new safe/empty response.
    workstation. Do not paste provider credentials into tickets or chat.
 5. If the response schema changed, capture a sanitized structural fixture with
    all addresses and free-form provider text removed, then reproduce in the
-   deterministic test harness before changing the parser.
+   deterministic test harness before changing the parser. Do not restore a
+   permissive struct/map `json.Unmarshal`: envelope/result identity, EVM
+   decisive flags, Solana `creators` plus all privileged authority fields, and
+   Approval `chain_id` plus its three nested schemas must stay independently
+   bound and duplicate-free.
 
 ## Containment and rollback
 
@@ -66,7 +70,8 @@ caches never turn an error into a new safe/empty response.
 
 Recovery is complete only when all of the following are true:
 
-1. The affected provider returns a schema accepted by current production code.
+1. The affected provider returns a schema accepted by current production code;
+   a quota/error envelope missing `result` is not a successful schema sample.
 2. The eight-mainnet read-only matrix returns 8/8 provider-backed safe results,
    and the deterministic unsafe/error/malformed fixtures remain rejected by
    `make token-risk-matrix-test`.

@@ -1,7 +1,6 @@
 package upstream
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -48,6 +47,9 @@ func (g *GoPlusSolana) TokenRisk(ctx context.Context, mint string) (TokenThreat,
 	if err := ValidateGoPlusURL(g.baseURL); err != nil {
 		return TokenThreat{}, &Unavailable{Upstream: "goplus-solana", Message: "invalid provider endpoint"}
 	}
+	if err := validateSolanaMint(mint); err != nil {
+		return TokenThreat{}, &Unavailable{Upstream: "goplus-solana", Message: "invalid token identity"}
+	}
 	endpoint, err := url.Parse(g.baseURL)
 	if err != nil || endpoint.Scheme == "" || endpoint.Host == "" {
 		return TokenThreat{}, &Unavailable{Upstream: "goplus-solana", Message: "invalid provider endpoint"}
@@ -88,28 +90,27 @@ func (g *GoPlusSolana) TokenRisk(ctx context.Context, mint string) (TokenThreat,
 	if err != nil {
 		return TokenThreat{}, &Unavailable{Upstream: "goplus-solana", Message: "could not read provider response"}
 	}
-	var envelope struct {
-		Code   int                        `json:"code"`
-		Result map[string]json.RawMessage `json:"result"`
-	}
-	if err := json.Unmarshal(data, &envelope); err != nil {
+	envelope, err := decodeGoPlusEnvelope(data)
+	if err != nil {
 		return TokenThreat{}, &Unavailable{Upstream: "goplus-solana", Message: "malformed or incomplete provider response"}
 	}
 	if envelope.Code == 2020 || envelope.Code == 2021 {
+		if !isJSONNull(envelope.Result) {
+			return TokenThreat{}, &Unavailable{Upstream: "goplus-solana", Message: "malformed or incomplete provider response"}
+		}
 		return TokenThreat{Found: false}, nil
 	}
-	if envelope.Code != 1 || envelope.Result == nil {
+	if envelope.Code != 1 {
 		return TokenThreat{}, &Unavailable{Upstream: "goplus-solana", Message: "malformed or incomplete provider response"}
 	}
-	recordRaw, found := envelope.Result[mint]
-	if !found || len(bytes.TrimSpace(recordRaw)) == 0 || bytes.Equal(bytes.TrimSpace(recordRaw), []byte("null")) {
+	recordRaw, found, err := decodeBoundGoPlusRecord(envelope.Result, mint, false)
+	if err != nil {
+		return TokenThreat{}, &Unavailable{Upstream: "goplus-solana", Message: "malformed or incomplete provider response"}
+	}
+	if !found {
 		return TokenThreat{Found: false}, nil
 	}
-	var record map[string]json.RawMessage
-	if err := json.Unmarshal(recordRaw, &record); err != nil {
-		return TokenThreat{}, &Unavailable{Upstream: "goplus-solana", Message: "malformed token risk record"}
-	}
-	unsafe, err := explicitSolanaAuthorityThreat(record)
+	unsafe, err := explicitSolanaAuthorityThreat(recordRaw)
 	if err != nil {
 		return TokenThreat{}, &Unavailable{Upstream: "goplus-solana", Message: "malformed token risk record"}
 	}
@@ -120,83 +121,98 @@ func (g *GoPlusSolana) TokenRisk(ctx context.Context, mint string) (TokenThreat,
 	return TokenThreat{Found: true, Unsafe: unsafe, Category: category}, nil
 }
 
-var solanaPrivilegedRiskFields = [...]string{
-	"creator",
-	"metadata_mutable",
-	"mintable",
-	"freezable",
-	"closable",
-	"transfer_fee_upgradable",
-	"default_account_state_upgradable",
-	"balance_mutable_authority",
-	"transfer_hook",
-	"transfer_hook_upgradable",
+type solanaPrivilegedRiskField struct {
+	name         string
+	authorityKey string
+	array        bool
 }
 
-func explicitSolanaAuthorityThreat(record map[string]json.RawMessage) (bool, error) {
+var solanaPrivilegedRiskFields = [...]solanaPrivilegedRiskField{
+	{name: "creators", array: true},
+	{name: "metadata_mutable", authorityKey: "metadata_upgrade_authority"},
+	{name: "mintable", authorityKey: "authority"},
+	{name: "freezable", authorityKey: "authority"},
+	{name: "closable", authorityKey: "authority"},
+	{name: "transfer_fee_upgradable", authorityKey: "authority"},
+	{name: "default_account_state_upgradable", authorityKey: "authority"},
+	{name: "balance_mutable_authority", authorityKey: "authority"},
+	{name: "transfer_hook", array: true},
+	{name: "transfer_hook_upgradable", authorityKey: "authority"},
+}
+
+func explicitSolanaAuthorityThreat(recordRaw json.RawMessage) (bool, error) {
+	record, err := decodeUniqueJSONObject(recordRaw)
+	if err != nil {
+		return false, err
+	}
+	consumed := make([]string, 0, len(solanaPrivilegedRiskFields))
 	for _, field := range solanaPrivilegedRiskFields {
-		raw, ok := record[field]
-		if !ok || len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-			continue
+		consumed = append(consumed, field.name)
+	}
+	if err := rejectConsumedFieldAliases(record, consumed...); err != nil {
+		return false, err
+	}
+	unsafe := false
+	for _, field := range solanaPrivilegedRiskFields {
+		raw, present := record[field.name]
+		if !present || isJSONNull(raw) {
+			return false, fmt.Errorf("missing Solana risk field %q", field.name)
 		}
-		var value any
-		if err := json.Unmarshal(raw, &value); err != nil {
-			return false, err
+		var fieldUnsafe bool
+		if field.array {
+			fieldUnsafe, err = parseSolanaAuthorityArray(raw)
+		} else {
+			fieldUnsafe, err = parseSolanaCapability(raw, field.authorityKey)
 		}
-		unsafe, err := containsMaliciousAuthority(value, 0)
 		if err != nil {
 			return false, err
 		}
-		if unsafe {
-			return true, nil
-		}
+		unsafe = unsafe || fieldUnsafe
 	}
-	return false, nil
+	return unsafe, nil
 }
 
-func containsMaliciousAuthority(value any, depth int) (bool, error) {
-	if depth > 8 {
-		return false, fmt.Errorf("provider authority object is too deeply nested")
+func parseSolanaCapability(raw json.RawMessage, authorityKey string) (bool, error) {
+	fields, err := decodeExactJSONObject(raw, "status", authorityKey)
+	if err != nil {
+		return false, err
 	}
-	switch value := value.(type) {
-	case map[string]any:
-		if flag, ok := value["malicious_address"]; ok {
-			switch flag := flag.(type) {
-			case string:
-				if flag != "0" && flag != "1" {
-					return false, fmt.Errorf("invalid malicious_address flag")
-				}
-				if flag == "1" {
-					return true, nil
-				}
-			case float64:
-				if flag != 0 && flag != 1 {
-					return false, fmt.Errorf("invalid malicious_address flag")
-				}
-				if flag == 1 {
-					return true, nil
-				}
-			case bool:
-				if flag {
-					return true, nil
-				}
-			default:
-				return false, fmt.Errorf("invalid malicious_address flag")
-			}
-		}
-		for _, child := range value {
-			unsafe, err := containsMaliciousAuthority(child, depth+1)
-			if err != nil || unsafe {
-				return unsafe, err
-			}
-		}
-	case []any:
-		for _, child := range value {
-			unsafe, err := containsMaliciousAuthority(child, depth+1)
-			if err != nil || unsafe {
-				return unsafe, err
-			}
-		}
+	statusRaw, hasStatus := fields["status"]
+	authorityRaw, hasAuthority := fields[authorityKey]
+	if !hasStatus || !hasAuthority {
+		return false, errors.New("incomplete Solana capability record")
 	}
-	return false, nil
+	if _, err := parseBinaryFlag(statusRaw); err != nil {
+		return false, err
+	}
+	return parseSolanaAuthorityArray(authorityRaw)
+}
+
+func parseSolanaAuthorityArray(raw json.RawMessage) (bool, error) {
+	rows, err := decodeRawJSONArray(raw, maxGoPlusAuthorityRows)
+	if err != nil {
+		return false, err
+	}
+	unsafe := false
+	for _, row := range rows {
+		fields, err := decodeExactJSONObject(row, "address", "malicious_address")
+		if err != nil {
+			return false, err
+		}
+		addressRaw, hasAddress := fields["address"]
+		maliciousRaw, hasMalicious := fields["malicious_address"]
+		if !hasAddress || !hasMalicious {
+			return false, errors.New("incomplete Solana authority record")
+		}
+		address, err := decodeBoundedString(addressRaw, 44, false)
+		if err != nil || validateSolanaMint(address) != nil {
+			return false, errors.New("invalid Solana authority address")
+		}
+		malicious, err := parseBinaryFlag(maliciousRaw)
+		if err != nil {
+			return false, err
+		}
+		unsafe = unsafe || malicious
+	}
+	return unsafe, nil
 }

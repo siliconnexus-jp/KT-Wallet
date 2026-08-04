@@ -12,6 +12,19 @@ import (
 	"ktwallet/gateway/internal/rpc"
 )
 
+func completeHandlerSolanaRiskRecord(authority string) string {
+	return `{"creators":[],` +
+		`"metadata_mutable":{"status":"1","metadata_upgrade_authority":[{"address":"` + authority + `","malicious_address":0}]},` +
+		`"mintable":{"status":"1","authority":[{"address":"` + authority + `","malicious_address":0}]},` +
+		`"freezable":{"status":"1","authority":[{"address":"` + authority + `","malicious_address":0}]},` +
+		`"closable":{"status":"0","authority":[]},` +
+		`"transfer_fee_upgradable":{"status":"0","authority":[]},` +
+		`"default_account_state_upgradable":{"status":"0","authority":[]},` +
+		`"balance_mutable_authority":{"status":"0","authority":[]},` +
+		`"transfer_hook":[],` +
+		`"transfer_hook_upgradable":{"status":"0","authority":[]}}`
+}
+
 func TestCheckTokenRiskReturnsUnsafeSafeAndUnknown(t *testing.T) {
 	const risky = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	e := newEnv(t, func(cfg *handlers.Config) {
@@ -118,14 +131,16 @@ func TestCheckTokenRiskUsesSolanaProviderWithoutMisclassifyingLegitimateAuthorit
 		mint := r.URL.Query().Get("contract_addresses")
 		switch mint {
 		case usdc:
-			_, _ = w.Write([]byte(`{"code":1,"result":{"` + usdc + `":{
-              "mintable":{"status":"1","authority":[{"malicious_address":0}]},
-              "freezable":{"status":"1","authority":[{"malicious_address":"0"}]}
-            }}}`))
+			_, _ = w.Write([]byte(`{"code":1,"result":{"` + usdc + `":` +
+				completeHandlerSolanaRiskRecord(usdc) + `}}`))
 		case bonk:
-			_, _ = w.Write([]byte(`{"code":1,"result":{"` + bonk + `":{
-              "metadata_mutable":{"metadata_upgrade_authority":[{"malicious_address":"1"}]}
-            }}}`))
+			record := strings.Replace(
+				completeHandlerSolanaRiskRecord(bonk),
+				`"metadata_mutable":{"status":"1","metadata_upgrade_authority":[{"address":"`+bonk+`","malicious_address":0}]}`,
+				`"metadata_mutable":{"status":"1","metadata_upgrade_authority":[{"address":"`+bonk+`","malicious_address":1}]}`,
+				1,
+			)
+			_, _ = w.Write([]byte(`{"code":1,"result":{"` + bonk + `":` + record + `}}`))
 		default:
 			t.Fatalf("unexpected Solana mint %q", mint)
 		}
@@ -297,7 +312,8 @@ func TestOperatorRiskPrecedesExternalProvider(t *testing.T) {
 func TestExternalExplicitThreatOverridesOfficialIdentity(t *testing.T) {
 	const usdt = "0xdac17f958d2ee523a2206206994597c13d831ec7"
 	provider := newRESTFake(t)
-	provider.routeJSON("/1", `{"code":1,"result":{"0xdac17f958d2ee523a2206206994597c13d831ec7":{"fake_token":"1"}}}`)
+	provider.routeJSON("/1", `{"code":1,"result":{"0xdac17f958d2ee523a2206206994597c13d831ec7":{`+
+		`"fake_token":{"true_token_address":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","value":1}}}}`)
 	e := newEnv(t, func(cfg *handlers.Config) {
 		cfg.DisableExternalTokenRisk = false
 		cfg.GoPlusURL = provider.srv.URL
@@ -323,6 +339,22 @@ func TestOfficialIdentityIsSafeOnlyAfterExternalCheckFindsNoExplicitThreat(t *te
 	}))
 	if got["status"] != "safe" || got["source"] != "official_catalog+goplus" {
 		t.Fatalf("official externally checked result = %v", got)
+	}
+}
+
+func TestOfficialIdentityStaysUnknownWhenProviderReturnsNoBoundRecord(t *testing.T) {
+	const usdt = "0xdac17f958d2ee523a2206206994597c13d831ec7"
+	provider := newRESTFake(t)
+	provider.routeJSON("/1", `{"code":1,"message":"OK","result":{}}`)
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.DisableExternalTokenRisk = false
+		cfg.GoPlusURL = provider.srv.URL
+	})
+	got := result(t, e.rpc("kt_checkTokenRisk", map[string]any{
+		"chain": "eth", "network": "eth-mainnet", "contract": usdt,
+	}))
+	if got["status"] != "unknown" || got["source"] != "goplus" {
+		t.Fatalf("provider no-record must not decorate official identity as checked-safe: %v", got)
 	}
 }
 
