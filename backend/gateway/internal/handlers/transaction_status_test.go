@@ -172,6 +172,32 @@ func TestSolanaTransactionStatusReportsExecutionFailure(t *testing.T) {
 	}
 }
 
+func TestSolanaTransactionStatusKeepsProcessedExecutionFailurePending(t *testing.T) {
+	failure := map[string]any{"InstructionError": []any{0, "Custom"}}
+	node := newRPCFake(t)
+	node.result("getSignatureStatuses", map[string]any{
+		"context": map[string]any{"slot": 82},
+		"value": []any{map[string]any{
+			"slot":               80,
+			"confirmations":      1,
+			"confirmationStatus": "processed",
+			"err":                failure,
+			"status":             map[string]any{"Err": failure},
+		}},
+	})
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.SolanaURLs = []string{node.srv.URL}
+	})
+
+	res := result(t, e.rpc(
+		"kt_getTransactionStatus",
+		fmt.Sprintf(`{"chain":"solana","hash":%q}`, solHash),
+	))
+	if res["status"] != "pending" {
+		t.Fatalf("expected pending, got %v", res)
+	}
+}
+
 func TestSolanaTransactionStatusMissingErrFailsClosed(t *testing.T) {
 	node := newRPCFake(t)
 	node.result("getSignatureStatuses", map[string]any{

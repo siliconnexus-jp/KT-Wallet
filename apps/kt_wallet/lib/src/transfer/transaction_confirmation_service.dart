@@ -125,12 +125,11 @@ class TransactionConfirmationService {
       );
     }
     final confirmationStatus = result.confirmationStatus;
-    final txStatus = result.failed
-        ? TxStatus.failed
-        : switch (confirmationStatus) {
-            'confirmed' || 'finalized' => TxStatus.confirmed,
-            _ => TxStatus.pending,
-          };
+    final txStatus = switch (confirmationStatus) {
+      'confirmed' ||
+      'finalized' => result.failed ? TxStatus.failed : TxStatus.confirmed,
+      _ => TxStatus.pending,
+    };
     return TransactionConfirmation(
       status: txStatus,
       confirmations: result.confirmations,

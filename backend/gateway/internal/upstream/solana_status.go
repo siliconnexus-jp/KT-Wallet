@@ -82,9 +82,6 @@ func decodeSolanaSignatureStatus(raw json.RawMessage) (string, error) {
 	if err := validateSolanaDeprecatedStatus(entry["status"], errRaw, failed); err != nil {
 		return "", err
 	}
-	if failed {
-		return "failed", nil
-	}
 	if !confirmationKnown {
 		return "unknown", nil
 	}
@@ -92,6 +89,9 @@ func decodeSolanaSignatureStatus(raw json.RawMessage) (string, error) {
 	case "processed":
 		return "pending", nil
 	case "confirmed", "finalized":
+		if failed {
+			return "failed", nil
+		}
 		return "confirmed", nil
 	default:
 		return "", errors.New("unsupported Solana confirmation status")

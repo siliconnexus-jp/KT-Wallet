@@ -101,9 +101,11 @@ func TestSolanaSignatureStatusAcceptsExactOfficialShapes(t *testing.T) {
 	}{
 		{"not found", `{"context":{"slot":82},"value":[null]}`, "unknown"},
 		{"processed", `{"context":{"slot":82},"value":[{"slot":81,"confirmations":0,"err":null,"status":{"Ok":null},"confirmationStatus":"processed"}]}`, "pending"},
+		{"processed failure", `{"context":{"slot":82},"value":[{"slot":81,"confirmations":0,"err":"AccountInUse","status":{"Err":"AccountInUse"},"confirmationStatus":"processed"}]}`, "pending"},
 		{"confirmed", `{"context":{"slot":82,"apiVersion":"2.3.0"},"value":[{"slot":80,"confirmations":2,"err":null,"status":{"Ok":null},"confirmationStatus":"confirmed"}]}`, "confirmed"},
 		{"finalized", `{"context":{"slot":82},"value":[{"slot":48,"confirmations":null,"err":null,"status":{"Ok":null},"confirmationStatus":"finalized"}]}`, "confirmed"},
 		{"legacy unknown confirmation", `{"context":{"slot":82},"value":[{"slot":48,"confirmations":null,"err":null,"status":{"Ok":null},"confirmationStatus":null}]}`, "unknown"},
+		{"legacy unknown failed confirmation", `{"context":{"slot":82},"value":[{"slot":48,"confirmations":null,"err":"AccountInUse","status":{"Err":"AccountInUse"},"confirmationStatus":null}]}`, "unknown"},
 		{"failed enum", `{"context":{"slot":82},"value":[{"slot":80,"confirmations":2,"err":"AccountInUse","status":{"Err":"AccountInUse"},"confirmationStatus":"confirmed"}]}`, "failed"},
 		{"failed instruction", `{"context":{"slot":82},"value":[{"slot":80,"confirmations":2,"err":{"InstructionError":[0,"Custom"]},"status":{"Err":{"InstructionError":[0,"Custom"]}},"confirmationStatus":"confirmed"}]}`, "failed"},
 	}

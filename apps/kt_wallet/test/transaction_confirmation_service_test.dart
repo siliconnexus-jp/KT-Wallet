@@ -325,6 +325,34 @@ void main() {
       expect(json.method, 'getSignatureStatuses');
     });
 
+    test('processed Solana execution error is not terminal yet', () async {
+      final json = _JsonRpc({
+        'getSignatureStatuses': {
+          'context': {'slot': 100},
+          'value': [
+            {
+              'slot': 99,
+              'err': {'InstructionError': 1},
+              'status': {
+                'Err': {'InstructionError': 1},
+              },
+              'confirmations': 0,
+              'confirmationStatus': 'processed',
+            },
+          ],
+        },
+      });
+      final service = TransactionConfirmationService(
+        endpoints: _endpoint,
+        jsonRpcTransport: json,
+        restTransport: _Rest(),
+      );
+
+      final result = await service.check(Chain.solana, _solanaSignature);
+      expect(result.status, TxStatus.pending);
+      expect(result.confirmations, 0);
+    });
+
     test('Solana confirmation rejects incomplete evidence', () async {
       final json = _JsonRpc({
         'getSignatureStatuses': {

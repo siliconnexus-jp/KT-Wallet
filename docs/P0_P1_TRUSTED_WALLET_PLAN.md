@@ -2,7 +2,7 @@
 
 更新日期：2026-08-05
 
-当前 Gateway 源码版本 1.16.25；当前生产 Gateway 1.16.25。生产 Gateway-first 链身份、
+当前 Gateway 源码版本 1.16.26；当前生产 Gateway 1.16.25。生产 Gateway-first 链身份、
 TRON/Solana/EVM 余额与 Portfolio 身份、Solana 交易终态、EVM 动态手续费及签名前预执行回包严格解析均已启用。
 
 ## 目标与边界
@@ -2245,3 +2245,15 @@ failed。两组失败优先测试分别稳定复现 `expected hex quantity` 与 
 通过。公开 BSC Testnet 既有交易只读 smoke 还通过同一生产确认服务读取真实 receipt 与
 latest height，确认 confirmed 且深度为正；未加载私钥且未广播。本轮没有 Gateway 服务端
 或视觉 UI 变化，无需部署后端；App 修复须随下一版移动端制品发布。
+
+同日继续复审 Solana 失败终态的 commitment 边界。旧 App 直连状态、确认页和 Gateway
+解析器都先判断 `err`，因此仅达到 `processed` 的失败会立即写成 `failed`；该 commitment
+仍可能回滚，不能作为不可逆终态。失败优先测试在三个生产入口稳定复现错误终结，并补充
+Gateway RPC 端到端用例。修复后只有 `confirmed/finalized + err` 才映射为 `failed`，
+`processed + err` 保持 `pending`，legacy/未知 commitment 保持 `unknown`；成功路径同样只在
+confirmed/finalized 后终结。KT Wallet 1635/1635（另有 11 项显式线上/设备测试默认跳过）、
+KT Cold Signer 570/570、共享 packages 438/438、Gateway 普通/race/vet/govulncheck/运维守卫、
+静态分析 0 与完整依赖/OSV 门禁 13/13 均通过。官方 Solana Devnet 严格 status smoke 1/1，
+blockhash/fee/simulation、余额/SPL accounts 与历史只读 smoke 3/3 通过；未加载私钥且未广播。
+Gateway 源码候选提升到 1.16.26，须在 secondary → primary 滚动验证完成后才更新生产声明。
+本项没有视觉 UI 变化，不使用无关模拟器截图替代协议证据。

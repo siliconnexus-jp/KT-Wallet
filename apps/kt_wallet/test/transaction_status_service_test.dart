@@ -465,6 +465,35 @@ void main() {
     );
   });
 
+  test('processed Solana execution error is not terminal yet', () async {
+    final rpc = _JsonRpc({
+      'getSignatureStatuses': {
+        'context': {'slot': 82},
+        'value': [
+          {
+            'slot': 81,
+            'confirmations': 0,
+            'confirmationStatus': 'processed',
+            'err': {'InstructionError': 0},
+            'status': {
+              'Err': {'InstructionError': 0},
+            },
+          },
+        ],
+      },
+    });
+    final service = TransactionStatusService(
+      endpoints: (_) => 'https://rpc.example',
+      jsonRpcTransport: rpc,
+      restTransport: _Rest(null),
+    );
+
+    expect(
+      await service.check(_tx(Coin.solana.name, _solanaSignature)),
+      ChainTransactionStatus.pending,
+    );
+  });
+
   test(
     'malformed Solana status stays unknown and never invents confirmation',
     () async {

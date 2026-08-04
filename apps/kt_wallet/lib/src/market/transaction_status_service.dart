@@ -211,9 +211,11 @@ class TransactionStatusService {
           ? ChainTransactionStatus.expired
           : ChainTransactionStatus.unknown;
     }
-    if (result.failed) return ChainTransactionStatus.failed;
     return switch (result.confirmationStatus) {
-      'confirmed' || 'finalized' => ChainTransactionStatus.confirmed,
+      'confirmed' || 'finalized' =>
+        result.failed
+            ? ChainTransactionStatus.failed
+            : ChainTransactionStatus.confirmed,
       _ => ChainTransactionStatus.pending,
     };
   }
