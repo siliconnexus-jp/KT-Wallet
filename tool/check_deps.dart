@@ -1176,6 +1176,17 @@ void main() {
       );
     }
   }
+  for (final approvalEvidenceBoundary in const [
+    '!_isApprovalTimestamp(approvedAt)',
+    'DateTime.now().add(const Duration(days: 1)).millisecondsSinceEpoch',
+  ]) {
+    if (!gatewayClientSource.contains(approvalEvidenceBoundary)) {
+      failures.add(
+        '${gatewayClient.path} does not independently bound approval '
+        'evidence time: $approvalEvidenceBoundary',
+      );
+    }
+  }
   for (final path in const [
     'apps/kt_wallet/lib/src/market/history_scope_host.dart',
     'apps/kt_wallet/lib/src/screens/home_screen.dart',

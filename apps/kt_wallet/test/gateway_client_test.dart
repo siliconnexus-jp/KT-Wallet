@@ -1917,6 +1917,13 @@ void main() {
             ..['amount'] = '1'
             ..['unlimited'] = true,
           validRow()..['approvedAt'] = -1,
+          validRow()
+            ..['approvedAt'] =
+                DateTime.now()
+                    .add(const Duration(days: 2))
+                    .millisecondsSinceEpoch ~/
+                1000,
+          validRow()..['approvedAt'] = 8640000000001,
           validRow()..['transaction'] = '0x1234',
           validRow()..['tokenSymbol'] = 'T' * 33,
           validRow()..['tokenName'] = 'USDT\u202eTDSU',

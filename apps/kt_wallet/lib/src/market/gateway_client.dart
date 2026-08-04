@@ -1375,7 +1375,7 @@ class GatewayClient {
           decimals > Amount.maxDecimals ||
           !_isProviderDecimal(balance) ||
           !validUnlimited ||
-          approvedAt < 0 ||
+          !_isApprovalTimestamp(approvedAt) ||
           (transaction.isNotEmpty &&
               !_evmTxHashPattern.hasMatch(transaction)) ||
           !_isBoundedDisplayText(tokenName, 80) ||
@@ -1561,6 +1561,18 @@ class GatewayClient {
     return normalized.isNotEmpty &&
         normalized.length <= 128 &&
         _providerDecimalPattern.hasMatch(normalized);
+  }
+
+  /// Approval evidence uses Unix seconds. Zero means the provider did not
+  /// supply a timestamp. A bounded 24-hour future skew matches the Gateway's
+  /// upstream validation while independently preventing false future evidence
+  /// and values that could make the UI's DateTime conversion throw.
+  static bool _isApprovalTimestamp(int seconds) {
+    if (seconds < 0) return false;
+    final maximum =
+        DateTime.now().add(const Duration(days: 1)).millisecondsSinceEpoch ~/
+        1000;
+    return seconds <= maximum;
   }
 
   static bool _tokenIdentityMatches(
