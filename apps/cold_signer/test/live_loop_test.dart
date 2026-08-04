@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:cold_signer/main.dart';
+import 'package:cold_signer/src/security/pin_lock.dart';
 import 'package:cold_signer/src/security/secure_vault.dart';
 import 'package:cold_signer/src/security/security_check.dart';
 import 'package:cold_signer/src/signing/demo_airgap.dart';
@@ -213,6 +214,7 @@ void main() {
         addresses: addresses.toMap(),
       ),
     );
+    await PinLock(storage, iterations: 500).setPin('135790');
 
     await tester.pumpWidget(
       ColdSignerApp(

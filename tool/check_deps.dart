@@ -217,6 +217,16 @@ void main() {
     failures.add('${walletPinState.path}: $issue');
   }
 
+  final signerPinState = File(
+    'apps/cold_signer/lib/src/security/pin_lock.dart',
+  );
+  final signerPinStateSource = signerPinState.existsSync()
+      ? signerPinState.readAsStringSync()
+      : '';
+  for (final issue in findSignerPinStateBoundaryIssues(signerPinStateSource)) {
+    failures.add('${signerPinState.path}: $issue');
+  }
+
   // Direct MethodChannel callers must not be able to crash the iOS process
   // with an unexpected runtime type. `as!` and force-unwrapped HDWallet
   // construction bypass Swift error handling entirely, so keep both out of

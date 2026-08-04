@@ -202,6 +202,7 @@ class WalletPin {
 
   static const saltLength = 16;
   static const hashLength = 32;
+  static const maxStoredRecordChars = 4096;
   static const maxStoredIterations = 1000000;
   static const lockoutThreshold = 5;
   static const maxTrackedFailures = 64;
@@ -362,6 +363,9 @@ class WalletPin {
     required Set<String> required,
   }) {
     try {
+      if (raw.length > maxStoredRecordChars) {
+        throw const PinStateCorruptedException();
+      }
       final decoded = decodeJsonWithoutDuplicateKeys(raw);
       if (decoded is! Map ||
           decoded.keys.any((key) => key is! String || !allowed.contains(key)) ||

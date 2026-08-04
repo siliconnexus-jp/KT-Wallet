@@ -6,16 +6,36 @@ import 'package:crypto/crypto.dart';
 
 import 'secure_vault.dart';
 
+/// The enrolled PIN or lockout record exists but is not valid under the
+/// signer's closed security schema. Callers must keep signing locked.
+class PinStateCorruptedException implements Exception {
+  const PinStateCorruptedException();
+
+  @override
+  String toString() => 'PinStateCorruptedException';
+}
+
 /// PBKDF2-HMAC-SHA256 (RFC 2898). package:crypto has no PBKDF2, so the loop
 /// is implemented here over its HMAC primitive.
-Uint8List pbkdf2Sha256({required List<int> password, required List<int> salt, required int iterations, int length = 32}) {
+Uint8List pbkdf2Sha256({
+  required List<int> password,
+  required List<int> salt,
+  required int iterations,
+  int length = 32,
+}) {
   if (iterations < 1) throw ArgumentError.value(iterations, 'iterations');
   final hmac = Hmac(sha256, password);
   final blockCount = (length / 32).ceil();
   final out = BytesBuilder(copy: false);
   for (var block = 1; block <= blockCount; block++) {
     // U1 = HMAC(password, salt || INT_32_BE(block))
-    var u = hmac.convert([...salt, block >> 24, (block >> 16) & 0xff, (block >> 8) & 0xff, block & 0xff]).bytes;
+    var u = hmac.convert([
+      ...salt,
+      block >> 24,
+      (block >> 16) & 0xff,
+      (block >> 8) & 0xff,
+      block & 0xff,
+    ]).bytes;
     final t = Uint8List.fromList(u);
     for (var i = 1; i < iterations; i++) {
       u = hmac.convert(u).bytes;
@@ -35,8 +55,14 @@ class PinVerdict {
   const PinVerdict._(this.kind, {this.failedAttempts = 0, this.lockRemaining});
 
   const PinVerdict.ok() : this._(PinVerdictKind.ok);
-  const PinVerdict.wrong(int failedAttempts) : this._(PinVerdictKind.wrong, failedAttempts: failedAttempts);
-  const PinVerdict.locked(Duration remaining, int failedAttempts) : this._(PinVerdictKind.locked, failedAttempts: failedAttempts, lockRemaining: remaining);
+  const PinVerdict.wrong(int failedAttempts)
+    : this._(PinVerdictKind.wrong, failedAttempts: failedAttempts);
+  const PinVerdict.locked(Duration remaining, int failedAttempts)
+    : this._(
+        PinVerdictKind.locked,
+        failedAttempts: failedAttempts,
+        lockRemaining: remaining,
+      );
 
   final PinVerdictKind kind;
 
@@ -60,7 +86,13 @@ class PinVerdict {
 /// (30 s → 60 s → 120 s → …). Both the counter and the lock deadline are
 /// persisted, so restarting the app does NOT reset the lockout.
 class PinLock {
-  PinLock(this._storage, {this.iterations = 100000, Random? random, DateTime Function()? clock}) : _random = random ?? Random.secure(), _now = clock ?? DateTime.now;
+  PinLock(
+    this._storage, {
+    this.iterations = 100000,
+    Random? random,
+    DateTime Function()? clock,
+  }) : _random = random ?? Random.secure(),
+       _now = clock ?? DateTime.now;
 
   final VaultStorage _storage;
 
@@ -72,17 +104,48 @@ class PinLock {
   final DateTime Function() _now;
 
   static const saltLength = 16;
+  static const hashLength = 32;
+  static const maxStoredRecordChars = 4096;
+  static const maxStoredIterations = 1000000;
   static const lockoutThreshold = 5;
+  static const maxTrackedFailures = 64;
   static const baseLockout = Duration(seconds: 30);
+  static const maxLockout = Duration(hours: 24);
+  static const maxPersistedLockout = Duration(days: 7);
 
   /// Whether a PIN has been enrolled.
-  Future<bool> isSet() async => await _storage.read(SecureVault.pinKey) != null;
+  Future<bool> isSet() async {
+    final raw = await _storage.read(SecureVault.pinKey);
+    if (raw == null) return false;
+    _decodePinRecord(raw);
+    return true;
+  }
 
   /// Enrolls (or replaces) the PIN and clears any lockout state.
   Future<void> setPin(String pin) async {
-    final salt = Uint8List.fromList(List.generate(saltLength, (_) => _random.nextInt(256)));
-    final hash = pbkdf2Sha256(password: utf8.encode(pin), salt: salt, iterations: iterations);
-    await _storage.write(SecureVault.pinKey, jsonEncode({'algo': 'pbkdf2-hmac-sha256', 'salt': base64Encode(salt), 'hash': base64Encode(hash), 'iterations': iterations}));
+    if (!_isSixDigitPin(pin)) {
+      throw ArgumentError.value(pin.length, 'pin', 'must be exactly 6 digits');
+    }
+    if (iterations < 1 || iterations > maxStoredIterations) {
+      throw ArgumentError.value(iterations, 'iterations');
+    }
+    final salt = Uint8List.fromList(
+      List.generate(saltLength, (_) => _random.nextInt(256)),
+    );
+    final hash = pbkdf2Sha256(
+      password: utf8.encode(pin),
+      salt: salt,
+      iterations: iterations,
+    );
+    await _storage.write(
+      SecureVault.pinKey,
+      jsonEncode({
+        'algo': 'pbkdf2-hmac-sha256',
+        'salt': base64Encode(salt),
+        'hash': base64Encode(hash),
+        'iterations': iterations,
+      }),
+    );
     await _storage.delete(SecureVault.pinLockoutKey);
   }
 
@@ -95,9 +158,12 @@ class PinLock {
   /// bumps the persisted failure counter (engaging/extending the lock); on
   /// success resets it.
   Future<PinVerdict> verify(String pin) async {
+    if (!_isSixDigitPin(pin)) {
+      throw ArgumentError.value(pin.length, 'pin', 'must be exactly 6 digits');
+    }
     final raw = await _storage.read(SecureVault.pinKey);
     if (raw == null) throw StateError('no PIN set');
-    final record = (jsonDecode(raw) as Map).cast<String, Object?>();
+    final record = _decodePinRecord(raw);
 
     final lockout = await _readLockout();
     final fails = lockout.$1;
@@ -107,21 +173,31 @@ class PinLock {
       return PinVerdict.locked(lockedUntil.difference(now), fails);
     }
 
-    final hash = pbkdf2Sha256(password: utf8.encode(pin), salt: base64Decode(record['salt']! as String), iterations: record['iterations']! as int);
-    if (_constantTimeEquals(hash, base64Decode(record['hash']! as String))) {
+    final hash = pbkdf2Sha256(
+      password: utf8.encode(pin),
+      salt: record.salt,
+      iterations: record.iterations,
+    );
+    if (_constantTimeEquals(hash, record.hash)) {
       await _storage.delete(SecureVault.pinLockoutKey);
       return const PinVerdict.ok();
     }
 
-    final newFails = fails + 1;
+    final newFails = min(fails + 1, maxTrackedFailures);
     DateTime? until;
     if (newFails >= lockoutThreshold) {
-      // 5th failure → 30s; each further failure doubles the lock.
-      final factor = 1 << (newFails - lockoutThreshold);
-      until = now.add(baseLockout * factor);
+      until = now.add(_lockoutDuration(newFails));
     }
-    await _storage.write(SecureVault.pinLockoutKey, jsonEncode({'fails': newFails, if (until != null) 'lockedUntil': until.millisecondsSinceEpoch}));
-    return until == null ? PinVerdict.wrong(newFails) : PinVerdict.locked(until.difference(now), newFails);
+    await _storage.write(
+      SecureVault.pinLockoutKey,
+      jsonEncode({
+        'fails': newFails,
+        if (until != null) 'lockedUntil': until.millisecondsSinceEpoch,
+      }),
+    );
+    return until == null
+        ? PinVerdict.wrong(newFails)
+        : PinVerdict.locked(until.difference(now), newFails);
   }
 
   /// The currently pending lockout, if any (for pre-flight UI checks).
@@ -135,10 +211,103 @@ class PinLock {
   Future<(int, DateTime?)> _readLockout() async {
     final raw = await _storage.read(SecureVault.pinLockoutKey);
     if (raw == null) return (0, null);
-    final json = (jsonDecode(raw) as Map).cast<String, Object?>();
-    final untilMs = json['lockedUntil'] as int?;
-    return (json['fails']! as int, untilMs == null ? null : DateTime.fromMillisecondsSinceEpoch(untilMs));
+    final json = _decodeExactObject(
+      raw,
+      allowed: const {'fails', 'lockedUntil'},
+      required: const {'fails'},
+    );
+    final fails = json['fails'];
+    if (fails is! int || fails < 1 || fails > maxTrackedFailures) {
+      throw const PinStateCorruptedException();
+    }
+    final untilMs = json['lockedUntil'];
+    if (fails < lockoutThreshold) {
+      if (untilMs != null || json.containsKey('lockedUntil')) {
+        throw const PinStateCorruptedException();
+      }
+      return (fails, null);
+    }
+    if (untilMs is! int || untilMs < 0) {
+      throw const PinStateCorruptedException();
+    }
+    final latest = _now().add(maxPersistedLockout).millisecondsSinceEpoch;
+    if (untilMs > latest) throw const PinStateCorruptedException();
+    return (fails, DateTime.fromMillisecondsSinceEpoch(untilMs));
   }
+
+  ({Uint8List salt, Uint8List hash, int iterations}) _decodePinRecord(
+    String raw,
+  ) {
+    final record = _decodeExactObject(
+      raw,
+      allowed: const {'algo', 'salt', 'hash', 'iterations'},
+      required: const {'algo', 'salt', 'hash', 'iterations'},
+    );
+    final storedIterations = record['iterations'];
+    if (record['algo'] != 'pbkdf2-hmac-sha256' ||
+        storedIterations is! int ||
+        storedIterations < 1 ||
+        storedIterations > maxStoredIterations) {
+      throw const PinStateCorruptedException();
+    }
+    return (
+      salt: _decodeCanonicalBase64(record['salt'], saltLength),
+      hash: _decodeCanonicalBase64(record['hash'], hashLength),
+      iterations: storedIterations,
+    );
+  }
+
+  static Map<String, Object?> _decodeExactObject(
+    String raw, {
+    required Set<String> allowed,
+    required Set<String> required,
+  }) {
+    try {
+      if (raw.length > maxStoredRecordChars) {
+        throw const PinStateCorruptedException();
+      }
+      final decoded = _decodeJsonWithoutDuplicateKeys(raw);
+      if (decoded is! Map ||
+          decoded.keys.any((key) => key is! String || !allowed.contains(key)) ||
+          required.any((key) => !decoded.containsKey(key))) {
+        throw const PinStateCorruptedException();
+      }
+      return decoded.cast<String, Object?>();
+    } on PinStateCorruptedException {
+      rethrow;
+    } on Object {
+      throw const PinStateCorruptedException();
+    }
+  }
+
+  static Uint8List _decodeCanonicalBase64(Object? value, int length) {
+    if (value is! String) throw const PinStateCorruptedException();
+    try {
+      final bytes = base64Decode(value);
+      if (bytes.length != length || base64Encode(bytes) != value) {
+        throw const PinStateCorruptedException();
+      }
+      return Uint8List.fromList(bytes);
+    } on PinStateCorruptedException {
+      rethrow;
+    } on Object {
+      throw const PinStateCorruptedException();
+    }
+  }
+
+  static Duration _lockoutDuration(int failedAttempts) {
+    var seconds = baseLockout.inSeconds;
+    final maxSeconds = maxLockout.inSeconds;
+    for (var i = lockoutThreshold; i < failedAttempts; i++) {
+      seconds = min(seconds * 2, maxSeconds);
+      if (seconds == maxSeconds) break;
+    }
+    return Duration(seconds: seconds);
+  }
+
+  static bool _isSixDigitPin(String pin) =>
+      pin.length == 6 &&
+      pin.codeUnits.every((code) => code >= 48 && code <= 57);
 
   static bool _constantTimeEquals(List<int> a, List<int> b) {
     if (a.length != b.length) return false;
@@ -148,4 +317,141 @@ class PinLock {
     }
     return diff == 0;
   }
+}
+
+Object? _decodeJsonWithoutDuplicateKeys(String source) {
+  final scanner = _DuplicateJsonKeyScanner(source);
+  if (scanner.scan()) {
+    throw const FormatException('duplicate JSON object member');
+  }
+  return jsonDecode(source);
+}
+
+class _DuplicateJsonKeyScanner {
+  _DuplicateJsonKeyScanner(this.source);
+
+  static const _maximumDepth = 32;
+  final String source;
+  int _offset = 0;
+
+  bool scan() {
+    _skipWhitespace();
+    final duplicate = _scanValue(0);
+    _skipWhitespace();
+    if (_offset != source.length) {
+      throw const FormatException('trailing JSON data');
+    }
+    return duplicate;
+  }
+
+  bool _scanValue(int depth) {
+    if (depth > _maximumDepth) {
+      throw const FormatException('JSON nesting exceeds limit');
+    }
+    _skipWhitespace();
+    if (_offset >= source.length) {
+      throw const FormatException('missing JSON value');
+    }
+    return switch (source.codeUnitAt(_offset)) {
+      0x7b => _scanObject(depth),
+      0x5b => _scanArray(depth),
+      0x22 => (_scanString(), false).$2,
+      _ => _scanPrimitive(),
+    };
+  }
+
+  bool _scanObject(int depth) {
+    _offset++;
+    _skipWhitespace();
+    if (_consume(0x7d)) return false;
+    final keys = <String>{};
+    var duplicate = false;
+    while (true) {
+      _skipWhitespace();
+      if (_offset >= source.length || source.codeUnitAt(_offset) != 0x22) {
+        throw const FormatException('JSON object key must be a string');
+      }
+      final key = _scanString();
+      if (!keys.add(key)) duplicate = true;
+      _skipWhitespace();
+      if (!_consume(0x3a)) {
+        throw const FormatException('missing JSON object colon');
+      }
+      if (_scanValue(depth + 1)) duplicate = true;
+      _skipWhitespace();
+      if (_consume(0x7d)) return duplicate;
+      if (!_consume(0x2c)) {
+        throw const FormatException('missing JSON object comma');
+      }
+    }
+  }
+
+  bool _scanArray(int depth) {
+    _offset++;
+    _skipWhitespace();
+    if (_consume(0x5d)) return false;
+    var duplicate = false;
+    while (true) {
+      if (_scanValue(depth + 1)) duplicate = true;
+      _skipWhitespace();
+      if (_consume(0x5d)) return duplicate;
+      if (!_consume(0x2c)) {
+        throw const FormatException('missing JSON array comma');
+      }
+    }
+  }
+
+  String _scanString() {
+    final start = _offset;
+    _offset++;
+    while (_offset < source.length) {
+      final code = source.codeUnitAt(_offset++);
+      if (code == 0x5c) {
+        if (_offset >= source.length) {
+          throw const FormatException('truncated JSON escape');
+        }
+        _offset++;
+        continue;
+      }
+      if (code == 0x22) {
+        final decoded = jsonDecode(source.substring(start, _offset));
+        if (decoded is! String) {
+          throw const FormatException('invalid JSON object key');
+        }
+        return decoded;
+      }
+    }
+    throw const FormatException('unterminated JSON string');
+  }
+
+  bool _scanPrimitive() {
+    final start = _offset;
+    while (_offset < source.length) {
+      final code = source.codeUnitAt(_offset);
+      if (code == 0x2c || code == 0x5d || code == 0x7d || _isWhitespace(code)) {
+        break;
+      }
+      _offset++;
+    }
+    if (_offset == start) throw const FormatException('missing JSON value');
+    return false;
+  }
+
+  bool _consume(int code) {
+    if (_offset < source.length && source.codeUnitAt(_offset) == code) {
+      _offset++;
+      return true;
+    }
+    return false;
+  }
+
+  void _skipWhitespace() {
+    while (_offset < source.length &&
+        _isWhitespace(source.codeUnitAt(_offset))) {
+      _offset++;
+    }
+  }
+
+  static bool _isWhitespace(int code) =>
+      code == 0x20 || code == 0x09 || code == 0x0a || code == 0x0d;
 }

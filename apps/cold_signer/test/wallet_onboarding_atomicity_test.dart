@@ -1,3 +1,4 @@
+import 'package:cold_signer/src/security/pin_lock.dart';
 import 'package:cold_signer/src/security/secure_vault.dart';
 import 'package:cold_signer/src/signing/sign_record_store.dart';
 import 'package:cold_signer/src/state/signer_wallet_controller.dart';
@@ -100,7 +101,8 @@ void main() {
           createdAt: 1,
         ),
       );
-      await storage.write(SecureVault.pinKey, 'durable-pin-record');
+      await PinLock(storage, iterations: 500).setPin('135790');
+      final durablePinRecord = await storage.read(SecureVault.pinKey);
 
       final controller = SignerWalletController(
         storage: storage,
@@ -109,7 +111,7 @@ void main() {
       await expectLater(controller.load(), throwsStateError);
 
       expect((await SecureVault(storage).readMetadata())?.walletId, walletId);
-      expect(await storage.read(SecureVault.pinKey), 'durable-pin-record');
+      expect(await storage.read(SecureVault.pinKey), durablePinRecord);
       expect(crypto.storedWalletCount, 1);
     },
   );
@@ -272,6 +274,7 @@ void main() {
         biometricEnabled: true,
       ),
     );
+    await PinLock(storage, iterations: 500).setPin('135790');
     final controller = SignerWalletController(storage: storage, crypto: crypto);
     await controller.load();
     storage.failMetadataWrites = true;
@@ -304,6 +307,7 @@ void main() {
           addresses: addresses.toMap(),
         ),
       );
+      await PinLock(storage, iterations: 500).setPin('135790');
       final controller = SignerWalletController(
         storage: storage,
         crypto: crypto,
@@ -349,6 +353,7 @@ void main() {
           addresses: addresses.toMap(),
         ),
       );
+      await PinLock(storage, iterations: 500).setPin('135790');
       final controller = SignerWalletController(
         storage: storage,
         crypto: crypto,

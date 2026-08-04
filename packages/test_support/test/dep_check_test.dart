@@ -618,6 +618,7 @@ final unsafe = jsonDecode(utf8.decode(bytes));
   group('wallet PIN state boundary', () {
     const safe = '''
 static const maxStoredIterations = 1000000;
+static const maxStoredRecordChars = 4096;
 static const maxTrackedFailures = 64;
 static const maxLockout = Duration(hours: 24);
 final decoded = decodeJsonWithoutDuplicateKeys(raw);
@@ -650,6 +651,7 @@ final factor = 1 << (newFails - threshold);
     test('rejects removal of every resource and schema bound', () {
       for (final marker in [
         'maxStoredIterations = 1000000',
+        'maxStoredRecordChars = 4096',
         'maxTrackedFailures = 64',
         'maxLockout = Duration(hours: 24)',
         "allowed: const {'algo', 'salt', 'hash', 'iterations'}",
@@ -660,6 +662,37 @@ final factor = 1 << (newFails - threshold);
           isNotEmpty,
         );
       }
+    });
+  });
+
+  group('cold signer PIN state boundary', () {
+    const safe = '''
+static const maxStoredIterations = 1000000;
+static const maxStoredRecordChars = 4096;
+static const maxTrackedFailures = 64;
+static const maxLockout = Duration(hours: 24);
+final decoded = _decodeJsonWithoutDuplicateKeys(raw);
+final pin = _decode(allowed: const {'algo', 'salt', 'hash', 'iterations'});
+final lock = _decode(allowed: const {'fails', 'lockedUntil'});
+final salt = _decodeCanonicalBase64(record['salt'], saltLength);
+final hash = _decodeCanonicalBase64(record['hash'], hashLength);
+until = now.add(_lockoutDuration(newFails));
+''';
+
+    test('accepts the closed bounded signer PIN format', () {
+      expect(findSignerPinStateBoundaryIssues(safe), isEmpty);
+    });
+
+    test('rejects unsafe decoding and unbounded lockout growth', () {
+      final issues = findSignerPinStateBoundaryIssues('''
+$safe
+final record = jsonDecode(raw);
+Future<bool> isSet() async => await storage.read(pinKey) != null;
+final factor = 1 << (newFails - threshold);
+''');
+      expect(issues, contains(contains('duplicate-unsafe JSON decoder')));
+      expect(issues, contains(contains('presence without parsing')));
+      expect(issues, contains(contains('attacker-sized bit shift')));
     });
   });
 

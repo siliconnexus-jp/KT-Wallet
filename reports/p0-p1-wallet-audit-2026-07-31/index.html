@@ -700,9 +700,9 @@
     <section>
       <h2>自动化与构建结果</h2>
       <div class="tests">
-        <div class="metric"><strong>1667</strong><span>KT Wallet tests 通过</span></div>
-        <div class="metric"><strong>570</strong><span>KT Cold Signer tests 通过</span></div>
-        <div class="metric"><strong>438</strong><span>共享 packages tests 通过</span></div>
+        <div class="metric"><strong>1668</strong><span>KT Wallet tests 通过</span></div>
+        <div class="metric"><strong>576</strong><span>KT Cold Signer tests 通过</span></div>
+        <div class="metric"><strong>440</strong><span>共享 packages tests 通过</span></div>
         <div class="metric"><strong>0</strong><span>静态分析问题</span></div>
       </div>
       <div class="scroll"><table>
@@ -714,8 +714,9 @@
           <tr><td>Gateway 供应链</td><td>首次扫描发现 Go 1.26.1 有 9 个代码可达标准库漏洞；现将 go.mod 最低工具链、Go 构建镜像和 Distroless 运行镜像固定到已复核版本/内容摘要。OSV-Scanner 2.2.4 扫描 Dart 147、npm 293、Go 4 个依赖及最终容器镜像</td><td class="pass">当前已知问题 0；每个发布候选必须重扫</td></tr>
           <tr><td>双端运行时供应链</td><td>Android Wrapper、Release runtime lock 与制品哈希已固定，protobuf-javalite 提升至 3.25.8。Apple 旧 SQLite 3.52.0 精确 commit 扫描命中 4 个 CVE（含与 FTS5 编译路径相关的高危项），已迁移到 sqlite3 native assets / SQLite 3.53.3；两个远程 Pod 与 SQLite 均固定 tag commit、spec/archive/source SHA-256，并查询 exact-commit OSV</td><td class="partial">Android runtime：KT 135、Signer 134 个坐标，OSV 为 0；Apple 三个上游 commit 为 0，双 App 最终 framework 为 3.53.3。构建工具告警、初始基线 provenance、正式签名与外部审计仍待闭合</td></tr>
           <tr id="public-secret-gate"><td>公开发布秘密泄漏门禁</td><td>统一检测 Etherscan、Helius、GoPlus、metrics bearer、完整 GitHub family、Alchemy、Slack、Stripe、Google、私钥模式，以及明确凭证字段中的无前缀高熵 opaque 值；通过 <code>git ls-files --cached --others --exclude-standard -z</code> 枚举全部已跟踪及可提交的未跟踪文本，覆盖两款 App、测试、工具、配置、CI、Gateway、网站与文档。通用检测限定 20–256 字符、字符类别与 Shannon entropy 阈值，并放行占位符、环境变量和公开 EVM 地址/交易哈希；Android APK/AAB 与 iOS app 制品门禁同步覆盖通用凭证字段，本地凭证和私密 runbook 必须留在共享 gitignore</td><td class="pass">Provider 文件选择负例先红后绿后，高熵正负例再次先红后绿；首次新门禁全仓扫描实际发现 Gateway 两个测试文件中的 3 个完整 opaque fixture，已改为运行时拼接。定向 14/14、Faucet 10/10、test_support 57/57、共享 packages 397/397、KT Wallet 1460/1460、Cold Signer 570/570、Gateway upstream、check_deps 与静态分析通过。当前工作树 0 已识别泄漏；无字段上下文的任意随机值和历史 commit 仍由专用 scanner / Push Protection 补足</td></tr>
-          <tr id="public-beta-source-gate"><td>公开测试源码统一门禁</td><td><code>dart run tool/audit_public_beta.dart</code> 固定顺序执行差异完整性、仓库安全/秘密/原生钱包清理、完整静态分析、六个共享 package、KT Wallet、KT Cold Signer 与 Gateway audit，共 12 步；任一步非零立即停止。<code>--list</code> 输出精确计划，<code>--full</code> 在其后追加固定版本的 Gradle/CocoaPods、Apple runtime、Gateway 与 OSV 依赖审计。明确不替代正式签名制品、物理设备、真实链上广播或第三方审计</td><td class="pass">计划完整性、唯一 ID、首错停止和全成功 4/4 先红后绿；2026-08-05 当前回归 KT Wallet 1667/1667、KT Cold Signer 570/570；最近完整依赖门禁 13/13、test_support 76/76、共享 packages 438/438，以及 Apple 2 个远程 Pod + SQLite 3.53.3、portable backup Swift vector、Gateway 全套及 OSV 扫描 Dart 147、npm 293、Go 4、Android 135+134 个 package 均通过，本轮源码回归问题 0</td></tr>
-          <tr id="wallet-pin-state-boundary"><td>钱包 PIN 状态唯一解释与资源上界</td><td>PIN 与 lockout 记录使用递归 duplicate-safe 闭合 schema；算法、规范 Base64、16-byte salt、32-byte hash、PBKDF2 轮数上界、失败次数上界和时间边界均在哈希前验证。<code>isSet</code> 必须完整解析记录；损坏状态在 App Lock、设置与转账认证中保持硬锁，不能触发重新注册、绕过认证或异常逃逸。静态门禁禁止恢复普通 <code>jsonDecode</code>、presence-only 判断或攻击者尺寸的位移</td><td class="pass">未知算法/字段、普通与 Unicode 转义重复 key、短盐、超大失败次数、缺失及超远锁定时间和交易认证异常先红后绿；PIN 10/10、受影响认证/UI 44/44、test_support 76/76、KT Wallet 1667/1667（另 11 项显式设备/线上测试跳过）、分析 0、完整门禁 13/13。英文 390×844 Golden 已人工复核，不含钱包内容；移动修复待下一版签名制品</td></tr>
+          <tr id="public-beta-source-gate"><td>公开测试源码统一门禁</td><td><code>dart run tool/audit_public_beta.dart</code> 固定顺序执行差异完整性、仓库安全/秘密/原生钱包清理、完整静态分析、六个共享 package、KT Wallet、KT Cold Signer 与 Gateway audit，共 12 步；任一步非零立即停止。<code>--list</code> 输出精确计划，<code>--full</code> 在其后追加固定版本的 Gradle/CocoaPods、Apple runtime、Gateway 与 OSV 依赖审计。明确不替代正式签名制品、物理设备、真实链上广播或第三方审计</td><td class="pass">计划完整性、唯一 ID、首错停止和全成功 4/4 先红后绿；2026-08-05 当前回归 KT Wallet 1668/1668、KT Cold Signer 576/576；最近完整依赖门禁 13/13、test_support 78/78、共享 packages 440/440，以及 Apple 2 个远程 Pod + SQLite 3.53.3、portable backup Swift vector、Gateway 全套及 OSV 扫描 Dart 147、npm 293、Go 4、Android 135+134 个 package 均通过，本轮源码回归问题 0</td></tr>
+          <tr id="wallet-pin-state-boundary"><td>钱包 PIN 状态唯一解释与资源上界</td><td>PIN 与 lockout 记录先限制为 4,096 字符，再使用递归 duplicate-safe 闭合 schema；算法、规范 Base64、16-byte salt、32-byte hash、PBKDF2 轮数上界、失败次数上界和时间边界均在哈希前验证。<code>isSet</code> 必须完整解析记录；损坏状态在 App Lock、设置与转账认证中保持硬锁，不能触发重新注册、绕过认证或异常逃逸。静态门禁禁止恢复普通 <code>jsonDecode</code>、presence-only 判断或攻击者尺寸的位移</td><td class="pass">未知算法/字段、普通与 Unicode 转义重复 key、短盐、超大记录/失败次数、缺失及超远锁定时间和交易认证异常先红后绿；PIN 11/11、受影响认证/UI 44/44、test_support 78/78、KT Wallet 1668/1668（另 11 项显式设备/线上测试跳过）、分析 0、完整门禁 13/13。英文 390×844 Golden 已人工复核，不含钱包内容；移动修复待下一版签名制品</td></tr>
+          <tr id="cold-signer-pin-state-boundary"><td>KT Cold Signer PIN 启动硬锁</td><td>独立 Signer PIN/lockout 使用同等级闭合 schema 与资源/时间上界；启动必须在原生地址派生及任何 Face ID 签名路由前验证 PIN 和 lockout，并仅在全部读取成功后原子发布钱包状态。修改密码、签名 PIN sheet 与写入错误均失败闭合；损坏状态不能进入重新注册、密码异常逃逸或生物识别绕过</td><td class="pass">旧实现的歧义记录、无界锁定、认证 sheet 异常和“损坏 PIN + 生物识别仍进入首页”负例先红后绿；相关定向 23/23、Signer 576/576、Wallet 1668/1668、test_support 78/78、共享 packages 440/440、分析 0、源码门禁 12/12。英文 390×844 Golden 已加载真实字体并人工复核；移动修复待下一版签名制品</td></tr>
           <tr id="host-e2e-funding-preflight-binding"><td>八链 E2E 资金预检身份闭合</td><td>独立纯 Dart 主机工具对生产 <code>kt_getPortfolio</code> 响应执行递归重复键拒绝，并精确绑定 JSON-RPC id、8 个账户的顺序与唯一链、外层及嵌套 <code>chain/network/address</code>、原生币元数据和唯一 Token 身份。EVM 地址按大小写不敏感的字节身份比较，TRON 与 Solana 地址精确比较；远端错误只作为有界不可用信号，不能变成余额 0。仓库静态门禁禁止恢复普通 <code>jsonDecode</code> 或绕过主机解码器</td><td class="pass">Gateway 1.16.23 加入双层地址绑定后，旧预检把合法生产响应误判为 invalid；当前 schema 失败优先用例先红后绿。错外层地址、错嵌套网络、普通/Unicode 转义重复 key 均被拒绝。定向 13/13、test_support 71/71、KT Wallet 1660/1660（另 11 项显式设备/线上测试跳过）、Cold Signer 570/570、共享 packages 438/438、静态分析 0 与完整门禁 13/13 通过。生产只读预检现准确返回 8 条 <code>insufficient</code>，而非错误的 <code>unavailable</code>；未读取助记词/私钥且未签名或广播。服务端无变更，无需重新部署，也没有适用的 UI 截图</td></tr>
           <tr id="gateway-release-version-gate"><td>Gateway 当前公开版本一致性</td><td>以生产 Go 配置中的唯一 SemVer 为单一来源，精确绑定 backend README health 示例、根 README 状态表与可靠性段落、P0/P1 生产证据，以及本报告发布徽标和上线标题；历史记录可以继续保留旧版本</td><td class="pass">六个公开面同时改旧的负例先红后绿，缺失或重复源码版本也失败闭合；<code>dep_check</code> 35/35、test_support 61/61、共享 packages 409/409、源码门禁 12/12、完整门禁 13/13 和静态分析 0 通过。该门禁防止仓库证据漂移，不替代公网 <code>kt_health</code>、制品 SHA 或部署目录核验</td></tr>
           <tr id="official-token-search-input-boundary"><td>官方 Token 搜索与目录文本边界</td><td>App 在出网前 trim 搜索词、限制 128 个 Unicode rune 并拒绝控制、零宽和 Bidi 字符；未知网络零出网。Gateway 独立执行同一 query 边界，拒绝重复或未知网络；运营目录名称限制 80 rune，并拒绝不可见方向控制文本。Token 管理输入框同步限制 128 字符，避免无意义的大请求</td><td class="pass">原始 query 出网、未知网络出网、服务端重复网络/超长/控制/Bidi query，以及恶意目录名均由失败优先用例先红后绿；静态门禁锁定双端契约。官方 Token 9/9、目录 UI 1/1、KT Wallet 1658/1658（另 11 项显式线上/设备测试跳过）、Cold Signer 570/570、共享 packages 438/438、Gateway 普通/race/audit、静态分析 0、完整门禁 13/13 通过。1.16.27 已滚动上线，公网正常搜索返回 1 条绑定结果，超长、Bidi 与重复网络均返回 <code>-32602</code>；本项无适用视觉变化，不使用无关截图替代协议证据</td></tr>
@@ -880,9 +881,9 @@
           <tr><td>生产夹具与深链隔离</td><td>移除 WalletScope 隐式演示钱包；Release 禁止 seed/test-bypass controller、设计 Splash、模拟账户/签名扫码，以及无钱包、缺 pending mnemonic、错误 walletId、缺 AccountExport/交易会话的深链。未备份横幅打开当前 walletId 的强认证导出，不生成新种子。Cold Signer 的助记词核对、PIN、生物识别与完成页由易失状态机顺序约束；已有钱包、错误阶段或伪造完成 metadata 均拒绝。Gallery/Golden/Widget 只能通过显式测试夹具或 preview 渲染</td><td class="pass">Wallet 生产路由定向 37/37 + Wallet 全量 1446/1446；Cold Signer 路由/竞态负例 + 全量 568/568；静态分析 0、check_deps、Android APK/AAB 与 iOS Release 产物门禁通过</td></tr>
         </tbody>
       </table></div>
-      <p class="muted">完整 KT Wallet 1667/1667 与 KT Cold Signer 570/570 套件均已包含并通过
+      <p class="muted">完整 KT Wallet 1668/1668 与 KT Cold Signer 576/576 套件均已包含并通过
         默认字号、200% 字体及 Golden 门禁。共享 packages 为
-        438 项通过（包含 AIRGAP 严格解码、canonical 交易验签、EVM receipt 与 Pending 交易对象身份绑定、TRON receipt 身份绑定、Solana 余额/SPL 账户与交易状态身份绑定、Drift v9 崩溃一致性、Manifest/备份安全、跨平台备份向量、备份密码门禁、凭证批次防绕过、Apple Privacy Manifest、
+        440 项通过（包含 AIRGAP 严格解码、canonical 交易验签、EVM receipt 与 Pending 交易对象身份绑定、TRON receipt 身份绑定、Solana 余额/SPL 账户与交易状态身份绑定、Drift v9 崩溃一致性、Manifest/备份安全、跨平台备份向量、备份密码门禁、凭证批次防绕过、Apple Privacy Manifest、
         三语 ARB/原生资源结构门禁与 package 文档门禁）。
         Gateway 通过 <code>go vet ./...</code> 与 <code>go test -race ./...</code>；两份
         Release APK 与 AAB 再次通过完整二进制、Bundle、Manifest、权限、ABI、凭证和签名状态门禁；
@@ -928,12 +929,13 @@
         确定性 Widget 注入，只证明失败与取消已分离、错误文本和布局正确，不冒充
         iCloud Drive 或 Android 文档 Provider 真机故障。损坏 PIN 状态截图为确定性
         App Lock Golden，只证明异常记录保持硬锁，不代表真机 Keychain/Keystore 故障。
-        报告共引用 129 张截图。</p>
+        报告共引用 130 张截图。</p>
       <h3>钱包 PIN 状态损坏失败闭合 UI</h3>
       <p class="muted">PIN 记录存在但不满足闭合 schema 时，钱包内容不会被构建，也不会把
         用户送入重新设置 PIN 的降级路径；页面只允许在修复安全存储后重新检查。</p>
       <div class="shots">
         <figure><img src="../../apps/kt_wallet/test/goldens/screens/pin-state-corrupted-en.png" alt="Corrupt wallet PIN state remains hard locked"><figcaption>英文 390×844 Golden：损坏的 PIN 记录显示“Secure storage unavailable”；首页与钱包内容均未渲染，Retry 是唯一操作。字体已加载并人工复核，本图不含密钥、助记词或地址</figcaption></figure>
+        <figure><img src="../../apps/cold_signer/test/goldens/screens/pin-state-corrupted-en.png" alt="Corrupt Cold Signer PIN state blocks startup"><figcaption>英文 390×844 Golden：KT Cold Signer 在损坏 PIN 状态下于启动阶段硬锁；Face ID 与签名入口未渲染。字体已加载并人工复核，本图不含密钥、助记词、地址或签名请求</figcaption></figure>
       </div>
       <h3>备份 Provider 故障失败闭合 UI</h3>
       <p class="muted">系统文件选择器返回稳定读取失败时，页面保留在恢复流程并给出可操作的

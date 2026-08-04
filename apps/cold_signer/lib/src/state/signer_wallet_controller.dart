@@ -121,17 +121,26 @@ class SignerWalletController extends ChangeNotifier {
       await _finishPendingDeletion(pendingDeletion);
       return;
     }
-    _metadata = await _vault.readMetadata();
-    _hasWallet = _metadata != null;
-    if (_metadata != null) {
+    final loadedMetadata = await _vault.readMetadata();
+    if (loadedMetadata != null) {
+      // A wallet without one valid, bounded PIN record is not a usable signer.
+      // Validate this before native derivation or any biometric-only signing
+      // route can become reachable. Missing and malformed state both keep the
+      // startup security gate closed; never enroll a replacement implicitly.
+      if (!await _pinLock.isSet()) {
+        throw const PinStateCorruptedException();
+      }
+      await _pinLock.lockRemaining();
       // A native plugin, Keychain, Keystore, or derivation failure is not
       // proof that the wallet key is gone. Never destroy the only durable
       // wallet identifier in response to a transient read failure. Propagate
       // the error so the app stays on its blocking security screen and an
       // explicit retry can recover the same wallet.
-      final addresses = await _crypto.deriveAddresses(_metadata!.walletId);
-      final publicKeys = await _crypto.derivePublicKeys(_metadata!.walletId);
-      final refreshed = _metadata!.copyWith(
+      final addresses = await _crypto.deriveAddresses(loadedMetadata.walletId);
+      final publicKeys = await _crypto.derivePublicKeys(
+        loadedMetadata.walletId,
+      );
+      final refreshed = loadedMetadata.copyWith(
         addresses: addresses.toMap(),
         publicKeys: publicKeys.toMap().map(
           (key, value) => MapEntry(key, base64Encode(value)),
@@ -139,6 +148,10 @@ class SignerWalletController extends ChangeNotifier {
       );
       await _vault.storeMetadata(refreshed);
       _metadata = refreshed;
+      _hasWallet = true;
+    } else {
+      _metadata = null;
+      _hasWallet = false;
     }
     notifyListeners();
   }

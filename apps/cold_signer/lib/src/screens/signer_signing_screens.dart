@@ -1826,7 +1826,18 @@ class _SignerPinEntrySheetState extends State<SignerPinEntrySheet> {
 
     final l10n = AppLocalizations.of(context);
     setState(() => _verifying = true);
-    final verdict = await widget.pinLock.verify(_entry);
+    final PinVerdict verdict;
+    try {
+      verdict = await widget.pinLock.verify(_entry);
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _entry = '';
+        _verifying = false;
+        _error = l10n.secureStorageUnavailableTitle;
+      });
+      return;
+    }
     if (!mounted) return;
     if (verdict.isOk) {
       Navigator.of(context).pop(true);

@@ -2,6 +2,8 @@ import 'package:cold_signer/main.dart';
 import 'package:cold_signer/src/security/secure_vault.dart';
 import 'package:cold_signer/src/state/locale_controller.dart';
 import 'package:cold_signer/src/state/signer_wallet_controller.dart';
+import 'package:core_crypto/testing.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -52,5 +54,54 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Secure storage unavailable'), findsOneWidget);
     expect(find.text('Create new wallet'), findsNothing);
+  });
+
+  testWidgets('corrupt enrolled PIN blocks startup before biometric signing', (
+    tester,
+  ) async {
+    await (FontLoader(
+      'Inter',
+    )..addFont(rootBundle.load('fonts/Inter.ttf'))).load();
+    await (FontLoader(
+      'MaterialIcons',
+    )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final storage = InMemoryVaultStorage();
+    final crypto = MockCoreCrypto();
+    const walletId = 'cold-wallet-corrupt-pin';
+    await crypto.storeWallet(
+      walletId: walletId,
+      mnemonic:
+          'abandon ability able about above absent absorb abstract absurd abuse access accident',
+      requireAuth: false,
+    );
+    await SecureVault(storage).storeMetadata(
+      const WalletMetadata(
+        walletId: walletId,
+        name: 'KT Cold Signer',
+        createdAt: 1785888000,
+        biometricEnabled: true,
+      ),
+    );
+    storage.values[SecureVault.pinKey] = '{"iterations":500}';
+    final wallet = SignerWalletController(storage: storage, crypto: crypto);
+
+    await tester.pumpWidget(
+      ColdSignerApp(
+        localeController: LocaleController(initial: const Locale('en')),
+        walletController: wallet,
+        initialLocation: '/home',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Secure storage unavailable'), findsOneWidget);
+    expect(find.text('Use Face ID'), findsNothing);
+    expect(wallet.hasWallet, isFalse);
+    await expectLater(
+      find.byType(ColdSignerApp),
+      matchesGoldenFile('goldens/screens/pin-state-corrupted-en.png'),
+    );
   });
 }

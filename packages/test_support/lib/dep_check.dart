@@ -1001,6 +1001,8 @@ List<String> findWalletPinStateBoundaryIssues(String contents) {
         'PIN lockout schema is not closed',
     'static const maxStoredIterations = 1000000':
         'stored PBKDF2 work is not bounded',
+    'static const maxStoredRecordChars = 4096':
+        'persisted PIN JSON size is not bounded before parsing',
     'static const maxTrackedFailures = 64':
         'persisted failure count is not bounded',
     'static const maxLockout = Duration(hours: 24)':
@@ -1025,6 +1027,51 @@ List<String> findWalletPinStateBoundaryIssues(String contents) {
     r'Future<bool> isSet\(\)[\s\S]{0,250}read\(pinKey\)\s*!=\s*null',
   ).hasMatch(contents)) {
     issues.add('PIN enrollment check trusts record presence without parsing');
+  }
+  return issues;
+}
+
+/// Keeps KT Cold Signer's local PIN and lockout records bounded and
+/// single-interpretable before they can authorize an offline signature.
+List<String> findSignerPinStateBoundaryIssues(String contents) {
+  final issues = <String>[];
+  const required = {
+    '_decodeJsonWithoutDuplicateKeys(raw)':
+        'signer PIN state does not reject duplicate JSON members',
+    "allowed: const {'algo', 'salt', 'hash', 'iterations'}":
+        'signer PIN record schema is not closed',
+    "allowed: const {'fails', 'lockedUntil'}":
+        'signer PIN lockout schema is not closed',
+    'static const maxStoredIterations = 1000000':
+        'signer stored PBKDF2 work is not bounded',
+    'static const maxStoredRecordChars = 4096':
+        'signer persisted PIN JSON size is not bounded before parsing',
+    'static const maxTrackedFailures = 64':
+        'signer persisted failure count is not bounded',
+    'static const maxLockout = Duration(hours: 24)':
+        'signer computed lockout duration is not bounded',
+    "_decodeCanonicalBase64(record['salt'], saltLength)":
+        'signer PIN salt length/canonical encoding is not bound',
+    "_decodeCanonicalBase64(record['hash'], hashLength)":
+        'signer PIN hash length/canonical encoding is not bound',
+    'until = now.add(_lockoutDuration(newFails))':
+        'signer lockout growth bypasses the bounded duration helper',
+  };
+  for (final entry in required.entries) {
+    if (!contents.contains(entry.key)) issues.add(entry.value);
+  }
+  if (RegExp(r'jsonDecode\(\s*raw\s*\)').hasMatch(contents)) {
+    issues.add('signer PIN state uses the duplicate-unsafe JSON decoder');
+  }
+  if (RegExp(r'1\s*<<\s*\(newFails').hasMatch(contents)) {
+    issues.add('signer PIN lockout uses an attacker-sized bit shift');
+  }
+  if (RegExp(
+    r'Future<bool> isSet\(\)[\s\S]{0,250}read\([^)]*pinKey\)\s*!=\s*null',
+  ).hasMatch(contents)) {
+    issues.add(
+      'signer PIN enrollment check trusts record presence without parsing',
+    );
   }
   return issues;
 }

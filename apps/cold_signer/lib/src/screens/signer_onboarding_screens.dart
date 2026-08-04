@@ -6,6 +6,7 @@ import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../security/biometric_auth.dart';
+import '../security/pin_lock.dart' show PinVerdict;
 import '../security/secure_vault.dart' show WalletMetadata, isFlutterTestEnv;
 import '../signing/mnemonic_quiz.dart';
 import '../signing/mnemonic_review.dart';
@@ -960,7 +961,17 @@ class _SignerSetPasswordScreenState extends State<SignerSetPasswordScreen> {
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     final controller = SignerWalletScope.maybeOf(context);
     if (controller?.hasWallet == true && !_oldVerified) {
-      final verdict = await controller!.pinLock.verify(_entry);
+      final PinVerdict verdict;
+      try {
+        verdict = await controller!.pinLock.verify(_entry);
+      } on Object {
+        if (!mounted) return;
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.secureStorageUnavailableTitle)),
+        );
+        setState(() => _entry = '');
+        return;
+      }
       if (!mounted) return;
       if (!verdict.isOk) {
         messenger.showSnackBar(SnackBar(content: Text(l10n.pinIncorrect)));
@@ -984,7 +995,19 @@ class _SignerSetPasswordScreenState extends State<SignerSetPasswordScreen> {
       // before moving on. Without a scope (goldens) this is a pure no-op and
       // the screen behaves exactly like the design snapshot.
       if (!widget.preview && controller != null) {
-        await controller.setPin(_entry);
+        try {
+          await controller.setPin(_entry);
+        } on Object {
+          if (!mounted) return;
+          messenger.showSnackBar(
+            SnackBar(content: Text(l10n.secureStorageUnavailableTitle)),
+          );
+          setState(() {
+            _first = null;
+            _entry = '';
+          });
+          return;
+        }
       }
       if (!mounted) return;
       unawaited(context.push('/biometric'));

@@ -205,4 +205,11 @@ void main() {
     final restarted = newPin(storage, clock: () => now);
     expect(await restarted.lockRemaining(), WalletPin.maxLockout);
   });
+
+  test('rejects oversized persisted PIN state before JSON parsing', () async {
+    final storage = InMemoryPinStorage()..values[WalletPin.pinKey] = ' ' * 4097;
+    final pin = newPin(storage);
+
+    expect(() => pin.isSet(), throwsA(isA<PinStateCorruptedException>()));
+  });
 }
