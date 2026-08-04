@@ -111,10 +111,10 @@ class BroadcastService {
   /// GATEWAY SEMANTICS: with a gateway configured, `kt_broadcast` is tried
   /// first. A -32000 upstream error means a real node explicitly REJECTED the
   /// transaction; -32003 explicitly means the gateway attempted submission
-  /// but lost the authoritative answer. Unsupported-network preflight and
-  /// gateway rate limiting are known to happen before forwarding, so only
-  /// those may use the direct path. Any other gateway failure is
-  /// outcome-unknown and is never re-posted.
+  /// but lost the authoritative answer. Any error received after the signed
+  /// request was posted is outcome-unknown and is never re-posted, regardless
+  /// of its claimed code. Only a local [GatewayNetworkUnsupported] raised
+  /// before `kt_broadcast` may use the direct path.
   Future<BroadcastOutcome> broadcast(
     Chain chain,
     Uint8List signedTx, {
@@ -177,16 +177,16 @@ class BroadcastService {
               'Gateway response unavailable',
             );
           }
-          if (e.isUnsupported || e.isRateLimited) {
-            // Both contract errors are emitted before any upstream write.
-            // Falling through is therefore still a single node submission.
-          } else {
-            return const BroadcastOutcome.unknown(
-              'Gateway response unavailable',
-            );
-          }
+          // An HTTP answer cannot prove the signed payload stayed local to the
+          // Gateway process. Even a response claiming unsupported/rate-limited
+          // may be stale, malformed, or emitted after a proxy/upstream write.
+          // Only GatewayNetworkUnsupported below is a local pre-request fact;
+          // every answered error therefore remains unknown and must reconcile
+          // by hash instead of submitting the same bytes to a second node.
+          return const BroadcastOutcome.unknown('Gateway response unavailable');
         } on GatewayNetworkUnsupported {
-          // Local/health-manifest preflight: no request was forwarded.
+          // Local/health-manifest preflight: no HTTP request was made, so the
+          // direct path below remains the one and only submission.
         } on Object {
           return const BroadcastOutcome.unknown('Gateway response unavailable');
         }

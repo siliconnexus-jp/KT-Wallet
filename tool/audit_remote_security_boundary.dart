@@ -144,7 +144,8 @@ void main() {
     '${_reviewedGatewayResponseKeys.length} reviewed Gateway fields, '
     '${_networkFreeSecurityFiles.length} network-free security modules, '
     '3 hot-signing families independently verified, '
-    'hot and air-gapped broadcasts hash-bound before success metrics, '
+    'hot and air-gapped broadcasts hash-bound before success metrics and '
+    'answered Gateway errors kept single-shot, '
     'all parameterized public Gateway requests, inbound JSON-RPC envelopes, '
     'upstream node responses, Helius, Alchemy, Etherscan/Blockscout, '
     'TronGrid history, CoinGecko market responses, and all three GoPlus '
@@ -367,6 +368,39 @@ void _auditHotSigningBoundary(List<String> failures) {
     if (boundBroadcast == null || !boundBroadcast.contains(marker)) {
       failures.add(
         '$broadcastPath lost pre-metric local-hash binding: $marker',
+      );
+    }
+  }
+
+  final irreversibleBroadcast = _futureMethodSection(broadcast, '_broadcast');
+  const answeredErrorStart = '} on GatewayException catch (e) {';
+  const localPreflightStart = '} on GatewayNetworkUnsupported {';
+  final answeredStart =
+      irreversibleBroadcast?.indexOf(answeredErrorStart) ?? -1;
+  final localStart = answeredStart < 0
+      ? -1
+      : irreversibleBroadcast!.indexOf(
+          localPreflightStart,
+          answeredStart + answeredErrorStart.length,
+        );
+  if (answeredStart < 0 || localStart < 0) {
+    failures.add(
+      '$broadcastPath lost answered-error versus local-preflight boundary',
+    );
+  } else {
+    final answeredError = irreversibleBroadcast!.substring(
+      answeredStart + answeredErrorStart.length,
+      localStart,
+    );
+    if (answeredError.contains('e.isUnsupported') ||
+        answeredError.contains('e.isRateLimited')) {
+      failures.add(
+        '$broadcastPath lets a remote preflight-looking error re-post signed bytes',
+      );
+    }
+    if (!_answeredGatewayErrorTerminatesUnknown(answeredError)) {
+      failures.add(
+        '$broadcastPath answered Gateway error does not terminate as unknown',
       );
     }
   }
@@ -1010,6 +1044,10 @@ String? _futureMethodSection(String source, String method) {
   return source.substring(start, next < 0 ? source.length : next);
 }
 
+bool _answeredGatewayErrorTerminatesUnknown(String source) => RegExp(
+  r"return\s+const\s+BroadcastOutcome\.unknown\(\s*'Gateway response unavailable'\s*,?\s*\);\s*$",
+).hasMatch(source);
+
 List<String> _selfTestFailures() {
   final failures = <String>[];
   if (!_mapLookupKeys("final x = row['status'];").contains('status')) {
@@ -1032,6 +1070,28 @@ List<String> _selfTestFailures() {
   final section = _futureMethodSection(strict, 'signPreparedEvm');
   if (section == null || section.contains('Future<void> next')) {
     failures.add('method boundary extractor is not closed');
+  }
+  if (!_answeredGatewayErrorTerminatesUnknown('''
+    if (submissionUnknown) {
+      return const BroadcastOutcome.unknown(
+        'Gateway response unavailable',
+      );
+    }
+    return const BroadcastOutcome.unknown('Gateway response unavailable');
+  ''')) {
+    failures.add('answered-error terminal-unknown extractor misses valid code');
+  }
+  if (_answeredGatewayErrorTerminatesUnknown('''
+    if (submissionUnknown) {
+      return const BroadcastOutcome.unknown(
+        'Gateway response unavailable',
+      );
+    }
+    // Falls through and may submit again.
+  ''')) {
+    failures.add(
+      'answered-error terminal-unknown extractor allows fallthrough',
+    );
   }
   if (!_sameStringMap(const {'kt_a': 'A'}, const {'kt_a': 'A'}) ||
       _sameStringMap(const {'kt_a': 'B'}, const {'kt_a': 'A'}) ||

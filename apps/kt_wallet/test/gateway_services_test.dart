@@ -1217,7 +1217,44 @@ void main() {
     });
 
     test(
-      'gateway response loss is unknown; preflight unsupported falls back',
+      'answered preflight-looking errors never re-post signed bytes directly',
+      () async {
+        for (final error in <Map<String, Object?>>[
+          {
+            'code': -32002,
+            'message': 'unsupported',
+            'data': {
+              'upstream': 'eth-node',
+              'message': 'request may have been forwarded',
+            },
+          },
+          {'code': -32001, 'message': 'rate_limited'},
+        ]) {
+          final gateway = _FakeGateway(errors: {'kt_broadcast': error});
+          final direct = _FakeJsonRpc(
+            (url, body) async => _rpcResult(_evmBroadcastHash),
+          );
+          final service = BroadcastService(
+            jsonRpcTransport: direct,
+            gateway: () => gateway.client,
+          );
+
+          final outcome = await service.broadcast(
+            Chain.ethereum,
+            Uint8List.fromList([0x02, 0x01]),
+            expectedTxHash: _evmBroadcastHash,
+          );
+
+          expect(outcome.status, BroadcastStatus.unknown, reason: '$error');
+          expect(outcome.txHash, isNull, reason: '$error');
+          expect(gateway.calls, hasLength(1), reason: '$error');
+          expect(direct.calls, isEmpty, reason: '$error');
+        }
+      },
+    );
+
+    test(
+      'gateway response loss and answered unsupported both stay unknown',
       () async {
         final direct = _FakeJsonRpc(
           (url, body) async => _rpcResult('0xdirecthash'),
@@ -1235,7 +1272,8 @@ void main() {
         expect(outcome.txHash, isNull);
         expect(direct.calls, isEmpty);
 
-        // -32002 unsupported: the gateway never reached a node — direct is safe.
+        // A remote -32002 is only a claim. It cannot prove that a proxy or
+        // stale Gateway instance did not already forward the signed bytes.
         final gateway = _FakeGateway(
           errors: {
             'kt_broadcast': {'code': -32002, 'message': 'unsupported'},
@@ -1251,9 +1289,9 @@ void main() {
           Uint8List.fromList([1, 2]),
           expectedTxHash: 'sig',
         );
-        expect(sol.status, BroadcastStatus.ok);
-        expect(sol.txHash, 'sig');
-        expect(direct2.calls.single.$2, 'sendTransaction');
+        expect(sol.status, BroadcastStatus.unknown);
+        expect(sol.txHash, isNull);
+        expect(direct2.calls, isEmpty);
       },
     );
 

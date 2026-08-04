@@ -185,6 +185,11 @@ failure, while a timeout, disconnected response, or malformed reply after the
 request starts is kept as an unknown result. The locally derived transaction
 hash and first-attempt time are persisted before submission, so KT Wallet can
 continue reconciliation without automatically sending the transaction again.
+No error returned by a posted Gateway broadcast—including one claiming
+`unsupported` or `rate_limited`—authorizes a direct-node retry. Only a local
+network-manifest decision made before the signed payload leaves the App may
+select the direct route; this prevents a stale or malformed error from causing
+the same signed transaction to be submitted twice.
 The production Gateway also atomically claims a SHA-256 fingerprint of the
 chain, network, and signed payload in shared Redis before contacting a node.
 Repeated or concurrent POSTs across CDN, proxy, or Gateway instances reuse the
@@ -553,7 +558,7 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-05) completed with zero static-analysis
-issues: **1,621/1,621** KT Wallet tests, **570/570** KT Cold Signer tests, and
+issues: **1,622/1,622** KT Wallet tests, **570/570** KT Cold Signer tests, and
 **429/429** shared-package tests passed. The default gate passed **12/12** and
 the native/runtime/OSV `--full` gate passed **13/13**. The Gateway audit,
 public-secret gate, Gateway public-release version gate, native dependency

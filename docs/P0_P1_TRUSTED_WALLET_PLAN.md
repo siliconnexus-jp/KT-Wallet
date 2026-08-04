@@ -162,8 +162,9 @@ TRON/Solana/EVM 余额与 Portfolio 身份、Solana 交易终态、EVM 动态手
 - [x] 广播结果严格区分 `accepted / rejected / unknown`：只有节点返回可解析的明确拒绝
   才进入失败；请求开始后的超时、断连、畸形回包或 Gateway 不确定错误均保持 unknown。
   EVM/Solana JSON-RPC 与 TRON REST 广播只向一个端点提交一次，不做 endpoint failover
-  或自动重试；Gateway 仅在能够证明请求尚未转发的 unsupported/rate-limit 前置拒绝时
-  才允许直连。热钱包、AIRGAP、replacement 与授权撤销都在首次提交前持久化本地
+  或自动重试；任何已经收到的 Gateway 广播错误都不能授权直连重发，只有 App 在发送
+  `kt_broadcast` 前由本地网络清单产生的 `GatewayNetworkUnsupported` 才能选择直连。
+  热钱包、AIRGAP、replacement 与授权撤销都在首次提交前持久化本地
   txHash 和广播尝试时间；结果未知页明确禁止再次发送，并以该 hash 持续对账。
   Gateway 1.16.2 又在访问链节点前，以 `chain + network + canonical signed payload`
   的 SHA-256 指纹取得 Redis `SET NX` 原子 claim；24 小时内的并发、客户端/CDN/代理
@@ -1822,7 +1823,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     精确 unsigned bytes 与 sender 调用独立验签器；外部威胁供应商只能产生
     `unsafe/unknown`，不能把资产提升为 `safe`。`safe` 仅允许来自与请求网络及
     contract/mint 精确绑定的内置官方目录，UI 只解释为“官方身份”，不解释为“合约安全”。
-    审计自带 extractor 负例并已纳入 `check_deps`，当前输出为 66 fields /
+    审计自带 extractor 负例并已纳入 `check_deps`，当前输出为 69 fields /
     5 network-free modules / 3 signing families。
   - [ ] 若未来引入远程配置，仍需版本化 allowlist schema、配置签名、防回滚、过期和
     kill-switch 边界测试；未完成前不得添加可影响签名/验签的远程字段。
@@ -2135,3 +2136,16 @@ KT Wallet 1618/1618（另有 11 项显式线上/设备测试默认跳过）、KT
 严格 App 客户端只读验收 6/6，证明当前 1.16.25 健康声明与余额、状态、历史、价格路径
 兼容。本轮没有 Gateway 服务端变化，无需部署；没有视觉 UI 变化，不以无关模拟器截图
 代替路由权限负例和真实 HTTPS 响应证据。
+
+同日继续闭合不可逆广播的单次提交边界。旧 `BroadcastService` 只按远端错误 code 判断：
+`kt_broadcast` 若返回 `-32002 unsupported` 或 `-32001 rate_limited`，App 会把同一已签名字节
+再次提交到直连节点；污染缓存、错误代理或畸形 Gateway 回包可借此把不确定的首次写入
+伪装成“尚未触网”。失败优先测试用带 upstream data 的伪造 `-32002` 稳定复现 Gateway
+调用 1 次、直连又调用 1 次且广播指标错误记录成功。现改为：成功回包仍必须匹配本地
+密码学 hash；明确 `-32000` 节点拒绝只返回 rejected；其余任何已收到的 Gateway error
+一律保持 unknown、以本地 hash 对账且绝不直连重发。只有 `_networkParam` 在发送签名字节
+前抛出的本地 `GatewayNetworkUnsupported` 可以进入唯一一次直连提交。伪造 unsupported
+与 rate-limited 两类负例均转绿；Gateway/广播/网络定向 77/77、KT Wallet 全量
+1622/1622（另有 11 项显式线上/设备测试默认跳过）、静态分析 0 与完整依赖/OSV 门禁
+13/13 通过。生产 Gateway 的真实严格 App 客户端只读回归 6/6 继续通过；本轮不改变
+Gateway 服务端，也没有 UI 变化，因此无需部署或使用无关截图。
