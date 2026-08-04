@@ -537,8 +537,8 @@ population crash-rate denominator or paging signal.
 Per-token upstream failure sets that token's `error` (with `raw: "0"`)
 instead of failing the call. Upstream mapping: EVM native `eth_getBalance`;
 EVM tokens `eth_call` `0x70a08231` balanceOf; tron native + TRC-20 via
-TronGrid `/v1/accounts/{addr}`; solana native `getBalance` (SPL tokens:
-per-token `error: "unsupported"` for now).
+TronGrid `/v1/accounts/{addr}`; Solana native `getBalance` and SPL/Token-2022
+balances via `getTokenAccountsByOwner` with a mint filter.
 
 TRON account balances are decoded as a financial trust boundary. The
 TronGrid envelope must be the exact `data/success/meta?` shape with
@@ -552,6 +552,14 @@ whole native balance call and is never converted to a trustworthy zero.
 Public TRON and Solana address parameters are also rejected before cache or
 network access unless they are respectively a checksum-valid 34-character
 Base58Check address or a Base58 public key that decodes to exactly 32 bytes.
+
+Solana balance results are also treated as a financial trust boundary. Native
+balances require the exact current `context/value` response with an unsigned
+64-bit slot and lamport value. Every parsed token account must have a unique
+valid public key, be owned by the legacy Token Program or Token-2022, and bind
+the returned mint and owner to the request. Raw amount, decimals and canonical
+UI amount must agree, and duplicate accounts or an overflowing aggregate are
+rejected rather than counted as a valid balance.
 
 ### `kt_getPrices` `{"symbols": ["ETH","POL","AVAX","TRX","SOL","USDT","USDC","BUSD"]}`
 

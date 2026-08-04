@@ -344,6 +344,14 @@
   字符串都会进入缓存键和上游请求；六个非法地址红测先完整失败。现公开参数在出网前要求
   TRON 为 34 字符 checksum-valid Base58Check、Solana Base58 解码后精确 32 bytes，合法
   系统程序与普通公钥保持通过。该修复属于 Gateway 1.16.17 源码候选，尚未部署。
+- [x] 2026-08-04 同一轮把 Solana 资产余额从宽松 struct 解码收紧为请求身份与当前官方
+  `getBalance` / `getTokenAccountsByOwner` `jsonParsed` 形态绑定。Native 必须携带唯一
+  `context/value`、非负 u64 slot 与 lamports；SPL/Token-2022 每行必须具有唯一且有效的
+  token account 公钥、正确 Token Program、非 executable 账户，并把返回 mint/owner
+  精确绑定请求。Raw amount、decimals 与规范 `uiAmountString` 必须一致，重复账户和 u64
+  聚合溢出整体失败闭合。旧实现接受的 10 类 native 歧义与 13 类 Token 身份/金额歧义
+  现全部拒绝；当前官方形态、合法聚合与非法请求出网前拒绝通过，Gateway 全量、关键包
+  race、vet、固定 govulncheck 与全部 ops 门禁通过。该项属于 1.16.17 源码候选，尚未部署。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。

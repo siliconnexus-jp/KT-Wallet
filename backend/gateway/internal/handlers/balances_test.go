@@ -213,11 +213,42 @@ func TestTronBalancesUnknownAccount(t *testing.T) {
 func TestSolanaBalances(t *testing.T) {
 	node := newRPCFake(t)
 	node.result("getBalance", map[string]any{"context": map[string]any{"slot": 1}, "value": 2039280})
+	tokenRow := func(pubkey, amount, uiAmount string, ui float64) map[string]any {
+		return map[string]any{
+			"pubkey": pubkey,
+			"account": map[string]any{
+				"data": map[string]any{
+					"program": "spl-token",
+					"parsed": map[string]any{
+						"type": "account",
+						"info": map[string]any{
+							"isNative": false,
+							"mint":     "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+							"owner":    solSelf,
+							"state":    "initialized",
+							"tokenAmount": map[string]any{
+								"amount":         amount,
+								"decimals":       6,
+								"uiAmount":       ui,
+								"uiAmountString": uiAmount,
+							},
+						},
+					},
+					"space": 165,
+				},
+				"executable": false,
+				"lamports":   2039280,
+				"owner":      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+				"rentEpoch":  uint64(18446744073709551615),
+				"space":      165,
+			},
+		}
+	}
 	node.result("getTokenAccountsByOwner", map[string]any{
 		"context": map[string]any{"slot": 1},
 		"value": []any{
-			map[string]any{"account": map[string]any{"data": map[string]any{"parsed": map[string]any{"info": map[string]any{"tokenAmount": map[string]any{"amount": "1200000"}}}}}},
-			map[string]any{"account": map[string]any{"data": map[string]any{"parsed": map[string]any{"info": map[string]any{"tokenAmount": map[string]any{"amount": "300000"}}}}}},
+			tokenRow(solOther, "1200000", "1.2", 1.2),
+			tokenRow("BGocb4GEpbTFm8UFV2VsDSaBXHELPfAXrvd4vtt8QWrA", "300000", "0.3", 0.3),
 		},
 	})
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.SolanaURLs = []string{node.srv.URL} })
