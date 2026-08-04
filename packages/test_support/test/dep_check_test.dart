@@ -554,6 +554,7 @@ import 'dart:io';
 import 'package:http/http.dart';
 import 'e2e_funding_preflight_model.dart';
 Future<void> main(List<String> arguments) async {}
+Object? decode(String source) => decodeGatewayFundingJson(source);
 ''';
 
     test('accepts the exact standalone Dart import surface', () {
@@ -576,6 +577,14 @@ void leak() {
       expect(issues, contains(contains('environment credentials')));
       expect(issues, contains(contains('dart-define credentials')));
       expect(issues, contains(contains('child process execution')));
+    });
+
+    test('rejects duplicate-unsafe remote JSON decoding', () {
+      final issues = findHostFundingCliBoundaryIssues('''
+$standalone
+Object? unsafe(String source) => jsonDecode(source);
+''');
+      expect(issues, contains(contains('duplicate-unsafe JSON decoder')));
     });
   });
 

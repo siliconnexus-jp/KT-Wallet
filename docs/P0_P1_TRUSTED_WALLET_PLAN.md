@@ -2347,3 +2347,16 @@ primary 发布至 `20260804T205038Z-2a3a1bb-v1.16.27-token-search-boundary`。81
 HAProxy 8118 与公网均返回 1.16.27、16 网络和 ready；公网正常搜索返回唯一绑定结果，
 超长、Bidi 与重复网络均为 `-32602`。发布后 3/3 targets UP、17/17 rules healthy、
 0 firing、Alertmanager 0 active，双实例 warning+ 为 0；未读取环境文件、未加载私钥且未广播。
+
+同日继续复审真实 E2E 广播前的八链资金门禁。Gateway 1.16.23 已在 Portfolio 外层账户和
+嵌套余额中加入 `address/chain/network` 双重绑定，但独立纯 Dart 预检仍按旧 schema 解析，
+会把当前生产合法响应误判为 unavailable；其远端 JSON 还使用普通 `jsonDecode`，会接受普通
+或 Unicode 转义后的重复成员。当前生产 schema 失败优先用例先稳定转红。修复后预检递归拒绝
+重复 key，并精确绑定 JSON-RPC id、八个唯一账户、外层和嵌套链/网络/地址、原生币元数据与
+唯一 Token 身份；EVM 地址按大小写不敏感的字节身份比较，TRON/Solana 精确比较，错误文本
+仅能作为有界不可用信号。仓库门禁禁止恢复宽松解码。定向 13/13、test_support 71/71、
+KT Wallet 1660/1660（另有 11 项显式设备/线上测试默认跳过）、KT Cold Signer 570/570、
+共享 packages 438/438、静态分析 0、Gateway audit 与完整依赖/OSV 门禁 13/13 通过。生产
+只读复验现准确返回八条 `insufficient`（退出码 2），不再误报 invalid/unavailable；这批短期
+地址的原生币和测试 Token 均不足，因此继续禁止签名和广播。未读取助记词或私钥，也未产生
+签名/广播；Gateway 服务端无变更，无需重新部署，本项没有适用的 UI 截图。

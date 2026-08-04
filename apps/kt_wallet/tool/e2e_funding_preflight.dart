@@ -53,7 +53,11 @@ Future<void> main(List<String> arguments) async {
             },
           }),
         );
-        portfolio = parseGatewayFundingResponse(decoded, expectedId: requestId);
+        portfolio = parseGatewayFundingResponse(
+          decoded,
+          expectedId: requestId,
+          expectedAddresses: addresses,
+        );
       } on FormatException {
         throw const _GatewayUnavailable();
       }
@@ -139,7 +143,7 @@ Future<Object?> _postBounded(
     bytes.addAll(chunk);
   }
   try {
-    return jsonDecode(utf8.decode(bytes, allowMalformed: false));
+    return decodeGatewayFundingJson(utf8.decode(bytes, allowMalformed: false));
   } on Object {
     throw const FormatException('Gateway returned invalid JSON');
   }

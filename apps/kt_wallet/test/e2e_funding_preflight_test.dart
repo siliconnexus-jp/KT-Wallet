@@ -190,7 +190,11 @@ void main() {
 
   test('closed Gateway parser accepts the exact eight-chain response', () {
     final decoded = _gatewayResponse();
-    final portfolio = parseGatewayFundingResponse(decoded, expectedId: 7);
+    final portfolio = parseGatewayFundingResponse(
+      decoded,
+      expectedId: 7,
+      expectedAddresses: _addresses.build(),
+    );
 
     expect(portfolio.failedChains, isEmpty);
     expect(portfolio.balances, hasLength(8));
@@ -203,7 +207,11 @@ void main() {
   test('closed Gateway parser rejects wrong id and unknown fields', () {
     final wrongId = _gatewayResponse()..['id'] = 8;
     expect(
-      () => parseGatewayFundingResponse(wrongId, expectedId: 7),
+      () => parseGatewayFundingResponse(
+        wrongId,
+        expectedId: 7,
+        expectedAddresses: _addresses.build(),
+      ),
       throwsFormatException,
     );
 
@@ -213,7 +221,11 @@ void main() {
       'unexpected': true,
     };
     expect(
-      () => parseGatewayFundingResponse(unknown, expectedId: 7),
+      () => parseGatewayFundingResponse(
+        unknown,
+        expectedId: 7,
+        expectedAddresses: _addresses.build(),
+      ),
       throwsFormatException,
     );
   });
@@ -224,7 +236,11 @@ void main() {
         (wrongNetwork['result']! as Map<String, Object?>)['accounts']! as List;
     (accounts.first as Map<String, Object?>)['network'] = 'eth-mainnet';
     expect(
-      () => parseGatewayFundingResponse(wrongNetwork, expectedId: 7),
+      () => parseGatewayFundingResponse(
+        wrongNetwork,
+        expectedId: 7,
+        expectedAddresses: _addresses.build(),
+      ),
       throwsFormatException,
     );
 
@@ -237,7 +253,58 @@ void main() {
     final tokens = firstResult['tokens']! as List;
     (tokens.single as Map<String, Object?>)['decimals'] = 18;
     expect(
-      () => parseGatewayFundingResponse(wrongToken, expectedId: 7),
+      () => parseGatewayFundingResponse(
+        wrongToken,
+        expectedId: 7,
+        expectedAddresses: _addresses.build(),
+      ),
+      throwsFormatException,
+    );
+  });
+
+  test('closed Gateway parser rejects outer and nested account mismatch', () {
+    final wrongOuter = _gatewayResponse();
+    final outerAccounts =
+        (wrongOuter['result']! as Map<String, Object?>)['accounts']! as List;
+    (outerAccounts.first as Map<String, Object?>)['address'] =
+        '0x2222222222222222222222222222222222222222';
+    expect(
+      () => parseGatewayFundingResponse(
+        wrongOuter,
+        expectedId: 7,
+        expectedAddresses: _addresses.build(),
+      ),
+      throwsFormatException,
+    );
+
+    final wrongNested = _gatewayResponse();
+    final nestedAccounts =
+        (wrongNested['result']! as Map<String, Object?>)['accounts']! as List;
+    final nestedResult =
+        (nestedAccounts.first as Map<String, Object?>)['result']!
+            as Map<String, Object?>;
+    nestedResult['network'] = 'eth-mainnet';
+    expect(
+      () => parseGatewayFundingResponse(
+        wrongNested,
+        expectedId: 7,
+        expectedAddresses: _addresses.build(),
+      ),
+      throwsFormatException,
+    );
+  });
+
+  test('host Gateway decoder rejects literal and escaped duplicate keys', () {
+    expect(
+      () => decodeGatewayFundingJson(
+        '{"jsonrpc":"2.0","id":1,"id":2,"result":{}}',
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => decodeGatewayFundingJson(
+        '{"jsonrpc":"2.0","id":1,"result":{},"re\\u0073ult":{}}',
+      ),
       throwsFormatException,
     );
   });
@@ -292,7 +359,11 @@ Map<String, Object?> _gatewayResponse() => {
         {
           'chain': requirement.coin.name,
           'network': requirement.networkId,
+          'address': _addresses.build().forCoin(requirement.coin),
           'result': {
+            'chain': requirement.coin.name,
+            'network': requirement.networkId,
+            'address': _addresses.build().forCoin(requirement.coin),
             'native': {
               'raw': requirement.nativeTargetRaw.toString(),
               'decimals': requirement.nativeDecimals,

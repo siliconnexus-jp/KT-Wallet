@@ -1,4 +1,148 @@
+import 'dart:convert';
+
 import 'package:crypto/crypto.dart' show sha256;
+
+/// Decodes the remote Gateway body while rejecting duplicate object members.
+///
+/// The standard Dart decoder keeps the last duplicate value. At this funding
+/// safety boundary that could let different intermediaries disagree about the
+/// request id, account identity, or balance used to authorize an E2E batch.
+Object? decodeGatewayFundingJson(String source) {
+  final scanner = _DuplicateJsonKeyScanner(source);
+  if (scanner.scan()) {
+    throw const FormatException('duplicate JSON object member');
+  }
+  return jsonDecode(source);
+}
+
+class _DuplicateJsonKeyScanner {
+  _DuplicateJsonKeyScanner(this.source);
+
+  static const _maximumDepth = 128;
+  final String source;
+  int _offset = 0;
+
+  bool scan() {
+    _skipWhitespace();
+    final duplicate = _scanValue(0);
+    _skipWhitespace();
+    if (_offset != source.length) {
+      throw const FormatException('trailing JSON data');
+    }
+    return duplicate;
+  }
+
+  bool _scanValue(int depth) {
+    if (depth > _maximumDepth) {
+      throw const FormatException('JSON nesting exceeds limit');
+    }
+    _skipWhitespace();
+    if (_offset >= source.length) {
+      throw const FormatException('missing JSON value');
+    }
+    return switch (source.codeUnitAt(_offset)) {
+      0x7b => _scanObject(depth),
+      0x5b => _scanArray(depth),
+      0x22 => (_scanString(), false).$2,
+      _ => _scanPrimitive(),
+    };
+  }
+
+  bool _scanObject(int depth) {
+    _offset++;
+    _skipWhitespace();
+    if (_consume(0x7d)) return false;
+    final keys = <String>{};
+    var duplicate = false;
+    while (true) {
+      _skipWhitespace();
+      if (_offset >= source.length || source.codeUnitAt(_offset) != 0x22) {
+        throw const FormatException('JSON object key must be a string');
+      }
+      final key = _scanString();
+      if (!keys.add(key)) duplicate = true;
+      _skipWhitespace();
+      if (!_consume(0x3a)) {
+        throw const FormatException('missing JSON object colon');
+      }
+      if (_scanValue(depth + 1)) duplicate = true;
+      _skipWhitespace();
+      if (_consume(0x7d)) return duplicate;
+      if (!_consume(0x2c)) {
+        throw const FormatException('missing JSON object comma');
+      }
+    }
+  }
+
+  bool _scanArray(int depth) {
+    _offset++;
+    _skipWhitespace();
+    if (_consume(0x5d)) return false;
+    var duplicate = false;
+    while (true) {
+      if (_scanValue(depth + 1)) duplicate = true;
+      _skipWhitespace();
+      if (_consume(0x5d)) return duplicate;
+      if (!_consume(0x2c)) {
+        throw const FormatException('missing JSON array comma');
+      }
+    }
+  }
+
+  String _scanString() {
+    final start = _offset;
+    _offset++;
+    while (_offset < source.length) {
+      final code = source.codeUnitAt(_offset++);
+      if (code == 0x5c) {
+        if (_offset >= source.length) {
+          throw const FormatException('truncated JSON escape');
+        }
+        _offset++;
+        continue;
+      }
+      if (code == 0x22) {
+        final decoded = jsonDecode(source.substring(start, _offset));
+        if (decoded is! String) {
+          throw const FormatException('invalid JSON object key');
+        }
+        return decoded;
+      }
+    }
+    throw const FormatException('unterminated JSON string');
+  }
+
+  bool _scanPrimitive() {
+    final start = _offset;
+    while (_offset < source.length) {
+      final code = source.codeUnitAt(_offset);
+      if (code == 0x2c || code == 0x5d || code == 0x7d || _isWhitespace(code)) {
+        break;
+      }
+      _offset++;
+    }
+    if (_offset == start) throw const FormatException('missing JSON value');
+    return false;
+  }
+
+  bool _consume(int code) {
+    if (_offset < source.length && source.codeUnitAt(_offset) == code) {
+      _offset++;
+      return true;
+    }
+    return false;
+  }
+
+  void _skipWhitespace() {
+    while (_offset < source.length &&
+        _isWhitespace(source.codeUnitAt(_offset))) {
+      _offset++;
+    }
+  }
+
+  static bool _isWhitespace(int code) =>
+      code == 0x20 || code == 0x09 || code == 0x0a || code == 0x0d;
+}
 
 enum FundingReadiness { ready, insufficient, unavailable }
 
@@ -238,6 +382,7 @@ class FundingPortfolio {
 FundingPortfolio parseGatewayFundingResponse(
   Object? decoded, {
   required int expectedId,
+  required E2eFundingAddresses expectedAddresses,
   List<FundingRequirement>? requirements,
 }) {
   final expected = requirements ?? e2eFundingRequirements;
@@ -268,23 +413,32 @@ FundingPortfolio parseGatewayFundingResponse(
     _exactKeys(
       row,
       hasResult && !hasError
-          ? {'chain', 'network', 'result'}
+          ? {'chain', 'network', 'address', 'result'}
           : !hasResult && hasError
-          ? {'chain', 'network', 'error'}
+          ? {'chain', 'network', 'address', 'error'}
           : const {},
       'account',
     );
     if (row['network'] != requirement.networkId) {
       throw const FormatException('portfolio network mismatch');
     }
+    final expectedAddress = expectedAddresses.forCoin(requirement.coin);
+    if (!_sameAddress(requirement.coin, row['address'], expectedAddress)) {
+      throw const FormatException('portfolio address mismatch');
+    }
     if (hasError) {
-      if (row['error'] is! String || (row['error'] as String).isEmpty) {
+      if (row['error'] is! String ||
+          !_isBoundedDisplayText(row['error'] as String, 160)) {
         throw const FormatException('malformed portfolio error');
       }
       failed.add(requirement.coin);
       continue;
     }
-    balances[requirement.coin] = _parseBalances(row['result'], requirement);
+    balances[requirement.coin] = _parseBalances(
+      row['result'],
+      requirement,
+      expectedAddress,
+    );
   }
   if (balances.length + failed.length != expected.length) {
     throw const FormatException('incomplete portfolio response');
@@ -295,9 +449,24 @@ FundingPortfolio parseGatewayFundingResponse(
   );
 }
 
-ObservedBalances _parseBalances(Object? value, FundingRequirement requirement) {
+ObservedBalances _parseBalances(
+  Object? value,
+  FundingRequirement requirement,
+  String expectedAddress,
+) {
   final result = _map(value, 'balances');
-  _exactKeys(result, {'native', 'tokens'}, 'balances');
+  _exactKeys(result, {
+    'chain',
+    'network',
+    'address',
+    'native',
+    'tokens',
+  }, 'balances');
+  if (result['chain'] != requirement.coin.name ||
+      result['network'] != requirement.networkId ||
+      !_sameAddress(requirement.coin, result['address'], expectedAddress)) {
+    throw const FormatException('unbound balances result');
+  }
   final native = _map(result['native'], 'native');
   _exactKeys(native, {'raw', 'decimals', 'symbol'}, 'native');
   final nativeRaw = _nonNegativeBigInt(native['raw'], 'native.raw');
@@ -330,7 +499,7 @@ ObservedBalances _parseBalances(Object? value, FundingRequirement requirement) {
     throw const FormatException('token metadata mismatch');
   }
   final error = token['error'];
-  if (hasError && (error is! String || error.isEmpty)) {
+  if (hasError && (error is! String || !_isBoundedDisplayText(error, 160))) {
     throw const FormatException('malformed token error');
   }
   return ObservedBalances(
@@ -530,6 +699,29 @@ bool _isEvm(FundingCoin coin) => switch (coin) {
   FundingCoin.bnb => true,
   FundingCoin.tron || FundingCoin.solana => false,
 };
+
+bool _sameAddress(FundingCoin coin, Object? actual, String expected) =>
+    actual is String &&
+    (_isEvm(coin)
+        ? actual.toLowerCase() == expected.toLowerCase()
+        : actual == expected);
+
+bool _isBoundedDisplayText(String value, int maxRunes) {
+  if (value.isEmpty || value != value.trim() || value.runes.length > maxRunes) {
+    return false;
+  }
+  for (final rune in value.runes) {
+    if (rune < 0x20 ||
+        (rune >= 0x7f && rune <= 0x9f) ||
+        (rune >= 0x200b && rune <= 0x200f) ||
+        (rune >= 0x202a && rune <= 0x202e) ||
+        (rune >= 0x2060 && rune <= 0x2069) ||
+        rune == 0xfeff) {
+      return false;
+    }
+  }
+  return true;
+}
 
 final _evmPattern = RegExp(r'^0x[0-9a-fA-F]{40}$');
 const _base58Alphabet =

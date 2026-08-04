@@ -951,5 +951,11 @@ List<String> findHostFundingCliBoundaryIssues(String contents) {
   if (!contents.contains('Future<void> main(List<String> arguments) async')) {
     issues.add('host funding CLI entrypoint is missing');
   }
+  if (!contents.contains('decodeGatewayFundingJson(')) {
+    issues.add('remote Gateway body is not decoded with duplicate-key checks');
+  }
+  if (RegExp(r'\bjsonDecode\(').hasMatch(contents)) {
+    issues.add('remote Gateway body uses the duplicate-unsafe JSON decoder');
+  }
   return issues;
 }
