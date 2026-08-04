@@ -172,7 +172,8 @@ func TestEVMBalancesNativeFailureFailsCall(t *testing.T) {
 func TestTronBalances(t *testing.T) {
 	grid := newRESTFake(t)
 	grid.routeJSON("/v1/accounts/"+tronSelfB58, fmt.Sprintf(
-		`{"data":[{"balance":5000000,"trc20":[{%q:"123456"}]}],"success":true}`, tronUSDT))
+		`{"data":[{"address":%q,"balance":5000000,"trc20":[{%q:"123456"}]}],"success":true}`,
+		tronSelfHex, tronUSDT))
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
 
 	resp := e.rpc("kt_getBalances", balancesParams("tron", tronSelfB58,
@@ -184,6 +185,21 @@ func TestTronBalances(t *testing.T) {
 			{"contract":%q,"raw":"123456","decimals":6,"symbol":"USDT"},
 			{"contract":"TVj7RNVHy6thbM7BWdSe9G6gXwKhjhdNaS","raw":"0","decimals":18,"symbol":"JST"}
 		]}`, tronUSDT), result(t, resp))
+}
+
+func TestTronMalformedNativeBalanceFailsCallInsteadOfBecomingZero(t *testing.T) {
+	grid := newRESTFake(t)
+	grid.routeJSON("/v1/accounts/"+tronSelfB58, fmt.Sprintf(
+		`{"data":[{"address":%q,"balance":"not-a-balance"}],"success":true}`,
+		tronSelfHex))
+	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
+
+	resp := e.rpc("kt_getBalances", balancesParams("tron", tronSelfB58, ""))
+	errObj := assertErrCode(t, resp, rpc.CodeUpstream)
+	data := errData(t, errObj)
+	if data["upstream"] != "trongrid" || data["message"] != "upstream temporarily unavailable" {
+		t.Fatalf("malformed account data must remain a privacy-safe upstream failure: %v", data)
+	}
 }
 
 func TestTronBalancesUnknownAccount(t *testing.T) {

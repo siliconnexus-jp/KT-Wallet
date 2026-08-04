@@ -46,3 +46,38 @@ func TestTokenSetHash(t *testing.T) {
 		t.Fatal("decimals must participate in the tokenset hash")
 	}
 }
+
+func TestValidateAddressRejectsMalformedNonEVMIdentitiesBeforeUpstream(t *testing.T) {
+	t.Parallel()
+	valid := []struct {
+		chain   string
+		address string
+	}{
+		{"eth", "0x1111111111111111111111111111111111111111"},
+		{"tron", "TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C"},
+		{"solana", "11111111111111111111111111111111"},
+		{"solana", "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin"},
+	}
+	for _, tc := range valid {
+		if err := validateAddress(tc.chain, tc.address); err != nil {
+			t.Errorf("valid %s address rejected: %s", tc.chain, err.Message)
+		}
+	}
+
+	invalid := []struct {
+		chain   string
+		address string
+	}{
+		{"tron", "TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4D"},         // wrong checksum
+		{"tron", "41b0f28f797f0e57e56c1729783b7a5e5d4bacd0f4"}, // not user-facing Base58Check
+		{"tron", "not-a-tron-address"},
+		{"solana", "1111111111111111111111111111111"}, // 31 decoded bytes
+		{"solana", "0x1111111111111111111111111111111111111111"},
+		{"solana", "not-a-solana-address"},
+	}
+	for _, tc := range invalid {
+		if err := validateAddress(tc.chain, tc.address); err == nil {
+			t.Errorf("invalid %s address %q must fail before an upstream call", tc.chain, tc.address)
+		}
+	}
+}

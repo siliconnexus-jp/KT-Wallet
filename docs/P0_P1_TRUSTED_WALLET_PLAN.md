@@ -328,6 +328,22 @@
   Alchemy、Etherscan/Blockscout、TronGrid、CoinGecko 与 GoPlus 三接口。该项已随
   Gateway 1.16.16 上线；公网官方 Ethereum USDC 返回身份绑定的
   `official_catalog+goplus / safe`。
+- [x] 2026-08-04 继续把 TronGrid 审阅从三条历史 feed 扩展到资产首页依赖的
+  `/v1/accounts/{address}`。旧 `GetAccount` 直接解码宽松 struct：忽略 `success=false`、
+  未知/别名/重复成员、错误账户与第二账户；字符串、负数、小数 native balance 会被
+  静默保留为默认 0，畸形、负数或超出 uint256 的 TRC-20 余额也会进入账户 map。20 类
+  红测全部证明旧实现错误返回成功。现信封精确限制为 `data/success/meta?` 且必须
+  `success=true`；明确空数组仍表示未激活账户。非空结果必须恰好一行，并把返回的
+  41-hex 地址与请求 Base58Check 地址做 checksum 后绑定。Native 只接受可省略的非负
+  int64 protobuf 值，TRC-20 每行只允许一个 checksum-valid 合约与规范 uint256 十进制，
+  合约必须唯一；任何歧义或越界使整次原生余额查询返回 privacy-safe upstream error，
+  不能伪装成 0。20 类负例、合法余额、明确空账户与 Gateway handler 降级回归均通过。
+  随后以公开主网地址执行 opt-in `KT_LIVE_TRON_ACCOUNT=1` 只读 smoke，当前 TronGrid
+  大型真实账户对象（含可扩展未消费字段）通过受审 schema，未放宽金融字段。
+  相邻输入审计同时确认 Gateway 旧 `validateAddress` 只验证 EVM，TRON/Solana 任意非空
+  字符串都会进入缓存键和上游请求；六个非法地址红测先完整失败。现公开参数在出网前要求
+  TRON 为 34 字符 checksum-valid Base58Check、Solana Base58 解码后精确 32 bytes，合法
+  系统程序与普通公钥保持通过。该修复属于 Gateway 1.16.17 源码候选，尚未部署。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。

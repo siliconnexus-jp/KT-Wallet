@@ -56,6 +56,7 @@ func quotedList(items []string) string {
 
 var evmAddressRe = regexp.MustCompile(`^0x[0-9a-fA-F]{40}$`)
 var evmHexPayloadRe = regexp.MustCompile(`^0x(?:[0-9a-fA-F]{2})+$`)
+var tronHexAddressRe = regexp.MustCompile(`^41[0-9a-f]{40}$`)
 
 func validateChain(chain string) (chainMeta, *rpc.Error) {
 	m, ok := chains[chain]
@@ -70,10 +71,38 @@ func validateAddress(chain, address string) *rpc.Error {
 	if strings.TrimSpace(address) == "" {
 		return rpc.Errorf(rpc.CodeInvalidParams, `invalid params: "address" is required and must not be blank`)
 	}
-	if chains[chain].EVM && !evmAddressRe.MatchString(address) {
+	meta, known := chains[chain]
+	if !known {
+		return rpc.Errorf(rpc.CodeInvalidParams, `invalid params: unsupported address chain`)
+	}
+	if meta.EVM && !evmAddressRe.MatchString(address) {
 		return rpc.Errorf(rpc.CodeInvalidParams, `invalid params: "address" must be a 0x-prefixed 20-byte hex address`)
 	}
+	if chain == "tron" && !isValidTronBase58Address(address) {
+		return rpc.Errorf(rpc.CodeInvalidParams, `invalid params: "address" must be a checksum-valid TRON Base58Check address`)
+	}
+	if chain == "solana" && !isValidSolanaAddress(address) {
+		return rpc.Errorf(rpc.CodeInvalidParams, `invalid params: "address" must decode to a 32-byte Solana public key`)
+	}
 	return nil
+}
+
+func isValidTronBase58Address(address string) bool {
+	if len(address) != 34 || !strings.HasPrefix(address, "T") {
+		return false
+	}
+	normalized := tronAddrHex(address)
+	return len(normalized) == 42 &&
+		strings.HasPrefix(normalized, "41") &&
+		tronHexAddressRe.MatchString(normalized)
+}
+
+func isValidSolanaAddress(address string) bool {
+	if len(address) < 32 || len(address) > 44 {
+		return false
+	}
+	raw, ok := base58Decode(address)
+	return ok && len(raw) == 32
 }
 
 // tokenSetHash canonically fingerprints a token list for balance cache keys.

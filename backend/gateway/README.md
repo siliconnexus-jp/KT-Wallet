@@ -540,6 +540,19 @@ EVM tokens `eth_call` `0x70a08231` balanceOf; tron native + TRC-20 via
 TronGrid `/v1/accounts/{addr}`; solana native `getBalance` (SPL tokens:
 per-token `error: "unsupported"` for now).
 
+TRON account balances are decoded as a financial trust boundary. The
+TronGrid envelope must be the exact `data/success/meta?` shape with
+`success=true`; a non-empty result must contain exactly one account whose
+41-prefixed address matches the requested Base58Check address. Native balance
+is an optional non-negative protocol `int64` (omission means the protobuf zero
+value), while every TRC-20 balance is a unique checksum-valid contract plus a
+bounded `uint256` decimal string. Duplicate/aliased fields, a second account,
+wrong identity, malformed amount or explicit provider failure rejects the
+whole native balance call and is never converted to a trustworthy zero.
+Public TRON and Solana address parameters are also rejected before cache or
+network access unless they are respectively a checksum-valid 34-character
+Base58Check address or a Base58 public key that decodes to exactly 32 bytes.
+
 ### `kt_getPrices` `{"symbols": ["ETH","POL","AVAX","TRX","SOL","USDT","USDC","BUSD"]}`
 
 → `{"prices": {"ETH": {"usd": 1234.56, "change24h": 2.34}, ...}, "cachedAtMs": <int>}`
