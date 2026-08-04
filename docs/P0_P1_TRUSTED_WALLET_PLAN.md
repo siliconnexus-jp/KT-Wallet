@@ -2,8 +2,8 @@
 
 更新日期：2026-08-04
 
-当前 Gateway 源码版本 1.16.18；当前生产 Gateway 1.16.17。生产 Gateway-first 链身份与
-TRON/Solana 余额严格解析均已启用；源码候选继续闭合 EVM 金融响应，尚未部署。
+当前 Gateway 源码版本 1.16.18；当前生产 Gateway 1.16.18。生产 Gateway-first 链身份与
+TRON/Solana/EVM 余额严格解析均已启用。
 
 ## 目标与边界
 
@@ -360,7 +360,8 @@ TRON/Solana 余额严格解析均已启用；源码候选继续闭合 EVM 金融
   等 quantity 只接受规范 `0x`、无前导零、最多 256-bit；`balanceOf` 必须恰好返回一个
   32-byte ABI uint256，任何其他形态成为显式 Token availability error。余额请求在出网
   前校验 20-byte 地址与 `latest/pending` tag。合法边界值、handler 失败闭合与真实 Ethereum
-  主网 native + USDC 只读 smoke 均通过。该项属于 Gateway 1.16.18 源码候选，尚未部署。
+  主网 native + USDC 只读 smoke 均通过。该项已随 Gateway 1.16.18 上线；双实例与公网
+  都返回相同精确余额，监控 3/3 targets UP、17/17 规则健康且 0 firing。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。
