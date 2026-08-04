@@ -22,10 +22,9 @@ The project is licensed under [MPL-2.0](LICENSE).
 |---|---:|---|
 | KT Wallet | `1.0.0+1` | Controlled public-beta builds; App Store and Play Store listings are not yet public |
 | KT Cold Signer | `1.0.0+1` | Controlled public-beta builds; source build is available for dedicated offline devices |
-| KT Gateway | `1.16.25` | Production service at `https://gateway.kt-wallet.com` |
+| KT Gateway | `1.16.26` | Production service at `https://gateway.kt-wallet.com` |
 
-Gateway source version: `1.16.26`. Production currently remains on `1.16.25`
-until the commitment-semantics candidate passes rollout validation on both
+Gateway source version: `1.16.26`. The same version is deployed to both
 production instances behind `https://gateway.kt-wallet.com`.
 
 Until signed store releases are published, build both apps from this repository
@@ -381,7 +380,7 @@ unattended Pending poll retries with a bounded 1×/2×/4×/8× delay instead of
 silently stopping. These controls improve responsiveness without treating stale
 cache or unknown chain evidence as a successful result.
 
-Gateway `1.16.25` currently exposes 16 mainnet/testnet network profiles. It uses
+Gateway `1.16.26` currently exposes 16 mainnet/testnet network profiles. It uses
 bounded upstream failover and circuit breakers, plus short caches for prices
 (30 seconds), display balances (10 seconds), and history (5 seconds). Pending
 nonces, spendable balances, simulations, and transaction-status checks are not

@@ -2,7 +2,7 @@
 
 更新日期：2026-08-05
 
-当前 Gateway 源码版本 1.16.26；当前生产 Gateway 1.16.25。生产 Gateway-first 链身份、
+当前 Gateway 源码版本 1.16.26；当前生产 Gateway 1.16.26。生产 Gateway-first 链身份、
 TRON/Solana/EVM 余额与 Portfolio 身份、Solana 交易终态、EVM 动态手续费及签名前预执行回包严格解析均已启用。
 
 ## 目标与边界
@@ -2255,5 +2255,12 @@ confirmed/finalized 后终结。KT Wallet 1635/1635（另有 11 项显式线上/
 KT Cold Signer 570/570、共享 packages 438/438、Gateway 普通/race/vet/govulncheck/运维守卫、
 静态分析 0 与完整依赖/OSV 门禁 13/13 均通过。官方 Solana Devnet 严格 status smoke 1/1，
 blockhash/fee/simulation、余额/SPL accounts 与历史只读 smoke 3/3 通过；未加载私钥且未广播。
-Gateway 源码候选提升到 1.16.26，须在 secondary → primary 滚动验证完成后才更新生产声明。
+Gateway 源码候选提升到 1.16.26，并从干净提交 `7b76812` 构建 Go 1.26.5、CGO 关闭的
+Linux amd64 静态制品（8,904,866 bytes，SHA-256
+`677393eed41bd92b5b89e1f8dd364e3e9d95b0b5e6e0a8cb102034daf61c8dfc`）。生产按
+secondary → primary 发布到
+`20260804T192528Z-7b76812-v1.16.26-solana-commitment`；8120、8119、HAProxy 8118 与
+公网均返回 1.16.26、16 网络且 ready，公网同一 Devnet signature 精确返回
+`sol-devnet/confirmed/hash`。发布后 3/3 targets UP、17/17 rules healthy、0 firing、
+Alertmanager 0 active、双实例 warning+ 为 0。本轮未读取环境文件、未加载私钥且未广播。
 本项没有视觉 UI 变化，不使用无关模拟器截图替代协议证据。
