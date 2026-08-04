@@ -396,8 +396,8 @@ void main() {
         expect(balances.tokens, hasLength(2));
         expect(balances.tokens[0].raw, BigInt.from(120500000));
         expect(balances.tokens[0].error, isNull);
-        // Per-token error: no raw value, the error string is preserved.
-        expect(balances.tokens[1].error, 'execution reverted');
+        // Per-token failure keeps only a local stable category.
+        expect(balances.tokens[1].error, GatewayTokenBalance.unavailableError);
         expect(balances.tokens[1].raw, isNull);
       },
     );
@@ -442,6 +442,49 @@ void main() {
         ]);
       },
     );
+
+    test('per-token failures never retain provider-controlled text', () async {
+      final providerCanary = <String>[
+        'provider',
+        'token_balance_body_secret',
+      ].join('_');
+      final recorder = _Recorder()
+        ..results = {
+          'kt_getBalances': {
+            'chain': 'eth',
+            'network': 'eth-mainnet',
+            'address': _evmFrom,
+            'native': {'raw': '1', 'decimals': 18, 'symbol': 'ETH'},
+            'tokens': [
+              {
+                'contract': _evmTo,
+                'raw': '0',
+                'decimals': 6,
+                'symbol': 'BAD',
+                'error': providerCanary,
+              },
+            ],
+          },
+        };
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: recorder.client,
+      );
+
+      final balances = await client.getBalances(
+        chain: Coin.eth,
+        address: _evmFrom,
+        tokens: const [
+          GatewayTokenQuery(contract: _evmTo, decimals: 6, symbol: 'BAD'),
+        ],
+      );
+
+      expect(
+        balances.tokens.single.error,
+        GatewayTokenBalance.unavailableError,
+      );
+      expect(balances.tokens.single.error, isNot(contains(providerCanary)));
+    });
 
     test('malformed result (missing native) throws FormatException', () async {
       final recorder = _Recorder()

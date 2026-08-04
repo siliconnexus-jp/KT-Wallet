@@ -550,7 +550,11 @@ class GatewayClient {
       parsedTokens.add(
         GatewayTokenBalance(
           contract: row['contract'] as String,
-          error: error as String?,
+          // The remote reason is useful only as an availability signal. Do
+          // not retain it: a compromised provider could put wallet addresses,
+          // credential URLs, or arbitrary text in this field and have it
+          // escape later through logging or diagnostics.
+          error: hasError ? GatewayTokenBalance.unavailableError : null,
           raw: hasError ? null : raw,
           decimals: query.decimals,
           symbol: query.symbol,
@@ -1780,8 +1784,11 @@ class GatewayNativeBalance {
 }
 
 /// One per-token row of a `kt_getBalances` answer. [raw] is non-null exactly
-/// when the row succeeded ([error] == null and the value parsed).
+/// when the row succeeded ([error] == null and the value parsed). [error] is
+/// always a local stable category; the provider's reason is never retained.
 class GatewayTokenBalance {
+  static const unavailableError = 'token_balance_unavailable';
+
   const GatewayTokenBalance({
     required this.contract,
     required this.raw,

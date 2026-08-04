@@ -1153,6 +1153,7 @@ void main() {
     "message: error['message']",
     'upstreamMessage:',
     'this.upstream',
+    'error: error as String?',
   ]) {
     if (gatewayClientSource.contains(retainedRemoteErrorText)) {
       failures.add(
@@ -1165,6 +1166,8 @@ void main() {
     'GatewayException({required this.code})',
     'message = _gatewayErrorCategory(code)',
     "_ => 'gateway_error'",
+    "static const unavailableError = 'token_balance_unavailable'",
+    'error: hasError ? GatewayTokenBalance.unavailableError : null',
   ]) {
     if (!gatewayClientSource.contains(stableGatewayErrorBoundary)) {
       failures.add(

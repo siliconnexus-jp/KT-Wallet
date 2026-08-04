@@ -2304,3 +2304,15 @@ KT Cold Signer 570/570、共享 packages 438/438、静态分析 0、Gateway audi
 门禁 13/13 通过，生产 Gateway 严格客户端真实只读 6/6。未加载钱包、私钥或广播；Gateway
 服务端和视觉 UI 均未变化，无需部署后端，也不使用无关截图替代协议证据。移动端修复须
 随下一版签名制品发布。
+
+同日继续复审余额成功响应中的局部失败。旧 `kt_getBalances` 解析器虽然只把失败 Token
+显示为不可用，却会把该行的 Provider `error` 原文保存在 `GatewayTokenBalance.error`；未来
+日志、诊断或 UI 输出对象时仍可能泄漏节点正文、钱包地址或凭证 URL。失败优先 canary
+测试先稳定证明旧对象返回完整远端字符串。修复后远端字段仅作为 availability 信号，移动端
+对象只保存固定本地类别 `token_balance_unavailable`，其他 Token 与原生币继续正常解析；
+静态门禁禁止恢复 `error as String` 透传并锁定本地类别。余额/Gateway/市场相关定向
+121/121；KT Wallet 1657/1657（另有 11 项显式线上/设备测试默认跳过）、KT Cold Signer
+570/570、共享 packages 438/438、静态分析 0、Gateway audit 与完整依赖/OSV 门禁 13/13
+通过，生产 Gateway 严格客户端真实只读 6/6。未加载钱包、私钥或广播；Gateway 服务端和
+视觉 UI 均未变化，无需部署后端，也没有适用的 UI 截图。移动端修复须随下一版签名制品
+发布。
