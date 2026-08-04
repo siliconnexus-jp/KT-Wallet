@@ -576,8 +576,8 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-05) completed with zero static-analysis
-issues: **1,630/1,630** KT Wallet tests, **570/570** KT Cold Signer tests, and
-**435/435** shared-package tests passed. The default gate passed **12/12** and
+issues: **1,631/1,631** KT Wallet tests, **570/570** KT Cold Signer tests, and
+**438/438** shared-package tests passed. The default gate passed **12/12** and
 the native/runtime/OSV `--full` gate passed **13/13**. The Gateway audit,
 public-secret gate, Gateway public-release version gate, native dependency
 lock/checksum verification, and OSV scans also passed. These numbers are
@@ -610,6 +610,16 @@ those samples. Finality and ordinary experience samples use independent
 cannot break startup, confirmation, or UI refresh. A process exit after
 confirmed/failed commits therefore cannot lose or duplicate the corresponding
 success-rate/P95 evidence on restart.
+
+EVM mempool reconciliation also treats the node transaction object as bound
+evidence, not a loose status hint. The request hash and sender must be
+canonical; the returned hash and sender must match them exactly (hex case
+aside), and nonce must be a canonical, non-negative uint256 quantity before
+the app may show Pending or persist replacement evidence. Missing, mismatched,
+negative, leading-zero, oversized, or otherwise malformed values remain
+unknown. An opt-in read-only BNB Smart Chain Testnet smoke verifies this parser
+against a previously confirmed public test transaction without loading a key
+or broadcasting.
 
 EVM nonce competitors are settled in one Drift transaction guarded by a live-
 status compare-and-set. A late pending/unknown response cannot overwrite a

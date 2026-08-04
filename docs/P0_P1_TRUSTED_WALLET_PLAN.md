@@ -128,6 +128,15 @@ TRON/Solana/EVM 余额与 Portfolio 身份、Solana 交易终态、EVM 动态手
   全 `f` 的有效形状假 hash 三处均为 unknown，公开 Ethereum 历史 5/5 status=ok。
   这只能证明 RPC 回包内部身份与包含字段一致，不能把单一 RPC 的区块视为密码学最终性，
   因此不使用无关 UI 截图扩大结论。
+- [x] EVM 无 receipt 时的节点交易对象也必须绑定本地身份后才能证明 Pending：请求 hash
+  与 from 在发网前分别校验为规范 32-byte/20-byte hex；回包 hash/from 必须与请求一致，
+  nonce 只接受无负号、无多余前导零且不超过 uint256 的 canonical quantity。旧实现会把
+  `0x-1` 解析成负 nonce、显示 Pending 并持久化，随后可能把任意 confirmed nonce 误作
+  replacement 证据；失败优先测试先稳定复现后转绿。缺失、错身份、`0x00`、`0X7`、负数
+  或 257-bit nonce 均保持 unknown 且不写数据库，非法请求在 transport 前拒绝。共享静态
+  门禁禁止 App 恢复手工 hex 解析；公开 BSC Testnet 既有 BUSD 交易
+  `0x0122368527979e6c9d41aa18ff72bb86bc67889b7ad010998902272fc384abca`
+  的真实只读 RPC 证明 hash/from/nonce=5 与严格 parser 兼容，未加载私钥且未广播。
 - [x] TRON hash 专项查询绑定完整链上证据：App 直连与 Gateway 都要求
   `TransactionInfo.id` 与请求的 64-hex txID 精确一致，并要求非负 `blockNumber`。
   智能合约/TRC-20 必须给出协议已知的 `receipt.result`；普通 TRX 系统转账因 protobuf
@@ -2206,3 +2215,18 @@ rooted/null 语义必须一致，Ok/Err 与 err 必须按有界 JSON
 Devnet 的 blockhash、fee、未签名 simulation 与一笔既有 finalized signature 真实只读 smoke
 1/1 通过，未加载私钥且未广播。本轮没有 Gateway 或视觉 UI 变化，无需部署后端，也不使用
 无关截图冒充协议响应证据；App 修复须随下一版移动端制品发布。
+
+同日继续复审 EVM Pending 交易对象。旧 App 在 receipt 为空时手工执行
+`BigInt.tryParse(nonce.substring(2), radix: 16)`，会接受节点返回的 `0x-1`，将负 nonce
+写入数据库并展示 Pending；此后任意非负 confirmed nonce 都可能错误满足 replacement
+比较。失败优先测试先得到 `expected unknown / actual pending`。修复后共享 EVM RPC 在
+发网前校验请求 hash/from，并把回包 hash、from 与 canonical uint256 nonce 一次性解析为
+类型化证据；App 只消费该证据，缺失、错身份、前导零、负数、大小写错误前缀或超过 256-bit
+的 nonce 全部失败闭合为 unknown 且不持久化。静态远程安全边界锁定生产入口不得恢复
+`getTransactionByHash` 手工解析。完整全量首次执行还准确暴露 5 个仍使用 `0xabc/0xFrom`
+的旧测试夹具，改为规范公开地址后，原本的 nonce/fee/Gateway fallback 语义继续通过。
+最终 chains 199/199、KT Wallet 1631/1631（另有 11 项显式线上/设备测试默认跳过）、
+KT Cold Signer 570/570、共享 packages 438/438、静态分析 0、`check_deps` 与完整依赖/OSV
+门禁 13/13 通过。公开 BSC Testnet 既有交易只读 smoke 1/1 证明真实节点对象兼容严格
+hash/from/nonce 解析；未加载私钥且未广播。本轮没有 Gateway 或视觉 UI 变化，无需部署
+后端，也不使用无关截图冒充协议证据；App 修复须随下一版移动端制品发布。

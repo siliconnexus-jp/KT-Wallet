@@ -49,6 +49,8 @@ const _evmHash =
     '0x1111111111111111111111111111111111111111111111111111111111111111';
 const _otherEvmHash =
     '0x2222222222222222222222222222222222222222222222222222222222222222';
+const _evmFrom = '0x3333333333333333333333333333333333333333';
+const _otherEvmFrom = '0x4444444444444444444444444444444444444444';
 const _tronHash =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const _otherTronHash =
@@ -138,6 +140,76 @@ Map<String, Object?> _evmReceipt({
 };
 
 void main() {
+  group('EVM pending transaction evidence', () {
+    test('binds canonical hash sender and nonce', () {
+      final evidence = parseEvmPendingTransactionEvidence(
+        {
+          'hash': _evmHash,
+          'from': _evmFrom,
+          'nonce': '0x7',
+          'blockHash': null,
+          'providerExtension': true,
+        },
+        expectedTransactionHash: _evmHash,
+        expectedFrom: _evmFrom,
+      );
+
+      expect(evidence.transactionHash, _evmHash);
+      expect(evidence.from, _evmFrom);
+      expect(evidence.nonce, BigInt.from(7));
+    });
+
+    test('rejects unbound or non-canonical consumed fields', () {
+      final valid = <String, Object?>{
+        'hash': _evmHash,
+        'from': _evmFrom,
+        'nonce': '0x7',
+      };
+      final invalid = <Map<String, Object?>>[
+        {...valid}..remove('hash'),
+        {...valid, 'hash': _otherEvmHash},
+        {...valid}..remove('from'),
+        {...valid, 'from': _otherEvmFrom},
+        {...valid}..remove('nonce'),
+        {...valid, 'nonce': '0x00'},
+        {...valid, 'nonce': '0x-1'},
+        {...valid, 'nonce': '0X7'},
+        {...valid, 'nonce': '0x${'1' * 65}'},
+      ];
+
+      for (final row in invalid) {
+        expect(
+          () => parseEvmPendingTransactionEvidence(
+            row,
+            expectedTransactionHash: _evmHash,
+            expectedFrom: _evmFrom,
+          ),
+          throwsA(isA<RpcException>()),
+          reason: '$row',
+        );
+      }
+    });
+
+    test('rejects invalid request identity before transport', () async {
+      final transport = FakeJsonRpc((m, p) => _ok(null));
+      final rpc = EvmRpc(url: 'x', transport: transport);
+
+      await expectLater(
+        rpc.getPendingTransactionEvidence('0xshort', expectedFrom: _evmFrom),
+        throwsA(isA<RpcException>()),
+      );
+      await expectLater(
+        rpc.getPendingTransactionEvidence(_evmHash, expectedFrom: '0xshort'),
+        throwsA(isA<RpcException>()),
+      );
+      await expectLater(
+        rpc.getTransactionReceipt('0xshort'),
+        throwsA(isA<RpcException>()),
+      );
+      expect(transport.requests, isEmpty);
+    });
+  });
+
   group('EVM receipt evidence', () {
     test('binds complete canonical evidence to the requested hash', () {
       final evidence = parseEvmReceiptEvidence(
@@ -461,7 +533,7 @@ void main() {
         ),
       );
       expect(
-        () => rpc.getNonce('0xabc'),
+        () => rpc.getNonce(_evmFrom),
         throwsA(
           isA<RpcException>()
               .having((e) => e.code, 'code', -32000)
@@ -489,7 +561,7 @@ void main() {
 
       Object? thrown;
       try {
-        await rpc.getNonce('0xabc');
+        await rpc.getNonce(_evmFrom);
       } on Object catch (error) {
         thrown = error;
       }

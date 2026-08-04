@@ -119,6 +119,7 @@ void main() {
   _auditGatewayVocabulary(failures);
   _auditNetworkFreeSecurityModules(failures);
   _auditHotSigningBoundary(failures);
+  _auditEvmPendingStatusEvidence(failures);
   _auditSolanaStatusEvidence(failures);
   _auditGatewayFirstNetworkIdentity(failures);
   _auditGatewayIrreversibleRequestSchema(failures);
@@ -154,6 +155,46 @@ void main() {
     'security responses plus fallback block timestamps exact-schema '
     'decoded.',
   );
+}
+
+void _auditEvmPendingStatusEvidence(List<String> failures) {
+  const rpcPath = 'packages/chains/lib/src/rpc/evm_rpc.dart';
+  final rpc = File(rpcPath).readAsStringSync();
+  final parserStart = rpc.indexOf(
+    'EvmPendingTransactionEvidence parseEvmPendingTransactionEvidence(',
+  );
+  final parserEnd = parserStart < 0
+      ? -1
+      : rpc.indexOf('\nvoid _requireEvmHash', parserStart);
+  final parser = parserStart < 0 || parserEnd < 0
+      ? null
+      : rpc.substring(parserStart, parserEnd);
+  for (final marker in const [
+    "_requireEvmHash(expectedTransactionHash, 'expected transaction hash')",
+    "_requireEvmAddress(expectedFrom, 'expected sender')",
+    'transactionHash.toLowerCase() != expectedTransactionHash.toLowerCase()',
+    'from.toLowerCase() != expectedFrom.toLowerCase()',
+    "_parseEvmReceiptQuantity(transaction['nonce'], 'transaction nonce')",
+  ]) {
+    if (parser == null || !parser.contains(marker)) {
+      failures.add('$rpcPath lost EVM pending evidence invariant: $marker');
+    }
+  }
+
+  const statusPath =
+      'apps/kt_wallet/lib/src/market/transaction_status_service.dart';
+  final status = File(statusPath).readAsStringSync();
+  if (!status.contains('.getPendingTransactionEvidence(')) {
+    failures.add('$statusPath bypasses strict EVM pending evidence parsing');
+  }
+  for (final forbidden in const [
+    'getTransactionByHash(',
+    '_parseHexQuantity',
+  ]) {
+    if (status.contains(forbidden)) {
+      failures.add('$statusPath restored lax EVM pending parsing: $forbidden');
+    }
+  }
 }
 
 void _auditSolanaStatusEvidence(List<String> failures) {

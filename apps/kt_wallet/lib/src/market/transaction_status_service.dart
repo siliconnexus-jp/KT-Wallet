@@ -135,19 +135,12 @@ class TransactionStatusService {
           ? ChainTransactionStatus.confirmed
           : ChainTransactionStatus.failed;
     }
-    final remoteTransaction = await rpc.getTransactionByHash(hash);
+    final remoteTransaction = await rpc.getPendingTransactionEvidence(
+      hash,
+      expectedFrom: transaction.fromAddr,
+    );
     if (remoteTransaction != null) {
-      final remoteHash = remoteTransaction['hash'];
-      final remoteFrom = remoteTransaction['from'];
-      final rawNonce = remoteTransaction['nonce'];
-      final observedNonce = _parseHexQuantity(rawNonce);
-      if (remoteHash is! String ||
-          remoteHash.toLowerCase() != hash.toLowerCase() ||
-          remoteFrom is! String ||
-          remoteFrom.toLowerCase() != transaction.fromAddr.toLowerCase() ||
-          observedNonce == null) {
-        return ChainTransactionStatus.unknown;
-      }
+      final observedNonce = remoteTransaction.nonce;
       final persistedNonce = BigInt.tryParse(transaction.nonce ?? '');
       if (persistedNonce != null && persistedNonce != observedNonce) {
         return ChainTransactionStatus.unknown;
@@ -223,13 +216,6 @@ class TransactionStatusService {
       'confirmed' || 'finalized' => ChainTransactionStatus.confirmed,
       _ => ChainTransactionStatus.pending,
     };
-  }
-
-  BigInt? _parseHexQuantity(Object? value) {
-    if (value is! String || !value.startsWith('0x') || value.length <= 2) {
-      return null;
-    }
-    return BigInt.tryParse(value.substring(2), radix: 16);
   }
 
   bool _isEvm(Coin coin) => switch (coin) {

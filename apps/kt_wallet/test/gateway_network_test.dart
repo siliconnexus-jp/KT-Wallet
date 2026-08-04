@@ -676,7 +676,7 @@ void main() {
         jsonRpcTransport: direct,
         gateway: () => gateway.client,
       );
-      final params = await service.fetchEvmParams(Chain.ethereum, '0xFrom');
+      final params = await service.fetchEvmParams(Chain.ethereum, _evmFrom);
       // 42 from the direct node, NOT the gateway's mainnet 999.
       expect(params.nonce, 42);
       expect(gateway.paramsOf('kt_getChainParams'), isEmpty);

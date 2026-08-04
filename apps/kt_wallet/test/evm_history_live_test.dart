@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import 'package:chains/rpc.dart';
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/src/market/history_service.dart';
+import 'package:kt_wallet/src/rpc/http_transport.dart';
 
 void main() {
   final live = Platform.environment['KT_LIVE_EVM_HISTORY'] == '1';
@@ -31,6 +33,29 @@ void main() {
           isTrue,
         );
       }
+
+      // This is a previously confirmed public BSC Testnet transaction from
+      // the same public test address. Reading it here proves that a real node
+      // transaction object remains compatible with the strict hash/from/nonce
+      // parser. No key is loaded and no transaction is broadcast.
+      const bscHash =
+          '0x0122368527979e6c9d41aa18ff72bb86bc67889b7ad010998902272fc384abca';
+      final transport = HttpJsonRpcTransport(
+        timeout: const Duration(seconds: 20),
+      );
+      addTearDown(transport.close);
+      final rpc = EvmRpc(
+        url: 'https://bsc-testnet-dataseed.bnbchain.org',
+        transport: transport,
+      );
+      final evidence = await rpc.getPendingTransactionEvidence(
+        bscHash,
+        expectedFrom: owner,
+      );
+      expect(evidence, isNotNull);
+      expect(evidence!.transactionHash.toLowerCase(), bscHash);
+      expect(evidence.from.toLowerCase(), owner);
+      expect(evidence.nonce, BigInt.from(5));
     },
     skip: live ? false : 'set KT_LIVE_EVM_HISTORY=1',
     timeout: const Timeout(Duration(seconds: 60)),

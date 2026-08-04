@@ -18,7 +18,22 @@ class EvmReceiptEvidence {
   final bool succeeded;
 }
 
+/// Minimal mempool evidence returned by `eth_getTransactionByHash`, bound to
+/// the exact locally persisted transaction identity.
+class EvmPendingTransactionEvidence {
+  const EvmPendingTransactionEvidence({
+    required this.transactionHash,
+    required this.from,
+    required this.nonce,
+  });
+
+  final String transactionHash;
+  final String from;
+  final BigInt nonce;
+}
+
 final RegExp _evmHashPattern = RegExp(r'^0x[0-9a-fA-F]{64}$');
+final RegExp _evmAddressPattern = RegExp(r'^0x[0-9a-fA-F]{40}$');
 final RegExp _evmQuantityPattern = RegExp(
   r'^0x(?:0|[1-9a-fA-F][0-9a-fA-F]{0,63})$',
 );
@@ -67,6 +82,47 @@ EvmReceiptEvidence parseEvmReceiptEvidence(
     transactionIndex: transactionIndex,
     succeeded: succeeded,
   );
+}
+
+/// Validates the fields used to decide that a requested EVM transaction is
+/// still known by the node. Provider extensions are ignored, but every field
+/// consumed by reconciliation is canonical and bound to local identity.
+EvmPendingTransactionEvidence parseEvmPendingTransactionEvidence(
+  Map<Object?, Object?> transaction, {
+  required String expectedTransactionHash,
+  required String expectedFrom,
+}) {
+  _requireEvmHash(expectedTransactionHash, 'expected transaction hash');
+  _requireEvmAddress(expectedFrom, 'expected sender');
+  final transactionHash = transaction['hash'];
+  if (transactionHash is! String ||
+      !_evmHashPattern.hasMatch(transactionHash) ||
+      transactionHash.toLowerCase() != expectedTransactionHash.toLowerCase()) {
+    throw RpcException('malformed EVM transaction hash');
+  }
+  final from = transaction['from'];
+  if (from is! String ||
+      !_evmAddressPattern.hasMatch(from) ||
+      from.toLowerCase() != expectedFrom.toLowerCase()) {
+    throw RpcException('malformed EVM transaction sender');
+  }
+  return EvmPendingTransactionEvidence(
+    transactionHash: transactionHash,
+    from: from,
+    nonce: _parseEvmReceiptQuantity(transaction['nonce'], 'transaction nonce'),
+  );
+}
+
+void _requireEvmHash(String value, String field) {
+  if (!_evmHashPattern.hasMatch(value)) {
+    throw RpcException('invalid EVM $field');
+  }
+}
+
+void _requireEvmAddress(String value, String field) {
+  if (!_evmAddressPattern.hasMatch(value)) {
+    throw RpcException('invalid EVM $field');
+  }
 }
 
 BigInt _parseEvmReceiptQuantity(Object? value, String field) {
@@ -147,6 +203,7 @@ class EvmRpc {
       getNonceAt(address, 'latest');
 
   Future<int> getNonceAt(String address, String blockTag) async {
+    _requireEvmAddress(address, 'nonce account');
     if (blockTag != 'latest' && blockTag != 'pending') {
       throw ArgumentError.value(blockTag, 'blockTag');
     }
@@ -155,16 +212,27 @@ class EvmRpc {
     ).toInt();
   }
 
-  /// Returns null when the node no longer knows [hash].
-  Future<Map<Object?, Object?>?> getTransactionByHash(String hash) async {
+  /// Returns null when the node no longer knows [hash]. A non-null response is
+  /// accepted only after binding hash, sender, and canonical nonce.
+  Future<EvmPendingTransactionEvidence?> getPendingTransactionEvidence(
+    String hash, {
+    required String expectedFrom,
+  }) async {
+    _requireEvmHash(hash, 'transaction hash');
+    _requireEvmAddress(expectedFrom, 'transaction sender');
     final result = await _call('eth_getTransactionByHash', [hash]);
     if (result == null) return null;
     if (result is! Map) throw RpcException('malformed transaction response');
-    return result;
+    return parseEvmPendingTransactionEvidence(
+      result,
+      expectedTransactionHash: hash,
+      expectedFrom: expectedFrom,
+    );
   }
 
   /// Returns null until the transaction is mined (or when it is unknown).
   Future<Map<Object?, Object?>?> getTransactionReceipt(String hash) async {
+    _requireEvmHash(hash, 'transaction hash');
     final result = await _call('eth_getTransactionReceipt', [hash]);
     if (result == null) return null;
     if (result is! Map) throw RpcException('malformed receipt response');

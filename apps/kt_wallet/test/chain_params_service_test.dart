@@ -608,7 +608,10 @@ void main() {
               : 'https://wrong.example',
         );
 
-        final params = await service.fetchEvmParams(Chain.ethereum, '0xabc');
+        final params = await service.fetchEvmParams(
+          Chain.ethereum,
+          _gatewayFrom,
+        );
         expect(params.nonce, 42);
         // standard = 2 * next base fee (30 gwei) + mean p50 tip (2 gwei).
         expect(params.fees.standard.maxPriorityFeePerGas, BigInt.two * _gwei);
@@ -634,7 +637,7 @@ void main() {
         jsonRpcTransport: transport,
         endpoints: (coin) => 'https://node.example/${coin.name}',
       );
-      await service.fetchEvmParams(Chain.polygon, '0xabc');
+      await service.fetchEvmParams(Chain.polygon, _gatewayFrom);
       expect(transport.calls.map((c) => c.$1).toSet(), {
         'https://node.example/polygon',
       });
@@ -658,7 +661,7 @@ void main() {
         endpoints: (_) => 'https://bsc-testnet.example',
       );
 
-      final params = await service.fetchEvmParams(Chain.bnb, '0xabc');
+      final params = await service.fetchEvmParams(Chain.bnb, _gatewayFrom);
       final floor = BigInt.from(100000000);
       for (final tier in [
         params.fees.slow,
@@ -681,7 +684,7 @@ void main() {
           endpoints: (_) => 'https://node.example',
         );
         expect(
-          () => service.fetchEvmParams(Chain.ethereum, '0xabc'),
+          () => service.fetchEvmParams(Chain.ethereum, _gatewayFrom),
           throwsA(isA<RpcException>()),
         );
       },

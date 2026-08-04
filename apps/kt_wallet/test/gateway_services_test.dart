@@ -872,7 +872,7 @@ void main() {
           jsonRpcTransport: direct,
           gateway: _deadGateway,
         );
-        final params = await service.fetchEvmParams(Chain.polygon, '0xFrom');
+        final params = await service.fetchEvmParams(Chain.polygon, _evmFrom);
         expect(params.nonce, 42);
         expect(direct.calls, isNotEmpty);
         expect(direct.calls.first.$1, defaultPolygonRpcUrl);
@@ -889,7 +889,7 @@ void main() {
           gateway: _deadGateway,
         );
         await expectLater(
-          service.fetchEvmParams(Chain.ethereum, '0xFrom'),
+          service.fetchEvmParams(Chain.ethereum, _evmFrom),
           throwsA(isA<RpcException>()),
         );
       },

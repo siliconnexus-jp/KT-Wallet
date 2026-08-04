@@ -76,7 +76,7 @@ void main() {
         restTransport: _Rest(),
       );
 
-      final result = await service.check(Chain.ethereum, '0xhash');
+      final result = await service.check(Chain.ethereum, _evmHash);
       expect(result.status, TxStatus.pending);
       expect(result.confirmations, 0);
       expect(json.method, 'eth_getTransactionReceipt');

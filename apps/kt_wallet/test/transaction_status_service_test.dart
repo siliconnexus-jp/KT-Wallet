@@ -45,6 +45,7 @@ const _evmHash =
     '0x1111111111111111111111111111111111111111111111111111111111111111';
 const _otherEvmHash =
     '0x2222222222222222222222222222222222222222222222222222222222222222';
+const _evmFrom = '0x3333333333333333333333333333333333333333';
 const _tronHash =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const _otherTronHash =
@@ -71,6 +72,7 @@ Transaction _tx(
   String? nonce,
   int? expiresAt,
   int? lastValidBlockHeight,
+  String fromAddr = 'from',
 }) => Transaction(
   id: 'tx',
   walletId: 'wallet',
@@ -78,7 +80,7 @@ Transaction _tx(
   networkId: networkId ?? '$coin-mainnet',
   operation: TxOperationKind.transfer,
   direction: TxDirection.outgoing,
-  fromAddr: 'from',
+  fromAddr: fromAddr,
   toAddr: 'to',
   amountRaw: '1',
   hash: hash,
@@ -247,8 +249,8 @@ void main() {
     final rpc = _JsonRpc({
       'eth_getTransactionReceipt': null,
       'eth_getTransactionByHash': {
-        'hash': '0xhash',
-        'from': 'from',
+        'hash': _evmHash,
+        'from': _evmFrom,
         'nonce': '0x7',
       },
     });
@@ -263,7 +265,7 @@ void main() {
     );
 
     expect(
-      await service.check(_tx(Coin.bnb.name, '0xhash')),
+      await service.check(_tx(Coin.bnb.name, _evmHash, fromAddr: _evmFrom)),
       ChainTransactionStatus.pending,
     );
     expect(observedNonce, '7');
@@ -289,8 +291,8 @@ void main() {
       final rpc = _JsonRpc({
         'eth_getTransactionReceipt': null,
         'eth_getTransactionByHash': {
-          'hash': '0xhash',
-          'from': 'from',
+          'hash': _evmHash,
+          'from': _evmFrom,
           'nonce': '0x9',
         },
       });
@@ -306,7 +308,7 @@ void main() {
       );
 
       expect(
-        await service.check(_tx(Coin.eth.name, '0xhash')),
+        await service.check(_tx(Coin.eth.name, _evmHash, fromAddr: _evmFrom)),
         ChainTransactionStatus.pending,
       );
       expect(observedNonce, '9');
@@ -323,8 +325,8 @@ void main() {
       final rpc = _JsonRpc({
         'eth_getTransactionReceipt': null,
         'eth_getTransactionByHash': {
-          'hash': '0xhash',
-          'from': 'from',
+          'hash': _evmHash,
+          'from': _evmFrom,
           'nonce': '0x7',
         },
       });
@@ -339,7 +341,38 @@ void main() {
       );
 
       expect(
-        await service.check(_tx(Coin.eth.name, '0xhash', nonce: '8')),
+        await service.check(
+          _tx(Coin.eth.name, _evmHash, nonce: '8', fromAddr: _evmFrom),
+        ),
+        ChainTransactionStatus.unknown,
+      );
+      expect(callbackCalled, isFalse);
+    },
+  );
+
+  test(
+    'malformed EVM pending nonce stays unknown and is never persisted',
+    () async {
+      final rpc = _JsonRpc({
+        'eth_getTransactionReceipt': null,
+        'eth_getTransactionByHash': {
+          'hash': _evmHash,
+          'from': _evmFrom,
+          'nonce': '0x-1',
+        },
+      });
+      var callbackCalled = false;
+      final service = TransactionStatusService(
+        endpoints: (_) => 'https://rpc.example',
+        jsonRpcTransport: rpc,
+        restTransport: _Rest(null),
+        onEvmNonceObserved: (transaction, nonce) async {
+          callbackCalled = true;
+        },
+      );
+
+      expect(
+        await service.check(_tx(Coin.eth.name, _evmHash, fromAddr: _evmFrom)),
         ChainTransactionStatus.unknown,
       );
       expect(callbackCalled, isFalse);
@@ -377,7 +410,9 @@ void main() {
       );
 
       expect(
-        await service.check(_tx(Coin.eth.name, '0xold', nonce: '7')),
+        await service.check(
+          _tx(Coin.eth.name, _evmHash, nonce: '7', fromAddr: _evmFrom),
+        ),
         ChainTransactionStatus.replaced,
       );
     },
@@ -395,7 +430,7 @@ void main() {
     );
 
     expect(
-      await service.check(_tx(Coin.eth.name, '0xmaybe')),
+      await service.check(_tx(Coin.eth.name, _evmHash, fromAddr: _evmFrom)),
       ChainTransactionStatus.unknown,
     );
     expect(rpc.methods, isNot(contains('eth_getTransactionCount')));
