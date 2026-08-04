@@ -1156,19 +1156,25 @@ void main() {
       },
     );
 
-    test('-32000 node rejection: error with the node message, NO direct '
-        're-post (one broadcast posts at most once)', () async {
+    test('-32000 forwarded rejection claim stays unknown and never directly '
+        're-posts signed bytes', () async {
       final gateway = _FakeGateway(
         errors: {
           'kt_broadcast': {
             'code': -32000,
             'message': 'upstream_error',
-            'data': {'upstream': 'eth-node', 'message': 'nonce too low'},
+            'data': {
+              'upstream': 'eth-node',
+              'message': 'nonce too low; request may already be forwarded',
+            },
           },
         },
       );
+      final direct = _FakeJsonRpc(
+        (url, body) async => _rpcResult(_evmBroadcastHash),
+      );
       final service = BroadcastService(
-        jsonRpcTransport: _NoDirectJsonRpc(),
+        jsonRpcTransport: direct,
         restTransport: _NoDirectRest(),
         gateway: () => gateway.client,
       );
@@ -1177,10 +1183,11 @@ void main() {
         Uint8List.fromList([0x02, 0x01]),
         expectedTxHash: '0xlocal',
       );
-      expect(outcome.status, BroadcastStatus.error);
-      expect(outcome.message, 'transaction nonce is too low');
+      expect(outcome.status, BroadcastStatus.unknown);
+      expect(outcome.message, 'Gateway response unavailable');
       expect(outcome.txHash, isNull);
       expect(gateway.calls, hasLength(1));
+      expect(direct.calls, isEmpty);
     });
 
     test('-32003 submission unknown: preserve local reconciliation and never '

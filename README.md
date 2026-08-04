@@ -180,16 +180,19 @@ error in one hash lookup is persisted as unknown evidence for that row and does
 not abort status updates for its peers. If the wallet/network context changes
 or the route is disposed, queued workers stop before sending another old hash.
 
-Broadcasts are single-shot writes. An explicit node rejection is shown as a
-failure, while a timeout, disconnected response, or malformed reply after the
-request starts is kept as an unknown result. The locally derived transaction
-hash and first-attempt time are persisted before submission, so KT Wallet can
-continue reconciliation without automatically sending the transaction again.
-No error returned by a posted Gateway broadcast—including one claiming
-`unsupported` or `rate_limited`—authorizes a direct-node retry. Only a local
-network-manifest decision made before the signed payload leaves the App may
-select the direct route; this prevents a stale or malformed error from causing
-the same signed transaction to be submitted twice.
+Broadcasts are single-shot writes. An explicit rejection from the directly
+selected node is shown as a failure, while a timeout, disconnected response,
+or malformed reply after the request starts is kept as an unknown result. The
+locally derived transaction hash and first-attempt time are persisted before
+submission, allowing KT Wallet to continue reconciliation without
+automatically sending the transaction again.
+No error returned by a posted Gateway broadcast—including one claiming an
+upstream rejection, `unsupported`, or `rate_limited`—authorizes a terminal
+failure or direct-node retry. The App keeps the locally verified hash in
+reconciliation instead. Only a local network-manifest decision made before the
+signed payload leaves the App may select the direct route; this prevents a
+stale or malformed intermediary answer from hiding a forwarded transaction or
+causing the same signed bytes to be submitted twice.
 The production Gateway also atomically claims a SHA-256 fingerprint of the
 chain, network, and signed payload in shared Redis before contacting a node.
 Repeated or concurrent POSTs across CDN, proxy, or Gateway instances reuse the

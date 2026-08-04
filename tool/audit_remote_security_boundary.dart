@@ -373,7 +373,7 @@ void _auditHotSigningBoundary(List<String> failures) {
   }
 
   final irreversibleBroadcast = _futureMethodSection(broadcast, '_broadcast');
-  const answeredErrorStart = '} on GatewayException catch (e) {';
+  const answeredErrorStart = '} on GatewayException {';
   const localPreflightStart = '} on GatewayNetworkUnsupported {';
   final answeredStart =
       irreversibleBroadcast?.indexOf(answeredErrorStart) ?? -1;
@@ -392,10 +392,9 @@ void _auditHotSigningBoundary(List<String> failures) {
       answeredStart + answeredErrorStart.length,
       localStart,
     );
-    if (answeredError.contains('e.isUnsupported') ||
-        answeredError.contains('e.isRateLimited')) {
+    if (_answeredGatewayErrorCanSetTerminalFailure(answeredError)) {
       failures.add(
-        '$broadcastPath lets a remote preflight-looking error re-post signed bytes',
+        '$broadcastPath lets an answered Gateway error control terminal state or re-post signed bytes',
       );
     }
     if (!_answeredGatewayErrorTerminatesUnknown(answeredError)) {
@@ -1048,6 +1047,12 @@ bool _answeredGatewayErrorTerminatesUnknown(String source) => RegExp(
   r"return\s+const\s+BroadcastOutcome\.unknown\(\s*'Gateway response unavailable'\s*,?\s*\);\s*$",
 ).hasMatch(source);
 
+bool _answeredGatewayErrorCanSetTerminalFailure(String source) =>
+    source.contains('isUnsupported') ||
+    source.contains('isRateLimited') ||
+    source.contains('isUpstreamError') ||
+    RegExp(r'BroadcastOutcome\.(?:error|unsupported)\s*\(').hasMatch(source);
+
 List<String> _selfTestFailures() {
   final failures = <String>[];
   if (!_mapLookupKeys("final x = row['status'];").contains('status')) {
@@ -1092,6 +1097,17 @@ List<String> _selfTestFailures() {
     failures.add(
       'answered-error terminal-unknown extractor allows fallthrough',
     );
+  }
+  if (!_answeredGatewayErrorCanSetTerminalFailure('''
+    if (e.isUpstreamError) {
+      return BroadcastOutcome.error(RpcRejectionKind.rejected);
+    }
+    return const BroadcastOutcome.unknown('Gateway response unavailable');
+  ''') ||
+      _answeredGatewayErrorCanSetTerminalFailure('''
+    return const BroadcastOutcome.unknown('Gateway response unavailable');
+  ''')) {
+    failures.add('answered-error terminal-authority extractor is not exact');
   }
   if (!_sameStringMap(const {'kt_a': 'A'}, const {'kt_a': 'A'}) ||
       _sameStringMap(const {'kt_a': 'B'}, const {'kt_a': 'A'}) ||

@@ -159,11 +159,12 @@ TRON/Solana/EVM 余额与 Portfolio 身份、Solana 交易终态、EVM 动态手
 - [x] Solana：保存与 recent blockhash 配对的 `lastValidBlockHeight`；
   signature status 缺失且 finalized block height 明确越界后才标记
   `expired`。
-- [x] 广播结果严格区分 `accepted / rejected / unknown`：只有节点返回可解析的明确拒绝
-  才进入失败；请求开始后的超时、断连、畸形回包或 Gateway 不确定错误均保持 unknown。
+- [x] 广播结果严格区分 `accepted / rejected / unknown`：只有 App 直接选择并请求的节点
+  返回可解析的明确拒绝才进入失败；请求开始后的超时、断连、畸形回包或任何 Gateway
+  错误均保持 unknown。
   EVM/Solana JSON-RPC 与 TRON REST 广播只向一个端点提交一次，不做 endpoint failover
-  或自动重试；任何已经收到的 Gateway 广播错误都不能授权直连重发，只有 App 在发送
-  `kt_broadcast` 前由本地网络清单产生的 `GatewayNetworkUnsupported` 才能选择直连。
+  或自动重试；任何已经收到的 Gateway 广播错误都不能授权终态失败或直连重发，只有
+  App 在发送 `kt_broadcast` 前由本地网络清单产生的 `GatewayNetworkUnsupported` 才能选择直连。
   热钱包、AIRGAP、replacement 与授权撤销都在首次提交前持久化本地
   txHash 和广播尝试时间；结果未知页明确禁止再次发送，并以该 hash 持续对账。
   Gateway 1.16.2 又在访问链节点前，以 `chain + network + canonical signed payload`
@@ -2142,10 +2143,22 @@ KT Wallet 1618/1618（另有 11 项显式线上/设备测试默认跳过）、KT
 再次提交到直连节点；污染缓存、错误代理或畸形 Gateway 回包可借此把不确定的首次写入
 伪装成“尚未触网”。失败优先测试用带 upstream data 的伪造 `-32002` 稳定复现 Gateway
 调用 1 次、直连又调用 1 次且广播指标错误记录成功。现改为：成功回包仍必须匹配本地
-密码学 hash；明确 `-32000` 节点拒绝只返回 rejected；其余任何已收到的 Gateway error
-一律保持 unknown、以本地 hash 对账且绝不直连重发。只有 `_networkParam` 在发送签名字节
+密码学 hash；任何已收到的 Gateway error（包括自称节点拒绝的 `-32000`）一律保持
+unknown、以本地 hash 对账且绝不直接标记失败或直连重发。只有 `_networkParam` 在发送签名字节
 前抛出的本地 `GatewayNetworkUnsupported` 可以进入唯一一次直连提交。伪造 unsupported
 与 rate-limited 两类负例均转绿；Gateway/广播/网络定向 77/77、KT Wallet 全量
 1622/1622（另有 11 项显式线上/设备测试默认跳过）、静态分析 0 与完整依赖/OSV 门禁
 13/13 通过。生产 Gateway 的真实严格 App 客户端只读回归 6/6 继续通过；本轮不改变
 Gateway 服务端，也没有 UI 变化，因此无需部署或使用无关截图。
+
+同日的下一轮资产边界复审进一步发现，上述修复仍保留了 `-32000 upstream_error → failed`：
+Gateway/代理若先转发签名字节再返回伪造或陈旧的节点拒绝，App 会停止按本地 hash 对账并
+向用户展示失败。失败优先用例把 `data.message` 明示为“可能已经转发”，旧实现稳定返回
+`BroadcastStatus.error`；修复后 Gateway 的 `-32000/-32001/-32002/-32003` 及其他所有 error
+统一保持 unknown、Gateway 调用 1 次、直连 0 次，并继续使用广播前已持久化的本地 hash
+恢复。直连节点自身的协议拒绝语义保持不变，因为不存在额外 Gateway 转发层。静态边界
+同时禁止 Gateway error catch 恢复 `isUpstreamError` 或任何 `BroadcastOutcome.error /
+unsupported` 分支，并用门禁自身的正负向量验证绝对末尾必须返回 unknown。Gateway/
+广播/网络定向 77/77、KT Wallet 1622/1622（另有 11 项显式线上/设备测试默认跳过）、
+KT Cold Signer 570/570、静态分析 0、生产严格只读客户端 6/6 与完整依赖/OSV 门禁
+13/13 通过。本轮无 Gateway 服务端或视觉 UI 变化，不部署后端，也不使用无关截图。

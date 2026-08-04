@@ -109,12 +109,13 @@ class BroadcastService {
   /// signed bytes may already have reached the chain.
   ///
   /// GATEWAY SEMANTICS: with a gateway configured, `kt_broadcast` is tried
-  /// first. A -32000 upstream error means a real node explicitly REJECTED the
-  /// transaction; -32003 explicitly means the gateway attempted submission
-  /// but lost the authoritative answer. Any error received after the signed
-  /// request was posted is outcome-unknown and is never re-posted, regardless
-  /// of its claimed code. Only a local [GatewayNetworkUnsupported] raised
-  /// before `kt_broadcast` may use the direct path.
+  /// first. No Gateway error can prove that an intermediary did not forward
+  /// the signed bytes before returning, including -32000 upstream_error and
+  /// -32003 submission_unknown. Every answered error is therefore
+  /// outcome-unknown and is never re-posted, regardless of its claimed code.
+  /// Only a local [GatewayNetworkUnsupported] raised before `kt_broadcast` may
+  /// use the direct path. Direct-node protocol rejections remain explicit
+  /// because that request has no additional Gateway forwarding hop.
   Future<BroadcastOutcome> broadcast(
     Chain chain,
     Uint8List signedTx, {
@@ -166,23 +167,14 @@ class BroadcastService {
               payload: payload,
             ),
           );
-        } on GatewayException catch (e) {
-          if (e.isUpstreamError) {
-            return BroadcastOutcome.error(
-              publicRpcRejectionKind(e.upstreamMessage ?? e.message),
-            );
-          }
-          if (e.isSubmissionUnknown) {
-            return const BroadcastOutcome.unknown(
-              'Gateway response unavailable',
-            );
-          }
+        } on GatewayException {
           // An HTTP answer cannot prove the signed payload stayed local to the
-          // Gateway process. Even a response claiming unsupported/rate-limited
-          // may be stale, malformed, or emitted after a proxy/upstream write.
-          // Only GatewayNetworkUnsupported below is a local pre-request fact;
-          // every answered error therefore remains unknown and must reconcile
-          // by hash instead of submitting the same bytes to a second node.
+          // Gateway process. Even a response claiming upstream rejection,
+          // unsupported, or rate-limiting may be stale, malformed, or emitted
+          // after a proxy/upstream write. Only GatewayNetworkUnsupported below
+          // is a local pre-request fact; every answered error therefore remains
+          // unknown and must reconcile by hash instead of becoming a terminal
+          // failure or submitting the same bytes to a second node.
           return const BroadcastOutcome.unknown('Gateway response unavailable');
         } on GatewayNetworkUnsupported {
           // Local/health-manifest preflight: no HTTP request was made, so the
