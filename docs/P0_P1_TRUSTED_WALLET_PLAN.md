@@ -2,7 +2,7 @@
 
 更新日期：2026-08-05
 
-当前 Gateway 源码版本 1.16.24；当前生产 Gateway 1.16.23。生产 Gateway-first 链身份、
+当前 Gateway 源码版本 1.16.24；当前生产 Gateway 1.16.24。生产 Gateway-first 链身份、
 TRON/Solana/EVM 余额与 Portfolio 身份、Solana 交易终态、EVM 动态手续费及签名前预执行回包严格解析均已启用。
 
 ## 目标与边界
@@ -2070,3 +2070,22 @@ SHA-256 `e477b5e0…23dab` 已按 secondary → primary 发布到
 分别通过单层/双层身份绑定；监控 3/3 targets UP、17/17 规则健康、0 firing、
 Alertmanager 0 active，发布后双实例 warning+ 为 0。保留 1.16.22 release 原子回滚；
 本项没有私钥、签名或广播，也不以无关 UI 截图替代协议证据。
+
+2026-08-05 继续闭合账户历史 Gateway 回包身份。旧 App 会接受属于另一 network/owner
+的历史页，并把未知或畸形行静默跳过后展示剩余部分；旧服务端结果也没有重复请求身份。
+失败优先测试先复现跨账户/跨网络接受与部分页误报，再修复为：服务端精确返回
+`chain/network/address/status/records`；App 绑定 resolved network、查询 owner、页面上限
+与每一行的规范 hash/signature、方向账户、uint amount、decimals、symbol、Token 身份、
+时间和状态。未知字段、重复 ID、跨账户、超限页或任一坏行会拒绝整页，`unsupported`
+必须携带空 records；共享缓存升级为 `history-v2`，滚动期间不会信任旧的无身份数据。
+Gateway Client 49/49、Services 37/37、Network 19/19、KT Wallet 1611/1611（另有 10 项
+显式线上/设备测试默认跳过）、KT Cold Signer 570/570、Gateway 普通/race/vet、静态分析
+与远程安全边界通过。生产严格 App 客户端 5/5，其中 BNB 公开地址返回两条被逐行绑定的
+真实历史。Gateway 1.16.24 静态制品 8,900,770 bytes / SHA-256
+`4b263940a0ca344ef6479db464efde02ee39799132cad7def92d66adab38d164` 已发布到
+`20260804T154939Z-2fd0083-v1.16.24-history-binding`；8118/8119/8120 与公网均为
+1.16.24、16 网络且 ready。部署时发现宿主机 Docker 恢复会连带等待 Gateway，现两个
+systemd unit 已移除 Docker 启动依赖，Redis 不可用时继续按既有 bounded local fallback
+启动；公开路径仍为 FluxGate → HAProxy 8118 → 8119/8120。Prometheus 恢复后 3/3
+targets UP、17 条规则 0 firing、Alertmanager 0 active，发布后双实例 warning+ 为 0。
+本项没有加载私钥、签名或广播，也不以无关 UI 截图替代协议证据。

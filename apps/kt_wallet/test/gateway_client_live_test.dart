@@ -87,4 +87,33 @@ void main() {
     },
     skip: enabled ? false : 'set KT_LIVE_GATEWAY_CLIENT=1 for live evidence',
   );
+
+  test(
+    'production BNB history binds every row to the exact public owner',
+    () async {
+      const publicOwner = '0xb787f3c2f96403b5a73dc66de68e4a6395d4e632';
+      final client = GatewayClient(
+        baseUrl: baseUrl,
+        networks: (_) => 'bnb-mainnet',
+      );
+
+      final history = await client.getHistory(
+        chain: Coin.bnb,
+        address: publicOwner,
+        limit: 2,
+      );
+
+      expect(history.unsupported, isFalse);
+      expect(history.records, isNotEmpty);
+      for (final record in history.records) {
+        expect(record.id, isNotEmpty);
+        expect(record.hash, isNotEmpty);
+        expect(record.amountRaw, isNotNull);
+        expect(record.decimals, isNotNull);
+        expect(record.symbol, isNotNull);
+      }
+      client.close();
+    },
+    skip: enabled ? false : 'set KT_LIVE_GATEWAY_CLIENT=1 for live evidence',
+  );
 }

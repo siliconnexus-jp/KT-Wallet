@@ -22,10 +22,10 @@ The project is licensed under [MPL-2.0](LICENSE).
 |---|---:|---|
 | KT Wallet | `1.0.0+1` | Controlled public-beta builds; App Store and Play Store listings are not yet public |
 | KT Cold Signer | `1.0.0+1` | Controlled public-beta builds; source build is available for dedicated offline devices |
-| KT Gateway | `1.16.23` | Production service at `https://gateway.kt-wallet.com` |
+| KT Gateway | `1.16.24` | Production service at `https://gateway.kt-wallet.com` |
 
-Gateway source version: `1.16.24` (release candidate; production remains
-`1.16.23` until the history response-binding rollout completes).
+Gateway source version: `1.16.24`. The same version was deployed to both
+production instances on 2026-08-05 after the history response-binding gate.
 
 Until signed store releases are published, build both apps from this repository
 and do not install APK or IPA files from unofficial mirrors. Start with
@@ -41,7 +41,7 @@ as pending until official store artifacts are available.
 
 | Evidence area | Current state | What it means |
 |---|---|---|
-| Reproducible source gate | Passed on 2026-08-04 | Static analysis, Flutter/package tests, Gateway tests, secret checks, dependency locks, checksums, and OSV scans passed for the revision described below |
+| Reproducible source gate | Passed on 2026-08-05 | Static analysis, Flutter/package tests, Gateway tests, secret checks, dependency locks, checksums, and OSV scans passed for the revision described below |
 | iOS native lifecycle tests | Passed on one retained simulator | Scene privacy and native bridge regressions are covered, but simulator evidence does not replace physical-device testing |
 | Android and iOS physical devices | In progress | Biometrics, camera QR, lifecycle privacy, accessibility, recovery, and deletion still need the complete device matrix |
 | Current-batch chain evidence | Partial | Implemented chains and transaction families are listed below; remaining live-network evidence is tracked explicitly and is never inferred from mocks |
@@ -357,7 +357,7 @@ unattended Pending poll retries with a bounded 1×/2×/4×/8× delay instead of
 silently stopping. These controls improve responsiveness without treating stale
 cache or unknown chain evidence as a successful result.
 
-Gateway `1.16.23` currently exposes 16 mainnet/testnet network profiles. It uses
+Gateway `1.16.24` currently exposes 16 mainnet/testnet network profiles. It uses
 bounded upstream failover and circuit breakers, plus short caches for prices
 (30 seconds), display balances (10 seconds), and history (5 seconds). Pending
 nonces, spendable balances, simulations, and transaction-status checks are not
@@ -398,6 +398,13 @@ queried owner. A malformed, duplicated, additive, cross-wallet, or oversized
 page is rejected in full and falls back to the chain source; it is never
 partially displayed. The `history-v2` cache namespace isolates older unbound
 entries during a rolling release.
+
+The public production path remains FluxGate → HAProxy on loopback port 8118 →
+the two Gateway instances on 8119/8120. The Gateway systemd units do not wait
+for Docker or Redis to start: if Redis is unavailable, the documented bounded
+local cache remains available and both Gateway instances can still start.
+HAProxy, Prometheus, Alertmanager, and Redis remain containerized and are
+monitored separately.
 
 The Gateway receives the public address, network, and public contract/mint
 needed for a requested lookup. Recovery phrases, private keys, signatures, raw
