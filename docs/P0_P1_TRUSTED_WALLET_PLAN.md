@@ -2,8 +2,8 @@
 
 更新日期：2026-08-04
 
-当前 Gateway 源码版本 1.16.17；当前生产 Gateway 1.16.17。2026-08-04 已完成 secondary → primary
-滚动部署，生产 Gateway-first 链身份与 TRON/Solana 余额严格解析均已启用。
+当前 Gateway 源码版本 1.16.18；当前生产 Gateway 1.16.17。生产 Gateway-first 链身份与
+TRON/Solana 余额严格解析均已启用；源码候选继续闭合 EVM 金融响应，尚未部署。
 
 ## 目标与边界
 
@@ -352,6 +352,15 @@
   聚合溢出整体失败闭合。旧实现接受的 10 类 native 歧义与 13 类 Token 身份/金额歧义
   现全部拒绝；当前官方形态、合法聚合与非法请求出网前拒绝通过，Gateway 全量、关键包
   race、vet、固定 govulncheck 与全部 ops 门禁通过。该项已随 Gateway 1.16.17 上线。
+- [x] 2026-08-04 继续审阅 EVM 资产首页与预签余额。旧 `hexToBig` 同时解码 JSON-RPC
+  quantity 和 ABI DATA，会接受空 `0x`、缺少/大写前缀、前导零、负数样式、超过
+  uint256 的 native balance，以及空、短、31/33-byte 或无前缀的 ERC-20 `balanceOf`
+  返回；空合约返回甚至会被当成可信余额 0。红测证明旧实现错误接受 6 类 native 和
+  6 类 Token 回包，4 类非法 holder/contract/block-tag 还会出网。现 native/nonce/gas
+  等 quantity 只接受规范 `0x`、无前导零、最多 256-bit；`balanceOf` 必须恰好返回一个
+  32-byte ABI uint256，任何其他形态成为显式 Token availability error。余额请求在出网
+  前校验 20-byte 地址与 `latest/pending` tag。合法边界值、handler 失败闭合与真实 Ethereum
+  主网 native + USDC 只读 smoke 均通过。该项属于 Gateway 1.16.18 源码候选，尚未部署。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。

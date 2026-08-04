@@ -40,7 +40,7 @@ curl -s localhost:8080/rpc -d '{"jsonrpc":"2.0","id":1,"method":"kt_health"}'
 curl -s localhost:8080/healthz
 curl -s localhost:8080/readyz
 curl -s -H "Authorization: Bearer $METRICS_BEARER_TOKEN" localhost:8080/metrics
-# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.17"}}
+# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.18"}}
 ```
 
 ## Environment
@@ -560,6 +560,16 @@ valid public key, be owned by the legacy Token Program or Token-2022, and bind
 the returned mint and owner to the request. Raw amount, decimals and canonical
 UI amount must agree, and duplicate accounts or an overflowing aggregate are
 rejected rather than counted as a valid balance.
+
+EVM financial responses use separate wire formats and are never decoded by a
+shared permissive hex parser. Native balances, nonces, gas values and fee
+quantities must be canonical `0x`-prefixed JSON-RPC quantities with no leading
+zero and at most 256 bits. ERC-20 `balanceOf` must return exactly one 32-byte
+ABI `uint256` word; an empty, short, overlong, unprefixed or malformed result
+is an explicit per-token availability error and is never trusted as zero.
+Balance holders/contracts must be 20-byte EVM addresses and current balance
+reads are restricted to the reviewed `latest` or `pending` tags before any
+network request.
 
 ### `kt_getPrices` `{"symbols": ["ETH","POL","AVAX","TRX","SOL","USDT","USDC","BUSD"]}`
 

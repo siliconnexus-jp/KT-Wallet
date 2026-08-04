@@ -39,7 +39,7 @@ func TestEVMBalancesGolden(t *testing.T) {
 	node := newRPCFake(t)
 	scriptEVMBalances(node, map[string]string{
 		evmTokenA: "0x00000000000000000000000000000000000000000000000000000000000f4240", // 1_000_000
-		evmTokenB: "0x",                                                                 // empty return == zero
+		evmTokenB: "0x0000000000000000000000000000000000000000000000000000000000000000", // zero
 	})
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.EthURLs = []string{node.srv.URL} })
 
@@ -118,7 +118,7 @@ func TestPolygonNativeSymbol(t *testing.T) {
 func TestBNBBalancesUseDedicatedChain(t *testing.T) {
 	node := newRPCFake(t)
 	scriptEVMBalances(node, map[string]string{
-		"0xe9e7cea3dedca5984780bafc599bd69add087d56": "0x64",
+		"0xe9e7cea3dedca5984780bafc599bd69add087d56": "0x0000000000000000000000000000000000000000000000000000000000000064",
 	})
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.BNBURLs = []string{node.srv.URL} })
 	resp := e.rpc("kt_getBalances", balancesParams("bnb", evmSelf,
@@ -158,6 +158,19 @@ func TestEVMPerTokenErrorIsolation(t *testing.T) {
 	}
 }
 
+func TestEVMMalformedTokenBalanceIsNeverReportedAsZero(t *testing.T) {
+	node := newRPCFake(t)
+	scriptEVMBalances(node, map[string]string{evmTokenA: "0x"})
+	e := newEnv(t, func(cfg *handlers.Config) { cfg.EthURLs = []string{node.srv.URL} })
+
+	res := result(t, e.rpc("kt_getBalances", balancesParams("eth", evmSelf,
+		fmt.Sprintf(`[{"contract":%q,"decimals":6,"symbol":"BAD"}]`, evmTokenA))))
+	token := res["tokens"].([]any)[0].(map[string]any)
+	if token["raw"] != "0" || token["error"] != "token balance temporarily unavailable" {
+		t.Fatalf("malformed balanceOf result must be an explicit error, not a trusted zero: %v", token)
+	}
+}
+
 func TestEVMBalancesNativeFailureFailsCall(t *testing.T) {
 	node := newRPCFake(t)
 	node.nodeError("eth_getBalance", -32000, "header not found")
@@ -166,6 +179,17 @@ func TestEVMBalancesNativeFailureFailsCall(t *testing.T) {
 	errObj := assertErrCode(t, resp, rpc.CodeUpstream)
 	if d := errData(t, errObj); d["message"] != "upstream rejected request" {
 		t.Fatalf("untrusted node message must be normalized: %v", d)
+	}
+}
+
+func TestEVMMalformedNativeBalanceFailsCallInsteadOfReportingZero(t *testing.T) {
+	node := newRPCFake(t)
+	node.result("eth_getBalance", "0x00")
+	e := newEnv(t, func(cfg *handlers.Config) { cfg.EthURLs = []string{node.srv.URL} })
+	resp := e.rpc("kt_getBalances", balancesParams("eth", evmSelf, ""))
+	errObj := assertErrCode(t, resp, rpc.CodeUpstream)
+	if d := errData(t, errObj); d["message"] != "upstream temporarily unavailable" {
+		t.Fatalf("malformed native balance must stay a privacy-safe upstream failure: %v", d)
 	}
 }
 

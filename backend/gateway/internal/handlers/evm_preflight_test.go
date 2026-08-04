@@ -131,7 +131,7 @@ func TestEVMSpendableBalancesReadPendingStateWithoutCache(t *testing.T) {
 		}
 		return "0xde0b6b3a7640000", nil
 	})
-	node.result("eth_call", "0x5f5e100")
+	node.result("eth_call", "0x0000000000000000000000000000000000000000000000000000000005f5e100")
 	e := newEnv(t, func(cfg *handlers.Config) {
 		cfg.EthURLs = []string{node.srv.URL}
 	})

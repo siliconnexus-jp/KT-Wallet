@@ -21,6 +21,8 @@ const balanceOfSelector = "0x70a08231"
 var (
 	evmReceiptHashPattern     = regexp.MustCompile(`^0x[0-9a-fA-F]{64}$`)
 	evmReceiptQuantityPattern = regexp.MustCompile(`^0x(?:0|[1-9a-fA-F][0-9a-fA-F]{0,63})$`)
+	evmBalanceAddressPattern  = regexp.MustCompile(`^0x[0-9a-fA-F]{40}$`)
+	evmABIUint256Pattern      = regexp.MustCompile(`^0x[0-9a-fA-F]{64}$`)
 )
 
 // EVM is a JSON-RPC client for an EVM chain, backed by a failover Pool.
@@ -92,6 +94,9 @@ func (e *EVM) GetBalanceAt(
 	ctx context.Context,
 	address, blockTag string,
 ) (*big.Int, error) {
+	if !evmBalanceAddressPattern.MatchString(address) || !validEVMBalanceBlockTag(blockTag) {
+		return nil, &Unavailable{Upstream: e.pool.name, Message: "invalid balance query identity"}
+	}
 	return e.quantity(ctx, "eth_getBalance", address, blockTag)
 }
 
@@ -105,8 +110,17 @@ func (e *EVM) TokenBalanceAt(
 	ctx context.Context,
 	contract, holder, blockTag string,
 ) (*big.Int, error) {
+	if !evmBalanceAddressPattern.MatchString(contract) ||
+		!evmBalanceAddressPattern.MatchString(holder) ||
+		!validEVMBalanceBlockTag(blockTag) {
+		return nil, &Unavailable{Upstream: e.pool.name, Message: "invalid token balance query identity"}
+	}
 	data := balanceOfSelector + strings.Repeat("0", 24) + strings.ToLower(strings.TrimPrefix(holder, "0x"))
-	return e.quantity(ctx, "eth_call", map[string]string{"to": contract, "data": data}, blockTag)
+	raw, err := e.call(ctx, "eth_call", map[string]string{"to": contract, "data": data}, blockTag)
+	if err != nil {
+		return nil, err
+	}
+	return parseABIUint256(raw)
 }
 
 // SimulateTransaction executes the exact unsigned call against a canonical
@@ -282,15 +296,24 @@ func parseQuantity(raw json.RawMessage) (*big.Int, error) {
 }
 
 func hexToBig(s string) (*big.Int, error) {
-	t := strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X")
-	if t == "" {
-		return big.NewInt(0), nil // "0x" — empty eth_call return counts as zero
-	}
-	v, ok := new(big.Int).SetString(t, 16)
-	if !ok {
+	if !evmReceiptQuantityPattern.MatchString(s) {
 		return nil, &Unavailable{Upstream: "evm", Message: "invalid hex quantity"}
 	}
+	v, _ := new(big.Int).SetString(s[2:], 16)
 	return v, nil
+}
+
+func parseABIUint256(raw json.RawMessage) (*big.Int, error) {
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil || !evmABIUint256Pattern.MatchString(value) {
+		return nil, &Unavailable{Upstream: "evm", Message: "invalid ABI uint256 result"}
+	}
+	parsed, _ := new(big.Int).SetString(value[2:], 16)
+	return parsed, nil
+}
+
+func validEVMBalanceBlockTag(value string) bool {
+	return value == "latest" || value == "pending"
 }
 
 func validHexBytes(s string) bool {
