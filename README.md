@@ -22,11 +22,10 @@ The project is licensed under [MPL-2.0](LICENSE).
 |---|---:|---|
 | KT Wallet | `1.0.0+1` | Controlled public-beta builds; App Store and Play Store listings are not yet public |
 | KT Cold Signer | `1.0.0+1` | Controlled public-beta builds; source build is available for dedicated offline devices |
-| KT Gateway | `1.16.24` | Production service at `https://gateway.kt-wallet.com` |
+| KT Gateway | `1.16.25` | Production service at `https://gateway.kt-wallet.com` |
 
-Gateway source version: `1.16.25`. Production remains `1.16.24` until the
-current broadcast response-binding release candidate completes the full audit
-and rolling deployment to both production instances.
+Gateway source version: `1.16.25`. The same version is deployed to both
+production instances behind `https://gateway.kt-wallet.com`.
 
 Until signed store releases are published, build both apps from this repository
 and do not install APK or IPA files from unofficial mirrors. Start with
@@ -358,7 +357,7 @@ unattended Pending poll retries with a bounded 1×/2×/4×/8× delay instead of
 silently stopping. These controls improve responsiveness without treating stale
 cache or unknown chain evidence as a successful result.
 
-Gateway `1.16.24` currently exposes 16 mainnet/testnet network profiles. It uses
+Gateway `1.16.25` currently exposes 16 mainnet/testnet network profiles. It uses
 bounded upstream failover and circuit breakers, plus short caches for prices
 (30 seconds), display balances (10 seconds), and history (5 seconds). Pending
 nonces, spendable balances, simulations, and transaction-status checks are not
@@ -384,6 +383,13 @@ distinct request id per call, so an out-of-order response cannot satisfy a
 different in-flight lookup.
 Broadcasts remain single-shot when this check fails, so an unknown outcome
 cannot trigger an automatic duplicate submission.
+
+Successful broadcast responses repeat and bind the requested chain, resolved
+network, and a canonical transaction identity. EVM and TRON require a 32-byte
+hex hash; Solana requires a canonical Base58-encoded 64-byte signature. The App
+rejects another chain/network, unknown response members, or a malformed node
+identity and keeps the durable local transaction in the honest `unknown` state
+without posting the signed bytes again.
 
 Balance results repeat and bind the exact chain, resolved network, and account
 before any amount reaches the UI. Portfolio rows preserve request order and

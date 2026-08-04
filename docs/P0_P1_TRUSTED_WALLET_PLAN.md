@@ -2,7 +2,7 @@
 
 更新日期：2026-08-05
 
-当前 Gateway 源码版本 1.16.25；当前生产 Gateway 1.16.24。生产 Gateway-first 链身份、
+当前 Gateway 源码版本 1.16.25；当前生产 Gateway 1.16.25。生产 Gateway-first 链身份、
 TRON/Solana/EVM 余额与 Portfolio 身份、Solana 交易终态、EVM 动态手续费及签名前预执行回包严格解析均已启用。
 
 ## 目标与边界
@@ -2089,3 +2089,20 @@ systemd unit 已移除 Docker 启动依赖，Redis 不可用时继续按既有 b
 启动；公开路径仍为 FluxGate → HAProxy 8118 → 8119/8120。Prometheus 恢复后 3/3
 targets UP、17 条规则 0 firing、Alertmanager 0 active，发布后双实例 warning+ 为 0。
 本项没有加载私钥、签名或广播，也不以无关 UI 截图替代协议证据。
+
+2026-08-05 继续闭合广播成功回包。旧 Gateway 会把 EVM 短 hash、Solana 畸形
+signature、TRON 短 txid 及带未知附加字段的成功响应当作已提交；旧 App 只读取
+`txHash`，没有绑定请求 chain/network，也不校验节点返回的交易身份。失败优先测试逐项
+复现后修复为：EVM/TRON 只接受规范 32-byte hex，Solana 只接受规范 Base58 64-byte
+signature；TRON 广播响应使用 duplicate/alias-safe 精确 schema；Gateway 成功与 Redis
+幂等 replay 均返回精确 `chain/network/txHash`；App 绑定 resolved network、精确成员和
+链特定身份。任何畸形、附加、错链或错网络成功响应都保持 `unknown`，不会自动再次提交
+已签名 bytes。Gateway 定向与全量/race/vet/govulncheck/ops、远程安全边界、静态分析、
+源码门禁 12/12 与完整门禁 13/13 通过；KT Wallet 1614/1614（另有 10 项显式线上/
+设备测试默认跳过），KT Cold Signer 570/570，生产严格只读客户端 5/5。Gateway
+1.16.25 静态制品 8,904,866 bytes / SHA-256
+`3054a7d9bdb9124da375288273ce18c5e5228291eee417e05a92763c688cd2a7` 已按 secondary →
+primary 发布到 `20260804T162710Z-26c6887-v1.16.25-broadcast-binding`；8118/8119/8120
+及公网均为 1.16.25、16 网络且 ready。Prometheus 3/3 targets UP、17 条规则 0
+firing、Alertmanager 0 active，发布后双实例 warning+ 为 0。没有使用私钥、签名或
+真实广播探测，因此本项不宣称新增链上交易证据，也不使用无关 UI 截图冒充协议证据。
