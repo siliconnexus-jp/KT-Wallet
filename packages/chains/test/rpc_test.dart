@@ -499,13 +499,20 @@ void main() {
         url: 'x',
         transport: FakeJsonRpc(
           (m, p) => _ok({
-            'value': {'blockhash': 'HASH123', 'lastValidBlockHeight': 100},
+            'context': {'slot': 90},
+            'value': {
+              'blockhash': 'EkSnNWid2cvwEVnVx9aBqawnmiCNiDgp3gUdkDPTKN1N',
+              'lastValidBlockHeight': 100,
+            },
           }),
         ),
       );
-      expect(await rpc.getLatestBlockhash(), 'HASH123');
+      expect(
+        await rpc.getLatestBlockhash(),
+        'EkSnNWid2cvwEVnVx9aBqawnmiCNiDgp3gUdkDPTKN1N',
+      );
       final latest = await rpc.getLatestBlockhashInfo();
-      expect(latest.blockhash, 'HASH123');
+      expect(latest.blockhash, 'EkSnNWid2cvwEVnVx9aBqawnmiCNiDgp3gUdkDPTKN1N');
       expect(latest.lastValidBlockHeight, 100);
     });
 
@@ -531,9 +538,15 @@ void main() {
 
     test('fee and simulation use the exact serialized message', () async {
       final transport = FakeJsonRpc((method, params) {
-        if (method == 'getFeeForMessage') return _ok({'value': 5000});
+        if (method == 'getFeeForMessage') {
+          return _ok({
+            'context': {'slot': 5068},
+            'value': 5000,
+          });
+        }
         if (method == 'simulateTransaction') {
           return _ok({
+            'context': {'slot': 5068},
             'value': {'err': null, 'unitsConsumed': 500},
           });
         }
@@ -560,10 +573,18 @@ void main() {
             'addresses': ['fee-payer'],
           });
           return _ok({
+            'context': {'slot': 5068},
             'value': {
               'err': null,
               'accounts': [
-                {'lamports': 12345},
+                {
+                  'data': ['', 'base64'],
+                  'executable': false,
+                  'lamports': 12345,
+                  'owner': '11111111111111111111111111111111',
+                  'rentEpoch': 0,
+                  'space': 0,
+                },
               ],
               'unitsConsumed': 721,
             },
@@ -587,6 +608,7 @@ void main() {
           url: 'x',
           transport: FakeJsonRpc(
             (method, params) => _ok({
+              'context': {'slot': 5068},
               'value': {'err': null, 'accounts': null},
             }),
           ),
@@ -599,6 +621,109 @@ void main() {
           ),
           throwsA(isA<RpcException>()),
         );
+      },
+    );
+
+    test(
+      'pre-signing RPC results reject ambiguous or inconsistent shapes',
+      () async {
+        final scenarios = <(String, Future<void> Function(SolanaRpc), Object?)>[
+          (
+            'blockhash missing context',
+            (rpc) async => rpc.getLatestBlockhashInfo(),
+            {
+              'value': {
+                'blockhash': 'EkSnNWid2cvwEVnVx9aBqawnmiCNiDgp3gUdkDPTKN1N',
+                'lastValidBlockHeight': 3090,
+              },
+            },
+          ),
+          (
+            'blockhash unknown value member',
+            (rpc) async => rpc.getLatestBlockhashInfo(),
+            {
+              'context': {'slot': 2792},
+              'value': {
+                'blockhash': 'EkSnNWid2cvwEVnVx9aBqawnmiCNiDgp3gUdkDPTKN1N',
+                'lastValidBlockHeight': 3090,
+                'valid': true,
+              },
+            },
+          ),
+          (
+            'invalid blockhash identity',
+            (rpc) async => rpc.getLatestBlockhashInfo(),
+            {
+              'context': {'slot': 2792},
+              'value': {'blockhash': 'HASH123', 'lastValidBlockHeight': 3090},
+            },
+          ),
+          (
+            'negative last valid height',
+            (rpc) async => rpc.getLatestBlockhashInfo(),
+            {
+              'context': {'slot': 2792},
+              'value': {
+                'blockhash': 'EkSnNWid2cvwEVnVx9aBqawnmiCNiDgp3gUdkDPTKN1N',
+                'lastValidBlockHeight': -1,
+              },
+            },
+          ),
+          (
+            'fee missing context',
+            (rpc) async => rpc.getFeeForMessage(Uint8List.fromList([1])),
+            {'value': 5000},
+          ),
+          (
+            'negative fee',
+            (rpc) async => rpc.getFeeForMessage(Uint8List.fromList([1])),
+            {
+              'context': {'slot': 5068},
+              'value': -1,
+            },
+          ),
+          (
+            'simulation missing context',
+            (rpc) async => rpc.simulateMessage(Uint8List.fromList([1])),
+            {
+              'value': {'err': null},
+            },
+          ),
+          (
+            'simulation unknown value member',
+            (rpc) async => rpc.simulateMessage(Uint8List.fromList([1])),
+            {
+              'context': {'slot': 393226680},
+              'value': {'err': null, 'trusted': true},
+            },
+          ),
+          (
+            'simulation contradicts fixed blockhash request',
+            (rpc) async => rpc.simulateMessage(Uint8List.fromList([1])),
+            {
+              'context': {'slot': 393226680},
+              'value': {
+                'err': null,
+                'replacementBlockhash': {
+                  'blockhash': '6oFLsE7kmgJx9PjR4R63VRNtpAVJ648gCTr3nq5Hihit',
+                  'lastValidBlockHeight': 381186895,
+                },
+              },
+            },
+          ),
+        ];
+
+        for (final (name, invoke, response) in scenarios) {
+          final rpc = SolanaRpc(
+            url: 'x',
+            transport: FakeJsonRpc((method, params) => _ok(response)),
+          );
+          await expectLater(
+            invoke(rpc),
+            throwsA(isA<RpcException>()),
+            reason: name,
+          );
+        }
       },
     );
   });

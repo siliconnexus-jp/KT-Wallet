@@ -1,0 +1,50 @@
+import 'dart:io';
+
+import 'package:chains/chains.dart';
+import 'package:chains/rpc.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kt_wallet/src/rpc/http_transport.dart';
+
+void main() {
+  final live = Platform.environment['KT_LIVE_SOLANA_PREFLIGHT'] == '1';
+
+  test(
+    'official Solana Devnet blockhash fee and simulation match strict schema',
+    () async {
+      final transport = HttpJsonRpcTransport(
+        timeout: const Duration(seconds: 20),
+      );
+      addTearDown(transport.close);
+      final rpc = SolanaRpc(
+        url: 'https://api.devnet.solana.com',
+        transport: transport,
+      );
+
+      final latest = await rpc.getLatestBlockhashInfo();
+      expect(latest.lastValidBlockHeight, greaterThan(0));
+
+      // Public account used only to build a read-only, unsigned simulation.
+      // No private key is loaded and sendTransaction is never called.
+      const payer = '47eFuHR9ste9kopiJ9eRxcwahmE62JovbKe5r7AjANut';
+      const recipient = 'GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB';
+      final message = SolanaMessage.systemTransfer(
+        from: payer,
+        to: recipient,
+        lamports: BigInt.zero,
+        recentBlockhash: latest.blockhash,
+      ).serialize();
+
+      final fee = await rpc.getFeeForMessage(message);
+      expect(fee, greaterThan(BigInt.zero));
+      final simulated = await rpc.simulateMessage(
+        message,
+        accountAddresses: const [payer],
+      );
+      expect(simulated.accountLamports[payer], greaterThan(BigInt.zero));
+      expect(simulated.feeLamports, fee);
+      expect(simulated.unitsConsumed, isNotNull);
+    },
+    skip: live ? false : 'set KT_LIVE_SOLANA_PREFLIGHT=1',
+    timeout: const Timeout(Duration(seconds: 60)),
+  );
+}

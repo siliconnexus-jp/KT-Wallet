@@ -110,6 +110,39 @@ void main() {
     }
   });
 
+  test('JSON-RPC responses reject duplicate aliases and unknown members', () async {
+    final ambiguous = <String>[
+      '{"jsonrpc":"2.0","id":1,"result":"0x1","result":"0x2"}',
+      '{"jsonrpc":"2.0","id":2,"id":1,"result":"0x1"}',
+      '{"jsonrpc":"2.0","id":1,"result":"0x1","re\\u0073ult":"0x2"}',
+      '{"jsonrpc":"2.0","id":1,"result":"0x1","Result":"0x2"}',
+      '{"jsonrpc":"2.0","id":1,"result":"0x1","provider":"node-a"}',
+      '{"jsonrpc":"2.0","id":1,"error":{"code":-1,"code":-2,"message":"bad"}}',
+      '{"jsonrpc":"2.0","id":1,"error":{"code":-1,"message":"bad","Message":"override"}}',
+      '{"jsonrpc":"2.0","id":1,"error":{"code":-1,"message":"bad","provider":"node-a"}}',
+      '{"jsonrpc":"2.0","id":1,"result":{"value":1,"value":2}}',
+    ];
+
+    for (final response in ambiguous) {
+      final transport = HttpJsonRpcTransport(
+        client: MockClient((_) async => http.Response(response, 200)),
+      );
+      addTearDown(transport.close);
+
+      await expectLater(
+        transport.post('https://rpc.example', _rpc('eth_getBalance')),
+        throwsA(
+          isA<RpcException>().having(
+            (error) => error.message,
+            'bounded public error',
+            'malformed JSON-RPC response',
+          ),
+        ),
+        reason: response,
+      );
+    }
+  });
+
   test(
     'JSON-RPC envelope accepts matching string ids and null results',
     () async {

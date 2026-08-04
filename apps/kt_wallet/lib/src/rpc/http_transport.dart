@@ -132,7 +132,7 @@ class HttpJsonRpcTransport implements JsonRpcTransport {
       if (resp.statusCode != 200) {
         throw RpcException('HTTP ${resp.statusCode}', code: resp.statusCode);
       }
-      return _validatedJsonRpcResponse(body, jsonDecode(resp.body));
+      return _decodeValidatedJsonRpcResponse(body, resp.body);
     } on RpcException {
       rethrow;
     } on Object {
@@ -166,7 +166,7 @@ class HttpJsonRpcTransport implements JsonRpcTransport {
         if (resp.statusCode != 200) {
           throw RpcException('HTTP ${resp.statusCode}', code: resp.statusCode);
         }
-        final decoded = _validatedJsonRpcResponse(body, jsonDecode(resp.body));
+        final decoded = _decodeValidatedJsonRpcResponse(body, resp.body);
         if (_retryableRpcError(decoded) && candidate != _last(url)) {
           continue;
         }
@@ -203,10 +203,7 @@ class HttpJsonRpcTransport implements JsonRpcTransport {
           )
           .timeout(timeout);
       if (response.statusCode != 200) return false;
-      final decoded = _validatedJsonRpcResponse(
-        body,
-        jsonDecode(response.body),
-      );
+      final decoded = _decodeValidatedJsonRpcResponse(body, response.body);
       if (decoded is! Map || decoded.containsKey('error')) return false;
       final result = decoded['result'];
       if (evmChainId != null) {
@@ -394,6 +391,16 @@ Object _validatedJsonRpcResponse(Object request, Object? response) {
     throw RpcException('malformed JSON-RPC response');
   }
   return response!;
+}
+
+Object _decodeValidatedJsonRpcResponse(Object request, String responseBody) {
+  Object? decoded;
+  try {
+    decoded = decodeJsonWithoutDuplicateKeys(responseBody);
+  } on Object {
+    throw RpcException('malformed JSON-RPC response');
+  }
+  return _validatedJsonRpcResponse(request, decoded);
 }
 
 bool _retryableRpcError(Object? body) {

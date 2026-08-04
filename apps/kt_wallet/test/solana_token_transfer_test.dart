@@ -20,9 +20,13 @@ const _blockhash = 'DzfXchZJoLMG3cNftcf2sw7qatkkuwQf4xH15N5wkKAb';
 const _genesisHash = 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG';
 
 class _SolanaTransport implements JsonRpcTransport {
-  _SolanaTransport({this.recipientAtaExists = false});
+  _SolanaTransport({
+    this.recipientAtaExists = false,
+    this.simulationFee = 5000,
+  });
 
   final bool recipientAtaExists;
+  final int? simulationFee;
   Uint8List? simulatedMessage;
   Map<Object?, Object?>? simulationConfig;
 
@@ -38,6 +42,7 @@ class _SolanaTransport implements JsonRpcTransport {
         break;
       case 'getLatestBlockhash':
         result = {
+          'context': {'slot': 123000},
           'value': {'blockhash': _blockhash, 'lastValidBlockHeight': 123456},
         };
         break;
@@ -82,7 +87,10 @@ class _SolanaTransport implements JsonRpcTransport {
         };
         break;
       case 'getFeeForMessage':
-        result = {'value': 5000};
+        result = {
+          'context': {'slot': 123000},
+          'value': 5000,
+        };
         break;
       case 'getBalance':
         result = {'value': 100000000};
@@ -92,11 +100,20 @@ class _SolanaTransport implements JsonRpcTransport {
         simulatedMessage = Uint8List.sublistView(wire, 65);
         simulationConfig = params[1] as Map<Object?, Object?>;
         result = {
+          'context': {'slot': 123000},
           'value': {
             'err': null,
+            'fee': simulationFee,
             // 100,000,000 - 5,000 fee - 2,039,280 ATA rent reserve.
             'accounts': [
-              {'lamports': 97955720},
+              {
+                'data': ['', 'base64'],
+                'executable': false,
+                'lamports': 97955720,
+                'owner': '11111111111111111111111111111111',
+                'rentEpoch': 0,
+                'space': 0,
+              },
             ],
             'unitsConsumed': 24100,
           },
@@ -338,4 +355,33 @@ void main() {
       );
     },
   );
+
+  test('preparation rejects a simulation fee that contradicts quote', () async {
+    final service = LocalTransferService(
+      endpoints: (_) => 'https://solana.test',
+      jsonRpcTransport: _SolanaTransport(simulationFee: 5001),
+    );
+
+    await expectLater(
+      service.prepareSolana(
+        draft: TransferDraft(
+          symbol: 'SOL',
+          networkLabel: 'Solana',
+          chain: Chain.solana,
+          recipient: _recipient,
+          amount: Amount.parse('0.001', 9, symbol: 'SOL'),
+          feeTier: 1,
+        ),
+        from: _owner,
+        expectedNetworkIdentity: _genesisHash,
+      ),
+      throwsA(
+        isA<LocalTransferException>().having(
+          (error) => error.message,
+          'message',
+          contains('inconsistent network fee'),
+        ),
+      ),
+    );
+  });
 }

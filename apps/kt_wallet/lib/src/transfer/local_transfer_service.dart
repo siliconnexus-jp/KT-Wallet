@@ -797,6 +797,11 @@ class LocalTransferService {
       serialized,
       accountAddresses: [from],
     );
+    if (simulation.feeLamports == null || simulation.feeLamports != fee) {
+      throw const LocalTransferException(
+        'Solana simulation returned an inconsistent network fee',
+      );
+    }
     final postBalance = simulation.accountLamports[from];
     if (postBalance == null || postBalance > solBalance) {
       throw const LocalTransferException(

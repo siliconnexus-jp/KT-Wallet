@@ -1931,3 +1931,16 @@ KT Cold Signer 全量 568/568。真实 Wallet Core Android Release APK 重新构
 `259cbf56fab2adaea638816a2ebbf1ba31a58f45db8200409f004538fe47ba1b`；制品门禁核对
 三 ABI、包名、权限、SQLite 3.53.3、无演示/Mock/本地 E2E 助记词及 provider 凭证。
 APK 仍未签名，不能描述为可分发制品。
+
+2026-08-04 移动端直连 RPC 信任边界继续闭合：此前 Dart JSON 解码会保留重复成员的
+最后一个值，且响应/error 的未知字段未被拒绝；Solana 预签也没有闭合校验官方模拟返回
+中的 context、账户结构、手续费和扩展余额字段。现统一在解码前递归扫描重复键（包含
+Unicode 转义后的同名键），主节点、备用节点和链身份探针只接受精确 JSON-RPC 字段。
+Solana blockhash、lastValidBlockHeight、fee、simulation account、前后余额、Token 余额、
+loaded addresses、日志和 compute units 均有有界类型/身份校验；模拟手续费必须与同一消息
+的 `getFeeForMessage` 完全相等，否则在原生签名前失败。重复 result/id/error、大小写或
+转义别名、未知字段、9 类 Solana 歧义/矛盾回包和手续费冲突均以红测复现后转绿；官方
+Solana Devnet 的真实 blockhash、fee 与未签名 simulation 只读测试通过，未加载私钥且未
+调用广播。最终 KT Wallet 1562/1562、KT Cold Signer 570/570、共享 packages 426/426、
+静态分析 0、完整公开门禁 13/13；本轮没有 Gateway 源码变更，也没有生成新的移动端签名
+制品，仍不替代物理设备、真实广播或正式签名发布验收。
