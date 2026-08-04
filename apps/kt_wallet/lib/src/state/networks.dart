@@ -4,7 +4,65 @@ import 'package:chains/chains.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../rpc/json_rpc_envelope.dart';
 import 'endpoint_policy.dart';
+
+const _networkSnapshotMembers = {
+  'version',
+  'environment',
+  'custom',
+  'overrides',
+};
+const _networkRequiredMembers = {
+  'id',
+  'chain',
+  'name',
+  'rpcUrl',
+  'symbol',
+  'isTestnet',
+};
+const _networkAllowedMembers = {
+  ..._networkRequiredMembers,
+  'evmChainId',
+  'networkIdentity',
+  'explorerUrl',
+  'faucetUrl',
+};
+
+bool _hasExactStringMembers(
+  Map<String, Object?> value, {
+  required Set<String> required,
+  required Set<String> allowed,
+}) =>
+    required.every(value.containsKey) &&
+    value.keys.every(allowed.contains) &&
+    value.length >= required.length &&
+    value.length <= allowed.length;
+
+bool _isVisibleBoundedText(String value, int maxRunes) {
+  if (value.isEmpty || value.runes.length > maxRunes) return false;
+  for (final rune in value.runes) {
+    if (rune < 0x20 ||
+        rune == 0x7f ||
+        (rune >= 0x200b && rune <= 0x200f) ||
+        (rune >= 0x202a && rune <= 0x202e) ||
+        (rune >= 0x2060 && rune <= 0x206f) ||
+        rune == 0xfeff) {
+      return false;
+    }
+  }
+  return true;
+}
+
+Map<String, Object?>? _stringObject(Object? value) {
+  if (value is! Map) return null;
+  final out = <String, Object?>{};
+  for (final entry in value.entries) {
+    if (entry.key is! String) return null;
+    out[entry.key as String] = entry.value;
+  }
+  return out;
+}
 
 bool _isEvmChain(Chain chain) => chain != Chain.tron && chain != Chain.solana;
 
@@ -77,6 +135,12 @@ class Network {
   /// Built-ins cannot be deleted; custom networks can.
   final bool builtin;
 
+  static const maxIdChars = 64;
+  static const maxNameRunes = 80;
+  static const maxSymbolChars = 16;
+  static const maxNetworkIdentityChars = 128;
+  static const maxEvmChainId = 2147483647;
+
   Map<String, Object?> toJson() => {
     'id': id,
     'chain': chain.name,
@@ -91,6 +155,13 @@ class Network {
   };
 
   static Network? fromJson(Map<String, Object?> m) {
+    if (!_hasExactStringMembers(
+      m,
+      required: _networkRequiredMembers,
+      allowed: _networkAllowedMembers,
+    )) {
+      return null;
+    }
     final chainName = m['chain'];
     final chain = Chain.values.where((c) => c.name == chainName).firstOrNull;
     final id = m['id'];
@@ -104,13 +175,31 @@ class Network {
         name is! String ||
         rpcUrl is! String ||
         symbol is! String ||
-        id.isEmpty ||
-        name.trim().isEmpty ||
-        symbol.trim().isEmpty ||
+        !RegExp(r'^custom-[A-Za-z0-9][A-Za-z0-9._-]{0,56}$').hasMatch(id) ||
+        id.length > maxIdChars ||
+        name != name.trim() ||
+        !_isVisibleBoundedText(name, maxNameRunes) ||
+        symbol != symbol.trim().toUpperCase() ||
+        symbol.length > maxSymbolChars ||
+        !RegExp(r'^[A-Z0-9][A-Z0-9._-]*$').hasMatch(symbol) ||
+        m['isTestnet'] is! bool ||
+        rpcUrl.length > EndpointPolicy.maxUrlChars ||
         !EndpointPolicy.isSafeUrl(rpcUrl) ||
         (evmChainId != null && evmChainId is! int) ||
         (networkIdentity != null && networkIdentity is! String) ||
-        (_isEvmChain(chain) && (evmChainId is! int || evmChainId <= 0)) ||
+        (networkIdentity is String &&
+            (networkIdentity.length > maxNetworkIdentityChars ||
+                !_isVisibleBoundedText(
+                  networkIdentity,
+                  maxNetworkIdentityChars,
+                ))) ||
+        (_isEvmChain(chain) &&
+            (evmChainId is! int ||
+                evmChainId <= 0 ||
+                evmChainId > maxEvmChainId ||
+                (networkIdentity != null &&
+                    networkIdentity != '$evmChainId'))) ||
+        (!_isEvmChain(chain) && evmChainId != null) ||
         (!_isEvmChain(chain) &&
             (networkIdentity is! String ||
                 !_isValidNetworkIdentity(chain, networkIdentity)))) {
@@ -118,12 +207,16 @@ class Network {
     }
     final explorerUrl = m['explorerUrl'];
     if (explorerUrl != null &&
-        (explorerUrl is! String || !EndpointPolicy.isSafeUrl(explorerUrl))) {
+        (explorerUrl is! String ||
+            explorerUrl.length > EndpointPolicy.maxUrlChars ||
+            !EndpointPolicy.isSafeUrl(explorerUrl))) {
       return null;
     }
     final faucetUrl = m['faucetUrl'];
     if (faucetUrl != null &&
-        (faucetUrl is! String || !EndpointPolicy.isSafeUrl(faucetUrl))) {
+        (faucetUrl is! String ||
+            faucetUrl.length > EndpointPolicy.maxUrlChars ||
+            !EndpointPolicy.isSafeUrl(faucetUrl))) {
       return null;
     }
     return Network(
@@ -136,7 +229,7 @@ class Network {
       networkIdentity: networkIdentity as String?,
       explorerUrl: explorerUrl as String?,
       faucetUrl: faucetUrl as String?,
-      isTestnet: m['isTestnet'] == true,
+      isTestnet: m['isTestnet'] as bool,
     );
   }
 }
@@ -397,6 +490,8 @@ class NetworkController extends ChangeNotifier {
            preferencesProvider ?? SharedPreferences.getInstance;
 
   static const snapshotKey = 'network.snapshot.v1';
+  static const maxSnapshotChars = 262144;
+  static const maxCustomNetworks = 64;
   static const _keyEnvironment = 'network.environment';
   static const _keyOverrides =
       'network.overrides'; // JSON {chainName: networkId}
@@ -445,13 +540,14 @@ class NetworkController extends ChangeNotifier {
     try {
       final prefs = await _preferencesProvider();
       final hasSnapshot = prefs.containsKey(snapshotKey);
-      final snapshot = _decodeMap(prefs.getString(snapshotKey));
+      final snapshot = _decodeSnapshot(prefs.getString(snapshotKey));
       final legacy = !hasSnapshot;
 
       // Once a snapshot key exists, a corrupt or unsupported snapshot must
       // never fall back to stale legacy keys. Keep the initial safe profile.
+      if (hasSnapshot && snapshot == null) return;
       final envName =
-          snapshot?['environment'] ??
+          snapshot?.environment.name ??
           (legacy ? prefs.getString(_keyEnvironment) : null);
       final nextEnvironment = envName == NetworkEnvironment.testnet.name
           ? NetworkEnvironment.testnet
@@ -459,43 +555,21 @@ class NetworkController extends ChangeNotifier {
           ? NetworkEnvironment.mainnet
           : _environment;
 
-      final customValue =
-          snapshot?['custom'] ??
-          (legacy ? _decodeJson(prefs.getString(_keyCustom)) : null);
-      final nextCustom = <Network>[];
-      if (customValue is List) {
-        for (final value in customValue) {
-          if (value is! Map) continue;
-          final network = Network.fromJson(
-            value.map((key, value) => MapEntry(key.toString(), value)),
-          );
-          if (network != null &&
-              !builtinNetworks.any((item) => item.id == network.id) &&
-              !nextCustom.any((item) => item.id == network.id)) {
-            nextCustom.add(network);
-          }
-        }
-      }
+      final nextCustom =
+          snapshot?.custom ??
+          (legacy
+              ? _decodeLegacyCustom(prefs.getString(_keyCustom))
+              : const <Network>[]);
 
       final knownNetworks = [...builtinNetworks, ...nextCustom];
-      final overrideValue =
-          snapshot?['overrides'] ??
-          (legacy ? _decodeJson(prefs.getString(_keyOverrides)) : null);
-      final nextOverrides = <Chain, String>{};
-      if (overrideValue is Map) {
-        for (final entry in overrideValue.entries) {
-          final chain = Chain.values
-              .where((item) => item.name == entry.key)
-              .firstOrNull;
-          final id = entry.value;
-          final network = id is String
-              ? knownNetworks.where((item) => item.id == id).firstOrNull
-              : null;
-          if (chain != null && network?.chain == chain) {
-            nextOverrides[chain] = id as String;
-          }
-        }
-      }
+      final nextOverrides =
+          snapshot?.overrides ??
+          (legacy
+              ? _decodeLegacyOverrides(
+                  prefs.getString(_keyOverrides),
+                  knownNetworks,
+                )
+              : const <Chain, String>{});
 
       _environment = nextEnvironment;
       _custom
@@ -588,7 +662,9 @@ class NetworkController extends ChangeNotifier {
   }) => _queueMutation(() async {
     final normalizedName = name.trim();
     final normalizedSymbol = symbol.trim().toUpperCase();
-    if (normalizedName.isEmpty || normalizedSymbol.isEmpty) {
+    if (!_isVisibleBoundedText(normalizedName, Network.maxNameRunes) ||
+        normalizedSymbol.length > Network.maxSymbolChars ||
+        !RegExp(r'^[A-Z0-9][A-Z0-9._-]*$').hasMatch(normalizedSymbol)) {
       throw const FormatException('Network name and symbol are required');
     }
     final normalizedRpcUrl = EndpointPolicy.requireSafeUrl(rpcUrl);
@@ -596,11 +672,29 @@ class NetworkController extends ChangeNotifier {
         explorerUrl == null || explorerUrl.trim().isEmpty
         ? null
         : EndpointPolicy.requireSafeUrl(explorerUrl);
-    if (_isEvmChain(chain) && (evmChainId == null || evmChainId <= 0)) {
+    if (_isEvmChain(chain) &&
+        (evmChainId == null ||
+            evmChainId <= 0 ||
+            evmChainId > Network.maxEvmChainId ||
+            (networkIdentity != null && networkIdentity != '$evmChainId'))) {
       throw const FormatException('A positive EVM chain id is required');
+    }
+    if (!_isEvmChain(chain) && evmChainId != null) {
+      throw const FormatException('Non-EVM networks cannot carry a chain id');
     }
     if (!_isValidNetworkIdentity(chain, networkIdentity)) {
       throw const FormatException('A valid network identity is required');
+    }
+    if (networkIdentity != null &&
+        (networkIdentity.length > Network.maxNetworkIdentityChars ||
+            !_isVisibleBoundedText(
+              networkIdentity,
+              Network.maxNetworkIdentityChars,
+            ))) {
+      throw const FormatException('Network identity is invalid');
+    }
+    if (_custom.length >= maxCustomNetworks) {
+      throw StateError('custom network limit reached');
     }
     final network = Network(
       id: 'custom-${DateTime.now().microsecondsSinceEpoch}',
@@ -652,17 +746,22 @@ class NetworkController extends ChangeNotifier {
     required Map<Chain, String> overrides,
   }) async {
     final prefs = await _preferencesProvider();
-    final stored = await prefs.setString(
-      snapshotKey,
-      json.encode({
-        'version': 1,
-        'environment': environment.name,
-        'custom': [for (final network in custom) network.toJson()],
-        'overrides': {
-          for (final entry in overrides.entries) entry.key.name: entry.value,
-        },
-      }),
-    );
+    final customList = custom.toList(growable: false);
+    if (customList.length > maxCustomNetworks) {
+      throw StateError('custom network limit exceeded');
+    }
+    final encoded = json.encode({
+      'version': 1,
+      'environment': environment.name,
+      'custom': [for (final network in customList) network.toJson()],
+      'overrides': {
+        for (final entry in overrides.entries) entry.key.name: entry.value,
+      },
+    });
+    if (encoded.length > maxSnapshotChars) {
+      throw StateError('network snapshot size limit exceeded');
+    }
+    final stored = await prefs.setString(snapshotKey, encoded);
     if (!stored) throw StateError('network preference write failed');
   }
 
@@ -675,17 +774,113 @@ class NetworkController extends ChangeNotifier {
   static Object? _decodeJson(String? source) {
     if (source == null || source.isEmpty) return null;
     try {
-      return json.decode(source);
+      return decodeJsonWithoutDuplicateKeys(source, maxChars: maxSnapshotChars);
     } on FormatException {
       return null;
     }
   }
 
-  static Map<String, Object?>? _decodeMap(String? source) {
-    final value = _decodeJson(source);
-    if (value is! Map || value['version'] != 1) return null;
-    return value.map((key, value) => MapEntry(key.toString(), value));
+  static _NetworkSnapshot? _decodeSnapshot(String? source) {
+    final value = _stringObject(_decodeJson(source));
+    if (value == null ||
+        value['version'] != 1 ||
+        value.keys.toSet().difference(_networkSnapshotMembers).isNotEmpty ||
+        value.length != _networkSnapshotMembers.length) {
+      return null;
+    }
+    final environmentName = value['environment'];
+    final environment = NetworkEnvironment.values
+        .where((item) => item.name == environmentName)
+        .firstOrNull;
+    final customValue = value['custom'];
+    if (environment == null ||
+        customValue is! List ||
+        customValue.length > maxCustomNetworks) {
+      return null;
+    }
+    final custom = <Network>[];
+    final ids = <String>{};
+    for (final candidate in customValue) {
+      final record = _stringObject(candidate);
+      final network = record == null ? null : Network.fromJson(record);
+      if (network == null ||
+          builtinNetworks.any((item) => item.id == network.id) ||
+          !ids.add(network.id)) {
+        return null;
+      }
+      custom.add(network);
+    }
+    final overrides = _decodeOverrides(value['overrides'], [
+      ...builtinNetworks,
+      ...custom,
+    ]);
+    if (overrides == null) return null;
+    return _NetworkSnapshot(
+      environment: environment,
+      custom: List.unmodifiable(custom),
+      overrides: Map.unmodifiable(overrides),
+    );
   }
+
+  static List<Network> _decodeLegacyCustom(String? source) {
+    final value = _decodeJson(source);
+    if (value == null) return const [];
+    if (value is! List || value.length > maxCustomNetworks) return const [];
+    final custom = <Network>[];
+    final ids = <String>{};
+    for (final candidate in value) {
+      final record = _stringObject(candidate);
+      final network = record == null ? null : Network.fromJson(record);
+      if (network == null ||
+          builtinNetworks.any((item) => item.id == network.id) ||
+          !ids.add(network.id)) {
+        return const [];
+      }
+      custom.add(network);
+    }
+    return List.unmodifiable(custom);
+  }
+
+  static Map<Chain, String> _decodeLegacyOverrides(
+    String? source,
+    List<Network> knownNetworks,
+  ) => _decodeOverrides(_decodeJson(source), knownNetworks) ?? const {};
+
+  static Map<Chain, String>? _decodeOverrides(
+    Object? value,
+    List<Network> knownNetworks,
+  ) {
+    if (value is! Map || value.length > Chain.values.length) return null;
+    final overrides = <Chain, String>{};
+    for (final entry in value.entries) {
+      if (entry.key is! String || entry.value is! String) return null;
+      final chain = Chain.values
+          .where((item) => item.name == entry.key)
+          .firstOrNull;
+      final id = entry.value as String;
+      if (chain == null ||
+          id.length > Network.maxIdChars ||
+          !_isVisibleBoundedText(id, Network.maxIdChars)) {
+        return null;
+      }
+      final network = knownNetworks.where((item) => item.id == id).firstOrNull;
+      if (network?.chain != chain) return null;
+      overrides[chain] = id;
+    }
+    return overrides;
+  }
+}
+
+class _NetworkSnapshot {
+  const _NetworkSnapshot({
+    required this.environment,
+    required this.custom,
+    required this.overrides,
+  });
+
+  final NetworkEnvironment environment;
+  final List<Network> custom;
+  final Map<Chain, String> overrides;
 }
 
 /// Exposes the app-wide [NetworkController]; absent scope (gallery/goldens)

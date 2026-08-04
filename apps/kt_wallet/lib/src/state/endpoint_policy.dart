@@ -7,11 +7,17 @@
 final class EndpointPolicy {
   const EndpointPolicy._();
 
+  /// Large enough for ordinary RPC paths and API query parameters, while
+  /// preventing preferences/UI input from turning URL parsing or persistence
+  /// into unbounded local work.
+  static const maxUrlChars = 2048;
+
   /// Returns a trimmed, validated endpoint or throws [FormatException].
   static String requireSafeUrl(String value) {
     final normalized = value.trim();
     final uri = Uri.tryParse(normalized);
     if (normalized.isEmpty ||
+        normalized.length > maxUrlChars ||
         uri == null ||
         !uri.hasAuthority ||
         uri.host.isEmpty ||

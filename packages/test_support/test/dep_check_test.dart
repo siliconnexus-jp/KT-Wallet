@@ -671,6 +671,61 @@ return ChainTxRecord(assetVerified: verified);
     });
   });
 
+  group('network snapshot boundary', () {
+    const network = '''
+static const maxSnapshotChars = 262144;
+static const maxCustomNetworks = 64;
+static const maxEvmChainId = 2147483647;
+final decoded = decodeJsonWithoutDuplicateKeys(
+  source,
+  maxChars: maxSnapshotChars,
+);
+if (value.keys.toSet().difference(_networkSnapshotMembers).isNotEmpty) {}
+final valid = _hasExactStringMembers(
+  record,
+  required: _networkRequiredMembers,
+  allowed: _networkAllowedMembers,
+);
+if (m['isTestnet'] is! bool) return null;
+if (networkIdentity != '\$evmChainId') return null;
+if (hasSnapshot && snapshot == null) return;
+''';
+    const endpoint = '''
+static const maxUrlChars = 2048;
+if (normalized.length > maxUrlChars) throw FormatException();
+''';
+    const settings = '''
+final isEvm = chain != Chain.tron && chain != Chain.solana;
+final valid = typedChainId <= Network.maxEvmChainId;
+''';
+
+    test('accepts closed bounded routing and signing-domain state', () {
+      expect(
+        findNetworkSnapshotBoundaryIssues(network, endpoint, settings),
+        isEmpty,
+      );
+    });
+
+    test('rejects unsafe JSON, mainnet coercion and incomplete EVM UI', () {
+      final issues = findNetworkSnapshotBoundaryIssues(
+        '''
+${network.replaceFirst('decodeJsonWithoutDuplicateKeys(', 'json.decode(source); unused(')}
+final testnet = m['isTestnet'] == true;
+''',
+        endpoint.replaceFirst('normalized.length > maxUrlChars', 'gone'),
+        settings.replaceFirst(
+          'chain != Chain.tron && chain != Chain.solana',
+          'chain == Chain.ethereum || chain == Chain.polygon',
+        ),
+      );
+      expect(issues, contains(contains('does not reject duplicate')));
+      expect(issues, contains(contains('duplicate-unsafe JSON decoder')));
+      expect(issues, contains(contains('silently becomes mainnet')));
+      expect(issues, contains(contains('endpoint length')));
+      expect(issues, contains(contains('every EVM')));
+    });
+  });
+
   group('wallet PIN state boundary', () {
     const safe = '''
 static const maxStoredIterations = 1000000;

@@ -298,4 +298,134 @@ void main() {
     expect(snapshot['custom'], hasLength(1));
     expect(snapshot['overrides'], {'ethereum': custom.id});
   });
+
+  test(
+    'network snapshot rejects ambiguity open schemas partial state and resource abuse',
+    () async {
+      final source = NetworkController();
+      await source.addCustom(
+        chain: Chain.ethereum,
+        name: 'Reviewed custom network',
+        rpcUrl: 'https://rpc.example',
+        symbol: 'ETH',
+        evmChainId: 31337,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      final valid = prefs.getString(NetworkController.snapshotKey)!;
+      final decoded = jsonDecode(valid) as Map<String, dynamic>;
+      final record = ((decoded['custom'] as List).single as Map)
+          .cast<String, Object?>();
+
+      String changed(void Function(Map<String, dynamic>) mutate) {
+        final value = jsonDecode(valid) as Map<String, dynamic>;
+        mutate(value);
+        return jsonEncode(value);
+      }
+
+      final malformed = <String, String>{
+        'duplicate environment': valid.replaceFirst(
+          '"environment":"mainnet"',
+          '"environment":"testnet","environment":"mainnet"',
+        ),
+        'escaped duplicate environment': valid.replaceFirst(
+          '"environment":"mainnet"',
+          '"environment":"testnet","envir\\u006fnment":"mainnet"',
+        ),
+        'unknown top-level member':
+            '${valid.substring(0, valid.length - 1)},"memo":"ignored"}',
+        'unknown custom member': changed((value) {
+          final custom = ((value['custom'] as List).single as Map);
+          custom['memo'] = 'ignored';
+        }),
+        'missing testnet classification': changed((value) {
+          final custom = ((value['custom'] as List).single as Map);
+          custom.remove('isTestnet');
+        }),
+        'non-boolean testnet classification': changed((value) {
+          final custom = ((value['custom'] as List).single as Map);
+          custom['isTestnet'] = 'true';
+        }),
+        'nested duplicate RPC URL': valid.replaceFirst(
+          '"rpcUrl":"https://rpc.example"',
+          '"rpcUrl":"https://evil.example","rpcUrl":"https://rpc.example"',
+        ),
+        'unknown override chain': changed((value) {
+          value['overrides'] = {'unknown': record['id']};
+        }),
+        'one invalid record beside a valid record': changed((value) {
+          value['custom'] = [
+            record,
+            <String, Object?>{
+              ...record,
+              'id': 'custom-invalid',
+              'rpcUrl': 'http://public-rpc.example',
+            },
+          ];
+        }),
+        'too many custom networks': changed((value) {
+          value['custom'] = [
+            for (var i = 0; i < 65; i++)
+              <String, Object?>{...record, 'id': 'custom-$i'},
+          ];
+        }),
+        'unbounded snapshot text': changed((value) {
+          final custom = ((value['custom'] as List).single as Map);
+          custom['name'] = 'x' * 262144;
+        }),
+        'oversized EVM chain id': changed((value) {
+          final custom = ((value['custom'] as List).single as Map);
+          custom['evmChainId'] = 2147483648;
+        }),
+      };
+
+      for (final entry in malformed.entries) {
+        SharedPreferences.setMockInitialValues({
+          NetworkController.snapshotKey: entry.value,
+        });
+        final loaded = NetworkController();
+        await loaded.load();
+        expect(
+          loaded.environment,
+          NetworkEnvironment.mainnet,
+          reason: entry.key,
+        );
+        expect(loaded.customNetworks, isEmpty, reason: entry.key);
+        expect(loaded.activeFor(Chain.ethereum), ethMainnet, reason: entry.key);
+      }
+    },
+  );
+
+  test(
+    'custom network writes enforce the persisted resource contract',
+    () async {
+      final controller = NetworkController();
+      Future<void> add({
+        String name = 'Network',
+        String rpcUrl = 'https://rpc.example',
+        String symbol = 'ETH',
+        int chainId = 31337,
+      }) => controller.addCustom(
+        chain: Chain.ethereum,
+        name: name,
+        rpcUrl: rpcUrl,
+        symbol: symbol,
+        evmChainId: chainId,
+      );
+
+      await expectLater(add(name: 'x' * 81), throwsFormatException);
+      await expectLater(add(symbol: 'X' * 17), throwsFormatException);
+      await expectLater(
+        add(rpcUrl: 'https://example.com/${'x' * 2048}'),
+        throwsFormatException,
+      );
+      await expectLater(add(chainId: 2147483648), throwsFormatException);
+      expect(controller.customNetworks, isEmpty);
+
+      for (var i = 0; i < 64; i++) {
+        await add(name: 'Network $i');
+      }
+      await expectLater(add(name: 'Network 65'), throwsStateError);
+      expect(controller.customNetworks, hasLength(64));
+    },
+  );
 }

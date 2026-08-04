@@ -40,5 +40,12 @@ void main() {
         );
       }
     });
+
+    test('rejects endpoint input beyond the persisted resource limit', () {
+      final url = 'https://rpc.example/${'x' * 2048}';
+      expect(url.length, greaterThan(EndpointPolicy.maxUrlChars));
+      expect(EndpointPolicy.isSafeUrl(url), isFalse);
+      expect(() => EndpointPolicy.requireSafeUrl(url), throwsFormatException);
+    });
   });
 }

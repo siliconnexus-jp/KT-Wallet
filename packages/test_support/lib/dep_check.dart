@@ -1049,6 +1049,62 @@ List<String> findWalletDisplaySnapshotBoundaryIssues(
   return issues;
 }
 
+/// Keeps persisted custom networks from becoming an ambiguous or unbounded
+/// source of RPC routing and EVM signing-domain authority.
+List<String> findNetworkSnapshotBoundaryIssues(
+  String networkContents,
+  String endpointPolicyContents,
+  String settingsContents,
+) {
+  final issues = <String>[];
+  const networkRequired = {
+    'static const maxSnapshotChars = 262144':
+        'network snapshot JSON size is not bounded before parsing',
+    'static const maxCustomNetworks = 64':
+        'custom network count is not bounded',
+    'decodeJsonWithoutDuplicateKeys(':
+        'network snapshot does not reject duplicate JSON members',
+    'maxChars: maxSnapshotChars':
+        'network snapshot decoder does not enforce its size bound',
+    'value.keys.toSet().difference(_networkSnapshotMembers)':
+        'network snapshot top-level schema is not closed',
+    'required: _networkRequiredMembers':
+        'custom network required fields are not closed',
+    'allowed: _networkAllowedMembers':
+        'custom network allowed fields are not closed',
+    "m['isTestnet'] is! bool":
+        'custom network testnet classification is not strict',
+    'static const maxEvmChainId = 2147483647':
+        'custom EVM signing-domain id is not bounded',
+    r"networkIdentity != '$evmChainId'":
+        'persisted EVM probe identity is not bound to the chain id',
+    'if (hasSnapshot && snapshot == null) return':
+        'corrupt versioned snapshot can fall back to legacy routing state',
+  };
+  for (final entry in networkRequired.entries) {
+    if (!networkContents.contains(entry.key)) issues.add(entry.value);
+  }
+  if (RegExp(r'json\.decode\(\s*source\s*\)').hasMatch(networkContents)) {
+    issues.add('network snapshot uses the duplicate-unsafe JSON decoder');
+  }
+  if (networkContents.contains("m['isTestnet'] == true")) {
+    issues.add('malformed testnet classification silently becomes mainnet');
+  }
+  if (!endpointPolicyContents.contains('static const maxUrlChars = 2048') ||
+      !endpointPolicyContents.contains('normalized.length > maxUrlChars')) {
+    issues.add('user-configurable endpoint length is not bounded');
+  }
+  const allEvmFamilies =
+      'final isEvm = chain != Chain.tron && chain != Chain.solana;';
+  if (!settingsContents.contains(allEvmFamilies)) {
+    issues.add('custom-network UI does not require Chain ID for every EVM');
+  }
+  if (!settingsContents.contains('typedChainId <= Network.maxEvmChainId')) {
+    issues.add('custom-network UI does not enforce the Chain ID upper bound');
+  }
+  return issues;
+}
+
 /// Keeps the app-lock PIN record bounded and single-interpretable.
 ///
 /// Secure storage availability does not make its bytes infallible: migration,

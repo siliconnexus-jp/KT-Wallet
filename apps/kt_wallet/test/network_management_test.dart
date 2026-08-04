@@ -13,9 +13,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Network management UX in the settings screen: environment switch,
 /// per-chain picker, probed add-network form, custom-network deletion — all
 /// NetworkScope-only (the scope-absent rendering stays the pre-feature one).
-Widget _app(NetworkController net, {http.Client? probeClient}) => MaterialApp(
+Widget _app(
+  NetworkController net, {
+  http.Client? probeClient,
+  Locale locale = const Locale('zh'),
+}) => MaterialApp(
   debugShowCheckedModeBanner: false,
-  locale: const Locale('zh'),
+  locale: locale,
   localizationsDelegates: AppLocalizations.localizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,
   home: NetworkScope(
@@ -191,6 +195,54 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('net-row-ethereum')));
     await tester.pumpAndSettle();
     expect(find.byKey(ValueKey('net-opt-${added.id}')), findsOneWidget);
+  });
+
+  testWidgets('all EVM families require Chain ID and can save a custom RPC', (
+    tester,
+  ) async {
+    final net = NetworkController();
+    await net.load();
+    final client = MockClient((request) async {
+      final body = jsonDecode(request.body) as Map<String, Object?>;
+      expect(body['method'], 'eth_chainId');
+      return http.Response(
+        jsonEncode({'jsonrpc': '2.0', 'id': body['id'], 'result': '0x14a34'}),
+        200,
+      );
+    });
+    await tester.pumpWidget(
+      _app(net, probeClient: client, locale: const Locale('en')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('add-network')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Base').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Chain ID'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).at(0), 'Base Local');
+    await tester.enterText(
+      find.byType(TextField).at(1),
+      'https://base-rpc.example',
+    );
+    await tester.enterText(find.byType(TextField).at(2), 'ETH');
+    await tester.enterText(find.byType(TextField).at(3), '84532');
+    await tester.pump();
+    await tester.ensureVisible(find.text('Save'));
+    await tester.pump();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(net.customNetworks, hasLength(1));
+    expect(net.customNetworks.single.chain, Chain.base);
+    expect(net.customNetworks.single.evmChainId, 84532);
+    expect(find.text('Probe passed, saved'), findsOneWidget);
+
+    final reloaded = NetworkController();
+    await reloaded.load();
+    expect(reloaded.customNetworks, hasLength(1));
+    expect(reloaded.customNetworks.single.networkIdentity, '84532');
   });
 
   testWidgets(

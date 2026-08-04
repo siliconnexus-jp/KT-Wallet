@@ -57,6 +57,7 @@ Widget _sheetField(
   TextEditingController controller, {
   required String label,
   bool mono = false,
+  int? maxLength,
   VoidCallback? onChanged,
 }) => Column(
   crossAxisAlignment: CrossAxisAlignment.start,
@@ -80,6 +81,9 @@ Widget _sheetField(
       child: TextField(
         controller: controller,
         onChanged: (_) => onChanged?.call(),
+        inputFormatters: maxLength == null
+            ? null
+            : [LengthLimitingTextInputFormatter(maxLength)],
         autocorrect: false,
         enableSuggestions: false,
         style: TextStyle(
@@ -2088,13 +2092,17 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheetState) {
           final chain = _chainTags[family].$1;
-          final isEvm = chain == Chain.ethereum || chain == Chain.polygon;
+          final isEvm = chain != Chain.tron && chain != Chain.solana;
           final typedChainId = int.tryParse(chainIdController.text.trim());
+          final validChainId =
+              typedChainId != null &&
+              typedChainId > 0 &&
+              typedChainId <= Network.maxEvmChainId;
           final complete =
               nameController.text.trim().isNotEmpty &&
               rpcController.text.trim().isNotEmpty &&
               symbolController.text.trim().isNotEmpty &&
-              (!isEvm || typedChainId != null);
+              (!isEvm || validChainId);
           return Padding(
             padding: EdgeInsets.only(
               bottom: MediaQuery.of(ctx).viewInsets.bottom,
@@ -2151,6 +2159,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                       _sheetField(
                         nameController,
                         label: l10n.networkNameLabel,
+                        maxLength: Network.maxNameRunes,
                         onChanged: () => setSheetState(() {}),
                       ),
                       const SizedBox(height: 14),
@@ -2158,12 +2167,14 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                         rpcController,
                         label: l10n.rpcNode,
                         mono: true,
+                        maxLength: EndpointPolicy.maxUrlChars,
                         onChanged: () => setSheetState(() {}),
                       ),
                       const SizedBox(height: 14),
                       _sheetField(
                         symbolController,
                         label: l10n.symbolLabel,
+                        maxLength: Network.maxSymbolChars,
                         onChanged: () => setSheetState(() {}),
                       ),
                       if (isEvm) ...[
@@ -2172,6 +2183,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                           chainIdController,
                           label: l10n.chainIdLabel,
                           mono: true,
+                          maxLength: 10,
                           onChanged: () => setSheetState(() {}),
                         ),
                       ],
@@ -2180,6 +2192,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                         explorerController,
                         label: l10n.explorerLabel,
                         mono: true,
+                        maxLength: EndpointPolicy.maxUrlChars,
                       ),
                       if (error != null) ...[
                         const SizedBox(height: 10),

@@ -994,6 +994,20 @@ void main() {
         : '',
     historySnapshot.path: historySnapshotSource,
   };
+  final networkState = File('apps/kt_wallet/lib/src/state/networks.dart');
+  final endpointPolicy = File(
+    'apps/kt_wallet/lib/src/state/endpoint_policy.dart',
+  );
+  final settingsScreens = File(
+    'apps/kt_wallet/lib/src/screens/settings_screens.dart',
+  );
+  for (final issue in findNetworkSnapshotBoundaryIssues(
+    networkState.existsSync() ? networkState.readAsStringSync() : '',
+    endpointPolicy.existsSync() ? endpointPolicy.readAsStringSync() : '',
+    settingsScreens.existsSync() ? settingsScreens.readAsStringSync() : '',
+  )) {
+    failures.add('custom network persistence: $issue');
+  }
   final duplicateSafeRemoteResponseSources = <String, int>{
     'apps/kt_wallet/lib/src/rpc/http_transport.dart': 2,
     historyService.path: 3,
