@@ -24,8 +24,8 @@ The project is licensed under [MPL-2.0](LICENSE).
 | KT Cold Signer | `1.0.0+1` | Controlled public-beta builds; source build is available for dedicated offline devices |
 | KT Gateway | `1.16.21` | Production service at `https://gateway.kt-wallet.com` |
 
-Gateway source version: `1.16.21` (deployed to both production instances on
-2026-08-04 after the signing-preflight response-binding gates passed).
+Gateway source version: `1.16.22` (candidate; production remains `1.16.21`
+until the transaction-status response-binding release gate passes).
 
 Until signed store releases are published, build both apps from this repository
 and do not install APK or IPA files from unofficial mirrors. Start with

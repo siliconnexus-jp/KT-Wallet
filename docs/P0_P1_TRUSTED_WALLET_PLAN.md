@@ -2,7 +2,7 @@
 
 更新日期：2026-08-04
 
-当前 Gateway 源码版本 1.16.21；当前生产 Gateway 1.16.21。生产 Gateway-first 链身份、
+当前 Gateway 源码版本 1.16.22（候选）；当前生产 Gateway 1.16.21。生产 Gateway-first 链身份、
 TRON/Solana/EVM 余额、Solana 交易终态、EVM 动态手续费及签名前预执行回包严格解析均已启用。
 
 ## 目标与边界

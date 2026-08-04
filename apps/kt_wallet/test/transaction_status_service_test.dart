@@ -201,6 +201,7 @@ void main() {
   );
 
   test('gateway status override follows the transaction network', () async {
+    final hash = '0x${'a' * 64}';
     String? observedNetwork;
     final gateway = GatewayClient(
       baseUrl: 'https://gateway.example',
@@ -214,7 +215,11 @@ void main() {
           jsonEncode({
             'jsonrpc': '2.0',
             'id': body['id'],
-            'result': {'status': 'confirmed'},
+            'result': {
+              'network': 'eth-sepolia',
+              'hash': hash,
+              'status': 'confirmed',
+            },
           }),
           200,
         );
@@ -230,9 +235,7 @@ void main() {
     );
 
     expect(
-      await service.check(
-        _tx(Coin.eth.name, '0xhash', networkId: 'eth-sepolia'),
-      ),
+      await service.check(_tx(Coin.eth.name, hash, networkId: 'eth-sepolia')),
       ChainTransactionStatus.confirmed,
     );
     expect(observedNetwork, 'eth-sepolia');

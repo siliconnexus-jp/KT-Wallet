@@ -1017,9 +1017,14 @@ void main() {
 
   group('kt_getTransactionStatus', () {
     test('maps chain-authoritative status and sends the exact hash', () async {
+      final hash = '0x${'a' * 64}';
       final recorder = _Recorder()
         ..results = {
-          'kt_getTransactionStatus': {'status': 'confirmed'},
+          'kt_getTransactionStatus': {
+            'network': 'avalanche-mainnet',
+            'hash': hash,
+            'status': 'confirmed',
+          },
         };
       final client = GatewayClient(
         baseUrl: 'https://gw.example',
@@ -1028,20 +1033,24 @@ void main() {
 
       final status = await client.getTransactionStatus(
         chain: Coin.avalanche,
-        hash: '0xreceipt',
+        hash: hash,
       );
 
       expect(status, GatewayTransactionStatus.confirmed);
       expect(recorder.requests.single['params'], {
         'chain': 'avalanche',
-        'hash': '0xreceipt',
+        'hash': hash,
       });
     });
 
-    test('rejects an unknown status instead of assuming pending', () async {
+    test('rejects a status bound to another network or hash', () async {
       final recorder = _Recorder()
         ..results = {
-          'kt_getTransactionStatus': {'status': 'indexed-later'},
+          'kt_getTransactionStatus': {
+            'network': 'eth-mainnet',
+            'hash': '0x${'b' * 64}',
+            'status': 'confirmed',
+          },
         };
       final client = GatewayClient(
         baseUrl: 'https://gw.example',
@@ -1049,7 +1058,114 @@ void main() {
       );
 
       await expectLater(
-        client.getTransactionStatus(chain: Coin.eth, hash: '0xreceipt'),
+        client.getTransactionStatus(
+          chain: Coin.avalanche,
+          hash: '0x${'a' * 64}',
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects unreviewed fields in a transaction status result', () async {
+      final hash = '0x${'a' * 64}';
+      final recorder = _Recorder()
+        ..results = {
+          'kt_getTransactionStatus': {
+            'network': 'eth-mainnet',
+            'hash': hash,
+            'status': 'confirmed',
+            'final': true,
+          },
+        };
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: recorder.client,
+      );
+
+      await expectLater(
+        client.getTransactionStatus(chain: Coin.eth, hash: hash),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('requires a canonical TRON transaction id', () async {
+      final hash = 'a' * 64;
+      final recorder = _Recorder()
+        ..results = {
+          'kt_getTransactionStatus': {
+            'network': 'tron-mainnet',
+            'hash': hash,
+            'status': 'pending',
+          },
+        };
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: recorder.client,
+      );
+
+      expect(
+        await client.getTransactionStatus(chain: Coin.tron, hash: hash),
+        GatewayTransactionStatus.pending,
+      );
+      recorder.results['kt_getTransactionStatus'] = {
+        'network': 'tron-mainnet',
+        'hash': 'not-a-transaction-id',
+        'status': 'pending',
+      };
+      await expectLater(
+        client.getTransactionStatus(chain: Coin.tron, hash: hash),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('requires a canonical 64-byte Solana signature', () async {
+      const signature =
+          '5KtPn3E1Z9ezPTVYPQ7V2FZx5zRW2aYw5gCz6tNQ8crShXKQ3Fd6ztqQmDN7Hjz3EN3YHhuYxqUjQK4rDgVjSxqR';
+      final recorder = _Recorder()
+        ..results = {
+          'kt_getTransactionStatus': {
+            'network': 'sol-mainnet',
+            'hash': signature,
+            'status': 'confirmed',
+          },
+        };
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: recorder.client,
+      );
+
+      expect(
+        await client.getTransactionStatus(chain: Coin.solana, hash: signature),
+        GatewayTransactionStatus.confirmed,
+      );
+      recorder.results['kt_getTransactionStatus'] = {
+        'network': 'sol-mainnet',
+        'hash': '11111111111111111111111111111111',
+        'status': 'confirmed',
+      };
+      await expectLater(
+        client.getTransactionStatus(chain: Coin.solana, hash: signature),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects an unknown status instead of assuming pending', () async {
+      final hash = '0x${'a' * 64}';
+      final recorder = _Recorder()
+        ..results = {
+          'kt_getTransactionStatus': {
+            'network': 'eth-mainnet',
+            'hash': hash,
+            'status': 'indexed-later',
+          },
+        };
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: recorder.client,
+      );
+
+      await expectLater(
+        client.getTransactionStatus(chain: Coin.eth, hash: hash),
         throwsA(isA<FormatException>()),
       );
     });

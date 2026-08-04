@@ -1,6 +1,7 @@
 import 'dart:convert';
 
-import 'package:chains/chains.dart' show Amount;
+import 'package:chains/chains.dart'
+    show Amount, Base58Error, base58Decode, base58Encode;
 import 'package:chains/rpc.dart' show GasFeeEstimate, GasFeeEstimateTier;
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:http/http.dart' as http;
@@ -33,6 +34,8 @@ import 'fiat_math.dart';
 /// - `kt_getEvmSpendableBalances`
 ///   `{chain, network?, address, tokenContract?}` → uncached pending balances
 /// - `kt_getHistory` `{chain, network?, address, limit?}` → `{status, records}`
+/// - `kt_getTransactionStatus` `{chain, network?, hash}` →
+///   `{network, hash, status}` bound to the exact requested transaction
 /// - `kt_searchTokens` `{query?, networks?, limit?}` → verified token catalog
 /// - `kt_checkTokenRisk` `{chain, network?, contract}` →
 ///   `{status: safe|unsafe|unknown, category?, source, network, contract}`
@@ -192,6 +195,7 @@ class GatewayClient {
   };
   static final _evmAddressPattern = RegExp(r'^0x[0-9a-fA-F]{40}$');
   static final _evmTxHashPattern = RegExp(r'^0x[0-9a-fA-F]{64}$');
+  static final _tronTxHashPattern = RegExp(r'^[0-9a-fA-F]{64}$');
   static final _evmChainIdPattern = RegExp(r'^[1-9][0-9]{0,19}$');
   static final _tronGenesisPattern = RegExp(r'^[0-9a-f]{64}$');
   static final _base58AddressPattern = RegExp(r'^[1-9A-HJ-NP-Za-km-z]+$');
@@ -829,7 +833,12 @@ class GatewayClient {
       'network': ?resolvedNetwork,
       'hash': hash,
     });
-    if (result is! Map || result['status'] is! String) {
+    final expectedNetwork = resolvedNetwork ?? _mainnetNetworkId(chain);
+    if (result is! Map ||
+        !_hasExactStringKeys(result, const {'network', 'hash', 'status'}) ||
+        result['network'] != expectedNetwork ||
+        !_sameTransactionHash(chain, result['hash'], hash) ||
+        result['status'] is! String) {
       throw const FormatException('bad transaction status result');
     }
     return switch (result['status']) {
@@ -1185,6 +1194,40 @@ class GatewayClient {
       _evmAddressPattern.hasMatch(value) &&
       _evmAddressPattern.hasMatch(expected) &&
       value.toLowerCase() == expected.toLowerCase();
+
+  static bool _sameTransactionHash(Coin chain, Object? value, String expected) {
+    if (value is! String ||
+        value != value.trim() ||
+        expected != expected.trim()) {
+      return false;
+    }
+    return switch (chain) {
+      Coin.eth ||
+      Coin.polygon ||
+      Coin.base ||
+      Coin.arbitrum ||
+      Coin.avalanche ||
+      Coin.bnb =>
+        _evmTxHashPattern.hasMatch(value) &&
+            _evmTxHashPattern.hasMatch(expected) &&
+            value.toLowerCase() == expected.toLowerCase(),
+      Coin.tron =>
+        _tronTxHashPattern.hasMatch(value) &&
+            _tronTxHashPattern.hasMatch(expected) &&
+            value.toLowerCase() == expected.toLowerCase(),
+      Coin.solana => _sameCanonicalSolanaSignature(value, expected),
+    };
+  }
+
+  static bool _sameCanonicalSolanaSignature(String value, String expected) {
+    if (value != expected) return false;
+    try {
+      final decoded = base58Decode(value);
+      return decoded.length == 64 && base58Encode(decoded) == value;
+    } on Base58Error {
+      return false;
+    }
+  }
 
   static bool _isProviderDecimal(String value) {
     final normalized = value.trim();

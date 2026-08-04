@@ -34,6 +34,12 @@ func TestEVMTransactionStatusUsesReceiptNotHistoryIndexer(t *testing.T) {
 		"kt_getTransactionStatus",
 		fmt.Sprintf(`{"chain":"eth","network":"eth-mainnet","hash":%q}`, evmHash),
 	))
+	if res["network"] != "eth-mainnet" || res["hash"] != evmHash {
+		t.Fatalf("status result must bind the resolved network and requested hash, got %v", res)
+	}
+	if len(res) != 3 {
+		t.Fatalf("status result must expose only network, hash and status, got %v", res)
+	}
 	if res["status"] != "confirmed" {
 		t.Fatalf("expected confirmed, got %v", res)
 	}

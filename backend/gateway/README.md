@@ -40,7 +40,7 @@ curl -s localhost:8080/rpc -d '{"jsonrpc":"2.0","id":1,"method":"kt_health"}'
 curl -s localhost:8080/healthz
 curl -s localhost:8080/readyz
 curl -s -H "Authorization: Bearer $METRICS_BEARER_TOKEN" localhost:8080/metrics
-# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.21"}}
+# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.22"}}
 ```
 
 ## Environment
@@ -659,7 +659,14 @@ clients reject a wrong network/account/token or an alias that differs from
 
 ### `kt_getTransactionStatus` `{"chain": C, "network": N?, "hash": S}`
 
-→ `{"status":"confirmed"|"failed"|"pending"|"unknown"}`
+→ `{"network":N,"hash":S,"status":"confirmed"|"failed"|"pending"|"unknown"}`
+
+The response repeats the resolved network and exact requested transaction
+identity. Clients must require this exact three-field result and bind both
+identity fields to their request before persisting a state transition. EVM and
+TRON hexadecimal ids compare case-insensitively after canonical shape checks;
+Solana signatures remain case-sensitive and must canonically decode to exactly
+64 bytes.
 
 Solana transaction status follows the official
 [`getSignatureStatuses`](https://solana.com/docs/rpc/http/getsignaturestatuses)

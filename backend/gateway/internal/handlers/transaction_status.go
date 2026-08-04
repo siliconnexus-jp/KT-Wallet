@@ -55,5 +55,9 @@ func (g *Gateway) GetTransactionStatus(ctx context.Context, params json.RawMessa
 	if err != nil {
 		return nil, upstreamError("transaction_status", err)
 	}
-	return map[string]string{"status": status}, nil
+	return map[string]string{
+		"network": network,
+		"hash":    p.Hash,
+		"status":  status,
+	}, nil
 }
