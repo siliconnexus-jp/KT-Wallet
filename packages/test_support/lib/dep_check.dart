@@ -983,6 +983,72 @@ List<String> findExternalBackupJsonBoundaryIssues(String contents) {
   return issues;
 }
 
+/// Keeps wallet balance and transaction-history display caches bounded,
+/// single-interpretable and closed-schema.
+///
+/// These records do not authorize transfers, but malformed cached data can
+/// still falsely label an asset/transaction as verified or block startup with
+/// excessive local work. Both loaders must fail the whole snapshot closed and
+/// let their live refresh paths replace it.
+List<String> findWalletDisplaySnapshotBoundaryIssues(
+  String marketContents,
+  String historyContents,
+) {
+  final issues = <String>[];
+  const marketRequired = {
+    'static const maxSnapshotChars = 262144':
+        'market snapshot JSON size is not bounded before parsing',
+    'static const _maxTokens = 512':
+        'market snapshot token maps are not bounded',
+    'decodeJsonWithoutDuplicateKeys(':
+        'market snapshot does not reject duplicate JSON members',
+    'maxChars: maxSnapshotChars':
+        'market snapshot decoder does not enforce its size bound',
+    'members: rawVersion == 1 ? _topV1 : _topV2':
+        'market snapshot top-level schema is not version-closed',
+    'members: _amountMembers': 'market snapshot amount schema is not closed',
+    'positiveFiniteMarketNumber(entry.value)':
+        'market snapshot prices are not positive finite values',
+  };
+  for (final entry in marketRequired.entries) {
+    if (!marketContents.contains(entry.key)) issues.add(entry.value);
+  }
+  const historyRequired = {
+    'static const maxSnapshotChars = 1048576':
+        'history snapshot JSON size is not bounded before parsing',
+    'static const _maxRecordsPerCoin = 100':
+        'history snapshot rows are not bounded per chain',
+    'decodeJsonWithoutDuplicateKeys(':
+        'history snapshot does not reject duplicate JSON members',
+    'maxChars: maxSnapshotChars':
+        'history snapshot decoder does not enforce its size bound',
+    'requireExactSnapshotObject(decoded, members: _topMembers)':
+        'history snapshot top-level schema is not closed',
+    'members: switch (version)': 'history record schema is not version-closed',
+    "final verified = record['verified'];":
+        'history verification state is not explicitly decoded',
+    'outgoing is! bool || verified is! bool':
+        'history verification state is not required to be boolean',
+    'assetVerified: verified':
+        'history record does not preserve the required verification value',
+  };
+  for (final entry in historyRequired.entries) {
+    if (!historyContents.contains(entry.key)) issues.add(entry.value);
+  }
+  if (RegExp(r'jsonDecode\(\s*encoded\s*\)').hasMatch(marketContents)) {
+    issues.add('market snapshot uses the duplicate-unsafe JSON decoder');
+  }
+  if (RegExp(r'jsonDecode\(\s*encoded\s*\)').hasMatch(historyContents)) {
+    issues.add('history snapshot uses the duplicate-unsafe JSON decoder');
+  }
+  if (RegExp(
+    r"assetVerified:\s*[^,]+\?[^:]+:\s*true",
+  ).hasMatch(historyContents)) {
+    issues.add('history snapshot defaults malformed verification to trusted');
+  }
+  return issues;
+}
+
 /// Keeps the app-lock PIN record bounded and single-interpretable.
 ///
 /// Secure storage availability does not make its bytes infallible: migration,

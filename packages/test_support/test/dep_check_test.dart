@@ -615,6 +615,62 @@ final unsafe = jsonDecode(utf8.decode(bytes));
     });
   });
 
+  group('wallet display snapshot boundary', () {
+    const market = '''
+static const maxSnapshotChars = 262144;
+static const _maxTokens = 512;
+final decoded = decodeJsonWithoutDuplicateKeys(
+  encoded,
+  maxChars: maxSnapshotChars,
+);
+final body = requireExactSnapshotObject(
+  decoded,
+  members: rawVersion == 1 ? _topV1 : _topV2,
+);
+final amount = requireExactSnapshotObject(value, members: _amountMembers);
+final number = positiveFiniteMarketNumber(entry.value);
+''';
+    const history = '''
+static const maxSnapshotChars = 1048576;
+static const _maxRecordsPerCoin = 100;
+final decoded = decodeJsonWithoutDuplicateKeys(
+  encoded,
+  maxChars: maxSnapshotChars,
+);
+final body = requireExactSnapshotObject(decoded, members: _topMembers);
+final record = requireExactSnapshotObject(
+  value,
+  members: switch (version) { 1 => _recordV1, _ => _recordV3 },
+);
+final verified = record['verified'];
+if (outgoing is! bool || verified is! bool) throw FormatException();
+return ChainTxRecord(assetVerified: verified);
+''';
+
+    test('accepts bounded duplicate-safe closed cache schemas', () {
+      expect(findWalletDisplaySnapshotBoundaryIssues(market, history), isEmpty);
+    });
+
+    test('rejects unsafe decoding and trusted verification fallback', () {
+      final issues = findWalletDisplaySnapshotBoundaryIssues(
+        market.replaceFirst(
+          'decodeJsonWithoutDuplicateKeys(',
+          'jsonDecode(encoded); unused(',
+        ),
+        history
+            .replaceFirst('maxSnapshotChars = 1048576', 'gone')
+            .replaceFirst(
+              'assetVerified: verified',
+              "assetVerified: value['verified'] is bool ? true : true",
+            ),
+      );
+      expect(issues, contains(contains('market snapshot does not reject')));
+      expect(issues, contains(contains('duplicate-unsafe JSON decoder')));
+      expect(issues, contains(contains('history snapshot JSON size')));
+      expect(issues, contains(contains('defaults malformed verification')));
+    });
+  });
+
   group('wallet PIN state boundary', () {
     const safe = '''
 static const maxStoredIterations = 1000000;

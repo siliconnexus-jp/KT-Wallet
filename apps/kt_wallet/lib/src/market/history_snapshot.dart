@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:core_crypto/core_crypto.dart' show Coin;
 
 import '../state/wallet_controller.dart';
+import '../rpc/json_rpc_envelope.dart';
 import 'history_service.dart';
+import 'snapshot_boundary.dart';
 
 /// Network-scoped, display-only snapshot of remote chain history.
 ///
@@ -31,6 +33,36 @@ class WalletHistorySnapshotStore implements HistorySnapshotStore {
   WalletHistorySnapshotStore(this._wallets);
 
   static const _key = 'history.snapshot.v1';
+  static const maxSnapshotChars = 1048576;
+  static const _maxRecordsPerCoin = 100;
+  static const _topMembers = {'v', 'scope', 'savedAtMs', 'results'};
+  static const _recordV1 = {
+    'id',
+    'hash',
+    'outgoing',
+    'from',
+    'to',
+    'amount',
+    'contract',
+    'symbol',
+    'verified',
+    'timestampMs',
+    'confirmed',
+  };
+  static const _recordV2 = {
+    'id',
+    'hash',
+    'outgoing',
+    'from',
+    'to',
+    'amount',
+    'contract',
+    'symbol',
+    'verified',
+    'timestampMs',
+    'status',
+  };
+  static const _recordV3 = {..._recordV2, 'networkId'};
   final WalletController _wallets;
 
   @override
@@ -38,23 +70,37 @@ class WalletHistorySnapshotStore implements HistorySnapshotStore {
     try {
       final encoded = await _wallets.walletSetting(walletId, _key);
       if (encoded == null || encoded.isEmpty) return null;
-      final body = jsonDecode(encoded);
-      if (body is! Map || body['scope'] != scope) return null;
-      final version = body['v'];
-      if (version != 1 && version != 2 && version != 3) return null;
-      final savedAtMs = body['savedAtMs'];
+      final decoded = decodeJsonWithoutDuplicateKeys(
+        encoded,
+        maxChars: maxSnapshotChars,
+      );
+      final body = requireExactSnapshotObject(decoded, members: _topMembers);
+      if (requireBoundedSnapshotText(body['scope'], maxChars: 4096) != scope) {
+        return null;
+      }
+      final rawVersion = body['v'];
+      if (rawVersion != 1 && rawVersion != 2 && rawVersion != 3) return null;
+      final version = rawVersion as int;
+      final savedAtMs = requireSnapshotEpochMillis(body['savedAtMs']);
       final rows = body['results'];
-      if (savedAtMs is! int || rows is! Map) return null;
+      if (rows is! Map || rows.isEmpty || rows.length > Coin.values.length) {
+        return null;
+      }
       final results = <Coin, HistoryResult>{};
       for (final entry in rows.entries) {
         final name = entry.key;
-        if (name is! String || entry.value is! List) continue;
+        if (name is! String || entry.value is! List) {
+          throw const FormatException('history result map is invalid');
+        }
         final coin = Coin.values.where((coin) => coin.name == name).firstOrNull;
-        if (coin == null) continue;
+        if (coin == null) throw const FormatException('unknown history coin');
+        final values = entry.value as List;
+        if (values.length > _maxRecordsPerCoin) {
+          throw const FormatException('history record limit exceeded');
+        }
         final records = <ChainTxRecord>[];
-        for (final value in entry.value as List) {
-          final record = _decodeRecord(coin, value);
-          if (record != null) records.add(record);
+        for (final value in values) {
+          records.add(_decodeRecord(coin, value, version));
         }
         results[coin] = HistoryResult.ok(List.unmodifiable(records));
       }
@@ -101,47 +147,49 @@ class WalletHistorySnapshotStore implements HistorySnapshotStore {
     'status': record.status.name,
   };
 
-  static ChainTxRecord? _decodeRecord(Coin coin, Object? value) {
-    if (value is! Map) return null;
-    final hash = value['hash'];
-    final outgoing = value['outgoing'];
-    final timestampMs = value['timestampMs'];
-    final rawStatus = value['status'];
-    final legacyConfirmed = value['confirmed'];
-    if (hash is! String ||
-        hash.isEmpty ||
-        outgoing is! bool ||
-        timestampMs is! int) {
-      return null;
+  static ChainTxRecord _decodeRecord(Coin coin, Object? value, int version) {
+    final record = requireExactSnapshotObject(
+      value,
+      members: switch (version) {
+        1 => _recordV1,
+        2 => _recordV2,
+        _ => _recordV3,
+      },
+    );
+    final hash = requireBoundedSnapshotText(record['hash'], maxChars: 256);
+    final outgoing = record['outgoing'];
+    final timestampMs = requireSnapshotEpochMillis(record['timestampMs']);
+    final verified = record['verified'];
+    if (outgoing is! bool || verified is! bool) {
+      throw const FormatException('history booleans are invalid');
     }
-    final status = rawStatus is String
-        ? ChainTxStatus.values
-              .where((item) => item.name == rawStatus)
-              .firstOrNull
-        : legacyConfirmed is bool
-        ? (legacyConfirmed ? ChainTxStatus.confirmed : ChainTxStatus.failed)
-        : null;
-    if (status == null) return null;
+    final status = version == 1
+        ? switch (record['confirmed']) {
+            true => ChainTxStatus.confirmed,
+            false => ChainTxStatus.failed,
+            _ => throw const FormatException('legacy status is invalid'),
+          }
+        : ChainTxStatus.values
+              .where((item) => item.name == record['status'])
+              .firstOrNull;
+    if (status == null) throw const FormatException('status is invalid');
     return ChainTxRecord(
       coin: coin,
-      networkId:
-          value['networkId'] is String &&
-              (value['networkId'] as String).isNotEmpty
-          ? value['networkId'] as String
+      networkId: version == 3
+          ? requireNullableSnapshotText(record['networkId'], maxChars: 256)
           : null,
-      id: value['id'] is String ? value['id'] as String : null,
+      id: requireNullableSnapshotText(record['id'], maxChars: 512),
       hash: hash,
       outgoing: outgoing,
-      fromAddress: value['from'] is String ? value['from'] as String : null,
-      toAddress: value['to'] is String ? value['to'] as String : null,
-      amountText: value['amount'] is String ? value['amount'] as String : null,
-      assetContract: value['contract'] is String
-          ? value['contract'] as String
-          : null,
-      assetSymbol: value['symbol'] is String ? value['symbol'] as String : null,
-      assetVerified: value['verified'] is bool
-          ? value['verified'] as bool
-          : true,
+      fromAddress: requireNullableSnapshotText(record['from'], maxChars: 256),
+      toAddress: requireNullableSnapshotText(record['to'], maxChars: 256),
+      amountText: requireNullableSnapshotText(record['amount'], maxChars: 256),
+      assetContract: requireNullableSnapshotText(
+        record['contract'],
+        maxChars: 256,
+      ),
+      assetSymbol: requireNullableSnapshotText(record['symbol'], maxChars: 128),
+      assetVerified: verified,
       timestamp: DateTime.fromMillisecondsSinceEpoch(timestampMs),
       status: status,
     );

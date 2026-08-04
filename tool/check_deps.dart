@@ -970,6 +970,21 @@ void main() {
   final historySnapshot = File(
     'apps/kt_wallet/lib/src/market/history_snapshot.dart',
   );
+  final marketSnapshot = File(
+    'apps/kt_wallet/lib/src/market/market_snapshot.dart',
+  );
+  final marketSnapshotSource = marketSnapshot.existsSync()
+      ? marketSnapshot.readAsStringSync()
+      : '';
+  final historySnapshotSource = historySnapshot.existsSync()
+      ? historySnapshot.readAsStringSync()
+      : '';
+  for (final issue in findWalletDisplaySnapshotBoundaryIssues(
+    marketSnapshotSource,
+    historySnapshotSource,
+  )) {
+    failures.add('wallet display snapshots: $issue');
+  }
   final historySources = {
     historyService.path: historyService.existsSync()
         ? historyService.readAsStringSync()
@@ -977,9 +992,7 @@ void main() {
     historyController.path: historyController.existsSync()
         ? historyController.readAsStringSync()
         : '',
-    historySnapshot.path: historySnapshot.existsSync()
-        ? historySnapshot.readAsStringSync()
-        : '',
+    historySnapshot.path: historySnapshotSource,
   };
   final duplicateSafeRemoteResponseSources = <String, int>{
     'apps/kt_wallet/lib/src/rpc/http_transport.dart': 2,
@@ -1060,7 +1073,7 @@ void main() {
     'apps/kt_wallet/lib/src/market/history_snapshot.dart': [
       "'v': 3",
       "'networkId': record.networkId",
-      "value['networkId']",
+      "record['networkId']",
     ],
   }.entries) {
     for (final marker in boundary.value) {

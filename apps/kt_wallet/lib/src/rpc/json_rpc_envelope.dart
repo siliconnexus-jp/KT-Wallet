@@ -6,7 +6,10 @@ import 'dart:convert';
 /// unsafe at an RPC trust boundary: a proxy and a node could interpret two
 /// `result`, `id`, or nested `error.code` members differently. Escaped names
 /// are decoded before comparison, so `result` and `re\u0073ult` also collide.
-Object? decodeJsonWithoutDuplicateKeys(String source) {
+Object? decodeJsonWithoutDuplicateKeys(String source, {int? maxChars}) {
+  if (maxChars != null && (maxChars < 0 || source.length > maxChars)) {
+    throw const FormatException('JSON record exceeds size limit');
+  }
   final scanner = _DuplicateJsonKeyScanner(source);
   if (scanner.scan()) {
     throw const FormatException('duplicate JSON object member');
