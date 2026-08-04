@@ -2292,3 +2292,15 @@ KT Wallet 1647/1647（另有 11 项显式线上/设备测试默认跳过）、KT
 通过。公开 TRON 历史 1/1、Solana Devnet preflight/余额/历史 3/3、生产 Gateway 严格客户端
 6/6 真实只读通过；未加载钱包、私钥或广播。Gateway 后端及 UI 均未变化，无需部署后端，
 也不使用无关截图替代协议证据；移动端修复须随下一版签名制品发布。
+
+同日继续收紧 Gateway 错误对象的隐私边界。旧客户端把 JSON-RPC
+`error.message`、`error.data.upstream` 与 `error.data.message` 原样保存在
+`GatewayException`，未来日志、诊断或 UI 一旦输出异常即可泄漏 Provider 文本、带凭证的
+上游 URL 或公开钱包地址。失败优先 canary 测试先证明旧对象和 `toString()` 会保留远端正文；
+修复后 App 只保留整数错误码与本地固定类别，彻底丢弃远端 message/data，静态门禁禁止
+恢复这些字段，远程响应审阅词汇由 69 收紧至 67。Gateway Client/网络定向 77/77、受影响
+服务回归 109/109；KT Wallet 1656/1656（另有 11 项显式线上/设备测试默认跳过）、
+KT Cold Signer 570/570、共享 packages 438/438、静态分析 0、Gateway audit 与完整依赖/OSV
+门禁 13/13 通过，生产 Gateway 严格客户端真实只读 6/6。未加载钱包、私钥或广播；Gateway
+服务端和视觉 UI 均未变化，无需部署后端，也不使用无关截图替代协议证据。移动端修复须
+随下一版签名制品发布。

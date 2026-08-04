@@ -1148,6 +1148,31 @@ void main() {
       'duplicate-member rejection',
     );
   }
+  for (final retainedRemoteErrorText in const [
+    "final data = error['data']",
+    "message: error['message']",
+    'upstreamMessage:',
+    'this.upstream',
+  ]) {
+    if (gatewayClientSource.contains(retainedRemoteErrorText)) {
+      failures.add(
+        '${gatewayClient.path} retains provider-controlled Gateway error '
+        'text: $retainedRemoteErrorText',
+      );
+    }
+  }
+  for (final stableGatewayErrorBoundary in const [
+    'GatewayException({required this.code})',
+    'message = _gatewayErrorCategory(code)',
+    "_ => 'gateway_error'",
+  ]) {
+    if (!gatewayClientSource.contains(stableGatewayErrorBoundary)) {
+      failures.add(
+        '${gatewayClient.path} does not preserve the bounded Gateway error '
+        'category boundary: $stableGatewayErrorBoundary',
+      );
+    }
+  }
   for (final path in const [
     'apps/kt_wallet/lib/src/market/history_scope_host.dart',
     'apps/kt_wallet/lib/src/screens/home_screen.dart',

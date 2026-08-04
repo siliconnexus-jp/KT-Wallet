@@ -45,8 +45,8 @@ import 'fiat_math.dart';
 ///   allowances; provider/unsupported failures never become an empty list
 /// - `kt_broadcast` `{chain, network?, payload}` →
 ///   `{chain, network, txHash}` bound to the resolved signing domain
-/// Errors: -32700/-32600/-32601/-32602 protocol, -32000 upstream_error
-/// (data.upstream / data.message carry the node's reason), -32001
+/// Errors: -32700/-32600/-32601/-32602 protocol, -32000 upstream_error,
+/// -32001
 /// rate_limited, -32002 unsupported, -32003 submission_unknown (a broadcast
 /// may have reached the node, so callers must reconcile by local txHash and
 /// must not submit it again).
@@ -339,19 +339,7 @@ class GatewayClient {
     }
     final error = decoded['error'];
     if (error is Map) {
-      final data = error['data'];
-      throw GatewayException(
-        code: error['code'] is int ? error['code'] as int : 0,
-        message: error['message'] is String
-            ? error['message'] as String
-            : 'error',
-        upstream: data is Map && data['upstream'] is String
-            ? data['upstream'] as String
-            : null,
-        upstreamMessage: data is Map && data['message'] is String
-            ? data['message'] as String
-            : null,
-      );
+      throw GatewayException(code: error['code'] as int);
     }
     return decoded['result'];
   }
@@ -1423,9 +1411,8 @@ class GatewayClient {
 
   /// `kt_broadcast` — pushes an encoded signed payload (hex for EVM, base64
   /// for Solana, the TronGrid JSON string for TRON) to the active network of
-  /// [chain] and returns the node's transaction hash. A node rejection
-  /// arrives as [GatewayException] -32000 with the node's message in
-  /// [GatewayException.upstreamMessage].
+  /// [chain] and returns the node's transaction hash. A node rejection arrives
+  /// as [GatewayException] code -32000; provider-controlled text is discarded.
   ///
   /// The network param is resolved BEFORE the post: a bypass
   /// ([GatewayNetworkUnsupported]) can therefore never leave a transaction
@@ -1664,24 +1651,15 @@ class GatewayClient {
 
 /// A JSON-RPC error answered by the gateway. [code] follows the contract
 /// (-32000 upstream_error, -32001 rate_limited, -32002 unsupported, -32003
-/// submission_unknown, plus the standard protocol codes); for upstream errors
-/// [upstreamMessage] carries the node's own reason.
+/// submission_unknown, plus the standard protocol codes). Remote message and
+/// data fields are deliberately discarded so provider text cannot reach UI,
+/// logs, diagnostics, or future callers through this object.
 class GatewayException implements Exception {
-  const GatewayException({
-    required this.code,
-    required this.message,
-    this.upstream,
-    this.upstreamMessage,
-  });
+  GatewayException({required this.code})
+    : message = _gatewayErrorCategory(code);
 
   final int code;
   final String message;
-
-  /// Which upstream the gateway was talking to (error data.upstream), if any.
-  final String? upstream;
-
-  /// The upstream node's own message (error data.message), if any.
-  final String? upstreamMessage;
 
   /// The contract's "no indexer / not implemented for this chain" code.
   bool get isUnsupported => code == -32002;
@@ -1696,10 +1674,21 @@ class GatewayException implements Exception {
   bool get isSubmissionUnknown => code == -32003;
 
   @override
-  String toString() =>
-      'GatewayException($code, $message'
-      '${upstreamMessage == null ? '' : ', upstream: $upstreamMessage'})';
+  String toString() => 'GatewayException($code, $message)';
 }
+
+String _gatewayErrorCategory(int code) => switch (code) {
+  -32700 => 'parse_error',
+  -32600 => 'invalid_request',
+  -32601 => 'method_not_found',
+  -32602 => 'invalid_params',
+  -32603 => 'internal_error',
+  -32000 => 'upstream_error',
+  -32001 => 'rate_limited',
+  -32002 => 'unsupported',
+  -32003 => 'submission_unknown',
+  _ => 'gateway_error',
+};
 
 /// A privacy-safe gateway transport failure. It never stores the request URL,
 /// response body or the lower-level exception text.

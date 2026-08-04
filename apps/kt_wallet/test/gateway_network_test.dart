@@ -388,11 +388,7 @@ void main() {
           throwsA(
             isA<GatewayException>()
                 .having((e) => e.code, 'code', -32000)
-                .having(
-                  (e) => e.upstreamMessage,
-                  'upstreamMessage',
-                  'node down',
-                ),
+                .having((e) => e.message, 'message', 'upstream_error'),
           ),
         );
         expect(

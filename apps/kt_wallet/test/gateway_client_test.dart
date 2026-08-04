@@ -2054,7 +2054,7 @@ void main() {
     });
 
     test(
-      '-32000 upstream_error surfaces the node message and upstream',
+      '-32000 maps to a stable category without retaining node text',
       () async {
         final recorder = _Recorder()
           ..errors = {
@@ -2074,17 +2074,47 @@ void main() {
             isA<GatewayException>()
                 .having((e) => e.code, 'code', -32000)
                 .having((e) => e.isUpstreamError, 'isUpstreamError', isTrue)
-                .having((e) => e.message, 'message', 'upstream_error')
-                .having((e) => e.upstream, 'upstream', 'eth-node')
-                .having(
-                  (e) => e.upstreamMessage,
-                  'upstreamMessage',
-                  'nonce too low',
-                ),
+                .having((e) => e.message, 'message', 'upstream_error'),
           ),
         );
       },
     );
+
+    test('gateway errors never retain provider-controlled text', () async {
+      final bodyCanary = <String>[
+        'alch',
+        'gateway_error_body_secret',
+      ].join('_');
+      final upstreamCanary = <String>[
+        'https://rpc.example',
+        bodyCanary,
+      ].join('/');
+      final recorder = _Recorder()
+        ..errors = {
+          'kt_getPrices': {
+            'code': -32000,
+            'message': bodyCanary,
+            'data': {
+              'upstream': upstreamCanary,
+              'message': 'wallet address and $bodyCanary',
+            },
+          },
+        };
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: recorder.client,
+      );
+
+      try {
+        await client.getPrices(const ['ETH']);
+        fail('request should fail');
+      } on GatewayException catch (error) {
+        expect(error.code, -32000);
+        expect(error.message, 'upstream_error');
+        expect(error.toString(), isNot(contains(bodyCanary)));
+        expect(error.toString(), isNot(contains(upstreamCanary)));
+      }
+    });
 
     test(
       '-32002 unsupported and -32001 rate_limited map onto the flags',
