@@ -38,6 +38,49 @@ const _addresses = ChainAddresses(
   solana: '47eFuHR9ste9kopiJ9eRxcwahmE62JovbKe5r7AjANut',
 );
 
+Map<String, Object?> _completeCoinGeckoResponse({
+  Map<String, double> usd = const {},
+}) {
+  final ids = {
+    ...PriceService.coinGeckoIds.values,
+    ...PriceService.coinGeckoTokenIds.values,
+  };
+  final sourceTime = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+  return {
+    for (final id in ids)
+      id: {
+        'usd': usd[id] ?? 1.0,
+        'usd_24h_change': null,
+        'cny': (usd[id] ?? 1.0) * 7,
+        'cny_24h_change': null,
+        'jpy': (usd[id] ?? 1.0) * 150,
+        'jpy_24h_change': null,
+        'last_updated_at': sourceTime,
+      },
+  };
+}
+
+Map<String, Object?> _completeGatewayPriceResult({
+  Map<String, double> usd = const {},
+  Map<String, double?> change24h = const {},
+}) {
+  final symbols = {
+    for (final coin in Coin.values) BalanceService.symbolFor[coin]!,
+    ...PriceService.coinGeckoTokenIds.keys,
+  };
+  return {
+    'prices': {
+      for (final symbol in symbols)
+        symbol: {
+          'usd': usd[symbol] ?? 1.0,
+          if (change24h.containsKey(symbol)) 'change24h': change24h[symbol],
+        },
+    },
+    'fiatPerUsd': {'USD': 1, 'CNY': 7, 'JPY': 150},
+    'cachedAtMs': DateTime.now().millisecondsSinceEpoch,
+  };
+}
+
 /// A scripted gateway: records every JSON-RPC call and answers per-method.
 class _FakeGateway {
   _FakeGateway({this.results = const {}, this.errors = const {}});
@@ -609,20 +652,26 @@ void main() {
     test(
       'kt_getPrices first: symbols asserted, CoinGecko never contacted',
       () async {
+        final cachedAtMs = DateTime.now().millisecondsSinceEpoch;
         final gateway = _FakeGateway(
           results: {
-            'kt_getPrices': {
-              'prices': {
-                'ETH': {'usd': 2500.0, 'change24h': 2.5},
-                'POL': {'usd': 0.4, 'change24h': -3.0},
-                'TRX': {'usd': 0.12},
-                'SOL': {'usd': 150, 'change24h': 1.0},
-                'USDT': {'usd': 0.998, 'change24h': -0.1},
-                'USDC': {'usd': 1.001, 'change24h': 0.05},
+            'kt_getPrices': _completeGatewayPriceResult(
+              usd: const {
+                'ETH': 2500,
+                'POL': 0.4,
+                'TRX': 0.12,
+                'SOL': 150,
+                'USDT': 0.998,
+                'USDC': 1.001,
               },
-              'fiatPerUsd': {'USD': 1, 'CNY': 7, 'JPY': 150},
-              'cachedAtMs': 1753000000000,
-            },
+              change24h: const {
+                'ETH': 2.5,
+                'POL': -3,
+                'SOL': 1,
+                'USDT': -0.1,
+                'USDC': 0.05,
+              },
+            )..['cachedAtMs'] = cachedAtMs,
           },
         );
         final service = PriceService(
@@ -683,9 +732,9 @@ void main() {
           coinGeckoHits++;
           expect(request.url.path, '/api/v3/simple/price');
           return http.Response(
-            jsonEncode({
-              'ethereum': {'usd': 2000.0},
-            }),
+            jsonEncode(
+              _completeCoinGeckoResponse(usd: const {'ethereum': 2000}),
+            ),
             200,
           );
         }),
@@ -696,18 +745,53 @@ void main() {
       expect(coinGeckoHits, 1);
     });
 
+    test(
+      'a partial known-symbol gateway answer falls back as one unit',
+      () async {
+        var coinGeckoHits = 0;
+        final gateway = _FakeGateway(
+          results: {
+            'kt_getPrices': _completeGatewayPriceResult()
+              ..['prices'] = {
+                'ETH': {'usd': 999999.0},
+              },
+          },
+        );
+        final service = PriceService(
+          client: MockClient((_) async {
+            coinGeckoHits++;
+            return http.Response(
+              jsonEncode(
+                _completeCoinGeckoResponse(usd: const {'ethereum': 2000}),
+              ),
+              200,
+            );
+          }),
+          gateway: () => gateway.client,
+        );
+
+        final prices = await service.fetchUsdPrices();
+
+        expect(coinGeckoHits, 1);
+        expect(prices![Coin.eth], 2000.0);
+        expect(service.lastGoodUsd![Coin.eth], 2000.0);
+      },
+    );
+
     test('an all-unknown-symbols gateway answer also falls back', () async {
       final gateway = _FakeGateway(
         results: {
-          'kt_getPrices': {'prices': <String, Object?>{}, 'cachedAtMs': 0},
+          'kt_getPrices': {
+            'prices': <String, Object?>{},
+            'fiatPerUsd': {'USD': 1},
+            'cachedAtMs': DateTime.now().millisecondsSinceEpoch,
+          },
         },
       );
       final service = PriceService(
         client: MockClient(
           (request) async => http.Response(
-            jsonEncode({
-              'tron': {'usd': 0.11},
-            }),
+            jsonEncode(_completeCoinGeckoResponse(usd: const {'tron': 0.11})),
             200,
           ),
         ),
@@ -721,9 +805,9 @@ void main() {
       final service = PriceService(
         client: MockClient(
           (request) async => http.Response(
-            jsonEncode({
-              'solana': {'usd': 149.0},
-            }),
+            jsonEncode(
+              _completeCoinGeckoResponse(usd: const {'solana': 149.0}),
+            ),
             200,
           ),
         ),

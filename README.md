@@ -552,8 +552,8 @@ Recent device and simulator evidence is available in:
 - [Testnet cryptography report](reports/testnet-real-crypto-2026-07-26/index.html)
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
-The latest source gate (2026-08-04) completed with zero static-analysis
-issues: **1,602/1,602** KT Wallet tests, **570/570** KT Cold Signer tests, and
+The latest source gate (2026-08-05) completed with zero static-analysis
+issues: **1,618/1,618** KT Wallet tests, **570/570** KT Cold Signer tests, and
 **429/429** shared-package tests passed. The default gate passed **12/12** and
 the native/runtime/OSV `--full` gate passed **13/13**. The Gateway audit,
 public-secret gate, Gateway public-release version gate, native dependency
@@ -564,7 +564,12 @@ hash; a missing or inconsistent hash is fail-closed/unknown and records a
 failed broadcast metric. Market and history refresh metrics also require a
 complete live result: one healthy chain cannot hide another chain's explicit
 failure, and missing/invalid native quotes cannot be counted as a successful
-portfolio refresh. A legacy wallet whose actually enabled chains are all on
+portfolio refresh. Gateway market responses are bound to the exact requested
+symbols, closed schemas, bounded financial values, and a 15-minute freshness
+window. The direct CoinGecko fallback additionally requires the complete
+requested quote set and mutually consistent CNY/JPY rates before it replaces
+the last-known-good cache; malformed, additive, partial, stale, or polluted
+answers are discarded as one unit. A legacy wallet whose actually enabled chains are all on
 testnets now skips the price request entirely, regardless of disabled network
 profiles. Transaction finality is committed in the same Drift transaction as
 its terminal state: confirmed is successful; failed, replaced, and expired are

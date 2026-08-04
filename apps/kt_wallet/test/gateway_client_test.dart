@@ -670,6 +670,7 @@ void main() {
     test(
       'exact params; unknown symbols omitted by the gateway stay absent',
       () async {
+        final cachedAtMs = DateTime.now().millisecondsSinceEpoch;
         final recorder = _Recorder()
           ..results = {
             'kt_getPrices': {
@@ -678,7 +679,7 @@ void main() {
                 'TRX': {'usd': 0.12, 'change24h': -1.5},
               },
               'fiatPerUsd': {'USD': 1, 'CNY': 7.2, 'JPY': 151.5},
-              'cachedAtMs': 1753000000000,
+              'cachedAtMs': cachedAtMs,
             },
           };
         final client = GatewayClient(
@@ -698,30 +699,133 @@ void main() {
         expect(prices.usdBySymbol, {'ETH': 2500.5, 'TRX': 0.12});
         expect(prices.change24hBySymbol, {'ETH': 3.25, 'TRX': -1.5});
         expect(prices.fiatPerUsd, {'USD': 1, 'CNY': 7.2, 'JPY': 151.5});
-        expect(prices.cachedAtMs, 1753000000000);
+        expect(prices.cachedAtMs, cachedAtMs);
       },
     );
 
-    test('rejects non-positive or non-finite market truth', () async {
-      final recorder = _Recorder()
-        ..results = {
-          'kt_getPrices': {
-            'prices': {
-              'ETH': {'usd': -2500, 'change24h': 1.5},
-              'POL': {'usd': 0, 'change24h': -2},
-              'TRX': {'usd': 0.12, 'change24h': 3.25},
+    test(
+      'normalizes symbols and rejects invalid or duplicate requests',
+      () async {
+        final cachedAtMs = DateTime.now().millisecondsSinceEpoch;
+        final recorder = _Recorder()
+          ..results = {
+            'kt_getPrices': {
+              'prices': {
+                'ETH': {'usd': 2500.0},
+              },
+              'fiatPerUsd': {'USD': 1, 'CNY': 7.2, 'JPY': 151.5},
+              'cachedAtMs': cachedAtMs,
             },
-            'fiatPerUsd': {'USD': 0, 'CNY': -7.2, 'JPY': 151.5},
-          },
-        };
-      final prices = await GatewayClient(
-        baseUrl: 'https://gw.example',
-        client: recorder.client,
-      ).getPrices(const ['ETH', 'POL', 'TRX']);
+          };
+        final client = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: recorder.client,
+        );
 
-      expect(prices.usdBySymbol, {'TRX': 0.12});
-      expect(prices.change24hBySymbol, {'TRX': 3.25});
-      expect(prices.fiatPerUsd, {'USD': 1, 'JPY': 151.5});
+        expect((await client.getPrices(const [' eth '])).usdBySymbol, {
+          'ETH': 2500.0,
+        });
+        expect(recorder.requests.single['params'], {
+          'symbols': ['ETH'],
+        });
+        final before = recorder.requests.length;
+        await expectLater(
+          client.getPrices(const ['ETH', 'eth']),
+          throwsArgumentError,
+        );
+        await expectLater(
+          client.getPrices(const ['ETH/USD']),
+          throwsArgumentError,
+        );
+        await expectLater(client.getPrices(const []), throwsArgumentError);
+        expect(recorder.requests, hasLength(before));
+      },
+    );
+
+    test(
+      'rejects any malformed quote instead of displaying a partial set',
+      () async {
+        final cachedAtMs = DateTime.now().millisecondsSinceEpoch;
+        final recorder = _Recorder()
+          ..results = {
+            'kt_getPrices': {
+              'prices': {
+                'ETH': {'usd': -2500, 'change24h': 1.5},
+                'POL': {'usd': 0, 'change24h': -2},
+                'TRX': {'usd': 0.12, 'change24h': 3.25},
+              },
+              'fiatPerUsd': {'USD': 0, 'CNY': -7.2, 'JPY': 151.5},
+              'cachedAtMs': cachedAtMs,
+            },
+          };
+        await expectLater(
+          GatewayClient(
+            baseUrl: 'https://gw.example',
+            client: recorder.client,
+          ).getPrices(const ['ETH', 'POL', 'TRX']),
+          throwsFormatException,
+        );
+      },
+    );
+
+    test('rejects unbound, additive and incomplete price results', () async {
+      final cachedAtMs = DateTime.now().millisecondsSinceEpoch;
+      final cases = <Map<String, Object?>>[
+        {
+          'prices': {
+            'ETH': {'usd': 2500.0},
+          },
+          'fiatPerUsd': {'USD': 1},
+          'cachedAtMs': cachedAtMs,
+          'accepted': true,
+        },
+        {
+          'prices': {
+            'ETH': {'usd': 2500.0, 'provider': 'trusted'},
+          },
+          'fiatPerUsd': {'USD': 1},
+          'cachedAtMs': cachedAtMs,
+        },
+        {
+          'prices': {
+            'BTC': {'usd': 100000.0},
+          },
+          'fiatPerUsd': {'USD': 1},
+          'cachedAtMs': cachedAtMs,
+        },
+        {
+          'prices': {
+            'ETH': {'usd': 2500.0},
+          },
+          'fiatPerUsd': {'USD': 1, 'EUR': 0.9},
+          'cachedAtMs': cachedAtMs,
+        },
+        {
+          'prices': {
+            'ETH': {'usd': 2500.0},
+          },
+          'fiatPerUsd': {'USD': 1},
+        },
+        {
+          'prices': {
+            'ETH': {'usd': 2500.0},
+          },
+          'fiatPerUsd': {'USD': 1, 'CNY': 7.2, 'JPY': 151.5},
+          'cachedAtMs': DateTime.now()
+              .subtract(const Duration(minutes: 16))
+              .millisecondsSinceEpoch,
+        },
+      ];
+      for (final result in cases) {
+        final recorder = _Recorder()..results = {'kt_getPrices': result};
+        await expectLater(
+          GatewayClient(
+            baseUrl: 'https://gw.example',
+            client: recorder.client,
+          ).getPrices(const ['ETH']),
+          throwsFormatException,
+        );
+      }
     });
   });
 

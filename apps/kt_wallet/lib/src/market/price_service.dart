@@ -1,9 +1,8 @@
-import 'dart:convert';
-
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:http/http.dart' as http;
 
 import '../rpc/bounded_http_client.dart';
+import '../rpc/json_rpc_envelope.dart';
 import 'balance_service.dart' show BalanceService;
 import 'fiat_math.dart';
 import 'gateway_client.dart';
@@ -63,6 +62,20 @@ class PriceService {
     'BONK': 'bonk',
     'PYUSD': 'paypal-usd',
   };
+
+  static const _coinGeckoQuoteKeys = <String>{
+    'usd',
+    'usd_24h_change',
+    'cny',
+    'cny_24h_change',
+    'jpy',
+    'jpy_24h_change',
+    'last_updated_at',
+  };
+  static const _maximumQuoteAge = Duration(minutes: 15);
+  static const _maximumFutureClockSkew = Duration(minutes: 5);
+  static const _maximumChange = 1000000000.0;
+  static const _maximumFxDeviation = 0.005;
 
   Map<Coin, double>? _lastGood;
   Map<String, double>? _lastGoodTokenUsd;
@@ -125,8 +138,10 @@ class PriceService {
     });
   }
 
-  /// Fetches spot USD prices. Returns null on any failure; partial responses
-  /// keep whichever coins were present.
+  /// Fetches spot USD prices. Returns null on any failure. Both Gateway and
+  /// direct CoinGecko responses are all-or-nothing trust boundaries: a bad,
+  /// partial, additive, stale or internally inconsistent quote set never
+  /// replaces the last known-good display cache.
   ///
   /// GATEWAY SEMANTICS: with a gateway configured, `kt_getPrices` is asked
   /// first (symbols per [BalanceService.symbolFor]); a failing or empty
@@ -136,12 +151,15 @@ class PriceService {
     final gateway = _gateway();
     if (gateway != null) {
       try {
-        final quoted = await gateway.getPrices(
-          {
-            for (final coin in Coin.values) BalanceService.symbolFor[coin]!,
-            ...coinGeckoTokenIds.keys,
-          }.toList(),
-        );
+        final requestedSymbols = {
+          for (final coin in Coin.values) BalanceService.symbolFor[coin]!,
+          ...coinGeckoTokenIds.keys,
+        };
+        final quoted = await gateway.getPrices(requestedSymbols.toList());
+        if (quoted.usdBySymbol.length != requestedSymbols.length ||
+            !requestedSymbols.every(quoted.usdBySymbol.containsKey)) {
+          throw const FormatException('partial known-symbol price result');
+        }
         final out = <Coin, double>{
           for (final coin in Coin.values)
             if (quoted.usdBySymbol[BalanceService.symbolFor[coin]!] != null)
@@ -173,7 +191,7 @@ class PriceService {
           _lastGood = Map.unmodifiable(out);
           return _lastGood;
         }
-        // All symbols unknown to the gateway: try CoinGecko instead.
+        // Defensive fallback; the exact-set check above normally owns this.
       } catch (_) {
         // GatewayException / transport failure: direct CoinGecko fallback.
       }
@@ -185,57 +203,87 @@ class PriceService {
       }.join(',');
       final uri = Uri.parse(
         '$baseUrl/simple/price?ids=$ids&vs_currencies=usd,cny,jpy'
-        '&include_24hr_change=true',
+        '&include_24hr_change=true&include_last_updated_at=true'
+        '&precision=full',
       );
       final resp = await _client.get(uri).timeout(timeout);
       if (resp.statusCode != 200) return null;
-      final body = jsonDecode(resp.body);
-      if (body is! Map) return null;
-      final out = <Coin, double>{};
-      final changeOut = <Coin, double>{};
-      for (final entry in coinGeckoIds.entries) {
-        final row = body[entry.value];
-        final usd = row is Map ? positiveFiniteMarketNumber(row['usd']) : null;
-        if (usd != null) out[entry.key] = usd;
-        final change = row is Map ? row['usd_24h_change'] : null;
-        final parsedChange = finiteMarketNumber(change);
-        if (usd != null && parsedChange != null) {
-          changeOut[entry.key] = parsedChange;
+      final body = decodeJsonWithoutDuplicateKeys(resp.body);
+      final expectedIds = {...coinGeckoIds.values, ...coinGeckoTokenIds.values};
+      if (body is! Map || !_hasExactStringKeys(body, expectedIds)) return null;
+
+      final now = DateTime.now();
+      final quotes = <String, _DirectMarketQuote>{};
+      final cnyRates = <double>[];
+      final jpyRates = <double>[];
+      for (final entry in body.entries) {
+        final id = entry.key;
+        final row = entry.value;
+        if (id is! String ||
+            !expectedIds.contains(id) ||
+            row is! Map ||
+            !_hasExactStringKeys(row, _coinGeckoQuoteKeys)) {
+          return null;
         }
+        final usd = positiveFiniteMarketNumber(row['usd']);
+        final cny = positiveFiniteMarketNumber(row['cny']);
+        final jpy = positiveFiniteMarketNumber(row['jpy']);
+        final usdChange = _nullableMarketChange(row['usd_24h_change']);
+        final cnyChange = _nullableMarketChange(row['cny_24h_change']);
+        final jpyChange = _nullableMarketChange(row['jpy_24h_change']);
+        final updatedAt = row['last_updated_at'];
+        if (usd == null ||
+            cny == null ||
+            jpy == null ||
+            (row['usd_24h_change'] != null && usdChange == null) ||
+            (row['cny_24h_change'] != null && cnyChange == null) ||
+            (row['jpy_24h_change'] != null && jpyChange == null) ||
+            updatedAt is! int) {
+          return null;
+        }
+        final sourceTime = DateTime.fromMillisecondsSinceEpoch(
+          updatedAt * 1000,
+          isUtc: true,
+        );
+        if (sourceTime.isBefore(now.subtract(_maximumQuoteAge)) ||
+            sourceTime.isAfter(now.add(_maximumFutureClockSkew))) {
+          return null;
+        }
+        final cnyRate = cny / usd;
+        final jpyRate = jpy / usd;
+        if (!_rateInRange(cnyRate, 0.1, 100) ||
+            !_rateInRange(jpyRate, 1, 10000)) {
+          return null;
+        }
+        cnyRates.add(cnyRate);
+        jpyRates.add(jpyRate);
+        quotes[id] = _DirectMarketQuote(usd: usd, change24h: usdChange);
       }
-      final tokenOut = <String, double>{};
-      final tokenChangeOut = <String, double>{};
-      for (final entry in coinGeckoTokenIds.entries) {
-        final row = body[entry.value];
-        final usd = row is Map ? positiveFiniteMarketNumber(row['usd']) : null;
-        if (usd != null) tokenOut[entry.key] = usd;
-        final change = row is Map ? row['usd_24h_change'] : null;
-        final parsedChange = finiteMarketNumber(change);
-        if (usd != null && parsedChange != null) {
-          tokenChangeOut[entry.key] = parsedChange;
-        }
-      }
-      if (out.isEmpty && tokenOut.isEmpty) return null;
-      final rates = <String, double>{'USD': 1};
-      for (final row in body.values) {
-        if (row is! Map) continue;
-        final usd = row['usd'];
-        final cny = row['cny'];
-        final jpy = row['jpy'];
-        final safeUsd = positiveFiniteMarketNumber(usd);
-        if (safeUsd == null) continue;
-        final safeCny = positiveFiniteMarketNumber(cny);
-        final safeJpy = positiveFiniteMarketNumber(jpy);
-        if (safeCny != null) {
-          final rate = safeCny / safeUsd;
-          if (rate.isFinite && rate > 0) rates['CNY'] = rate;
-        }
-        if (safeJpy != null) {
-          final rate = safeJpy / safeUsd;
-          if (rate.isFinite && rate > 0) rates['JPY'] = rate;
-        }
-        if (rates.length == 3) break;
-      }
+      if (!_ratesAgree(cnyRates) || !_ratesAgree(jpyRates)) return null;
+
+      final out = <Coin, double>{
+        for (final entry in coinGeckoIds.entries)
+          entry.key: quotes[entry.value]!.usd,
+      };
+      final changeOut = <Coin, double>{
+        for (final entry in coinGeckoIds.entries)
+          if (quotes[entry.value]!.change24h != null)
+            entry.key: quotes[entry.value]!.change24h!,
+      };
+      final tokenOut = <String, double>{
+        for (final entry in coinGeckoTokenIds.entries)
+          entry.key: quotes[entry.value]!.usd,
+      };
+      final tokenChangeOut = <String, double>{
+        for (final entry in coinGeckoTokenIds.entries)
+          if (quotes[entry.value]!.change24h != null)
+            entry.key: quotes[entry.value]!.change24h!,
+      };
+      final rates = <String, double>{
+        'USD': 1,
+        'CNY': _median(cnyRates),
+        'JPY': _median(jpyRates),
+      };
       if (tokenOut.isNotEmpty) {
         _lastGoodTokenUsd = Map.unmodifiable(tokenOut);
       }
@@ -250,4 +298,45 @@ class PriceService {
   }
 
   void close() => _client.close();
+
+  static bool _hasExactStringKeys(
+    Map<Object?, Object?> value,
+    Set<String> expected,
+  ) =>
+      value.length == expected.length &&
+      value.keys.every((key) => key is String && expected.contains(key));
+
+  static double? _nullableMarketChange(Object? value) {
+    if (value == null) return null;
+    final parsed = finiteMarketNumber(value);
+    return parsed != null && parsed >= -100 && parsed <= _maximumChange
+        ? parsed
+        : null;
+  }
+
+  static bool _rateInRange(double value, double minimum, double maximum) =>
+      value.isFinite && value >= minimum && value <= maximum;
+
+  static bool _ratesAgree(List<double> rates) {
+    if (rates.isEmpty) return false;
+    final median = _median(rates);
+    return rates.every(
+      (rate) => (rate / median - 1).abs() <= _maximumFxDeviation,
+    );
+  }
+
+  static double _median(List<double> values) {
+    final sorted = [...values]..sort();
+    final middle = sorted.length ~/ 2;
+    return sorted.length.isOdd
+        ? sorted[middle]
+        : (sorted[middle - 1] + sorted[middle]) / 2;
+  }
+}
+
+class _DirectMarketQuote {
+  const _DirectMarketQuote({required this.usd, required this.change24h});
+
+  final double usd;
+  final double? change24h;
 }

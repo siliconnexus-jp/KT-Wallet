@@ -72,6 +72,7 @@ const _reviewedGatewayResponseKeys = <String>{
   'txHash',
   'unlimited',
   'upstream',
+  'USD',
   'usd',
   'value',
   'verified',

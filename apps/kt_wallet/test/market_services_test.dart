@@ -40,6 +40,31 @@ Map<String, Object?> _rpcResult(Object? result) => {
   'result': result,
 };
 
+Map<String, Object?> _completeCoinGeckoResponse({
+  Map<String, double> usd = const {},
+  Map<String, double?> change24h = const {},
+  int? updatedAt,
+}) {
+  final ids = {
+    ...PriceService.coinGeckoIds.values,
+    ...PriceService.coinGeckoTokenIds.values,
+  };
+  final sourceTime =
+      updatedAt ?? DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+  return {
+    for (final id in ids)
+      id: {
+        'usd': usd[id] ?? 1.0,
+        'usd_24h_change': change24h[id],
+        'cny': (usd[id] ?? 1.0) * 7,
+        'cny_24h_change': change24h[id],
+        'jpy': (usd[id] ?? 1.0) * 150,
+        'jpy_24h_change': change24h[id],
+        'last_updated_at': sourceTime,
+      },
+  };
+}
+
 void main() {
   group('BalanceService', () {
     test('fetches all four native balances (success)', () async {
@@ -202,20 +227,32 @@ void main() {
           expect(request.url.path, '/api/v3/simple/price');
           expect(request.url.queryParameters['vs_currencies'], 'usd,cny,jpy');
           expect(request.url.queryParameters['include_24hr_change'], 'true');
+          expect(
+            request.url.queryParameters['include_last_updated_at'],
+            'true',
+          );
+          expect(request.url.queryParameters['precision'], 'full');
           return http.Response(
-            jsonEncode({
-              'ethereum': {
-                'usd': 2500.0,
-                'cny': 17500.0,
-                'jpy': 375000.0,
-                'usd_24h_change': 2.5,
-              },
-              'polygon-ecosystem-token': {'usd': 0.4, 'usd_24h_change': -3.0},
-              'tron': {'usd': 0.12, 'usd_24h_change': null},
-              'solana': {'usd': 150, 'usd_24h_change': 1},
-              'tether': {'usd': 0.997, 'usd_24h_change': -0.1},
-              'usd-coin': {'usd': 1.001, 'usd_24h_change': 0.05},
-            }),
+            jsonEncode(
+              _completeCoinGeckoResponse(
+                usd: const {
+                  'ethereum': 2500,
+                  'polygon-ecosystem-token': 0.4,
+                  'tron': 0.12,
+                  'solana': 150,
+                  'tether': 0.997,
+                  'usd-coin': 1.001,
+                },
+                change24h: const {
+                  'ethereum': 2.5,
+                  'polygon-ecosystem-token': -3,
+                  'tron': null,
+                  'solana': 1,
+                  'tether': -0.1,
+                  'usd-coin': 0.05,
+                },
+              ),
+            ),
             200,
           );
         }),
@@ -246,9 +283,9 @@ void main() {
           (request) async => fail
               ? http.Response('rate limited', 429)
               : http.Response(
-                  jsonEncode({
-                    'ethereum': {'usd': 2000.0},
-                  }),
+                  jsonEncode(
+                    _completeCoinGeckoResponse(usd: const {'ethereum': 2000}),
+                  ),
                   200,
                 ),
         ),
@@ -261,7 +298,7 @@ void main() {
       expect(service.lastGoodUsd![Coin.eth], 2000.0);
     });
 
-    test('direct quotes omit non-positive prices and their changes', () async {
+    test('one malformed direct quote rejects the whole valuation', () async {
       final service = PriceService(
         client: MockClient(
           (_) async => http.Response(
@@ -280,14 +317,62 @@ void main() {
         ),
       );
 
-      final prices = await service.fetchUsdPrices();
-      expect(prices, {Coin.tron: 0.12});
+      expect(await service.fetchUsdPrices(), isNull);
       expect(service.change24hPercent(Coin.eth), isNull);
-      expect(service.change24hPercent(Coin.tron), -1.25);
+      expect(service.change24hPercent(Coin.tron), isNull);
       expect(service.tokenPriceUsd('USDT'), isNull);
       expect(service.tokenChange24hPercent('USDT'), isNull);
       expect(service.lastGoodFiatPerUsd, {'USD': 1});
     });
+
+    test(
+      'direct CoinGecko rejects duplicate, additive, partial and stale truth',
+      () async {
+        Map<String, Object?> freshResponse() =>
+            jsonDecode(jsonEncode(_completeCoinGeckoResponse()))
+                as Map<String, Object?>;
+
+        final validJson = jsonEncode(freshResponse());
+        final duplicateEthereum =
+            '{"ethereum":${jsonEncode(freshResponse()['ethereum'])},'
+            '${validJson.substring(1)}';
+
+        final additiveQuote = freshResponse();
+        (additiveQuote['ethereum'] as Map<String, Object?>)['unexpected'] =
+            true;
+
+        final additiveTopLevel = freshResponse()
+          ..['unrequested-coin'] = freshResponse()['ethereum'];
+
+        final partial = freshResponse()..remove('ethereum');
+
+        final stale = freshResponse();
+        (stale['ethereum'] as Map<String, Object?>)['last_updated_at'] =
+            DateTime.now()
+                .subtract(const Duration(minutes: 16))
+                .millisecondsSinceEpoch ~/
+            1000;
+
+        final inconsistentFx = freshResponse();
+        (inconsistentFx['tron'] as Map<String, Object?>)['cny'] = 1.0;
+
+        final bodies = <String>[
+          duplicateEthereum,
+          jsonEncode(additiveQuote),
+          jsonEncode(additiveTopLevel),
+          jsonEncode(partial),
+          jsonEncode(stale),
+          jsonEncode(inconsistentFx),
+        ];
+        for (final body in bodies) {
+          final service = PriceService(
+            client: MockClient((_) async => http.Response(body, 200)),
+          );
+          expect(await service.fetchUsdPrices(), isNull, reason: body);
+          expect(service.lastGoodUsd, isNull);
+        }
+      },
+    );
 
     test('timeout → null', () async {
       final service = PriceService(

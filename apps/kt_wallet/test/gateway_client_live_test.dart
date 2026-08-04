@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kt_wallet/src/market/balance_service.dart';
 import 'package:kt_wallet/src/market/gateway_client.dart';
+import 'package:kt_wallet/src/market/price_service.dart';
 
 void main() {
   final enabled = Platform.environment['KT_LIVE_GATEWAY_CLIENT'] == '1';
@@ -112,6 +114,29 @@ void main() {
         expect(record.decimals, isNotNull);
         expect(record.symbol, isNotNull);
       }
+      client.close();
+    },
+    skip: enabled ? false : 'set KT_LIVE_GATEWAY_CLIENT=1 for live evidence',
+  );
+
+  test(
+    'production prices survive exact schema, freshness and request binding',
+    () async {
+      final client = GatewayClient(baseUrl: baseUrl);
+      final requestedSymbols = {
+        for (final coin in Coin.values) BalanceService.symbolFor[coin]!,
+        ...PriceService.coinGeckoTokenIds.keys,
+      };
+
+      final prices = await client.getPrices(requestedSymbols.toList());
+
+      expect(prices.usdBySymbol.keys.toSet(), requestedSymbols);
+      expect(prices.usdBySymbol.values, everyElement(greaterThan(0)));
+      expect(prices.fiatPerUsd.keys, containsAll(const ['USD', 'CNY', 'JPY']));
+      expect(
+        DateTime.now().millisecondsSinceEpoch - prices.cachedAtMs,
+        inInclusiveRange(0, const Duration(minutes: 15).inMilliseconds),
+      );
       client.close();
     },
     skip: enabled ? false : 'set KT_LIVE_GATEWAY_CLIENT=1 for live evidence',

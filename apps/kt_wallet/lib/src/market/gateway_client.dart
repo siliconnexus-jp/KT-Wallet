@@ -218,6 +218,14 @@ class GatewayClient {
     'status',
   };
   static const _broadcastResultKeys = <String>{'chain', 'network', 'txHash'};
+  static const _pricesResultKeys = <String>{
+    'prices',
+    'fiatPerUsd',
+    'cachedAtMs',
+  };
+  static const _priceRowKeys = <String>{'usd'};
+  static const _priceChangeRowKeys = <String>{'usd', 'change24h'};
+  static const _fiatRateKeys = <String>{'USD', 'CNY', 'JPY'};
   static const _tokenRiskCategories = <String>{
     'malicious',
     'phishing',
@@ -618,44 +626,106 @@ class GatewayClient {
   }
 
   /// `kt_getPrices` — USD spot quotes and optional 24h percentage changes
-  /// keyed by symbol (unknown symbols are omitted by the gateway; an empty
-  /// map is a valid, useless answer).
+  /// keyed by symbol (unknown symbols are omitted by the gateway; a fresh,
+  /// schema-valid empty map is a valid but useless answer).
   Future<GatewayPrices> getPrices(List<String> symbols) async {
-    final result = await _call('kt_getPrices', {'symbols': symbols});
-    if (result is! Map) throw const FormatException('bad prices result');
+    final requested = <String>{};
+    final normalizedSymbols = <String>[];
+    for (final symbol in symbols) {
+      final normalized = symbol.trim().toUpperCase();
+      if (!_officialTokenSymbolPattern.hasMatch(normalized)) {
+        throw ArgumentError.value(symbol, 'symbols', 'invalid market symbol');
+      }
+      if (!requested.add(normalized)) {
+        throw ArgumentError.value(
+          symbols,
+          'symbols',
+          'duplicate market symbol',
+        );
+      }
+      normalizedSymbols.add(normalized);
+    }
+    if (requested.isEmpty) {
+      throw ArgumentError.value(symbols, 'symbols', 'must not be empty');
+    }
+    final result = await _call('kt_getPrices', {'symbols': normalizedSymbols});
+    if (result is! Map || !_hasExactStringKeys(result, _pricesResultKeys)) {
+      throw const FormatException('bad prices result');
+    }
     final prices = result['prices'];
     if (prices is! Map) throw const FormatException('missing prices map');
     final out = <String, double>{};
     final changes = <String, double>{};
     for (final entry in prices.entries) {
+      final symbol = entry.key;
       final row = entry.value;
-      final usd = row is Map ? positiveFiniteMarketNumber(row['usd']) : null;
-      if (entry.key is String && usd != null) {
-        final symbol = entry.key as String;
-        out[symbol] = usd;
-        final change24h = row is Map ? row['change24h'] : null;
-        final parsedChange = finiteMarketNumber(change24h);
-        if (parsedChange != null) changes[symbol] = parsedChange;
+      final expectedRowKeys = row is Map && row.containsKey('change24h')
+          ? _priceChangeRowKeys
+          : _priceRowKeys;
+      if (symbol is! String ||
+          !requested.contains(symbol) ||
+          !_officialTokenSymbolPattern.hasMatch(symbol) ||
+          row is! Map ||
+          !_hasExactStringKeys(row, expectedRowKeys)) {
+        throw const FormatException('unbound price row');
+      }
+      final usd = positiveFiniteMarketNumber(row['usd']);
+      if (usd == null) throw const FormatException('invalid USD price');
+      out[symbol] = usd;
+      if (row.containsKey('change24h')) {
+        final parsedChange = _marketChange(row['change24h']);
+        if (parsedChange == null) {
+          throw const FormatException('invalid 24 hour change');
+        }
+        changes[symbol] = parsedChange;
       }
     }
     final rawRates = result['fiatPerUsd'];
-    final rates = <String, double>{'USD': 1};
-    if (rawRates is Map) {
-      for (final entry in rawRates.entries) {
-        final currency = entry.key;
-        final rate = entry.value;
-        final parsedRate = positiveFiniteMarketNumber(rate);
-        if (currency is String && parsedRate != null) {
-          rates[currency.toUpperCase()] = parsedRate;
-        }
+    if (rawRates is! Map ||
+        rawRates.isEmpty ||
+        rawRates.keys.any(
+          (key) => key is! String || !_fiatRateKeys.contains(key),
+        ) ||
+        rawRates['USD'] != 1 ||
+        (prices.isNotEmpty && !_hasExactStringKeys(rawRates, _fiatRateKeys))) {
+      throw const FormatException('invalid fiat rates');
+    }
+    final rates = <String, double>{};
+    for (final entry in rawRates.entries) {
+      final currency = entry.key as String;
+      final parsedRate = positiveFiniteMarketNumber(entry.value);
+      final inRange = switch (currency) {
+        'USD' => parsedRate == 1,
+        'CNY' => parsedRate != null && parsedRate >= 0.1 && parsedRate <= 100,
+        'JPY' => parsedRate != null && parsedRate >= 1 && parsedRate <= 10000,
+        _ => false,
+      };
+      if (!inRange || parsedRate == null) {
+        throw const FormatException('invalid fiat rate');
       }
+      rates[currency] = parsedRate;
+    }
+    final cachedAtMs = result['cachedAtMs'];
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (cachedAtMs is! int ||
+        cachedAtMs <= 0 ||
+        cachedAtMs < nowMs - const Duration(minutes: 15).inMilliseconds ||
+        cachedAtMs > nowMs + const Duration(minutes: 5).inMilliseconds) {
+      throw const FormatException('stale market result');
     }
     return GatewayPrices(
       usdBySymbol: Map.unmodifiable(out),
       change24hBySymbol: Map.unmodifiable(changes),
       fiatPerUsd: Map.unmodifiable(rates),
-      cachedAtMs: result['cachedAtMs'] is int ? result['cachedAtMs'] as int : 0,
+      cachedAtMs: cachedAtMs,
     );
+  }
+
+  static double? _marketChange(Object? value) {
+    final parsed = finiteMarketNumber(value);
+    return parsed != null && parsed >= -100 && parsed <= 1000000000
+        ? parsed
+        : null;
   }
 
   /// `kt_getChainParams` — pending nonce + EIP-1559 fee tiers of the active
