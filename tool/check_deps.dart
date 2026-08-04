@@ -938,8 +938,12 @@ void main() {
       '_evmExplorerExecutionStatus',
       '_evmTokenTransferExecutionStatus',
       '_isEvmBlockHash',
-      "item['hash'] ?? item['transactionHash']",
-      "item['traceId'] ?? item['index'] ?? index",
+      'decodeJsonWithoutDuplicateKeys(response.body)',
+      '_evmExplorerRows(body, limit: limit)',
+      '_evmInternalHash(item)',
+      '_evmInternalTrace(item)',
+      '_evmRowTouchesOwner(item, lower)',
+      "fetchList('txlistinternal'),",
       '_solanaExecutionStatus',
       '_tronContractExecutionStatus',
       '?limit=\$limit&only_confirmed=true',
@@ -978,6 +982,7 @@ void main() {
     "item['err'] == null && meta['err'] == null",
     "data['rejected'] != true",
     'var confirmed = true',
+    "fetchList('txlistinternal').catchError",
   ]) {
     if (historySources[historyService.path]!.contains(failOpen)) {
       failures.add(

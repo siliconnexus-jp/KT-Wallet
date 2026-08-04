@@ -258,9 +258,10 @@ class HistoryService {
 
   Future<HistoryResult> _fetchEvm(Coin coin, String address, int limit) async {
     try {
+      final lower = _evmAddress(address, 'history owner').toLowerCase();
       final base = _evmHistoryApi(coin);
 
-      Future<List<dynamic>> fetchList(String action) async {
+      Future<List<Map<Object?, Object?>>> fetchList(String action) async {
         final uri = Uri.parse(base).replace(
           queryParameters: {
             'module': 'account',
@@ -275,93 +276,89 @@ class HistoryService {
         if (response.statusCode != 200) {
           throw http.ClientException('HTTP ${response.statusCode}', uri);
         }
-        final body = jsonDecode(response.body);
-        if (body is! Map) throw const FormatException('non-object body');
-        final result = body['result'];
-        if (result is List) return result;
-        // Etherscan-compatible APIs use this shape for a valid empty page.
-        if (body['status'] == '0' &&
-            '${body['message']}'.toLowerCase().contains('no transactions')) {
-          return const [];
-        }
-        // In particular, Routescan currently returns a null result for BNB.
-        // Treat that as unavailable rather than telling users the wallet has
-        // no transactions.
-        throw const FormatException('missing transaction result');
+        final body = decodeJsonWithoutDuplicateKeys(response.body);
+        final rows = _evmExplorerRows(body, limit: limit);
+        return [
+          for (final row in rows)
+            switch (action) {
+              'txlist' => _evmNormalRow(row),
+              'tokentx' => _evmTokenRow(row),
+              'txlistinternal' => _evmInternalRow(row),
+              _ => throw const FormatException('unknown explorer action'),
+            },
+        ];
       }
 
       final results = await (
         fetchList('txlist'),
         fetchList('tokentx'),
-        fetchList('txlistinternal').catchError((_) => const <dynamic>[]),
+        fetchList('txlistinternal'),
       ).wait;
       final normalItems = results.$1;
       final tokenItems = results.$2;
-      // Internal transfers are enrichment on explorers that implement it; a
-      // failure must not hide otherwise trustworthy native/token rows.
       final internalItems = results.$3;
 
-      final lower = address.toLowerCase();
       final registry = _tokenRegistry();
       final records = <ChainTxRecord>[];
+      final normalMovements = <String>{};
 
-      void appendNative(
-        Map<dynamic, dynamic> item, {
-        required bool internal,
-        required int index,
-      }) {
+      for (final item in normalItems) {
+        _evmRowTouchesOwner(item, lower);
+        normalMovements.add(_evmMovementKey(item));
+      }
+      for (final item in tokenItems) {
+        _evmRowTouchesOwner(item, lower);
+      }
+      for (final item in internalItems) {
+        _evmRowTouchesOwner(item, lower);
+      }
+
+      void appendNative(Map<Object?, Object?> item, {required bool internal}) {
         final hash = internal
-            ? (item['hash'] ?? item['transactionHash'])
-            : item['hash'];
-        if (hash is! String || hash.isEmpty) return;
-        final rawFrom = '${item['from'] ?? ''}'.trim();
-        final rawTo = '${item['to'] ?? ''}'.trim();
+            ? _evmInternalHash(item)
+            : item['hash']! as String;
+        final rawFrom = item['from']! as String;
+        final rawTo = item['to']! as String;
         final from = rawFrom.toLowerCase();
-        final to = rawTo.toLowerCase();
-        if (from != lower && to != lower) return;
-        final seconds = int.tryParse('${item['timeStamp'] ?? ''}');
-        final value = BigInt.tryParse('${item['value'] ?? ''}');
-        if (seconds == null || value == null || value == BigInt.zero) return;
-        final trace = '${item['traceId'] ?? item['index'] ?? index}';
+        final value = BigInt.parse(item['value']! as String);
+        if (value == BigInt.zero) return;
+        if (internal && normalMovements.contains(_evmMovementKey(item))) {
+          return;
+        }
+        final seconds = int.parse(item['timeStamp']! as String);
+        final trace = internal ? _evmInternalTrace(item) : null;
         records.add(
           ChainTxRecord(
             coin: coin,
             id: internal ? '$hash:internal:$trace' : hash,
             hash: hash,
             outgoing: from == lower,
-            fromAddress: rawFrom.isEmpty ? null : rawFrom,
+            fromAddress: rawFrom,
             toAddress: rawTo.isEmpty ? null : rawTo,
             amountText: _formatAmount(value, 18, _nativeSymbol(coin)),
-            timestamp: DateTime.fromMillisecondsSinceEpoch(seconds * 1000),
+            timestamp: DateTime.fromMillisecondsSinceEpoch(
+              seconds * 1000,
+              isUtc: true,
+            ),
             status: _evmExplorerExecutionStatus(item),
           ),
         );
       }
 
-      for (final (index, item) in normalItems.indexed) {
-        if (item is Map) appendNative(item, internal: false, index: index);
+      for (final item in normalItems) {
+        appendNative(item, internal: false);
       }
-      for (final (index, item) in internalItems.indexed) {
-        if (item is Map) appendNative(item, internal: true, index: index);
+      for (final item in internalItems) {
+        appendNative(item, internal: true);
       }
       for (final (index, item) in tokenItems.indexed) {
-        if (item is! Map) continue;
-        final hash = item['hash'];
-        final contract = '${item['contractAddress'] ?? ''}'.trim();
-        final rawFrom = '${item['from'] ?? ''}'.trim();
-        final rawTo = '${item['to'] ?? ''}'.trim();
+        final hash = item['hash']! as String;
+        final contract = item['contractAddress']! as String;
+        final rawFrom = item['from']! as String;
+        final rawTo = item['to']! as String;
         final from = rawFrom.toLowerCase();
-        final to = rawTo.toLowerCase();
-        final seconds = int.tryParse('${item['timeStamp'] ?? ''}');
-        final raw = BigInt.tryParse('${item['value'] ?? ''}');
-        if (hash is! String ||
-            hash.isEmpty ||
-            contract.isEmpty ||
-            (from != lower && to != lower) ||
-            seconds == null ||
-            raw == null) {
-          continue;
-        }
+        final seconds = int.parse(item['timeStamp']! as String);
+        final raw = BigInt.parse(item['value']! as String);
         TokenInfo? official;
         for (final token in registry) {
           if (token.chain == coin &&
@@ -370,28 +367,32 @@ class HistoryService {
             break;
           }
         }
-        final claimedDecimals = int.tryParse('${item['tokenDecimal'] ?? ''}');
-        final claimedSymbol = '${item['tokenSymbol'] ?? ''}'.trim();
+        final claimedDecimals = int.parse(item['tokenDecimal']! as String);
+        if (official != null && official.decimals != claimedDecimals) {
+          throw const FormatException('official token decimals mismatch');
+        }
+        final claimedSymbol = (item['tokenSymbol']! as String).trim();
         final decimals = official?.decimals ?? claimedDecimals;
         final symbol =
             official?.symbol ??
             (claimedSymbol.isEmpty ? 'TOKEN' : claimedSymbol.toUpperCase());
-        final logIndex = '${item['logIndex'] ?? index}';
+        final logIndex = item['logIndex'] as String? ?? '$index';
         records.add(
           ChainTxRecord(
             coin: coin,
             id: '$hash:token:${contract.toLowerCase()}:$logIndex',
             hash: hash,
             outgoing: from == lower,
-            fromAddress: rawFrom.isEmpty ? null : rawFrom,
-            toAddress: rawTo.isEmpty ? null : rawTo,
-            amountText: decimals == null
-                ? null
-                : _formatAmount(raw, decimals, symbol),
+            fromAddress: rawFrom,
+            toAddress: rawTo,
+            amountText: _formatAmount(raw, decimals, symbol),
             assetContract: contract,
             assetSymbol: symbol,
             assetVerified: official != null,
-            timestamp: DateTime.fromMillisecondsSinceEpoch(seconds * 1000),
+            timestamp: DateTime.fromMillisecondsSinceEpoch(
+              seconds * 1000,
+              isUtc: true,
+            ),
             status: _evmTokenTransferExecutionStatus(item),
           ),
         );
@@ -1164,6 +1165,351 @@ class HistoryService {
 
   void close() => _client.close();
 }
+
+const Set<String> _evmNormalFields = {
+  'blockNumber',
+  'blockHash',
+  'timeStamp',
+  'hash',
+  'nonce',
+  'transactionIndex',
+  'from',
+  'to',
+  'value',
+  'gas',
+  'gasPrice',
+  'input',
+  'methodId',
+  'functionName',
+  'contractAddress',
+  'cumulativeGasUsed',
+  'txreceipt_status',
+  'gasUsed',
+  'confirmations',
+  'isError',
+  'maxFeePerGas',
+  'maxPriorityFeePerGas',
+  'type',
+  'l1Fee',
+  'l1GasPrice',
+  'l1GasUsed',
+  'l1FeeScalar',
+  'blobGasUsed',
+  'blobGasPrice',
+  'authorizationList',
+};
+
+const Set<String> _evmTokenFields = {
+  'blockNumber',
+  'timeStamp',
+  'hash',
+  'nonce',
+  'blockHash',
+  'from',
+  'contractAddress',
+  'to',
+  'value',
+  'tokenName',
+  'tokenSymbol',
+  'tokenDecimal',
+  'transactionIndex',
+  'gas',
+  'gasPrice',
+  'gasUsed',
+  'cumulativeGasUsed',
+  'input',
+  'methodId',
+  'functionName',
+  'confirmations',
+  'logIndex',
+  'isError',
+  'txreceipt_status',
+  'maxFeePerGas',
+  'maxPriorityFeePerGas',
+  'type',
+  'l1Fee',
+  'l1GasPrice',
+  'l1GasUsed',
+  'l1FeeScalar',
+  'blobGasUsed',
+  'blobGasPrice',
+  'authorizationList',
+};
+
+const Set<String> _evmInternalFields = {
+  'blockNumber',
+  'timeStamp',
+  'hash',
+  'transactionHash',
+  'from',
+  'to',
+  'value',
+  'contractAddress',
+  'input',
+  'type',
+  'callType',
+  'gas',
+  'gasUsed',
+  'traceId',
+  'index',
+  'isError',
+  'txreceipt_status',
+  'errCode',
+};
+
+List<Object?> _evmExplorerRows(Object? raw, {required int limit}) {
+  final envelope = _evmExactMap(
+    raw,
+    allowed: const {'status', 'message', 'result'},
+    required: const {'status', 'message', 'result'},
+    schema: 'explorer envelope',
+  );
+  final status = _evmRequiredString(envelope, 'status');
+  final message = _evmRequiredString(envelope, 'message');
+  final result = envelope['result'];
+  if (message.length > 256 || result is! List || result.length > limit) {
+    throw const FormatException('bad explorer envelope');
+  }
+  if (status == '1' && message == 'OK') return result;
+  if (status == '0' && message == 'No transactions found' && result.isEmpty) {
+    return result;
+  }
+  throw const FormatException('explorer rejected request');
+}
+
+Map<Object?, Object?> _evmNormalRow(Object? raw) {
+  final row = _evmExactMap(
+    raw,
+    allowed: _evmNormalFields,
+    required: const {'hash', 'from', 'to', 'value', 'timeStamp'},
+    schema: 'normal transaction',
+  );
+  _evmHash(_evmRequiredString(row, 'hash'), 'transaction hash');
+  _evmAddress(_evmRequiredString(row, 'from'), 'transaction sender');
+  _evmAddress(
+    _evmRequiredString(row, 'to'),
+    'transaction recipient',
+    allowEmpty: true,
+  );
+  _evmUnsignedDecimal(_evmRequiredString(row, 'value'), 'transaction value');
+  _evmTimestamp(_evmRequiredString(row, 'timeStamp'));
+  _evmOptionalExecutionFlag(row, 'isError');
+  _evmOptionalExecutionFlag(row, 'txreceipt_status');
+  return row;
+}
+
+Map<Object?, Object?> _evmTokenRow(Object? raw) {
+  final row = _evmExactMap(
+    raw,
+    allowed: _evmTokenFields,
+    required: const {
+      'blockNumber',
+      'timeStamp',
+      'hash',
+      'blockHash',
+      'from',
+      'to',
+      'value',
+      'tokenSymbol',
+      'tokenDecimal',
+      'contractAddress',
+      'transactionIndex',
+      'confirmations',
+    },
+    schema: 'token transaction',
+  );
+  final block = _evmUnsigned64(
+    _evmRequiredString(row, 'blockNumber'),
+    'token block number',
+  );
+  if (block == BigInt.zero) {
+    throw const FormatException('bad token block number');
+  }
+  _evmTimestamp(_evmRequiredString(row, 'timeStamp'));
+  _evmHash(_evmRequiredString(row, 'hash'), 'token transaction hash');
+  _evmHash(_evmRequiredString(row, 'blockHash'), 'token block hash');
+  _evmAddress(_evmRequiredString(row, 'from'), 'token sender');
+  _evmAddress(_evmRequiredString(row, 'to'), 'token recipient');
+  _evmAddress(_evmRequiredString(row, 'contractAddress'), 'token contract');
+  _evmUnsignedDecimal(_evmRequiredString(row, 'value'), 'token value');
+  _evmText(_evmRequiredString(row, 'tokenSymbol'), 'token symbol', 128);
+  final decimals = _evmUnsigned64(
+    _evmRequiredString(row, 'tokenDecimal'),
+    'token decimals',
+  );
+  if (decimals > BigInt.from(255)) {
+    throw const FormatException('bad token decimals');
+  }
+  _evmUnsigned64(
+    _evmRequiredString(row, 'transactionIndex'),
+    'token transaction index',
+  );
+  _evmUnsigned64(
+    _evmRequiredString(row, 'confirmations'),
+    'token confirmations',
+  );
+  if (row.containsKey('logIndex')) {
+    _evmUnsigned64(_evmRequiredString(row, 'logIndex'), 'token log index');
+  }
+  _evmOptionalExecutionFlag(row, 'isError');
+  _evmOptionalExecutionFlag(row, 'txreceipt_status');
+  return row;
+}
+
+Map<Object?, Object?> _evmInternalRow(Object? raw) {
+  final row = _evmExactMap(
+    raw,
+    allowed: _evmInternalFields,
+    required: const {'timeStamp', 'from', 'to', 'value'},
+    schema: 'internal transaction',
+  );
+  final hasHash = row.containsKey('hash');
+  final hasTransactionHash = row.containsKey('transactionHash');
+  final hasTrace = row.containsKey('traceId');
+  final hasIndex = row.containsKey('index');
+  if (hasHash == hasTransactionHash || hasTrace == hasIndex) {
+    throw const FormatException('ambiguous internal transaction identity');
+  }
+  _evmHash(_evmInternalHash(row), 'internal transaction hash');
+  _evmTrace(_evmInternalTrace(row));
+  _evmAddress(_evmRequiredString(row, 'from'), 'internal sender');
+  _evmAddress(
+    _evmRequiredString(row, 'to'),
+    'internal recipient',
+    allowEmpty: true,
+  );
+  _evmUnsignedDecimal(_evmRequiredString(row, 'value'), 'internal value');
+  _evmTimestamp(_evmRequiredString(row, 'timeStamp'));
+  _evmOptionalExecutionFlag(row, 'isError');
+  _evmOptionalExecutionFlag(row, 'txreceipt_status');
+  return row;
+}
+
+Map<Object?, Object?> _evmExactMap(
+  Object? raw, {
+  required Set<String> allowed,
+  required Set<String> required,
+  required String schema,
+}) {
+  if (raw is! Map ||
+      raw.keys.any((key) => key is! String || !allowed.contains(key)) ||
+      required.any((key) => !raw.containsKey(key))) {
+    throw FormatException('bad $schema');
+  }
+  return raw;
+}
+
+String _evmRequiredString(Map<Object?, Object?> row, String key) {
+  final value = row[key];
+  if (value is! String) throw FormatException('bad explorer field $key');
+  return value;
+}
+
+void _evmOptionalExecutionFlag(Map<Object?, Object?> row, String key) {
+  if (!row.containsKey(key)) return;
+  final value = _evmRequiredString(row, key);
+  if (value != '' && value != '0' && value != '1') {
+    throw FormatException('bad explorer field $key');
+  }
+}
+
+String _evmHash(String value, String label) {
+  if (value.length != 66 || !_evmHex(value)) {
+    throw FormatException('bad $label');
+  }
+  return value;
+}
+
+String _evmAddress(String value, String label, {bool allowEmpty = false}) {
+  if ((allowEmpty && value.isEmpty) || (value.length == 42 && _evmHex(value))) {
+    return value;
+  }
+  throw FormatException('bad $label');
+}
+
+bool _evmHex(String value) {
+  if (!value.startsWith('0x')) return false;
+  for (final code in value.codeUnits.skip(2)) {
+    final digit = code >= 0x30 && code <= 0x39;
+    final lower = code >= 0x61 && code <= 0x66;
+    final upper = code >= 0x41 && code <= 0x46;
+    if (!digit && !lower && !upper) return false;
+  }
+  return true;
+}
+
+BigInt _evmUnsignedDecimal(String value, String label) {
+  if (value.isEmpty || value.length > 78) {
+    throw FormatException('bad $label');
+  }
+  for (final code in value.codeUnits) {
+    if (code < 0x30 || code > 0x39) throw FormatException('bad $label');
+  }
+  final parsed = BigInt.tryParse(value);
+  if (parsed == null || parsed.isNegative || parsed.bitLength > 256) {
+    throw FormatException('bad $label');
+  }
+  return parsed;
+}
+
+BigInt _evmUnsigned64(String value, String label) {
+  final parsed = _evmUnsignedDecimal(value, label);
+  if (parsed.bitLength > 64) throw FormatException('bad $label');
+  return parsed;
+}
+
+int _evmTimestamp(String value) {
+  final parsed = _evmUnsignedDecimal(value, 'transaction timestamp');
+  // Dart DateTime supports a wider range than the product/UI should accept.
+  // Year 9999 is a closed, deterministic upper bound for chain evidence.
+  if (parsed == BigInt.zero || parsed > BigInt.from(253402300799)) {
+    throw const FormatException('bad transaction timestamp');
+  }
+  return parsed.toInt();
+}
+
+void _evmText(String value, String label, int maxBytes) {
+  if (utf8.encode(value).length > maxBytes) throw FormatException('bad $label');
+  for (final rune in value.runes) {
+    if (rune < 0x20 || rune == 0x7f) throw FormatException('bad $label');
+  }
+}
+
+String _evmInternalHash(Map<Object?, Object?> row) => _evmRequiredString(
+  row,
+  row.containsKey('hash') ? 'hash' : 'transactionHash',
+);
+
+String _evmInternalTrace(Map<Object?, Object?> row) =>
+    _evmRequiredString(row, row.containsKey('traceId') ? 'traceId' : 'index');
+
+void _evmTrace(String value) {
+  if (value.isEmpty || value.length > 128) {
+    throw const FormatException('bad internal trace id');
+  }
+  for (final segment in value.split('_')) {
+    if (segment.isEmpty ||
+        segment.codeUnits.any((code) => code < 0x30 || code > 0x39)) {
+      throw const FormatException('bad internal trace id');
+    }
+  }
+}
+
+void _evmRowTouchesOwner(Map<Object?, Object?> row, String owner) {
+  final from = (row['from']! as String).toLowerCase();
+  final to = (row['to']! as String).toLowerCase();
+  if (from != owner && to != owner) {
+    throw const FormatException('explorer row is not bound to owner');
+  }
+}
+
+String _evmMovementKey(Map<Object?, Object?> row) => [
+  row.containsKey('hash') ? row['hash'] : row['transactionHash'],
+  (row['from']! as String).toLowerCase(),
+  (row['to']! as String).toLowerCase(),
+  row['value'],
+  row['timeStamp'],
+].join('\u0000');
 
 final BigInt _solanaMaximumU64 = (BigInt.one << 64) - BigInt.one;
 

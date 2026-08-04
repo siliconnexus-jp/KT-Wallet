@@ -1967,3 +1967,18 @@ amount 全部精确校验；跨 Program 重复账户、错身份、溢出和矛�
 测试全部通过，没有加载私钥或广播。最终 KT Wallet 1568/1568、KT Cold Signer 570/570、
 共享 packages 429/429、静态分析 0、完整公开门禁 13/13；Gateway 仍为 1.16.20 且本轮无
 后端源码变化，移动端修复须随下一版 App 构建发布。
+
+同日继续关闭 App 在 Gateway 故障时使用的 EVM Explorer 直连历史边界。查询地址必须先
+通过规范 20-byte EVM 校验才允许出网；Etherscan-compatible 信封只接受精确
+`status/message/result`，每页数量不得超过请求 limit。Normal、ERC-20 与 internal 行分别
+使用受审字段词汇表，并严格校验 32-byte hash、地址、uint256 金额、u64 区块/索引/确认数、
+时间、执行证据与 Token 精度；每一行必须真实涉及被查询账户。Internal 行必须恰好使用
+Etherscan `hash/traceId` 或 Blockscout `transactionHash/index` 一族，官方 Token 的返回
+decimals 必须与注册表一致。三类 feed 任一失败、出现未知/重复字段、部分坏行或 Provider
+声明索引不完整时，整次直连查询失败闭合，不再把不完整历史伪装成完整空列表；normal 与
+internal 的同一资产移动会确定性去重。失败优先负例、现有状态语义与回归共 35/35 通过；
+Routescan Avalanche Fuji 对公开地址的三路真实只读测试 1/1 通过，规范 hash、金额与账户
+绑定均成立，没有加载私钥或广播。Blockscout 实时返回的 `status=2` 内部索引不完整形态也
+被明确拒绝。最终 KT Wallet 1578/1578、KT Cold Signer 570/570、共享 packages 429/429、
+静态分析 0、完整公开门禁 13/13；本轮没有 Gateway 源码变化，不需要后端部署，App 修复仍
+须随下一版移动端制品发布。

@@ -25,6 +25,31 @@ const _solanaSignature =
     '5h6xBEauJ3PK6SWCZ1PGjBvj8vDdWG3KpwATGy1ARAXFSDwt8GFXM7W5Ncn16wmqokgpiKRLuS83KUxyZyv2sUYv';
 const _solanaOtherSignature =
     '4ReKprwf3WdLHRrzp4ctPWNBsQDPL3VZz3zMmoZfcGJMJCHh5Vq937mPdyxhCbw54wNnA6hZ7KfNpQdpt13yY7A9';
+const _evmOwner = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const _evmOther = '0x1111111111111111111111111111111111111111';
+const _evmHash =
+    '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+
+Map<String, Object?> _emptyExplorerEnvelope() => {
+  'status': '1',
+  'message': 'OK',
+  'result': <Object?>[],
+};
+
+Map<String, Object?> _validEvmNormalItem({
+  String hash = _evmHash,
+  String from = _evmOther,
+  String to = _evmOwner,
+  String value = '1',
+}) => {
+  'hash': hash,
+  'from': from,
+  'to': to,
+  'value': value,
+  'timeStamp': '1700000000',
+  'isError': '0',
+  'txreceipt_status': '1',
+};
 
 Map<String, Object?> _solanaEmptyTokenAccounts() => {
   'context': {'slot': 114},
@@ -404,7 +429,7 @@ void main() {
     for (final coin in [Coin.eth, Coin.polygon, Coin.solana]) {
       final result = await service.fetch(
         coin,
-        coin == Coin.solana ? _solanaOwner : '0xabc',
+        coin == Coin.solana ? _solanaOwner : _evmOwner,
       );
       expect(result.status, HistoryStatus.ok, reason: '$coin');
       expect(result.records, isEmpty);
@@ -662,6 +687,215 @@ void main() {
     },
   );
 
+  test(
+    'EVM direct history validates the owner before network access',
+    () async {
+      var requests = 0;
+      final service = HistoryService(
+        endpoints: (_) => 'https://rpc.ankr.com/eth',
+        client: MockClient((request) async {
+          requests += 1;
+          return http.Response(jsonEncode(_emptyExplorerEnvelope()), 200);
+        }),
+      );
+
+      final result = await service.fetch(Coin.eth, '0xnot-an-address');
+      expect(result.status, HistoryStatus.error);
+      expect(result.records, isEmpty);
+      expect(requests, 0);
+    },
+  );
+
+  test('EVM direct history rejects ambiguous explorer envelopes', () async {
+    final service = HistoryService(
+      endpoints: (_) => 'https://rpc.ankr.com/eth',
+      client: MockClient((request) async {
+        if (request.url.queryParameters['action'] == 'txlist') {
+          return http.Response(
+            '{"status":"1","message":"OK","result":[],"Result":[]}',
+            200,
+          );
+        }
+        return http.Response(jsonEncode(_emptyExplorerEnvelope()), 200);
+      }),
+    );
+
+    final result = await service.fetch(Coin.eth, _evmOwner);
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
+  });
+
+  test('EVM direct history rejects duplicate JSON members', () async {
+    final service = HistoryService(
+      endpoints: (_) => 'https://rpc.ankr.com/eth',
+      client: MockClient((request) async {
+        if (request.url.queryParameters['action'] == 'txlist') {
+          return http.Response(
+            '{"status":"0","status":"1","message":"OK","result":[]}',
+            200,
+          );
+        }
+        return http.Response(jsonEncode(_emptyExplorerEnvelope()), 200);
+      }),
+    );
+
+    final result = await service.fetch(Coin.eth, _evmOwner);
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
+  });
+
+  test('EVM direct history rejects unknown transaction fields', () async {
+    final service = HistoryService(
+      endpoints: (_) => 'https://rpc.ankr.com/eth',
+      client: MockClient((request) async {
+        final result = request.url.queryParameters['action'] == 'txlist'
+            ? [
+                {..._validEvmNormalItem(), 'Hash': _evmHash},
+              ]
+            : <Object?>[];
+        return http.Response(
+          jsonEncode({'status': '1', 'message': 'OK', 'result': result}),
+          200,
+        );
+      }),
+    );
+
+    final result = await service.fetch(Coin.eth, _evmOwner);
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
+  });
+
+  test('EVM direct history rejects rows not bound to the owner', () async {
+    final service = HistoryService(
+      endpoints: (_) => 'https://rpc.ankr.com/eth',
+      client: MockClient((request) async {
+        final result = request.url.queryParameters['action'] == 'txlist'
+            ? [
+                _validEvmNormalItem(
+                  from: '0x2222222222222222222222222222222222222222',
+                  to: '0x3333333333333333333333333333333333333333',
+                ),
+              ]
+            : <Object?>[];
+        return http.Response(
+          jsonEncode({'status': '1', 'message': 'OK', 'result': result}),
+          200,
+        );
+      }),
+    );
+
+    final result = await service.fetch(Coin.eth, _evmOwner);
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
+  });
+
+  test('EVM direct history rejects responses larger than requested', () async {
+    final service = HistoryService(
+      endpoints: (_) => 'https://rpc.ankr.com/eth',
+      client: MockClient((request) async {
+        final result = request.url.queryParameters['action'] == 'txlist'
+            ? [
+                _validEvmNormalItem(),
+                _validEvmNormalItem(
+                  hash:
+                      '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+                ),
+              ]
+            : <Object?>[];
+        return http.Response(
+          jsonEncode({'status': '1', 'message': 'OK', 'result': result}),
+          200,
+        );
+      }),
+    );
+
+    final result = await service.fetch(Coin.eth, _evmOwner, limit: 1);
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
+  });
+
+  test(
+    'EVM direct history rejects malformed rows instead of reporting empty',
+    () async {
+      final service = HistoryService(
+        endpoints: (_) => 'https://rpc.ankr.com/eth',
+        client: MockClient((request) async {
+          final action = request.url.queryParameters['action'];
+          if (action != 'txlist') {
+            return http.Response(jsonEncode(_emptyExplorerEnvelope()), 200);
+          }
+          return http.Response(
+            jsonEncode({
+              'status': '1',
+              'message': 'OK',
+              'result': [
+                {
+                  'hash': '0xshort',
+                  'from': _evmOther,
+                  'to': _evmOwner,
+                  'value': '-1',
+                  'timeStamp': '1700000000',
+                  'isError': '0',
+                },
+              ],
+            }),
+            200,
+          );
+        }),
+      );
+
+      final result = await service.fetch(Coin.eth, _evmOwner);
+      expect(result.status, HistoryStatus.error);
+      expect(result.records, isEmpty);
+    },
+  );
+
+  test(
+    'EVM direct history fails closed when internal history is unavailable',
+    () async {
+      final service = HistoryService(
+        endpoints: (_) => 'https://rpc.ankr.com/eth',
+        client: MockClient((request) async {
+          if (request.url.queryParameters['action'] == 'txlistinternal') {
+            return http.Response('upstream unavailable', 503);
+          }
+          return http.Response(jsonEncode(_emptyExplorerEnvelope()), 200);
+        }),
+      );
+
+      final result = await service.fetch(Coin.eth, _evmOwner);
+      expect(result.status, HistoryStatus.error);
+      expect(result.records, isEmpty);
+    },
+  );
+
+  test(
+    'EVM direct history rejects explicitly incomplete internal indexes',
+    () async {
+      final service = HistoryService(
+        endpoints: (_) => 'https://rpc.ankr.com/eth',
+        client: MockClient((request) async {
+          if (request.url.queryParameters['action'] == 'txlistinternal') {
+            return http.Response(
+              jsonEncode({
+                'status': '2',
+                'message':
+                    'Some internal transactions within this block range have not yet been processed',
+                'result': <Object?>[],
+              }),
+              200,
+            );
+          }
+          return http.Response(jsonEncode(_emptyExplorerEnvelope()), 200);
+        }),
+      );
+
+      final result = await service.fetch(Coin.eth, _evmOwner);
+      expect(result.status, HistoryStatus.error);
+      expect(result.records, isEmpty);
+    },
+  );
+
   test('Avalanche direct history includes native internal receipts', () async {
     final actions = <String>[];
     final service = HistoryService(
@@ -676,7 +910,7 @@ void main() {
                 {
                   // Blockscout uses these names for internal transactions;
                   // Etherscan uses hash/traceId for the same concepts.
-                  'transactionHash': '0xairdrop',
+                  'transactionHash': _evmHash,
                   'index': '0_1',
                   'from': '0x1111111111111111111111111111111111111111',
                   'to': '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
@@ -701,7 +935,7 @@ void main() {
     expect(actions, ['txlist', 'tokentx', 'txlistinternal']);
     expect(result.status, HistoryStatus.ok);
     expect(result.records, hasLength(1));
-    expect(result.records.single.id, '0xairdrop:internal:0_1');
+    expect(result.records.single.id, '$_evmHash:internal:0_1');
     expect(result.records.single.outgoing, isFalse);
     expect(
       result.records.single.fromAddress,
@@ -726,13 +960,13 @@ void main() {
           final result = action == 'tokentx'
               ? [
                   {
-                    'hash': '0xtoken',
+                    'hash': _evmHash,
                     'logIndex': '3',
                     'from': '0x1111111111111111111111111111111111111111',
                     'to': address,
                     'value': '2500000',
                     'timeStamp': '1700000200',
-                    'tokenDecimal': '18',
+                    'tokenDecimal': '6',
                     'tokenSymbol': 'FAKE',
                     'contractAddress':
                         '0xdAC17F958D2ee523a2206206994597C13D831ec7',
@@ -765,8 +999,44 @@ void main() {
     },
   );
 
+  test('EVM direct history rejects official-token decimals mismatch', () async {
+    final service = HistoryService(
+      endpoints: (_) => 'https://rpc.ankr.com/eth',
+      client: MockClient((request) async {
+        final result = request.url.queryParameters['action'] == 'tokentx'
+            ? [
+                {
+                  'hash': _evmHash,
+                  'from': _evmOther,
+                  'to': _evmOwner,
+                  'value': '2500000',
+                  'timeStamp': '1700000200',
+                  'tokenDecimal': '18',
+                  'tokenSymbol': 'USDT',
+                  'contractAddress':
+                      '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+                  'blockNumber': '4730207',
+                  'blockHash':
+                      '0x022c5e6a3d2487a8ccf8946a2ffb74938bf8e5c8a3f6d91b41c56378a96b5c37',
+                  'transactionIndex': '81',
+                  'confirmations': '1',
+                },
+              ]
+            : <Object?>[];
+        return http.Response(
+          jsonEncode({'status': '1', 'message': 'OK', 'result': result}),
+          200,
+        );
+      }),
+    );
+
+    final result = await service.fetch(Coin.eth, _evmOwner);
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
+  });
+
   test(
-    'EVM token event without execution flags or canonical block evidence stays unknown',
+    'EVM token event without canonical block evidence fails closed',
     () async {
       const address = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
       final service = HistoryService(
@@ -775,7 +1045,7 @@ void main() {
           final result = request.url.queryParameters['action'] == 'tokentx'
               ? [
                   {
-                    'hash': '0xunproven-token',
+                    'hash': _evmHash,
                     'from': address,
                     'to': '0x1111111111111111111111111111111111111111',
                     'value': '1',
@@ -794,8 +1064,9 @@ void main() {
         }),
       );
 
-      final record = (await service.fetch(Coin.eth, address)).records.single;
-      expect(record.status, ChainTxStatus.unknown);
+      final result = await service.fetch(Coin.eth, address);
+      expect(result.status, HistoryStatus.error);
+      expect(result.records, isEmpty);
     },
   );
 
@@ -1088,14 +1359,16 @@ void main() {
           final result = action == 'txlist'
               ? [
                   {
-                    'hash': '0xmissing',
+                    'hash':
+                        '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
                     'from': address,
                     'to': '0x1111111111111111111111111111111111111111',
                     'value': '1000000000000000',
                     'timeStamp': '1700000400',
                   },
                   {
-                    'hash': '0xconflict',
+                    'hash':
+                        '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
                     'from': address,
                     'to': '0x2222222222222222222222222222222222222222',
                     'value': '2000000000000000',

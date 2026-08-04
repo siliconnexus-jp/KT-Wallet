@@ -750,8 +750,8 @@ void main() {
         expect(tron.status, HistoryStatus.ok); // direct TronGrid answered
         expect(tronGridHits, 3); // trc20 + native + internal endpoints
 
-        // No direct history source exists for the other chains: an honest
-        // error (the gateway WAS configured), never a silent "unsupported".
+        // Invalid direct-fallback addresses remain an honest error after the
+        // gateway fails, never a silent "unsupported" or network request.
         final eth = await service.fetch(Coin.eth, '0xEthAddr');
         expect(eth.status, HistoryStatus.error);
         final solana = await service.fetch(
@@ -798,9 +798,13 @@ void main() {
           }),
           gateway: () => null,
         );
-        expect((await service.fetch(Coin.eth, '0xA')).status, HistoryStatus.ok);
+        const evmAddress = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
         expect(
-          (await service.fetch(Coin.polygon, '0xA')).status,
+          (await service.fetch(Coin.eth, evmAddress)).status,
+          HistoryStatus.ok,
+        );
+        expect(
+          (await service.fetch(Coin.polygon, evmAddress)).status,
           HistoryStatus.ok,
         );
         expect(
