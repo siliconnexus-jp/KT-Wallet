@@ -1095,6 +1095,16 @@ void main() {
     'final id = networkOverride ?? _networks(chain)',
     'networkOverride: network',
     'decodeJsonWithoutDuplicateKeys(resp.body)',
+    '_chainParamsResultKeys',
+    '_evmSimulationResultKeys',
+    '_evmGasResultKeys',
+    '_evmTokenSpendableResultKeys',
+    "result['network'] != expectedNetwork",
+    "!_sameEvmAddress(result['address'], address)",
+    "result['value'] != normalizedValue",
+    "result['data'] != data.toLowerCase()",
+    'non-monotonic fee tiers',
+    'nativeAlias != native',
   ]) {
     if (!gatewayClientSource.contains(marker)) {
       failures.add(

@@ -14,7 +14,9 @@ const _reviewedGatewayResponseKeys = <String>{
   'amountRaw',
   'approvals',
   'approvedAt',
+  'address',
   'balance',
+  'blockTag',
   'cachedAtMs',
   'category',
   'chain',
@@ -62,6 +64,7 @@ const _reviewedGatewayResponseKeys = <String>{
   'to',
   'token',
   'tokenAddress',
+  'tokenContract',
   'tokenName',
   'tokenSymbol',
   'tokens',
@@ -70,6 +73,7 @@ const _reviewedGatewayResponseKeys = <String>{
   'unlimited',
   'upstream',
   'usd',
+  'value',
   'verified',
 };
 

@@ -40,6 +40,7 @@ const _addresses = ChainAddresses(
   tron: 'TTronAddr',
   solana: '47eFuHR9ste9kopiJ9eRxcwahmE62JovbKe5r7AjANut',
 );
+const _evmFrom = '0x1111111111111111111111111111111111111111';
 
 /// Every network id the current Go service advertises via `kt_health`.
 const _advertised = [
@@ -183,6 +184,8 @@ void main() {
               results: {
                 'kt_getBalances': _native('1', 18, 'ETH'),
                 'kt_getChainParams': {
+                  'network': 'polygon-amoy',
+                  'address': _evmFrom,
                   'nonce': '7',
                   'fees': {
                     'slow': {'maxPriorityFeePerGas': '1', 'maxFeePerGas': '10'},
@@ -213,7 +216,7 @@ void main() {
           GatewayTokenQuery(contract: '0xTok', decimals: 6, symbol: 'USDT'),
         ],
       );
-      await client.getChainParams(chain: Coin.polygon, address: '0xFrom');
+      await client.getChainParams(chain: Coin.polygon, address: _evmFrom);
       await client.getHistory(
         chain: Coin.tron,
         address: 'TTronAddr',
@@ -232,7 +235,7 @@ void main() {
       expect(gateway.paramsOf('kt_getChainParams').single, {
         'chain': 'polygon',
         'network': 'polygon-amoy',
-        'address': '0xFrom',
+        'address': _evmFrom,
       });
       expect(gateway.paramsOf('kt_getHistory').single, {
         'chain': 'tron',

@@ -27,13 +27,9 @@ func TestEVMPreflightForwardsExactPendingCall(t *testing.T) {
 	}
 
 	simulated := result(t, e.rpc("kt_simulateEvmTransfer", params))
-	if simulated["returnData"] != "0x"+fmt.Sprintf("%064x", 1) {
-		t.Fatalf("returnData = %v", simulated["returnData"])
-	}
+	assertJSONEq(t, `{"network":"polygon-amoy","from":"`+evmSelf+`","to":"`+evmTokenA+`","value":"0xf","data":"0xa9059cbb","blockTag":"pending","returnData":"0x`+fmt.Sprintf("%064x", 1)+`"}`, simulated)
 	gas := result(t, e.rpc("kt_estimateEvmGas", params))
-	if gas["gas"] != "21000" {
-		t.Fatalf("gas = %v, want decimal 21000", gas["gas"])
-	}
+	assertJSONEq(t, `{"network":"polygon-amoy","from":"`+evmSelf+`","to":"`+evmTokenA+`","value":"0xf","data":"0xa9059cbb","gas":"21000"}`, gas)
 
 	for _, method := range []string{"eth_call", "eth_estimateGas"} {
 		got := node.params(method)
@@ -143,7 +139,7 @@ func TestEVMSpendableBalancesReadPendingStateWithoutCache(t *testing.T) {
 
 	for range 2 {
 		got := result(t, e.rpc("kt_getEvmSpendableBalances", params))
-		assertJSONEq(t, `{"native":"1000000000000000000","nativeLatest":"1000000000000000000","nativePending":"1000000000000000000","pendingAvailable":true,"token":"100000000"}`, got)
+		assertJSONEq(t, `{"network":"eth-mainnet","address":"`+evmSelf+`","tokenContract":"`+evmTokenA+`","native":"1000000000000000000","nativeLatest":"1000000000000000000","nativePending":"1000000000000000000","pendingAvailable":true,"token":"100000000"}`, got)
 	}
 	if node.count("eth_getBalance") != 4 || node.count("eth_call") != 2 {
 		t.Fatalf(
@@ -180,7 +176,7 @@ func TestEVMSpendableBalancesMarksUnsupportedPendingState(t *testing.T) {
 	)
 
 	got := result(t, e.rpc("kt_getEvmSpendableBalances", params))
-	assertJSONEq(t, `{"native":"1000000000000000000","nativeLatest":"1000000000000000000","nativePending":"1000000000000000000","pendingAvailable":false}`, got)
+	assertJSONEq(t, `{"network":"avalanche-fuji","address":"`+evmSelf+`","native":"1000000000000000000","nativeLatest":"1000000000000000000","nativePending":"1000000000000000000","pendingAvailable":false}`, got)
 }
 
 func TestEVMSpendableBalancesRejectsInvalidTokenContract(t *testing.T) {

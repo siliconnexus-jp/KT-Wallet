@@ -47,6 +47,33 @@ class _Recorder {
   });
 }
 
+const _evmFrom = '0x1111111111111111111111111111111111111111';
+const _evmTo = '0x2222222222222222222222222222222222222222';
+
+Map<String, Object?> _chainParamsResult({
+  String network = 'eth-mainnet',
+  String address = _evmFrom,
+  String nonce = '42',
+}) => {
+  'network': network,
+  'address': address,
+  'nonce': nonce,
+  'fees': <String, Object?>{
+    'slow': <String, Object?>{
+      'maxPriorityFeePerGas': '1000000000',
+      'maxFeePerGas': '20000000000',
+    },
+    'standard': <String, Object?>{
+      'maxPriorityFeePerGas': '2000000000',
+      'maxFeePerGas': '30000000000',
+    },
+    'fast': <String, Object?>{
+      'maxPriorityFeePerGas': '3000000000',
+      'maxFeePerGas': '40000000000',
+    },
+  },
+};
+
 void main() {
   group('GatewayClient request framing', () {
     test(
@@ -504,23 +531,7 @@ void main() {
       () async {
         final recorder = _Recorder()
           ..results = {
-            'kt_getChainParams': {
-              'nonce': '42',
-              'fees': {
-                'slow': {
-                  'maxPriorityFeePerGas': '1000000000',
-                  'maxFeePerGas': '20000000000',
-                },
-                'standard': {
-                  'maxPriorityFeePerGas': '2000000000',
-                  'maxFeePerGas': '30000000000',
-                },
-                'fast': {
-                  'maxPriorityFeePerGas': '3000000000',
-                  'maxFeePerGas': '40000000000',
-                },
-              },
-            },
+            'kt_getChainParams': _chainParamsResult(network: 'polygon-mainnet'),
           };
         final client = GatewayClient(
           baseUrl: 'https://gw.example',
@@ -528,12 +539,12 @@ void main() {
         );
         final params = await client.getChainParams(
           chain: Coin.polygon,
-          address: '0xFrom',
+          address: _evmFrom,
         );
 
         expect(recorder.requests.single['params'], {
           'chain': 'polygon',
-          'address': '0xFrom',
+          'address': _evmFrom,
         });
         expect(params.nonce, 42);
         expect(params.fees.slow.maxPriorityFeePerGas, BigInt.from(1000000000));
@@ -541,6 +552,44 @@ void main() {
         expect(params.fees.fast.maxPriorityFeePerGas, BigInt.from(3000000000));
       },
     );
+
+    test('rejects unbound, unknown or impossible signing parameters', () async {
+      final unknownResult = {
+        ..._chainParamsResult(),
+        'authorization': 'approved',
+      };
+      final unknownFees = _chainParamsResult();
+      (unknownFees['fees']! as Map<String, Object?>)['baseFee'] = '1';
+      final invalidTier = _chainParamsResult();
+      final invalidSlow =
+          ((invalidTier['fees']! as Map<String, Object?>)['slow']!
+              as Map<String, Object?>);
+      invalidSlow['maxPriorityFeePerGas'] = '30000000000';
+      final nonMonotonic = _chainParamsResult();
+      final nonMonotonicFees = nonMonotonic['fees']! as Map<String, Object?>;
+      (nonMonotonicFees['slow']! as Map<String, Object?>)['maxFeePerGas'] =
+          '50000000000';
+
+      for (final result in <Map<String, Object?>>[
+        unknownResult,
+        unknownFees,
+        _chainParamsResult(address: _evmTo),
+        _chainParamsResult(nonce: '-1'),
+        invalidTier,
+        nonMonotonic,
+      ]) {
+        final recorder = _Recorder()..results = {'kt_getChainParams': result};
+        final client = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: recorder.client,
+        );
+
+        await expectLater(
+          client.getChainParams(chain: Coin.eth, address: _evmFrom),
+          throwsFormatException,
+        );
+      }
+    });
 
     test('-32602 for a non-EVM chain surfaces as GatewayException', () async {
       final recorder = _Recorder()
@@ -572,8 +621,23 @@ void main() {
               'ok': true,
               'networks': ['polygon-amoy'],
             },
-            'kt_simulateEvmTransfer': {'returnData': '0x${'0' * 63}1'},
-            'kt_estimateEvmGas': {'gas': '65432'},
+            'kt_simulateEvmTransfer': {
+              'network': 'polygon-amoy',
+              'from': _evmFrom,
+              'to': _evmTo,
+              'value': '0xf',
+              'data': '0xa9059cbb',
+              'blockTag': 'latest',
+              'returnData': '0x${'0' * 63}1',
+            },
+            'kt_estimateEvmGas': {
+              'network': 'polygon-amoy',
+              'from': _evmFrom,
+              'to': _evmTo,
+              'value': '0xf',
+              'data': '0xa9059cbb',
+              'gas': '65432',
+            },
           };
         final client = GatewayClient(
           baseUrl: 'https://gw.example',
@@ -582,8 +646,8 @@ void main() {
         );
         final args = (
           chain: Coin.polygon,
-          from: '0xFrom',
-          to: '0xToken',
+          from: _evmFrom,
+          to: _evmTo,
           value: BigInt.from(15),
           data: '0xa9059cbb',
         );
@@ -617,8 +681,8 @@ void main() {
         expect(calls.first['params'], {
           'chain': 'polygon',
           'network': 'polygon-amoy',
-          'from': '0xFrom',
-          'to': '0xToken',
+          'from': _evmFrom,
+          'to': _evmTo,
           'value': '15',
           'data': '0xa9059cbb',
           'blockTag': 'latest',
@@ -626,8 +690,8 @@ void main() {
         expect(calls.last['params'], {
           'chain': 'polygon',
           'network': 'polygon-amoy',
-          'from': '0xFrom',
-          'to': '0xToken',
+          'from': _evmFrom,
+          'to': _evmTo,
           'value': '15',
           'data': '0xa9059cbb',
         });
@@ -654,11 +718,98 @@ void main() {
         ),
         throwsFormatException,
       );
+      recorder.results['kt_simulateEvmTransfer'] = {
+        'network': 'eth-mainnet',
+        'from': _evmFrom,
+        'to': _evmTo,
+        'value': '0x0',
+        'data': '0x',
+        'blockTag': 'pending',
+        'returnData': '0x',
+        'authorization': true,
+      };
+      await expectLater(
+        client.simulateEvmTransfer(
+          chain: Coin.eth,
+          from: _evmFrom,
+          to: _evmTo,
+          value: BigInt.zero,
+          data: '0x',
+        ),
+        throwsFormatException,
+      );
       await expectLater(
         client.estimateEvmGas(
           chain: Coin.eth,
           from: '0xFrom',
           to: '0xTo',
+          value: BigInt.zero,
+          data: '0x',
+        ),
+        throwsFormatException,
+      );
+      recorder.results['kt_estimateEvmGas'] = {
+        'network': 'eth-mainnet',
+        'from': _evmFrom,
+        'to': _evmTo,
+        'value': '0x0',
+        'data': '0x',
+        'gas': '21000',
+        'authorization': true,
+      };
+      await expectLater(
+        client.estimateEvmGas(
+          chain: Coin.eth,
+          from: _evmFrom,
+          to: _evmTo,
+          value: BigInt.zero,
+          data: '0x',
+        ),
+        throwsFormatException,
+      );
+    });
+
+    test('preflight results must echo the exact normalized request', () async {
+      final recorder = _Recorder()
+        ..results = {
+          'kt_simulateEvmTransfer': {
+            'network': 'eth-mainnet',
+            'from': _evmTo,
+            'to': _evmTo,
+            'value': '0x0',
+            'data': '0x',
+            'blockTag': 'pending',
+            'returnData': '0x',
+          },
+          'kt_estimateEvmGas': {
+            'network': 'eth-mainnet',
+            'from': _evmFrom,
+            'to': _evmTo,
+            'value': '0x1',
+            'data': '0x',
+            'gas': '21000',
+          },
+        };
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: recorder.client,
+      );
+
+      await expectLater(
+        client.simulateEvmTransfer(
+          chain: Coin.eth,
+          from: _evmFrom,
+          to: _evmTo,
+          value: BigInt.zero,
+          data: '0x',
+        ),
+        throwsFormatException,
+      );
+      await expectLater(
+        client.estimateEvmGas(
+          chain: Coin.eth,
+          from: _evmFrom,
+          to: _evmTo,
           value: BigInt.zero,
           data: '0x',
         ),
@@ -672,6 +823,10 @@ void main() {
         final recorder = _Recorder()
           ..results = {
             'kt_getEvmSpendableBalances': {
+              'network': 'eth-mainnet',
+              'address': _evmFrom,
+              'tokenContract': _evmTo,
+              'native': '900000000000000000',
               'nativePending': '900000000000000000',
               'nativeLatest': '1000000000000000000',
               'token': '2500000',
@@ -685,8 +840,8 @@ void main() {
 
         final balances = await client.getEvmSpendableBalances(
           chain: Coin.eth,
-          address: '0xFrom',
-          tokenContract: '0xToken',
+          address: _evmFrom,
+          tokenContract: _evmTo,
         );
         expect(balances.native, BigInt.parse('900000000000000000'));
         expect(balances.nativeLatest, BigInt.parse('1000000000000000000'));
@@ -694,9 +849,73 @@ void main() {
         expect(balances.pendingAvailable, isFalse);
         expect(recorder.requests.single['params'], {
           'chain': 'eth',
-          'address': '0xFrom',
-          'tokenContract': '0xToken',
+          'address': _evmFrom,
+          'tokenContract': _evmTo,
         });
+      },
+    );
+
+    test('spendable balances bind account, token and native alias', () async {
+      final valid = <String, Object?>{
+        'network': 'eth-mainnet',
+        'address': _evmFrom,
+        'tokenContract': _evmTo,
+        'native': '1',
+        'nativePending': '1',
+        'nativeLatest': '2',
+        'token': '3',
+        'pendingAvailable': true,
+      };
+      for (final result in <Map<String, Object?>>[
+        {...valid, 'address': _evmTo},
+        {...valid, 'tokenContract': _evmFrom},
+        {...valid, 'native': '999'},
+        {...valid, 'authorization': true},
+      ]) {
+        final recorder = _Recorder()
+          ..results = {'kt_getEvmSpendableBalances': result};
+        final client = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: recorder.client,
+        );
+
+        await expectLater(
+          client.getEvmSpendableBalances(
+            chain: Coin.eth,
+            address: _evmFrom,
+            tokenContract: _evmTo,
+          ),
+          throwsFormatException,
+        );
+      }
+    });
+
+    test(
+      'native-only spendable result excludes token identity and value',
+      () async {
+        final recorder = _Recorder()
+          ..results = {
+            'kt_getEvmSpendableBalances': {
+              'network': 'eth-mainnet',
+              'address': _evmFrom,
+              'native': '1',
+              'nativePending': '1',
+              'nativeLatest': '2',
+              'pendingAvailable': true,
+            },
+          };
+        final client = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: recorder.client,
+        );
+
+        final balances = await client.getEvmSpendableBalances(
+          chain: Coin.eth,
+          address: _evmFrom,
+        );
+        expect(balances.native, BigInt.one);
+        expect(balances.nativeLatest, BigInt.two);
+        expect(balances.token, isNull);
       },
     );
 

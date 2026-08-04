@@ -35,6 +35,9 @@ import 'support/test_wallet_scope.dart';
 /// fallback hint on failure).
 
 final _gwei = BigInt.from(1000000000);
+const _gatewayFrom = '0x1111111111111111111111111111111111111111';
+const _gatewayTo = '0x2222222222222222222222222222222222222222';
+const _gatewayToken = '0x3333333333333333333333333333333333333333';
 
 String _hex(BigInt v) => '0x${v.toRadixString(16)}';
 
@@ -244,12 +247,32 @@ void main() {
             final method = body['method']! as String;
             methods.add(method);
             final result = switch (method) {
-              'kt_simulateEvmTransfer' => {'returnData': '0x'},
-              'kt_estimateEvmGas' => {'gas': '21000'},
+              'kt_simulateEvmTransfer' => {
+                'network': 'eth-mainnet',
+                'from': _gatewayFrom,
+                'to': _gatewayTo,
+                'value': '0x1',
+                'data': '0x',
+                'blockTag': 'pending',
+                'returnData': '0x',
+              },
+              'kt_estimateEvmGas' => {
+                'network': 'eth-mainnet',
+                'from': _gatewayFrom,
+                'to': _gatewayTo,
+                'value': '0x1',
+                'data': '0x',
+                'gas': '21000',
+              },
               'kt_getEvmSpendableBalances' => {
+                'network': 'eth-mainnet',
+                'address': _gatewayFrom,
+                'tokenContract': _gatewayToken,
+                'native': '100000',
                 'nativePending': '100000',
                 'nativeLatest': '110000',
                 'token': '2500',
+                'pendingAvailable': true,
               },
               _ => throw StateError('unexpected $method'),
             };
@@ -272,8 +295,8 @@ void main() {
 
         await service.simulateEvmTransfer(
           Chain.ethereum,
-          from: '0xfrom',
-          to: '0xto',
+          from: _gatewayFrom,
+          to: _gatewayTo,
           value: BigInt.one,
           data: '0x',
           tokenTransfer: false,
@@ -281,8 +304,8 @@ void main() {
         expect(
           await service.estimateEvmGas(
             Chain.ethereum,
-            from: '0xfrom',
-            to: '0xto',
+            from: _gatewayFrom,
+            to: _gatewayTo,
             value: BigInt.one,
             data: '0x',
           ),
@@ -290,8 +313,8 @@ void main() {
         );
         final balances = await service.fetchEvmSpendableBalances(
           Chain.ethereum,
-          address: '0xfrom',
-          tokenContract: '0xtoken',
+          address: _gatewayFrom,
+          tokenContract: _gatewayToken,
         );
         expect(balances.native, BigInt.from(100000));
         expect(balances.nativeLatest, BigInt.from(110000));

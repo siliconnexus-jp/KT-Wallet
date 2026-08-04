@@ -40,7 +40,7 @@ curl -s localhost:8080/rpc -d '{"jsonrpc":"2.0","id":1,"method":"kt_health"}'
 curl -s localhost:8080/healthz
 curl -s localhost:8080/readyz
 curl -s -H "Authorization: Bearer $METRICS_BEARER_TOKEN" localhost:8080/metrics
-# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.20"}}
+# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.21"}}
 ```
 
 ## Environment
@@ -602,7 +602,7 @@ valuation.
 
 ### `kt_getChainParams` `{"chain": C, "network": N?, "address": A}`
 
-→ `{"nonce": "<decimal-string>", "fees": {"slow": {"maxPriorityFeePerGas": "<dec>", "maxFeePerGas": "<dec>"}, "standard": {...}, "fast": {...}}}`
+→ `{"network": N, "address": A, "nonce": "<decimal-string>", "fees": {"slow": {"maxPriorityFeePerGas": "<dec>", "maxFeePerGas": "<dec>"}, "standard": {...}, "fast": {...}}}`
 
 EVM chains only (`eth`, `polygon`, `base`, `arbitrum`, `avalanche`, `bnb`);
 tron/solana → error `-32602`. Nonce is
@@ -610,7 +610,8 @@ tron/solana → error `-32602`. Nonce is
 (5 blocks, percentiles 10/50/90; priority = per-tier average, maxFee =
 2×next-base-fee + priority) with an `eth_gasPrice` fallback
 (priority 10/15/20 %, maxFee 100/125/150 % of gas price). Tiers are
-monotonic: slow ≤ standard ≤ fast.
+monotonic: slow ≤ standard ≤ fast. The resolved network and queried address
+are echoed so a client can reject a stale or misrouted signing response.
 
 The fee-history response follows the canonical Ethereum Execution API
 [`eth_feeHistory`](https://github.com/ethereum/execution-apis/blob/main/src/eth/fee_market.yaml)
@@ -624,9 +625,9 @@ the handler may only fall back to a fresh canonical `eth_gasPrice` quantity.
 
 ### `kt_simulateEvmTransfer` `{"chain": C, "network": N?, "from": A, "to": A, "value": S, "data": S, "blockTag": "pending"|"latest"?}`
 
-→ `{"gasLimit":"<decimal-string>"}`
+→ `{"network":N,"from":A,"to":A,"value":"<normalized-hex>","data":"<normalized-hex>","blockTag":"pending"|"latest","returnData":"<hex-bytes>"}`
 
-EVM only. It executes the exact call with `eth_estimateGas`; `blockTag`
+EVM only. It executes the exact call with `eth_call`; `blockTag`
 defaults to `pending`. Ordinary transfers use pending state and fail closed
 when a node cannot provide it. A same-nonce replacement may explicitly use
 `latest` only after the client has proved that its target nonce equals the
@@ -636,14 +637,14 @@ transaction.
 
 ### `kt_estimateEvmGas` `{"chain": C, "network": N?, "from": A, "to": A, "value": S, "data": S}`
 
-→ `{"gasLimit":"<decimal-string>"}`
+→ `{"network":N,"from":A,"to":A,"value":"<normalized-hex>","data":"<normalized-hex>","gas":"<decimal-string>"}`
 
 Compatibility alias for EVM gas estimation. New clients should prefer
 `kt_simulateEvmTransfer`, whose request records the state tag explicitly.
 
 ### `kt_getEvmSpendableBalances` `{"chain": C, "network": N?, "address": A, "tokenContract": A?}`
 
-→ `{"native":"<decimal-string>", "nativePending":"<decimal-string>", "nativeLatest":"<decimal-string>", "pendingAvailable":true|false, "token":"<decimal-string>"?}`
+→ `{"network":N, "address":A, "tokenContract":A?, "native":"<decimal-string>", "nativePending":"<decimal-string>", "nativeLatest":"<decimal-string>", "pendingAvailable":true|false, "token":"<decimal-string>"?}`
 
 EVM only. `nativeLatest` and `nativePending` are read from the same upstream
 selection; `native` is a rolling-upgrade alias of `nativePending`. When a
@@ -651,7 +652,10 @@ selection; `native` is a rolling-upgrade alias of `nativePending`. When a
 When the node explicitly reports that pending state is unsupported, the
 Gateway returns the latest native value in both explicit fields and sets
 `pendingAvailable:false`; other errors fail the call. Clients must not treat a
-false marker as proof that no pending outgoing transaction exists.
+false marker as proof that no pending outgoing transaction exists. Identity
+fields and the rolling `native` alias are part of the exact response contract;
+clients reject a wrong network/account/token or an alias that differs from
+`nativePending`.
 
 ### `kt_getTransactionStatus` `{"chain": C, "network": N?, "hash": S}`
 

@@ -102,6 +102,47 @@ class GatewayClient {
     'network',
     'approvals',
   };
+  static const _chainParamsResultKeys = <String>{
+    'network',
+    'address',
+    'nonce',
+    'fees',
+  };
+  static const _feeResultKeys = <String>{'slow', 'standard', 'fast'};
+  static const _feeTierResultKeys = <String>{
+    'maxPriorityFeePerGas',
+    'maxFeePerGas',
+  };
+  static const _evmSimulationResultKeys = <String>{
+    'network',
+    'from',
+    'to',
+    'value',
+    'data',
+    'blockTag',
+    'returnData',
+  };
+  static const _evmGasResultKeys = <String>{
+    'network',
+    'from',
+    'to',
+    'value',
+    'data',
+    'gas',
+  };
+  static const _evmSpendableResultKeys = <String>{
+    'network',
+    'address',
+    'native',
+    'nativePending',
+    'nativeLatest',
+    'pendingAvailable',
+  };
+  static const _evmTokenSpendableResultKeys = <String>{
+    ..._evmSpendableResultKeys,
+    'tokenContract',
+    'token',
+  };
   static const _officialTokenResultKeys = <String>{'tokens'};
   static const _officialTokenRowKeys = <String>{
     'network',
@@ -158,6 +199,9 @@ class GatewayClient {
   static final _providerDecimalPattern = RegExp(
     r'^[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$',
   );
+  static final _canonicalUintPattern = RegExp(r'^(?:0|[1-9][0-9]*)$');
+  static final _maxUint256 = (BigInt.one << 256) - BigInt.one;
+  static final _maxDartInt = (BigInt.one << 63) - BigInt.one;
 
   int _nextId = 0;
 
@@ -496,27 +540,46 @@ class GatewayClient {
       'network': ?network,
       'address': address,
     });
-    if (result is! Map) throw const FormatException('bad chain params result');
+    final expectedNetwork = network ?? _mainnetNetworkId(chain);
+    if (result is! Map ||
+        !_hasExactStringKeys(result, _chainParamsResultKeys) ||
+        result['network'] != expectedNetwork ||
+        !_sameEvmAddress(result['address'], address)) {
+      throw const FormatException('bad chain params result');
+    }
     final fees = result['fees'];
-    if (fees is! Map) throw const FormatException('missing fees');
+    if (fees is! Map || !_hasExactStringKeys(fees, _feeResultKeys)) {
+      throw const FormatException('missing fees');
+    }
     GasFeeEstimateTier tier(String name) {
       final t = fees[name];
-      if (t is! Map) throw FormatException('missing $name fee tier');
+      if (t is! Map || !_hasExactStringKeys(t, _feeTierResultKeys)) {
+        throw FormatException('missing $name fee tier');
+      }
+      final priority = _canonicalUint(t['maxPriorityFeePerGas']);
+      final maxFee = _canonicalUint(t['maxFeePerGas']);
+      if (maxFee <= BigInt.zero || priority > maxFee) {
+        throw FormatException('invalid $name fee tier');
+      }
       return GasFeeEstimateTier(
-        maxPriorityFeePerGas: _decBigInt(t['maxPriorityFeePerGas']),
-        maxFeePerGas: _decBigInt(t['maxFeePerGas']),
+        maxPriorityFeePerGas: priority,
+        maxFeePerGas: maxFee,
       );
     }
 
-    final nonce = int.tryParse(_string(result['nonce']));
-    if (nonce == null) throw const FormatException('non-decimal nonce');
+    final nonceValue = _canonicalUint(result['nonce'], max: _maxDartInt);
+    final slow = tier('slow');
+    final standard = tier('standard');
+    final fast = tier('fast');
+    if (slow.maxPriorityFeePerGas > standard.maxPriorityFeePerGas ||
+        standard.maxPriorityFeePerGas > fast.maxPriorityFeePerGas ||
+        slow.maxFeePerGas > standard.maxFeePerGas ||
+        standard.maxFeePerGas > fast.maxFeePerGas) {
+      throw const FormatException('non-monotonic fee tiers');
+    }
     return GatewayChainParams(
-      nonce: nonce,
-      fees: GasFeeEstimate(
-        slow: tier('slow'),
-        standard: tier('standard'),
-        fast: tier('fast'),
-      ),
+      nonce: nonceValue.toInt(),
+      fees: GasFeeEstimate(slow: slow, standard: standard, fast: fast),
     );
   }
 
@@ -601,8 +664,8 @@ class GatewayClient {
       value: value,
       data: data,
     );
-    final gas = BigInt.tryParse(_string(result['gas']));
-    if (gas == null || gas <= BigInt.zero) {
+    final gas = _canonicalUint(result['gas']);
+    if (gas <= BigInt.zero) {
       throw const FormatException('bad EVM gas estimate');
     }
     return gas;
@@ -622,32 +685,33 @@ class GatewayClient {
       'address': address,
       'tokenContract': ?tokenContract,
     });
-    if (result is! Map) {
+    final expectedNetwork = network ?? _mainnetNetworkId(chain);
+    final expectedKeys = tokenContract == null
+        ? _evmSpendableResultKeys
+        : _evmTokenSpendableResultKeys;
+    if (result is! Map ||
+        !_hasExactStringKeys(result, expectedKeys) ||
+        result['network'] != expectedNetwork ||
+        !_sameEvmAddress(result['address'], address) ||
+        (tokenContract != null &&
+            !_sameEvmAddress(result['tokenContract'], tokenContract))) {
       throw const FormatException('bad EVM spendable balances result');
     }
-    final native = BigInt.tryParse(
-      _string(result['nativePending'] ?? result['native']),
-    );
-    final nativeLatest = BigInt.tryParse(
-      _string(result['nativeLatest'] ?? result['native']),
-    );
+    final nativeAlias = _canonicalUint(result['native']);
+    final native = _canonicalUint(result['nativePending']);
+    final nativeLatest = _canonicalUint(result['nativeLatest']);
     final token = tokenContract == null
         ? null
-        : BigInt.tryParse(_string(result['token']));
+        : _canonicalUint(result['token']);
     final pendingAvailable = result['pendingAvailable'];
-    if (native == null ||
-        nativeLatest == null ||
-        native < BigInt.zero ||
-        nativeLatest < BigInt.zero ||
-        (pendingAvailable != null && pendingAvailable is! bool) ||
-        (tokenContract != null && (token == null || token < BigInt.zero))) {
+    if (nativeAlias != native || pendingAvailable is! bool) {
       throw const FormatException('bad EVM spendable balances result');
     }
     return GatewayEvmSpendableBalances(
       native: native,
       nativeLatest: nativeLatest,
       token: token,
-      pendingAvailable: pendingAvailable as bool? ?? true,
+      pendingAvailable: pendingAvailable,
     );
   }
 
@@ -661,6 +725,7 @@ class GatewayClient {
     String? blockTag,
   }) async {
     final network = await _networkParam(chain);
+    final expectedNetwork = network ?? _mainnetNetworkId(chain);
     final result = await _call(method, {
       'chain': chainName(chain),
       'network': ?network,
@@ -670,7 +735,21 @@ class GatewayClient {
       'data': data,
       'blockTag': ?blockTag,
     });
-    if (result is! Map) throw FormatException('bad $method result');
+    final expectedKeys = method == 'kt_simulateEvmTransfer'
+        ? _evmSimulationResultKeys
+        : _evmGasResultKeys;
+    final normalizedValue = '0x${value.toRadixString(16)}';
+    if (result is! Map ||
+        !_hasExactStringKeys(result, expectedKeys) ||
+        result['network'] != expectedNetwork ||
+        !_sameEvmAddress(result['from'], from) ||
+        !_sameEvmAddress(result['to'], to) ||
+        result['value'] != normalizedValue ||
+        result['data'] != data.toLowerCase() ||
+        (method == 'kt_simulateEvmTransfer' &&
+            result['blockTag'] != (blockTag ?? 'pending'))) {
+      throw FormatException('bad $method result');
+    }
     return Map<Object?, Object?>.from(result);
   }
 
@@ -1062,6 +1141,19 @@ class GatewayClient {
     return parsed;
   }
 
+  static BigInt _canonicalUint(Object? value, {BigInt? max}) {
+    if (value is! String ||
+        value.length > 78 ||
+        !_canonicalUintPattern.hasMatch(value)) {
+      throw const FormatException('non-canonical unsigned integer');
+    }
+    final parsed = BigInt.parse(value);
+    if (parsed > (max ?? _maxUint256)) {
+      throw const FormatException('unsigned integer out of range');
+    }
+    return parsed;
+  }
+
   static int _int(Object? value) {
     if (value is! int) throw const FormatException('missing integer');
     return value;
@@ -1087,6 +1179,12 @@ class GatewayClient {
     Map<Object?, Object?> value,
     Set<String> keys,
   ) => value.length == keys.length && value.keys.every(keys.contains);
+
+  static bool _sameEvmAddress(Object? value, String expected) =>
+      value is String &&
+      _evmAddressPattern.hasMatch(value) &&
+      _evmAddressPattern.hasMatch(expected) &&
+      value.toLowerCase() == expected.toLowerCase();
 
   static bool _isProviderDecimal(String value) {
     final normalized = value.trim();

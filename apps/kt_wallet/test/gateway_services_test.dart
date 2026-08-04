@@ -28,6 +28,7 @@ const _addresses = ChainAddresses(
   tron: 'TTronAddr',
   solana: '47eFuHR9ste9kopiJ9eRxcwahmE62JovbKe5r7AjANut',
 );
+const _evmFrom = '0x1111111111111111111111111111111111111111';
 
 /// A scripted gateway: records every JSON-RPC call and answers per-method.
 class _FakeGateway {
@@ -568,6 +569,8 @@ void main() {
       final gateway = _FakeGateway(
         results: {
           'kt_getChainParams': {
+            'network': 'eth-mainnet',
+            'address': _evmFrom,
             'nonce': '7',
             'fees': {
               'slow': {'maxPriorityFeePerGas': '1', 'maxFeePerGas': '10'},
@@ -582,14 +585,14 @@ void main() {
         gateway: () => gateway.client,
       );
 
-      final params = await service.fetchEvmParams(Chain.ethereum, '0xFrom');
+      final params = await service.fetchEvmParams(Chain.ethereum, _evmFrom);
       expect(params.nonce, 7);
       expect(params.tierFor(0).maxFeePerGas, BigInt.from(10));
       expect(params.tierFor(1).maxPriorityFeePerGas, BigInt.from(2));
       expect(params.tierFor(2).maxFeePerGas, BigInt.from(30));
       expect(gateway.paramsOf('kt_getChainParams').single, {
         'chain': 'eth',
-        'address': '0xFrom',
+        'address': _evmFrom,
       });
     });
 

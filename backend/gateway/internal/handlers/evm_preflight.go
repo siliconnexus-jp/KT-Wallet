@@ -110,7 +110,15 @@ func (g *Gateway) SimulateEVMTransfer(
 	if err != nil {
 		return nil, upstreamError(p.Chain, err)
 	}
-	return map[string]string{"returnData": returnData}, nil
+	return map[string]string{
+		"network":    network,
+		"from":       p.From,
+		"to":         p.To,
+		"value":      p.Value,
+		"data":       p.Data,
+		"blockTag":   blockTag,
+		"returnData": returnData,
+	}, nil
 }
 
 // EstimateEVMGas implements kt_estimateEvmGas for the exact unsigned call.
@@ -133,7 +141,14 @@ func (g *Gateway) EstimateEVMGas(
 	if err != nil {
 		return nil, upstreamError(p.Chain, err)
 	}
-	return map[string]string{"gas": gas.String()}, nil
+	return map[string]string{
+		"network": network,
+		"from":    p.From,
+		"to":      p.To,
+		"value":   p.Value,
+		"data":    p.Data,
+		"gas":     gas.String(),
+	}, nil
 }
 
 // GetEVMSpendableBalances implements kt_getEvmSpendableBalances. It reads the
@@ -197,6 +212,8 @@ func (g *Gateway) GetEVMSpendableBalances(
 		nativePending = nativeLatest
 	}
 	result := map[string]any{
+		"network": network,
+		"address": p.Address,
 		// Keep `native` during the rolling upgrade; new clients use the two
 		// explicit state views to authorize replacement fee deltas safely.
 		"native":           nativePending.String(),
@@ -205,6 +222,7 @@ func (g *Gateway) GetEVMSpendableBalances(
 		"pendingAvailable": pendingAvailable,
 	}
 	if p.TokenContract != "" {
+		result["tokenContract"] = p.TokenContract
 		blockTag := "pending"
 		if !pendingAvailable {
 			blockTag = "latest"

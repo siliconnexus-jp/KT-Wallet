@@ -15,8 +15,10 @@ type feeTier struct {
 }
 
 type chainParamsResult struct {
-	Nonce string `json:"nonce"`
-	Fees  struct {
+	Network string `json:"network"`
+	Address string `json:"address"`
+	Nonce   string `json:"nonce"`
+	Fees    struct {
 		Slow     feeTier `json:"slow"`
 		Standard feeTier `json:"standard"`
 		Fast     feeTier `json:"fast"`
@@ -61,7 +63,11 @@ func (g *Gateway) GetChainParams(ctx context.Context, params json.RawMessage) (a
 		return nil, upstreamError(p.Chain, err)
 	}
 
-	res := &chainParamsResult{Nonce: nonce.String()}
+	res := &chainParamsResult{
+		Network: network,
+		Address: p.Address,
+		Nonce:   nonce.String(),
+	}
 	tiers, tierErr := g.feeTiersFromHistory(ctx, evm)
 	if tierErr != nil {
 		// eth_feeHistory unavailable or unusable on this node: fall back to

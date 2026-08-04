@@ -57,6 +57,9 @@ func TestChainParamsFromFeeHistory(t *testing.T) {
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.EthURLs = []string{node.srv.URL} })
 
 	res := result(t, e.rpc("kt_getChainParams", fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf)))
+	if res["network"] != "eth-mainnet" || res["address"] != evmSelf {
+		t.Fatalf("unbound chain params identity: %v", res)
+	}
 	if res["nonce"] != "42" {
 		t.Fatalf("nonce = %v, want \"42\" (decimal string)", res["nonce"])
 	}
@@ -82,6 +85,9 @@ func TestChainParamsGasPriceFallback(t *testing.T) {
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.PolygonURLs = []string{node.srv.URL} })
 
 	res := result(t, e.rpc("kt_getChainParams", fmt.Sprintf(`{"chain":"polygon","address":%q}`, evmSelf)))
+	if res["network"] != "polygon-mainnet" || res["address"] != evmSelf {
+		t.Fatalf("unbound chain params identity: %v", res)
+	}
 	if res["nonce"] != "0" {
 		t.Fatalf("nonce = %v, want \"0\"", res["nonce"])
 	}
