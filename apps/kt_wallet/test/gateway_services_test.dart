@@ -778,8 +778,19 @@ void main() {
               );
             }
             if (request.url.host.contains('solana')) {
+              final payload = jsonDecode(request.body) as Map<String, dynamic>;
+              final result = payload['method'] == 'getTokenAccountsByOwner'
+                  ? {
+                      'context': {'slot': 1},
+                      'value': <Object?>[],
+                    }
+                  : <Object?>[];
               return http.Response(
-                jsonEncode({'jsonrpc': '2.0', 'id': 1, 'result': <Object?>[]}),
+                jsonEncode({
+                  'jsonrpc': '2.0',
+                  'id': payload['id'],
+                  'result': result,
+                }),
                 200,
               );
             }
@@ -793,7 +804,10 @@ void main() {
           HistoryStatus.ok,
         );
         expect(
-          (await service.fetch(Coin.solana, 'S')).status,
+          (await service.fetch(
+            Coin.solana,
+            '47eFuHR9ste9kopiJ9eRxcwahmE62JovbKe5r7AjANut',
+          )).status,
           HistoryStatus.ok,
         );
         expect(

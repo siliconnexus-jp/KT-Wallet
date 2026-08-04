@@ -1953,3 +1953,17 @@ Token Program、公钥、state、decimals 与规范 raw/UI amount，拒绝重复
 通过。官方 Solana Devnet 的真实 SOL 余额与 Devnet USDC 账户只读测试 2/2 通过，没有
 私钥和广播。最终 KT Wallet 1563/1563、KT Cold Signer 570/570、共享 packages 429/429、
 静态分析 0、完整公开门禁 13/13；本轮仍无 Gateway 源码变化。
+
+同日继续闭合 App 在 Gateway 不可用时仍可达的 Solana 直连历史备用路径：查询账户先
+校验为规范 32-byte Base58，签名列表逐行绑定 signature、slot、err、blockTime、
+confirmationStatus 与节点可选的 transactionIndex；随后 `getTransaction` 必须回显同一
+signature、slot、transactionIndex、blockTime，并确实包含本次查询的钱包或 ATA。SPL 与
+Token-2022 账户发现改为必需证据，owner、mint、program、accountIndex、decimals、raw/UI
+amount 全部精确校验；跨 Program 重复账户、错身份、溢出和矛盾交易整体失败，不把部分
+历史伪装为完整空列表。原生 SOL 只从明确的 System Program transfer 解析，纯手续费变化
+不再显示为转账，转出金额也不再把网络费重复计入。缺 slot 与 fee-only 两项负例先红后绿，
+错 transactionIndex、错 signature/slot、无效 owner、SPL ATA 收款和显式执行证据矩阵通过；
+官方 Solana Devnet 的 blockhash/fee/simulation、余额/USDC 账户及直连历史三项真实只读
+测试全部通过，没有加载私钥或广播。最终 KT Wallet 1568/1568、KT Cold Signer 570/570、
+共享 packages 429/429、静态分析 0、完整公开门禁 13/13；Gateway 仍为 1.16.20 且本轮无
+后端源码变化，移动端修复须随下一版 App 构建发布。

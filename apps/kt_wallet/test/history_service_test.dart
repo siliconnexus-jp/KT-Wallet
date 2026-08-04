@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:chains/chains.dart' show solanaTokenProgram;
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -16,6 +17,71 @@ const _me = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 const _meHex = '41a614f803b6fd780986a42c78ec9c7f77e6ded13c';
 const _other = 'TVjsyZ7fYF3qLF6BQgPmTEZy1xrNNyVAAA';
 const _otherHex = '41b3dcf27c251da9363f1a4888257c16676cf54edf';
+const _solanaOwner = '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin';
+const _solanaRecipient = '4Nd1mYtBS4yPPsSycFSCA1WzX7yBW2cVDpn9WzWtLDwT';
+const _solanaAta = 'BGocb4GEpbTFm8UFV2VsDSaBXHELPfAXrvd4vtt8QWrA';
+const _solanaSenderAta = 'A1TMhSGzQxMr1TboBKtgixKz1sS6REASMxPo1qsyTSJd';
+const _solanaSignature =
+    '5h6xBEauJ3PK6SWCZ1PGjBvj8vDdWG3KpwATGy1ARAXFSDwt8GFXM7W5Ncn16wmqokgpiKRLuS83KUxyZyv2sUYv';
+const _solanaOtherSignature =
+    '4ReKprwf3WdLHRrzp4ctPWNBsQDPL3VZz3zMmoZfcGJMJCHh5Vq937mPdyxhCbw54wNnA6hZ7KfNpQdpt13yY7A9';
+
+Map<String, Object?> _solanaEmptyTokenAccounts() => {
+  'context': {'slot': 114},
+  'value': <Object?>[],
+};
+
+List<Object?> _solanaSignatureRows() => [
+  {
+    'signature': _solanaSignature,
+    'slot': 114,
+    'err': null,
+    'memo': null,
+    'blockTime': 1700000500,
+    'confirmationStatus': 'confirmed',
+    'transactionIndex': 4,
+  },
+];
+
+Map<String, Object?> _solanaNativeTransaction({
+  int slot = 114,
+  List<Object?>? signatures,
+  bool includeTransfer = true,
+}) => {
+  'blockTime': 1700000500,
+  'slot': slot,
+  'transactionIndex': 4,
+  'version': 'legacy',
+  'meta': {
+    'err': null,
+    'fee': 5000,
+    'preBalances': [2000000000, 0],
+    'postBalances': [999995000, 1000000000],
+    'preTokenBalances': <Object?>[],
+    'postTokenBalances': <Object?>[],
+  },
+  'transaction': {
+    'message': {
+      'accountKeys': [_solanaOwner, _solanaRecipient],
+      'instructions': includeTransfer
+          ? [
+              {
+                'program': 'system',
+                'parsed': {
+                  'type': 'transfer',
+                  'info': {
+                    'source': _solanaOwner,
+                    'destination': _solanaRecipient,
+                    'lamports': 1000000000,
+                  },
+                },
+              },
+            ]
+          : <Object?>[],
+    },
+    'signatures': signatures ?? [_solanaSignature],
+  },
+};
 
 Map<String, Object?> _trc20Item({
   required String hash,
@@ -326,11 +392,20 @@ void main() {
           return {'status': '1', 'message': 'OK', 'result': <Object?>[]};
         }
         final payload = jsonDecode(request.body) as Map<String, Object?>;
-        return {'jsonrpc': '2.0', 'id': payload['id'], 'result': <Object?>[]};
+        final result = payload['method'] == 'getTokenAccountsByOwner'
+            ? {
+                'context': {'slot': 114},
+                'value': <Object?>[],
+              }
+            : <Object?>[];
+        return {'jsonrpc': '2.0', 'id': payload['id'], 'result': result};
       },
     );
     for (final coin in [Coin.eth, Coin.polygon, Coin.solana]) {
-      final result = await service.fetch(coin, '0xabc');
+      final result = await service.fetch(
+        coin,
+        coin == Coin.solana ? _solanaOwner : '0xabc',
+      );
       expect(result.status, HistoryStatus.ok, reason: '$coin');
       expect(result.records, isEmpty);
     }
@@ -347,10 +422,245 @@ void main() {
       ),
     );
 
-    final result = await service.fetch(Coin.solana, 'SolanaOwner');
+    final result = await service.fetch(Coin.solana, _solanaOwner);
     expect(result.status, HistoryStatus.error);
     expect(result.records, isEmpty);
   });
+
+  test(
+    'Solana direct history rejects a signature row without its canonical slot',
+    () async {
+      final service = HistoryService(
+        endpoints: (_) => 'https://api.mainnet-beta.solana.com',
+        client: MockClient((request) async {
+          final payload = jsonDecode(request.body) as Map<String, dynamic>;
+          final result = switch (payload['method']) {
+            'getTokenAccountsByOwner' => {
+              'context': {'slot': 114},
+              'value': <Object?>[],
+            },
+            'getSignaturesForAddress' => [
+              {
+                'signature': _solanaSignature,
+                'err': null,
+                'memo': null,
+                'blockTime': 1700000500,
+                'confirmationStatus': 'confirmed',
+              },
+            ],
+            'getTransaction' => {
+              'meta': {
+                'err': null,
+                'preBalances': [2000000000, 0],
+                'postBalances': [1000000000, 1000000000],
+                'preTokenBalances': <Object?>[],
+                'postTokenBalances': <Object?>[],
+              },
+              'transaction': {
+                'message': {
+                  'accountKeys': [_solanaOwner, _solanaRecipient],
+                  'instructions': [
+                    {
+                      'program': 'system',
+                      'parsed': {
+                        'type': 'transfer',
+                        'info': {
+                          'source': _solanaOwner,
+                          'destination': _solanaRecipient,
+                          'lamports': 1000000000,
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+            _ => fail('unexpected Solana RPC method ${payload['method']}'),
+          };
+          return http.Response(
+            jsonEncode({
+              'jsonrpc': '2.0',
+              'id': payload['id'],
+              'result': result,
+            }),
+            200,
+          );
+        }),
+      );
+
+      final result = await service.fetch(Coin.solana, _solanaOwner);
+      expect(result.status, HistoryStatus.error);
+      expect(result.records, isEmpty);
+    },
+  );
+
+  test('Solana direct history rejects an invalid transaction index', () async {
+    final service = HistoryService(
+      endpoints: (_) => 'https://api.mainnet-beta.solana.com',
+      client: MockClient((request) async {
+        final payload = jsonDecode(request.body) as Map<String, dynamic>;
+        final result = switch (payload['method']) {
+          'getTokenAccountsByOwner' => _solanaEmptyTokenAccounts(),
+          'getSignaturesForAddress' => [
+            {..._solanaSignatureRows().single as Map, 'transactionIndex': -1},
+          ],
+          _ => fail('unexpected Solana RPC method ${payload['method']}'),
+        };
+        return http.Response(
+          jsonEncode({'jsonrpc': '2.0', 'id': payload['id'], 'result': result}),
+          200,
+        );
+      }),
+    );
+
+    final result = await service.fetch(Coin.solana, _solanaOwner);
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
+  });
+
+  test(
+    'Solana fee-only balance movement is not displayed as a transfer',
+    () async {
+      final service = HistoryService(
+        endpoints: (_) => 'https://api.mainnet-beta.solana.com',
+        client: MockClient((request) async {
+          final payload = jsonDecode(request.body) as Map<String, dynamic>;
+          final result = switch (payload['method']) {
+            'getTokenAccountsByOwner' => {
+              'context': {'slot': 114},
+              'value': <Object?>[],
+            },
+            'getSignaturesForAddress' => [
+              {
+                'signature': _solanaSignature,
+                'slot': 114,
+                'err': null,
+                'memo': null,
+                'blockTime': 1700000500,
+                'confirmationStatus': 'confirmed',
+              },
+            ],
+            'getTransaction' => {
+              'blockTime': 1700000500,
+              'slot': 114,
+              'version': 'legacy',
+              'meta': {
+                'err': null,
+                'fee': 5000,
+                'preBalances': [2000000000, 0],
+                'postBalances': [1999995000, 0],
+                'preTokenBalances': <Object?>[],
+                'postTokenBalances': <Object?>[],
+              },
+              'transaction': {
+                'message': {
+                  'accountKeys': [_solanaOwner, _solanaRecipient],
+                  'instructions': <Object?>[],
+                },
+                'signatures': [_solanaSignature],
+              },
+            },
+            _ => fail('unexpected Solana RPC method ${payload['method']}'),
+          };
+          return http.Response(
+            jsonEncode({
+              'jsonrpc': '2.0',
+              'id': payload['id'],
+              'result': result,
+            }),
+            200,
+          );
+        }),
+      );
+
+      final result = await service.fetch(Coin.solana, _solanaOwner);
+      expect(result.status, HistoryStatus.ok);
+      expect(result.records, isEmpty);
+    },
+  );
+
+  test('Solana native history excludes the network fee from amount', () async {
+    final service = HistoryService(
+      endpoints: (_) => 'https://api.mainnet-beta.solana.com',
+      client: MockClient((request) async {
+        final payload = jsonDecode(request.body) as Map<String, dynamic>;
+        final result = switch (payload['method']) {
+          'getTokenAccountsByOwner' => _solanaEmptyTokenAccounts(),
+          'getSignaturesForAddress' => _solanaSignatureRows(),
+          'getTransaction' => _solanaNativeTransaction(),
+          _ => fail('unexpected Solana RPC method ${payload['method']}'),
+        };
+        return http.Response(
+          jsonEncode({'jsonrpc': '2.0', 'id': payload['id'], 'result': result}),
+          200,
+        );
+      }),
+    );
+
+    final result = await service.fetch(Coin.solana, _solanaOwner);
+    expect(result.status, HistoryStatus.ok);
+    final record = result.records.single;
+    expect(record.hash, _solanaSignature);
+    expect(record.amountText, '1 SOL');
+    expect(record.fromAddress, _solanaOwner);
+    expect(record.toAddress, _solanaRecipient);
+    expect(record.status, ChainTxStatus.confirmed);
+  });
+
+  test(
+    'Solana direct history binds transaction slot and queried signature',
+    () async {
+      final invalidTransactions = <Map<String, Object?>>[
+        _solanaNativeTransaction(slot: 115),
+        _solanaNativeTransaction(signatures: [_solanaOtherSignature]),
+      ];
+      for (final transaction in invalidTransactions) {
+        final service = HistoryService(
+          endpoints: (_) => 'https://api.mainnet-beta.solana.com',
+          client: MockClient((request) async {
+            final payload = jsonDecode(request.body) as Map<String, dynamic>;
+            final result = switch (payload['method']) {
+              'getTokenAccountsByOwner' => _solanaEmptyTokenAccounts(),
+              'getSignaturesForAddress' => _solanaSignatureRows(),
+              'getTransaction' => transaction,
+              _ => fail('unexpected Solana RPC method ${payload['method']}'),
+            };
+            return http.Response(
+              jsonEncode({
+                'jsonrpc': '2.0',
+                'id': payload['id'],
+                'result': result,
+              }),
+              200,
+            );
+          }),
+        );
+
+        final result = await service.fetch(Coin.solana, _solanaOwner);
+        expect(result.status, HistoryStatus.error, reason: '$transaction');
+        expect(result.records, isEmpty);
+      }
+    },
+  );
+
+  test(
+    'Solana direct history validates the owner before network access',
+    () async {
+      var requests = 0;
+      final service = HistoryService(
+        endpoints: (_) => 'https://api.mainnet-beta.solana.com',
+        client: MockClient((request) async {
+          requests += 1;
+          return http.Response('{}', 200);
+        }),
+      );
+
+      final result = await service.fetch(Coin.solana, 'not-a-public-key');
+      expect(result.status, HistoryStatus.error);
+      expect(result.records, isEmpty);
+      expect(requests, 0);
+    },
+  );
 
   test('Avalanche direct history includes native internal receipts', () async {
     final actions = <String>[];
@@ -492,10 +802,10 @@ void main() {
   test(
     'Solana direct history finds an incoming SPL transfer through its ATA',
     () async {
-      const owner = '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin';
-      const ata = 'Ata111111111111111111111111111111111111111';
-      const sender = '4Nd1mYtBS4yPPsSycFSCA1WzX7yBW2cVDpn9WzWtLDwT';
-      const senderAta = 'Ata222222222222222222222222222222222222222';
+      const owner = _solanaOwner;
+      const ata = _solanaAta;
+      const sender = _solanaRecipient;
+      const senderAta = _solanaSenderAta;
       const mint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
       final rpcIds = <Object?>[];
       final service = HistoryService(
@@ -507,25 +817,64 @@ void main() {
           final params = payload['params'] as List<dynamic>;
           final Object? result;
           if (method == 'getTokenAccountsByOwner') {
+            final program = (params[1] as Map)['programId'];
             result = {
-              'value': [
-                {'pubkey': ata},
-              ],
+              'context': {'slot': 114},
+              'value': program == solanaTokenProgram
+                  ? [
+                      {
+                        'pubkey': ata,
+                        'account': {
+                          'data': {
+                            'program': 'spl-token',
+                            'parsed': {
+                              'info': {
+                                'isNative': false,
+                                'mint': mint,
+                                'owner': owner,
+                                'state': 'initialized',
+                                'tokenAmount': {
+                                  'amount': '1000000',
+                                  'decimals': 6,
+                                  'uiAmount': 1,
+                                  'uiAmountString': '1',
+                                },
+                              },
+                              'type': 'account',
+                            },
+                            'space': 165,
+                          },
+                          'executable': false,
+                          'lamports': 2039280,
+                          'owner': solanaTokenProgram,
+                          'rentEpoch': 1,
+                          'space': 165,
+                        },
+                      },
+                    ]
+                  : <Object?>[],
             };
           } else if (method == 'getSignaturesForAddress') {
             result = params.first == ata
                 ? [
                     {
-                      'signature': 'ata-signature',
+                      'signature': _solanaSignature,
+                      'slot': 114,
                       'blockTime': 1700000300,
                       'err': null,
+                      'memo': null,
+                      'confirmationStatus': 'confirmed',
                     },
                   ]
                 : <Object?>[];
           } else if (method == 'getTransaction') {
             result = {
+              'blockTime': 1700000300,
+              'slot': 114,
+              'version': 'legacy',
               'meta': {
                 'err': null,
+                'fee': 5000,
                 'preBalances': [100, 100],
                 'postBalances': [100, 100],
                 'preTokenBalances': [
@@ -533,13 +882,25 @@ void main() {
                     'accountIndex': 0,
                     'mint': mint,
                     'owner': sender,
-                    'uiTokenAmount': {'amount': '3000000', 'decimals': 6},
+                    'programId': solanaTokenProgram,
+                    'uiTokenAmount': {
+                      'amount': '3000000',
+                      'decimals': 6,
+                      'uiAmount': 3,
+                      'uiAmountString': '3',
+                    },
                   },
                   {
                     'accountIndex': 1,
                     'mint': mint,
                     'owner': owner,
-                    'uiTokenAmount': {'amount': '1000000', 'decimals': 6},
+                    'programId': solanaTokenProgram,
+                    'uiTokenAmount': {
+                      'amount': '1000000',
+                      'decimals': 6,
+                      'uiAmount': 1,
+                      'uiAmountString': '1',
+                    },
                   },
                 ],
                 'postTokenBalances': [
@@ -547,13 +908,25 @@ void main() {
                     'accountIndex': 0,
                     'mint': mint,
                     'owner': sender,
-                    'uiTokenAmount': {'amount': '1000000', 'decimals': 6},
+                    'programId': solanaTokenProgram,
+                    'uiTokenAmount': {
+                      'amount': '1000000',
+                      'decimals': 6,
+                      'uiAmount': 1,
+                      'uiAmountString': '1',
+                    },
                   },
                   {
                     'accountIndex': 1,
                     'mint': mint,
                     'owner': owner,
-                    'uiTokenAmount': {'amount': '3000000', 'decimals': 6},
+                    'programId': solanaTokenProgram,
+                    'uiTokenAmount': {
+                      'amount': '3000000',
+                      'decimals': 6,
+                      'uiAmount': 3,
+                      'uiAmountString': '3',
+                    },
                   },
                 ],
               },
@@ -561,10 +934,7 @@ void main() {
                 'message': {
                   // The wallet owner is deliberately absent; only its ATA was
                   // touched by this incoming token transfer.
-                  'accountKeys': [
-                    {'pubkey': senderAta},
-                    {'pubkey': ata},
-                  ],
+                  'accountKeys': [senderAta, ata],
                   'instructions': [
                     {
                       'program': 'spl-token',
@@ -579,6 +949,7 @@ void main() {
                     },
                   ],
                 },
+                'signatures': [_solanaSignature],
               },
             };
           } else {
@@ -596,7 +967,7 @@ void main() {
       );
 
       final record = (await service.fetch(Coin.solana, owner)).records.single;
-      expect(record.hash, 'ata-signature');
+      expect(record.hash, _solanaSignature);
       expect(record.outgoing, isFalse);
       expect(record.fromAddress, sender);
       expect(record.toAddress, owner);
@@ -751,8 +1122,8 @@ void main() {
   );
 
   test('Solana direct history requires explicit success evidence', () async {
-    const owner = '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin';
-    const recipient = '4Nd1mYtBS4yPPsSycFSCA1WzX7yBW2cVDpn9WzWtLDwT';
+    const owner = _solanaOwner;
+    const recipient = _solanaRecipient;
     final service = HistoryService(
       endpoints: (_) => 'https://api.mainnet-beta.solana.com',
       client: MockClient((request) async {
@@ -760,7 +1131,10 @@ void main() {
         final method = payload['method'];
         final Object? result;
         if (method == 'getTokenAccountsByOwner') {
-          result = {'value': <Object?>[]};
+          result = {
+            'context': {'slot': 114},
+            'value': <Object?>[],
+          };
         } else if (method == 'getSignaturesForAddress') {
           result = [
             {'signature': 'missing-status-signature', 'blockTime': 1700000500},
@@ -797,8 +1171,9 @@ void main() {
       }),
     );
 
-    final record = (await service.fetch(Coin.solana, owner)).records.single;
-    expect(record.status, ChainTxStatus.unknown);
+    final result = await service.fetch(Coin.solana, owner);
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
   });
 
   test(

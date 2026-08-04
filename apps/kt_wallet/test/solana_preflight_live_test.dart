@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:chains/chains.dart';
 import 'package:chains/rpc.dart';
+import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kt_wallet/src/market/history_service.dart';
 import 'package:kt_wallet/src/rpc/http_transport.dart';
 
 void main() {
@@ -70,5 +72,27 @@ void main() {
     },
     skip: live ? false : 'set KT_LIVE_SOLANA_PREFLIGHT=1',
     timeout: const Timeout(Duration(seconds: 60)),
+  );
+
+  test(
+    'official Solana Devnet direct history matches strict schema',
+    () async {
+      const owner = '47eFuHR9ste9kopiJ9eRxcwahmE62JovbKe5r7AjANut';
+      final service = HistoryService(
+        timeout: const Duration(seconds: 20),
+        endpoints: (_) => 'https://api.devnet.solana.com',
+      );
+      addTearDown(service.close);
+
+      final history = await service.fetch(Coin.solana, owner, limit: 3);
+      expect(history.status, HistoryStatus.ok);
+      expect(history.records, isNotEmpty);
+      for (final record in history.records) {
+        expect(record.hash, isNotEmpty);
+        expect(record.amountText, isNotNull);
+      }
+    },
+    skip: live ? false : 'set KT_LIVE_SOLANA_PREFLIGHT=1',
+    timeout: const Timeout(Duration(seconds: 90)),
   );
 }
