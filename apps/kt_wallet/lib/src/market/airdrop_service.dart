@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../rpc/bounded_http_client.dart';
 import '../rpc/json_rpc_envelope.dart';
+import '../rpc/network_identity_value.dart';
 
 /// 1 SOL — the fixed amount the receive screen's one-tap faucet requests.
 const lamportsPerSol = 1000000000;
@@ -112,8 +113,8 @@ class AirdropService {
     }
     final Object? decoded;
     try {
-      decoded = jsonDecode(resp.body);
-    } on FormatException {
+      decoded = decodeJsonWithoutDuplicateKeys(resp.body);
+    } on Object {
       throw const AirdropException(AirdropFailureKind.malformedResponse);
     }
     if (!isBoundJsonRpcResponse(request, decoded) || decoded is! Map) {
@@ -125,8 +126,8 @@ class AirdropService {
         _classifyRpcFailure(error['code'], error['message']),
       );
     }
-    final result = decoded['result'];
-    if (result is! String) {
+    final result = parseCanonicalSolanaSignature(decoded['result']);
+    if (result == null) {
       throw const AirdropException(AirdropFailureKind.malformedResponse);
     }
     return result;

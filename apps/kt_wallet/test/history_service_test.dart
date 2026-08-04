@@ -1841,6 +1841,39 @@ void main() {
     expect(result.records, isEmpty);
   });
 
+  test('Solana direct history rejects duplicate RPC result members', () async {
+    const owner = _solanaOwner;
+    var calls = 0;
+    final service = HistoryService(
+      endpoints: (_) => 'https://api.mainnet-beta.solana.com',
+      client: MockClient((request) async {
+        calls += 1;
+        final payload = jsonDecode(request.body) as Map<String, dynamic>;
+        final method = payload['method'];
+        final Object result = switch (method) {
+          'getTokenAccountsByOwner' => {
+            'context': {'slot': 114},
+            'value': <Object?>[],
+          },
+          'getSignaturesForAddress' => <Object?>[],
+          _ => throw StateError('unexpected Solana method $method'),
+        };
+        final valid = jsonEncode(result);
+        return http.Response(
+          '{"jsonrpc":"2.0","id":${payload['id']},'
+          '"result":null,"result":$valid}',
+          200,
+        );
+      }),
+    );
+
+    final result = await service.fetch(Coin.solana, owner);
+
+    expect(result.status, HistoryStatus.error);
+    expect(result.records, isEmpty);
+    expect(calls, 1, reason: 'the first ambiguous response must stop the read');
+  });
+
   test(
     'TRON direct native and internal rows require explicit execution evidence',
     () async {

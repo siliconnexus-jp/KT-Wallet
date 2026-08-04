@@ -243,13 +243,17 @@ class GatewayDiagnosticTelemetryUploader
           response.request?.url,
         );
       }
-      final body = jsonDecode(response.body);
+      final body = decodeJsonWithoutDuplicateKeys(response.body);
+      final result = body is Map ? body['result'] : null;
       if (!isBoundJsonRpcResponse(request, body) ||
           body is! Map ||
           body.containsKey('error') ||
-          body['result'] is! Map ||
-          (body['result'] as Map)['accepted'] != true ||
-          (body['result'] as Map)['rawEventsStored'] != false) {
+          result is! Map ||
+          result.length != 2 ||
+          !result.containsKey('accepted') ||
+          !result.containsKey('rawEventsStored') ||
+          result['accepted'] != true ||
+          result['rawEventsStored'] != false) {
         throw const FormatException('invalid diagnostics acknowledgement');
       }
       try {

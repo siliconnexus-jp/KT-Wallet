@@ -320,7 +320,7 @@ class HttpRestTransport implements RestTransport {
             code: response.statusCode,
           );
         }
-        return jsonDecode(response.body);
+        return decodeJsonWithoutDuplicateKeys(response.body);
       } on RpcException catch (error) {
         lastError = error;
       } on Object {
@@ -361,7 +361,7 @@ class HttpRestTransport implements RestTransport {
           )
           .timeout(timeout);
       if (response.statusCode != 200) return false;
-      final decoded = jsonDecode(response.body);
+      final decoded = decodeJsonWithoutDuplicateKeys(response.body);
       return decoded is Map && decoded['blockID'] == expected;
     } on Object {
       return false;

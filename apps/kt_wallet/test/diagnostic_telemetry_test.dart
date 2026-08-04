@@ -223,6 +223,60 @@ void main() {
     expect(receipts.digest, isNull);
   });
 
+  test('duplicate acknowledgement members are never marked sent', () async {
+    final receipts = _MemoryReceipts();
+    final uploader = GatewayDiagnosticTelemetryUploader(
+      client: MockClient(
+        (_) async => http.Response(
+          '{"jsonrpc":"2.0","id":1,'
+          '"result":{"accepted":false,"rawEventsStored":true},'
+          '"result":{"accepted":true,"rawEventsStored":false}}',
+          200,
+        ),
+      ),
+      receipts: receipts,
+    );
+
+    await expectLater(
+      uploader.upload(
+        gatewayBaseUrl: 'https://gateway.kt-wallet.com',
+        report: _report(),
+      ),
+      throwsA(isA<FormatException>()),
+    );
+    expect(receipts.digest, isNull);
+  });
+
+  test('unknown acknowledgement members are never marked sent', () async {
+    final receipts = _MemoryReceipts();
+    final uploader = GatewayDiagnosticTelemetryUploader(
+      client: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'jsonrpc': '2.0',
+            'id': 1,
+            'result': {
+              'accepted': true,
+              'rawEventsStored': false,
+              'walletId': 'must-not-be-accepted',
+            },
+          }),
+          200,
+        ),
+      ),
+      receipts: receipts,
+    );
+
+    await expectLater(
+      uploader.upload(
+        gatewayBaseUrl: 'https://gateway.kt-wallet.com',
+        report: _report(),
+      ),
+      throwsA(isA<FormatException>()),
+    );
+    expect(receipts.digest, isNull);
+  });
+
   test('acknowledgement must bind the exact JSON-RPC request', () async {
     final malformed = <Map<String, Object?>>[
       {

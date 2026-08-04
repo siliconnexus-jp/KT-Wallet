@@ -44,6 +44,19 @@ String? parseCanonicalSolanaGenesisHash(Object? value) {
   }
 }
 
+/// Returns a canonical Solana transaction signature only when Base58 decodes
+/// to the exact 64-byte Ed25519 signature carried by JSON-RPC responses.
+String? parseCanonicalSolanaSignature(Object? value) {
+  if (value is! String || value.length > 96) return null;
+  try {
+    final decoded = base58Decode(value);
+    if (decoded.length != 64 || base58Encode(decoded) != value) return null;
+    return value;
+  } on Base58Error {
+    return null;
+  }
+}
+
 /// Returns TRON block zero's canonical lowercase 32-byte hex identity.
 String? parseCanonicalTronGenesisBlockId(Object? value) =>
     value is String && _canonicalTronGenesis.hasMatch(value) ? value : null;

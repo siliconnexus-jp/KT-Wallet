@@ -7,6 +7,9 @@ import 'package:kt_wallet/src/market/airdrop_service.dart';
 
 String _alchemyCanary(String suffix) => <String>['alch', suffix].join('_');
 
+const _solanaSignature =
+    '5h6xBEauJ3PK6SWCZ1PGjBvj8vDdWG3KpwATGy1ARAXFSDwt8GFXM7W5Ncn16wmqokgpiKRLuS83KUxyZyv2sUYv';
+
 void main() {
   final rpcCanary = _alchemyCanary('airdrop_test_secret');
 
@@ -81,6 +84,46 @@ void main() {
       ),
     );
     expect(error.kind, AirdropFailureKind.malformedResponse);
+  });
+
+  test('duplicate result members cannot become a successful airdrop', () async {
+    final error = await failureFor(
+      (_) => http.Response(
+        '{"jsonrpc":"2.0","id":1,"result":"wrong",'
+        '"result":"signature"}',
+        200,
+      ),
+    );
+    expect(error.kind, AirdropFailureKind.malformedResponse);
+  });
+
+  test('noncanonical result cannot become a successful airdrop', () async {
+    final error = await failureFor(
+      (_) => http.Response(
+        jsonEncode({'jsonrpc': '2.0', 'id': 1, 'result': 'sig111'}),
+        200,
+      ),
+    );
+    expect(error.kind, AirdropFailureKind.malformedResponse);
+  });
+
+  test('canonical 64-byte signature is returned', () async {
+    final service = AirdropService(
+      client: MockClient(
+        (_) async => http.Response(
+          jsonEncode({'jsonrpc': '2.0', 'id': 1, 'result': _solanaSignature}),
+          200,
+        ),
+      ),
+    );
+
+    expect(
+      await service.requestAirdrop(
+        rpcUrl: 'https://rpc.example',
+        address: 'SolanaAddress',
+      ),
+      _solanaSignature,
+    );
   });
 
   test('transport errors do not retain a credential-bearing URI', () async {

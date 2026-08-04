@@ -1,7 +1,6 @@
 import 'dart:convert';
 
-import 'package:chains/chains.dart'
-    show Addresses, Amount, Base58Error, Chain, base58Decode, base58Encode;
+import 'package:chains/chains.dart' show Addresses, Amount, Chain;
 import 'package:chains/rpc.dart' show GasFeeEstimate, GasFeeEstimateTier;
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:http/http.dart' as http;
@@ -1521,13 +1520,7 @@ class GatewayClient {
   }
 
   static bool _sameCanonicalSolanaSignature(String value, String expected) {
-    if (value != expected) return false;
-    try {
-      final decoded = base58Decode(value);
-      return decoded.length == 64 && base58Encode(decoded) == value;
-    } on Base58Error {
-      return false;
-    }
+    return value == expected && parseCanonicalSolanaSignature(value) != null;
   }
 
   static bool _isCanonicalTransactionHash(Coin chain, String value) =>
@@ -1542,14 +1535,8 @@ class GatewayClient {
         Coin.solana => _isCanonicalSolanaSignature(value),
       };
 
-  static bool _isCanonicalSolanaSignature(String value) {
-    try {
-      final decoded = base58Decode(value);
-      return decoded.length == 64 && base58Encode(decoded) == value;
-    } on Base58Error {
-      return false;
-    }
-  }
+  static bool _isCanonicalSolanaSignature(String value) =>
+      parseCanonicalSolanaSignature(value) != null;
 
   static Chain _addressChain(Coin chain) => switch (chain) {
     Coin.eth => Chain.ethereum,

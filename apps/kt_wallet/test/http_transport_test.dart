@@ -504,6 +504,59 @@ void main() {
     ]);
   });
 
+  test(
+    'duplicate TRON fallback identity never authorizes an address request',
+    () async {
+      const expected =
+          '0000000000000000d698d4192c56cb6be724a558448e2684802de4d6cd8690dc';
+      final paths = <String>[];
+      final transport = HttpRestTransport(
+        client: MockClient((request) async {
+          paths.add(request.url.path);
+          if (request.url.host == 'nile.trongrid.io') {
+            return http.Response('unavailable', 503);
+          }
+          if (request.url.path == '/wallet/getblockbynum') {
+            return http.Response(
+              '{"blockID":"${List<String>.filled(64, 'f').join()}",'
+              '"blockID":"$expected"}',
+              200,
+            );
+          }
+          return http.Response(jsonEncode({'data': <Object?>[]}), 200);
+        }),
+      );
+      addTearDown(transport.close);
+
+      await expectLater(
+        transport.getJson(
+          'https://nile.trongrid.io/v1/accounts/TPrivate/transactions',
+        ),
+        throwsA(isA<RpcException>()),
+      );
+      expect(paths, [
+        '/v1/accounts/TPrivate/transactions',
+        '/wallet/getblockbynum',
+      ]);
+    },
+  );
+
+  test('duplicate TRON REST result members fail closed', () async {
+    final transport = HttpRestTransport(
+      client: MockClient(
+        (_) async => http.Response('{"balance":0,"balance":1000000000}', 200),
+      ),
+    );
+    addTearDown(transport.close);
+
+    await expectLater(
+      transport.postJson('https://tron.example/wallet/getaccount', const {
+        'address': 'TAddress',
+      }),
+      throwsA(isA<RpcException>()),
+    );
+  });
+
   test('wrong TRON genesis never receives the address request', () async {
     final paths = <String>[];
     final transport = HttpRestTransport(

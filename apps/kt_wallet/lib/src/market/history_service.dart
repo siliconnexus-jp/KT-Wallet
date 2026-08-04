@@ -843,7 +843,7 @@ class HistoryService {
     if (response.statusCode != 200) {
       throw http.ClientException('HTTP ${response.statusCode}', uri);
     }
-    final body = jsonDecode(response.body);
+    final body = decodeJsonWithoutDuplicateKeys(response.body);
     if (!isBoundJsonRpcResponse(request, body) ||
         body is! Map ||
         body.containsKey('error')) {

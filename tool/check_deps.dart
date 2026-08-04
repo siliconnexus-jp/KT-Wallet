@@ -930,6 +930,36 @@ void main() {
         ? historySnapshot.readAsStringSync()
         : '',
   };
+  final duplicateSafeRemoteResponseSources = <String, int>{
+    'apps/kt_wallet/lib/src/rpc/http_transport.dart': 2,
+    historyService.path: 3,
+    'apps/kt_wallet/lib/src/market/airdrop_service.dart': 1,
+    'apps/kt_wallet/lib/src/observability/diagnostic_telemetry.dart': 1,
+  };
+  final duplicateSafeDecode = RegExp(
+    r'decodeJsonWithoutDuplicateKeys\(\s*(?:resp|response)\.body\s*\)',
+  );
+  final unsafeRemoteDecode = RegExp(
+    r'jsonDecode\(\s*(?:resp|response)\.body\s*\)',
+  );
+  for (final boundary in duplicateSafeRemoteResponseSources.entries) {
+    final sourceFile = File(boundary.key);
+    final source = sourceFile.existsSync() ? sourceFile.readAsStringSync() : '';
+    final safeDecodeCount = duplicateSafeDecode.allMatches(source).length;
+    if (safeDecodeCount < boundary.value) {
+      failures.add(
+        '${boundary.key} does not duplicate-check every owned remote JSON '
+        'response: expected at least ${boundary.value}, found '
+        '$safeDecodeCount',
+      );
+    }
+    if (unsafeRemoteDecode.hasMatch(source)) {
+      failures.add(
+        '${boundary.key} decodes an owned remote response without '
+        'duplicate-member rejection',
+      );
+    }
+  }
   for (final boundary in const {
     'apps/kt_wallet/lib/src/market/history_service.dart': [
       'final String? networkId;',

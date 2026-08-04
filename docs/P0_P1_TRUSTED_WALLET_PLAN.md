@@ -2278,3 +2278,17 @@ KT Wallet 1647/1647（另有 11 项显式线上/设备测试默认跳过）、KT
 13/13 通过。Ethereum、Solana 与 TRON 官方公网只读响应及生产 Gateway 三链 identity
 均与新解析器兼容；未加载钱包、私钥且未广播。本轮没有 Gateway 服务端或 UI 变化，
 不需要后端部署，移动修复须随下一版签名制品发布。
+
+同日继续复审移动端拥有的远程 JSON 响应。此前统一门禁只锁定了 Gateway 主客户端和部分
+历史入口，TRON REST/备用节点身份探针、Solana 直连历史、水龙头及匿名诊断仍直接使用
+`jsonDecode`，攻击者可用重复对象成员让后值覆盖前值。失败优先测试先证明重复
+`blockID/balance/result` 会授权错误节点、伪造余额、历史或空投成功，并让诊断回执被记录为
+已发送。修复后四个生产所有者统一使用递归 duplicate-safe decoder；静态门禁按文件计数
+全部七个远端 body 解码点并禁止恢复宽松解码。水龙头成功结果还必须是规范 Base58 且精确
+解码为 64-byte Solana signature，诊断成功回执只能包含精确的
+`accepted/rawEventsStored` 两个字段。7 项失败优先负例与合法签名正例转绿，受影响定向
+95/95；KT Wallet 1655/1655（另有 11 项显式线上/设备测试默认跳过）、KT Cold Signer
+570/570、共享 packages 438/438、静态分析 0、Gateway audit 与完整依赖/OSV 门禁 13/13
+通过。公开 TRON 历史 1/1、Solana Devnet preflight/余额/历史 3/3、生产 Gateway 严格客户端
+6/6 真实只读通过；未加载钱包、私钥或广播。Gateway 后端及 UI 均未变化，无需部署后端，
+也不使用无关截图替代协议证据；移动端修复须随下一版签名制品发布。

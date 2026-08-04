@@ -24,6 +24,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// with a declared faucet URL open the system browser, mainnet gets nothing.
 const _mnemonic =
     'abandon ability able about above absent absorb abstract absurd abuse access accident';
+const _solanaSignature =
+    '5h6xBEauJ3PK6SWCZ1PGjBvj8vDdWG3KpwATGy1ARAXFSDwt8GFXM7W5Ncn16wmqokgpiKRLuS83KUxyZyv2sUYv';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -91,7 +93,11 @@ void main() {
       expect(body['method'], 'requestAirdrop');
       expect(body['params'], [addresses.solana, 1000000000]);
       return http.Response(
-        jsonEncode({'jsonrpc': '2.0', 'id': body['id'], 'result': 'sig111'}),
+        jsonEncode({
+          'jsonrpc': '2.0',
+          'id': body['id'],
+          'result': _solanaSignature,
+        }),
         200,
       );
     });
