@@ -177,8 +177,8 @@
   `txID` 或嵌套重复 `expiration`，本地幂等指纹采用后值而节点接收原始歧义文本；两项
   红测均证明旧实现访问 TronGrid 1 次。现内层对象也递归拒绝重复键，再进行指纹和转发。
   六类负例 20 轮与全部广播矩阵通过，静态边界禁止该入口恢复
-  `json.Unmarshal(params, &p)` 或移除 TRON 内层重复键检查。这是本地源码候选证据；
-  生产仍为 Gateway 1.16.15，未部署前不把该修复描述为线上能力。
+  `json.Unmarshal(params, &p)` 或移除 TRON 内层重复键检查。该修复已随 Gateway
+  1.16.16 滚动上线，公网与双实例版本、ready 和 16 网络一致。
 - [x] 2026-08-04 继续审阅 Gateway 其余公开参数边界，确认余额、Portfolio、价格、
   动态费用、EVM 预执行/可用余额、历史、交易状态、官方 Token 搜索、Token 风险与
   授权查询共 12 个方法仍使用宽松 `encoding/json`：未知字段会被忽略，`Hash`、
@@ -188,7 +188,7 @@
   原本已严格的匿名诊断和广播，14 个带参数公开方法均在缓存/上游之前以 `-32602`
   拒绝未知字段、大小写别名及任意深度重复键。13 项新负例与 6 项广播负例连续 20 轮、
   Gateway 普通/race/vet/govulncheck 和静态边界通过；门禁还扫描所有生产 handler，禁止
-  重新出现 `json.Unmarshal(params, ...)`。这是本地源码候选证据；生产仍为 1.16.15。
+  重新出现 `json.Unmarshal(params, ...)`。该修复已随 Gateway 1.16.16 上线。
 - [x] 2026-08-04 随后把审阅边界上移到 JSON-RPC Request Object。旧服务器直接把完整
   body `json.Unmarshal` 到 struct，10 类歧义/非法信封——未知成员、`Method`/`JSONRPC`
   大小写别名或冲突、重复 method/params/id、字符串 params，以及布尔/对象/数组 id——
@@ -198,7 +198,7 @@
   `id=null / -32600` 返回，语法损坏仍为 `-32700`，handler 执行次数必须为 0。
   10 项负例及对象/数组/null 兼容正例连续 20 轮，RPC/handlers race、Gateway
   普通/vet/govulncheck/ops 与静态远程安全边界通过；静态门禁禁止恢复
-  `json.Unmarshal(body, &req)`。该修复仍是本地源码候选，生产仍为 1.16.15。
+  `json.Unmarshal(body, &req)`。该修复已随 Gateway 1.16.16 上线。
 - [x] 2026-08-04 再把相同的精确对象边界下推到 Gateway 的 EVM/Solana 节点响应。
   旧实现把上游 JSON-RPC 解码到 Go struct，会接受未知成员、`Result`/`JSONRPC`
   大小写别名或冲突、重复 result/id，以及 error 对象中的未知/别名/重复 code/message。
@@ -210,7 +210,7 @@
   红测捕获并修复 Go 零值回归；10 类旧歧义负例、2 类 null 回归、标准 error data 正例及
   广播 single-shot 负例连续 20 轮，Gateway 普通/race/vet/govulncheck/ops 与静态边界通过。
   范围仅覆盖核心 EVM/Solana JSON-RPC pool；Provider 专用 REST/索引解析继续由各自闭合
-  schema 审阅。该修复是本地源码候选，生产仍为 1.16.15。
+  schema 审阅。该修复已随 Gateway 1.16.16 上线。
 - [x] 2026-08-04 继续进入 Provider 专用历史路径，先关闭 Helius
   `getTransfersByAddress`。旧实现完全忽略 JSON-RPC 版本与响应 id，并把信封、result 和
   transfer 直接解码到 Go struct；错/缺 id、错版本、未知成员、`Result`/`Data`/`Amount`
@@ -226,7 +226,7 @@
   数组及当前官方扩展回包正例连续 20 轮，三类 handler 路由/回退连续 10 轮通过；
   Gateway 全量/race/vet/govulncheck/ops 和静态边界通过。
   当前范围仅为 Helius；Alchemy、Etherscan/Blockscout、TronGrid、CoinGecko 与 GoPlus
-  专用响应仍按各自风险继续审阅。该修复是本地源码候选，生产仍为 1.16.15。
+  专用响应仍按各自风险继续审阅。该修复已随 Gateway 1.16.16 上线。
 - [x] 2026-08-04 继续关闭 Alchemy `alchemy_getAssetTransfers` 与缺失 metadata 时的
   `eth_getBlockByNumber` 批量时间回填边界。旧实现把信封、result、transfer、rawContract
   和批量 block 直接解码到 Go struct：错/缺 id、错版本、未知成员、大小写别名/冲突与
@@ -242,8 +242,8 @@
   错误脱敏正例连续 20 轮；全部 Alchemy 与 BNB handler 路由/回退连续 10 轮通过。Gateway
   全量、关键包
   race、vet、govulncheck/ops 与静态远程安全边界通过。当前范围扩展到 Helius + Alchemy；
-  Etherscan/Blockscout、TronGrid、CoinGecko 与 GoPlus 仍待同等级审阅。该修复是本地源码
-  候选，生产仍为 1.16.15。
+  Etherscan/Blockscout、TronGrid、CoinGecko 与 GoPlus 仍待同等级审阅。该修复已随
+  Gateway 1.16.16 上线。
 - [x] 2026-08-04 继续关闭 Etherscan v2 与 Blockscout/Routescan account history 边界。
   旧实现把 `status/message/result` 及 normal/token/internal 行直接解码进 Go struct，会接受
   未知成员、大小写别名/冲突、重复 status/result/hash/value，甚至把 `status=1 + NOTOK`、
@@ -259,7 +259,7 @@
   合法空历史、错误脱敏与 page/offset/sort 绑定连续 20 轮；History handler 连续 10 轮，
   Gateway 全量、关键包 race、vet、govulncheck/ops 及新增静态退化门禁通过。Provider 严格
   范围现扩展到 Helius + Alchemy + Etherscan/Blockscout；TronGrid、CoinGecko 与 GoPlus
-  仍待同等级审阅。该修复是本地源码候选，生产仍为 1.16.15。
+  仍待同等级审阅。该修复已随 Gateway 1.16.16 上线。
 - [x] 2026-08-04 继续关闭 TronGrid 三条账户历史 feed。旧实现把
   `data/success/meta`、TRC-20、native raw contract 与 internal data 直接解码进 Go
   struct，会接受未知成员、大小写别名/冲突、重复 data/value/amount/type/scalar、
@@ -278,8 +278,8 @@
   20/20、handler 10/10，Gateway 全量、关键包 race、vet、govulncheck/ops、静态远程
   安全边界与公共源码 12/12 门禁通过；提交前再以 TRON 官方文档公开地址只读抽取当前
   mainnet 三条 limit=1 回包，三者顶层/row/meta 字段均与受审词汇表一致。Provider 严格范围现扩展到 Helius + Alchemy +
-  Etherscan/Blockscout + TronGrid；CoinGecko 与 GoPlus 仍待同等级审阅。该修复是本地源码
-  候选，生产仍为 1.16.15。
+  Etherscan/Blockscout + TronGrid；CoinGecko 与 GoPlus 仍待同等级审阅。该修复已随
+  Gateway 1.16.16 上线。
 - [x] 2026-08-04 继续关闭 CoinGecko Simple Price 的资产估值边界。旧实现把动态
   coin-id 对象直接 `json.Unmarshal` 到 `map[string]MarketQuote`，会静默接受请求外币种、
   大小写别名、重复顶层/价格键、未知字段、缺少请求币种或价格字段、零/负价格、非法
@@ -296,8 +296,8 @@
   ETH/SOL/USDC 解析 smoke 1/1 与全部 19 个内置 symbol 的 Gateway 只读 smoke 19/19，
   Gateway 全量、关键包 race、vet、固定 govulncheck/ops、
   远程安全边界和公开源码 12/12 全部通过。Provider 严格范围现扩展到 Helius + Alchemy +
-  Etherscan/Blockscout + TronGrid + CoinGecko；仅 GoPlus 仍待同等级响应审阅。该项仍是
-  本地源码候选，未部署，生产仍为 1.16.15。
+  Etherscan/Blockscout + TronGrid + CoinGecko；仅 GoPlus 仍待同等级响应审阅。该项已随
+  Gateway 1.16.16 上线；公网 ETH/SOL/USDC 报价正值与缓存时间 smoke 通过。
 - [x] 2026-08-04 完成最后一组 provider 专用边界：GoPlus EVM/TRON Token
   Security、Solana Token Security 与 opt-in EVM Approval Security。旧实现三条路径
   都使用普通 struct/map `json.Unmarshal`，会吞掉 envelope/result/风险字段重复键与别名；
@@ -322,8 +322,9 @@
   unavailable，不把配额错误算作安全结果。冷却后再次执行要求 `Found && !Unsafe` 的
   完整 provider-backed 套件，Approval、Solana 5/5 与 EVM/TRON 7/7 全部通过。Provider
   专用严格响应审阅至此覆盖 Helius、
-  Alchemy、Etherscan/Blockscout、TronGrid、CoinGecko 与 GoPlus 三接口。该项仍是本地
-  源码候选，未部署，生产仍为 1.16.15。
+  Alchemy、Etherscan/Blockscout、TronGrid、CoinGecko 与 GoPlus 三接口。该项已随
+  Gateway 1.16.16 上线；公网官方 Ethereum USDC 返回身份绑定的
+  `official_catalog+goplus / safe`。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。
@@ -1459,8 +1460,8 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     缺失/错误 network 或 contract，不能被后续重构或部署遗漏静默删除。
     负例先稳定复现旧实现放行跨网络 safe 和旧 Gateway 缺少身份字段，修复后 Token 风险
     定向 3/3、Gateway Client/Services 60/60、KT Wallet 1542/1542、Gateway `make audit`、
-    远程安全边界与静态分析 0 通过。该协议目前是源码候选；生产 1.16.15 尚未回显身份，
-    必须先发布 Gateway 再发布 App，旧服务只会触发“无法检查”，不会降级为 safe。
+    远程安全边界与静态分析 0 通过。Gateway 协议已随 1.16.16 上线并由官方 Ethereum
+    USDC 公网 smoke 证明 network/contract 身份回显；App 端仍须随下一版移动构建发布。
   - [x] 2026-08-04 相邻严审发现 Token 搜索只检查 `verified:true` 与基本字段：请求
     Ethereum 时，错误路由返回的 Polygon 官方条目仍会获得蓝勾；未知字段、查询不匹配、
     无效合约与重复身份也没有使整次目录查询失败。Gateway 还把 TRON/Solana Base58 mint
@@ -1470,14 +1471,14 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     蓝勾。Gateway 仅对 EVM 合约不区分大小写，TRON/Solana 保持 Base58 大小写敏感。
     错网络、错查询、未知字段、无效合约、未知 root 字段与重复身份 6 个负例先红后绿；
     Token 搜索 7/7、Gateway/服务/目录 UI 定向 79/79、Gateway `make audit`、远程安全边界
-    和静态分析 0 通过。该行为仍是基于公开版本 1.16.15 的未部署源码候选；完整门禁
-    禁止提前提升公开版本或改写生产证据，未把源码修复冒充线上已部署。
+    和静态分析 0 通过。Gateway 行为已随 1.16.16 上线，公网 Ethereum USDC 搜索返回
+    1 条、全 verified 且全部绑定 `eth-mainnet`；App 端仍须随下一版移动构建发布。
   - [x] 2026-08-04 继续审计运营方官方 Token 文件，红测证明旧 loader 会忽略未知字段：
     将 `decimals` 拼成 `decimal` 后会落到 0，仍可被强制标记 `verified:true`；配置还可声明
     响应专用的 `verified:false`，但运行时同样强制变成蓝勾，重复 JSON key 则由 Go 采用
     最后值。现在配置输入与响应模型分离，严格解码拒绝未知字段、响应派生字段、重复对象
     key 与尾随 JSON；任一错误使 Gateway 启动失败，不加载部分目录。三个负例均先红后绿，
-    官方目录/搜索与匿名诊断严格 JSON 定向测试通过。该修复仍是未部署源码候选。
+    官方目录/搜索与匿名诊断严格 JSON 定向测试通过。该修复已随 Gateway 1.16.16 上线。
   - [x] 2026-08-04 同类审计延伸到更高优先级的运营风险表：旧 loader 同样会忽略未知
     字段并接受重复对象 key；更严重的是，`handlers.New` 收到无效程序化 denylist 时会记录
     日志后清空风险表，随后同一官方 Token 会重新返回 `safe`。现风险文件复用闭合 JSON
@@ -1486,7 +1487,7 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     继续查询官方目录或外部 provider。无效 denylist + 官方 USDT 的假 safe 红测稳定复现
     后转绿；Gateway 风险/目录定向、完整 `make audit`、KT Wallet 1542/1542、KT Cold
     Signer 570/570、共享 packages 415/415、静态分析 0 与完整公开测试门禁 13/13 通过。
-    该行为仍是未部署源码候选。
+    该行为已随 Gateway 1.16.16 上线。
   - [x] 2026-08-04 再次复核共享严格 JSON 实现发现 Go `encoding/json` 会忽略字段名
     大小写：单独的 `Contract` 会绑定到 `contract`，`contract + Contract` 会对同一字段
     赋值两次但绕过精确重复 key 检测，匿名诊断中的 `consent + Consent` 甚至会把拒绝改成
@@ -1496,8 +1497,10 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     类型解码；任何大小写别名或非规范字段名整份失败闭合。官方目录单独别名、风险表大小写
     碰撞与诊断根字段红测转绿，嵌套字段回归一并重复 10 次通过；完整 Gateway audit、
     静态分析 0、KT Wallet 1542/1542、KT Cold Signer 570/570、共享 packages 415/415、依赖/OSV
-    审计及完整公开测试门禁 13/13 通过。该修复仍为未部署源码候选。
-  - [ ] Alertmanager 通知接收方、供应商长期 SLA/版本监测和用户误报申诉渠道仍未完成；
+    审计及完整公开测试门禁 13/13 通过。该修复已随 Gateway 1.16.16 上线。
+  - [ ] Alertmanager 外部接收器已有单源渲染、凭证文件、闭合路由与 2 正/14 负门禁，
+    但真实接收 URL、人工值班接收与 resolved 演练尚未配置；供应商长期 SLA/版本监测和
+    用户误报申诉渠道仍未完成；
     一次生产 smoke 与自动熔断不能证明所有链、所有风险类型或供应商长期质量，因此本
     总项保持未完成。
 - [ ] ERC-20 授权清单、无限授权提示与撤销交易。
@@ -1524,8 +1527,8 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
     decimals 从 255 收紧至 36，并在输出前移除 Bidi/零宽字符。错误网络 UI 明确显示
     unavailable，不会显示“无授权”或撤销按钮。负例先稳定复现旧实现放行，再修复为
     Gateway Client 32/32、授权 UI 12/12、KT Wallet 1542/1542、Gateway `make audit`、
-    `check_deps` 与静态分析 0 通过。该 Gateway 变更目前是源码候选，未冒充已部署到
-    生产 1.16.15。
+    `check_deps` 与静态分析 0 通过。Gateway 变更已随 1.16.16 上线；App 端仍须随
+    下一版移动构建发布。
   - [ ] 仍需用小额主网钱包完成真实授权发现、热钱包撤销、Cold Signer 撤销、链上
     确认与历史回填，并建立第三方限流、告警、回滚和隐私运营流程，因此本总项保持未完成。
 
