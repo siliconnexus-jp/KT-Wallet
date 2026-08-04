@@ -39,6 +39,9 @@ type historyRecord struct {
 }
 
 type historyResult struct {
+	Chain   string          `json:"chain"`
+	Network string          `json:"network"`
+	Address string          `json:"address"`
 	Status  string          `json:"status"` // "ok" | "unsupported"
 	Records []historyRecord `json:"records"`
 }
@@ -108,6 +111,12 @@ func (g *Gateway) GetHistory(ctx context.Context, params json.RawMessage) (any, 
 	if rpcErr != nil {
 		return nil, rpcErr
 	}
+	// Bind every successful response (including unsupported) to the exact
+	// request identity. The mobile client rejects a page that cannot prove
+	// which chain, network, and owner it belongs to.
+	res.Chain = p.Chain
+	res.Network = network
+	res.Address = p.Address
 	g.historyCache.SetContext(ctx, key, res)
 	return res, nil
 }

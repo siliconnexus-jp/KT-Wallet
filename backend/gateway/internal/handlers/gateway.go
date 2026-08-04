@@ -125,7 +125,7 @@ type Config struct {
 // Defaults returns the production upstream configuration.
 func Defaults() Config {
 	return Config{
-		Version:        "1.16.23",
+		Version:        "1.16.24",
 		Clock:          clock.Real{},
 		AttemptTimeout: 10 * time.Second,
 		EthURLs:        []string{"https://eth.llamarpc.com", "https://cloudflare-eth.com"},
@@ -423,7 +423,9 @@ func New(cfg Config) *Gateway {
 			clk,
 			historyTTL,
 			cfg.SharedCache,
-			"history",
+			// v2 adds chain/network/address response identity. Keep rolling
+			// instances from decoding a pre-v2 Redis row as an unbound page.
+			"history-v2",
 			cache.JSONPointerCodec[historyResult](),
 		),
 		tokenRiskCache:      cache.New(clk, tokenRiskTTL),

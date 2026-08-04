@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:chains/chains.dart'
-    show Amount, Base58Error, base58Decode, base58Encode;
+    show Addresses, Amount, Base58Error, Chain, base58Decode, base58Encode;
 import 'package:chains/rpc.dart' show GasFeeEstimate, GasFeeEstimateTier;
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:http/http.dart' as http;
@@ -33,7 +33,8 @@ import 'fiat_math.dart';
 ///   decimal gas estimate
 /// - `kt_getEvmSpendableBalances`
 ///   `{chain, network?, address, tokenContract?}` → uncached pending balances
-/// - `kt_getHistory` `{chain, network?, address, limit?}` → `{status, records}`
+/// - `kt_getHistory` `{chain, network?, address, limit?}` →
+///   `{chain, network, address, status, records}` with exact owner binding
 /// - `kt_getTransactionStatus` `{chain, network?, hash}` →
 ///   `{network, hash, status}` bound to the exact requested transaction
 /// - `kt_searchTokens` `{query?, networks?, limit?}` → verified token catalog
@@ -196,6 +197,24 @@ class GatewayClient {
   static const _tokenRiskUnsafeResultKeys = <String>{
     ..._tokenRiskResultKeys,
     'category',
+  };
+  static const _historyResultKeys = <String>{
+    'chain',
+    'network',
+    'address',
+    'status',
+    'records',
+  };
+  static const _historyRecordKeys = <String>{
+    'id',
+    'hash',
+    'direction',
+    'amountRaw',
+    'decimals',
+    'symbol',
+    'verified',
+    'timestampMs',
+    'status',
   };
   static const _tokenRiskCategories = <String>{
     'malicious',
@@ -865,56 +884,118 @@ class GatewayClient {
   }
 
   /// `kt_getHistory` — recent transactions of the active network of [chain],
-  /// or `unsupported` when the gateway has no indexer for it. Malformed
-  /// records are skipped, not fatal.
+  /// or `unsupported` when the gateway has no indexer for it.
+  ///
+  /// History is a security boundary: a response is accepted only when its
+  /// chain/network/owner identity and every row are exact. A malformed row is
+  /// fatal for the whole page so the service can fall back without presenting
+  /// a partial or cross-account history as authoritative.
   Future<GatewayHistory> getHistory({
     required Coin chain,
     required String address,
     int? limit,
   }) async {
     final network = await _networkParam(chain);
+    final expectedNetwork = network ?? _mainnetNetworkId(chain);
     final result = await _call('kt_getHistory', {
       'chain': chainName(chain),
       'network': ?network,
       'address': address,
       'limit': ?limit,
     });
-    if (result is! Map) throw const FormatException('bad history result');
+    if (result is! Map ||
+        !_hasExactStringKeys(result, _historyResultKeys) ||
+        result['chain'] != chainName(chain) ||
+        result['network'] != expectedNetwork ||
+        !_sameAccountAddress(chain, result['address'], address)) {
+      throw const FormatException('unbound history result');
+    }
     final status = result['status'];
-    if (status == 'unsupported') return const GatewayHistory.unsupported();
-    if (status != 'ok') throw const FormatException('unknown history status');
     final rows = result['records'];
     if (rows is! List) throw const FormatException('missing records list');
+    if (status == 'unsupported') {
+      if (rows.isNotEmpty) {
+        throw const FormatException('unsupported history has records');
+      }
+      return const GatewayHistory.unsupported();
+    }
+    if (status != 'ok') throw const FormatException('unknown history status');
+    final maximumRows = (limit ?? 20).clamp(1, 100);
+    if (rows.length > maximumRows) {
+      throw const FormatException('history page exceeds requested limit');
+    }
     final records = <GatewayHistoryRecord>[];
+    final ids = <String>{};
     for (final row in rows) {
-      if (row is! Map) continue;
+      if (row is! Map) throw const FormatException('bad history row');
+      final expectedKeys = <String>{
+        ..._historyRecordKeys,
+        if (row.containsKey('from')) 'from',
+        if (row.containsKey('to')) 'to',
+        if (row.containsKey('contract')) 'contract',
+      };
+      if (!_hasExactStringKeys(row, expectedKeys)) {
+        throw const FormatException('unknown history row field');
+      }
+      final id = row['id'];
       final hash = row['hash'];
       final direction = row['direction'];
+      final from = row['from'];
+      final to = row['to'];
+      final decimals = row['decimals'];
+      final symbol = row['symbol'];
+      final contract = row['contract'];
+      final verified = row['verified'];
       final ts = row['timestampMs'];
-      if (hash is! String || ts is! int) continue;
-      if (direction != 'in' && direction != 'out') continue;
+      if (id is! String ||
+          id.isEmpty ||
+          !_isBoundedDisplayText(id, 256) ||
+          !ids.add(id) ||
+          hash is! String ||
+          !_isCanonicalTransactionHash(chain, hash) ||
+          (direction != 'in' && direction != 'out') ||
+          (from != null && !_isCanonicalChainAddress(chain, from)) ||
+          (to != null && !_isCanonicalChainAddress(chain, to)) ||
+          (direction == 'out' && !_sameAccountAddress(chain, from, address)) ||
+          (direction == 'in' && !_sameAccountAddress(chain, to, address)) ||
+          decimals is! int ||
+          decimals < 0 ||
+          decimals > 36 ||
+          symbol is! String ||
+          !_officialTokenSymbolPattern.hasMatch(symbol) ||
+          verified is! bool ||
+          ts is! int ||
+          ts < 0 ||
+          ts > 253402300799999 ||
+          !_isValidHistoryContract(chain, contract)) {
+        throw const FormatException('invalid history row semantics');
+      }
+      final amount = _canonicalUint(row['amountRaw']);
+      if (chain == Coin.tron &&
+          contract is String &&
+          _canonicalUintPattern.hasMatch(contract) &&
+          (symbol != 'TRC10' || decimals != 0 || verified)) {
+        throw const FormatException('invalid TRC-10 history row');
+      }
       final recordStatus = switch (row['status']) {
-        'ok' || 'confirmed' => GatewayTransactionStatus.confirmed,
+        'ok' => GatewayTransactionStatus.confirmed,
         'failed' => GatewayTransactionStatus.failed,
         'pending' => GatewayTransactionStatus.pending,
-        _ => GatewayTransactionStatus.unknown,
+        'unknown' => GatewayTransactionStatus.unknown,
+        _ => throw const FormatException('unknown transaction status'),
       };
       records.add(
         GatewayHistoryRecord(
-          id: row['id'] is String ? row['id'] as String : hash,
+          id: id,
           hash: hash,
           outgoing: direction == 'out',
-          fromAddress: row['from'] is String ? row['from'] as String : null,
-          toAddress: row['to'] is String ? row['to'] as String : null,
-          amountRaw: row['amountRaw'] is String
-              ? BigInt.tryParse(row['amountRaw'] as String)
-              : null,
-          decimals: row['decimals'] is int ? row['decimals'] as int : null,
-          symbol: row['symbol'] is String ? row['symbol'] as String : null,
-          contract: row['contract'] is String
-              ? row['contract'] as String
-              : null,
-          verified: row['verified'] == true,
+          fromAddress: from as String?,
+          toAddress: to as String?,
+          amountRaw: amount,
+          decimals: decimals,
+          symbol: symbol,
+          contract: contract as String?,
+          verified: verified,
           timestampMs: ts,
           status: recordStatus,
         ),
@@ -1321,6 +1402,54 @@ class GatewayClient {
     } on Base58Error {
       return false;
     }
+  }
+
+  static bool _isCanonicalTransactionHash(Coin chain, String value) =>
+      switch (chain) {
+        Coin.eth ||
+        Coin.polygon ||
+        Coin.base ||
+        Coin.arbitrum ||
+        Coin.avalanche ||
+        Coin.bnb => _evmTxHashPattern.hasMatch(value),
+        Coin.tron => _tronTxHashPattern.hasMatch(value),
+        Coin.solana => _isCanonicalSolanaSignature(value),
+      };
+
+  static bool _isCanonicalSolanaSignature(String value) {
+    try {
+      final decoded = base58Decode(value);
+      return decoded.length == 64 && base58Encode(decoded) == value;
+    } on Base58Error {
+      return false;
+    }
+  }
+
+  static Chain _addressChain(Coin chain) => switch (chain) {
+    Coin.eth => Chain.ethereum,
+    Coin.polygon => Chain.polygon,
+    Coin.base => Chain.base,
+    Coin.arbitrum => Chain.arbitrum,
+    Coin.avalanche => Chain.avalanche,
+    Coin.bnb => Chain.bnb,
+    Coin.tron => Chain.tron,
+    Coin.solana => Chain.solana,
+  };
+
+  static bool _isCanonicalChainAddress(Coin chain, Object? value) =>
+      value is String &&
+      value == value.trim() &&
+      Addresses.validate(_addressChain(chain), value).isValid;
+
+  static bool _isValidHistoryContract(Coin chain, Object? value) {
+    if (value == null) return true;
+    if (value is! String || value.isEmpty || value != value.trim()) {
+      return false;
+    }
+    if (chain == Coin.tron && _canonicalUintPattern.hasMatch(value)) {
+      return value.length <= 78;
+    }
+    return _isCanonicalChainAddress(chain, value);
   }
 
   static bool _isProviderDecimal(String value) {

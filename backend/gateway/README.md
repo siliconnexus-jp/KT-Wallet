@@ -40,7 +40,7 @@ curl -s localhost:8080/rpc -d '{"jsonrpc":"2.0","id":1,"method":"kt_health"}'
 curl -s localhost:8080/healthz
 curl -s localhost:8080/readyz
 curl -s -H "Authorization: Bearer $METRICS_BEARER_TOKEN" localhost:8080/metrics
-# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.23"}}
+# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.24"}}
 ```
 
 ## Environment
@@ -701,10 +701,21 @@ not-found shape and maps to `unknown`; it is not treated as a failed transfer.
 
 ### `kt_getHistory` `{"chain": C, "network": N?, "address": A, "limit": N?}`
 
-→ `{"status": "ok" | "unsupported",
+→ `{"chain": C, "network": N, "address": A,
+    "status": "ok" | "unsupported",
     "records": [{"id": S, "hash": S, "direction": "in"|"out",
     "amountRaw": "<dec>", "decimals": N, "symbol": S, "contract": S?,
-    "verified": B, "timestampMs": <int>, "status": "ok"|"failed"}]}`
+    "verified": B, "timestampMs": <int>,
+    "status": "ok"|"failed"|"pending"|"unknown"}]}`
+
+The response repeats the exact canonical chain, resolved network, and queried
+owner. Mobile clients reject a page unless all three values match the request,
+every object has the exact reviewed field set, every row touches the owner on
+the claimed direction, and every hash, address, amount, precision, symbol,
+timestamp, token identity, and status is canonical. One malformed row rejects
+the complete page; it is never silently skipped. `unsupported` must carry an
+empty records array. Shared cache namespace `history-v2` prevents a rolling
+deployment from accepting an older unbound cached result.
 
 - **tron** — always supported via TronGrid: TRC-20 transfers + native
   `TransferContract` / TRC-10 `TransferAssetContract` + contract-created

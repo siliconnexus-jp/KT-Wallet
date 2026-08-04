@@ -67,6 +67,9 @@ func TestTronHistoryMergeDedupeDirection(t *testing.T) {
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
 
 	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"tron","address":%q}`, tronSelfB58)))
+	if res["chain"] != "tron" || res["network"] != "tron-mainnet" || res["address"] != tronSelfB58 {
+		t.Fatalf("history response must bind exact request identity: %v", res)
+	}
 	if res["status"] != "ok" {
 		t.Fatalf("tron history must always be supported, got %v", res["status"])
 	}
@@ -374,7 +377,10 @@ func TestPolygonAmoyHistoryWithoutKeyUnsupported(t *testing.T) {
 	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(
 		`{"chain":"polygon","network":"polygon-amoy","address":%q}`, evmSelf,
 	)))
-	assertJSONEq(t, `{"status":"unsupported","records":[]}`, res)
+	assertJSONEq(t, fmt.Sprintf(
+		`{"chain":"polygon","network":"polygon-amoy","address":%q,"status":"unsupported","records":[]}`,
+		evmSelf,
+	), res)
 }
 
 func TestBNBHistoryUsesAlchemyBeforeEtherscan(t *testing.T) {

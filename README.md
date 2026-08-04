@@ -24,8 +24,8 @@ The project is licensed under [MPL-2.0](LICENSE).
 | KT Cold Signer | `1.0.0+1` | Controlled public-beta builds; source build is available for dedicated offline devices |
 | KT Gateway | `1.16.23` | Production service at `https://gateway.kt-wallet.com` |
 
-Gateway source version: `1.16.23` (deployed to both production instances on
-2026-08-04 after the balance and portfolio response-binding gates passed).
+Gateway source version: `1.16.24` (release candidate; production remains
+`1.16.23` until the history response-binding rollout completes).
 
 Until signed store releases are published, build both apps from this repository
 and do not install APK or IPA files from unofficial mirrors. Start with
@@ -390,6 +390,14 @@ repeat the same identity in both the outer account row and nested balance
 result; missing, duplicated, reordered, additive, or cross-wallet rows are
 rejected. The versioned shared-cache namespace prevents a rolling deployment
 from interpreting a pre-binding Redis entry as a current trusted response.
+
+History results apply the same request binding to chain, resolved network, and
+owner. Each row must use the exact reviewed schema, carry a canonical
+transaction identity and amount, and prove that its direction touches the
+queried owner. A malformed, duplicated, additive, cross-wallet, or oversized
+page is rejected in full and falls back to the chain source; it is never
+partially displayed. The `history-v2` cache namespace isolates older unbound
+entries during a rolling release.
 
 The Gateway receives the public address, network, and public contract/mint
 needed for a requested lookup. Recovery phrases, private keys, signatures, raw

@@ -158,13 +158,22 @@ Object? _bindBalanceResult(
   Object? result,
   Map<String, Object?> params,
 ) {
-  if (method != 'kt_getBalances' || result is! Map) return result;
+  if (result is! Map) return result;
+  if (method != 'kt_getBalances' && method != 'kt_getHistory') return result;
   final network = params['network'] as String?;
   final chain = params['chain'] as String;
   final mainnet = switch (chain) {
     'solana' => 'sol-mainnet',
     _ => '$chain-mainnet',
   };
+  if (method == 'kt_getHistory') {
+    return <String, Object?>{
+      'chain': chain,
+      'network': network ?? mainnet,
+      'address': params['address'],
+      ...result.cast<String, Object?>(),
+    };
+  }
   final requestedTokens = (params['tokens'] as List?) ?? const <Object?>[];
   final scriptedTokens = (result['tokens'] as List?) ?? const <Object?>[];
   final boundTokens = <Object?>[

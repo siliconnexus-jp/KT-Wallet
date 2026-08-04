@@ -23,6 +23,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// gateway while gateway mode never touches the direct transports on success.
 
 const _evmFrom = '0x1111111111111111111111111111111111111111';
+const _evmTo = '0x2222222222222222222222222222222222222222';
 const _tronOwner = 'TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH';
 const _addresses = ChainAddresses(
   eth: _evmFrom,
@@ -182,12 +183,21 @@ Object? _bindBalanceResult(
   Object? result,
   Map<String, Object?> params,
 ) {
-  if (method != 'kt_getBalances' || result is! Map) return result;
+  if (result is! Map) return result;
+  if (method != 'kt_getBalances' && method != 'kt_getHistory') return result;
   final chain = params['chain'] as String;
   final mainnet = switch (chain) {
     'solana' => 'sol-mainnet',
     _ => '$chain-mainnet',
   };
+  if (method == 'kt_getHistory') {
+    return <String, Object?>{
+      'chain': chain,
+      'network': params['network'] ?? mainnet,
+      'address': params['address'],
+      ...result.cast<String, Object?>(),
+    };
+  }
   final requestedTokens = (params['tokens'] as List?) ?? const <Object?>[];
   final scriptedTokens = (result['tokens'] as List?) ?? const <Object?>[];
   final boundTokens = <Object?>[
@@ -798,17 +808,19 @@ void main() {
 
   group('HistoryService gateway mode', () {
     test('UNLOCK: eth history returns ok records via the gateway', () async {
+      final nativeHash = '0x${'a' * 64}';
+      final tokenHash = '0x${'b' * 64}';
       final gateway = _FakeGateway(
         results: {
           'kt_getHistory': {
             'status': 'ok',
             'records': [
               {
-                'id': '0xaaa',
-                'hash': '0xaaa',
+                'id': nativeHash,
+                'hash': nativeHash,
                 'direction': 'out',
-                'from': '0xEthAddr',
-                'to': '0xRecipient',
+                'from': _evmFrom,
+                'to': _evmTo,
                 'amountRaw': '1500000000000000000',
                 'decimals': 18,
                 'symbol': 'ETH',
@@ -817,11 +829,11 @@ void main() {
                 'status': 'ok',
               },
               {
-                'id': '0xbbb:7',
-                'hash': '0xbbb',
+                'id': '$tokenHash:7',
+                'hash': tokenHash,
                 'direction': 'in',
-                'from': '0xSender',
-                'to': '0xEthAddr',
+                'from': _evmTo,
+                'to': _evmFrom,
                 'amountRaw': '2000000',
                 'decimals': 6,
                 'symbol': 'USDT',
@@ -842,30 +854,30 @@ void main() {
         gateway: () => gateway.client,
       );
 
-      final result = await service.fetch(Coin.eth, '0xEthAddr');
+      final result = await service.fetch(Coin.eth, _evmFrom);
       expect(result.status, HistoryStatus.ok);
       expect(result.records, hasLength(2));
       // Newest first.
-      expect(result.records[0].hash, '0xbbb');
+      expect(result.records[0].hash, tokenHash);
       expect(result.records[0].outgoing, isFalse);
-      expect(result.records[0].fromAddress, '0xSender');
-      expect(result.records[0].toAddress, '0xEthAddr');
+      expect(result.records[0].fromAddress, _evmTo);
+      expect(result.records[0].toAddress, _evmFrom);
       expect(result.records[0].confirmed, isFalse); // status: failed
       expect(result.records[0].amountText, '2 USDT');
-      expect(result.records[0].id, '0xbbb:7');
+      expect(result.records[0].id, '$tokenHash:7');
       expect(result.records[0].assetVerified, isFalse);
       expect(
         result.records[0].assetContract,
         '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       );
-      expect(result.records[1].hash, '0xaaa');
+      expect(result.records[1].hash, nativeHash);
       expect(result.records[1].outgoing, isTrue);
       expect(result.records[1].confirmed, isTrue);
       expect(result.records[1].amountText, '1.5 ETH');
       expect(result.records[1].assetVerified, isTrue);
       expect(gateway.paramsOf('kt_getHistory').single, {
         'chain': 'eth',
-        'address': '0xEthAddr',
+        'address': _evmFrom,
         'limit': HistoryService.pageSize,
       });
     });

@@ -250,7 +250,10 @@ func TestSepoliaHistoryWithoutKeyUnsupported(t *testing.T) {
 
 	res := result(t, e.rpc("kt_getHistory",
 		fmt.Sprintf(`{"chain":"eth","network":"eth-sepolia","address":%q}`, evmSelf)))
-	assertJSONEq(t, `{"status":"unsupported","records":[]}`, res)
+	assertJSONEq(t, fmt.Sprintf(
+		`{"chain":"eth","network":"eth-sepolia","address":%q,"status":"unsupported","records":[]}`,
+		evmSelf,
+	), res)
 	if len(scan.hitsFor("/")) != 0 {
 		t.Fatal("without ETHERSCAN_API_KEY no upstream call may happen")
 	}

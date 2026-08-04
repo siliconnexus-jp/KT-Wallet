@@ -1134,33 +1134,122 @@ void main() {
   });
 
   group('kt_getHistory', () {
-    test('ok status with records; malformed rows are skipped', () async {
+    test('rejects history bound to another network and owner', () async {
+      final hash = '0x${'a' * 64}';
       final recorder = _Recorder()
         ..results = {
           'kt_getHistory': {
+            'chain': 'eth',
+            'network': 'eth-sepolia',
+            'address': _evmTo,
             'status': 'ok',
             'records': [
               {
-                'hash': '0xaaa',
+                'id': hash,
+                'hash': hash,
                 'direction': 'out',
-                'from': '0xEthAddr',
-                'to': '0xRecipient',
+                'from': _evmFrom,
+                'to': _evmTo,
+                'amountRaw': '1',
+                'decimals': 18,
+                'symbol': 'ETH',
+                'verified': true,
+                'timestampMs': 1753000000000,
+                'status': 'ok',
+              },
+            ],
+          },
+        };
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: recorder.client,
+      );
+
+      await expectLater(
+        client.getHistory(chain: Coin.eth, address: _evmFrom),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test(
+      'rejects an additive field instead of accepting a partial page',
+      () async {
+        final hash = '0x${'b' * 64}';
+        final recorder = _Recorder()
+          ..results = {
+            'kt_getHistory': {
+              'chain': 'eth',
+              'network': 'eth-mainnet',
+              'address': _evmFrom,
+              'status': 'ok',
+              'records': [
+                {
+                  'id': hash,
+                  'hash': hash,
+                  'direction': 'in',
+                  'from': _evmTo,
+                  'to': _evmFrom,
+                  'amountRaw': '1',
+                  'decimals': 18,
+                  'symbol': 'ETH',
+                  'verified': true,
+                  'timestampMs': 1753000000000,
+                  'status': 'ok',
+                  'memo': 'unreviewed',
+                },
+              ],
+            },
+          };
+        final client = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: recorder.client,
+        );
+
+        await expectLater(
+          client.getHistory(chain: Coin.eth, address: _evmFrom),
+          throwsA(isA<FormatException>()),
+        );
+      },
+    );
+
+    test('ok status requires and parses a fully bound exact page', () async {
+      final nativeHash = '0x${'c' * 64}';
+      final tokenHash = '0x${'d' * 64}';
+      final recorder = _Recorder()
+        ..results = {
+          'kt_getHistory': {
+            'chain': 'eth',
+            'network': 'eth-mainnet',
+            'address': _evmFrom,
+            'status': 'ok',
+            'records': [
+              {
+                'id': nativeHash,
+                'hash': nativeHash,
+                'direction': 'out',
+                'from': _evmFrom,
+                'to': _evmTo,
                 'amountRaw': '1500000000000000000',
                 'decimals': 18,
                 'symbol': 'ETH',
+                'verified': true,
                 'timestampMs': 1753000000000,
                 'status': 'ok',
               },
               {
-                'hash': '0xbbb',
+                'id': '$tokenHash:7',
+                'hash': tokenHash,
                 'direction': 'in',
+                'from': _evmTo,
+                'to': _evmFrom,
                 'amountRaw': '2000000',
                 'decimals': 6,
                 'symbol': 'USDT',
+                'contract': _evmToken,
+                'verified': true,
                 'timestampMs': 1752000000000,
                 'status': 'failed',
               },
-              {'direction': 'in', 'timestampMs': 1}, // no hash → skipped
             ],
           },
         };
@@ -1170,21 +1259,21 @@ void main() {
       );
       final history = await client.getHistory(
         chain: Coin.eth,
-        address: '0xEthAddr',
+        address: _evmFrom,
         limit: 20,
       );
 
       expect(recorder.requests.single['params'], {
         'chain': 'eth',
-        'address': '0xEthAddr',
+        'address': _evmFrom,
         'limit': 20,
       });
       expect(history.unsupported, isFalse);
       expect(history.records, hasLength(2));
-      expect(history.records[0].hash, '0xaaa');
+      expect(history.records[0].hash, nativeHash);
       expect(history.records[0].outgoing, isTrue);
-      expect(history.records[0].fromAddress, '0xEthAddr');
-      expect(history.records[0].toAddress, '0xRecipient');
+      expect(history.records[0].fromAddress, _evmFrom);
+      expect(history.records[0].toAddress, _evmTo);
       expect(history.records[0].status, GatewayTransactionStatus.confirmed);
       expect(history.records[0].amountRaw, BigInt.parse('1500000000000000000'));
       expect(history.records[1].outgoing, isFalse);
@@ -1194,7 +1283,13 @@ void main() {
     test('status unsupported maps to the typed unsupported result', () async {
       final recorder = _Recorder()
         ..results = {
-          'kt_getHistory': {'status': 'unsupported', 'records': <Object?>[]},
+          'kt_getHistory': {
+            'chain': 'solana',
+            'network': 'sol-mainnet',
+            'address': _solanaOwner,
+            'status': 'unsupported',
+            'records': <Object?>[],
+          },
         };
       final client = GatewayClient(
         baseUrl: 'https://gw.example',
@@ -1202,10 +1297,97 @@ void main() {
       );
       final history = await client.getHistory(
         chain: Coin.solana,
-        address: 'SolAddr',
+        address: _solanaOwner,
       );
       expect(history.unsupported, isTrue);
       expect(history.records, isEmpty);
+    });
+
+    test('rejects malformed money, identity and status semantics', () async {
+      final hash = '0x${'e' * 64}';
+      final valid = <String, Object?>{
+        'id': hash,
+        'hash': hash,
+        'direction': 'out',
+        'from': _evmFrom,
+        'to': _evmTo,
+        'amountRaw': '1',
+        'decimals': 18,
+        'symbol': 'ETH',
+        'verified': true,
+        'timestampMs': 1753000000000,
+        'status': 'ok',
+      };
+      final mutations = <String, Map<String, Object?>>{
+        'non-canonical hash': {...valid, 'hash': '0x1234'},
+        'owner is not sender': {...valid, 'from': _evmTo},
+        'leading-zero amount': {...valid, 'amountRaw': '01'},
+        'unsupported precision': {...valid, 'decimals': 37},
+        'unreviewed symbol': {...valid, 'symbol': 'eth'},
+        'legacy status alias': {...valid, 'status': 'confirmed'},
+      };
+
+      for (final entry in mutations.entries) {
+        final recorder = _Recorder()
+          ..results = {
+            'kt_getHistory': {
+              'chain': 'eth',
+              'network': 'eth-mainnet',
+              'address': _evmFrom,
+              'status': 'ok',
+              'records': [entry.value],
+            },
+          };
+        final client = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: recorder.client,
+        );
+        await expectLater(
+          client.getHistory(chain: Coin.eth, address: _evmFrom),
+          throwsA(isA<FormatException>()),
+          reason: entry.key,
+        );
+      }
+    });
+
+    test('rejects duplicate ids and unsupported pages with rows', () async {
+      final hash = '0x${'f' * 64}';
+      final row = <String, Object?>{
+        'id': hash,
+        'hash': hash,
+        'direction': 'in',
+        'from': _evmTo,
+        'to': _evmFrom,
+        'amountRaw': '1',
+        'decimals': 18,
+        'symbol': 'ETH',
+        'verified': true,
+        'timestampMs': 1753000000000,
+        'status': 'ok',
+      };
+      for (final (status, rows) in <(String, List<Object?>)>[
+        ('ok', [row, row]),
+        ('unsupported', [row]),
+      ]) {
+        final recorder = _Recorder()
+          ..results = {
+            'kt_getHistory': {
+              'chain': 'eth',
+              'network': 'eth-mainnet',
+              'address': _evmFrom,
+              'status': status,
+              'records': rows,
+            },
+          };
+        final client = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: recorder.client,
+        );
+        await expectLater(
+          client.getHistory(chain: Coin.eth, address: _evmFrom),
+          throwsA(isA<FormatException>()),
+        );
+      }
     });
   });
 
