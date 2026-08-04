@@ -47,11 +47,12 @@ func TestEVMBalancesGolden(t *testing.T) {
 		fmt.Sprintf(`[{"contract":%q,"decimals":6,"symbol":"USDT"},{"contract":%q,"decimals":18,"symbol":"DAI"}]`, evmTokenA, evmTokenB)))
 
 	assertJSONEq(t, fmt.Sprintf(`{
+		"chain":"eth","network":"eth-mainnet","address":%q,
 		"native":{"raw":"1000000000000000000","decimals":18,"symbol":"ETH"},
 		"tokens":[
 			{"contract":%q,"raw":"1000000","decimals":6,"symbol":"USDT"},
 			{"contract":%q,"raw":"0","decimals":18,"symbol":"DAI"}
-		]}`, evmTokenA, evmTokenB), result(t, resp))
+		]}`, evmSelf, evmTokenA, evmTokenB), result(t, resp))
 
 	// Token calls run with bounded concurrency, so the last completed request is
 	// intentionally nondeterministic. It must still be balanceOf(holder)
@@ -74,7 +75,7 @@ func TestEVMBalancesNoTokens(t *testing.T) {
 	node.result("eth_getBalance", "0x0")
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.EthURLs = []string{node.srv.URL} })
 	resp := e.rpc("kt_getBalances", balancesParams("eth", evmSelf, ""))
-	assertJSONEq(t, `{"native":{"raw":"0","decimals":18,"symbol":"ETH"},"tokens":[]}`, result(t, resp))
+	assertJSONEq(t, fmt.Sprintf(`{"chain":"eth","network":"eth-mainnet","address":%q,"native":{"raw":"0","decimals":18,"symbol":"ETH"},"tokens":[]}`, evmSelf), result(t, resp))
 }
 
 func TestPortfolioCombinesChainsAndIsolatesFailures(t *testing.T) {
@@ -96,6 +97,17 @@ func TestPortfolioCombinesChainsAndIsolatesFailures(t *testing.T) {
 	eth := accounts[0].(map[string]any)
 	polygon := accounts[1].(map[string]any)
 	bad := accounts[2].(map[string]any)
+	for name, row := range map[string]map[string]any{
+		"eth": eth, "polygon": polygon,
+	} {
+		if row["chain"] != name || row["network"] != name+"-mainnet" || row["address"] != evmSelf {
+			t.Fatalf("unbound %s portfolio identity: %v", name, row)
+		}
+		bound := row["result"].(map[string]any)
+		if bound["chain"] != name || bound["network"] != name+"-mainnet" || bound["address"] != evmSelf {
+			t.Fatalf("unbound nested %s balance identity: %v", name, bound)
+		}
+	}
 	if eth["result"].(map[string]any)["native"].(map[string]any)["symbol"] != "ETH" {
 		t.Fatalf("bad eth result: %v", eth)
 	}
@@ -105,6 +117,9 @@ func TestPortfolioCombinesChainsAndIsolatesFailures(t *testing.T) {
 	if bad["error"] == nil || bad["result"] != nil {
 		t.Fatalf("invalid sibling must be isolated: %v", bad)
 	}
+	if bad["chain"] != "solana" || bad["network"] != "sol-mainnet" || bad["address"] != "not-a-solana-address" {
+		t.Fatalf("unbound failed portfolio identity: %v", bad)
+	}
 }
 
 func TestPolygonNativeSymbol(t *testing.T) {
@@ -112,7 +127,7 @@ func TestPolygonNativeSymbol(t *testing.T) {
 	node.result("eth_getBalance", "0x5")
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.PolygonURLs = []string{node.srv.URL} })
 	resp := e.rpc("kt_getBalances", balancesParams("polygon", evmSelf, ""))
-	assertJSONEq(t, `{"native":{"raw":"5","decimals":18,"symbol":"POL"},"tokens":[]}`, result(t, resp))
+	assertJSONEq(t, fmt.Sprintf(`{"chain":"polygon","network":"polygon-mainnet","address":%q,"native":{"raw":"5","decimals":18,"symbol":"POL"},"tokens":[]}`, evmSelf), result(t, resp))
 }
 
 func TestBNBBalancesUseDedicatedChain(t *testing.T) {
@@ -124,6 +139,7 @@ func TestBNBBalancesUseDedicatedChain(t *testing.T) {
 	resp := e.rpc("kt_getBalances", balancesParams("bnb", evmSelf,
 		`[{"contract":"0xe9e7cea3dedca5984780bafc599bd69add087d56","decimals":18,"symbol":"BUSD"}]`))
 	assertJSONEq(t, `{
+		"chain":"bnb","network":"bnb-mainnet","address":"`+evmSelf+`",
 		"native":{"raw":"1000000000000000000","decimals":18,"symbol":"BNB"},
 		"tokens":[{"contract":"0xe9e7cea3dedca5984780bafc599bd69add087d56","raw":"100","decimals":18,"symbol":"BUSD"}]
 	}`, result(t, resp))
@@ -204,11 +220,12 @@ func TestTronBalances(t *testing.T) {
 		fmt.Sprintf(`[{"contract":%q,"decimals":6,"symbol":"USDT"},{"contract":"TVj7RNVHy6thbM7BWdSe9G6gXwKhjhdNaS","decimals":18,"symbol":"JST"}]`, tronUSDT)))
 
 	assertJSONEq(t, fmt.Sprintf(`{
+		"chain":"tron","network":"tron-mainnet","address":%q,
 		"native":{"raw":"5000000","decimals":6,"symbol":"TRX"},
 		"tokens":[
 			{"contract":%q,"raw":"123456","decimals":6,"symbol":"USDT"},
 			{"contract":"TVj7RNVHy6thbM7BWdSe9G6gXwKhjhdNaS","raw":"0","decimals":18,"symbol":"JST"}
-		]}`, tronUSDT), result(t, resp))
+		]}`, tronSelfB58, tronUSDT), result(t, resp))
 }
 
 func TestTronMalformedNativeBalanceFailsCallInsteadOfBecomingZero(t *testing.T) {
@@ -231,7 +248,7 @@ func TestTronBalancesUnknownAccount(t *testing.T) {
 	grid.routeJSON("/v1/accounts/", `{"data":[],"success":true}`)
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
 	resp := e.rpc("kt_getBalances", balancesParams("tron", tronSelfB58, ""))
-	assertJSONEq(t, `{"native":{"raw":"0","decimals":6,"symbol":"TRX"},"tokens":[]}`, result(t, resp))
+	assertJSONEq(t, fmt.Sprintf(`{"chain":"tron","network":"tron-mainnet","address":%q,"native":{"raw":"0","decimals":6,"symbol":"TRX"},"tokens":[]}`, tronSelfB58), result(t, resp))
 }
 
 func TestSolanaBalances(t *testing.T) {
@@ -281,6 +298,7 @@ func TestSolanaBalances(t *testing.T) {
 		`[{"contract":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","decimals":6,"symbol":"USDC"}]`))
 
 	assertJSONEq(t, `{
+		"chain":"solana","network":"sol-mainnet","address":"`+solSelf+`",
 		"native":{"raw":"2039280","decimals":9,"symbol":"SOL"},
 		"tokens":[{"contract":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","raw":"1500000","decimals":6,"symbol":"USDC"}]
 	}`, result(t, resp))

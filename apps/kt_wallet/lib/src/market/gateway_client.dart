@@ -105,6 +105,34 @@ class GatewayClient {
     'network',
     'approvals',
   };
+  static const _balancesResultKeys = <String>{
+    'chain',
+    'network',
+    'address',
+    'native',
+    'tokens',
+  };
+  static const _nativeBalanceKeys = <String>{'raw', 'decimals', 'symbol'};
+  static const _tokenBalanceKeys = <String>{
+    'contract',
+    'raw',
+    'decimals',
+    'symbol',
+  };
+  static const _tokenBalanceErrorKeys = <String>{..._tokenBalanceKeys, 'error'};
+  static const _portfolioResultKeys = <String>{'accounts'};
+  static const _portfolioSuccessRowKeys = <String>{
+    'chain',
+    'network',
+    'address',
+    'result',
+  };
+  static const _portfolioErrorRowKeys = <String>{
+    'chain',
+    'network',
+    'address',
+    'error',
+  };
   static const _chainParamsResultKeys = <String>{
     'network',
     'address',
@@ -360,6 +388,7 @@ class GatewayClient {
     List<GatewayTokenQuery> tokens = const [],
   }) async {
     final network = await _networkParam(chain);
+    final expectedNetwork = network ?? _mainnetNetworkId(chain);
     final result = await _call('kt_getBalances', {
       'chain': chainName(chain),
       'network': ?network,
@@ -374,13 +403,33 @@ class GatewayClient {
             },
         ],
     });
-    return _parseBalances(result, chain);
+    return _parseBalances(
+      result,
+      chain: chain,
+      network: expectedNetwork,
+      address: address,
+      tokens: tokens,
+    );
   }
 
-  GatewayBalances _parseBalances(Object? result, Coin chain) {
-    if (result is! Map) throw const FormatException('bad balances result');
+  GatewayBalances _parseBalances(
+    Object? result, {
+    required Coin chain,
+    required String network,
+    required String address,
+    required List<GatewayTokenQuery> tokens,
+  }) {
+    if (result is! Map ||
+        !_hasExactStringKeys(result, _balancesResultKeys) ||
+        result['chain'] != chainName(chain) ||
+        result['network'] != network ||
+        !_sameAccountAddress(chain, result['address'], address)) {
+      throw const FormatException('unbound balances result');
+    }
     final native = result['native'];
-    if (native is! Map) throw const FormatException('missing native balance');
+    if (native is! Map || !_hasExactStringKeys(native, _nativeBalanceKeys)) {
+      throw const FormatException('missing native balance');
+    }
     final (expectedDecimals, expectedSymbol) = switch (chain) {
       Coin.eth => (18, 'ETH'),
       Coin.polygon => (18, 'POL'),
@@ -401,28 +450,54 @@ class GatewayClient {
       throw FormatException('native metadata mismatch for ${chain.name}');
     }
     final rows = result['tokens'];
+    if (rows is! List || rows.length != tokens.length) {
+      throw const FormatException('unbound token balance rows');
+    }
+    final parsedTokens = <GatewayTokenBalance>[];
+    for (var i = 0; i < rows.length; i++) {
+      final row = rows[i];
+      final query = tokens[i];
+      if (row is! Map) {
+        throw const FormatException('bad token balance row');
+      }
+      final hasError = row.containsKey('error');
+      final expectedKeys = hasError
+          ? _tokenBalanceErrorKeys
+          : _tokenBalanceKeys;
+      final error = hasError ? row['error'] : null;
+      if (!_hasExactStringKeys(row, expectedKeys) ||
+          row['contract'] is! String ||
+          !_tokenIdentityMatches(
+            chain,
+            query.contract,
+            row['contract'] as String,
+          ) ||
+          row['decimals'] != query.decimals ||
+          row['symbol'] != query.symbol ||
+          (hasError &&
+              (error is! String ||
+                  error.isEmpty ||
+                  !_isBoundedDisplayText(error, 160)))) {
+        throw const FormatException('unbound token balance row');
+      }
+      final raw = _canonicalUint(row['raw']);
+      parsedTokens.add(
+        GatewayTokenBalance(
+          contract: row['contract'] as String,
+          error: error as String?,
+          raw: hasError ? null : raw,
+          decimals: query.decimals,
+          symbol: query.symbol,
+        ),
+      );
+    }
     return GatewayBalances(
       native: GatewayNativeBalance(
-        raw: _decBigInt(native['raw']),
-        decimals: _int(native['decimals']),
-        symbol: _string(native['symbol']),
+        raw: _canonicalUint(native['raw']),
+        decimals: expectedDecimals,
+        symbol: expectedSymbol,
       ),
-      tokens: [
-        if (rows is List)
-          for (final row in rows)
-            if (row is Map)
-              GatewayTokenBalance(
-                contract: _string(row['contract']),
-                error: row['error'] is String ? row['error'] as String : null,
-                // raw/decimals/symbol are only trustworthy on non-error rows;
-                // a malformed success row degrades to a per-token error.
-                raw: row['error'] == null && row['raw'] is String
-                    ? BigInt.tryParse(row['raw'] as String)
-                    : null,
-                decimals: row['decimals'] is int ? row['decimals'] as int : 0,
-                symbol: row['symbol'] is String ? row['symbol'] as String : '',
-              ),
-      ],
+      tokens: List.unmodifiable(parsedTokens),
     );
   }
 
@@ -434,11 +509,17 @@ class GatewayClient {
   Future<GatewayPortfolio> getPortfolio(
     List<GatewayPortfolioQuery> queries,
   ) async {
+    if (queries.map((query) => query.chain).toSet().length != queries.length) {
+      throw const FormatException('duplicate portfolio chain');
+    }
     final accounts = <Map<String, Object?>>[];
+    final expectedAccounts =
+        <({GatewayPortfolioQuery query, String network})>[];
     final failed = <Coin>{};
     for (final query in queries) {
       try {
         final network = await _networkParam(query.chain);
+        final expectedNetwork = network ?? _mainnetNetworkId(query.chain);
         accounts.add({
           'chain': chainName(query.chain),
           'network': ?network,
@@ -453,6 +534,7 @@ class GatewayClient {
                 },
             ],
         });
+        expectedAccounts.add((query: query, network: expectedNetwork));
       } catch (_) {
         failed.add(query.chain);
       }
@@ -461,23 +543,48 @@ class GatewayClient {
       return GatewayPortfolio(balances: const {}, failedChains: failed);
     }
     final result = await _call('kt_getPortfolio', {'accounts': accounts});
-    if (result is! Map || result['accounts'] is! List) {
+    if (result is! Map ||
+        !_hasExactStringKeys(result, _portfolioResultKeys) ||
+        result['accounts'] is! List ||
+        (result['accounts'] as List).length != expectedAccounts.length) {
       throw const FormatException('bad portfolio result');
     }
     final balances = <Coin, GatewayBalances>{};
-    for (final row in result['accounts'] as List) {
-      if (row is! Map || row['chain'] is! String) continue;
-      final name = row['chain'] as String;
-      final chain = Coin.values.where((coin) => coin.name == name).firstOrNull;
-      if (chain == null) continue;
-      if (row['error'] != null || row['result'] == null) {
-        failed.add(chain);
+    final rows = result['accounts'] as List;
+    for (var i = 0; i < rows.length; i++) {
+      final row = rows[i];
+      final expected = expectedAccounts[i];
+      final query = expected.query;
+      if (row is! Map ||
+          row['chain'] != chainName(query.chain) ||
+          row['network'] != expected.network ||
+          !_sameAccountAddress(query.chain, row['address'], query.address)) {
+        throw const FormatException('unbound portfolio row');
+      }
+      if (row.containsKey('error')) {
+        final error = row['error'];
+        if (!_hasExactStringKeys(row, _portfolioErrorRowKeys) ||
+            error is! String ||
+            error.isEmpty ||
+            !_isBoundedDisplayText(error, 160)) {
+          throw const FormatException('bad portfolio error row');
+        }
+        failed.add(query.chain);
         continue;
       }
+      if (!_hasExactStringKeys(row, _portfolioSuccessRowKeys)) {
+        throw const FormatException('bad portfolio success row');
+      }
       try {
-        balances[chain] = _parseBalances(row['result'], chain);
+        balances[query.chain] = _parseBalances(
+          row['result'],
+          chain: query.chain,
+          network: expected.network,
+          address: query.address,
+          tokens: query.tokens,
+        );
       } catch (_) {
-        failed.add(chain);
+        failed.add(query.chain);
       }
     }
     for (final query in queries) {
@@ -1144,12 +1251,6 @@ class GatewayClient {
 
   void close() => _client.close();
 
-  static BigInt _decBigInt(Object? value) {
-    final parsed = value is String ? BigInt.tryParse(value) : null;
-    if (parsed == null) throw const FormatException('non-decimal integer');
-    return parsed;
-  }
-
   static BigInt _canonicalUint(Object? value, {BigInt? max}) {
     if (value is! String ||
         value.length > 78 ||
@@ -1161,16 +1262,6 @@ class GatewayClient {
       throw const FormatException('unsigned integer out of range');
     }
     return parsed;
-  }
-
-  static int _int(Object? value) {
-    if (value is! int) throw const FormatException('missing integer');
-    return value;
-  }
-
-  static String _string(Object? value) {
-    if (value is! String) throw const FormatException('missing string');
-    return value;
   }
 
   static String _mainnetNetworkId(Coin chain) => switch (chain) {
@@ -1194,6 +1285,9 @@ class GatewayClient {
       _evmAddressPattern.hasMatch(value) &&
       _evmAddressPattern.hasMatch(expected) &&
       value.toLowerCase() == expected.toLowerCase();
+
+  static bool _sameAccountAddress(Coin chain, Object? value, String expected) =>
+      value is String && _tokenIdentityMatches(chain, expected, value);
 
   static bool _sameTransactionHash(Coin chain, Object? value, String expected) {
     if (value is! String ||

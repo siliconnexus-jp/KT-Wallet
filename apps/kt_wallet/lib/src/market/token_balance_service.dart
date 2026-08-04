@@ -648,12 +648,13 @@ class TokenBalanceService {
   /// are keyed by [TokenInfo.id].
   ///
   /// GATEWAY SEMANTICS (resilience over purity): with a gateway configured,
-  /// the registry is grouped by chain and each chain issues ONE
-  /// `kt_getBalances` call carrying its token entries; the gateway's
-  /// per-token `error` rows map to [BalanceStatus.error] exactly like a
-  /// failing direct call. If the gateway call itself fails, every token of
-  /// that chain falls back to today's direct path — one broken gateway never
-  /// costs more than the extra round trip. Direct mode never contacts it.
+  /// the registry is grouped by chain and first fetched in ONE
+  /// `kt_getPortfolio` call. A failed account row falls back only that chain;
+  /// an older gateway without portfolio support falls back to one
+  /// `kt_getBalances` call per chain. Per-token `error` rows map to
+  /// [BalanceStatus.error] exactly like a failing direct call. If an entire
+  /// gateway balance call fails, that chain falls back to today's direct
+  /// path. Direct mode never contacts the gateway.
   Future<Map<String, BalanceResult>> fetchAll(ChainAddresses addresses) async {
     return (await fetchAllWithNative(addresses)).tokens;
   }

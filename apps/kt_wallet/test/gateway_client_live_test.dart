@@ -47,6 +47,29 @@ void main() {
   );
 
   test(
+    'production Sepolia balances bind the exact public probe owner',
+    () async {
+      const publicProbe = '0x000000000000000000000000000000000000dEaD';
+      final client = GatewayClient(
+        baseUrl: baseUrl,
+        networks: (_) => 'eth-sepolia',
+      );
+
+      final balances = await client.getBalances(
+        chain: Coin.eth,
+        address: publicProbe,
+      );
+
+      expect(balances.native.raw, greaterThanOrEqualTo(BigInt.zero));
+      expect(balances.native.decimals, 18);
+      expect(balances.native.symbol, 'ETH');
+      expect(balances.tokens, isEmpty);
+      client.close();
+    },
+    skip: enabled ? false : 'set KT_LIVE_GATEWAY_CLIENT=1 for live evidence',
+  );
+
+  test(
     'production Sepolia status binds the exact public probe hash',
     () async {
       const probeHash =

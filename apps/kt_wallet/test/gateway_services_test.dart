@@ -22,13 +22,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// fallback, and the guarantee that direct mode (blank URL) never touches the
 /// gateway while gateway mode never touches the direct transports on success.
 
+const _evmFrom = '0x1111111111111111111111111111111111111111';
+const _tronOwner = 'TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH';
 const _addresses = ChainAddresses(
-  eth: '0xEthAddr',
-  polygon: '0xPolyAddr',
-  tron: 'TTronAddr',
+  eth: _evmFrom,
+  polygon: _evmFrom,
+  tron: _tronOwner,
   solana: '47eFuHR9ste9kopiJ9eRxcwahmE62JovbKe5r7AjANut',
 );
-const _evmFrom = '0x1111111111111111111111111111111111111111';
 
 /// A scripted gateway: records every JSON-RPC call and answers per-method.
 class _FakeGateway {
@@ -60,10 +61,29 @@ class _FakeGateway {
       }
       var result = results[method];
       if (result is List) {
-        final index = _served[method] ?? 0;
-        _served[method] = index + 1;
-        result = result[index < result.length ? index : result.length - 1];
+        if (method == 'kt_getBalances') {
+          final chain = calls.last.$2['chain'];
+          final expectedSymbol = switch (chain) {
+            'eth' || 'base' || 'arbitrum' => 'ETH',
+            'polygon' => 'POL',
+            'avalanche' => 'AVAX',
+            'bnb' => 'BNB',
+            'tron' => 'TRX',
+            'solana' => 'SOL',
+            _ => null,
+          };
+          result = result.whereType<Map<Object?, Object?>>().firstWhere(
+            (row) =>
+                (row['native'] as Map<Object?, Object?>?)?['symbol'] ==
+                expectedSymbol,
+          );
+        } else {
+          final index = _served[method] ?? 0;
+          _served[method] = index + 1;
+          result = result[index < result.length ? index : result.length - 1];
+        }
       }
+      result = _bindBalanceResult(method, result, calls.last.$2);
       return http.Response(
         jsonEncode({'jsonrpc': '2.0', 'id': body['id'], 'result': result}),
         200,
@@ -157,6 +177,44 @@ Map<String, Object?> _zeroNative(Coin coin, {List<Object?>? tokens}) {
   };
 }
 
+Object? _bindBalanceResult(
+  String method,
+  Object? result,
+  Map<String, Object?> params,
+) {
+  if (method != 'kt_getBalances' || result is! Map) return result;
+  final chain = params['chain'] as String;
+  final mainnet = switch (chain) {
+    'solana' => 'sol-mainnet',
+    _ => '$chain-mainnet',
+  };
+  final requestedTokens = (params['tokens'] as List?) ?? const <Object?>[];
+  final scriptedTokens = (result['tokens'] as List?) ?? const <Object?>[];
+  final boundTokens = <Object?>[
+    for (final requested in requestedTokens)
+      if (requested is Map<Object?, Object?>)
+        scriptedTokens
+            .cast<Object?>()
+            .whereType<Map<Object?, Object?>>()
+            .firstWhere(
+              (row) => row['contract'] == requested['contract'],
+              orElse: () => <String, Object?>{
+                'contract': requested['contract'],
+                'raw': '0',
+                'decimals': requested['decimals'],
+                'symbol': requested['symbol'],
+              },
+            ),
+  ];
+  return <String, Object?>{
+    'chain': chain,
+    'network': params['network'] ?? mainnet,
+    'address': params['address'],
+    'native': result['native'],
+    'tokens': boundTokens,
+  };
+}
+
 void main() {
   group('Gateway network identity', () {
     test('parses exact EVM, TRON and Solana mainnet identities', () async {
@@ -245,7 +303,7 @@ void main() {
       );
       expect(
         params.firstWhere((p) => p['chain'] == 'tron')['address'],
-        'TTronAddr',
+        _tronOwner,
       );
       // Native-only calls: the token registry goes via TokenBalanceService.
       for (final p in params) {
@@ -275,7 +333,7 @@ void main() {
       }
       // The direct nodes answered: 3 JSON-RPC chains + TronGrid REST.
       expect(direct.calls, hasLength(3));
-      expect(rest.gets.single, '$defaultTronApiUrl/v1/accounts/TTronAddr');
+      expect(rest.gets.single, '$defaultTronApiUrl/v1/accounts/$_tronOwner');
     });
 
     test('direct mode (null resolver) never contacts the gateway', () async {
@@ -300,6 +358,102 @@ void main() {
   });
 
   group('TokenBalanceService gateway mode', () {
+    test(
+      'exact portfolio response serves every chain without per-chain calls',
+      () async {
+        const tokens = [
+          TokenInfo(
+            id: 'test-usdt-eth',
+            symbol: 'USDT',
+            chain: Coin.eth,
+            contract: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+            decimals: 6,
+            network: 'Ethereum',
+          ),
+          TokenInfo(
+            id: 'test-usdc-polygon',
+            symbol: 'USDC',
+            chain: Coin.polygon,
+            contract: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
+            decimals: 6,
+            network: 'Polygon',
+          ),
+        ];
+        final gateway = _FakeGateway(
+          results: {
+            'kt_getPortfolio': {
+              'accounts': [
+                {
+                  'chain': 'eth',
+                  'network': 'eth-mainnet',
+                  'address': _evmFrom,
+                  'result': {
+                    'chain': 'eth',
+                    'network': 'eth-mainnet',
+                    'address': _evmFrom,
+                    'native': {
+                      'raw': '1000000000000000000',
+                      'decimals': 18,
+                      'symbol': 'ETH',
+                    },
+                    'tokens': [
+                      {
+                        'contract':
+                            '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+                        'raw': '120500000',
+                        'decimals': 6,
+                        'symbol': 'USDT',
+                      },
+                    ],
+                  },
+                },
+                {
+                  'chain': 'polygon',
+                  'network': 'polygon-mainnet',
+                  'address': _evmFrom,
+                  'result': {
+                    'chain': 'polygon',
+                    'network': 'polygon-mainnet',
+                    'address': _evmFrom,
+                    'native': {
+                      'raw': '2000000000000000000',
+                      'decimals': 18,
+                      'symbol': 'POL',
+                    },
+                    'tokens': [
+                      {
+                        'contract':
+                            '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
+                        'raw': '99000000',
+                        'decimals': 6,
+                        'symbol': 'USDC',
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        );
+        final service = TokenBalanceService(
+          jsonRpcTransport: _NoDirectJsonRpc(),
+          restTransport: _NoDirectRest(),
+          gateway: () => gateway.client,
+          tokens: tokens,
+        );
+
+        final batch = await service.fetchAllWithNative(_addresses);
+
+        expect(batch.tokens['test-usdt-eth']!.amount!.format(), '120.5');
+        expect(batch.tokens['test-usdc-polygon']!.amount!.format(), '99');
+        expect(batch.native[Coin.eth]!.amount!.format(), '1');
+        expect(batch.native[Coin.polygon]!.amount!.format(), '2');
+        expect(batch.gatewayFailedChains, isEmpty);
+        expect(gateway.paramsOf('kt_getPortfolio'), hasLength(1));
+        expect(gateway.paramsOf('kt_getBalances'), isEmpty);
+      },
+    );
+
     test(
       'one call per chain with its registry tokens; per-token errors map',
       () async {

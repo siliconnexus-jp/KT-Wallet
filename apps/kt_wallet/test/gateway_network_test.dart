@@ -34,13 +34,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// a network the gateway does not advertise is never sent, the gateway is
 /// bypassed and the direct path answers.
 
+const _evmFrom = '0x1111111111111111111111111111111111111111';
+const _evmTo = '0x2222222222222222222222222222222222222222';
+const _tronOwner = 'TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH';
 const _addresses = ChainAddresses(
-  eth: '0xEthAddr',
-  polygon: '0xPolyAddr',
-  tron: 'TTronAddr',
+  eth: _evmFrom,
+  polygon: _evmFrom,
+  tron: _tronOwner,
   solana: '47eFuHR9ste9kopiJ9eRxcwahmE62JovbKe5r7AjANut',
 );
-const _evmFrom = '0x1111111111111111111111111111111111111111';
 
 /// Every network id the current Go service advertises via `kt_health`.
 const _advertised = [
@@ -120,6 +122,7 @@ class _FakeGateway {
         _served[method] = index + 1;
         result = result[index < result.length ? index : result.length - 1];
       }
+      result = _bindBalanceResult(method, result, calls.last.$2);
       return http.Response(
         jsonEncode({'jsonrpc': '2.0', 'id': body['id'], 'result': result}),
         200,
@@ -149,6 +152,45 @@ Map<String, Object?> _rpcResult(Object? result) => {
 Map<String, Object?> _native(String raw, int decimals, String symbol) => {
   'native': {'raw': raw, 'decimals': decimals, 'symbol': symbol},
 };
+
+Object? _bindBalanceResult(
+  String method,
+  Object? result,
+  Map<String, Object?> params,
+) {
+  if (method != 'kt_getBalances' || result is! Map) return result;
+  final network = params['network'] as String?;
+  final chain = params['chain'] as String;
+  final mainnet = switch (chain) {
+    'solana' => 'sol-mainnet',
+    _ => '$chain-mainnet',
+  };
+  final requestedTokens = (params['tokens'] as List?) ?? const <Object?>[];
+  final scriptedTokens = (result['tokens'] as List?) ?? const <Object?>[];
+  final boundTokens = <Object?>[
+    for (final requested in requestedTokens)
+      if (requested is Map<Object?, Object?>)
+        scriptedTokens
+            .cast<Object?>()
+            .whereType<Map<Object?, Object?>>()
+            .firstWhere(
+              (row) => row['contract'] == requested['contract'],
+              orElse: () => <String, Object?>{
+                'contract': requested['contract'],
+                'raw': '0',
+                'decimals': requested['decimals'],
+                'symbol': requested['symbol'],
+              },
+            ),
+  ];
+  return <String, Object?>{
+    'chain': chain,
+    'network': network ?? mainnet,
+    'address': params['address'],
+    'native': result['native'],
+    'tokens': boundTokens,
+  };
+}
 
 class _FakeJsonRpc implements JsonRpcTransport {
   _FakeJsonRpc(this.handler);
@@ -211,25 +253,21 @@ void main() {
 
       await client.getBalances(
         chain: Coin.eth,
-        address: '0xEthAddr',
+        address: _evmFrom,
         tokens: const [
-          GatewayTokenQuery(contract: '0xTok', decimals: 6, symbol: 'USDT'),
+          GatewayTokenQuery(contract: _evmTo, decimals: 6, symbol: 'USDT'),
         ],
       );
       await client.getChainParams(chain: Coin.polygon, address: _evmFrom);
-      await client.getHistory(
-        chain: Coin.tron,
-        address: 'TTronAddr',
-        limit: 20,
-      );
+      await client.getHistory(chain: Coin.tron, address: _tronOwner, limit: 20);
       await client.broadcast(chain: Coin.base, payload: '0x02ab');
 
       expect(gateway.paramsOf('kt_getBalances').single, {
         'chain': 'eth',
         'network': 'eth-sepolia',
-        'address': '0xEthAddr',
+        'address': _evmFrom,
         'tokens': [
-          {'contract': '0xTok', 'decimals': 6, 'symbol': 'USDT'},
+          {'contract': _evmTo, 'decimals': 6, 'symbol': 'USDT'},
         ],
       });
       expect(gateway.paramsOf('kt_getChainParams').single, {
@@ -240,7 +278,7 @@ void main() {
       expect(gateway.paramsOf('kt_getHistory').single, {
         'chain': 'tron',
         'network': 'tron-nile',
-        'address': 'TTronAddr',
+        'address': _tronOwner,
         'limit': 20,
       });
       expect(gateway.paramsOf('kt_broadcast').single, {
@@ -262,7 +300,7 @@ void main() {
       }
       await Future.wait([
         for (var i = 0; i < 7; i++)
-          gateway.client.getBalances(chain: Coin.eth, address: '0xA'),
+          gateway.client.getBalances(chain: Coin.eth, address: _evmFrom),
       ]);
       expect(gateway.paramsOf('kt_health'), hasLength(1));
       expect(gateway.paramsOf('kt_getBalances'), hasLength(7));
@@ -281,7 +319,7 @@ void main() {
 
         // Bind the live controller exactly as production does.
         gateway.networkOf[Coin.eth] = networks.activeFor(Chain.ethereum).id;
-        await gateway.client.getBalances(chain: Coin.eth, address: '0xA');
+        await gateway.client.getBalances(chain: Coin.eth, address: _evmFrom);
         expect(
           gateway.paramsOf('kt_getBalances').single['network'],
           'eth-sepolia',
@@ -290,7 +328,7 @@ void main() {
         // Switching back to mainnet is picked up on the next call.
         await networks.setEnvironment(NetworkEnvironment.mainnet);
         gateway.networkOf[Coin.eth] = networks.activeFor(Chain.ethereum).id;
-        await gateway.client.getBalances(chain: Coin.eth, address: '0xA');
+        await gateway.client.getBalances(chain: Coin.eth, address: _evmFrom);
         expect(
           gateway.paramsOf('kt_getBalances').last['network'],
           'eth-mainnet',
@@ -302,10 +340,10 @@ void main() {
       final gateway = _FakeGateway(
         results: {'kt_getBalances': _native('1', 18, 'ETH')},
       );
-      await gateway.client.getBalances(chain: Coin.eth, address: '0xA');
+      await gateway.client.getBalances(chain: Coin.eth, address: _evmFrom);
       expect(gateway.paramsOf('kt_getBalances').single, {
         'chain': 'eth',
-        'address': '0xA',
+        'address': _evmFrom,
       });
       expect(gateway.methods, ['kt_getBalances']); // never probed
     });
@@ -327,7 +365,7 @@ void main() {
           },
         )..networkOf[Coin.eth] = 'eth-sepolia';
         await expectLater(
-          gateway.client.getBalances(chain: Coin.eth, address: '0xA'),
+          gateway.client.getBalances(chain: Coin.eth, address: _evmFrom),
           throwsA(
             isA<GatewayException>()
                 .having((e) => e.code, 'code', -32000)
@@ -351,7 +389,7 @@ void main() {
       )..networkOf[Coin.eth] = 'custom-1753000000000000';
 
       await expectLater(
-        gateway.client.getBalances(chain: Coin.eth, address: '0xA'),
+        gateway.client.getBalances(chain: Coin.eth, address: _evmFrom),
         throwsA(
           isA<GatewayNetworkUnsupported>().having(
             (e) => e.networkId,
@@ -372,15 +410,15 @@ void main() {
       }
       final client = gateway.client;
       await expectLater(
-        client.getBalances(chain: Coin.eth, address: '0xA'),
+        client.getBalances(chain: Coin.eth, address: _evmFrom),
         throwsA(isA<GatewayNetworkUnsupported>()),
       );
       await expectLater(
-        client.getChainParams(chain: Coin.eth, address: '0xA'),
+        client.getChainParams(chain: Coin.eth, address: _evmFrom),
         throwsA(isA<GatewayNetworkUnsupported>()),
       );
       await expectLater(
-        client.getHistory(chain: Coin.eth, address: '0xA'),
+        client.getHistory(chain: Coin.eth, address: _evmFrom),
         throwsA(isA<GatewayNetworkUnsupported>()),
       );
       await expectLater(
@@ -403,11 +441,11 @@ void main() {
               ..networkOf[Coin.eth] = 'eth-sepolia';
 
         await expectLater(
-          gateway.client.getBalances(chain: Coin.base, address: '0xA'),
+          gateway.client.getBalances(chain: Coin.base, address: _evmFrom),
           throwsA(isA<GatewayNetworkUnsupported>()),
         );
         // The advertised network still goes through.
-        await gateway.client.getBalances(chain: Coin.eth, address: '0xA');
+        await gateway.client.getBalances(chain: Coin.eth, address: _evmFrom);
         expect(
           gateway.paramsOf('kt_getBalances').single['network'],
           'eth-sepolia',
@@ -423,7 +461,7 @@ void main() {
 
       // A legacy gateway ignores the unknown param and answers for mainnet,
       // which is exactly what the id says — safe to send.
-      await gateway.client.getBalances(chain: Coin.eth, address: '0xA');
+      await gateway.client.getBalances(chain: Coin.eth, address: _evmFrom);
       expect(
         gateway.paramsOf('kt_getBalances').single['network'],
         'eth-mainnet',
@@ -431,7 +469,7 @@ void main() {
 
       gateway.networkOf[Coin.eth] = 'eth-sepolia';
       await expectLater(
-        gateway.client.getBalances(chain: Coin.eth, address: '0xA'),
+        gateway.client.getBalances(chain: Coin.eth, address: _evmFrom),
         throwsA(isA<GatewayNetworkUnsupported>()),
       );
     });
@@ -443,14 +481,14 @@ void main() {
       )..networkOf[Coin.eth] = 'eth-sepolia';
 
       await expectLater(
-        gateway.client.getBalances(chain: Coin.eth, address: '0xA'),
+        gateway.client.getBalances(chain: Coin.eth, address: _evmFrom),
         throwsA(isA<GatewayNetworkUnsupported>()),
       );
       expect(gateway.methods, ['kt_health']);
 
       // A failed probe is never cached: the next call tries again.
       gateway.healthy = true;
-      await gateway.client.getBalances(chain: Coin.eth, address: '0xA');
+      await gateway.client.getBalances(chain: Coin.eth, address: _evmFrom);
       expect(gateway.paramsOf('kt_health'), hasLength(2));
       expect(
         gateway.paramsOf('kt_getBalances').single['network'],
@@ -466,7 +504,7 @@ void main() {
         )..networkOf[Coin.eth] = 'eth-sepolia';
 
         expect(await gateway.client.health(), isTrue);
-        await gateway.client.getBalances(chain: Coin.eth, address: '0xA');
+        await gateway.client.getBalances(chain: Coin.eth, address: _evmFrom);
         // The settings-screen probe already populated the set.
         expect(gateway.paramsOf('kt_health'), hasLength(1));
       },
@@ -481,17 +519,22 @@ void main() {
         client: MockClient((request) async {
           final body = jsonDecode(request.body) as Map<String, Object?>;
           if (body['method'] == 'kt_health') healthCalls++;
+          final params = (body['params'] as Map).cast<String, Object?>();
           return http.Response(
             jsonEncode({
               'jsonrpc': '2.0',
               'id': body['id'],
-              'result': _native('1', 18, 'ETH'),
+              'result': _bindBalanceResult(
+                'kt_getBalances',
+                _native('1', 18, 'ETH'),
+                params,
+              ),
             }),
             200,
           );
         }),
       );
-      await client.getBalances(chain: Coin.eth, address: '0xA');
+      await client.getBalances(chain: Coin.eth, address: _evmFrom);
       expect(healthCalls, 0);
     });
   });

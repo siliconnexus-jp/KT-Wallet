@@ -49,6 +49,9 @@ class _Recorder {
 
 const _evmFrom = '0x1111111111111111111111111111111111111111';
 const _evmTo = '0x2222222222222222222222222222222222222222';
+const _evmToken = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
+const _tronOwner = 'TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH';
+const _solanaOwner = '11111111111111111111111111111111';
 
 Map<String, Object?> _chainParamsResult({
   String network = 'eth-mainnet',
@@ -234,11 +237,43 @@ void main() {
 
   group('kt_getBalances', () {
     test(
+      'rejects a balance result bound to another network and owner',
+      () async {
+        final recorder = _Recorder()
+          ..results = {
+            'kt_getBalances': {
+              'chain': 'polygon',
+              'network': 'polygon-mainnet',
+              'address': _evmTo,
+              'native': {
+                'raw': '1000000000000000000',
+                'decimals': 18,
+                'symbol': 'ETH',
+              },
+              'tokens': const <Object?>[],
+            },
+          };
+        final client = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: recorder.client,
+        );
+
+        await expectLater(
+          client.getBalances(chain: Coin.eth, address: _evmFrom),
+          throwsA(isA<FormatException>()),
+        );
+      },
+    );
+
+    test(
       'exact params and typed native + per-token rows (incl. errors)',
       () async {
         final recorder = _Recorder()
           ..results = {
             'kt_getBalances': {
+              'chain': 'eth',
+              'network': 'eth-mainnet',
+              'address': _evmFrom,
               'native': {
                 'raw': '1000000000000000000',
                 'decimals': 18,
@@ -252,7 +287,7 @@ void main() {
                   'symbol': 'USDT',
                 },
                 {
-                  'contract': '0xBadToken',
+                  'contract': _evmTo,
                   'raw': '0',
                   'decimals': 6,
                   'symbol': 'BAD',
@@ -268,31 +303,27 @@ void main() {
 
         final balances = await client.getBalances(
           chain: Coin.eth,
-          address: '0xEthAddr',
+          address: _evmFrom,
           tokens: const [
             GatewayTokenQuery(
               contract: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
               decimals: 6,
               symbol: 'USDT',
             ),
-            GatewayTokenQuery(
-              contract: '0xBadToken',
-              decimals: 6,
-              symbol: 'BAD',
-            ),
+            GatewayTokenQuery(contract: _evmTo, decimals: 6, symbol: 'BAD'),
           ],
         );
 
         expect(recorder.requests.single['params'], {
           'chain': 'eth',
-          'address': '0xEthAddr',
+          'address': _evmFrom,
           'tokens': [
             {
               'contract': '0xdAC17F958D2ee523a2206206994597C13D831ec7',
               'decimals': 6,
               'symbol': 'USDT',
             },
-            {'contract': '0xBadToken', 'decimals': 6, 'symbol': 'BAD'},
+            {'contract': _evmTo, 'decimals': 6, 'symbol': 'BAD'},
           ],
         });
         expect(balances.native.raw, BigInt.parse('1000000000000000000'));
@@ -313,7 +344,11 @@ void main() {
         final recorder = _Recorder()
           ..results = {
             'kt_getBalances': {
+              'chain': 'tron',
+              'network': 'tron-mainnet',
+              'address': _tronOwner,
               'native': {'raw': '5000000', 'decimals': 6, 'symbol': 'TRX'},
+              'tokens': const <Object?>[],
             },
           };
         final client = GatewayClient(
@@ -322,11 +357,11 @@ void main() {
         );
         final balances = await client.getBalances(
           chain: Coin.tron,
-          address: 'TTronAddr',
+          address: _tronOwner,
         );
         expect(recorder.requests.single['params'], {
           'chain': 'tron',
-          'address': 'TTronAddr',
+          'address': _tronOwner,
         });
         expect(balances.native.raw, BigInt.from(5000000));
         expect(balances.tokens, isEmpty);
@@ -360,6 +395,78 @@ void main() {
     });
 
     test(
+      'rejects unknown fields, non-canonical money and token identity drift',
+      () async {
+        Map<String, Object?> result({
+          String nativeRaw = '1',
+          String tokenContract = _evmToken,
+          String tokenRaw = '2',
+          int tokenDecimals = 6,
+          String tokenSymbol = 'USDT',
+        }) => <String, Object?>{
+          'chain': 'eth',
+          'network': 'eth-mainnet',
+          'address': _evmFrom,
+          'native': <String, Object?>{
+            'raw': nativeRaw,
+            'decimals': 18,
+            'symbol': 'ETH',
+          },
+          'tokens': <Object?>[
+            <String, Object?>{
+              'contract': tokenContract,
+              'raw': tokenRaw,
+              'decimals': tokenDecimals,
+              'symbol': tokenSymbol,
+            },
+          ],
+        };
+
+        final extraTop = result()..['trusted'] = true;
+        final extraNative = result();
+        (extraNative['native'] as Map<String, Object?>)['display'] = '1 ETH';
+        final extraToken = result();
+        ((extraToken['tokens'] as List).single as Map<String, Object?>)['usd'] =
+            1;
+        final missingToken = result()..['tokens'] = const <Object?>[];
+        final cases = <Map<String, Object?>>[
+          extraTop,
+          extraNative,
+          extraToken,
+          missingToken,
+          result(nativeRaw: '01'),
+          result(tokenRaw: '-1'),
+          result(tokenContract: _evmTo),
+          result(tokenDecimals: 18),
+          result(tokenSymbol: 'USDC'),
+        ];
+
+        for (final response in cases) {
+          final recorder = _Recorder()..results = {'kt_getBalances': response};
+          final client = GatewayClient(
+            baseUrl: 'https://gw.example',
+            client: recorder.client,
+          );
+          await expectLater(
+            client.getBalances(
+              chain: Coin.eth,
+              address: _evmFrom,
+              tokens: const [
+                GatewayTokenQuery(
+                  contract: _evmToken,
+                  decimals: 6,
+                  symbol: 'USDT',
+                ),
+              ],
+            ),
+            throwsA(isA<FormatException>()),
+          );
+          client.close();
+        }
+      },
+    );
+
+    test(
       'rejects native decimals or symbol that contradict the chain',
       () async {
         for (final native in <Map<String, Object?>>[
@@ -385,14 +492,19 @@ void main() {
   });
 
   group('kt_getPortfolio', () {
-    test('parses per-chain results and preserves partial failures', () async {
+    test('rejects a portfolio row bound to another owner', () async {
       final recorder = _Recorder()
         ..results = {
           'kt_getPortfolio': {
             'accounts': [
               {
                 'chain': 'eth',
+                'network': 'eth-mainnet',
+                'address': _evmTo,
                 'result': {
+                  'chain': 'eth',
+                  'network': 'eth-mainnet',
+                  'address': _evmTo,
                   'native': {
                     'raw': '1000000000000000000',
                     'decimals': 18,
@@ -401,7 +513,90 @@ void main() {
                   'tokens': const <Object?>[],
                 },
               },
-              {'chain': 'solana', 'error': 'upstream unavailable'},
+            ],
+          },
+        };
+      final client = GatewayClient(
+        baseUrl: 'https://gw.example',
+        client: recorder.client,
+      );
+
+      await expectLater(
+        client.getPortfolio(const [
+          GatewayPortfolioQuery(chain: Coin.eth, address: _evmFrom),
+        ]),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test(
+      'rejects additive portfolio fields and duplicate chain requests',
+      () async {
+        final recorder = _Recorder()
+          ..results = {
+            'kt_getPortfolio': {
+              'accounts': [
+                {
+                  'chain': 'eth',
+                  'network': 'eth-mainnet',
+                  'address': _evmFrom,
+                  'error': 'upstream unavailable',
+                  'trusted': true,
+                },
+              ],
+            },
+          };
+        final client = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: recorder.client,
+        );
+        await expectLater(
+          client.getPortfolio(const [
+            GatewayPortfolioQuery(chain: Coin.eth, address: _evmFrom),
+          ]),
+          throwsA(isA<FormatException>()),
+        );
+
+        final before = recorder.requests.length;
+        await expectLater(
+          client.getPortfolio(const [
+            GatewayPortfolioQuery(chain: Coin.eth, address: _evmFrom),
+            GatewayPortfolioQuery(chain: Coin.eth, address: _evmTo),
+          ]),
+          throwsA(isA<FormatException>()),
+        );
+        expect(recorder.requests, hasLength(before));
+        client.close();
+      },
+    );
+
+    test('parses per-chain results and preserves partial failures', () async {
+      final recorder = _Recorder()
+        ..results = {
+          'kt_getPortfolio': {
+            'accounts': [
+              {
+                'chain': 'eth',
+                'network': 'eth-mainnet',
+                'address': _evmFrom,
+                'result': {
+                  'chain': 'eth',
+                  'network': 'eth-mainnet',
+                  'address': _evmFrom,
+                  'native': {
+                    'raw': '1000000000000000000',
+                    'decimals': 18,
+                    'symbol': 'ETH',
+                  },
+                  'tokens': const <Object?>[],
+                },
+              },
+              {
+                'chain': 'solana',
+                'network': 'sol-mainnet',
+                'address': _solanaOwner,
+                'error': 'upstream unavailable',
+              },
             ],
           },
         };
@@ -411,14 +606,8 @@ void main() {
       );
 
       final result = await client.getPortfolio(const [
-        GatewayPortfolioQuery(
-          chain: Coin.eth,
-          address: '0x1111111111111111111111111111111111111111',
-        ),
-        GatewayPortfolioQuery(
-          chain: Coin.solana,
-          address: '11111111111111111111111111111111',
-        ),
+        GatewayPortfolioQuery(chain: Coin.eth, address: _evmFrom),
+        GatewayPortfolioQuery(chain: Coin.solana, address: _solanaOwner),
       ]);
 
       expect(
@@ -440,7 +629,12 @@ void main() {
               'accounts': [
                 {
                   'chain': 'eth',
+                  'network': 'eth-mainnet',
+                  'address': _evmFrom,
                   'result': {
+                    'chain': 'eth',
+                    'network': 'eth-mainnet',
+                    'address': _evmFrom,
                     'native': {
                       'raw': '1000000000000000000',
                       'decimals': 6,
@@ -457,7 +651,7 @@ void main() {
         );
 
         final result = await client.getPortfolio(const [
-          GatewayPortfolioQuery(chain: Coin.eth, address: '0xA'),
+          GatewayPortfolioQuery(chain: Coin.eth, address: _evmFrom),
         ]);
 
         expect(result.balances, isEmpty);

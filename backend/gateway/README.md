@@ -40,7 +40,7 @@ curl -s localhost:8080/rpc -d '{"jsonrpc":"2.0","id":1,"method":"kt_health"}'
 curl -s localhost:8080/healthz
 curl -s localhost:8080/readyz
 curl -s -H "Authorization: Bearer $METRICS_BEARER_TOKEN" localhost:8080/metrics
-# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.22"}}
+# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.23"}}
 ```
 
 ## Environment
@@ -531,8 +531,27 @@ population crash-rate denominator or paging signal.
 
 ### `kt_getBalances` `{"chain": C, "network": N?, "address": A, "tokens": [{"contract": S, "decimals": N, "symbol": S}]?}`
 
-→ `{"native": {"raw": "<decimal-string>", "decimals": N, "symbol": S},
+→ `{"chain": C, "network": "<resolved-network>", "address": A,
+    "native": {"raw": "<decimal-string>", "decimals": N, "symbol": S},
     "tokens": [{"contract": S, "raw": "<decimal-string>", "decimals": N, "symbol": S, "error": S?}]}`
+
+The result repeats the canonical chain, resolved network and requested account.
+Clients must bind all three to the request before accepting any amount. Token
+rows are returned exactly once and in request order; their contract, decimals
+and symbol repeat the corresponding request entry.
+
+### `kt_getPortfolio` `{"accounts": [{"chain": C, "network": N?, "address": A, "tokens": [...]}, ...]}`
+
+→ `{"accounts": [{"chain": C, "network": "<resolved-network>", "address": A,
+    "result": <kt_getBalances-result>} | {"chain": C,
+    "network": "<resolved-network>", "address": A, "error": S}, ...]}`
+
+Account rows are returned exactly once and in request order. Every outer row
+repeats its request identity and each success result repeats the same identity
+again. One upstream account failure produces a bounded `error` only for that
+row; it does not discard valid balances for other accounts. Clients must reject
+duplicate queries, reordered/missing rows, identity mismatches and unknown
+fields rather than attach a valid amount to the wrong wallet or network.
 
 Per-token upstream failure sets that token's `error` (with `raw: "0"`)
 instead of failing the call. Upstream mapping: EVM native `eth_getBalance`;

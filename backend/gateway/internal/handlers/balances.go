@@ -32,8 +32,11 @@ type tokenBalanceEntry struct {
 }
 
 type balancesResult struct {
-	Native balanceEntry        `json:"native"`
-	Tokens []tokenBalanceEntry `json:"tokens"`
+	Chain   string              `json:"chain"`
+	Network string              `json:"network"`
+	Address string              `json:"address"`
+	Native  balanceEntry        `json:"native"`
+	Tokens  []tokenBalanceEntry `json:"tokens"`
 }
 
 type portfolioAccount struct {
@@ -45,7 +48,8 @@ type portfolioAccount struct {
 
 type portfolioEntry struct {
 	Chain   string          `json:"chain"`
-	Network string          `json:"network,omitempty"`
+	Network string          `json:"network"`
+	Address string          `json:"address"`
 	Result  *balancesResult `json:"result,omitempty"`
 	Error   string          `json:"error,omitempty"`
 }
@@ -79,13 +83,30 @@ func (g *Gateway) GetPortfolio(ctx context.Context, params json.RawMessage) (any
 			defer wg.Done()
 			limit <- struct{}{}
 			defer func() { <-limit }()
+			entry := portfolioEntry{
+				Chain:   account.Chain,
+				Network: account.Network,
+				Address: account.Address,
+			}
+			if _, chainErr := validateChain(account.Chain); chainErr != nil {
+				entry.Error = chainErr.Message
+				res.Accounts[i] = entry
+				return
+			}
+			resolvedNetwork, networkErr := resolveNetwork(account.Chain, account.Network)
+			if networkErr != nil {
+				entry.Error = networkErr.Message
+				res.Accounts[i] = entry
+				return
+			}
+			entry.Network = resolvedNetwork
 			raw, err := json.Marshal(account)
 			if err != nil {
-				res.Accounts[i] = portfolioEntry{Chain: account.Chain, Network: account.Network, Error: "invalid account"}
+				entry.Error = "invalid account"
+				res.Accounts[i] = entry
 				return
 			}
 			value, rpcErr := g.GetBalances(ctx, raw)
-			entry := portfolioEntry{Chain: account.Chain, Network: account.Network}
 			if rpcErr != nil {
 				entry.Error = rpcErr.Message
 			} else if balances, ok := value.(*balancesResult); ok {
@@ -152,6 +173,9 @@ func (g *Gateway) GetBalances(ctx context.Context, params json.RawMessage) (any,
 	if err != nil {
 		return nil, err
 	}
+	res.Chain = p.Chain
+	res.Network = network
+	res.Address = p.Address
 	g.balanceCache.SetContext(ctx, key, res)
 	return res, nil
 }
