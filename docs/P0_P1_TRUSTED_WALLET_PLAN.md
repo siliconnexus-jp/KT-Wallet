@@ -2,7 +2,7 @@
 
 更新日期：2026-08-05
 
-当前 Gateway 源码版本 1.16.27；当前生产 Gateway 1.16.26。生产 Gateway-first 链身份、
+当前 Gateway 源码版本 1.16.27；当前生产 Gateway 1.16.27。生产 Gateway-first 链身份、
 TRON/Solana/EVM 余额与 Portfolio 身份、Solana 交易终态、EVM 动态手续费及签名前预执行回包严格解析均已启用。
 
 ## 目标与边界
@@ -2339,4 +2339,11 @@ App 先 trim、限制输入并在出网前拒绝未知网络；Gateway 拒绝重
 1/1、KT Wallet 1658/1658（另有 11 项显式线上/设备测试默认跳过）、KT Cold Signer
 570/570、共享 packages 438/438、静态分析 0、Gateway 普通/race/vet/govulncheck/运维守卫
 及完整门禁 13/13 通过。Gateway 源码候选为 1.16.27，生产发布和公网复核完成前仍明确保留
-1.16.26 状态；本项没有可见设计变化，不使用无关截图冒充协议证据。
+1.16.26 状态；本项没有可见设计变化，不使用无关截图冒充协议证据。候选随后从干净提交
+`2a3a1bbb33de13dba74199e73303e6675b97dc3e` 使用 Go 1.26.5、CGO 关闭、trimpath 构建
+Linux amd64 静态制品（8,908,962 bytes，SHA-256
+`6e23e1d347afc1e312b97a646695c48cda32e172ac4b87c6498aa5f8509c5d6b`），按 secondary →
+primary 发布至 `20260804T205038Z-2a3a1bb-v1.16.27-token-search-boundary`。8120、8119、
+HAProxy 8118 与公网均返回 1.16.27、16 网络和 ready；公网正常搜索返回唯一绑定结果，
+超长、Bidi 与重复网络均为 `-32602`。发布后 3/3 targets UP、17/17 rules healthy、
+0 firing、Alertmanager 0 active，双实例 warning+ 为 0；未读取环境文件、未加载私钥且未广播。

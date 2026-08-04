@@ -109,7 +109,7 @@
       <p class="lead">结论不是“功能数量”比较，而是以资产安全、交易真实性、弱网可靠性、
         双端质量、生态完整度和外部保证为标准，对当前代码与真实测试网证据做审慎评估。</p>
       <div class="stamp">
-        <span>2026-08-05</span><span>源码门禁 12/12 · 完整门禁 13/13 · Gateway 1.16.26 生产发布</span>
+        <span>2026-08-05</span><span>源码门禁 12/12 · 完整门禁 13/13 · Gateway 1.16.27 生产发布</span>
         <span>Gateway 源码版本 · 1.16.27</span>
         <span>FluxGate 7e68008 · 生产 static-pie 已验证</span>
         <span>iOS Simulator 26.2</span><span>Android 15 / API 35</span>
@@ -300,9 +300,10 @@
           不保存签名 bytes。严审后旧有链参数缓存也已移除，pending nonce 每次
           报价都重新读取。Redis 故障会快速回退本地 miss；单主机双实例切换已通过，
           但尚未覆盖跨主机或跨地域。</small></div>
-        <div class="card"><strong>Gateway 发布状态 · 1.16.26 已上线</strong><small>2026-08-05
+        <div class="card"><strong>Gateway 发布状态 · 1.16.27 已上线</strong><small>2026-08-05
           通过 SHA 校验、原子软链接、secondary → primary 滚动和自动回滚门禁部署；生产返回
-          <code>version=1.16.26</code>、16 个网络、<code>/readyz=200</code>；三链实时
+          <code>version=1.16.27</code>、16 个网络、<code>/readyz=200</code>；官方 Token 搜索
+          正常结果及超长、Bidi、重复网络失败闭合已公网验证；三链实时
           network identity、Solana native/SPL、Ethereum native/USDC 余额与 Solana
           finalized 交易终态，以及 Sepolia EVM nonce、spendable balance、预执行、gas、
           交易状态与余额/Portfolio 账户、网络身份绑定 smoke 已通过。
@@ -715,8 +716,8 @@
           <tr id="public-secret-gate"><td>公开发布秘密泄漏门禁</td><td>统一检测 Etherscan、Helius、GoPlus、metrics bearer、完整 GitHub family、Alchemy、Slack、Stripe、Google、私钥模式，以及明确凭证字段中的无前缀高熵 opaque 值；通过 <code>git ls-files --cached --others --exclude-standard -z</code> 枚举全部已跟踪及可提交的未跟踪文本，覆盖两款 App、测试、工具、配置、CI、Gateway、网站与文档。通用检测限定 20–256 字符、字符类别与 Shannon entropy 阈值，并放行占位符、环境变量和公开 EVM 地址/交易哈希；Android APK/AAB 与 iOS app 制品门禁同步覆盖通用凭证字段，本地凭证和私密 runbook 必须留在共享 gitignore</td><td class="pass">Provider 文件选择负例先红后绿后，高熵正负例再次先红后绿；首次新门禁全仓扫描实际发现 Gateway 两个测试文件中的 3 个完整 opaque fixture，已改为运行时拼接。定向 14/14、Faucet 10/10、test_support 57/57、共享 packages 397/397、KT Wallet 1460/1460、Cold Signer 570/570、Gateway upstream、check_deps 与静态分析通过。当前工作树 0 已识别泄漏；无字段上下文的任意随机值和历史 commit 仍由专用 scanner / Push Protection 补足</td></tr>
           <tr id="public-beta-source-gate"><td>公开测试源码统一门禁</td><td><code>dart run tool/audit_public_beta.dart</code> 固定顺序执行差异完整性、仓库安全/秘密/原生钱包清理、完整静态分析、六个共享 package、KT Wallet、KT Cold Signer 与 Gateway audit，共 12 步；任一步非零立即停止。<code>--list</code> 输出精确计划，<code>--full</code> 在其后追加固定版本的 Gradle/CocoaPods、Apple runtime、Gateway 与 OSV 依赖审计。明确不替代正式签名制品、物理设备、真实链上广播或第三方审计</td><td class="pass">计划完整性、唯一 ID、首错停止和全成功 4/4 先红后绿；2026-08-05 当前回归 KT Wallet 1658/1658、KT Cold Signer 570/570；最近完整依赖门禁 13/13、test_support 70/70、共享 packages 438/438，以及 Apple 2 个远程 Pod + SQLite 3.53.3、portable backup Swift vector、Gateway 全套及 OSV 扫描 Dart 147、npm 293、Go 4、Android 135+134 个 package 均通过，本轮源码回归问题 0</td></tr>
           <tr id="gateway-release-version-gate"><td>Gateway 当前公开版本一致性</td><td>以生产 Go 配置中的唯一 SemVer 为单一来源，精确绑定 backend README health 示例、根 README 状态表与可靠性段落、P0/P1 生产证据，以及本报告发布徽标和上线标题；历史记录可以继续保留旧版本</td><td class="pass">六个公开面同时改旧的负例先红后绿，缺失或重复源码版本也失败闭合；<code>dep_check</code> 35/35、test_support 61/61、共享 packages 409/409、源码门禁 12/12、完整门禁 13/13 和静态分析 0 通过。该门禁防止仓库证据漂移，不替代公网 <code>kt_health</code>、制品 SHA 或部署目录核验</td></tr>
-          <tr id="official-token-search-input-boundary"><td>官方 Token 搜索与目录文本边界</td><td>App 在出网前 trim 搜索词、限制 128 个 Unicode rune 并拒绝控制、零宽和 Bidi 字符；未知网络零出网。Gateway 独立执行同一 query 边界，拒绝重复或未知网络；运营目录名称限制 80 rune，并拒绝不可见方向控制文本。Token 管理输入框同步限制 128 字符，避免无意义的大请求</td><td class="pass">原始 query 出网、未知网络出网、服务端重复网络/超长/控制/Bidi query，以及恶意目录名均由失败优先用例先红后绿；静态门禁锁定双端契约。官方 Token 9/9、目录 UI 1/1、KT Wallet 1658/1658（另 11 项显式线上/设备测试跳过）、Cold Signer 570/570、共享 packages 438/438、Gateway 普通/race/audit、静态分析 0、完整门禁 13/13 通过。1.16.27 生产发布前不把源码候选误报为已上线；本项无适用视觉变化，不使用无关截图替代协议证据</td></tr>
-          <tr><td>Gateway 生产发布</td><td>1.16.26 Go 1.26.5 已通过普通/race/vet/govulncheck、HAProxy、Alertmanager、Token 风险、仓库级公开测试与自动回滚门禁；Linux amd64 静态制品 8,904,866 bytes / SHA-256 <code>677393ee…f61c8dfc</code>；secondary → primary 滚动完成，生产返回 16 个网络和 <code>/readyz=200</code></td><td class="partial">发布目录 <code>20260804T192528Z-7b76812-v1.16.26-solana-commitment</code>；双实例、HAProxy 与公网均为 1.16.26。官方 Solana Devnet 既有 finalized signature 经公网 Gateway 精确返回 <code>sol-devnet/confirmed/hash</code>；3/3 targets UP、17/17 规则健康且 0 firing、Alertmanager 0 active，双实例 warning+ 为 0。Gateway systemd 已解除 Docker 启动依赖，公开路径仍为 FluxGate → HAProxy 8118 → 8119/8120；中国大陆多运营商和跨地域网络待验收</td></tr>
+          <tr id="official-token-search-input-boundary"><td>官方 Token 搜索与目录文本边界</td><td>App 在出网前 trim 搜索词、限制 128 个 Unicode rune 并拒绝控制、零宽和 Bidi 字符；未知网络零出网。Gateway 独立执行同一 query 边界，拒绝重复或未知网络；运营目录名称限制 80 rune，并拒绝不可见方向控制文本。Token 管理输入框同步限制 128 字符，避免无意义的大请求</td><td class="pass">原始 query 出网、未知网络出网、服务端重复网络/超长/控制/Bidi query，以及恶意目录名均由失败优先用例先红后绿；静态门禁锁定双端契约。官方 Token 9/9、目录 UI 1/1、KT Wallet 1658/1658（另 11 项显式线上/设备测试跳过）、Cold Signer 570/570、共享 packages 438/438、Gateway 普通/race/audit、静态分析 0、完整门禁 13/13 通过。1.16.27 已滚动上线，公网正常搜索返回 1 条绑定结果，超长、Bidi 与重复网络均返回 <code>-32602</code>；本项无适用视觉变化，不使用无关截图替代协议证据</td></tr>
+          <tr><td>Gateway 生产发布</td><td>1.16.27 Go 1.26.5 已通过普通/race/vet/govulncheck、HAProxy、Alertmanager、Token 风险、仓库级公开测试与自动回滚门禁；Linux amd64 静态制品 8,908,962 bytes / SHA-256 <code>6e23e1d3…509c5d6b</code>；secondary → primary 滚动完成，生产返回 16 个网络和 <code>/readyz=200</code></td><td class="partial">发布目录 <code>20260804T205038Z-2a3a1bb-v1.16.27-token-search-boundary</code>；双实例、HAProxy 与公网均为 1.16.27。官方 Token 搜索合法/超长/Bidi/重复网络公网 smoke 通过；3/3 targets UP、17/17 规则健康且 0 firing、Alertmanager 0 active，双实例 warning+ 为 0。Gateway systemd 已解除 Docker 启动依赖，公开路径仍为 FluxGate → HAProxy 8118 → 8119/8120；中国大陆多运营商和跨地域网络待验收</td></tr>
           <tr id="gateway-broadcast-exact-schema"><td>Gateway 广播请求精确 Schema</td><td><code>kt_broadcast</code> 的外层参数只接受精确大小写的 <code>chain</code>、可选 <code>network</code> 和 <code>payload</code>。未知字段、重复键、<code>Payload</code> 等大小写别名以及 <code>payload/Payload</code> 冲突，必须在 Redis 幂等 claim 和链节点写入前以 <code>-32602</code> 失败闭合。TRON 内嵌交易 JSON 的顶层及任意深度重复键也必须在生成指纹和转发前拒绝；静态门禁禁止不可逆入口恢复宽松 <code>json.Unmarshal</code> 或移除内层检查</td><td class="pass">旧实现四类外层歧义及两类 TRON 内层重复键均被接受并各访问上游 1 次，确定性红测完整复现；修复后广播全矩阵及六类严格负例连续 20 轮通过。该结论已随 Gateway 1.16.16 上线；公网与双实例版本、ready 和 16 网络一致</td></tr>
           <tr id="gateway-public-exact-schema"><td>Gateway 全公开参数精确 Schema</td><td>严格审阅其余参数入口发现，余额、Portfolio、价格、动态费用、EVM 预执行/可用余额、历史、交易状态、官方 Token 搜索、Token 风险和授权查询共 12 个公开方法仍会忽略未知字段、接受大小写别名或以后值覆盖重复键。现与匿名诊断、广播统一使用递归精确 schema；原 14 个入口加网络身份方法，共 15 个带参数公开方法在缓存和上游前拒绝未知字段、<code>Hash</code>/<code>Contract</code> 等别名，以及顶层、嵌套对象和数组项中的重复键。静态门禁枚举每个入口并禁止生产 handler 恢复 <code>json.Unmarshal(params, ...)</code></td><td class="pass">覆盖 12 个旧入口的 13 项负例先全部失败；既有 14 个入口随 Gateway 1.16.16 上线，网络身份入口随 1.16.17 上线。Gateway 普通/race/vet/govulncheck 与远程安全边界全部通过</td></tr>
           <tr id="gateway-rpc-envelope-exact-schema"><td>Gateway JSON-RPC 信封精确 Schema</td><td>Request Object 只接受精确小写的 <code>jsonrpc</code>、<code>method</code>、<code>params</code> 和 <code>id</code>。未知成员、大小写别名/冲突及重复 method/params/id 必须在方法路由前以 <code>id=null / -32600</code> 失败闭合。params 只允许省略、兼容 null、对象或数组；id 只允许字符串、数字或 null。非法信封不得执行 handler；JSON 语法错误继续返回 <code>-32700</code></td><td class="pass">旧实现对未知成员、<code>Method</code>/<code>JSONRPC</code> 别名或冲突、三类重复成员、字符串 params 和三类非法 id 共 10 项均返回成功，重复 id 明确回显后值 2；修复后 10 项负例与对象/数组/null 兼容正例连续 20 轮通过，RPC + handlers race、Gateway 普通/vet/govulncheck/ops 与静态边界通过。该结论已随 Gateway 1.16.16 上线</td></tr>
@@ -894,8 +895,8 @@
         1280×720 与移动 390×844 均无横向溢出；全部引用图片可解码，元素 ID 无重复。
         这些截图只证明报告可读性，不证明 App UI、链上交易或协议安全。</p>
       <div class="shots report-shots">
-        <figure><img src="screenshots/report-validation-2026-08-04/gateway-preflight-report-desktop.jpg" alt="P0 P1 report desktop browser validation"><figcaption>桌面 1280×720：1.16.21 发布时的真实报告首屏；当前 1.16.26 状态以本页上方实时文本证据为准</figcaption></figure>
-        <figure><img src="screenshots/report-validation-2026-08-04/gateway-preflight-report-mobile.jpg" alt="P0 P1 report mobile browser validation"><figcaption>移动 390×844：1.16.21 发布时的无横向溢出响应式首屏；当前生产版本为 1.16.26</figcaption></figure>
+        <figure><img src="screenshots/report-validation-2026-08-04/gateway-preflight-report-desktop.jpg" alt="P0 P1 report desktop browser validation"><figcaption>桌面 1280×720：1.16.21 发布时的真实报告首屏；当前 1.16.27 状态以本页上方实时文本证据为准</figcaption></figure>
+        <figure><img src="screenshots/report-validation-2026-08-04/gateway-preflight-report-mobile.jpg" alt="P0 P1 report mobile browser validation"><figcaption>移动 390×844：1.16.21 发布时的无横向溢出响应式首屏；当前生产版本为 1.16.27</figcaption></figure>
       </div>
     </section>
 
