@@ -553,7 +553,7 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-05) completed with zero static-analysis
-issues: **1,618/1,618** KT Wallet tests, **570/570** KT Cold Signer tests, and
+issues: **1,621/1,621** KT Wallet tests, **570/570** KT Cold Signer tests, and
 **429/429** shared-package tests passed. The default gate passed **12/12** and
 the native/runtime/OSV `--full` gate passed **13/13**. The Gateway audit,
 public-secret gate, Gateway public-release version gate, native dependency
@@ -571,7 +571,12 @@ requested quote set and mutually consistent CNY/JPY rates before it replaces
 the last-known-good cache; malformed, additive, partial, stale, or polluted
 answers are discarded as one unit. A legacy wallet whose actually enabled chains are all on
 testnets now skips the price request entirely, regardless of disabled network
-profiles. Transaction finality is committed in the same Drift transaction as
+profiles. Gateway health is also a closed routing-authority boundary: only an
+exact, versioned response with a non-empty, unique subset of the 16 built-in
+network IDs may route public wallet reads through the Gateway. Legacy,
+additive, malformed, duplicate, or operator-invented network advertisements
+fail closed; custom networks remain bound to the user's direct RPC. Transaction
+finality is committed in the same Drift transaction as
 its terminal state: confirmed is successful; failed, replaced, and expired are
 failed; pending and unknown evidence never manufacture a terminal sample. The
 bounded SQLite ring stores only duration and outcome—no wallet, address, hash,

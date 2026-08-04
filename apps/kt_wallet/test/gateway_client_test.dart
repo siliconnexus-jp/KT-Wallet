@@ -83,15 +83,22 @@ Map<String, Object?> _chainParamsResult({
   },
 };
 
+Map<String, Object?> _healthyResult({
+  List<String> networks = const ['eth-mainnet'],
+  String version = '1.0.0',
+}) => {
+  'ok': true,
+  'version': version,
+  'networks': networks,
+  'upstreams': {for (final network in networks) network: <String, Object?>{}},
+};
+
 void main() {
   group('GatewayClient request framing', () {
     test(
       'JSON-RPC 2.0 envelope: jsonrpc/id/method/params, POST {url}/rpc',
       () async {
-        final recorder = _Recorder()
-          ..results = {
-            'kt_health': {'ok': true, 'version': '1.0.0'},
-          };
+        final recorder = _Recorder()..results = {'kt_health': _healthyResult()};
         // Trailing slash is normalized away (requests still hit {url}/rpc).
         final client = GatewayClient(
           baseUrl: 'https://gw.example/',
@@ -148,6 +155,57 @@ void main() {
         );
       },
     );
+
+    test('health rejects ambiguous or authority-expanding results', () async {
+      Map<String, Object?> valid() => {
+        'ok': true,
+        'version': '1.16.25',
+        'networks': ['eth-mainnet', 'eth-sepolia'],
+        'upstreams': {
+          'eth-mainnet': <String, Object?>{},
+          'eth-sepolia': <String, Object?>{},
+        },
+      };
+
+      final additive = valid()..['admin'] = true;
+      final duplicateNetwork = valid()
+        ..['networks'] = ['eth-mainnet', 'eth-mainnet'];
+      final unknownNetwork = valid()..['networks'] = ['custom-operator'];
+      final nonStringNetwork = valid()..['networks'] = ['eth-mainnet', 1];
+      final emptyNetworks = valid()..['networks'] = <String>[];
+      final missingNetworks = valid()..remove('networks');
+      final missingUpstreams = valid()..remove('upstreams');
+      final badVersion = valid()..['version'] = 'latest';
+      final oversizedVersion = valid()
+        ..['version'] = '1.0.0+${List<String>.filled(59, 'a').join()}';
+      final unknownUpstream = valid()
+        ..['upstreams'] = {'custom-operator': <String, Object?>{}};
+      final malformedUpstream = valid()..['upstreams'] = {'eth-mainnet': true};
+
+      for (final result in <Map<String, Object?>>[
+        additive,
+        duplicateNetwork,
+        unknownNetwork,
+        nonStringNetwork,
+        emptyNetworks,
+        missingNetworks,
+        missingUpstreams,
+        badVersion,
+        oversizedVersion,
+        unknownUpstream,
+        malformedUpstream,
+      ]) {
+        final recorder = _Recorder()..results = {'kt_health': result};
+        expect(
+          await GatewayClient(
+            baseUrl: 'https://gw.example',
+            client: recorder.client,
+          ).health(),
+          isFalse,
+          reason: '$result',
+        );
+      }
+    });
 
     test('timeout becomes a privacy-safe transport exception', () async {
       final slow = MockClient((request) async {
@@ -922,8 +980,7 @@ void main() {
         final recorder = _Recorder()
           ..results = {
             'kt_health': {
-              'ok': true,
-              'networks': ['polygon-amoy'],
+              ..._healthyResult(networks: const ['polygon-amoy']),
             },
             'kt_simulateEvmTransfer': {
               'network': 'polygon-amoy',
@@ -1661,10 +1718,7 @@ void main() {
     test('requires consent and parses the complete typed approval row', () async {
       final recorder = _Recorder()
         ..results = {
-          'kt_health': {
-            'ok': true,
-            'networks': ['eth-mainnet'],
-          },
+          'kt_health': {..._healthyResult()},
           'kt_getEvmTokenApprovals': {
             'status': 'ok',
             'source': 'goplus',

@@ -104,6 +104,11 @@ class _FakeGateway {
               'ok': healthy,
               'version': '1.0.0',
               if (advertisedNetworks != null) 'networks': advertisedNetworks,
+              if (advertisedNetworks != null)
+                'upstreams': {
+                  for (final network in advertisedNetworks!)
+                    network: <String, Object?>{},
+                },
             },
           }),
           200,
@@ -467,18 +472,41 @@ void main() {
       },
     );
 
-    test('legacy gateway (no networks field): mainnet only', () async {
+    test(
+      'an operator-advertised custom network never gains routing authority',
+      () async {
+        final gateway = _FakeGateway(
+          results: {'kt_getBalances': _native('1', 18, 'ETH')},
+          advertisedNetworks: const ['custom-operator'],
+        )..networkOf[Coin.eth] = 'custom-operator';
+
+        await expectLater(
+          gateway.client.getBalances(chain: Coin.eth, address: _evmFrom),
+          throwsA(isA<GatewayNetworkUnsupported>()),
+        );
+        expect(gateway.methods, ['kt_health']);
+      },
+    );
+
+    test('seeded network authority is validated before any request', () {
+      expect(
+        () => GatewayClient(
+          baseUrl: 'https://gateway.example',
+          advertisedNetworks: const {'custom-operator'},
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('legacy health without network identity fails closed', () async {
       final gateway = _FakeGateway(
         results: {'kt_getBalances': _native('1', 18, 'ETH')},
         advertisedNetworks: null,
       )..networkOf[Coin.eth] = 'eth-mainnet';
 
-      // A legacy gateway ignores the unknown param and answers for mainnet,
-      // which is exactly what the id says — safe to send.
-      await gateway.client.getBalances(chain: Coin.eth, address: _evmFrom);
-      expect(
-        gateway.paramsOf('kt_getBalances').single['network'],
-        'eth-mainnet',
+      await expectLater(
+        gateway.client.getBalances(chain: Coin.eth, address: _evmFrom),
+        throwsA(isA<GatewayNetworkUnsupported>()),
       );
 
       gateway.networkOf[Coin.eth] = 'eth-sepolia';
@@ -486,6 +514,7 @@ void main() {
         gateway.client.getBalances(chain: Coin.eth, address: _evmFrom),
         throwsA(isA<GatewayNetworkUnsupported>()),
       );
+      expect(gateway.methods, ['kt_health', 'kt_health']);
     });
 
     test('unhealthy gateway bypasses, then re-probes once healthy', () async {

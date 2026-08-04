@@ -72,10 +72,12 @@ const _reviewedGatewayResponseKeys = <String>{
   'txHash',
   'unlimited',
   'upstream',
+  'upstreams',
   'USD',
   'usd',
   'value',
   'verified',
+  'version',
 };
 
 const _remotePolicySdkTokens = <String>{

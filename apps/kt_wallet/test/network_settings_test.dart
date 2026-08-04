@@ -282,7 +282,12 @@ void main() {
         jsonEncode({
           'jsonrpc': '2.0',
           'id': body['id'],
-          'result': {'ok': true, 'version': '1.0.0'},
+          'result': {
+            'ok': true,
+            'version': '1.0.0',
+            'networks': ['eth-mainnet'],
+            'upstreams': {'eth-mainnet': <String, Object?>{}},
+          },
         }),
         200,
       );

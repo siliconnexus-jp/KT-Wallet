@@ -70,7 +70,7 @@ class GatewayClient {
        _networks = networks ?? _noNetwork,
        _advertised = advertisedNetworks == null
            ? null
-           : Set.unmodifiable(advertisedNetworks);
+           : _validatedAdvertisedNetworks(advertisedNetworks);
 
   /// Gateway base URL without a trailing slash; requests go to `$baseUrl/rpc`.
   final String baseUrl;
@@ -90,17 +90,34 @@ class GatewayClient {
   /// every chain at once — that must cost a single `kt_health`).
   Future<Set<String>>? _probing;
 
-  /// What a gateway deployed before the `networks` field can serve: one
-  /// mainnet per chain family it knew about. Sending the matching id to such
-  /// a gateway is harmless (it ignores the unknown param and answers for the
-  /// mainnet anyway), while every testnet correctly bypasses it.
-  static const Set<String> legacyNetworks = {
+  /// The only remote network identifiers allowed to gain routing authority.
+  /// A user-defined network always stays on its user-authoritative direct RPC,
+  /// even if a remote Gateway claims to support an identically named id.
+  static const Set<String> supportedNetworks = {
     'eth-mainnet',
+    'eth-sepolia',
     'polygon-mainnet',
+    'polygon-amoy',
+    'base-mainnet',
+    'base-sepolia',
+    'arbitrum-mainnet',
+    'arbitrum-sepolia',
+    'avalanche-mainnet',
+    'avalanche-fuji',
+    'bnb-mainnet',
+    'bnb-testnet',
     'tron-mainnet',
+    'tron-nile',
     'sol-mainnet',
+    'sol-devnet',
   };
 
+  static const _healthResultKeys = <String>{
+    'ok',
+    'version',
+    'networks',
+    'upstreams',
+  };
   static const _approvalResultKeys = <String>{
     'status',
     'source',
@@ -257,6 +274,9 @@ class GatewayClient {
   static final _tronGenesisPattern = RegExp(r'^[0-9a-f]{64}$');
   static final _base58AddressPattern = RegExp(r'^[1-9A-HJ-NP-Za-km-z]+$');
   static final _officialTokenSymbolPattern = RegExp(r'^[A-Z0-9._-]{1,12}$');
+  static final _semanticVersionPattern = RegExp(
+    r'^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$',
+  );
   static final _providerDecimalPattern = RegExp(
     r'^[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$',
   );
@@ -338,15 +358,15 @@ class GatewayClient {
     return decoded['result'];
   }
 
-  /// `kt_health` — true iff the gateway answered `{ok: true}`. Never throws
-  /// (any failure is "not healthy"): this backs the settings screen's
-  /// test-connection action. Always hits the wire (it is a liveness check),
-  /// and refreshes the advertised-network set on the way.
+  /// `kt_health` — true only for the closed, versioned health schema and a
+  /// validated subset of [supportedNetworks]. Never throws (any failure is
+  /// "not healthy"): this backs the settings screen's test-connection action.
+  /// Always hits the wire and refreshes the advertised-network set.
   Future<bool> health() async {
     try {
       final result = await _call('kt_health');
       if (result is! Map || result['ok'] != true) return false;
-      _advertised = _networksFrom(result);
+      _advertised = _parseHealthyResult(result);
       return true;
     } catch (_) {
       return false;
@@ -394,18 +414,49 @@ class GatewayClient {
     if (result is! Map || result['ok'] != true) {
       throw const FormatException('gateway is not healthy');
     }
-    return _advertised = _networksFrom(result);
+    return _advertised = _parseHealthyResult(result);
   }
 
-  /// The `networks` array of a `kt_health` result; a gateway that predates the
-  /// field is assumed to serve [legacyNetworks] only.
-  static Set<String> _networksFrom(Map<Object?, Object?> health) {
-    final rows = health['networks'];
-    if (rows is! List) return legacyNetworks;
-    return Set.unmodifiable({
-      for (final row in rows)
-        if (row is String) row,
-    });
+  static Set<String> _parseHealthyResult(Map<Object?, Object?> health) {
+    final version = health['version'];
+    final upstreams = health['upstreams'];
+    if (!_hasExactStringKeys(health, _healthResultKeys) ||
+        health['ok'] != true ||
+        version is! String ||
+        version.length > 64 ||
+        !_semanticVersionPattern.hasMatch(version) ||
+        upstreams is! Map) {
+      throw const FormatException('bad gateway health result');
+    }
+    final networks = _validatedAdvertisedNetworks(health['networks']);
+    for (final entry in upstreams.entries) {
+      if (entry.key is! String ||
+          !networks.contains(entry.key) ||
+          entry.value is! Map) {
+        throw const FormatException('bad gateway upstream summary');
+      }
+    }
+    return networks;
+  }
+
+  static Set<String> _validatedAdvertisedNetworks(Object? rows) {
+    final values = rows is Set<String>
+        ? rows.toList(growable: false)
+        : rows is List
+        ? rows
+        : null;
+    if (values == null ||
+        values.isEmpty ||
+        values.length > supportedNetworks.length) {
+      throw const FormatException('bad gateway network list');
+    }
+    final out = <String>{};
+    for (final row in values) {
+      if (row is! String || !supportedNetworks.contains(row) || !out.add(row)) {
+        throw const FormatException('untrusted gateway network');
+      }
+    }
+    return Set.unmodifiable(out);
   }
 
   /// `kt_getBalances` — native balance plus one row per requested token
