@@ -1,5 +1,6 @@
 import 'support/e2e_credential_batch.dart';
 import 'support/e2e_wallet_cleanup.dart';
+import '../tool/e2e_funding_preflight_model.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -85,6 +86,8 @@ void main() {
       expect(paired.canSignLocally, isFalse);
       expect(paired.coldWalletId, _walletId);
 
+      await _requireSelectedFundingBeforeAnyBroadcast(selected, addresses);
+
       final jsonTransport = HttpJsonRpcTransport(
         timeout: const Duration(seconds: 30),
       );
@@ -153,6 +156,89 @@ void main() {
     },
     timeout: const Timeout(Duration(minutes: 20)),
   );
+}
+
+Future<void> _requireSelectedFundingBeforeAnyBroadcast(
+  Set<String> selected,
+  ChainAddresses addresses,
+) async {
+  final coins = <Coin>{
+    if (selected.contains('tron')) Coin.tron,
+    if (selected.contains('solana')) Coin.solana,
+  };
+  String network(Coin coin) => switch (coin) {
+    Coin.tron => 'tron-nile',
+    Coin.solana => 'sol-devnet',
+    _ => throw ArgumentError('unexpected non-EVM coin: $coin'),
+  };
+  final gateway = GatewayClient(
+    baseUrl: _gatewayUrl,
+    networks: network,
+    timeout: const Duration(seconds: 30),
+  );
+  try {
+    final portfolio = await gateway.getPortfolio([
+      if (coins.contains(Coin.tron))
+        GatewayPortfolioQuery(
+          chain: Coin.tron,
+          address: addresses.tron,
+          tokens: const [
+            GatewayTokenQuery(contract: _testUsdt, decimals: 6, symbol: 'USDT'),
+          ],
+        ),
+      if (coins.contains(Coin.solana))
+        GatewayPortfolioQuery(
+          chain: Coin.solana,
+          address: addresses.solana,
+          tokens: const [
+            GatewayTokenQuery(
+              contract: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+              decimals: 6,
+              symbol: 'USDC',
+            ),
+          ],
+        ),
+    ]);
+    final failures = <String>[];
+    for (final coin in coins) {
+      final networkId = network(coin);
+      final requirement = e2eFundingRequirements.singleWhere(
+        (row) => row.networkId == networkId,
+      );
+      final balances = portfolio.balances[coin];
+      if (portfolio.failedChains.contains(coin) || balances == null) {
+        failures.add('$networkId:unavailable');
+        continue;
+      }
+      final tokens = balances.tokens.where(
+        (row) =>
+            row.contract == requirement.token.contract &&
+            row.symbol == requirement.token.symbol &&
+            row.decimals == requirement.token.decimals &&
+            row.error == null &&
+            row.raw != null,
+      );
+      if (tokens.length != 1) {
+        failures.add('$networkId:token-unavailable');
+        continue;
+      }
+      if (balances.native.raw < requirement.nativeTargetRaw) {
+        failures.add('$networkId:${requirement.nativeSymbol}-insufficient');
+      }
+      if (tokens.single.raw! < requirement.tokenTargetRaw) {
+        failures.add('$networkId:${requirement.token.symbol}-insufficient');
+      }
+    }
+    expect(
+      failures,
+      isEmpty,
+      reason:
+          'all selected non-EVM networks must be funded before the first '
+          'signing or broadcast; failures=${failures.join(',')}',
+    );
+  } finally {
+    gateway.close();
+  }
 }
 
 Future<void> _runTron({

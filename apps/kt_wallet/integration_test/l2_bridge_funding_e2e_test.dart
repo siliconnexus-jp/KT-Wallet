@@ -56,6 +56,12 @@ void main() {
       final amount = BigInt.from(10).pow(16); // 0.01 ETH on each L2.
 
       try {
+        await _requireBridgeFundingBeforeAnyBroadcast(
+          address: addresses.eth,
+          amount: amount,
+          transport: transport,
+          params: params,
+        );
         final baseBefore = await EvmRpc(
           url: _baseRpc,
           transport: transport,
@@ -112,6 +118,37 @@ void main() {
       }
     },
     timeout: const Timeout(Duration(minutes: 15)),
+  );
+}
+
+Future<void> _requireBridgeFundingBeforeAnyBroadcast({
+  required String address,
+  required BigInt amount,
+  required JsonRpcTransport transport,
+  required ChainParamsService params,
+}) async {
+  final chainIdResponse = await transport.post(_sepoliaRpc, const {
+    'jsonrpc': '2.0',
+    'id': 1,
+    'method': 'eth_chainId',
+    'params': <Object>[],
+  });
+  expect(chainIdResponse, isA<Map<Object?, Object?>>());
+  expect((chainIdResponse as Map<Object?, Object?>)['result'], '0xaa36a7');
+  final balance = await EvmRpc(
+    url: _sepoliaRpc,
+    transport: transport,
+  ).getBalance(address);
+  final state = await params.fetchEvmParams(Chain.ethereum, address);
+  final required =
+      amount * BigInt.two +
+      state.fees.standard.maxFeePerGas * BigInt.from(300000 * 2);
+  expect(
+    balance,
+    greaterThan(required),
+    reason:
+        'Sepolia must fund both bridge deposits and their worst-case gas '
+        'before the first signature or broadcast',
   );
 }
 

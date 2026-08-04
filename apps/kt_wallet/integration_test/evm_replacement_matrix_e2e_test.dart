@@ -99,6 +99,11 @@ void main() {
         final addresses = await crypto
             .deriveAddresses(_walletId)
             .timeout(const Duration(seconds: 30));
+        await _requireSelectedFundingBeforeAnyBroadcast(
+          enabled: enabled,
+          addresses: addresses,
+          transport: transport,
+        );
         for (final item in _cases) {
           if (!enabled.contains(item.name)) continue;
           final sender = addresses.forCoin(item.coin);
@@ -166,6 +171,51 @@ void main() {
       }
     },
     timeout: const Timeout(Duration(minutes: 15)),
+  );
+}
+
+Future<void> _requireSelectedFundingBeforeAnyBroadcast({
+  required Set<String> enabled,
+  required ChainAddresses addresses,
+  required JsonRpcTransport transport,
+}) async {
+  final failures = <String>[];
+  for (final item in _cases) {
+    if (!enabled.contains(item.name)) continue;
+    try {
+      final sender = addresses.forCoin(item.coin);
+      final chainId = await _readChainId(transport, item.rpc);
+      if (chainId != item.chainId) {
+        failures.add('${item.name}: wrong chainId $chainId');
+        continue;
+      }
+      final params = ChainParamsService(
+        jsonRpcTransport: transport,
+        endpoints: (_) => item.rpc,
+      );
+      final state = await params
+          .fetchEvmParams(item.chain, sender)
+          .timeout(const Duration(seconds: 30));
+      final balance = await EvmRpc(
+        url: item.rpc,
+        transport: transport,
+      ).getBalance(sender).timeout(const Duration(seconds: 30));
+      final required =
+          state.fees.standard.maxFeePerGas * BigInt.from(item.gasLimit * 8);
+      if (balance <= required) {
+        failures.add('${item.name}: native $balance <= required $required');
+      }
+    } catch (error) {
+      failures.add('${item.name}: funding unavailable ($error)');
+    }
+  }
+  expect(
+    failures,
+    isEmpty,
+    reason:
+        'all selected replacement chains must pass the read-only funding '
+        'preflight before the first signature or broadcast:\n'
+        '${failures.join('\n')}',
   );
 }
 

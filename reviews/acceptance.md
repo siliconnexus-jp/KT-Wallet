@@ -4,27 +4,44 @@ Maps each V1 acceptance criterion to its verification method and current status.
 
 Legend:
 - **UNIT** — covered by automated tests in this repo (runnable now).
-- **LIVE** — validated against real testnet nodes by `tool/testnet_smoke.dart`.
+- **LIVE** — validated read-only against the production Gateway and its
+  configured testnet providers by `tool/e2e_funding_preflight.dart`.
 - **DEVICE** — requires a physical device + wallet-core native build (the
   standing P1-4 boundary); scripted here, run on hardware.
 
-## Live testnet RPC smoke (runnable now)
+## Live eight-chain funding preflight (runnable now)
 
-`dart run apps/kt_wallet/tool/testnet_smoke.dart` — READ-ONLY, no broadcast.
-Last run: **7/7 PASS** across all four chains:
+The old Flutter-dependent smoke could not run under plain Dart and has been
+removed. Use the pure-Dart replacement from `apps/kt_wallet`:
 
-| Check | Network | Result |
-|---|---|---|
-| getBalance | Sepolia | real wei balance parsed |
-| feeHistory 3-tier | Sepolia | slow < standard < fast computed from live data |
-| getNonce | Polygon Amoy | ok |
-| getBalance | Solana Devnet | real lamports |
-| getLatestBlockhash | Solana Devnet | real blockhash |
-| getTrxBalance | TRON Nile | real SUN |
-| getNowBlock (refBlock) | TRON Nile | real block number |
+```bash
+dart run tool/e2e_funding_preflight.dart \
+  --evm <public EVM address> \
+  --tron <public TRON address> \
+  --solana <public Solana address>
+```
 
-This validates RPC transport, hex/JSON parsing, fee estimation, and refBlock
-retrieval against production node software.
+It is read-only and accepts public addresses only. Last run: **8/8 networks
+returned authoritative balances**, but every native coin and target Token was
+exactly raw `0`, so the tool correctly returned exit `2` / `insufficient` and
+no signing or broadcast occurred.
+
+| Network | Native | Target Token | Result |
+|---|---|---|---|
+| Ethereum Sepolia | ETH raw=0 | USDT raw=0 | insufficient |
+| Polygon Amoy | POL raw=0 | USDC raw=0 | insufficient |
+| Base Sepolia | ETH raw=0 | USDC raw=0 | insufficient |
+| Arbitrum Sepolia | ETH raw=0 | USDC raw=0 | insufficient |
+| Avalanche Fuji | AVAX raw=0 | USDC raw=0 | insufficient |
+| BNB Testnet | BNB raw=0 | BUSD raw=0 | insufficient |
+| TRON Nile | TRX raw=0 | USDT raw=0 | insufficient |
+| Solana Devnet | SOL raw=0 | USDC raw=0 | insufficient |
+
+The response is fail-closed: JSON-RPC identity, network, native metadata,
+Token contract/mint, symbol, decimals, uniqueness and exact decimal strings
+must all match. This proves current funding state and read availability; it
+does **not** prove signing, broadcast, receipt confirmation or transaction
+history for this unfunded batch.
 
 ## Acceptance criteria (ui-m.md §18, 25 items)
 
@@ -51,8 +68,8 @@ retrieval against production node software.
 | # | Criterion | Method | Status |
 |---|---|---|---|
 | 12 | 离线手机创建助记词 | DEVICE (wallet-core) | pending device |
-| 13 | 导出四链公开地址 | UNIT (address derivation params) + DEVICE (vectors) | logic ✓ / device pending |
-| 14 | 联网手机查询四链余额 | LIVE (testnet_smoke: 4/4 chains) | ✓ |
+| 13 | 导出全部支持链公开地址 | UNIT + native Wallet Core simulator matrix | simulator ✓ / physical device pending |
+| 14 | 联网手机查询全部支持链余额 | LIVE (Gateway eight-chain funding preflight) | read path ✓ / current batch unfunded |
 | 15 | 观察钱包构建支持范围内转账 | UNIT (AirgapFlow + tx params) | ✓ |
 | 16 | 未签名交易经动态二维码传输 | UNIT (airgap fragmenter/aggregator) | ✓ |
 | 17 | 离线端独立解析交易 | UNIT (chains parse) + DEVICE | logic ✓ / device pending |
@@ -71,9 +88,9 @@ retrieval against production node software.
 2. Build kt_wallet on device B (online, testnet config).
 3. Cold Signer: create wallet → verify derived addresses match BIP-44 vectors
    (P1-2/P1-3 DoD) → export addresses QR.
-4. KT Wallet: scan account QR → confirm watch wallet imported with 4 addresses.
+4. KT Wallet: scan account QR → confirm watch wallet imported with every supported-chain address.
 5. Fund the derived addresses from public testnet faucets.
-6. Watch-wallet transfer (each chain): build → sign-request QR → Cold Signer
+6. Watch-wallet transfer (all eight current testnets): build → sign-request QR → Cold Signer
    scan/parse/verify (matches TxPreview) → sign → result QR → KT Wallet scan →
    broadcast → confirm receipt. Calibrate fragment size/speed (write back to
    airgap defaults).
@@ -83,8 +100,12 @@ retrieval against production node software.
 
 ## Summary
 
-- **Runnable-now coverage**: multi-wallet, isolation, both transfer flow
-  machines, anti-replay, transaction validation, address/amount/calldata, and
-  **live 4-chain RPC** are all verified. 257 unit tests + 7 live checks green.
-- **Device-gated**: wallet-core signing (all "DEVICE" rows) and live broadcast,
-  which are the standing P1-4 native boundary. The runbook above executes them.
+- **Runnable-now coverage**: the public-beta source gate passes 12/12; KT Wallet
+  passes 1553/1553 and KT Cold Signer 570/570. Native/OSV dependency audit
+  reports no known issues across the reviewed Dart, npm, Go, Android and Apple
+  runtime graphs.
+- **Current live boundary**: the production Gateway authoritatively reads all
+  eight testnets, but this credential batch is unfunded. Real broadcast,
+  receipt/history evidence, retail-device biometric prompts and physical QR
+  camera round trips remain pending; no simulator or read-only result is
+  reported as those outcomes.

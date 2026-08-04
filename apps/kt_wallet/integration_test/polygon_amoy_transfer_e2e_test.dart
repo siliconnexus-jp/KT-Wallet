@@ -1,5 +1,6 @@
 import 'support/e2e_credential_batch.dart';
 import 'support/e2e_wallet_cleanup.dart';
+import '../tool/e2e_funding_preflight_model.dart';
 
 import 'dart:async';
 import 'dart:typed_data';
@@ -59,7 +60,13 @@ void main() {
         print('POLYGON_E2E_STAGE=READ_BALANCES');
         final polBefore = await rpc.getBalance(addresses.polygon);
         final usdcBefore = await rpc.erc20Balance(_usdc, addresses.polygon);
-        expect(polBefore, greaterThan(BigInt.from(1000000000000000)));
+        final fundingRequirement = e2eFundingRequirements.singleWhere(
+          (row) => row.networkId == 'polygon-amoy',
+        );
+        expect(
+          polBefore,
+          greaterThanOrEqualTo(fundingRequirement.nativeTargetRaw),
+        );
         expect(usdcBefore, greaterThanOrEqualTo(BigInt.from(1000000)));
 
         // ignore: avoid_print

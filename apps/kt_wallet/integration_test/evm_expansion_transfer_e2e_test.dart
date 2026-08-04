@@ -69,6 +69,11 @@ void main() {
       );
 
       try {
+        await _requireSelectedFundingBeforeAnyBroadcast(
+          selected: selected.split(',').map((value) => value.trim()).toSet(),
+          addresses: addresses,
+          transport: transport,
+        );
         for (final item in _cases) {
           if (!selected.split(',').contains(item.name)) continue;
           final address = addresses.forCoin(item.coin);
@@ -152,6 +157,68 @@ void main() {
     },
     timeout: const Timeout(Duration(minutes: 12)),
   );
+}
+
+Future<void> _requireSelectedFundingBeforeAnyBroadcast({
+  required Set<String> selected,
+  required ChainAddresses addresses,
+  required JsonRpcTransport transport,
+}) async {
+  final failures = <String>[];
+  for (final item in _cases) {
+    if (!selected.contains(item.name)) continue;
+    try {
+      final address = addresses.forCoin(item.coin);
+      final chainId = await _readChainId(transport, item.rpc);
+      if (chainId != item.chainId) {
+        failures.add('${item.name}: wrong chainId $chainId');
+        continue;
+      }
+      final rpc = EvmRpc(url: item.rpc, transport: transport);
+      final params = ChainParamsService(
+        jsonRpcTransport: transport,
+        endpoints: (_) => item.rpc,
+      );
+      final native = await rpc.getBalance(address);
+      final token = await rpc.erc20Balance(item.usdc, address);
+      final fees = await params.fetchEvmParams(item.chain, address);
+      final nativeGas = item.chain == Chain.arbitrum ? 100000 : 21000;
+      final tokenGas = item.chain == Chain.arbitrum ? 150000 : 90000;
+      final requiredNative =
+          BigInt.from(1000000000000) +
+          fees.fees.standard.maxFeePerGas * BigInt.from(nativeGas + tokenGas);
+      if (native <= requiredNative) {
+        failures.add(
+          '${item.name}: native $native <= required $requiredNative',
+        );
+      }
+      if (token < BigInt.from(1000000)) {
+        failures.add('${item.name}: USDC $token < required 1000000');
+      }
+    } catch (error) {
+      failures.add('${item.name}: funding unavailable ($error)');
+    }
+  }
+  expect(
+    failures,
+    isEmpty,
+    reason:
+        'all selected chains must pass the read-only funding preflight before '
+        'the first signature or broadcast:\n${failures.join('\n')}',
+  );
+}
+
+Future<int> _readChainId(JsonRpcTransport transport, String rpcUrl) async {
+  final response = await transport.post(rpcUrl, const {
+    'jsonrpc': '2.0',
+    'id': 1,
+    'method': 'eth_chainId',
+    'params': <Object>[],
+  });
+  if (response is! Map || response['result'] is! String) {
+    throw StateError('invalid eth_chainId response');
+  }
+  return int.parse((response['result'] as String).substring(2), radix: 16);
 }
 
 Future<void> _waitForTokenBalance(

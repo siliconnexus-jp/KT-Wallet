@@ -1,5 +1,6 @@
 import 'support/e2e_credential_batch.dart';
 import 'support/e2e_wallet_cleanup.dart';
+import '../tool/e2e_funding_preflight_model.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -99,9 +100,12 @@ void main() {
           rpc.getBalance(addresses.eth),
           rpc.erc20Balance(usdtSepoliaToken.contract, addresses.eth),
         ]);
+        final fundingRequirement = e2eFundingRequirements.singleWhere(
+          (row) => row.networkId == 'eth-sepolia',
+        );
         expect(
           balances[0],
-          greaterThan(BigInt.from(500000000000000)),
+          greaterThanOrEqualTo(fundingRequirement.nativeTargetRaw),
           reason: 'the air-gap test account needs Sepolia ETH for two fees',
         );
         expect(

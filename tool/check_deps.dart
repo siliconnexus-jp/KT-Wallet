@@ -1523,11 +1523,36 @@ void main() {
   final integrationTests = Directory('apps/kt_wallet/integration_test');
   for (final entity in integrationTests.listSync(recursive: true)) {
     if (entity is! File || !entity.path.endsWith('_test.dart')) continue;
-    if (!realE2eEntrypointHasCredentialGuard(entity.readAsStringSync())) {
+    final contents = entity.readAsStringSync();
+    if (!realE2eEntrypointHasCredentialGuard(contents)) {
       failures.add(
         '${entity.path} reads the real E2E mnemonic without the batch guard',
       );
     }
+    if (!multiBroadcastE2eHasFundingPreflight(entity.path, contents)) {
+      failures.add(
+        '${entity.path} can broadcast a batch without an all-chain funding '
+        'preflight before the first broadcast',
+      );
+    }
+  }
+
+  // The eight-chain funding gate must remain a genuine standalone Dart CLI.
+  // Its first candidate imported Flutter/App runtime code and model tests did
+  // not catch the resulting `dart:ui` startup failure. Close that regression
+  // path at repository level and keep the retired smoke entrypoint absent.
+  final fundingCli = File('apps/kt_wallet/tool/e2e_funding_preflight.dart');
+  if (!fundingCli.existsSync()) {
+    failures.add('standalone eight-chain funding CLI is missing');
+  } else {
+    for (final issue in findHostFundingCliBoundaryIssues(
+      fundingCli.readAsStringSync(),
+    )) {
+      failures.add('${fundingCli.path}: $issue');
+    }
+  }
+  if (File('apps/kt_wallet/tool/testnet_smoke.dart').existsSync()) {
+    failures.add('retired Flutter-dependent testnet smoke was reintroduced');
   }
 
   // Real native E2E wallets must not survive a completed test run. Execute

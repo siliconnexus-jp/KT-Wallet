@@ -835,3 +835,79 @@ bool realE2eEntrypointHasCredentialGuard(String contents) {
   const guard = 'requireFreshE2eCredentialBatchIfConfigured();';
   return !contents.contains(readsMnemonic) || contents.contains(guard);
 }
+
+/// Prevents direct Flutter-test invocation from bypassing the all-chain
+/// funding gate in entrypoints that can broadcast more than one transaction.
+///
+/// The guard call must appear before the first broadcast expression in source
+/// order. This is intentionally a narrow, explicit list: single-chain tests
+/// retain their own dynamic balance checks, while every batch below must fail
+/// before signing anything when any later chain is unavailable or unfunded.
+bool multiBroadcastE2eHasFundingPreflight(String path, String contents) {
+  final basename = path.replaceAll('\\', '/').split('/').last;
+  const selectedGuardEntrypoints = {
+    'evm_airgap_full_loop_matrix_e2e_test.dart',
+    'non_evm_airgap_full_loop_e2e_test.dart',
+    'evm_expansion_transfer_e2e_test.dart',
+    'evm_replacement_matrix_e2e_test.dart',
+  };
+  const bridgeEntrypoint = 'l2_bridge_funding_e2e_test.dart';
+  if (!selectedGuardEntrypoints.contains(basename) &&
+      basename != bridgeEntrypoint) {
+    return true;
+  }
+  final guard = basename == bridgeEntrypoint
+      ? 'await _requireBridgeFundingBeforeAnyBroadcast('
+      : 'await _requireSelectedFundingBeforeAnyBroadcast(';
+  final guardIndex = contents.indexOf(guard);
+  final signatureIndex = contents.indexOf('.signTransaction(');
+  final broadcastIndex = contents.indexOf('.broadcast(');
+  return guardIndex >= 0 &&
+      signatureIndex >= 0 &&
+      broadcastIndex >= 0 &&
+      guardIndex < signatureIndex &&
+      guardIndex < broadcastIndex;
+}
+
+/// Keeps the funding preflight runnable by the standalone Dart VM.
+///
+/// This tool is deliberately outside the App runtime: it accepts public
+/// addresses, performs one bounded HTTPS request and writes optional public
+/// readiness evidence. An App/Flutter import can pass model tests while making
+/// `dart run` fail at startup because `dart:ui` is unavailable, so the import
+/// surface and environment/process boundaries are closed here.
+List<String> findHostFundingCliBoundaryIssues(String contents) {
+  const allowedImports = {
+    'dart:convert',
+    'dart:io',
+    'package:http/http.dart',
+    'e2e_funding_preflight_model.dart',
+  };
+  final imports = RegExp(
+    r'''^import\s+['"]([^'"]+)['"]\s*(?:as\s+\w+\s*)?;''',
+    multiLine: true,
+  ).allMatches(contents).map((match) => match.group(1)!).toList();
+  final issues = <String>[];
+  final missing = allowedImports.difference(imports.toSet());
+  final unexpected = imports.toSet().difference(allowedImports);
+  if (missing.isNotEmpty) {
+    issues.add('missing standalone imports: ${missing.toList()..sort()}');
+  }
+  if (unexpected.isNotEmpty) {
+    issues.add('unexpected host CLI imports: ${unexpected.toList()..sort()}');
+  }
+  for (final boundary in const {
+    'Platform.environment': 'environment credentials/configuration',
+    'String.fromEnvironment': 'dart-define credentials/configuration',
+    'Process.run': 'child process execution',
+    'Process.start': 'child process execution',
+  }.entries) {
+    if (contents.contains(boundary.key)) {
+      issues.add('host funding CLI reads ${boundary.value}');
+    }
+  }
+  if (!contents.contains('Future<void> main(List<String> arguments) async')) {
+    issues.add('host funding CLI entrypoint is missing');
+  }
+  return issues;
+}

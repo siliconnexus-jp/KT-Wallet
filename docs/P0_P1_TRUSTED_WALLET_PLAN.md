@@ -1140,6 +1140,21 @@ Wallet Core 签名 → 在线密码学验签 → 广播 → 链上确认 → 双
   旧 EVM 地址关联主网 BNB，只保留在本地安全归档中，不得用于自动化或未授权交易。
   2026-08-04 再次通过独立 Amoy RPC 读取公开地址，chainId=80002，POL=0、Circle
   USDC=0；签名/广播均未执行。
+  - [x] 已增加纯 Dart 八链资金门禁；只使用三个公开地址和生产 Gateway 的单次
+    `kt_getPortfolio`，闭合绑定 JSON-RPC id、八条 network、Token identity/精度与唯一
+    结果行。不可用与精确零余额分开，只有八链原生币和 Token 达到保守目标才返回 0；
+    不足返回 2、不可用返回 3，并在任何系统认证、签名或广播之前结束。11 项正负例及
+    主机真实执行通过；当前批次八链均为可信 raw=0，因此状态仍为未注资而不是 RPC 错误。
+  - [x] 八链 air-gap、非 EVM、EVM 扩展、加速/取消及双 L2 bridge 等多笔广播入口
+    均在第一笔签名前完成整批动态费用与余额预检；仓库门禁按源码顺序强制预检调用早于
+    首个 broadcast，删除、漏接或事后调用会失败。门禁正反例 2/2、KT Wallet
+    1553/1553、KT Cold Signer 570/570、公开测试源码门禁 12/12、原生/OSV 依赖审计
+    （Dart 147、npm 293、Go 4、Android 135+134）已知问题 0。
+  - [x] 纯主机资金 CLI 的 import 与隐式配置边界已纳入 `check_deps`：只允许
+    `dart:convert`、`dart:io`、HTTP client 与纯 Dart 模型；Flutter/App runtime、
+    `Platform.environment`、dart-define 及子进程执行均失败。正反例 2/2，`--help` 在普通
+    Dart VM 实际启动并退出 0，退役 smoke 不得重新出现。最终 test_support 67/67，
+    完整公开测试源码门禁再次 12/12 通过。
 
 ## P1：达到国际“可靠基础钱包”水平
 

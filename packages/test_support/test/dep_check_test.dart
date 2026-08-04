@@ -431,6 +431,92 @@ void main() {
     });
   });
 
+  group('multi-broadcast E2E funding guard', () {
+    test('requires the selected-chain preflight before any broadcast', () {
+      const path = 'integration_test/evm_expansion_transfer_e2e_test.dart';
+      const safe = '''
+await _requireSelectedFundingBeforeAnyBroadcast(
+  selected: selected,
+  addresses: addresses,
+  transport: transport,
+);
+await crypto.signTransaction(walletId: walletId, signingInput: input);
+await broadcaster.broadcast(chain, signedTx);
+''';
+      const missing = '''
+await crypto.signTransaction(walletId: walletId, signingInput: input);
+await broadcaster.broadcast(chain, signedTx);
+''';
+      const late = '''
+await crypto.signTransaction(walletId: walletId, signingInput: input);
+await broadcaster.broadcast(chain, signedTx);
+await _requireSelectedFundingBeforeAnyBroadcast();
+''';
+      expect(multiBroadcastE2eHasFundingPreflight(path, safe), isTrue);
+      expect(multiBroadcastE2eHasFundingPreflight(path, missing), isFalse);
+      expect(multiBroadcastE2eHasFundingPreflight(path, late), isFalse);
+    });
+
+    test(
+      'requires the bridge-specific preflight and ignores single-chain tests',
+      () {
+        const bridge = 'integration_test/l2_bridge_funding_e2e_test.dart';
+        const safe = '''
+await _requireBridgeFundingBeforeAnyBroadcast();
+await crypto.signTransaction(walletId: walletId, signingInput: input);
+await broadcaster.broadcast(chain, signedTx);
+''';
+        expect(multiBroadcastE2eHasFundingPreflight(bridge, safe), isTrue);
+        expect(
+          multiBroadcastE2eHasFundingPreflight(
+            bridge,
+            safe.replaceFirst('_requireBridge', '_requireSelected'),
+          ),
+          isFalse,
+        );
+        expect(
+          multiBroadcastE2eHasFundingPreflight(
+            'integration_test/sepolia_transfer_e2e_test.dart',
+            'await broadcaster.broadcast(chain, signedTx);',
+          ),
+          isTrue,
+        );
+      },
+    );
+  });
+
+  group('host funding CLI boundary', () {
+    const standalone = '''
+import 'dart:convert';
+import 'dart:io';
+import 'package:http/http.dart';
+import 'e2e_funding_preflight_model.dart';
+Future<void> main(List<String> arguments) async {}
+''';
+
+    test('accepts the exact standalone Dart import surface', () {
+      expect(findHostFundingCliBoundaryIssues(standalone), isEmpty);
+    });
+
+    test('rejects Flutter/App imports and implicit configuration channels', () {
+      final issues = findHostFundingCliBoundaryIssues('''
+$standalone
+import 'package:flutter/material.dart';
+import 'package:kt_wallet/src/market/gateway_client.dart';
+void leak() {
+  Platform.environment['TOKEN'];
+  const value = String.fromEnvironment('SECRET');
+  Process.run('helper', const []);
+}
+''');
+      expect(issues, contains(contains('package:flutter/material.dart')));
+      expect(issues, contains(contains('package:kt_wallet')));
+      expect(issues, contains(contains('environment credentials')));
+      expect(issues, contains(contains('dart-define credentials')));
+      expect(issues, contains(contains('child process execution')));
+    });
+  });
+
   group('Flutter ARB localization gate', () {
     test('rejects retired and locale-inappropriate brand terms', () {
       final issues = findForbiddenLocalizationTermIssues(

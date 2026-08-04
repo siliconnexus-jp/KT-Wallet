@@ -1,5 +1,6 @@
 import 'support/e2e_credential_batch.dart';
 import 'support/e2e_wallet_cleanup.dart';
+import '../tool/e2e_funding_preflight_model.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -161,6 +162,8 @@ void main() {
       expect(paired.canSignLocally, isFalse);
       expect(paired.coldWalletId, _walletId);
 
+      await _requireSelectedFundingBeforeAnyBroadcast(cases, addresses);
+
       for (final network in cases) {
         await _runNetwork(
           network,
@@ -172,6 +175,76 @@ void main() {
     },
     timeout: const Timeout(Duration(minutes: 35)),
   );
+}
+
+Future<void> _requireSelectedFundingBeforeAnyBroadcast(
+  List<_NetworkCase> cases,
+  ChainAddresses addresses,
+) async {
+  final networkByCoin = {for (final item in cases) item.coin: item.networkId};
+  final gateway = GatewayClient(
+    baseUrl: _gatewayUrl,
+    networks: (coin) => networkByCoin[coin],
+    timeout: const Duration(seconds: 30),
+  );
+  try {
+    final portfolio = await gateway.getPortfolio([
+      for (final network in cases)
+        GatewayPortfolioQuery(
+          chain: network.coin,
+          address: addressForChain(addresses, network.chain),
+          tokens: [
+            GatewayTokenQuery(
+              contract: network.tokenContract,
+              decimals: network.tokenDecimals,
+              symbol: network.tokenSymbol,
+            ),
+          ],
+        ),
+    ]);
+    final failures = <String>[];
+    for (final network in cases) {
+      final requirement = e2eFundingRequirements.singleWhere(
+        (row) => row.networkId == network.networkId,
+      );
+      final balances = portfolio.balances[network.coin];
+      if (portfolio.failedChains.contains(network.coin) || balances == null) {
+        failures.add('${network.networkId}:unavailable');
+        continue;
+      }
+      final tokens = balances.tokens.where(
+        (row) =>
+            row.contract.toLowerCase() == network.tokenContract.toLowerCase() &&
+            row.symbol == network.tokenSymbol &&
+            row.decimals == network.tokenDecimals &&
+            row.error == null &&
+            row.raw != null,
+      );
+      if (tokens.length != 1) {
+        failures.add('${network.networkId}:token-unavailable');
+        continue;
+      }
+      if (balances.native.raw < requirement.nativeTargetRaw) {
+        failures.add(
+          '${network.networkId}:${network.nativeSymbol}-insufficient',
+        );
+      }
+      if (tokens.single.raw! < requirement.tokenTargetRaw) {
+        failures.add(
+          '${network.networkId}:${network.tokenSymbol}-insufficient',
+        );
+      }
+    }
+    expect(
+      failures,
+      isEmpty,
+      reason:
+          'all selected EVM networks must be funded before the first signing '
+          'or broadcast; failures=${failures.join(',')}',
+    );
+  } finally {
+    gateway.close();
+  }
 }
 
 Future<void> _runNetwork(
