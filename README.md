@@ -180,11 +180,16 @@ error in one hash lookup is persisted as unknown evidence for that row and does
 not abort status updates for its peers. If the wallet/network context changes
 or the route is disposed, queued workers stop before sending another old hash.
 
-Broadcasts are single-shot writes. An explicit rejection from the directly
+Broadcasts are single-shot writes. A definitive rejection from the directly
 selected node is shown as a failure, while a timeout, disconnected response,
-or malformed reply after the request starts is kept as an unknown result. The
-locally derived transaction hash and first-attempt time are persisted before
-submission, allowing KT Wallet to continue reconciliation without
+or malformed reply after the request starts is kept as an unknown result.
+Network-seen responses are deliberately non-terminal: EVM `nonce too low` or
+`already known`, Solana `already processed`, and TRON
+`DUP_TRANSACTION_ERROR` retain the locally derived hash/signature and continue
+reconciliation. They may mean the exact transaction was already accepted or
+that its nonce was consumed, so treating them as a retryable failure could
+induce a duplicate payment. The local transaction identity and first-attempt
+time are persisted before submission, allowing KT Wallet to reconcile without
 automatically sending the transaction again.
 No error returned by a posted Gateway broadcast—including one claiming an
 upstream rejection, `unsupported`, or `rate_limited`—authorizes a terminal
@@ -561,8 +566,8 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-05) completed with zero static-analysis
-issues: **1,622/1,622** KT Wallet tests, **570/570** KT Cold Signer tests, and
-**429/429** shared-package tests passed. The default gate passed **12/12** and
+issues: **1,627/1,627** KT Wallet tests, **570/570** KT Cold Signer tests, and
+**431/431** shared-package tests passed. The default gate passed **12/12** and
 the native/runtime/OSV `--full` gate passed **13/13**. The Gateway audit,
 public-secret gate, Gateway public-release version gate, native dependency
 lock/checksum verification, and OSV scans also passed. These numbers are

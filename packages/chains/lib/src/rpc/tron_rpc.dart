@@ -409,7 +409,10 @@ class TronRpc {
     // TronGrid reports node-level failures as a top-level `Error` string and
     // contract-level ones as `code` + hex-encoded `message`; without `Error`
     // in this chain the reason came back as a bare `null`, hiding the cause.
-    final message = resp['message'] ?? resp['Error'] ?? resp['code'];
+    final duplicate = resp['code'] == 'DUP_TRANSACTION_ERROR';
+    final message = duplicate
+        ? publicRpcRejectionMessage(RpcRejectionKind.alreadyKnown)
+        : resp['message'] ?? resp['Error'] ?? resp['code'];
     throw RpcRejectedException(publicRpcRejectionMessage(message));
   }
 }

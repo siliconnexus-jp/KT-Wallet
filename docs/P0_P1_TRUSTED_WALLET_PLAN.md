@@ -160,8 +160,11 @@ TRON/Solana/EVM 余额与 Portfolio 身份、Solana 交易终态、EVM 动态手
   signature status 缺失且 finalized block height 明确越界后才标记
   `expired`。
 - [x] 广播结果严格区分 `accepted / rejected / unknown`：只有 App 直接选择并请求的节点
-  返回可解析的明确拒绝才进入失败；请求开始后的超时、断连、畸形回包或任何 Gateway
-  错误均保持 unknown。
+  返回可解析且能证明本次签名字节未被接受的确定性拒绝才进入失败；EVM
+  `nonce too low / already known`、Solana `already processed` 与 TRON
+  `DUP_TRANSACTION_ERROR` 均说明网络可能已经见过交易或 nonce 已被消费，必须保持
+  unknown 并按本地 hash/signature 对账。请求开始后的超时、断连、畸形回包或任何
+  Gateway 错误也保持 unknown。
   EVM/Solana JSON-RPC 与 TRON REST 广播只向一个端点提交一次，不做 endpoint failover
   或自动重试；任何已经收到的 Gateway 广播错误都不能授权终态失败或直连重发，只有
   App 在发送 `kt_broadcast` 前由本地网络清单产生的 `GatewayNetworkUnsupported` 才能选择直连。
@@ -2162,3 +2165,19 @@ unsupported` 分支，并用门禁自身的正负向量验证绝对末尾必须�
 广播/网络定向 77/77、KT Wallet 1622/1622（另有 11 项显式线上/设备测试默认跳过）、
 KT Cold Signer 570/570、静态分析 0、生产严格只读客户端 6/6 与完整依赖/OSV 门禁
 13/13 通过。本轮无 Gateway 服务端或视觉 UI 变化，不部署后端，也不使用无关截图。
+
+同日继续复审直连节点的“明确拒绝”边界。旧实现把 EVM `nonce too low / already known`、
+Solana “transaction has already been processed” 与 TRON `DUP_TRANSACTION_ERROR` 全部写成
+failed；其中前两类可能表示同一签名交易已在 mempool/链上，nonce too low 也可能表示
+另一竞争交易已消费 nonce。向用户展示失败和重试会破坏单次提交语义。失败优先测试先后
+稳定得到 `expected unknown / actual error`；修复后只把 `alreadyKnown + nonceTooLow` 两类
+结构化原因送入本地 hash/nonce 对账，其余 `invalid sender / invalid signature / expired`
+等确定性拒绝仍为本地化失败。共享 RPC 词汇新增 Solana 常见 duplicate 表达，TRON 以
+精确 `DUP_TRANSACTION_ERROR` 代码归一，不展示节点原文。静态门禁精确锁定仅这两个枚举，
+加入 `invalidSender` 或删除任一项都会使发布审计失败。三链红绿测试、W8 unknown/失败
+Golden、广播/热钱包持久化/replacement/授权撤销定向 69/69 与 chains 192/192 已通过；
+严格复审还发现通用子串 `known transaction` 会误命中 `unknown transaction`，已删除该宽泛
+词汇并用反例锁定。最终 KT Wallet 1627/1627（另有 11 项显式线上/设备测试默认跳过）、
+KT Cold Signer 570/570、共享 packages 431/431、静态分析 0、完整依赖/OSV 门禁 13/13
+通过。本项没有服务端改动，无需部署 Gateway；
+截图是确定性故障注入 UI，只证明“未知不重发”和“确定拒绝仍失败”，不宣称新增链上交易。

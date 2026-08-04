@@ -486,6 +486,31 @@ void main() {
       expect(thrown.toString(), isNot(contains('private-provider-key')));
     });
 
+    test('network-seen duplicate vocabulary stays alreadyKnown', () {
+      for (final message in const [
+        'already known',
+        'Transaction simulation failed: This transaction has already been processed',
+        'transaction already exists',
+        'transaction already imported',
+      ]) {
+        expect(
+          publicRpcRejectionKind(message),
+          RpcRejectionKind.alreadyKnown,
+          reason: message,
+        );
+        expect(
+          publicRpcRejectionMessage(message),
+          'transaction is already known by the network',
+          reason: message,
+        );
+      }
+      expect(
+        publicRpcRejectionKind('unknown transaction'),
+        RpcRejectionKind.rejected,
+        reason: 'unknown must not substring-match known',
+      );
+    });
+
     test('non-hex quantity throws instead of returning garbage', () async {
       final rpc = EvmRpc(
         url: 'x',
@@ -1152,6 +1177,36 @@ void main() {
         ),
       );
       expect(() => rpc.broadcast({'raw': 'x'}), throwsA(isA<RpcException>()));
+    });
+
+    test('TRON duplicate code is normalized as alreadyKnown', () async {
+      final rpc = TronRpc(
+        baseUrl: 'https://api',
+        transport: FakeRest(
+          onPost: (u, b) => {
+            'result': false,
+            'code': 'DUP_TRANSACTION_ERROR',
+            'message': '5472616e73616374696f6e20616c7265616479206578697373',
+          },
+        ),
+      );
+
+      await expectLater(
+        rpc.broadcast({'transaction': 'ab'}),
+        throwsA(
+          isA<RpcRejectedException>()
+              .having(
+                (error) => error.kind,
+                'kind',
+                RpcRejectionKind.alreadyKnown,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                'transaction is already known by the network',
+              ),
+        ),
+      );
     });
 
     // A signer payload carries the full signed Transaction protobuf, which

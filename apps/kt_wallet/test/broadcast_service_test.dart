@@ -230,9 +230,67 @@ void main() {
       },
     );
 
-    test('EVM node rejection maps to error with the node message', () async {
+    test(
+      'EVM nonce-too-low is outcome-unknown because the nonce may already be consumed',
+      () async {
+        final transport = _FakeJsonRpc(
+          errors: {'eth_sendRawTransaction': ('nonce too low', -32000)},
+        );
+        final service = BroadcastService(
+          jsonRpcTransport: transport,
+          endpoints: _endpoint,
+        );
+
+        final outcome = await service.broadcast(
+          Chain.polygon,
+          Uint8List.fromList([0x02, 0x01]),
+          expectedTxHash: _hexHash('a'),
+        );
+        expect(outcome.status, BroadcastStatus.unknown);
+        expect(outcome.message, 'RPC submission may already be known');
+        expect(outcome.rejectionKind, isNull);
+        expect(outcome.txHash, isNull);
+        expect(transport.calls.single.$1, 'https://node.example/polygon');
+        final metric = ExperienceMetrics.instance.recent.single;
+        expect(metric.name, ExperienceMetricNames.transactionBroadcast);
+        expect(metric.success, isFalse);
+      },
+    );
+
+    test(
+      'EVM already-known is reconciled by local hash and never shown as failed',
+      () async {
+        final transport = _FakeJsonRpc(
+          errors: {'eth_sendRawTransaction': ('already known', -32000)},
+        );
+        final service = BroadcastService(
+          jsonRpcTransport: transport,
+          endpoints: _endpoint,
+        );
+
+        final outcome = await service.broadcast(
+          Chain.ethereum,
+          Uint8List.fromList([0x02, 0x01]),
+          expectedTxHash: _hexHash('a'),
+        );
+
+        expect(outcome.status, BroadcastStatus.unknown);
+        expect(outcome.message, 'RPC submission may already be known');
+        expect(outcome.rejectionKind, isNull);
+        expect(outcome.txHash, isNull);
+        expect(transport.calls, hasLength(1));
+      },
+    );
+
+    test('Solana already-processed is reconciled by local signature', () async {
       final transport = _FakeJsonRpc(
-        errors: {'eth_sendRawTransaction': ('nonce too low', -32000)},
+        errors: {
+          'sendTransaction': (
+            'Transaction simulation failed: '
+                'This transaction has already been processed',
+            -32002,
+          ),
+        },
       );
       final service = BroadcastService(
         jsonRpcTransport: transport,
@@ -240,18 +298,62 @@ void main() {
       );
 
       final outcome = await service.broadcast(
-        Chain.polygon,
+        Chain.solana,
+        Uint8List.fromList([1, 2, 3]),
+        expectedTxHash: '3Bxs4NN8M2Yn4TLb',
+      );
+
+      expect(outcome.status, BroadcastStatus.unknown);
+      expect(outcome.message, 'RPC submission may already be known');
+      expect(outcome.rejectionKind, isNull);
+      expect(transport.calls, hasLength(1));
+    });
+
+    test('TRON duplicate transaction is reconciled by local txID', () async {
+      final transport = _FakeRest({
+        'result': false,
+        'code': 'DUP_TRANSACTION_ERROR',
+        'message': '5472616e73616374696f6e20616c7265616479206578697373',
+      });
+      final service = BroadcastService(
+        restTransport: transport,
+        endpoints: _endpoint,
+      );
+
+      final outcome = await service.broadcast(
+        Chain.tron,
+        Uint8List.fromList(
+          utf8.encode('{"transaction":"deadbeef","txID":"abc123"}'),
+        ),
+        expectedTxHash: 'abc123',
+      );
+
+      expect(outcome.status, BroadcastStatus.unknown);
+      expect(outcome.message, 'RPC submission may already be known');
+      expect(outcome.rejectionKind, isNull);
+      expect(transport.posts, hasLength(1));
+    });
+
+    test('EVM definitive node rejection remains a localized error', () async {
+      final transport = _FakeJsonRpc(
+        errors: {'eth_sendRawTransaction': ('invalid sender', -32000)},
+      );
+      final service = BroadcastService(
+        jsonRpcTransport: transport,
+        endpoints: _endpoint,
+      );
+
+      final outcome = await service.broadcast(
+        Chain.ethereum,
         Uint8List.fromList([0x02, 0x01]),
         expectedTxHash: _hexHash('a'),
       );
+
       expect(outcome.status, BroadcastStatus.error);
-      expect(outcome.message, 'transaction nonce is too low');
-      expect(outcome.rejectionKind, RpcRejectionKind.nonceTooLow);
+      expect(outcome.message, 'transaction sender is invalid');
+      expect(outcome.rejectionKind, RpcRejectionKind.invalidSender);
       expect(outcome.txHash, isNull);
-      expect(transport.calls.single.$1, 'https://node.example/polygon');
-      final metric = ExperienceMetrics.instance.recent.single;
-      expect(metric.name, ExperienceMetricNames.transactionBroadcast);
-      expect(metric.success, isFalse);
+      expect(transport.calls, hasLength(1));
     });
 
     test('EVM response loss maps to unknown, never to rejected', () async {
@@ -571,13 +673,13 @@ void main() {
     );
 
     testWidgets(
-      'real signature + node rejection: stays on W8 with a localized reason',
+      'real signature + definitive node rejection stays on W8 with a localized reason',
       (tester) async {
         tester.view.physicalSize = const Size(390, 844);
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.resetPhysicalSize);
         final transport = _FakeJsonRpc(
-          errors: {'eth_sendRawTransaction': ('nonce too low', -32000)},
+          errors: {'eth_sendRawTransaction': ('invalid sender', -32000)},
         );
         final service = BroadcastService(
           jsonRpcTransport: transport,
@@ -607,13 +709,10 @@ void main() {
         // locale-owned actionable copy rather than interpolated verbatim.
         expect(find.text('Transaction submitted'), findsNothing);
         expect(
-          find.text(
-            'Broadcast failed: The transaction nonce is too low. '
-            'Refresh and try again.',
-          ),
+          find.text('Broadcast failed: The transaction sender is invalid.'),
           findsOneWidget,
         );
-        expect(find.text('transaction nonce is too low'), findsNothing);
+        expect(find.text('transaction sender is invalid'), findsNothing);
         expect(
           transport.calls,
           hasLength(1),
@@ -622,6 +721,49 @@ void main() {
         await expectLater(
           find.byType(MaterialApp),
           matchesGoldenFile('goldens/broadcast/rejected-en.png'),
+        );
+      },
+    );
+
+    testWidgets(
+      'nonce-too-low opens reconciliation UI and never offers a second post',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        final transport = _FakeJsonRpc(
+          errors: {'eth_sendRawTransaction': ('nonce too low', -32000)},
+        );
+        final service = BroadcastService(
+          jsonRpcTransport: transport,
+          endpoints: _endpoint,
+        );
+        final result = SignResult(
+          reqId: Uint8List.fromList(List.filled(AirgapLimits.reqIdLength, 9)),
+          walletId: 'w1',
+          coin: 60,
+          signedTx: Uint8List.fromList([0x02, 0x01, 0x02]),
+          signer: '0x925fEA1c0dbf3B011391bbed682E32861BE73213',
+          txHash: 'locally-derived-hash',
+        );
+        final session = _broadcastSession(result);
+
+        await tester.pumpWidget(
+          app(session, service, locale: const Locale('en')),
+        );
+        await tester.pump();
+        await tester.tap(find.byType(KtPrimaryButton));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Broadcast result unknown'), findsOneWidget);
+        expect(find.textContaining('Do not send it again'), findsOneWidget);
+        expect(session.broadcastTxHash, 'locally-derived-hash');
+        expect(session.broadcastOutcomeUnknown, isTrue);
+        expect(transport.calls, hasLength(1));
+        expect(find.textContaining('Broadcast failed'), findsNothing);
+        await expectLater(
+          find.byType(MaterialApp),
+          matchesGoldenFile('goldens/broadcast/unknown-en.png'),
         );
       },
     );

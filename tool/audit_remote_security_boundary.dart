@@ -145,7 +145,8 @@ void main() {
     '${_networkFreeSecurityFiles.length} network-free security modules, '
     '3 hot-signing families independently verified, '
     'hot and air-gapped broadcasts hash-bound before success metrics and '
-    'answered Gateway errors kept single-shot, '
+    'answered Gateway errors kept single-shot, ambiguous direct-node '
+    'acceptance signals kept non-terminal, '
     'all parameterized public Gateway requests, inbound JSON-RPC envelopes, '
     'upstream node responses, Helius, Alchemy, Etherscan/Blockscout, '
     'TronGrid history, CoinGecko market responses, and all three GoPlus '
@@ -373,6 +374,26 @@ void _auditHotSigningBoundary(List<String> failures) {
   }
 
   final irreversibleBroadcast = _futureMethodSection(broadcast, '_broadcast');
+  final ambiguousKinds = _directReconciliationKinds(broadcast);
+  const expectedAmbiguousKinds = <String>{'alreadyKnown', 'nonceTooLow'};
+  if (!_sameStringSet(ambiguousKinds, expectedAmbiguousKinds)) {
+    failures.add(
+      '$broadcastPath changed ambiguous direct-node reconciliation kinds: '
+      '${ambiguousKinds.toList()..sort()}',
+    );
+  }
+  for (final marker in const [
+    'if (_rejectionRequiresReconciliation(e.kind))',
+    "BroadcastOutcome.unknown(\n          'RPC submission may already be known'",
+    'return BroadcastOutcome.error(e.kind)',
+  ]) {
+    if (irreversibleBroadcast == null ||
+        !irreversibleBroadcast.contains(marker)) {
+      failures.add(
+        '$broadcastPath lost ambiguous-versus-definitive direct rejection boundary: $marker',
+      );
+    }
+  }
   const answeredErrorStart = '} on GatewayException {';
   const localPreflightStart = '} on GatewayNetworkUnsupported {';
   final answeredStart =
@@ -1053,6 +1074,22 @@ bool _answeredGatewayErrorCanSetTerminalFailure(String source) =>
     source.contains('isUpstreamError') ||
     RegExp(r'BroadcastOutcome\.(?:error|unsupported)\s*\(').hasMatch(source);
 
+Set<String> _directReconciliationKinds(String source) {
+  final match = RegExp(
+    r'static bool _rejectionRequiresReconciliation\s*\([^)]*\)\s*=>\s*([\s\S]*?);',
+  ).firstMatch(source);
+  if (match == null) return const {};
+  return {
+    for (final kind in RegExp(
+      r'RpcRejectionKind\.([A-Za-z0-9_]+)',
+    ).allMatches(match.group(1)!))
+      kind.group(1)!,
+  };
+}
+
+bool _sameStringSet(Set<String> left, Set<String> right) =>
+    left.length == right.length && left.containsAll(right);
+
 List<String> _selfTestFailures() {
   final failures = <String>[];
   if (!_mapLookupKeys("final x = row['status'];").contains('status')) {
@@ -1108,6 +1145,29 @@ List<String> _selfTestFailures() {
     return const BroadcastOutcome.unknown('Gateway response unavailable');
   ''')) {
     failures.add('answered-error terminal-authority extractor is not exact');
+  }
+  if (!_sameStringSet(
+        _directReconciliationKinds('''
+          static bool _rejectionRequiresReconciliation(
+            RpcRejectionKind kind,
+          ) =>
+              kind == RpcRejectionKind.alreadyKnown ||
+              kind == RpcRejectionKind.nonceTooLow;
+        '''),
+        const {'alreadyKnown', 'nonceTooLow'},
+      ) ||
+      _sameStringSet(
+        _directReconciliationKinds('''
+          static bool _rejectionRequiresReconciliation(
+            RpcRejectionKind kind,
+          ) =>
+              kind == RpcRejectionKind.alreadyKnown ||
+              kind == RpcRejectionKind.nonceTooLow ||
+              kind == RpcRejectionKind.invalidSender;
+        '''),
+        const {'alreadyKnown', 'nonceTooLow'},
+      )) {
+    failures.add('direct reconciliation kind extractor is not exact');
   }
   if (!_sameStringMap(const {'kt_a': 'A'}, const {'kt_a': 'A'}) ||
       _sameStringMap(const {'kt_a': 'B'}, const {'kt_a': 'A'}) ||

@@ -18,8 +18,9 @@ enum BroadcastStatus {
   /// [BroadcastOutcome.txHash] is the local canonical transaction identity.
   ok,
 
-  /// A real node returned a syntactically valid response that explicitly
-  /// rejected the transaction. It is safe to show a failed state.
+  /// A real node returned a definitive protocol rejection for this exact
+  /// payload. It is safe to show a failed state. Ambiguous responses such as
+  /// `already known` and `nonce too low` are [unknown], not [error].
   error,
 
   /// The request started, but no authoritative node answer reached the app.
@@ -105,8 +106,9 @@ class BroadcastService {
   /// Broadcasts [signedTx] on [chain] and returns [expectedTxHash] only after
   /// the node's transaction identity matches it. Outcomes are returned, never
   /// thrown. A node rejection is [error], while response loss, timeout,
-  /// malformed responses and identity mismatches are [unknown] because the
-  /// signed bytes may already have reached the chain.
+  /// malformed responses, identity mismatches and ambiguous node responses
+  /// (`already known` / `nonce too low`) are [unknown] because the signed
+  /// bytes may already have reached the chain or the nonce may be consumed.
   ///
   /// GATEWAY SEMANTICS: with a gateway configured, `kt_broadcast` is tried
   /// first. No Gateway error can prove that an intermediary did not forward
@@ -114,8 +116,9 @@ class BroadcastService {
   /// -32003 submission_unknown. Every answered error is therefore
   /// outcome-unknown and is never re-posted, regardless of its claimed code.
   /// Only a local [GatewayNetworkUnsupported] raised before `kt_broadcast` may
-  /// use the direct path. Direct-node protocol rejections remain explicit
-  /// because that request has no additional Gateway forwarding hop.
+  /// use the direct path. A direct node may return a definitive rejection,
+  /// but `already known` and `nonce too low` still require hash/nonce
+  /// reconciliation rather than a terminal failure.
   Future<BroadcastOutcome> broadcast(
     Chain chain,
     Uint8List signedTx, {
@@ -233,6 +236,16 @@ class BroadcastService {
           return BroadcastOutcome.ok(await rpc.broadcast(decoded));
       }
     } on RpcRejectedException catch (e) {
+      if (_rejectionRequiresReconciliation(e.kind)) {
+        // `already known` explicitly says the network has seen this exact raw
+        // transaction. `nonce too low` can mean this transaction was mined or
+        // another transaction consumed the nonce. Neither response proves the
+        // locally verified hash failed, so retain the durable submitted row
+        // and let hash/nonce reconciliation determine the terminal outcome.
+        return const BroadcastOutcome.unknown(
+          'RPC submission may already be known',
+        );
+      }
       return BroadcastOutcome.error(e.kind);
     } on RpcException {
       return const BroadcastOutcome.unknown('RPC response unavailable');
@@ -243,6 +256,10 @@ class BroadcastService {
       return const BroadcastOutcome.unknown('RPC response unavailable');
     }
   }
+
+  static bool _rejectionRequiresReconciliation(RpcRejectionKind kind) =>
+      kind == RpcRejectionKind.alreadyKnown ||
+      kind == RpcRejectionKind.nonceTooLow;
 
   /// Encodes [signedTx] as the contract's `kt_broadcast` payload: 0x-hex for
   /// EVM, base64 for Solana, the TronGrid JSON string for TRON. Returns null
