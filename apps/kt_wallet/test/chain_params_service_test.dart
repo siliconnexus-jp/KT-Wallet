@@ -71,10 +71,13 @@ Map<String, Object? Function(List<Object?>)> _healthyHandlers({
   'eth_getTransactionCount': (_) => _hex(BigInt.from(nonce)),
   // Latest base fee 30 gwei; percentile tips 1/2/3 gwei on every row.
   'eth_feeHistory': (_) => {
+    'oldestBlock': '0x64',
     'baseFeePerGas': [
       _hex(BigInt.from(25) * _gwei),
       _hex(BigInt.from(30) * _gwei),
+      _hex(BigInt.from(30) * _gwei),
     ],
+    'gasUsedRatio': [0.5, 0.75],
     'reward': [
       [_hex(_gwei), _hex(BigInt.two * _gwei), _hex(BigInt.from(3) * _gwei)],
       [_hex(_gwei), _hex(BigInt.two * _gwei), _hex(BigInt.from(3) * _gwei)],
@@ -584,9 +587,9 @@ void main() {
 
         final params = await service.fetchEvmParams(Chain.ethereum, '0xabc');
         expect(params.nonce, 42);
-        // standard = latest base fee (30 gwei) + mean 50th-percentile tip (2 gwei).
+        // standard = 2 * next base fee (30 gwei) + mean p50 tip (2 gwei).
         expect(params.fees.standard.maxPriorityFeePerGas, BigInt.two * _gwei);
-        expect(params.fees.standard.maxFeePerGas, BigInt.from(32) * _gwei);
+        expect(params.fees.standard.maxFeePerGas, BigInt.from(62) * _gwei);
         expect(params.tierFor(0).maxPriorityFeePerGas, _gwei);
         expect(params.tierFor(2).maxPriorityFeePerGas, BigInt.from(3) * _gwei);
 
@@ -619,7 +622,9 @@ void main() {
       final transport = _FakeJsonRpc({
         'eth_getTransactionCount': (_) => '0x7',
         'eth_feeHistory': (_) => {
+          'oldestBlock': '0x64',
           'baseFeePerGas': ['0x0', '0x0'],
+          'gasUsedRatio': [0.5],
           'reward': [
             [_hex(belowFloor), _hex(belowFloor), _hex(belowFloor)],
           ],

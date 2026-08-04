@@ -40,7 +40,7 @@ curl -s localhost:8080/rpc -d '{"jsonrpc":"2.0","id":1,"method":"kt_health"}'
 curl -s localhost:8080/healthz
 curl -s localhost:8080/readyz
 curl -s -H "Authorization: Bearer $METRICS_BEARER_TOKEN" localhost:8080/metrics
-# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.19"}}
+# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.20"}}
 ```
 
 ## Environment
@@ -611,6 +611,16 @@ tron/solana → error `-32602`. Nonce is
 2×next-base-fee + priority) with an `eth_gasPrice` fallback
 (priority 10/15/20 %, maxFee 100/125/150 % of gas price). Tiers are
 monotonic: slow ≤ standard ≤ fast.
+
+The fee-history response follows the canonical Ethereum Execution API
+[`eth_feeHistory`](https://github.com/ethereum/execution-apis/blob/main/src/eth/fee_market.yaml)
+shape. Required `oldestBlock`, `baseFeePerGas`, and `gasUsedRatio` members,
+optional blob arrays, and reward rows are decoded with duplicate/alias/unknown
+member rejection. Returned block count may be smaller than requested, but it
+must not be larger; base-fee arrays have exactly one more entry than the
+returned range, ratio values stay within 0…1, and each reward row has exactly
+the requested monotonic percentiles. A malformed history is never averaged;
+the handler may only fall back to a fresh canonical `eth_gasPrice` quantity.
 
 ### `kt_simulateEvmTransfer` `{"chain": C, "network": N?, "from": A, "to": A, "value": S, "data": S, "blockTag": "pending"|"latest"?}`
 

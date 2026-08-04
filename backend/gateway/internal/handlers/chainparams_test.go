@@ -46,7 +46,9 @@ func TestChainParamsFromFeeHistory(t *testing.T) {
 	node.result("eth_getTransactionCount", "0x2a") // 42
 	// Two blocks, base fee 1 gwei, rewards 1/2/3 gwei at p10/p50/p90.
 	node.result("eth_feeHistory", map[string]any{
-		"baseFeePerGas": []string{"0x3b9aca00", "0x3b9aca00"},
+		"oldestBlock":   "0x64",
+		"baseFeePerGas": []string{"0x3b9aca00", "0x3b9aca00", "0x3b9aca00"},
+		"gasUsedRatio":  []float64{0.5, 0.75},
 		"reward": [][]string{
 			{"0x3b9aca00", "0x77359400", "0xb2d05e00"},
 			{"0x3b9aca00", "0x77359400", "0xb2d05e00"},
@@ -97,7 +99,12 @@ func TestChainParamsGasPriceFallback(t *testing.T) {
 func TestChainParamsEmptyFeeHistoryFallsBack(t *testing.T) {
 	node := newRPCFake(t)
 	node.result("eth_getTransactionCount", "0x1")
-	node.result("eth_feeHistory", map[string]any{"baseFeePerGas": []string{}, "reward": [][]string{}})
+	node.result("eth_feeHistory", map[string]any{
+		"oldestBlock":   "0x0",
+		"baseFeePerGas": []string{"0x0"},
+		"gasUsedRatio":  []float64{},
+		"reward":        [][]string{},
+	})
 	node.result("eth_gasPrice", "0x3b9aca00")
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.EthURLs = []string{node.srv.URL} })
 

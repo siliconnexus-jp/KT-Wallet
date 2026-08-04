@@ -146,7 +146,7 @@ void main() {
     test('getBalance parses a hex quantity', () async {
       final rpc = EvmRpc(
         url: 'x',
-        transport: FakeJsonRpc((m, p) => _ok('0x0de0b6b3a7640000')),
+        transport: FakeJsonRpc((m, p) => _ok('0xde0b6b3a7640000')),
       );
       expect(
         await rpc.getBalance('0xabc'),
@@ -173,7 +173,7 @@ void main() {
         url: 'x',
         transport: FakeJsonRpc((m, p) {
           params = p;
-          return _ok('0x05f5e100'); // 100_000_000
+          return _ok('0x${'0' * 56}05f5e100'); // ABI uint256: 100_000_000
         }),
       );
       final bal = await rpc.erc20Balance(
@@ -185,10 +185,23 @@ void main() {
       expect(call['data'], startsWith('0x70a08231'));
     });
 
+    test('erc20Balance requires one exact ABI uint256 word', () async {
+      for (final result in <String>['0x0', '0x${'0' * 62}', '0x${'0' * 66}']) {
+        final rpc = EvmRpc(
+          url: 'x',
+          transport: FakeJsonRpc((m, p) => _ok(result)),
+        );
+        await expectLater(
+          rpc.erc20Balance('0xcontract', '0xowner'),
+          throwsA(isA<RpcException>()),
+        );
+      }
+    });
+
     test('spendable balance reads use the pending block tag', () async {
       final transport = FakeJsonRpc((method, params) {
         if (method == 'eth_getBalance') return _ok('0x2a');
-        if (method == 'eth_call') return _ok('0x64');
+        if (method == 'eth_call') return _ok('0x${'0' * 62}64');
         throw StateError('unexpected $method');
       });
       final rpc = EvmRpc(url: 'x', transport: transport);
@@ -264,7 +277,9 @@ void main() {
         url: 'x',
         transport: FakeJsonRpc(
           (m, p) => _ok({
-            'baseFeePerGas': ['0x64', '0x64'], // 100
+            'oldestBlock': '0x64',
+            'baseFeePerGas': ['0x64', '0x64', '0x64'], // 100
+            'gasUsedRatio': [0.5, 0.75],
             'reward': [
               ['0x1', '0x2', '0x3'],
               ['0x1', '0x2', '0x3'],
@@ -276,9 +291,94 @@ void main() {
       expect(fees.slow.maxPriorityFeePerGas, BigInt.from(1));
       expect(fees.standard.maxPriorityFeePerGas, BigInt.from(2));
       expect(fees.fast.maxPriorityFeePerGas, BigInt.from(3));
-      expect(fees.slow.maxFeePerGas, BigInt.from(101));
-      expect(fees.fast.maxFeePerGas, BigInt.from(103));
+      expect(fees.slow.maxFeePerGas, BigInt.from(201));
+      expect(fees.fast.maxFeePerGas, BigInt.from(203));
     });
+
+    test(
+      'feeHistory rejects ambiguous or inconsistent official shapes',
+      () async {
+        final invalid = <Map<String, Object?>>[
+          {
+            'baseFeePerGas': ['0x10', '0x11', '0x12'],
+            'gasUsedRatio': [0.5, 0.75],
+            'reward': [
+              ['0x1', '0x2', '0x3'],
+              ['0x2', '0x3', '0x4'],
+            ],
+          },
+          {
+            'oldestBlock': '0x64',
+            'baseFeePerGas': ['0x10', '0x11', '0x12'],
+            'reward': [
+              ['0x1', '0x2', '0x3'],
+              ['0x2', '0x3', '0x4'],
+            ],
+          },
+          {
+            'oldestBlock': '0x64',
+            'baseFeePerGas': ['0x10', '0x11', '0x12'],
+            'gasUsedRatio': [0.5, 0.75],
+            'reward': [
+              ['0x1', '0x2', '0x3'],
+              ['0x2', '0x3', '0x4'],
+            ],
+            'nextBaseFeePerGas': '0x12',
+          },
+          {
+            'oldestBlock': '0x64',
+            'baseFeePerGas': ['0x10', '0x11'],
+            'gasUsedRatio': [0.5, 0.75],
+            'reward': [
+              ['0x1', '0x2', '0x3'],
+              ['0x2', '0x3', '0x4'],
+            ],
+          },
+          {
+            'oldestBlock': '0x64',
+            'baseFeePerGas': ['0x10', '0x11', '0x12'],
+            'gasUsedRatio': [-0.01, 0.75],
+            'reward': [
+              ['0x1', '0x2', '0x3'],
+              ['0x2', '0x3', '0x4'],
+            ],
+          },
+          {
+            'oldestBlock': '0x64',
+            'baseFeePerGas': ['0x10', '0x11', '0x12'],
+            'gasUsedRatio': [0.5, 0.75],
+            'reward': [
+              ['0x1', '0x2', '0x3'],
+            ],
+          },
+          {
+            'oldestBlock': '0x64',
+            'baseFeePerGas': ['0x10', '0x11', '0x12'],
+            'gasUsedRatio': [0.5, 0.75],
+            'reward': [
+              ['0x1', '0x2', '0x3', '0x4'],
+              ['0x2', '0x3', '0x4', '0x5'],
+            ],
+          },
+          {
+            'oldestBlock': '0x64',
+            'baseFeePerGas': ['0x10', '0x11', '0x12'],
+            'gasUsedRatio': [0.5, 0.75],
+            'reward': [
+              ['0x3', '0x2', '0x1'],
+              ['0x2', '0x3', '0x4'],
+            ],
+          },
+        ];
+        for (final result in invalid) {
+          final rpc = EvmRpc(
+            url: 'x',
+            transport: FakeJsonRpc((m, p) => _ok(result)),
+          );
+          await expectLater(rpc.estimateFees(), throwsA(isA<RpcException>()));
+        }
+      },
+    );
 
     test('RPC error response throws RpcException with code', () async {
       final rpc = EvmRpc(
@@ -339,6 +439,19 @@ void main() {
         transport: FakeJsonRpc((m, p) => _ok('123')),
       );
       expect(() => rpc.getBalance('0xabc'), throwsA(isA<RpcException>()));
+    });
+
+    test('EVM quantities must be canonical uint256 values', () async {
+      for (final quantity in <String>['0x', '0x00', '0x${'1' * 65}']) {
+        final rpc = EvmRpc(
+          url: 'x',
+          transport: FakeJsonRpc((m, p) => _ok(quantity)),
+        );
+        await expectLater(
+          rpc.getBalance('0xabc'),
+          throwsA(isA<RpcException>()),
+        );
+      }
     });
 
     test(

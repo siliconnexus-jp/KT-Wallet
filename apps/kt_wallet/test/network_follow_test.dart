@@ -295,7 +295,7 @@ void main() {
             'result': {'value': <Object>[]},
           };
         }
-        return _rpcResult('0x0');
+        return _rpcResult('0x${'0' * 64}');
       });
       final rest = _FakeRest((url) async => {'data': <Object>[]});
       final service = TokenBalanceService(

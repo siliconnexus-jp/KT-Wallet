@@ -2,8 +2,9 @@
 
 更新日期：2026-08-04
 
-当前 Gateway 源码版本 1.16.19；当前生产 Gateway 1.16.19。生产 Gateway-first 链身份、
-TRON/Solana/EVM 余额严格解析与 Solana 交易终态回包闭合均已启用。
+当前 Gateway 源码版本 1.16.20；当前生产 Gateway 1.16.19。生产 Gateway-first 链身份、
+TRON/Solana/EVM 余额严格解析与 Solana 交易终态回包闭合均已启用；源码候选继续闭合
+EVM 动态手续费回包。
 
 ## 目标与边界
 
@@ -372,6 +373,16 @@ TRON/Solana/EVM 余额严格解析与 Solana 交易终态回包闭合均已启�
   失败及错误内容必须一致。总计 28 类失败闭合负例、7 类官方正例、handler 失败闭合与
   真实 Solana Devnet finalized 交易只读 smoke 通过。该项已随 Gateway 1.16.19 上线；
   双实例、HAProxy 与公网均返回 confirmed，无效 signature 在出网前以 invalid params 拒绝。
+- [x] 2026-08-04 继续审阅 EVM 动态手续费。旧 Gateway 只宽松读取
+  `baseFeePerGas/reward`，会忽略官方必需的 `oldestBlock/gasUsedRatio`、未知或重复字段、
+  返回区块数与 base/reward/blob 数组错位、非法 ratio、额外 percentile 及非单调 reward；
+  16 类歧义红测均被旧实现接受并参与手续费计算。现按 Ethereum Execution API 精确解析
+  必需/可选字段，允许节点少返回历史区块但不允许多返回，并逐项校验 canonical uint256、
+  ratio 0…1、`base = blocks + 1`、reward 宽度与单调性。移动端直连回退同步采用同一约束，
+  `maxFee` 与 Gateway 统一为 `2 × nextBaseFee + priority`；所有 EVM JSON quantity 限制为
+  canonical uint256，ERC-20 `balanceOf` 只接受精确 32-byte ABI word。Gateway 16 类负例、
+  App 8 类 feeHistory 歧义、quantity/ABI 边界、当前官方正例及真实 Ethereum 主网
+  `eth_feeHistory` 只读 smoke 已通过。该项属于 Gateway 1.16.20 / App 源码候选，尚未发布。
 - [x] EVM replacement 广播被节点接收时，原交易与替换交易都保持 Pending；只有
   receipt 证明某个 nonce 候选获胜后，才原子地将同 nonce 竞争者标为 `replaced`。
   本地签名、认证或广播失败不会错误终结原交易。

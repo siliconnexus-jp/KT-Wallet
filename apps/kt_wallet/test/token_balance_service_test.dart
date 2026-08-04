@@ -45,7 +45,8 @@ Map<String, Object?> _rpcResult(Object? result) => {
   'result': result,
 };
 
-String _hex(int value) => '0x${BigInt.from(value).toRadixString(16)}';
+String _abiUint256(int value) =>
+    '0x${BigInt.from(value).toRadixString(16).padLeft(64, '0')}';
 
 void main() {
   test('protected symbols require a known official contract identity', () {
@@ -157,11 +158,11 @@ void main() {
             expect(call['to'], _usdtEth);
             // balanceOf(address) selector + owner left-padded to 32 bytes.
             expect(call['data'], '0x70a08231${'0' * 24}EthAddr');
-            return _rpcResult(_hex(25000000)); // 25 USDT
+            return _rpcResult(_abiUint256(25000000)); // 25 USDT
           }
           if (url == defaultPolygonRpcUrl) {
             expect(call['to'], _usdcPolygon);
-            return _rpcResult(_hex(10000000)); // 10 USDC
+            return _rpcResult(_abiUint256(10000000)); // 10 USDC
           }
           fail('unexpected url $url');
         }),
@@ -209,7 +210,7 @@ void main() {
             'error': {'code': -32000, 'message': 'execution reverted'},
           };
         }
-        return _rpcResult(_hex(10000000));
+        return _rpcResult(_abiUint256(10000000));
       }),
       restTransport: _FakeRest(
         onGet: (url) => throw TimeoutException('rest timeout'),
@@ -230,7 +231,7 @@ void main() {
         final service = TokenBalanceService(
           tokens: const [usdtEthToken, usdtTronToken],
           jsonRpcTransport: _FakeJsonRpc(
-            (url, body) async => _rpcResult('0x0'),
+            (url, body) async => _rpcResult(_abiUint256(0)),
           ),
           restTransport: _FakeRest(onGet: (url) async => tronBody),
         );
@@ -299,7 +300,7 @@ void main() {
       endpoints: (coin) => 'https://custom-${coin.name}.example',
       jsonRpcTransport: _FakeJsonRpc((url, body) async {
         seenJsonUrls.add(url);
-        return _rpcResult('0x0');
+        return _rpcResult(_abiUint256(0));
       }),
       restTransport: _FakeRest(
         onGet: (url) async {

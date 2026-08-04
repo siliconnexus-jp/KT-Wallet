@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"net/http"
 	"regexp"
@@ -240,37 +239,18 @@ type FeeHistoryResult struct {
 // FeeHistory fetches fee history for blockCount blocks at the given reward
 // percentiles.
 func (e *EVM) FeeHistory(ctx context.Context, blockCount int, percentiles []float64) (*FeeHistoryResult, error) {
-	raw, err := e.call(ctx, "eth_feeHistory", fmt.Sprintf("0x%x", blockCount), "latest", percentiles)
+	if err := validateEVMFeeHistoryRequest(blockCount, percentiles); err != nil {
+		return nil, &Unavailable{Upstream: e.pool.name, Message: "invalid eth_feeHistory request"}
+	}
+	raw, err := e.call(ctx, "eth_feeHistory", "0x"+big.NewInt(int64(blockCount)).Text(16), "latest", percentiles)
 	if err != nil {
 		return nil, err
 	}
-	var out struct {
-		BaseFeePerGas []string   `json:"baseFeePerGas"`
-		Reward        [][]string `json:"reward"`
-	}
-	if err := json.Unmarshal(raw, &out); err != nil {
+	result, err := decodeEVMFeeHistory(raw, blockCount, len(percentiles))
+	if err != nil {
 		return nil, &Unavailable{Upstream: e.pool.name, Message: "malformed eth_feeHistory result"}
 	}
-	res := &FeeHistoryResult{}
-	for _, h := range out.BaseFeePerGas {
-		v, err := hexToBig(h)
-		if err != nil {
-			return nil, &Unavailable{Upstream: e.pool.name, Message: "malformed baseFeePerGas"}
-		}
-		res.BaseFeePerGas = append(res.BaseFeePerGas, v)
-	}
-	for _, row := range out.Reward {
-		var vals []*big.Int
-		for _, h := range row {
-			v, err := hexToBig(h)
-			if err != nil {
-				return nil, &Unavailable{Upstream: e.pool.name, Message: "malformed fee reward"}
-			}
-			vals = append(vals, v)
-		}
-		res.Reward = append(res.Reward, vals)
-	}
-	return res, nil
+	return result, nil
 }
 
 // SendRawTransaction broadcasts a signed raw transaction (0x-hex) and returns

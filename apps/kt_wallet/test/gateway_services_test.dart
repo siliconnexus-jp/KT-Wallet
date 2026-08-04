@@ -409,7 +409,9 @@ void main() {
       // A null-returning resolver is direct mode; a _forbiddenGateway client
       // would fail the test on ANY request, proving no contact happens even
       // if one were constructed.
-      final direct = _FakeJsonRpc((url, body) async => _rpcResult('0x0'));
+      final direct = _FakeJsonRpc(
+        (url, body) async => _rpcResult('0x${'0' * 64}'),
+      );
       final service = TokenBalanceService(
         jsonRpcTransport: direct,
         restTransport: _FakeRest(onGet: (url) async => {'data': <Object?>[]}),
@@ -593,7 +595,9 @@ void main() {
           if (method == 'eth_getTransactionCount') return _rpcResult('0x2a');
           if (method == 'eth_feeHistory') {
             return _rpcResult({
+              'oldestBlock': '0x64',
               'baseFeePerGas': ['0x3b9aca00', '0x3b9aca00'],
+              'gasUsedRatio': [0.5],
               'reward': [
                 ['0x3b9aca00', '0x3b9aca00', '0x3b9aca00'],
               ],

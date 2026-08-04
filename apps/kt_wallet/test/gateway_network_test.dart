@@ -570,7 +570,9 @@ void main() {
         if (method == 'eth_getTransactionCount') return _rpcResult('0x2a');
         if (method == 'eth_feeHistory') {
           return _rpcResult({
+            'oldestBlock': '0x64',
             'baseFeePerGas': ['0x3b9aca00', '0x3b9aca00'],
+            'gasUsedRatio': [0.5],
             'reward': [
               ['0x3b9aca00', '0x3b9aca00', '0x3b9aca00'],
             ],

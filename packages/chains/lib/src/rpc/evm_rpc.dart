@@ -22,6 +22,7 @@ final RegExp _evmHashPattern = RegExp(r'^0x[0-9a-fA-F]{64}$');
 final RegExp _evmQuantityPattern = RegExp(
   r'^0x(?:0|[1-9a-fA-F][0-9a-fA-F]{0,63})$',
 );
+final RegExp _evmAbiUint256Pattern = RegExp(r'^0x[0-9a-fA-F]{64}$');
 
 /// Validates that [receipt] is complete inclusion evidence for
 /// [expectedTransactionHash].
@@ -116,8 +117,15 @@ class EvmRpc {
   }
 
   static BigInt _hexToBigInt(Object? v) {
-    if (v is! String || !v.startsWith('0x')) {
+    if (v is! String || !_evmQuantityPattern.hasMatch(v)) {
       throw RpcException('expected hex quantity');
+    }
+    return BigInt.parse(v.substring(2), radix: 16);
+  }
+
+  static BigInt _abiUint256ToBigInt(Object? v) {
+    if (v is! String || !_evmAbiUint256Pattern.hasMatch(v)) {
+      throw RpcException('expected ABI uint256');
     }
     return BigInt.parse(v.substring(2), radix: 16);
   }
@@ -221,7 +229,7 @@ class EvmRpc {
     _requireBlockTag(blockTag);
     // balanceOf(address) selector 70a08231 + padded owner.
     final data = '0x70a08231${'0' * 24}${_strip0x(owner)}';
-    return _hexToBigInt(
+    return _abiUint256ToBigInt(
       await _call('eth_call', [
         {'to': contract, 'data': data},
         blockTag,
@@ -242,19 +250,9 @@ class EvmRpc {
       'latest',
       [25, 50, 90],
     ]);
-    if (history is! Map) throw RpcException('bad feeHistory');
-    final rawBase = history['baseFeePerGas'];
-    final rawRewards = history['reward'];
-    if (rawBase is! List || rawBase.isEmpty || rawRewards is! List) {
-      throw RpcException('malformed feeHistory');
-    }
-    final baseFees = rawBase.map(_hexToBigInt).toList();
-    final rewards = rawRewards.map((r) {
-      if (r is! List || r.length < 3) {
-        throw RpcException('malformed feeHistory reward row');
-      }
-      return r.map(_hexToBigInt).toList();
-    }).toList();
+    final parsed = _parseFeeHistory(history, blockCount: 5, percentileCount: 3);
+    final baseFees = parsed.$1;
+    final rewards = parsed.$2;
     if (rewards.isEmpty) throw RpcException('empty feeHistory reward');
     // Use the latest base fee and the mean reward per percentile.
     final baseFee = baseFees.last;
@@ -268,11 +266,116 @@ class EvmRpc {
       final tip = meanReward(idx);
       return GasFeeEstimateTier(
         maxPriorityFeePerGas: tip,
-        maxFeePerGas: baseFee + tip,
+        maxFeePerGas: baseFee * BigInt.two + tip,
       );
     }
 
     return GasFeeEstimate(slow: tier(0), standard: tier(1), fast: tier(2));
+  }
+
+  static (List<BigInt>, List<List<BigInt>>) _parseFeeHistory(
+    Object? history, {
+    required int blockCount,
+    required int percentileCount,
+  }) {
+    if (history is! Map) throw RpcException('bad feeHistory');
+    const allowed = <String>{
+      'oldestBlock',
+      'baseFeePerGas',
+      'baseFeePerBlobGas',
+      'gasUsedRatio',
+      'blobGasUsedRatio',
+      'reward',
+    };
+    for (final key in history.keys) {
+      if (key is! String || !allowed.contains(key)) {
+        throw RpcException('malformed feeHistory');
+      }
+    }
+    if (!history.containsKey('oldestBlock') ||
+        !history.containsKey('baseFeePerGas') ||
+        !history.containsKey('gasUsedRatio') ||
+        !history.containsKey('reward')) {
+      throw RpcException('malformed feeHistory');
+    }
+    _hexToBigInt(history['oldestBlock']);
+
+    final gasRatios = _feeHistoryRatios(
+      history['gasUsedRatio'],
+      maximum: blockCount,
+    );
+    final returnedBlocks = gasRatios.length;
+    final baseFees = _feeHistoryQuantities(
+      history['baseFeePerGas'],
+      maximum: blockCount + 1,
+    );
+    if (baseFees.length != returnedBlocks + 1) {
+      throw RpcException('malformed feeHistory');
+    }
+
+    if (history.containsKey('baseFeePerBlobGas')) {
+      final blobBaseFees = _feeHistoryQuantities(
+        history['baseFeePerBlobGas'],
+        maximum: blockCount + 1,
+      );
+      if (blobBaseFees.length != returnedBlocks + 1) {
+        throw RpcException('malformed feeHistory');
+      }
+    }
+    if (history.containsKey('blobGasUsedRatio')) {
+      final blobRatios = _feeHistoryRatios(
+        history['blobGasUsedRatio'],
+        maximum: blockCount,
+      );
+      if (blobRatios.length != returnedBlocks) {
+        throw RpcException('malformed feeHistory');
+      }
+    }
+
+    final rawRewards = history['reward'];
+    if (rawRewards is! List ||
+        rawRewards.length != returnedBlocks ||
+        rawRewards.length > blockCount) {
+      throw RpcException('malformed feeHistory');
+    }
+    final rewards = <List<BigInt>>[];
+    for (final rawRow in rawRewards) {
+      final row = _feeHistoryQuantities(rawRow, maximum: percentileCount);
+      if (row.length != percentileCount) {
+        throw RpcException('malformed feeHistory reward row');
+      }
+      for (var index = 1; index < row.length; index++) {
+        if (row[index - 1] > row[index]) {
+          throw RpcException('non-monotonic feeHistory reward row');
+        }
+      }
+      rewards.add(row);
+    }
+    return (baseFees, rewards);
+  }
+
+  static List<BigInt> _feeHistoryQuantities(
+    Object? raw, {
+    required int maximum,
+  }) {
+    if (raw is! List || raw.length > maximum) {
+      throw RpcException('malformed feeHistory quantity array');
+    }
+    return raw.map(_hexToBigInt).toList(growable: false);
+  }
+
+  static List<double> _feeHistoryRatios(Object? raw, {required int maximum}) {
+    if (raw is! List || raw.length > maximum) {
+      throw RpcException('malformed feeHistory ratio array');
+    }
+    return raw
+        .map((value) {
+          if (value is! num || !value.isFinite || value < 0 || value > 1) {
+            throw RpcException('malformed feeHistory gas ratio');
+          }
+          return value.toDouble();
+        })
+        .toList(growable: false);
   }
 
   static String _strip0x(String s) => s.startsWith('0x') ? s.substring(2) : s;
