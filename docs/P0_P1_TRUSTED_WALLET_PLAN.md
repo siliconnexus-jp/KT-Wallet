@@ -2,8 +2,8 @@
 
 更新日期：2026-08-04
 
-当前 Gateway 源码版本 1.16.22；当前生产 Gateway 1.16.22。生产 Gateway-first 链身份、
-TRON/Solana/EVM 余额、Solana 交易终态、EVM 动态手续费及签名前预执行回包严格解析均已启用。
+当前 Gateway 源码版本 1.16.23；当前生产 Gateway 1.16.23。生产 Gateway-first 链身份、
+TRON/Solana/EVM 余额与 Portfolio 身份、Solana 交易终态、EVM 动态手续费及签名前预执行回包严格解析均已启用。
 
 ## 目标与边界
 
@@ -2051,3 +2051,22 @@ Gateway audit、公开源码 12/12 与完整依赖门禁 13/13 通过。Gateway 
 `unknown` 且网络/哈希精确绑定；监控 3/3 targets UP、17/17 规则健康、0 firing、
 Alertmanager 0 active，发布后双实例 warning+ 为 0。保留 1.16.21 release 原子回滚；
 本项没有加载私钥、签名或广播，也不替代物理设备、真实链上交易和独立安全审计。
+
+同日继续闭合余额与 Portfolio 回包身份。旧 App 会接受绑定到另一网络/账户的真实金额，
+并忽略未知字段、缺少/重排 Token、负数或非规范十进制金额；旧 Gateway 又没有在余额
+结果中回显请求身份。失败优先测试先稳定复现错误账户/网络仍被接受，再修复为：服务端
+余额精确返回 `chain/network/address/native/tokens`，Portfolio 外层账户和嵌套结果双重
+回显相同身份；App 逐项绑定请求顺序、账户、resolved network、合约、精度、symbol 与
+规范 uint，并拒绝重复链、附加字段和畸形错误行。生产服务成功路径已证明双链只发一次
+`kt_getPortfolio`，不再退回逐链请求；旧 Gateway 或单链错误仍按链安全降级。共享余额
+缓存升级为 `balances-v2`，滚动期间不会把缺少身份的旧 Redis 行解码成可信结果。
+Gateway Client/Services/Network/Home 定向 111/111、KT Wallet 1607/1607（另有 9 项
+显式线上/设备测试默认跳过）、KT Cold Signer 570/570、Gateway 普通/race/audit、
+静态分析 0、远程安全边界、公开源码 12/12、完整依赖门禁 13/13 和公网严格 App 客户端
+4/4 通过。Gateway 1.16.23 静态制品 8,900,770 bytes /
+SHA-256 `e477b5e0…23dab` 已按 secondary → primary 发布到
+`20260804T151500Z-e089be5-v1.16.23-balance-binding`；8118/8119/8120 与公网均为
+1.16.23、16 网络且 ready。公网 Sepolia 公开燃烧地址 native 余额及单账户 Portfolio
+分别通过单层/双层身份绑定；监控 3/3 targets UP、17/17 规则健康、0 firing、
+Alertmanager 0 active，发布后双实例 warning+ 为 0。保留 1.16.22 release 原子回滚；
+本项没有私钥、签名或广播，也不以无关 UI 截图替代协议证据。

@@ -22,10 +22,10 @@ The project is licensed under [MPL-2.0](LICENSE).
 |---|---:|---|
 | KT Wallet | `1.0.0+1` | Controlled public-beta builds; App Store and Play Store listings are not yet public |
 | KT Cold Signer | `1.0.0+1` | Controlled public-beta builds; source build is available for dedicated offline devices |
-| KT Gateway | `1.16.22` | Production service at `https://gateway.kt-wallet.com` |
+| KT Gateway | `1.16.23` | Production service at `https://gateway.kt-wallet.com` |
 
-Gateway source version: `1.16.22` (deployed to both production instances on
-2026-08-04 after the transaction-status response-binding gates passed).
+Gateway source version: `1.16.23` (deployed to both production instances on
+2026-08-04 after the balance and portfolio response-binding gates passed).
 
 Until signed store releases are published, build both apps from this repository
 and do not install APK or IPA files from unofficial mirrors. Start with
@@ -357,7 +357,7 @@ unattended Pending poll retries with a bounded 1×/2×/4×/8× delay instead of
 silently stopping. These controls improve responsiveness without treating stale
 cache or unknown chain evidence as a successful result.
 
-Gateway `1.16.22` currently exposes 16 mainnet/testnet network profiles. It uses
+Gateway `1.16.23` currently exposes 16 mainnet/testnet network profiles. It uses
 bounded upstream failover and circuit breakers, plus short caches for prices
 (30 seconds), display balances (10 seconds), and history (5 seconds). Pending
 nonces, spendable balances, simulations, and transaction-status checks are not
@@ -383,6 +383,13 @@ distinct request id per call, so an out-of-order response cannot satisfy a
 different in-flight lookup.
 Broadcasts remain single-shot when this check fails, so an unknown outcome
 cannot trigger an automatic duplicate submission.
+
+Balance results repeat and bind the exact chain, resolved network, and account
+before any amount reaches the UI. Portfolio rows preserve request order and
+repeat the same identity in both the outer account row and nested balance
+result; missing, duplicated, reordered, additive, or cross-wallet rows are
+rejected. The versioned shared-cache namespace prevents a rolling deployment
+from interpreting a pre-binding Redis entry as a current trusted response.
 
 The Gateway receives the public address, network, and public contract/mint
 needed for a requested lookup. Recovery phrases, private keys, signatures, raw
