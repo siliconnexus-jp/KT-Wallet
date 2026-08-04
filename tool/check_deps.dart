@@ -195,6 +195,18 @@ void main() {
     );
   }
 
+  final externalBackupEnvelope = File(
+    'apps/kt_wallet/lib/src/security/wallet_backup.dart',
+  );
+  final externalBackupEnvelopeSource = externalBackupEnvelope.existsSync()
+      ? externalBackupEnvelope.readAsStringSync()
+      : '';
+  for (final issue in findExternalBackupJsonBoundaryIssues(
+    externalBackupEnvelopeSource,
+  )) {
+    failures.add('${externalBackupEnvelope.path}: $issue');
+  }
+
   // Direct MethodChannel callers must not be able to crash the iOS process
   // with an unexpected runtime type. `as!` and force-unwrapped HDWallet
   // construction bypass Swift error handling entirely, so keep both out of

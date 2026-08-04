@@ -588,6 +588,33 @@ Object? unsafe(String source) => jsonDecode(source);
     });
   });
 
+  group('external backup JSON boundary', () {
+    const safe = '''
+final restored = decodeJsonWithoutDuplicateKeys(utf8.decode(bytes));
+final timestamp = decodeJsonWithoutDuplicateKeys(utf8.decode(bytes));
+''';
+
+    test('requires duplicate-safe decoding on both file paths', () {
+      expect(findExternalBackupJsonBoundaryIssues(safe), isEmpty);
+      expect(
+        findExternalBackupJsonBoundaryIssues(
+          'final value = decodeJsonWithoutDuplicateKeys(utf8.decode(bytes));',
+        ),
+        contains(contains('both reject duplicate JSON members')),
+      );
+    });
+
+    test('rejects the ordinary decoder even beside safe calls', () {
+      expect(
+        findExternalBackupJsonBoundaryIssues('''
+$safe
+final unsafe = jsonDecode(utf8.decode(bytes));
+'''),
+        contains(contains('duplicate-unsafe JSON decoder')),
+      );
+    });
+  });
+
   group('Flutter ARB localization gate', () {
     test('rejects retired and locale-inappropriate brand terms', () {
       final issues = findForbiddenLocalizationTermIssues(

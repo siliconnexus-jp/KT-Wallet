@@ -2360,3 +2360,13 @@ KT Wallet 1660/1660（另有 11 项显式设备/线上测试默认跳过）、KT
 只读复验现准确返回八条 `insufficient`（退出码 2），不再误报 invalid/unavailable；这批短期
 地址的原生币和测试 Token 均不足，因此继续禁止签名和广播。未读取助记词或私钥，也未产生
 签名/广播；Gateway 服务端无变更，无需重新部署，本项没有适用的 UI 截图。
+
+同日继续复审外部加密备份 JSON 的唯一解释边界。旧 `decodeEnvelope` 与 `createdAtOf`
+使用普通 `jsonDecode`，重复 `payload`、Unicode 转义同名 `payload`、重复 `format`、嵌套
+`kdf.rounds` 或 `createdAt` 会以后值覆盖并被接受。失败优先用例先稳定复现旧行为。修复后
+两个文件入口统一使用递归、转义感知的唯一键解码器，所有层级的重复成员均失败闭合，同时
+保留既有 v1/v2 闭合 schema 与正常恢复兼容性；仓库静态门禁锁定两个入口，禁止恢复普通
+`jsonDecode`。备份定向 35/35、test_support 73/73、KT Wallet 1661/1661（另有 11 项
+显式设备/线上测试默认跳过）、KT Cold Signer 570/570、共享 packages 438/438、静态分析
+0、Gateway audit 与完整依赖/OSV 门禁 13/13 通过。服务端和可见 UI 均无变化，无需部署
+Gateway，也没有适用的 UI 截图；移动修复须随下一版签名制品发布。

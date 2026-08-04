@@ -959,3 +959,26 @@ List<String> findHostFundingCliBoundaryIssues(String contents) {
   }
   return issues;
 }
+
+/// Keeps imported encrypted-backup JSON single-interpretable.
+///
+/// Both the restore parser and its display-only timestamp helper receive an
+/// attacker-controlled file. Dart's ordinary decoder silently keeps the last
+/// duplicate member, so a backup can otherwise carry conflicting format, KDF,
+/// timestamp, or payload identities even though the post-decode schema is
+/// closed.
+List<String> findExternalBackupJsonBoundaryIssues(String contents) {
+  final issues = <String>[];
+  final safeDecodeCount = RegExp(
+    r'decodeJsonWithoutDuplicateKeys\(\s*utf8\.decode\(bytes\)\s*\)',
+  ).allMatches(contents).length;
+  if (safeDecodeCount != 2) {
+    issues.add(
+      'restore and timestamp paths must both reject duplicate JSON members',
+    );
+  }
+  if (RegExp(r'jsonDecode\(\s*utf8\.decode\(bytes\)\s*\)').hasMatch(contents)) {
+    issues.add('external backup uses the duplicate-unsafe JSON decoder');
+  }
+  return issues;
+}

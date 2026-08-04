@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:core_crypto/core_crypto.dart';
 
+import '../rpc/json_rpc_envelope.dart' show decodeJsonWithoutDuplicateKeys;
+
 /// A backup file that is not ours, or is ours but damaged. Distinct from a
 /// wrong password (which surfaces from the native seal as
 /// `StoreCorruptedException`) so the UI can tell the user which mistake they
@@ -100,7 +102,7 @@ abstract final class WalletBackupFile {
     }
     final Object? decoded;
     try {
-      decoded = jsonDecode(utf8.decode(bytes));
+      decoded = decodeJsonWithoutDuplicateKeys(utf8.decode(bytes));
     } catch (_) {
       throw const BackupFormatException('not a KT Wallet backup file');
     }
@@ -192,7 +194,7 @@ abstract final class WalletBackupFile {
   static DateTime? createdAtOf(Uint8List bytes) {
     if (bytes.isEmpty || bytes.length > maxFileBytes) return null;
     try {
-      final decoded = jsonDecode(utf8.decode(bytes));
+      final decoded = decodeJsonWithoutDuplicateKeys(utf8.decode(bytes));
       if (decoded is! Map) return null;
       final raw = decoded['createdAt'];
       return raw is String ? DateTime.tryParse(raw) : null;

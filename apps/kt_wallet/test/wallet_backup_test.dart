@@ -353,6 +353,47 @@ void main() {
       }
     });
 
+    test('rejects duplicate backup identities before choosing a value', () {
+      final payload = base64Encode([1, 2, 3]);
+      Uint8List bytes(String body) => Uint8List.fromList(utf8.encode(body));
+      final prefix =
+          '{"format":"${WalletBackupFile.format}",'
+          '"version":${WalletBackupFile.version},'
+          '"kdf":{"alg":"${WalletBackupFile.kdfAlgorithm}",'
+          '"rounds":${WalletBackupFile.kdfRounds}},'
+          '"cipher":"${WalletBackupFile.cipher}",'
+          '"payloadFormat":"${WalletBackupFile.payloadFormat}",'
+          '"createdAt":"2026-08-05T00:00:00.000Z",';
+
+      for (final ambiguous in [
+        '$prefix"payload":"bad","payload":"$payload"}',
+        '$prefix"payload":"bad","pay\\u006coad":"$payload"}',
+        '{"format":"wrong","format":"${WalletBackupFile.format}",'
+            '"version":${WalletBackupFile.version},'
+            '"kdf":{"alg":"${WalletBackupFile.kdfAlgorithm}",'
+            '"rounds":1,"rounds":${WalletBackupFile.kdfRounds}},'
+            '"cipher":"${WalletBackupFile.cipher}",'
+            '"payloadFormat":"${WalletBackupFile.payloadFormat}",'
+            '"createdAt":"2026-08-05T00:00:00.000Z",'
+            '"payload":"$payload"}',
+      ]) {
+        expect(
+          () => WalletBackupFile.decodeEnvelope(bytes(ambiguous)),
+          throwsA(isA<BackupFormatException>()),
+        );
+      }
+
+      expect(
+        WalletBackupFile.createdAtOf(
+          bytes(
+            '$prefix"createdAt":"2026-08-06T00:00:00.000Z",'
+            '"payload":"$payload"}',
+          ),
+        ),
+        isNull,
+      );
+    });
+
     test('names a version from the future rather than failing to decrypt', () {
       final future = Uint8List.fromList(
         utf8.encode(
