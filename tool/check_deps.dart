@@ -1020,6 +1020,14 @@ void main() {
   )) {
     failures.add('TRON signed JSON: $issue');
   }
+  final airgapPayload = File('packages/airgap_protocol/lib/src/payload.dart');
+  final airgapCodec = File('apps/kt_wallet/lib/src/transfer/airgap_codec.dart');
+  for (final issue in findAirgapIdentityTextBoundaryIssues(
+    airgapPayload.existsSync() ? airgapPayload.readAsStringSync() : '',
+    airgapCodec.existsSync() ? airgapCodec.readAsStringSync() : '',
+  )) {
+    failures.add('AIRGAP identity text: $issue');
+  }
   final duplicateSafeRemoteResponseSources = <String, int>{
     'apps/kt_wallet/lib/src/rpc/http_transport.dart': 2,
     historyService.path: 3,

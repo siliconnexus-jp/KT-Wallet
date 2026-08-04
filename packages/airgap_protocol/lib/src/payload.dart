@@ -9,7 +9,7 @@ import 'cbor.dart';
 
 const int airgapVersion = 1;
 
-/// Field-length / count limits (DD §3.1). Enforced on decode.
+/// Field-length / count limits (DD §3.1). Enforced on construction and decode.
 class AirgapLimits {
   static const maxPayload = 64 * 1024;
   static const maxWalletId = 32;
@@ -108,13 +108,50 @@ int? _intOrNull(Map<Object?, Object?> m, int key) {
 String _text(Map<Object?, Object?> m, int key, String name, int maxLen) {
   final v = m[key];
   if (v is! String) throw PayloadError('$name must be text');
-  // Limits are on-wire UTF-8 byte lengths, not UTF-16 code units, so multibyte
-  // characters can't slip a field past its cap.
-  if (utf8.encode(v).length > maxLen) {
-    throw PayloadError('$name exceeds $maxLen bytes');
-  }
+  _validateProtocolText(v, name, maxLen);
   return v;
 }
+
+String _walletIdText(Map<Object?, Object?> m, int key) {
+  final v = m[key];
+  if (v is! String) throw PayloadError('walletId must be text');
+  _validateWalletId(v);
+  return v;
+}
+
+final RegExp _canonicalWalletId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$');
+
+void _validateWalletId(String value) {
+  _validateProtocolText(value, 'walletId', AirgapLimits.maxWalletId);
+  if (!_canonicalWalletId.hasMatch(value)) {
+    throw PayloadError('walletId must use canonical ASCII identity syntax');
+  }
+}
+
+void _validateProtocolText(String value, String name, int maxBytes) {
+  // Limits are on-wire UTF-8 byte lengths, not UTF-16 code units, so multibyte
+  // characters cannot slip a field past its cap.
+  if (utf8.encode(value).length > maxBytes) {
+    throw PayloadError('$name exceeds $maxBytes bytes');
+  }
+  if (value.trim().isEmpty) {
+    throw PayloadError('$name must contain visible text');
+  }
+  if (value.runes.any(_isUnsafeProtocolTextRune)) {
+    throw PayloadError('$name contains unsafe control or directional text');
+  }
+}
+
+bool _isUnsafeProtocolTextRune(int rune) =>
+    rune <= 0x1f ||
+    (rune >= 0x7f && rune <= 0x9f) ||
+    rune == 0x00ad || // soft hyphen
+    rune == 0x061c || // Arabic letter mark
+    rune == 0x180e || // Mongolian vowel separator
+    (rune >= 0x200b && rune <= 0x200f) || // zero-width / direction marks
+    (rune >= 0x202a && rune <= 0x202e) || // bidi embeddings / override
+    (rune >= 0x2060 && rune <= 0x206f) || // word joiner / bidi isolates
+    rune == 0xfeff; // zero-width no-break space / BOM
 
 Uint8List _bytes(Map<Object?, Object?> m, int key, String name, int maxLen) {
   final v = m[key];
@@ -142,7 +179,13 @@ class AccountRecord {
     required this.path,
     required this.index,
     this.publicKey,
-  });
+  }) {
+    _validateProtocolText(address, 'address', AirgapLimits.maxAddress);
+    _validateProtocolText(path, 'path', AirgapLimits.maxPath);
+    if (publicKey != null && publicKey!.length > 65) {
+      throw PayloadError('publicKey exceeds 65 bytes');
+    }
+  }
   final int coin;
   final String address;
   final String path;
@@ -154,8 +197,10 @@ class AccountExport extends AirgapPayload {
   AccountExport({
     required this.walletId,
     required this.walletName,
-    required this.accounts,
-  }) {
+    required List<AccountRecord> accounts,
+  }) : accounts = List<AccountRecord>.unmodifiable(accounts) {
+    _validateWalletId(walletId);
+    _validateProtocolText(walletName, 'walletName', AirgapLimits.maxWalletName);
     if (accounts.length < AirgapLimits.minAccounts ||
         accounts.length > AirgapLimits.maxAccounts) {
       throw PayloadError('accounts count out of range');
@@ -196,7 +241,7 @@ class AccountExport extends AirgapPayload {
       throw PayloadError('accounts count out of range');
     }
     return AccountExport(
-      walletId: _text(m, 2, 'walletId', AirgapLimits.maxWalletId),
+      walletId: _walletIdText(m, 2),
       walletName: _text(m, 3, 'walletName', AirgapLimits.maxWalletName),
       accounts: [
         for (final a in rawAccounts)
@@ -233,6 +278,7 @@ class SignRequest extends AirgapPayload {
     required this.createdAt,
     required this.expiresAt,
   }) {
+    _validateWalletId(walletId);
     if (reqId.length != AirgapLimits.reqIdLength) {
       throw PayloadError('reqId must be ${AirgapLimits.reqIdLength} bytes');
     }
@@ -286,7 +332,7 @@ class SignRequest extends AirgapPayload {
     }
     return SignRequest(
       reqId: _bytes(m, 2, 'reqId', AirgapLimits.reqIdLength),
-      walletId: _text(m, 3, 'walletId', AirgapLimits.maxWalletId),
+      walletId: _walletIdText(m, 3),
       coin: _int(m, 4, 'coin'),
       chainId: _intOrNull(m, 5),
       rawTx: _bytes(m, 6, 'rawTx', AirgapLimits.maxRawTx),
@@ -308,6 +354,9 @@ class SignResult extends AirgapPayload {
     required this.signer,
     required this.txHash,
   }) {
+    _validateWalletId(walletId);
+    _validateProtocolText(signer, 'signer', AirgapLimits.maxAddress);
+    _validateProtocolText(txHash, 'txHash', AirgapLimits.maxAddress);
     if (reqId.length != AirgapLimits.reqIdLength) {
       throw PayloadError('reqId must be ${AirgapLimits.reqIdLength} bytes');
     }
@@ -345,7 +394,7 @@ class SignResult extends AirgapPayload {
     _requireKnownKeys(m, const {0, 1, 2, 3, 4, 5, 6, 7}, 'sign result');
     return SignResult(
       reqId: _bytes(m, 2, 'reqId', AirgapLimits.reqIdLength),
-      walletId: _text(m, 3, 'walletId', AirgapLimits.maxWalletId),
+      walletId: _walletIdText(m, 3),
       coin: _int(m, 4, 'coin'),
       signedTx: _bytes(m, 5, 'signedTx', AirgapLimits.maxSignedTx),
       signer: _text(m, 6, 'signer', AirgapLimits.maxAddress),

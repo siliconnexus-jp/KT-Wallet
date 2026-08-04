@@ -1297,3 +1297,66 @@ List<String> findSignerVaultStateBoundaryIssues(
   }
   return issues;
 }
+
+/// Keeps AIRGAP wallet identities and user-visible fields single-interpretable
+/// across direct construction, QR decoding, and online request creation.
+///
+/// A walletId binds an online watch wallet to one offline signing authority.
+/// Silently truncating or normalizing it can therefore authorize a different
+/// identity. Invisible controls and bidi overrides are rejected from all
+/// display-bearing protocol fields so a QR cannot render one value while the
+/// signer processes another.
+List<String> findAirgapIdentityTextBoundaryIssues(
+  String payloadContents,
+  String codecContents,
+) {
+  final issues = <String>[];
+  const required = {
+    r"RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$')":
+        'walletId is not restricted to canonical ASCII identity syntax',
+    'value.trim().isEmpty':
+        'AIRGAP text fields do not reject empty or whitespace-only values',
+    'value.runes.any(_isUnsafeProtocolTextRune)':
+        'AIRGAP text fields do not reject unsafe invisible runes',
+    'rune >= 0x202a && rune <= 0x202e':
+        'AIRGAP text fields do not reject bidi override controls',
+    '_validateProtocolText(v, name, maxLen)':
+        'decoded AIRGAP text bypasses the shared text validator',
+    '_validateWalletId(v)':
+        'decoded walletId bypasses the canonical identity validator',
+    'List<AccountRecord>.unmodifiable(accounts)':
+        'account export does not snapshot its bounded account list',
+    "_validateProtocolText(address, 'address', AirgapLimits.maxAddress)":
+        'account address bypasses construction-time validation',
+    "_validateProtocolText(path, 'path', AirgapLimits.maxPath)":
+        'account derivation path bypasses construction-time validation',
+    "_validateProtocolText(walletName, 'walletName', AirgapLimits.maxWalletName)":
+        'wallet name bypasses construction-time validation',
+    "_validateProtocolText(signer, 'signer', AirgapLimits.maxAddress)":
+        'signer address bypasses construction-time validation',
+    "_validateProtocolText(txHash, 'txHash', AirgapLimits.maxAddress)":
+        'transaction hash bypasses construction-time validation',
+  };
+  for (final entry in required.entries) {
+    if (!payloadContents.contains(entry.key)) issues.add(entry.value);
+  }
+  if (RegExp(
+        r'_validateWalletId\(walletId\)',
+      ).allMatches(payloadContents).length <
+      3) {
+    issues.add('walletId is not validated by every AIRGAP payload constructor');
+  }
+  if (RegExp(
+        r'walletId:\s*_walletIdText\(',
+      ).allMatches(payloadContents).length <
+      3) {
+    issues.add('walletId decode paths do not all use the canonical validator');
+  }
+  if (!codecContents.contains('walletId: walletId')) {
+    issues.add('online sign request does not preserve the exact walletId');
+  }
+  if (codecContents.contains('substring(0, AirgapLimits.maxWalletId)')) {
+    issues.add('online sign request silently truncates wallet identity');
+  }
+  return issues;
+}

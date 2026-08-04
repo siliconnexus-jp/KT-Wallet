@@ -78,6 +78,81 @@ void main() {
       expect(() => AirgapPayload.decode(bytes), throwsA(isA<PayloadError>()));
     });
 
+    test('constructor rejects ambiguous wallet identity and display text', () {
+      final account = AccountRecord(
+        coin: 60,
+        address: '0xabc',
+        path: "m/44'/60'/0'/0/0",
+        index: 0,
+      );
+
+      for (final walletId in ['', 'wallet id', 'x' * 33]) {
+        expect(
+          () => AccountExport(
+            walletId: walletId,
+            walletName: 'Wallet',
+            accounts: [account],
+          ),
+          throwsA(isA<PayloadError>()),
+          reason: 'walletId must be a canonical protocol identity',
+        );
+      }
+      for (final walletName in ['   ', 'Safe\u202Eevil', 'Line\nBreak']) {
+        expect(
+          () => AccountExport(
+            walletId: 'wallet-1',
+            walletName: walletName,
+            accounts: [account],
+          ),
+          throwsA(isA<PayloadError>()),
+          reason: 'walletName must not contain invisible control text',
+        );
+      }
+    });
+
+    test('account constructor rejects empty and control-bearing fields', () {
+      expect(
+        () => AccountRecord(coin: 60, address: '', path: 'p', index: 0),
+        throwsA(isA<PayloadError>()),
+      );
+      expect(
+        () => AccountRecord(
+          coin: 60,
+          address: '0xabc\u200B',
+          path: 'p',
+          index: 0,
+        ),
+        throwsA(isA<PayloadError>()),
+      );
+      expect(
+        () => AccountRecord(coin: 60, address: 'a', path: 'p\nq', index: 0),
+        throwsA(isA<PayloadError>()),
+      );
+    });
+
+    test('decode rejects empty, control and bidi wallet identity text', () {
+      Uint8List encoded(String walletId, String walletName) => cborEncode({
+        0: 1,
+        1: 1,
+        2: walletId,
+        3: walletName,
+        4: [
+          {0: 60, 1: 'a', 2: 'p', 3: 0},
+        ],
+      });
+
+      for (final payload in [
+        encoded('', 'Wallet'),
+        encoded('wallet\n1', 'Wallet'),
+        encoded('wallet-1', 'Safe\u202Eevil'),
+      ]) {
+        expect(
+          () => AirgapPayload.decode(payload),
+          throwsA(isA<PayloadError>()),
+        );
+      }
+    });
+
     test('unknown root and nested account fields are rejected', () {
       final rootUnknown = cborEncode({
         0: 1,
@@ -169,6 +244,22 @@ void main() {
       );
     });
 
+    test('walletId is validated before encoding', () {
+      for (final walletId in ['', 'wallet id', 'x' * 33, 'wallet\u2066id']) {
+        expect(
+          () => SignRequest(
+            reqId: _reqId(),
+            walletId: walletId,
+            coin: 60,
+            rawTx: Uint8List(1),
+            createdAt: 0,
+            expiresAt: 10,
+          ),
+          throwsA(isA<PayloadError>()),
+        );
+      }
+    });
+
     test('unknown sign-request field is rejected', () {
       final decoded = cborDecode(build().encode()) as Map<Object?, Object?>;
       decoded[99] = 1;
@@ -207,6 +298,25 @@ void main() {
         99: 0,
       });
       expect(() => AirgapPayload.decode(bytes), throwsA(isA<PayloadError>()));
+    });
+
+    test('identity, signer and hash are validated before encoding', () {
+      SignResult result({
+        String walletId = 'wallet-1',
+        String signer = '0xsigner',
+        String txHash = '0xhash',
+      }) => SignResult(
+        reqId: _reqId(),
+        walletId: walletId,
+        coin: 60,
+        signedTx: Uint8List.fromList([1]),
+        signer: signer,
+        txHash: txHash,
+      );
+
+      expect(() => result(walletId: ''), throwsA(isA<PayloadError>()));
+      expect(() => result(signer: ' '), throwsA(isA<PayloadError>()));
+      expect(() => result(txHash: 'hash\u200F'), throwsA(isA<PayloadError>()));
     });
   });
 

@@ -301,12 +301,11 @@ SignRequest buildSignRequest({
   final created =
       nowEpochSeconds ??
       (live ? DateTime.now().millisecondsSinceEpoch ~/ 1000 : demoCreatedAtSec);
-  final id = walletId.length > AirgapLimits.maxWalletId
-      ? walletId.substring(0, AirgapLimits.maxWalletId)
-      : walletId;
   return SignRequest(
     reqId: reqId ?? (live ? randomReqId() : demoReqId),
-    walletId: id,
+    // A wallet identity is an authority boundary shared with the offline
+    // signer. Never truncate or normalize it into a different identity.
+    walletId: walletId,
     coin: coinForChain(d.chain),
     // Non-EVM chains have no signing-domain id; EVM chains carry the active
     // network's (defaulting to mainnet).

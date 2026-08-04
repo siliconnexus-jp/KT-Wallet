@@ -303,6 +303,13 @@ therefore distinguishes signing, broadcasting, and chain confirmation.
   database failure leaves the session empty and shows a localized blocking
   error, so the Cold Signer cannot sign a request the online wallet would lose
   after restart.
+- AIRGAP wallet IDs are exact authorization identities, not display labels.
+  Account exports, sign requests, and sign results require the same canonical
+  1–32 character ASCII identity during construction and QR decoding; KT Wallet
+  never truncates or normalizes an invalid ID into a different signer identity.
+  Wallet names, addresses, derivation paths, signers, and transaction hashes
+  are UTF-8 bounded, non-empty, and reject control, zero-width, and bidi text
+  before they can enter a QR or confirmation screen.
 - Hot-wallet EVM, TRON, and Solana sends persist the exact user-authorized
   transaction intent before native signing, then persist the locally derived
   transaction hash before the first network broadcast. If the node accepts the
@@ -576,8 +583,8 @@ Recent device and simulator evidence is available in:
 - [iOS transfer retest](reports/ios-transfer-retest-2026-07-26/index.html)
 
 The latest source gate (2026-08-05) completed with zero static-analysis
-issues: **1,633/1,633** KT Wallet tests, **570/570** KT Cold Signer tests, and
-**438/438** shared-package tests passed. The default gate passed **12/12** and
+issues: **1,677/1,677** KT Wallet tests, **583/583** KT Cold Signer tests, and
+**457/457** shared-package tests passed. The default gate passed **12/12** and
 the native/runtime/OSV `--full` gate passed **13/13**. The Gateway audit,
 public-secret gate, Gateway public-release version gate, native dependency
 lock/checksum verification, and OSV scans also passed. These numbers are

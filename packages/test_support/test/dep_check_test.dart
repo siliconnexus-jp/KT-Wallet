@@ -672,6 +672,55 @@ return decodeJsonWithUniqueObjectMembers(source);
     });
   });
 
+  group('AIRGAP identity text boundary', () {
+    const payload = r'''
+final RegExp _canonicalWalletId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$');
+void validate(String value, String name, int maxLen) {
+  if (value.trim().isEmpty) throw PayloadError();
+  if (value.runes.any(_isUnsafeProtocolTextRune)) throw PayloadError();
+  if (rune >= 0x202a && rune <= 0x202e) throw PayloadError();
+  _validateProtocolText(v, name, maxLen);
+  _validateWalletId(v);
+  final accounts = List<AccountRecord>.unmodifiable(accounts);
+  _validateProtocolText(address, 'address', AirgapLimits.maxAddress);
+  _validateProtocolText(path, 'path', AirgapLimits.maxPath);
+  _validateProtocolText(walletName, 'walletName', AirgapLimits.maxWalletName);
+  _validateProtocolText(signer, 'signer', AirgapLimits.maxAddress);
+  _validateProtocolText(txHash, 'txHash', AirgapLimits.maxAddress);
+  _validateWalletId(walletId);
+  _validateWalletId(walletId);
+  _validateWalletId(walletId);
+  walletId: _walletIdText(m, 2);
+  walletId: _walletIdText(m, 3);
+  walletId: _walletIdText(m, 3);
+}
+''';
+    const codec = 'final request = SignRequest(walletId: walletId);';
+
+    test('accepts canonical fail-closed AIRGAP identity handling', () {
+      expect(findAirgapIdentityTextBoundaryIssues(payload, codec), isEmpty);
+    });
+
+    test('rejects missing constructor validation and silent truncation', () {
+      final issues = findAirgapIdentityTextBoundaryIssues(
+        payload
+            .replaceFirst('_validateWalletId(walletId);', 'gone;')
+            .replaceFirst(
+              "_validateProtocolText(signer, 'signer', AirgapLimits.maxAddress);",
+              'gone;',
+            ),
+        '''
+final id = walletId.substring(0, AirgapLimits.maxWalletId);
+final request = SignRequest(walletId: id);
+''',
+      );
+      expect(issues, contains(contains('every AIRGAP payload constructor')));
+      expect(issues, contains(contains('signer address')));
+      expect(issues, contains(contains('preserve the exact walletId')));
+      expect(issues, contains(contains('silently truncates')));
+    });
+  });
+
   group('wallet display snapshot boundary', () {
     const market = '''
 static const maxSnapshotChars = 262144;

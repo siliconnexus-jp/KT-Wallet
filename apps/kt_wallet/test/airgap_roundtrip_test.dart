@@ -165,6 +165,20 @@ void main() {
   evmRawTxTests();
   group('protocol round-trip', () {
     test(
+      'sign request rejects overlong wallet identity instead of truncating',
+      () {
+        expect(
+          () => buildSignRequest(
+            draft: _draft(),
+            walletId: 'x' * (AirgapLimits.maxWalletId + 1),
+            fromAddress: _testSignerAddress,
+          ),
+          throwsA(isA<PayloadError>()),
+        );
+      },
+    );
+
+    test(
       'sign-request: draft → fragment → encode → aggregate → decode keeps every field',
       () {
         final draft = _draft();
