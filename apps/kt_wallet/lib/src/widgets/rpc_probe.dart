@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../rpc/bounded_http_client.dart';
 import '../rpc/json_rpc_envelope.dart';
+import '../rpc/network_identity_value.dart';
 
 /// Outcome of probing a candidate RPC endpoint before it is persisted as a
 /// custom network.
@@ -77,10 +78,7 @@ class RpcProbe {
         case Chain.avalanche:
         case Chain.bnb:
           final result = await _jsonRpcResult(url, 'eth_chainId');
-          if (result is! String || !result.startsWith('0x')) {
-            return const RpcProbeFailure();
-          }
-          final actual = int.tryParse(result.substring(2), radix: 16);
+          final actual = parseCanonicalEvmChainId(result);
           if (actual == null) return const RpcProbeFailure();
           if (expectedChainId != null && actual != expectedChainId) {
             return RpcProbeChainIdMismatch(actual);
@@ -99,14 +97,18 @@ class RpcProbe {
               )
               .timeout(timeout);
           if (resp.statusCode != 200) return const RpcProbeFailure();
-          final decoded = jsonDecode(resp.body);
-          final identity = decoded is Map ? decoded['blockID'] : null;
-          return identity is String && identity.isNotEmpty
+          final decoded = decodeJsonWithoutDuplicateKeys(resp.body);
+          final identity = parseCanonicalTronGenesisBlockId(
+            decoded is Map ? decoded['blockID'] : null,
+          );
+          return identity != null
               ? RpcProbeOk(identity)
               : const RpcProbeFailure();
         case Chain.solana:
-          final identity = await _jsonRpcResult(url, 'getGenesisHash');
-          return identity is String && identity.isNotEmpty
+          final identity = parseCanonicalSolanaGenesisHash(
+            await _jsonRpcResult(url, 'getGenesisHash'),
+          );
+          return identity != null
               ? RpcProbeOk(identity)
               : const RpcProbeFailure();
       }
@@ -131,7 +133,7 @@ class RpcProbe {
         )
         .timeout(timeout);
     if (response.statusCode != 200) return null;
-    final decoded = jsonDecode(response.body);
+    final decoded = decodeJsonWithoutDuplicateKeys(response.body);
     if (!isBoundJsonRpcResponse(request, decoded) ||
         decoded is! Map ||
         decoded.containsKey('error')) {

@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 
 import '../rpc/bounded_http_client.dart';
 import '../rpc/json_rpc_envelope.dart';
+import '../rpc/network_identity_value.dart';
 import 'fiat_math.dart';
 
 /// Thin JSON-RPC 2.0 client for the OPTIONAL KT gateway (`POST {url}/rpc`).
@@ -270,8 +271,6 @@ class GatewayClient {
   static final _evmAddressPattern = RegExp(r'^0x[0-9a-fA-F]{40}$');
   static final _evmTxHashPattern = RegExp(r'^0x[0-9a-fA-F]{64}$');
   static final _tronTxHashPattern = RegExp(r'^[0-9a-fA-F]{64}$');
-  static final _evmChainIdPattern = RegExp(r'^[1-9][0-9]{0,19}$');
-  static final _tronGenesisPattern = RegExp(r'^[0-9a-f]{64}$');
   static final _base58AddressPattern = RegExp(r'^[1-9A-HJ-NP-Za-km-z]+$');
   static final _officialTokenSymbolPattern = RegExp(r'^[A-Z0-9._-]{1,12}$');
   static final _semanticVersionPattern = RegExp(
@@ -860,12 +859,9 @@ class GatewayClient {
       Coin.base ||
       Coin.arbitrum ||
       Coin.avalanche ||
-      Coin.bnb => _evmChainIdPattern.hasMatch(identity),
-      Coin.tron => _tronGenesisPattern.hasMatch(identity),
-      Coin.solana =>
-        identity.length >= 32 &&
-            identity.length <= 128 &&
-            _base58AddressPattern.hasMatch(identity),
+      Coin.bnb => parseCanonicalEvmDecimalChainId(identity) != null,
+      Coin.tron => parseCanonicalTronGenesisBlockId(identity) != null,
+      Coin.solana => parseCanonicalSolanaGenesisHash(identity) != null,
     };
     if (!valid) throw const FormatException('invalid network identity');
     return identity;

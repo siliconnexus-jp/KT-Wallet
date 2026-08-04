@@ -350,7 +350,34 @@ void main() {
       verifier.verifySolana('another-cluster'),
       throwsA(isA<NetworkIdentityException>()),
     );
-    expect(json.methods, ['getGenesisHash', 'getGenesisHash']);
+    // An invalid persisted identity is rejected locally before any RPC call.
+    expect(json.methods, ['getGenesisHash']);
+  });
+
+  test('direct EVM identity rejects a non-canonical quantity', () async {
+    final json = _JsonTransport({'eth_chainId': '0x01'});
+    final verifier = RpcNetworkIdentityVerifier(
+      jsonRpcTransport: json,
+      endpoints: (_) => 'https://rpc.invalid',
+    );
+
+    await expectLater(
+      verifier.verifyEvm(Chain.ethereum, 1),
+      throwsA(isA<NetworkIdentityException>()),
+    );
+  });
+
+  test('direct Solana identity rejects an invalid pinned value', () async {
+    final json = _JsonTransport({'getGenesisHash': 'genesis'});
+    final verifier = RpcNetworkIdentityVerifier(
+      jsonRpcTransport: json,
+      endpoints: (_) => 'https://solana.invalid',
+    );
+
+    await expectLater(
+      verifier.verifySolana('genesis'),
+      throwsA(isA<NetworkIdentityException>()),
+    );
   });
 
   test('TRON block zero identity is pinned', () async {
@@ -365,9 +392,20 @@ void main() {
       verifier.verifyTron('another-network'),
       throwsA(isA<NetworkIdentityException>()),
     );
-    expect(
-      rest.urls,
-      everyElement('https://tron.invalid/wallet/getblockbynum'),
+    // An invalid persisted identity is rejected locally before any REST call.
+    expect(rest.urls, ['https://tron.invalid/wallet/getblockbynum']);
+  });
+
+  test('direct TRON identity rejects an invalid pinned value', () async {
+    final rest = _RestTransport('another-network');
+    final verifier = RpcNetworkIdentityVerifier(
+      restTransport: rest,
+      endpoints: (_) => 'https://tron.invalid',
+    );
+
+    await expectLater(
+      verifier.verifyTron('another-network'),
+      throwsA(isA<NetworkIdentityException>()),
     );
   });
 

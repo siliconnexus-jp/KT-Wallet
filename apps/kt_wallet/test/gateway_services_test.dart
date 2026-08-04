@@ -326,6 +326,38 @@ void main() {
         throwsA(isA<FormatException>()),
       );
     });
+
+    test('rejects a Solana identity that is not 32 decoded bytes', () async {
+      final malformed = _FakeGateway(
+        results: {
+          'kt_getNetworkIdentity': {
+            'network': 'sol-mainnet',
+            'identity': '22222222222222222222222222222222',
+          },
+        },
+      );
+
+      await expectLater(
+        malformed.client.getNetworkIdentity(chain: Coin.solana),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects an EVM identity outside the app chain-id domain', () async {
+      final malformed = _FakeGateway(
+        results: {
+          'kt_getNetworkIdentity': {
+            'network': 'eth-mainnet',
+            'identity': '99999999999999999999',
+          },
+        },
+      );
+
+      await expectLater(
+        malformed.client.getNetworkIdentity(chain: Coin.eth),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('BalanceService gateway mode', () {

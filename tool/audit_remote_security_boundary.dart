@@ -511,9 +511,12 @@ void _auditGatewayFirstNetworkIdentity(List<String> failures) {
     'on GatewayTransportException',
     'if (error.code == -32601) return null;',
     'rethrow;',
+    "import '../rpc/network_identity_value.dart';",
     '_requireMatch(chain, expected, gatewayIdentity);',
-    '_requireMatch(Chain.tron, expectedGenesisBlockId, gatewayIdentity);',
-    '_requireMatch(Chain.solana, expectedGenesisHash, gatewayIdentity);',
+    'final expected = parseCanonicalSolanaGenesisHash(expectedGenesisHash);',
+    'parseCanonicalSolanaGenesisHash(gatewayIdentity)',
+    'final expected = parseCanonicalTronGenesisBlockId(expectedGenesisBlockId);',
+    'parseCanonicalTronGenesisBlockId(gatewayIdentity)',
   ]) {
     if (!verifier.contains(marker)) {
       failures.add(

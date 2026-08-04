@@ -2264,3 +2264,17 @@ secondary → primary 发布到
 `sol-devnet/confirmed/hash`。发布后 3/3 targets UP、17/17 rules healthy、0 firing、
 Alertmanager 0 active、双实例 warning+ 为 0。本轮未读取环境文件、未加载私钥且未广播。
 本项没有视觉 UI 变化，不使用无关模拟器截图替代协议证据。
+
+2026-08-05 继续闭合自定义 RPC 与签名前网络身份值。旧自定义网络探针使用普通 JSON
+解码，会接受重复 `result/blockID`；EVM 接受带前导零的 chainId，Solana 只要求非空字符串，
+TRON 只要求非空 block ID。相同的畸形固定值还会进入签名前复核，不能证明用户保存的 RPC
+仍属于预期网络。失败优先测试先稳定复现 9 类错误放行；修复后入口共享同一规范解析器：
+JSON 对象递归拒绝重复键，EVM chainId 必须是非零、无前导零且处于 App 的 64-bit 域，
+Solana genesis hash 必须为规范 Base58 且精确解码为 32 bytes，TRON block-0 ID 必须为
+小写 64 hex。非法已保存 identity 在发网前失败闭合；Gateway Client 对 Solana identity
+也执行同一数值/字节域校验，不再只看字符集和长度。合法三链正例与恶意负例定向 64/64，
+KT Wallet 1647/1647（另有 11 项显式线上/设备测试默认跳过）、KT Cold Signer 570/570、
+共享 packages 438/438、静态分析 0、远程安全边界、Gateway audit 与完整依赖/OSV 门禁
+13/13 通过。Ethereum、Solana 与 TRON 官方公网只读响应及生产 Gateway 三链 identity
+均与新解析器兼容；未加载钱包、私钥且未广播。本轮没有 Gateway 服务端或 UI 变化，
+不需要后端部署，移动修复须随下一版签名制品发布。

@@ -6,6 +6,7 @@ import '../market/balance_service.dart'
     show RpcEndpointResolver, defaultRpcEndpointFor;
 import '../market/gateway_client.dart';
 import '../rpc/http_transport.dart';
+import '../rpc/network_identity_value.dart';
 import 'chain_params_service.dart' show rpcCoinForChain;
 
 class NetworkIdentityException implements Exception {
@@ -89,6 +90,13 @@ class RpcNetworkIdentityVerifier implements NetworkIdentityVerifier {
 
   @override
   Future<void> verifyEvm(Chain chain, int expectedChainId) async {
+    if (expectedChainId <= 0) {
+      throw NetworkIdentityException(
+        chain: chain,
+        expected: '$expectedChainId',
+        actual: null,
+      );
+    }
     final expected = '$expectedChainId';
     final gatewayIdentity = await _gatewayIdentity(rpcCoinForChain(chain));
     if (gatewayIdentity != null) {
@@ -103,17 +111,27 @@ class RpcNetworkIdentityVerifier implements NetworkIdentityVerifier {
       'params': const <Object?>[],
     });
     final result = response is Map ? response['result'] : null;
-    final actual = result is String && result.startsWith('0x')
-        ? int.tryParse(result.substring(2), radix: 16)
-        : null;
+    final actual = parseCanonicalEvmChainId(result);
     _requireMatch(chain, expected, actual?.toString());
   }
 
   @override
   Future<void> verifySolana(String expectedGenesisHash) async {
+    final expected = parseCanonicalSolanaGenesisHash(expectedGenesisHash);
+    if (expected == null) {
+      throw NetworkIdentityException(
+        chain: Chain.solana,
+        expected: expectedGenesisHash,
+        actual: null,
+      );
+    }
     final gatewayIdentity = await _gatewayIdentity(Coin.solana);
     if (gatewayIdentity != null) {
-      _requireMatch(Chain.solana, expectedGenesisHash, gatewayIdentity);
+      _requireMatch(
+        Chain.solana,
+        expected,
+        parseCanonicalSolanaGenesisHash(gatewayIdentity),
+      );
       return;
     }
     final endpoint = _endpoints(Coin.solana);
@@ -123,19 +141,29 @@ class RpcNetworkIdentityVerifier implements NetworkIdentityVerifier {
       'method': 'getGenesisHash',
       'params': const <Object?>[],
     });
-    final actual = response is Map ? response['result'] : null;
-    _requireMatch(
-      Chain.solana,
-      expectedGenesisHash,
-      actual is String ? actual : null,
+    final actual = parseCanonicalSolanaGenesisHash(
+      response is Map ? response['result'] : null,
     );
+    _requireMatch(Chain.solana, expected, actual);
   }
 
   @override
   Future<void> verifyTron(String expectedGenesisBlockId) async {
+    final expected = parseCanonicalTronGenesisBlockId(expectedGenesisBlockId);
+    if (expected == null) {
+      throw NetworkIdentityException(
+        chain: Chain.tron,
+        expected: expectedGenesisBlockId,
+        actual: null,
+      );
+    }
     final gatewayIdentity = await _gatewayIdentity(Coin.tron);
     if (gatewayIdentity != null) {
-      _requireMatch(Chain.tron, expectedGenesisBlockId, gatewayIdentity);
+      _requireMatch(
+        Chain.tron,
+        expected,
+        parseCanonicalTronGenesisBlockId(gatewayIdentity),
+      );
       return;
     }
     var endpoint = _endpoints(Coin.tron);
@@ -146,11 +174,9 @@ class RpcNetworkIdentityVerifier implements NetworkIdentityVerifier {
       '$endpoint/wallet/getblockbynum',
       const {'num': 0},
     );
-    final actual = response is Map ? response['blockID'] : null;
-    _requireMatch(
-      Chain.tron,
-      expectedGenesisBlockId,
-      actual is String ? actual : null,
+    final actual = parseCanonicalTronGenesisBlockId(
+      response is Map ? response['blockID'] : null,
     );
+    _requireMatch(Chain.tron, expected, actual);
   }
 }
