@@ -249,10 +249,10 @@ func broadcastGuardKey(chain, network string, canonicalPayload []byte) string {
 	return "ktw:v1:broadcast:" + hex.EncodeToString(hash.Sum(nil))
 }
 
-func replayBroadcast(record broadcastRecord) (any, *rpc.Error) {
+func replayBroadcast(record broadcastRecord, chain, network string) (any, *rpc.Error) {
 	switch record.State {
 	case broadcastAccepted:
-		return map[string]string{"txHash": record.TxHash}, nil
+		return acceptedBroadcastResult(chain, network, record.TxHash), nil
 	case broadcastRejected, broadcastUnknown:
 		if record.Error != nil {
 			return nil, record.Error

@@ -43,7 +43,8 @@ import 'fiat_math.dart';
 /// - `kt_getEvmTokenApprovals`
 ///   `{chain, network?, address, privacyConsent:true}` → outstanding ERC-20
 ///   allowances; provider/unsupported failures never become an empty list
-/// - `kt_broadcast` `{chain, network?, payload}` → `{txHash}`
+/// - `kt_broadcast` `{chain, network?, payload}` →
+///   `{chain, network, txHash}` bound to the resolved signing domain
 /// Errors: -32700/-32600/-32601/-32602 protocol, -32000 upstream_error
 /// (data.upstream / data.message carry the node's reason), -32001
 /// rate_limited, -32002 unsupported, -32003 submission_unknown (a broadcast
@@ -216,6 +217,7 @@ class GatewayClient {
     'timestampMs',
     'status',
   };
+  static const _broadcastResultKeys = <String>{'chain', 'network', 'txHash'};
   static const _tokenRiskCategories = <String>{
     'malicious',
     'phishing',
@@ -1319,15 +1321,22 @@ class GatewayClient {
     required String payload,
   }) async {
     final network = await _networkParam(chain);
+    final expectedNetwork = network ?? _mainnetNetworkId(chain);
     final result = await _call('kt_broadcast', {
       'chain': chainName(chain),
       'network': ?network,
       'payload': payload,
     });
-    if (result is! Map || result['txHash'] is! String) {
+    final txHash = result is Map ? result['txHash'] : null;
+    if (result is! Map ||
+        !_hasExactStringKeys(result, _broadcastResultKeys) ||
+        result['chain'] != chainName(chain) ||
+        result['network'] != expectedNetwork ||
+        txHash is! String ||
+        !_isCanonicalTransactionHash(chain, txHash)) {
       throw const FormatException('bad broadcast result');
     }
-    return result['txHash'] as String;
+    return txHash;
   }
 
   void close() => _client.close();

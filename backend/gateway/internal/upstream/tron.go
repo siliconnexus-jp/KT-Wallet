@@ -485,36 +485,61 @@ func (t *Tron) Broadcast(ctx context.Context, payload []byte) (string, error) {
 		payload = body
 	}
 
-	var out struct {
-		Result  bool   `json:"result"`
-		TxID    string `json:"txid"`
-		Code    string `json:"code"`
-		Message string `json:"message"`
-		// Node-level failures (an unparsable body, most often) arrive as a
-		// top-level `Error` with no `code`/`message` at all; without this the
-		// reason was reported as an empty string.
-		Error string `json:"Error"`
-	}
-	if err := t.do(ctx, http.MethodPost, path, payload, &out); err != nil {
+	data, err := t.fetch(ctx, http.MethodPost, path, payload)
+	if err != nil {
 		return "", err
 	}
-	if !out.Result {
-		msg := decodeTronMessage(out.Message)
-		if msg == "" {
-			msg = out.Error
+	fields, err := decodeExactJSONObject(data, "result", "txid", "code", "message", "Error")
+	if err != nil {
+		return "", t.unavailable("malformed TronGrid broadcast response")
+	}
+	resultRaw, hasResult := fields["result"]
+	if !hasResult {
+		errorRaw, hasError := fields["Error"]
+		var providerError string
+		if !hasError || len(fields) != 1 || json.Unmarshal(errorRaw, &providerError) != nil || providerError == "" {
+			return "", t.unavailable("malformed TronGrid broadcast response")
 		}
+		return "", &NodeError{Code: -1, Message: providerError}
+	}
+	var accepted bool
+	if err := json.Unmarshal(resultRaw, &accepted); err != nil {
+		return "", t.unavailable("malformed TronGrid broadcast response")
+	}
+	if accepted {
+		txIDRaw, hasTxID := fields["txid"]
+		var txID string
+		if !hasTxID || len(fields) != 2 || json.Unmarshal(txIDRaw, &txID) != nil || !tronTransactionIDPattern.MatchString(txID) {
+			return "", t.unavailable("malformed TronGrid broadcast response")
+		}
+		return txID, nil
+	}
+	if _, hasTxID := fields["txid"]; hasTxID {
+		return "", t.unavailable("ambiguous TronGrid broadcast response")
+	}
+	if _, hasError := fields["Error"]; hasError {
+		return "", t.unavailable("ambiguous TronGrid broadcast response")
+	}
+	var code, message string
+	if raw, ok := fields["code"]; ok && json.Unmarshal(raw, &code) != nil {
+		return "", t.unavailable("malformed TronGrid broadcast response")
+	}
+	if raw, ok := fields["message"]; ok && json.Unmarshal(raw, &message) != nil {
+		return "", t.unavailable("malformed TronGrid broadcast response")
+	}
+	{
+		msg := decodeTronMessage(message)
 		if msg == "" {
-			msg = out.Code
+			msg = code
 		}
 		if msg == "" {
 			msg = "broadcast rejected"
 		}
-		if out.Code != "" && msg != out.Code {
-			msg = out.Code + ": " + msg
+		if code != "" && msg != code {
+			msg = code + ": " + msg
 		}
 		return "", &NodeError{Code: -1, Message: msg}
 	}
-	return out.TxID, nil
 }
 
 // decodeTronMessage turns TronGrid's hex-encoded error message into readable

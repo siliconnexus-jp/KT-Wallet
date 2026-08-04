@@ -248,7 +248,12 @@ void main() {
                   },
                 },
                 'kt_getHistory': {'status': 'ok', 'records': <Object?>[]},
-                'kt_broadcast': {'txHash': '0xhash'},
+                'kt_broadcast': {
+                  'chain': 'base',
+                  'network': 'base-sepolia',
+                  'txHash':
+                      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                },
               },
             )
             ..networkOf.addAll({
@@ -651,7 +656,12 @@ void main() {
     test('BroadcastService posts directly, exactly once', () async {
       final gateway = _FakeGateway(
         results: {
-          'kt_broadcast': {'txHash': '0xgatewayhash'},
+          'kt_broadcast': {
+            'chain': 'eth',
+            'network': 'custom-42',
+            'txHash':
+                '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          },
         },
       )..networkOf[Coin.eth] = 'custom-42';
       final direct = _FakeJsonRpc(

@@ -292,7 +292,7 @@ func TestSolDevnetHistoryUsesDevnetHelius(t *testing.T) {
 func TestBroadcastAmoyForwardsToAmoyUpstream(t *testing.T) {
 	polygonMain := newRPCFake(t) // must never be called
 	amoy := newRPCFake(t)
-	amoy.result("eth_sendRawTransaction", "0xamoyhash")
+	amoy.result("eth_sendRawTransaction", evmBroadcastHash)
 	e := newEnv(t, func(cfg *handlers.Config) {
 		cfg.PolygonURLs = []string{polygonMain.srv.URL}
 		cfg.PolygonAmoyURLs = []string{amoy.srv.URL}
@@ -300,7 +300,7 @@ func TestBroadcastAmoyForwardsToAmoyUpstream(t *testing.T) {
 
 	resp := e.rpc("kt_broadcast",
 		fmt.Sprintf(`{"chain":"polygon","network":"polygon-amoy","payload":%q}`, evmRawTx))
-	assertJSONEq(t, `{"txHash":"0xamoyhash"}`, result(t, resp))
+	assertBoundBroadcastResult(t, resp, "polygon", "polygon-amoy", evmBroadcastHash)
 
 	params := amoy.params("eth_sendRawTransaction")
 	if len(params) != 1 {

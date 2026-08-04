@@ -12,6 +12,16 @@ import (
 	"ktwallet/gateway/internal/upstream"
 )
 
+type broadcastResult struct {
+	Chain   string `json:"chain"`
+	Network string `json:"network"`
+	TxHash  string `json:"txHash"`
+}
+
+func acceptedBroadcastResult(chain, network, txHash string) broadcastResult {
+	return broadcastResult{Chain: chain, Network: network, TxHash: txHash}
+}
+
 // Broadcast implements kt_broadcast. The payload is forwarded to the chain
 // verbatim. Signed-payload fingerprints and terminal outcomes are retained for
 // idempotency, but transaction bytes are never stored. Malformed payloads are
@@ -53,7 +63,7 @@ func (g *Gateway) Broadcast(ctx context.Context, params json.RawMessage) (any, *
 		}
 	}
 	if !owner {
-		return replayBroadcast(existing)
+		return replayBroadcast(existing, p.Chain, network)
 	}
 
 	var txHash string
@@ -105,7 +115,7 @@ func (g *Gateway) Broadcast(ctx context.Context, params json.RawMessage) (any, *
 			"err", persistErr,
 		)
 	}
-	return map[string]string{"txHash": txHash}, nil
+	return acceptedBroadcastResult(p.Chain, network, txHash), nil
 }
 
 func canonicalBroadcastPayload(

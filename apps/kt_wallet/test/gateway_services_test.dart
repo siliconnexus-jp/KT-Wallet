@@ -25,6 +25,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 const _evmFrom = '0x1111111111111111111111111111111111111111';
 const _evmTo = '0x2222222222222222222222222222222222222222';
 const _tronOwner = 'TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH';
+const _evmBroadcastHash =
+    '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const _solanaBroadcastSignature =
+    '1111111111111111111111111111111111111111111111111111111111111111';
+const _tronBroadcastTxID =
+    'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd';
 const _addresses = ChainAddresses(
   eth: _evmFrom,
   polygon: _evmFrom,
@@ -1007,9 +1013,21 @@ void main() {
         final gateway = _FakeGateway(
           results: {
             'kt_broadcast': [
-              {'txHash': '0xevm'},
-              {'txHash': 'solSig'},
-              {'txHash': 'tronTxid'},
+              {
+                'chain': 'eth',
+                'network': 'eth-mainnet',
+                'txHash': _evmBroadcastHash,
+              },
+              {
+                'chain': 'solana',
+                'network': 'sol-mainnet',
+                'txHash': _solanaBroadcastSignature,
+              },
+              {
+                'chain': 'tron',
+                'network': 'tron-mainnet',
+                'txHash': _tronBroadcastTxID,
+              },
             ],
           },
         );
@@ -1022,27 +1040,27 @@ void main() {
         final evm = await service.broadcast(
           Chain.ethereum,
           Uint8List.fromList([0x02, 0xab, 0x01]),
-          expectedTxHash: '0xEVM',
+          expectedTxHash: _evmBroadcastHash.toUpperCase(),
         );
         expect(evm.status, BroadcastStatus.ok);
-        expect(evm.txHash, '0xEVM');
+        expect(evm.txHash, _evmBroadcastHash.toUpperCase());
 
         final solanaBytes = Uint8List.fromList([9, 8, 7]);
         final sol = await service.broadcast(
           Chain.solana,
           solanaBytes,
-          expectedTxHash: 'solSig',
+          expectedTxHash: _solanaBroadcastSignature,
         );
-        expect(sol.txHash, 'solSig');
+        expect(sol.txHash, _solanaBroadcastSignature);
 
         final tronJson =
             '{"raw_data":{"ref_block_bytes":"1234"},"signature":["aa"]}';
         final tron = await service.broadcast(
           Chain.tron,
           Uint8List.fromList(utf8.encode(tronJson)),
-          expectedTxHash: 'TRONTXID',
+          expectedTxHash: _tronBroadcastTxID.toUpperCase(),
         );
-        expect(tron.txHash, 'TRONTXID');
+        expect(tron.txHash, _tronBroadcastTxID.toUpperCase());
 
         final params = gateway.paramsOf('kt_broadcast');
         expect(params[0], {'chain': 'eth', 'payload': '0x02ab01'});

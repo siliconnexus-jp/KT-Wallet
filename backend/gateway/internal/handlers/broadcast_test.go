@@ -19,18 +19,32 @@ import (
 )
 
 const (
-	evmRawTx  = "0x02f87001830f4240843b9aca00850df847580082520894111111111111111111111111111111111111111187038d7ea4c6800080c001a0aa" // arbitrary even-length hex
-	solRawTx  = "AXNpZ25hdHVyZS1ieXRlcy1oZXJlLW5vdC1yZWFslgEAAQJzb2xhbmEtdHgtYnl0ZXM="                                               // valid base64
-	tronRawTx = `{"raw_data":{"contract":[{"type":"TransferContract"}]},"signature":["ab12"],"txID":"deadbeef"}`
+	evmRawTx           = "0x02f87001830f4240843b9aca00850df847580082520894111111111111111111111111111111111111111187038d7ea4c6800080c001a0aa" // arbitrary even-length hex
+	solRawTx           = "AXNpZ25hdHVyZS1ieXRlcy1oZXJlLW5vdC1yZWFslgEAAQJzb2xhbmEtdHgtYnl0ZXM="                                               // valid base64
+	tronRawTx          = `{"raw_data":{"contract":[{"type":"TransferContract"}]},"signature":["ab12"],"txID":"deadbeef"}`
+	evmBroadcastHash   = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	solanaBroadcastSig = "1111111111111111111111111111111111111111111111111111111111111111"
+	tronBroadcastTxID  = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
 )
+
+func assertBoundBroadcastResult(t *testing.T, resp map[string]any, chain, network, txHash string) {
+	t.Helper()
+	want, err := json.Marshal(map[string]string{
+		"chain": chain, "network": network, "txHash": txHash,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertJSONEq(t, string(want), result(t, resp))
+}
 
 func TestBroadcastEVMForwardsExactPayload(t *testing.T) {
 	node := newRPCFake(t)
-	node.result("eth_sendRawTransaction", "0xhash123")
+	node.result("eth_sendRawTransaction", evmBroadcastHash)
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.EthURLs = []string{node.srv.URL} })
 
 	resp := e.rpc("kt_broadcast", fmt.Sprintf(`{"chain":"eth","payload":%q}`, evmRawTx))
-	assertJSONEq(t, `{"txHash":"0xhash123"}`, result(t, resp))
+	assertBoundBroadcastResult(t, resp, "eth", "eth-mainnet", evmBroadcastHash)
 
 	params := node.params("eth_sendRawTransaction")
 	if len(params) != 1 {
@@ -45,11 +59,11 @@ func TestBroadcastEVMForwardsExactPayload(t *testing.T) {
 
 func TestBroadcastSolanaBase64(t *testing.T) {
 	node := newRPCFake(t)
-	node.result("sendTransaction", "5sig...abc")
+	node.result("sendTransaction", solanaBroadcastSig)
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.SolanaURLs = []string{node.srv.URL} })
 
 	resp := e.rpc("kt_broadcast", fmt.Sprintf(`{"chain":"solana","payload":%q}`, solRawTx))
-	assertJSONEq(t, `{"txHash":"5sig...abc"}`, result(t, resp))
+	assertBoundBroadcastResult(t, resp, "solana", "sol-mainnet", solanaBroadcastSig)
 
 	params := node.params("sendTransaction")
 	if len(params) != 2 {
@@ -69,11 +83,11 @@ func TestBroadcastSolanaBase64(t *testing.T) {
 
 func TestBroadcastTronForwardsJSONBody(t *testing.T) {
 	grid := newRESTFake(t)
-	grid.routeJSON("/wallet/broadcasttransaction", `{"result":true,"txid":"deadbeef"}`)
+	grid.routeJSON("/wallet/broadcasttransaction", `{"result":true,"txid":"`+tronBroadcastTxID+`"}`)
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
 
 	resp := e.rpc("kt_broadcast", fmt.Sprintf(`{"chain":"tron","payload":%q}`, tronRawTx))
-	assertJSONEq(t, `{"txHash":"deadbeef"}`, result(t, resp))
+	assertBoundBroadcastResult(t, resp, "tron", "tron-mainnet", tronBroadcastTxID)
 
 	hits := grid.hitsFor("/wallet/broadcasttransaction")
 	if len(hits) != 1 {
@@ -90,12 +104,12 @@ func TestBroadcastTronForwardsJSONBody(t *testing.T) {
 // NullPointerException from the node.
 func TestBroadcastTronHexPayloadUsesBroadcastHex(t *testing.T) {
 	grid := newRESTFake(t)
-	grid.routeJSON("/wallet/broadcasthex", `{"result":true,"txid":"deadbeef"}`)
+	grid.routeJSON("/wallet/broadcasthex", `{"result":true,"txid":"`+tronBroadcastTxID+`"}`)
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
 
 	payload := `{"transaction":"0a02ab12","txID":"deadbeef"}`
 	resp := e.rpc("kt_broadcast", fmt.Sprintf(`{"chain":"tron","payload":%q}`, payload))
-	assertJSONEq(t, `{"txHash":"deadbeef"}`, result(t, resp))
+	assertBoundBroadcastResult(t, resp, "tron", "tron-mainnet", tronBroadcastTxID)
 
 	if hits := grid.hitsFor("/wallet/broadcasttransaction"); len(hits) != 0 {
 		t.Fatalf("a hex payload must not hit broadcasttransaction, got %d", len(hits))
@@ -199,6 +213,49 @@ func TestBroadcastTronTransportFailureIsUnknown(t *testing.T) {
 	}
 	if hits := grid.hitsFor("/wallet/broadcasttransaction"); len(hits) != 1 {
 		t.Fatalf("TRON broadcast must be attempted once, got %d", len(hits))
+	}
+}
+
+func TestBroadcastMalformedAcceptedIdentityIsSubmissionUnknown(t *testing.T) {
+	t.Run("evm malformed hash", func(t *testing.T) {
+		node := newRPCFake(t)
+		node.result("eth_sendRawTransaction", "0x1234")
+		e := newEnv(t, func(cfg *handlers.Config) { cfg.EthURLs = []string{node.srv.URL} })
+
+		resp := e.rpc("kt_broadcast", fmt.Sprintf(`{"chain":"eth","payload":%q}`, evmRawTx))
+		assertErrCode(t, resp, rpc.CodeSubmissionUnknown)
+		if node.count("eth_sendRawTransaction") != 1 {
+			t.Fatal("malformed EVM result must not trigger a second submission")
+		}
+	})
+
+	t.Run("solana malformed signature", func(t *testing.T) {
+		node := newRPCFake(t)
+		node.result("sendTransaction", "not-a-signature")
+		e := newEnv(t, func(cfg *handlers.Config) { cfg.SolanaURLs = []string{node.srv.URL} })
+
+		resp := e.rpc("kt_broadcast", fmt.Sprintf(`{"chain":"solana","payload":%q}`, solRawTx))
+		assertErrCode(t, resp, rpc.CodeSubmissionUnknown)
+		if node.count("sendTransaction") != 1 {
+			t.Fatal("malformed Solana result must not trigger a second submission")
+		}
+	})
+
+	for name, response := range map[string]string{
+		"tron malformed txid":   `{"result":true,"txid":"deadbeef"}`,
+		"tron additive success": `{"result":true,"txid":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","accepted":true}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			grid := newRESTFake(t)
+			grid.routeJSON("/wallet/broadcasttransaction", response)
+			e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
+
+			resp := e.rpc("kt_broadcast", fmt.Sprintf(`{"chain":"tron","payload":%q}`, tronRawTx))
+			assertErrCode(t, resp, rpc.CodeSubmissionUnknown)
+			if hits := grid.hitsFor("/wallet/broadcasttransaction"); len(hits) != 1 {
+				t.Fatalf("malformed TRON result must be single-shot, got %d", len(hits))
+			}
+		})
 	}
 }
 
@@ -370,12 +427,12 @@ func TestBroadcastTronDuplicateJSONKeysNeverHitUpstream(t *testing.T) {
 
 func TestBroadcastDuplicateReturnsStoredResultWithoutSecondUpstreamWrite(t *testing.T) {
 	node := newRPCFake(t)
-	node.result("eth_sendRawTransaction", "0xhash")
+	node.result("eth_sendRawTransaction", evmBroadcastHash)
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.EthURLs = []string{node.srv.URL} })
 
 	p := fmt.Sprintf(`{"chain":"eth","payload":%q}`, evmRawTx)
-	assertJSONEq(t, `{"txHash":"0xhash"}`, result(t, e.rpc("kt_broadcast", p)))
-	assertJSONEq(t, `{"txHash":"0xhash"}`, result(t, e.rpc("kt_broadcast", p)))
+	assertBoundBroadcastResult(t, e.rpc("kt_broadcast", p), "eth", "eth-mainnet", evmBroadcastHash)
+	assertBoundBroadcastResult(t, e.rpc("kt_broadcast", p), "eth", "eth-mainnet", evmBroadcastHash)
 	if node.count("eth_sendRawTransaction") != 1 {
 		t.Fatalf("same signed transaction must be submitted once, upstream calls = %d", node.count("eth_sendRawTransaction"))
 	}
@@ -383,7 +440,7 @@ func TestBroadcastDuplicateReturnsStoredResultWithoutSecondUpstreamWrite(t *test
 
 func TestBroadcastDuplicateIsDeduplicatedAcrossGatewayInstances(t *testing.T) {
 	node := newRPCFake(t)
-	node.result("eth_sendRawTransaction", "0xclusterhash")
+	node.result("eth_sendRawTransaction", evmBroadcastHash)
 	store := newAtomicMemoryStore()
 	configure := func(cfg *handlers.Config) {
 		cfg.EthURLs = []string{node.srv.URL}
@@ -393,8 +450,8 @@ func TestBroadcastDuplicateIsDeduplicatedAcrossGatewayInstances(t *testing.T) {
 	second := newEnv(t, configure)
 	p := fmt.Sprintf(`{"chain":"eth","network":"eth-mainnet","payload":%q}`, evmRawTx)
 
-	assertJSONEq(t, `{"txHash":"0xclusterhash"}`, result(t, first.rpc("kt_broadcast", p)))
-	assertJSONEq(t, `{"txHash":"0xclusterhash"}`, result(t, second.rpc("kt_broadcast", p)))
+	assertBoundBroadcastResult(t, first.rpc("kt_broadcast", p), "eth", "eth-mainnet", evmBroadcastHash)
+	assertBoundBroadcastResult(t, second.rpc("kt_broadcast", p), "eth", "eth-mainnet", evmBroadcastHash)
 	if node.count("eth_sendRawTransaction") != 1 {
 		t.Fatalf("cross-instance replay reached upstream %d times", node.count("eth_sendRawTransaction"))
 	}
@@ -417,7 +474,7 @@ func TestBroadcastConcurrentDuplicateReturnsUnknownWithoutSecondWrite(t *testing
 	node.handle("eth_sendRawTransaction", func([]json.RawMessage) (any, map[string]any) {
 		close(entered)
 		<-release
-		return "0xafterwait", nil
+		return evmBroadcastHash, nil
 	})
 	store := newAtomicMemoryStore()
 	configure := func(cfg *handlers.Config) {
@@ -436,7 +493,7 @@ func TestBroadcastConcurrentDuplicateReturnsUnknownWithoutSecondWrite(t *testing
 		t.Fatalf("concurrent replay reached upstream %d times", node.count("eth_sendRawTransaction"))
 	}
 	close(release)
-	assertJSONEq(t, `{"txHash":"0xafterwait"}`, result(t, <-firstDone))
+	assertBoundBroadcastResult(t, <-firstDone, "eth", "eth-mainnet", evmBroadcastHash)
 }
 
 func TestBroadcastGuardFailureIsFailClosedBeforeUpstream(t *testing.T) {
@@ -461,7 +518,7 @@ func TestBroadcastGuardFailureIsFailClosedBeforeUpstream(t *testing.T) {
 
 func TestBroadcastCorruptAcceptedClaimFailsClosedWithoutReturningEmptyHash(t *testing.T) {
 	node := newRPCFake(t)
-	node.result("eth_sendRawTransaction", "0xfirsthash")
+	node.result("eth_sendRawTransaction", evmBroadcastHash)
 	store := newAtomicMemoryStore()
 	configure := func(cfg *handlers.Config) {
 		cfg.EthURLs = []string{node.srv.URL}
@@ -469,7 +526,7 @@ func TestBroadcastCorruptAcceptedClaimFailsClosedWithoutReturningEmptyHash(t *te
 	}
 	first := newEnv(t, configure)
 	p := fmt.Sprintf(`{"chain":"eth","payload":%q}`, evmRawTx)
-	assertJSONEq(t, `{"txHash":"0xfirsthash"}`, result(t, first.rpc("kt_broadcast", p)))
+	assertBoundBroadcastResult(t, first.rpc("kt_broadcast", p), "eth", "eth-mainnet", evmBroadcastHash)
 
 	store.corruptLast([]byte(`{"state":"accepted"}`))
 	second := newEnv(t, configure)
@@ -504,7 +561,7 @@ func TestBroadcastClaimWithMismatchedErrorCodeFailsClosed(t *testing.T) {
 
 func TestBroadcastResultPersistenceFailureIsObservable(t *testing.T) {
 	node := newRPCFake(t)
-	node.result("eth_sendRawTransaction", "0xaccepted")
+	node.result("eth_sendRawTransaction", evmBroadcastHash)
 	store := newAtomicMemoryStore()
 	store.setErr = errors.New("redis result write failed")
 	e := newEnv(t, func(cfg *handlers.Config) {
@@ -513,7 +570,7 @@ func TestBroadcastResultPersistenceFailureIsObservable(t *testing.T) {
 	})
 	p := fmt.Sprintf(`{"chain":"eth","payload":%q}`, evmRawTx)
 
-	assertJSONEq(t, `{"txHash":"0xaccepted"}`, result(t, e.rpc("kt_broadcast", p)))
+	assertBoundBroadcastResult(t, e.rpc("kt_broadcast", p), "eth", "eth-mainnet", evmBroadcastHash)
 	if node.count("eth_sendRawTransaction") != 1 {
 		t.Fatalf("accepted transaction was submitted %d times", node.count("eth_sendRawTransaction"))
 	}
@@ -524,7 +581,7 @@ func TestBroadcastResultPersistenceFailureIsObservable(t *testing.T) {
 
 func TestBroadcastFingerprintCanonicalizesEquivalentPayloads(t *testing.T) {
 	node := newRPCFake(t)
-	node.result("eth_sendRawTransaction", "0xhash")
+	node.result("eth_sendRawTransaction", evmBroadcastHash)
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.EthURLs = []string{node.srv.URL} })
 
 	lower := fmt.Sprintf(`{"chain":"eth","payload":%q}`, evmRawTx)
@@ -569,7 +626,7 @@ func TestBroadcastUnknownResultIsReplayedWithoutSecondWrite(t *testing.T) {
 
 func TestBroadcastSamePayloadOnDifferentNetworksUsesDistinctClaims(t *testing.T) {
 	node := newRPCFake(t)
-	node.result("eth_sendRawTransaction", "0xhash")
+	node.result("eth_sendRawTransaction", evmBroadcastHash)
 	e := newEnv(t, func(cfg *handlers.Config) {
 		cfg.EthURLs = []string{node.srv.URL}
 		cfg.EthSepoliaURLs = []string{node.srv.URL}
@@ -586,7 +643,7 @@ func TestBroadcastSamePayloadOnDifferentNetworksUsesDistinctClaims(t *testing.T)
 
 func TestBroadcastTronCanonicalJSONDeduplicatesFieldOrder(t *testing.T) {
 	grid := newRESTFake(t)
-	grid.routeJSON("/wallet/broadcasttransaction", `{"result":true,"txid":"deadbeef"}`)
+	grid.routeJSON("/wallet/broadcasttransaction", `{"result":true,"txid":"`+tronBroadcastTxID+`"}`)
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
 	first := `{"chain":"tron","payload":"{\"txID\":\"deadbeef\",\"signature\":[\"ab12\"],\"raw_data\":{\"contract\":[{\"type\":\"TransferContract\"}]}}"}`
 	second := `{"chain":"tron","payload":"{\"raw_data\":{\"contract\":[{\"type\":\"TransferContract\"}]},\"signature\":[\"ab12\"],\"txID\":\"deadbeef\"}"}`
@@ -600,7 +657,7 @@ func TestBroadcastTronCanonicalJSONDeduplicatesFieldOrder(t *testing.T) {
 
 func TestBroadcastTronFingerprintPreservesLargeIntegerPrecision(t *testing.T) {
 	grid := newRESTFake(t)
-	grid.routeJSON("/wallet/broadcasttransaction", `{"result":true,"txid":"deadbeef"}`)
+	grid.routeJSON("/wallet/broadcasttransaction", `{"result":true,"txid":"`+tronBroadcastTxID+`"}`)
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
 	firstPayload := `{"raw_data":{"amount":9007199254740992},"signature":["ab12"],"txID":"same-label"}`
 	secondPayload := `{"raw_data":{"amount":9007199254740993},"signature":["ab12"],"txID":"same-label"}`

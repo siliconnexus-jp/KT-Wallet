@@ -407,7 +407,7 @@ func (s *Solana) SendTransaction(ctx context.Context, payloadBase64 string) (str
 		return "", err
 	}
 	var sig string
-	if err := json.Unmarshal(raw, &sig); err != nil {
+	if err := json.Unmarshal(raw, &sig); err != nil || !isValidSolanaSignature(sig) {
 		return "", &Unavailable{Upstream: "solana", Message: "malformed sendTransaction result"}
 	}
 	return sig, nil

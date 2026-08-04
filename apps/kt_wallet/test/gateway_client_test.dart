@@ -50,6 +50,12 @@ class _Recorder {
 const _evmFrom = '0x1111111111111111111111111111111111111111';
 const _evmTo = '0x2222222222222222222222222222222222222222';
 const _evmToken = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
+const _evmHash =
+    '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const _tronHash =
+    'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd';
+const _solanaSignature =
+    '1111111111111111111111111111111111111111111111111111111111111111';
 const _tronOwner = 'TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH';
 const _solanaOwner = '11111111111111111111111111111111';
 
@@ -1796,18 +1802,97 @@ void main() {
     test('payload passthrough and txHash back', () async {
       final recorder = _Recorder()
         ..results = {
-          'kt_broadcast': {'txHash': '0xfeedbead'},
+          'kt_broadcast': {
+            'chain': 'eth',
+            'network': 'eth-mainnet',
+            'txHash': _evmHash,
+          },
         };
       final client = GatewayClient(
         baseUrl: 'https://gw.example',
         client: recorder.client,
       );
       final hash = await client.broadcast(chain: Coin.eth, payload: '0x02ab01');
-      expect(hash, '0xfeedbead');
+      expect(hash, _evmHash);
       expect(recorder.requests.single['params'], {
         'chain': 'eth',
         'payload': '0x02ab01',
       });
+    });
+
+    test('accepts canonical TRON and Solana transaction identities', () async {
+      for (final row in <(Coin, String, String, String)>[
+        (Coin.tron, 'tron', 'tron-mainnet', _tronHash),
+        (Coin.solana, 'solana', 'sol-mainnet', _solanaSignature),
+      ]) {
+        final recorder = _Recorder()
+          ..results = {
+            'kt_broadcast': {
+              'chain': row.$2,
+              'network': row.$3,
+              'txHash': row.$4,
+            },
+          };
+        final client = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: recorder.client,
+        );
+
+        expect(
+          await client.broadcast(chain: row.$1, payload: 'signed-payload'),
+          row.$4,
+        );
+      }
+    });
+
+    test('rejects unbound, additive and malformed broadcast results', () async {
+      final cases = <Map<String, Object?>>[
+        {'chain': 'polygon', 'network': 'eth-mainnet', 'txHash': _evmHash},
+        {'chain': 'eth', 'network': 'polygon-mainnet', 'txHash': _evmHash},
+        {
+          'chain': 'eth',
+          'network': 'eth-mainnet',
+          'txHash': _evmHash,
+          'accepted': true,
+        },
+        {'chain': 'eth', 'network': 'eth-mainnet', 'txHash': '0x1234'},
+      ];
+      for (final result in cases) {
+        final recorder = _Recorder()..results = {'kt_broadcast': result};
+        final client = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: recorder.client,
+        );
+        await expectLater(
+          client.broadcast(chain: Coin.eth, payload: '0x02ab01'),
+          throwsFormatException,
+        );
+      }
+    });
+
+    test('rejects malformed TRON and Solana transaction identities', () async {
+      for (final row in <(Coin, String, String, String)>[
+        (Coin.tron, 'tron', 'tron-mainnet', 'abcd'),
+        (Coin.solana, 'solana', 'sol-mainnet', 'not-a-signature'),
+      ]) {
+        final recorder = _Recorder()
+          ..results = {
+            'kt_broadcast': {
+              'chain': row.$2,
+              'network': row.$3,
+              'txHash': row.$4,
+            },
+          };
+        final client = GatewayClient(
+          baseUrl: 'https://gw.example',
+          client: recorder.client,
+        );
+
+        await expectLater(
+          client.broadcast(chain: row.$1, payload: 'signed-payload'),
+          throwsFormatException,
+        );
+      }
     });
 
     test(

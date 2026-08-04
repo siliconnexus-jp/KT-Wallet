@@ -261,7 +261,7 @@ func (e *EVM) SendRawTransaction(ctx context.Context, payload string) (string, e
 		return "", err
 	}
 	var hash string
-	if err := json.Unmarshal(raw, &hash); err != nil {
+	if err := json.Unmarshal(raw, &hash); err != nil || !evmReceiptHashPattern.MatchString(hash) {
 		return "", &Unavailable{Upstream: e.pool.name, Message: "malformed eth_sendRawTransaction result"}
 	}
 	return hash, nil

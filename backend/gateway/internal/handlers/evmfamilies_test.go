@@ -127,7 +127,7 @@ func TestNewEVMFamilyChainParamsAndBroadcast(t *testing.T) {
 			testnet.result("eth_getTransactionCount", "0x5")
 			testnet.nodeError("eth_feeHistory", -32601, "method not found") // gasPrice fallback
 			testnet.result("eth_gasPrice", "0x64")
-			testnet.result("eth_sendRawTransaction", "0xtestnethash")
+			testnet.result("eth_sendRawTransaction", evmBroadcastHash)
 
 			res := result(t, e.rpc("kt_getChainParams",
 				fmt.Sprintf(`{"chain":%q,"network":%q,"address":%q}`, fam.chain, fam.testnet, evmSelf)))
@@ -137,7 +137,7 @@ func TestNewEVMFamilyChainParamsAndBroadcast(t *testing.T) {
 
 			resp := e.rpc("kt_broadcast",
 				fmt.Sprintf(`{"chain":%q,"network":%q,"payload":%q}`, fam.chain, fam.testnet, evmRawTx))
-			assertJSONEq(t, `{"txHash":"0xtestnethash"}`, result(t, resp))
+			assertBoundBroadcastResult(t, resp, fam.chain, fam.testnet, evmBroadcastHash)
 
 			if mainnet.totalCalls() != 0 {
 				t.Fatalf("a %s transaction must never reach the mainnet node, saw %d calls",
