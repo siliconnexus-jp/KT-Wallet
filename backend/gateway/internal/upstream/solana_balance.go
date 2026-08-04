@@ -27,12 +27,25 @@ func isValidSolanaPublicKey(value string) bool {
 	if len(value) < 32 || len(value) > 44 {
 		return false
 	}
+	decodedLength, ok := solanaBase58DecodedLength(value)
+	return ok && decodedLength == 32
+}
+
+func isValidSolanaSignature(value string) bool {
+	if len(value) < 64 || len(value) > 88 {
+		return false
+	}
+	decodedLength, ok := solanaBase58DecodedLength(value)
+	return ok && decodedLength == 64
+}
+
+func solanaBase58DecodedLength(value string) (int, bool) {
 	n := new(big.Int)
 	base := big.NewInt(58)
 	for i := 0; i < len(value); i++ {
 		index := strings.IndexByte(solanaBase58Alphabet, value[i])
 		if index < 0 {
-			return false
+			return 0, false
 		}
 		n.Mul(n, base)
 		n.Add(n, big.NewInt(int64(index)))
@@ -42,7 +55,7 @@ func isValidSolanaPublicKey(value string) bool {
 	for leadingZeroes < len(value) && value[leadingZeroes] == '1' {
 		leadingZeroes++
 	}
-	return leadingZeroes+len(decoded) == 32
+	return leadingZeroes + len(decoded), true
 }
 
 func parseSolanaU64(raw []byte, quoted bool) (*big.Int, error) {

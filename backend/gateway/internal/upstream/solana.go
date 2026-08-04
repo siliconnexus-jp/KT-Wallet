@@ -165,6 +165,9 @@ func (s *Solana) GetSignaturesForAddress(ctx context.Context, address string, li
 // waiting for Helius/history indexing. The returned status is one of
 // "confirmed", "failed", "pending", "unknown".
 func (s *Solana) SignatureStatus(ctx context.Context, signature string) (string, error) {
+	if !isValidSolanaSignature(signature) {
+		return "", &Unavailable{Upstream: "solana", Message: "invalid transaction signature"}
+	}
 	raw, err := s.pool.Call(ctx, "getSignatureStatuses", []any{
 		[]string{signature},
 		map[string]bool{"searchTransactionHistory": true},
@@ -172,38 +175,11 @@ func (s *Solana) SignatureStatus(ctx context.Context, signature string) (string,
 	if err != nil {
 		return "", err
 	}
-	var out struct {
-		Value []json.RawMessage `json:"value"`
-	}
-	if err := json.Unmarshal(raw, &out); err != nil || len(out.Value) == 0 {
+	status, err := decodeSolanaSignatureStatus(raw)
+	if err != nil {
 		return "", &Unavailable{Upstream: "solana", Message: "malformed signature status"}
 	}
-	entry := bytes.TrimSpace(out.Value[0])
-	if bytes.Equal(entry, []byte("null")) {
-		return "unknown", nil
-	}
-	var status struct {
-		Err                json.RawMessage `json:"err"`
-		ConfirmationStatus string          `json:"confirmationStatus"`
-	}
-	if err := json.Unmarshal(entry, &status); err != nil {
-		return "", &Unavailable{Upstream: "solana", Message: "malformed signature status entry"}
-	}
-	trimmedErr := bytes.TrimSpace(status.Err)
-	if len(trimmedErr) == 0 {
-		return "unknown", nil
-	}
-	if !bytes.Equal(trimmedErr, []byte("null")) {
-		return "failed", nil
-	}
-	switch status.ConfirmationStatus {
-	case "confirmed", "finalized":
-		return "confirmed", nil
-	case "processed":
-		return "pending", nil
-	default:
-		return "unknown", nil
-	}
+	return status, nil
 }
 
 // ExecutionStatus reports explicit success/failure while preserving a missing

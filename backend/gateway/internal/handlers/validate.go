@@ -105,6 +105,14 @@ func isValidSolanaAddress(address string) bool {
 	return ok && len(raw) == 32
 }
 
+func isValidSolanaSignature(signature string) bool {
+	if len(signature) < 64 || len(signature) > 88 {
+		return false
+	}
+	raw, ok := base58Decode(signature)
+	return ok && len(raw) == 64
+}
+
 // tokenSetHash canonically fingerprints a token list for balance cache keys.
 func tokenSetHash(tokens []tokenRef) string {
 	items := make([]string, len(tokens))

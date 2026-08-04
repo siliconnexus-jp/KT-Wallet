@@ -38,7 +38,7 @@ func (g *Gateway) GetTransactionStatus(ctx context.Context, params json.RawMessa
 		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: "hash" must be a 0x-prefixed 32-byte transaction hash`)
 	case p.Chain == "tron" && !tronTxHashRe.MatchString(p.Hash):
 		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: "hash" must be a 32-byte hex transaction id`)
-	case p.Chain == "solana" && (len(p.Hash) < 32 || len(p.Hash) > 128):
+	case p.Chain == "solana" && !isValidSolanaSignature(p.Hash):
 		return nil, rpc.Errorf(rpc.CodeInvalidParams, `invalid params: "hash" must be a Solana transaction signature`)
 	}
 

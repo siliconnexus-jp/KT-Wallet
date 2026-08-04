@@ -40,7 +40,7 @@ curl -s localhost:8080/rpc -d '{"jsonrpc":"2.0","id":1,"method":"kt_health"}'
 curl -s localhost:8080/healthz
 curl -s localhost:8080/readyz
 curl -s -H "Authorization: Bearer $METRICS_BEARER_TOKEN" localhost:8080/metrics
-# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.18"}}
+# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.19"}}
 ```
 
 ## Environment
@@ -642,6 +642,22 @@ When the node explicitly reports that pending state is unsupported, the
 Gateway returns the latest native value in both explicit fields and sets
 `pendingAvailable:false`; other errors fail the call. Clients must not treat a
 false marker as proof that no pending outgoing transaction exists.
+
+### `kt_getTransactionStatus` `{"chain": C, "network": N?, "hash": S}`
+
+→ `{"status":"confirmed"|"failed"|"pending"|"unknown"}`
+
+Solana transaction status follows the official
+[`getSignatureStatuses`](https://solana.com/docs/rpc/http/getsignaturestatuses)
+contract exactly. The hash must decode to one 64-byte Base58 signature before
+network access. Because the request contains one signature, the response must
+contain one status entry plus a bounded context slot. Every non-null entry must
+carry an in-range slot, confirmations, `err`, deprecated `status`, and the
+documented nullable confirmation status. Unknown/duplicate fields, invalid
+u64 values, a future transaction slot, more than one returned item, conflicting
+`err`/`status`, an unknown confirmation enum, or finalized evidence with a
+non-null confirmation count fail closed. A single `null` item is the only
+not-found shape and maps to `unknown`; it is not treated as a failed transfer.
 
 ### `kt_getHistory` `{"chain": C, "network": N?, "address": A, "limit": N?}`
 

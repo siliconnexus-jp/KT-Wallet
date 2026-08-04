@@ -141,11 +141,16 @@ func TestEVMTransactionStatusRejectsAnotherKnownTransaction(t *testing.T) {
 }
 
 func TestSolanaTransactionStatusReportsExecutionFailure(t *testing.T) {
+	failure := map[string]any{"InstructionError": []any{0, "Custom"}}
 	node := newRPCFake(t)
 	node.result("getSignatureStatuses", map[string]any{
+		"context": map[string]any{"slot": 82},
 		"value": []any{map[string]any{
+			"slot":               80,
+			"confirmations":      nil,
 			"confirmationStatus": "finalized",
-			"err":                map[string]any{"InstructionError": []any{0, "Custom"}},
+			"err":                failure,
+			"status":             map[string]any{"Err": failure},
 		}},
 	})
 	e := newEnv(t, func(cfg *handlers.Config) {
@@ -161,10 +166,14 @@ func TestSolanaTransactionStatusReportsExecutionFailure(t *testing.T) {
 	}
 }
 
-func TestSolanaTransactionStatusMissingErrIsUnknown(t *testing.T) {
+func TestSolanaTransactionStatusMissingErrFailsClosed(t *testing.T) {
 	node := newRPCFake(t)
 	node.result("getSignatureStatuses", map[string]any{
+		"context": map[string]any{"slot": 82},
 		"value": []any{map[string]any{
+			"slot":               80,
+			"confirmations":      nil,
+			"status":             map[string]any{"Ok": nil},
 			"confirmationStatus": "finalized",
 		}},
 	})
@@ -172,12 +181,24 @@ func TestSolanaTransactionStatusMissingErrIsUnknown(t *testing.T) {
 		cfg.SolanaURLs = []string{node.srv.URL}
 	})
 
-	res := result(t, e.rpc(
+	assertErrCode(t, e.rpc(
 		"kt_getTransactionStatus",
 		fmt.Sprintf(`{"chain":"solana","hash":%q}`, solHash),
-	))
-	if res["status"] != "unknown" {
-		t.Fatalf("missing err evidence must stay unknown, got %v", res)
+	), rpc.CodeUpstream)
+}
+
+func TestSolanaTransactionStatusRejectsInvalidSignatureBeforeNetwork(t *testing.T) {
+	node := newRPCFake(t)
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.SolanaURLs = []string{node.srv.URL}
+	})
+
+	assertErrCode(t, e.rpc(
+		"kt_getTransactionStatus",
+		`{"chain":"solana","hash":"not-a-valid-solana-transaction-signature"}`,
+	), rpc.CodeInvalidParams)
+	if got := node.totalCalls(); got != 0 {
+		t.Fatalf("invalid Solana signature reached upstream %d times", got)
 	}
 }
 
