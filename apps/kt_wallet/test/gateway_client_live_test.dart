@@ -45,4 +45,23 @@ void main() {
     },
     skip: enabled ? false : 'set KT_LIVE_GATEWAY_CLIENT=1 for live evidence',
   );
+
+  test(
+    'production Sepolia status binds the exact public probe hash',
+    () async {
+      const probeHash =
+          '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      final client = GatewayClient(
+        baseUrl: baseUrl,
+        networks: (_) => 'eth-sepolia',
+      );
+
+      expect(
+        await client.getTransactionStatus(chain: Coin.eth, hash: probeHash),
+        GatewayTransactionStatus.unknown,
+      );
+      client.close();
+    },
+    skip: enabled ? false : 'set KT_LIVE_GATEWAY_CLIENT=1 for live evidence',
+  );
 }

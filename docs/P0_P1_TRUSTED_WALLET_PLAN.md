@@ -2,7 +2,7 @@
 
 更新日期：2026-08-04
 
-当前 Gateway 源码版本 1.16.22（候选）；当前生产 Gateway 1.16.21。生产 Gateway-first 链身份、
+当前 Gateway 源码版本 1.16.22；当前生产 Gateway 1.16.22。生产 Gateway-first 链身份、
 TRON/Solana/EVM 余额、Solana 交易终态、EVM 动态手续费及签名前预执行回包严格解析均已启用。
 
 ## 目标与边界
@@ -2037,3 +2037,17 @@ opt-in 线上/设备测试默认跳过）、KT Cold Signer 570/570、共享 pack
 双实例、HAProxy 与公网均为 1.16.21，生产严格客户端只读测试 2/2、监控 3/3 targets UP、
 17/17 规则健康、0 firing、Alertmanager 0 active，发布后双实例 warning+ 为 0。该证据不
 替代签名移动制品、物理设备、真实链上广播或独立安全审计。
+
+同日继续闭合交易终态回包身份。服务端 `kt_getTransactionStatus` 现在只返回精确
+`network/hash/status` 三字段，并把 resolved network 与原始请求哈希回显；App 在持久化
+状态变化前逐项核对网络与交易身份，EVM/TRON 仅接受规范 32-byte hex，Solana 仅接受
+规范 Base58 64-byte 签名，未知字段、错误网络或错误哈希全部失败闭合。旧 App 实际会把
+绑定到另一网络/哈希的 `confirmed` 当作当前交易终态，失败优先测试先红后绿。Gateway
+Client/状态服务 61/61、KT Wallet 1602/1602、KT Cold Signer 570/570、静态分析 0、
+Gateway audit、公开源码 12/12 与完整依赖门禁 13/13 通过。Gateway 1.16.22 静态制品
+8,900,770 bytes / SHA-256 `9cef8ae3…d48d79` 已按 secondary → primary 发布到
+`20260804T143356Z-fb7f2c2-v1.16.22-status-binding`；8118/8119/8120 与公网均为
+1.16.22、16 网络且 ready。公网严格 App 客户端只读测试 3/3，状态探针按预期返回
+`unknown` 且网络/哈希精确绑定；监控 3/3 targets UP、17/17 规则健康、0 firing、
+Alertmanager 0 active，发布后双实例 warning+ 为 0。保留 1.16.21 release 原子回滚；
+本项没有加载私钥、签名或广播，也不替代物理设备、真实链上交易和独立安全审计。
