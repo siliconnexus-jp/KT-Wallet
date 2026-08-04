@@ -207,6 +207,16 @@ void main() {
     failures.add('${externalBackupEnvelope.path}: $issue');
   }
 
+  final walletPinState = File(
+    'apps/kt_wallet/lib/src/security/wallet_pin.dart',
+  );
+  final walletPinStateSource = walletPinState.existsSync()
+      ? walletPinState.readAsStringSync()
+      : '';
+  for (final issue in findWalletPinStateBoundaryIssues(walletPinStateSource)) {
+    failures.add('${walletPinState.path}: $issue');
+  }
+
   // Direct MethodChannel callers must not be able to crash the iOS process
   // with an unexpected runtime type. `as!` and force-unwrapped HDWallet
   // construction bypass Swift error handling entirely, so keep both out of

@@ -615,6 +615,54 @@ final unsafe = jsonDecode(utf8.decode(bytes));
     });
   });
 
+  group('wallet PIN state boundary', () {
+    const safe = '''
+static const maxStoredIterations = 1000000;
+static const maxTrackedFailures = 64;
+static const maxLockout = Duration(hours: 24);
+final decoded = decodeJsonWithoutDuplicateKeys(raw);
+final pin = _decode(allowed: const {'algo', 'salt', 'hash', 'iterations'});
+final lock = _decode(allowed: const {'fails', 'lockedUntil'});
+final salt = _decodeCanonicalBase64(record['salt'], saltLength);
+final hash = _decodeCanonicalBase64(record['hash'], hashLength);
+until = now.add(_lockoutDuration(newFails));
+''';
+
+    test('accepts closed bounded PIN and lockout records', () {
+      expect(findWalletPinStateBoundaryIssues(safe), isEmpty);
+    });
+
+    test(
+      'rejects unsafe JSON, presence-only enrollment, and unbounded shift',
+      () {
+        final issues = findWalletPinStateBoundaryIssues('''
+$safe
+final record = jsonDecode(raw);
+Future<bool> isSet() async => await storage.read(pinKey) != null;
+final factor = 1 << (newFails - threshold);
+''');
+        expect(issues, contains(contains('duplicate-unsafe JSON decoder')));
+        expect(issues, contains(contains('presence without parsing')));
+        expect(issues, contains(contains('attacker-sized bit shift')));
+      },
+    );
+
+    test('rejects removal of every resource and schema bound', () {
+      for (final marker in [
+        'maxStoredIterations = 1000000',
+        'maxTrackedFailures = 64',
+        'maxLockout = Duration(hours: 24)',
+        "allowed: const {'algo', 'salt', 'hash', 'iterations'}",
+        "allowed: const {'fails', 'lockedUntil'}",
+      ]) {
+        expect(
+          findWalletPinStateBoundaryIssues(safe.replaceFirst(marker, 'gone')),
+          isNotEmpty,
+        );
+      }
+    });
+  });
+
   group('Flutter ARB localization gate', () {
     test('rejects retired and locale-inappropriate brand terms', () {
       final issues = findForbiddenLocalizationTermIssues(

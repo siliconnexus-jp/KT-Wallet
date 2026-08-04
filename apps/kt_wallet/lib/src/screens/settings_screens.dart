@@ -2732,7 +2732,17 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     required String pinPrompt,
   }) async {
     final pin = WalletPin.instance;
-    final pinSet = await pin.isSet();
+    final bool pinSet;
+    try {
+      pinSet = await pin.isSet();
+    } on Object {
+      if (mounted) {
+        _showSecurityMessage(
+          AppLocalizations.of(context).secureStorageUnavailableDesc,
+        );
+      }
+      return false;
+    }
     if (!mounted) return false;
     if (_prefs.authMethod == AuthMethod.password && pinSet) {
       return _verifyPin(pin: pin, prompt: pinPrompt);
@@ -2787,7 +2797,14 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     final pin = WalletPin.instance;
     if (!_prefs.appLock) {
       // Turning ON: enroll a PIN first when none exists yet.
-      if (!await pin.isSet()) {
+      final bool pinSet;
+      try {
+        pinSet = await pin.isSet();
+      } on Object {
+        _showSecurityMessage(l10n.secureStorageUnavailableDesc);
+        return;
+      }
+      if (!pinSet) {
         if (!mounted) return;
         final enrolled = await showModalBottomSheet<bool>(
           context: context,
@@ -2877,7 +2894,16 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     )) {
       return;
     }
-    if (method == AuthMethod.password && !await WalletPin.instance.isSet()) {
+    var pinSet = true;
+    if (method == AuthMethod.password) {
+      try {
+        pinSet = await WalletPin.instance.isSet();
+      } on Object {
+        _showSecurityMessage(l10n.secureStorageUnavailableDesc);
+        return;
+      }
+    }
+    if (method == AuthMethod.password && !pinSet) {
       if (!mounted) return;
       final enrolled = await showModalBottomSheet<bool>(
         context: context,
@@ -3449,7 +3475,19 @@ class _SetPinSheetState extends State<_SetPinSheet> {
       });
     } else if (_entry == _first) {
       setState(() => _saving = true);
-      await widget.pin.setPin(_entry);
+      try {
+        await widget.pin.setPin(_entry);
+      } on Object {
+        if (!mounted) return;
+        final l10n = AppLocalizations.of(context);
+        setState(() {
+          _first = null;
+          _entry = '';
+          _saving = false;
+          _error = l10n.secureStorageUnavailableDesc;
+        });
+        return;
+      }
       if (mounted) Navigator.of(context).pop(true);
     } else {
       final l10n = AppLocalizations.of(context);
@@ -3557,7 +3595,18 @@ class _VerifyPinSheetState extends State<_VerifyPinSheet> {
 
     final l10n = AppLocalizations.of(context);
     setState(() => _verifying = true);
-    final verdict = await widget.pin.verify(_entry);
+    final PinVerdict verdict;
+    try {
+      verdict = await widget.pin.verify(_entry);
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _entry = '';
+        _verifying = false;
+        _error = l10n.secureStorageUnavailableDesc;
+      });
+      return;
+    }
     if (!mounted) return;
     if (verdict.isOk) {
       Navigator.of(context).pop(true);

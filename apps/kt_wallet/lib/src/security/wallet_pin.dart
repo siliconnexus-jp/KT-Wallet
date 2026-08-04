@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, visibleForTesting;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../rpc/json_rpc_envelope.dart' show decodeJsonWithoutDuplicateKeys;
 import '../state/flutter_test_env.dart';
 
 /// The wallet app's own PIN (the app-lock fallback when biometrics are
@@ -22,6 +23,16 @@ abstract class PinStorage {
   Future<String?> read(String key);
   Future<void> write(String key, String value);
   Future<void> delete(String key);
+}
+
+/// The enrolled PIN or lockout record exists but cannot be interpreted under
+/// KT Wallet's closed security schema. Callers must keep authentication
+/// locked; deleting or silently replacing the record would weaken the gate.
+class PinStateCorruptedException implements Exception {
+  const PinStateCorruptedException();
+
+  @override
+  String toString() => 'PinStateCorruptedException';
 }
 
 /// Production storage: flutter_secure_storage (Keychain / Keystore).
@@ -190,14 +201,30 @@ class WalletPin {
   static const pinLockoutKey = 'wallet.pin_lockout';
 
   static const saltLength = 16;
+  static const hashLength = 32;
+  static const maxStoredIterations = 1000000;
   static const lockoutThreshold = 5;
+  static const maxTrackedFailures = 64;
   static const baseLockout = Duration(seconds: 30);
+  static const maxLockout = Duration(hours: 24);
+  static const maxPersistedLockout = Duration(days: 7);
 
   /// Whether a PIN has been enrolled.
-  Future<bool> isSet() async => await _storage.read(pinKey) != null;
+  Future<bool> isSet() async {
+    final raw = await _storage.read(pinKey);
+    if (raw == null) return false;
+    _decodePinRecord(raw);
+    return true;
+  }
 
   /// Enrolls (or replaces) the PIN and clears any lockout state.
   Future<void> setPin(String pin) async {
+    if (!_isSixDigitPin(pin)) {
+      throw ArgumentError.value(pin.length, 'pin', 'must be exactly 6 digits');
+    }
+    if (iterations < 1 || iterations > maxStoredIterations) {
+      throw ArgumentError.value(iterations, 'iterations');
+    }
     final salt = Uint8List.fromList(
       List.generate(saltLength, (_) => _random.nextInt(256)),
     );
@@ -228,9 +255,12 @@ class WalletPin {
   /// bumps the persisted failure counter (engaging/extending the lock); on
   /// success resets it.
   Future<PinVerdict> verify(String pin) async {
+    if (!_isSixDigitPin(pin)) {
+      throw ArgumentError.value(pin.length, 'pin', 'must be exactly 6 digits');
+    }
     final raw = await _storage.read(pinKey);
     if (raw == null) throw StateError('no PIN set');
-    final record = (jsonDecode(raw) as Map).cast<String, Object?>();
+    final record = _decodePinRecord(raw);
 
     final lockout = await _readLockout();
     final fails = lockout.$1;
@@ -242,20 +272,21 @@ class WalletPin {
 
     final hash = pbkdf2Sha256(
       password: utf8.encode(pin),
-      salt: base64Decode(record['salt']! as String),
-      iterations: record['iterations']! as int,
+      salt: record.salt,
+      iterations: record.iterations,
     );
-    if (_constantTimeEquals(hash, base64Decode(record['hash']! as String))) {
+    if (_constantTimeEquals(hash, record.hash)) {
       await _storage.delete(pinLockoutKey);
       return const PinVerdict.ok();
     }
 
-    final newFails = fails + 1;
+    final newFails = min(fails + 1, maxTrackedFailures);
     DateTime? until;
     if (newFails >= lockoutThreshold) {
-      // 5th failure → 30s; each further failure doubles the lock.
-      final factor = 1 << (newFails - lockoutThreshold);
-      until = now.add(baseLockout * factor);
+      // 5th failure → 30s; subsequent failures double up to a 24-hour hard
+      // cap. The bounded loop cannot allocate an attacker-sized BigInt even
+      // if persisted storage is corrupted.
+      until = now.add(_lockoutDuration(newFails));
     }
     await _storage.write(
       pinLockoutKey,
@@ -280,13 +311,99 @@ class WalletPin {
   Future<(int, DateTime?)> _readLockout() async {
     final raw = await _storage.read(pinLockoutKey);
     if (raw == null) return (0, null);
-    final json = (jsonDecode(raw) as Map).cast<String, Object?>();
-    final untilMs = json['lockedUntil'] as int?;
-    return (
-      json['fails']! as int,
-      untilMs == null ? null : DateTime.fromMillisecondsSinceEpoch(untilMs),
+    final json = _decodeExactObject(
+      raw,
+      allowed: const {'fails', 'lockedUntil'},
+      required: const {'fails'},
     );
+    final fails = json['fails'];
+    if (fails is! int || fails < 1 || fails > maxTrackedFailures) {
+      throw const PinStateCorruptedException();
+    }
+    final untilMs = json['lockedUntil'];
+    if (fails < lockoutThreshold) {
+      if (untilMs != null || json.containsKey('lockedUntil')) {
+        throw const PinStateCorruptedException();
+      }
+      return (fails, null);
+    }
+    if (untilMs is! int || untilMs < 0) {
+      throw const PinStateCorruptedException();
+    }
+    final latest = _now().add(maxPersistedLockout).millisecondsSinceEpoch;
+    if (untilMs > latest) throw const PinStateCorruptedException();
+    final until = DateTime.fromMillisecondsSinceEpoch(untilMs);
+    return (fails, until);
   }
+
+  ({Uint8List salt, Uint8List hash, int iterations}) _decodePinRecord(
+    String raw,
+  ) {
+    final record = _decodeExactObject(
+      raw,
+      allowed: const {'algo', 'salt', 'hash', 'iterations'},
+      required: const {'algo', 'salt', 'hash', 'iterations'},
+    );
+    final storedIterations = record['iterations'];
+    if (record['algo'] != 'pbkdf2-hmac-sha256' ||
+        storedIterations is! int ||
+        storedIterations < 1 ||
+        storedIterations > maxStoredIterations) {
+      throw const PinStateCorruptedException();
+    }
+    final salt = _decodeCanonicalBase64(record['salt'], saltLength);
+    final hash = _decodeCanonicalBase64(record['hash'], hashLength);
+    return (salt: salt, hash: hash, iterations: storedIterations);
+  }
+
+  static Map<String, Object?> _decodeExactObject(
+    String raw, {
+    required Set<String> allowed,
+    required Set<String> required,
+  }) {
+    try {
+      final decoded = decodeJsonWithoutDuplicateKeys(raw);
+      if (decoded is! Map ||
+          decoded.keys.any((key) => key is! String || !allowed.contains(key)) ||
+          required.any((key) => !decoded.containsKey(key))) {
+        throw const PinStateCorruptedException();
+      }
+      return decoded.cast<String, Object?>();
+    } on PinStateCorruptedException {
+      rethrow;
+    } on Object {
+      throw const PinStateCorruptedException();
+    }
+  }
+
+  static Uint8List _decodeCanonicalBase64(Object? value, int length) {
+    if (value is! String) throw const PinStateCorruptedException();
+    try {
+      final bytes = base64Decode(value);
+      if (bytes.length != length || base64Encode(bytes) != value) {
+        throw const PinStateCorruptedException();
+      }
+      return Uint8List.fromList(bytes);
+    } on PinStateCorruptedException {
+      rethrow;
+    } on Object {
+      throw const PinStateCorruptedException();
+    }
+  }
+
+  static Duration _lockoutDuration(int failedAttempts) {
+    var seconds = baseLockout.inSeconds;
+    final maxSeconds = maxLockout.inSeconds;
+    for (var i = lockoutThreshold; i < failedAttempts; i++) {
+      seconds = min(seconds * 2, maxSeconds);
+      if (seconds == maxSeconds) break;
+    }
+    return Duration(seconds: seconds);
+  }
+
+  static bool _isSixDigitPin(String pin) =>
+      pin.length == 6 &&
+      pin.codeUnits.every((code) => code >= 48 && code <= 57);
 
   static bool _constantTimeEquals(List<int> a, List<int> b) {
     if (a.length != b.length) return false;

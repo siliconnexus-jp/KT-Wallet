@@ -5621,7 +5621,19 @@ class TransferAuthSheet extends StatelessWidget {
   Future<void> _usePin(BuildContext context) async {
     final l10n = AppLocalizations.of(context);
     final pin = WalletPin.instance;
-    if (!await pin.isSet()) {
+    final bool pinSet;
+    try {
+      pinSet = await pin.isSet();
+    } on Object {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(content: Text(l10n.secureStorageUnavailableDesc)),
+        );
+      return;
+    }
+    if (!pinSet) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
@@ -6169,7 +6181,19 @@ class _TransferPinSheetState extends State<_TransferPinSheet> {
     });
     if (_entry.length != 6) return;
     setState(() => _busy = true);
-    final verdict = await widget.pin.verify(_entry);
+    final PinVerdict verdict;
+    try {
+      verdict = await widget.pin.verify(_entry);
+    } on Object {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context);
+      setState(() {
+        _entry = '';
+        _busy = false;
+        _error = l10n.secureStorageUnavailableDesc;
+      });
+      return;
+    }
     if (!mounted) return;
     if (verdict.isOk) {
       Navigator.of(context).pop(true);

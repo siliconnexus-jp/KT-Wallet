@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/src/security/app_lock_gate.dart';
 import 'package:kt_wallet/src/security/biometric_auth.dart';
@@ -57,8 +58,9 @@ void main() {
     required AppPrefsController prefs,
     required BiometricAuth auth,
     WalletPin? pin,
+    Locale locale = const Locale('zh'),
   }) async {
-    tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+    tester.platformDispatcher.localesTestValue = <Locale>[locale];
     addTearDown(tester.platformDispatcher.clearLocalesTestValue);
     await tester.pumpWidget(
       AppLockGate(
@@ -195,6 +197,56 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('WALLET-HOME'), findsNothing);
     expect(find.text('安全存储不可用'), findsOneWidget);
+  });
+
+  testWidgets('corrupt PIN record is a hard lock, never an enrollment path', (
+    tester,
+  ) async {
+    final storage = InMemoryPinStorage()
+      ..values[WalletPin.pinKey] =
+          '{"algo":"pbkdf2-hmac-sha256","salt":"AA==",'
+          '"hash":"AA==","iterations":1000}';
+    await pumpGate(
+      tester,
+      prefs: AppPrefsController(),
+      auth: const FakeBiometricAuth(BiometricOutcome.success),
+      pin: newPin(storage),
+    );
+
+    expect(find.text('WALLET-HOME'), findsNothing);
+    expect(find.text('安全存储不可用'), findsOneWidget);
+    expect(find.text('设置解锁密码'), findsNothing);
+  });
+
+  testWidgets('corrupt PIN hard-lock state has report-grade English evidence', (
+    tester,
+  ) async {
+    await (FontLoader(
+      'Inter',
+    )..addFont(rootBundle.load('fonts/Inter.ttf'))).load();
+    await (FontLoader(
+      'MaterialIcons',
+    )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final storage = InMemoryPinStorage()
+      ..values[WalletPin.pinKey] =
+          '{"algo":"pbkdf2-hmac-sha256","salt":"AA==",'
+          '"hash":"AA==","iterations":1000}';
+    await pumpGate(
+      tester,
+      prefs: AppPrefsController(),
+      auth: const FakeBiometricAuth(BiometricOutcome.success),
+      pin: newPin(storage),
+      locale: const Locale('en'),
+    );
+
+    expect(find.text('Secure storage unavailable'), findsOneWidget);
+    expect(find.text('WALLET-HOME'), findsNothing);
+    await expectLater(
+      find.byType(AppLockGate),
+      matchesGoldenFile('goldens/screens/pin-state-corrupted-en.png'),
+    );
   });
 
   testWidgets('PIN enrollment write failure never unlocks the wallet', (

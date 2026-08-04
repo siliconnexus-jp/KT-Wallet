@@ -982,3 +982,49 @@ List<String> findExternalBackupJsonBoundaryIssues(String contents) {
   }
   return issues;
 }
+
+/// Keeps the app-lock PIN record bounded and single-interpretable.
+///
+/// Secure storage availability does not make its bytes infallible: migration,
+/// corruption, or a compromised device can still supply an open/ambiguous
+/// record. Authentication must reject that state before PBKDF2 work, and an
+/// attacker-controlled failure count must never create an unbounded shift or
+/// duration.
+List<String> findWalletPinStateBoundaryIssues(String contents) {
+  final issues = <String>[];
+  const required = {
+    'decodeJsonWithoutDuplicateKeys(raw)':
+        'PIN state does not reject duplicate JSON members',
+    "allowed: const {'algo', 'salt', 'hash', 'iterations'}":
+        'PIN record schema is not closed',
+    "allowed: const {'fails', 'lockedUntil'}":
+        'PIN lockout schema is not closed',
+    'static const maxStoredIterations = 1000000':
+        'stored PBKDF2 work is not bounded',
+    'static const maxTrackedFailures = 64':
+        'persisted failure count is not bounded',
+    'static const maxLockout = Duration(hours: 24)':
+        'computed lockout duration is not bounded',
+    "_decodeCanonicalBase64(record['salt'], saltLength)":
+        'PIN salt length/canonical encoding is not bound',
+    "_decodeCanonicalBase64(record['hash'], hashLength)":
+        'PIN hash length/canonical encoding is not bound',
+    'until = now.add(_lockoutDuration(newFails))':
+        'lockout growth bypasses the bounded duration helper',
+  };
+  for (final entry in required.entries) {
+    if (!contents.contains(entry.key)) issues.add(entry.value);
+  }
+  if (RegExp(r'jsonDecode\(\s*raw\s*\)').hasMatch(contents)) {
+    issues.add('PIN state uses the duplicate-unsafe JSON decoder');
+  }
+  if (RegExp(r'1\s*<<\s*\(newFails').hasMatch(contents)) {
+    issues.add('PIN lockout uses an attacker-sized bit shift');
+  }
+  if (RegExp(
+    r'Future<bool> isSet\(\)[\s\S]{0,250}read\(pinKey\)\s*!=\s*null',
+  ).hasMatch(contents)) {
+    issues.add('PIN enrollment check trusts record presence without parsing');
+  }
+  return issues;
+}

@@ -137,4 +137,72 @@ void main() {
       throwsStateError,
     );
   });
+
+  test('rejects ambiguous or open PIN records before hashing', () async {
+    final storage = InMemoryPinStorage();
+    final pin = newPin(storage);
+    await pin.setPin('123456');
+    final valid = storage.values[WalletPin.pinKey]!;
+
+    for (final malformed in [
+      valid.replaceFirst('"algo":"pbkdf2-hmac-sha256"', '"algo":"unknown"'),
+      valid.replaceFirst('}', ',"memo":"ignored"}'),
+      valid.replaceFirst(
+        '"iterations":1000',
+        '"iterations":1,"iterations":1000',
+      ),
+      valid.replaceFirst(
+        '"iterations":1000',
+        '"iterations":1,"itera\\u0074ions":1000',
+      ),
+      valid.replaceFirst(RegExp(r'"salt":"[^"]+"'), '"salt":"AA=="'),
+    ]) {
+      storage.values[WalletPin.pinKey] = malformed;
+      expect(() => pin.isSet(), throwsA(isA<PinStateCorruptedException>()));
+      expect(
+        () => pin.verify('123456'),
+        throwsA(isA<PinStateCorruptedException>()),
+      );
+    }
+  });
+
+  test(
+    'rejects malformed lockout state instead of weakening the gate',
+    () async {
+      final storage = InMemoryPinStorage();
+      final pin = newPin(storage, clock: () => DateTime.utc(2026, 8, 5));
+      await pin.setPin('123456');
+
+      for (final malformed in [
+        '{"fails":1,"memo":"ignored"}',
+        '{"fails":1,"fails":2}',
+        '{"fails":65}',
+        '{"fails":5}',
+        '{"fails":5,"lockedUntil":1786579200000}',
+      ]) {
+        storage.values[WalletPin.pinLockoutKey] = malformed;
+        expect(
+          () => pin.lockRemaining(),
+          throwsA(isA<PinStateCorruptedException>()),
+        );
+      }
+    },
+  );
+
+  test('caps repeated lockout growth without losing persistence', () async {
+    final now = DateTime.utc(2026, 8, 5);
+    final storage = InMemoryPinStorage();
+    final pin = newPin(storage, clock: () => now);
+    await pin.setPin('123456');
+    storage.values[WalletPin.pinLockoutKey] =
+        '{"fails":64,"lockedUntil":${now.subtract(const Duration(seconds: 1)).millisecondsSinceEpoch}}';
+
+    final verdict = await pin.verify('000000');
+    expect(verdict.isLocked, isTrue);
+    expect(verdict.failedAttempts, WalletPin.maxTrackedFailures);
+    expect(verdict.lockRemaining, WalletPin.maxLockout);
+
+    final restarted = newPin(storage, clock: () => now);
+    expect(await restarted.lockRemaining(), WalletPin.maxLockout);
+  });
 }

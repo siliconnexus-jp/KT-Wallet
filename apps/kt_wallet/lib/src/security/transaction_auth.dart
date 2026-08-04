@@ -49,7 +49,13 @@ class LocalTransactionAuthGate extends TransactionAuthGate {
   }
 
   Future<bool> _showPin(BuildContext context, WalletPin pin) async {
-    if (!await pin.isSet() || !context.mounted) return false;
+    try {
+      if (!await pin.isSet() || !context.mounted) return false;
+    } on Object {
+      // A missing platform store or malformed enrolled record is not an
+      // invitation to bypass authentication or enroll a replacement PIN.
+      return false;
+    }
     return await showModalBottomSheet<bool>(
           context: context,
           isScrollControlled: true,
@@ -103,7 +109,19 @@ class _TransactionPinSheetState extends State<_TransactionPinSheet> {
     });
     if (_entry.length != 6) return;
     setState(() => _busy = true);
-    final verdict = await widget.pin.verify(_entry);
+    final PinVerdict verdict;
+    try {
+      verdict = await widget.pin.verify(_entry);
+    } on Object {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context);
+      setState(() {
+        _entry = '';
+        _busy = false;
+        _error = l10n.secureStorageUnavailableDesc;
+      });
+      return;
+    }
     if (!mounted) return;
     if (verdict.isOk) {
       Navigator.of(context).pop(true);
