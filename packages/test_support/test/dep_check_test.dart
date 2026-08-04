@@ -615,6 +615,63 @@ final unsafe = jsonDecode(utf8.decode(bytes));
     });
   });
 
+  group('TRON signed JSON boundary', () {
+    const verifier = '''
+const tronSignedTransactionJsonMaxBytes = 1024 * 1024;
+if (signed.length > tronSignedTransactionJsonMaxBytes) throw FormatException();
+final decoded = decodeJsonWithUniqueObjectMembers(
+  utf8.decode(signed),
+  maxChars: tronSignedTransactionJsonMaxBytes,
+);
+if (map.keys.any((key) => key != 'transaction' && key != 'txID')) throw FormatException();
+''';
+    const broadcaster = '''
+final decoded = _decodeTronSignedJson(signedTx);
+final checked = _decodeTronSignedJson(signedTx);
+if (signedTx.length > tronSignedTransactionJsonMaxBytes) throw FormatException();
+return decodeJsonWithUniqueObjectMembers(source);
+''';
+
+    test(
+      'accepts a bounded unique decoder at verify and submit boundaries',
+      () {
+        expect(
+          findTronSignedJsonBoundaryIssues(verifier, broadcaster),
+          isEmpty,
+        );
+      },
+    );
+
+    test('rejects unsafe decoding or a missing submission bound', () {
+      final issues = findTronSignedJsonBoundaryIssues(
+        verifier.replaceFirst(
+          'decodeJsonWithUniqueObjectMembers(',
+          'jsonDecode(utf8.decode(signed)); unused(',
+        ),
+        broadcaster
+            .replaceFirst(
+              'decodeJsonWithUniqueObjectMembers(source)',
+              'json.decode(text)',
+            )
+            .replaceFirst(
+              'signedTx.length > tronSignedTransactionJsonMaxBytes',
+              'false',
+            ),
+      );
+      expect(issues, contains(contains('verifier does not reject duplicate')));
+      expect(issues, contains(contains('verifier uses the duplicate-unsafe')));
+      expect(
+        issues,
+        contains(contains('broadcaster does not reject duplicate')),
+      );
+      expect(issues, contains(contains('broadcaster does not enforce')));
+      expect(
+        issues,
+        contains(contains('broadcaster uses the duplicate-unsafe')),
+      );
+    });
+  });
+
   group('wallet display snapshot boundary', () {
     const market = '''
 static const maxSnapshotChars = 262144;

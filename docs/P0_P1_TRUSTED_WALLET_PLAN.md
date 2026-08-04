@@ -2426,3 +2426,23 @@ bool，任一坏字段会丢弃整份显示缓存并继续实时刷新，不再�
 583/583、test_support 82/82、共享 packages 444/444、静态分析 0、公开源码门禁 12/12
 通过。Gateway 与可见 UI 均未变化，不部署服务端，也不使用无关截图冒充缓存协议证据；移动
 修复仍需进入下一版签名制品。
+
+同日继续闭合自定义网络持久化这一 RPC 路由与 EVM signing-domain 权限边界。旧版本化
+快照使用普通 JSON 解码和开放 schema，重复成员、未知字段、超大列表/文本可被恢复；
+`isTestnet` 缺失或类型错误还会静默成为主网。失败优先测试同时发现 Base、Arbitrum、
+Avalanche 与 BNB 的添加页没有 Chain ID。修复后快照限制 256 KiB、最多 64 个自定义网络，
+递归拒绝普通与 Unicode 转义重复 key，关闭顶层/网络/override schema，并限制 ID、名称、
+symbol、URL、Chain ID 与探针身份；损坏的新快照不回退旧三键状态。六个 EVM 家族统一要求
+Chain ID，保存后重新创建 controller 仍回读同一 identity。定向 27/27、test_support
+84/84、`check_deps`、静态分析 0 与源码门禁 12/12 通过。Gateway 与可见主流程无变化，
+不部署后端；移动修复须进入下一版签名制品。
+
+随后复审 TRON AIRGAP-V1 签名结果的最后一道 JSON 边界。共享验签器与 App 直连/Gateway
+广播都曾使用普通 `jsonDecode`，所以重复 `transaction/txID`（包括 Unicode 转义同名）会
+选择最后一个值；失败优先测试证明歧义 envelope 被完整验签成功，广播层也产生实际提交
+尝试。前导 1 MiB 空白的有效签名同样被接受。修复在纯 Dart chains 包提供转义感知、递归
+唯一成员解码器，TRON envelope 在验签和两条广播路径共用 1 MiB byte/char 上限；之后继续
+执行闭合字段、完整 protobuf、raw_data、签名、signer 与 txID 绑定。歧义/超限载荷在任何
+网络写入前失败闭合。验签与严格 JSON 18/18、直连广播 23/23、Gateway 重复载荷 1/1、
+test_support 86/86、`check_deps` 与静态分析 0 通过。该项没有读取私钥、没有广播、没有视觉
+变化，不使用无关截图；Gateway 服务端无变化，不部署后端。

@@ -1008,6 +1008,18 @@ void main() {
   )) {
     failures.add('custom network persistence: $issue');
   }
+  final signatureVerifier = File(
+    'packages/chains/lib/src/signature_verifier.dart',
+  );
+  final broadcastService = File(
+    'apps/kt_wallet/lib/src/transfer/broadcast_service.dart',
+  );
+  for (final issue in findTronSignedJsonBoundaryIssues(
+    signatureVerifier.existsSync() ? signatureVerifier.readAsStringSync() : '',
+    broadcastService.existsSync() ? broadcastService.readAsStringSync() : '',
+  )) {
+    failures.add('TRON signed JSON: $issue');
+  }
   final duplicateSafeRemoteResponseSources = <String, int>{
     'apps/kt_wallet/lib/src/rpc/http_transport.dart': 2,
     historyService.path: 3,

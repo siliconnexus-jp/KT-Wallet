@@ -168,6 +168,71 @@ void main() {
       );
     });
 
+    test('rejects duplicate signed JSON members before verification', () async {
+      final unsigned = Uint8List.fromList(
+        List<int>.generate(96, (index) => (index * 17) & 0xff),
+      );
+      final digest = sha256(unsigned);
+      final signature = _signSecp256k1(digest);
+      final expectedSigner = _privateKeyOneTronAddress();
+      final valid = await _tronSignedWithRecovery(
+        unsigned,
+        digest,
+        signature,
+        expectedSigner,
+      );
+      final decoded = jsonDecode(utf8.decode(valid)) as Map<String, dynamic>;
+      final transaction = decoded['transaction']! as String;
+      final txID = decoded['txID']! as String;
+
+      final ambiguous = <String>[
+        '{"transaction":"$transaction",'
+            '"trans\\u0061ction":"$transaction","txID":"$txID"}',
+        '{"transaction":"$transaction","txID":"$txID",'
+            '"tx\\u0049D":"$txID"}',
+      ];
+      for (final payload in ambiguous) {
+        expect(
+          () => verifySignedTransaction(
+            chain: Chain.tron,
+            unsignedTx: unsigned,
+            signedTx: Uint8List.fromList(utf8.encode(payload)),
+            claimedSigner: expectedSigner,
+          ),
+          throwsA(isA<SignatureVerificationError>()),
+        );
+      }
+    });
+
+    test('rejects oversized signed JSON before parsing', () async {
+      final unsigned = Uint8List.fromList(
+        List<int>.generate(96, (index) => (index * 17) & 0xff),
+      );
+      final digest = sha256(unsigned);
+      final signature = _signSecp256k1(digest);
+      final expectedSigner = _privateKeyOneTronAddress();
+      final valid = await _tronSignedWithRecovery(
+        unsigned,
+        digest,
+        signature,
+        expectedSigner,
+      );
+      final oversized = Uint8List.fromList([
+        ...List<int>.filled(1024 * 1024, 0x20),
+        ...valid,
+      ]);
+
+      expect(
+        () => verifySignedTransaction(
+          chain: Chain.tron,
+          unsignedTx: unsigned,
+          signedTx: oversized,
+          claimedSigner: expectedSigner,
+        ),
+        throwsA(isA<SignatureVerificationError>()),
+      );
+    });
+
     // The signers emit the broadcasthex shape; verification must accept it,
     // since that is the only payload the online side ever gets to check.
     test('accepts the {transaction} protobuf shape the signers emit', () async {

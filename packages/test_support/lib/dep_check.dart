@@ -983,6 +983,58 @@ List<String> findExternalBackupJsonBoundaryIssues(String contents) {
   return issues;
 }
 
+/// Keeps TRON's signed transaction JSON single-interpretable and bounded at
+/// both the cryptographic verification and submission boundaries.
+List<String> findTronSignedJsonBoundaryIssues(
+  String verifierContents,
+  String broadcasterContents,
+) {
+  final issues = <String>[];
+  const verifierRequired = {
+    'const tronSignedTransactionJsonMaxBytes = 1024 * 1024':
+        'TRON signed JSON byte size is not bounded',
+    'signed.length > tronSignedTransactionJsonMaxBytes':
+        'TRON verifier does not enforce the signed JSON byte bound',
+    'decodeJsonWithUniqueObjectMembers(':
+        'TRON verifier does not reject duplicate JSON members',
+    'maxChars: tronSignedTransactionJsonMaxBytes':
+        'TRON verifier does not enforce the decoder size bound',
+    'map.keys.any((key) => key != \'transaction\' && key != \'txID\')':
+        'TRON signed JSON schema is not closed',
+  };
+  for (final entry in verifierRequired.entries) {
+    if (!verifierContents.contains(entry.key)) issues.add(entry.value);
+  }
+  const broadcasterRequired = {
+    'signedTx.length > tronSignedTransactionJsonMaxBytes':
+        'TRON broadcaster does not enforce the signed JSON byte bound',
+    'decodeJsonWithUniqueObjectMembers(':
+        'TRON broadcaster does not reject duplicate JSON members',
+  };
+  for (final entry in broadcasterRequired.entries) {
+    if (!broadcasterContents.contains(entry.key)) issues.add(entry.value);
+  }
+  if (RegExp(
+        r'_decodeTronSignedJson\(signedTx\)',
+      ).allMatches(broadcasterContents).length <
+      2) {
+    issues.add(
+      'TRON direct and Gateway submission do not share the strict decoder',
+    );
+  }
+  if (RegExp(
+    r'jsonDecode\(\s*utf8\.decode\(signed\)\s*\)',
+  ).hasMatch(verifierContents)) {
+    issues.add('TRON verifier uses the duplicate-unsafe JSON decoder');
+  }
+  if (RegExp(
+    r'json\.decode\(\s*(?:utf8\.decode\(signedTx\)|text)\s*\)',
+  ).hasMatch(broadcasterContents)) {
+    issues.add('TRON broadcaster uses the duplicate-unsafe JSON decoder');
+  }
+  return issues;
+}
+
 /// Keeps wallet balance and transaction-history display caches bounded,
 /// single-interpretable and closed-schema.
 ///

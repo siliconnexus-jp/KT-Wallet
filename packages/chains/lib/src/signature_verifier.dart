@@ -10,6 +10,7 @@ import 'address.dart';
 import 'keccak.dart';
 import 'rlp.dart';
 import 'sha256.dart';
+import 'strict_json.dart';
 import 'transaction_parser.dart';
 
 class SignatureVerificationError implements Exception {
@@ -54,6 +55,13 @@ class VerifiedTransaction {
   final String signer;
   final String txHash;
 }
+
+/// Maximum accepted size of the canonical TRON signed JSON envelope.
+///
+/// The native signers emit two short hex strings. One MiB leaves ample room
+/// for a future bounded protobuf while preventing untrusted QR/import data
+/// from forcing an unbounded JSON parse.
+const tronSignedTransactionJsonMaxBytes = 1024 * 1024;
 
 /// Verifies that [signedTx] signs exactly [unsignedTx], recovers/derives the
 /// signer from the signature itself, and compares it with [claimedSigner].
@@ -226,7 +234,13 @@ VerifiedTransaction _verifyTron(
 ) {
   final Object? decoded;
   try {
-    decoded = jsonDecode(utf8.decode(signed));
+    if (signed.isEmpty || signed.length > tronSignedTransactionJsonMaxBytes) {
+      throw const FormatException('TRON signed JSON size');
+    }
+    decoded = decodeJsonWithUniqueObjectMembers(
+      utf8.decode(signed),
+      maxChars: tronSignedTransactionJsonMaxBytes,
+    );
   } catch (_) {
     throw const SignatureVerificationError('invalid TRON signed JSON');
   }

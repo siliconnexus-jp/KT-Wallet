@@ -1352,6 +1352,27 @@ void main() {
         expect(gateway.calls, isEmpty);
       },
     );
+
+    test(
+      'TRON duplicate JSON payload stays unsupported, gateway never called',
+      () async {
+        final gateway = _FakeGateway();
+        final service = BroadcastService(
+          jsonRpcTransport: _NoDirectJsonRpc(),
+          restTransport: _NoDirectRest(),
+          gateway: () => gateway.client,
+        );
+        final outcome = await service.broadcast(
+          Chain.tron,
+          Uint8List.fromList(
+            utf8.encode('{"transaction":"aa","trans\\u0061ction":"aa"}'),
+          ),
+          expectedTxHash: 'tronTxid',
+        );
+        expect(outcome.status, BroadcastStatus.unsupported);
+        expect(gateway.calls, isEmpty);
+      },
+    );
   });
 
   group('Official token catalog', () {

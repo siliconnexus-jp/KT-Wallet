@@ -556,6 +556,24 @@ void main() {
       expect(outcome.message, isNotNull);
       expect(rest.posts, isEmpty);
     });
+
+    test('TRON duplicate JSON members: unsupported, nothing posted', () async {
+      final rest = _FakeRest();
+      final service = BroadcastService(
+        restTransport: rest,
+        endpoints: _endpoint,
+      );
+      final outcome = await service.broadcast(
+        Chain.tron,
+        Uint8List.fromList(
+          utf8.encode('{"signature":["aa"],"sign\\u0061ture":["aa"]}'),
+        ),
+        expectedTxHash: 'abc123',
+      );
+
+      expect(outcome.status, BroadcastStatus.unsupported);
+      expect(rest.posts, isEmpty);
+    });
   });
 
   group('W8 broadcast wiring', () {

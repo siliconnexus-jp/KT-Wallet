@@ -1,7 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:chains/chains.dart' show Chain;
+import 'package:chains/chains.dart'
+    show
+        Chain,
+        decodeJsonWithUniqueObjectMembers,
+        tronSignedTransactionJsonMaxBytes;
 import 'package:chains/rpc.dart';
 
 import '../market/balance_service.dart'
@@ -218,7 +222,7 @@ class BroadcastService {
           // client we have — reported as unsupported, never guessed at.
           final Object? decoded;
           try {
-            decoded = json.decode(utf8.decode(signedTx));
+            decoded = _decodeTronSignedJson(signedTx);
           } on FormatException {
             return const BroadcastOutcome.unsupported(
               'TRON signed payload is not the TronGrid JSON transaction',
@@ -280,11 +284,22 @@ class BroadcastService {
         final String text;
         try {
           text = utf8.decode(signedTx);
-          if (json.decode(text) is! Map) return null;
+          if (_decodeTronSignedJson(signedTx) is! Map) return null;
         } on FormatException {
           return null;
         }
         return text;
     }
+  }
+
+  static Object? _decodeTronSignedJson(Uint8List signedTx) {
+    if (signedTx.isEmpty ||
+        signedTx.length > tronSignedTransactionJsonMaxBytes) {
+      throw const FormatException('TRON signed JSON size');
+    }
+    return decodeJsonWithUniqueObjectMembers(
+      utf8.decode(signedTx),
+      maxChars: tronSignedTransactionJsonMaxBytes,
+    );
   }
 }
