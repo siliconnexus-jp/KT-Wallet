@@ -1036,8 +1036,10 @@ List<String> findWalletPinStateBoundaryIssues(String contents) {
 List<String> findSignerPinStateBoundaryIssues(String contents) {
   final issues = <String>[];
   const required = {
-    '_decodeJsonWithoutDuplicateKeys(raw)':
+    'decodeStrictLocalJson(':
         'signer PIN state does not reject duplicate JSON members',
+    'maxChars: maxStoredRecordChars':
+        'signer PIN strict decoder is not bound to the record size limit',
     "allowed: const {'algo', 'salt', 'hash', 'iterations'}":
         'signer PIN record schema is not closed',
     "allowed: const {'fails', 'lockedUntil'}":
@@ -1072,6 +1074,52 @@ List<String> findSignerPinStateBoundaryIssues(String contents) {
     issues.add(
       'signer PIN enrollment check trusts record presence without parsing',
     );
+  }
+  return issues;
+}
+
+/// Keeps Cold Signer's public wallet descriptor and crash-recovery tombstone
+/// closed, bounded, and bound to the same native wallet identity.
+List<String> findSignerVaultStateBoundaryIssues(
+  String vaultContents,
+  String controllerContents,
+) {
+  final issues = <String>[];
+  const vaultRequired = {
+    'static const maxMetadataChars = 16384':
+        'signer metadata JSON size is not bounded before parsing',
+    'decodeStrictLocalJson(raw, maxChars: maxMetadataChars)':
+        'signer metadata does not reject duplicate JSON members',
+    "const allowed = {": 'signer metadata schema is not closed',
+    "'walletId',": 'signer metadata schema omits wallet identity',
+    "'biometricEnabled',":
+        'signer metadata schema omits its authentication setting',
+    'Future<bool> hasWallet() async => await readMetadata() != null':
+        'signer wallet presence trusts an unparsed metadata record',
+    'CoreCryptoValidation.checkWalletId(walletId)':
+        'signer deletion marker wallet identity is not validated',
+  };
+  for (final entry in vaultRequired.entries) {
+    if (!vaultContents.contains(entry.key)) issues.add(entry.value);
+  }
+  const controllerRequired = {
+    'metadata.walletId != pendingDeletion':
+        'signer deletion recovery does not bind tombstone to metadata',
+    'deleteNative: metadata != null':
+        'signer deletion recovery may delete an unbound native wallet',
+    'if (deleteNative)':
+        'signer deletion recovery ignores the native-delete safety decision',
+  };
+  for (final entry in controllerRequired.entries) {
+    if (!controllerContents.contains(entry.key)) issues.add(entry.value);
+  }
+  if (RegExp(r'jsonDecode\(\s*raw\s*\)').hasMatch(vaultContents)) {
+    issues.add('signer metadata uses the duplicate-unsafe JSON decoder');
+  }
+  if (RegExp(
+    r'Future<bool> hasWallet\(\)[\s\S]{0,120}read\(metadataKey\)\s*!=\s*null',
+  ).hasMatch(vaultContents)) {
+    issues.add('signer wallet presence trusts metadata key presence');
   }
   return issues;
 }

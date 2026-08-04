@@ -671,7 +671,7 @@ static const maxStoredIterations = 1000000;
 static const maxStoredRecordChars = 4096;
 static const maxTrackedFailures = 64;
 static const maxLockout = Duration(hours: 24);
-final decoded = _decodeJsonWithoutDuplicateKeys(raw);
+final decoded = decodeStrictLocalJson(raw, maxChars: maxStoredRecordChars);
 final pin = _decode(allowed: const {'algo', 'salt', 'hash', 'iterations'});
 final lock = _decode(allowed: const {'fails', 'lockedUntil'});
 final salt = _decodeCanonicalBase64(record['salt'], saltLength);
@@ -693,6 +693,41 @@ final factor = 1 << (newFails - threshold);
       expect(issues, contains(contains('duplicate-unsafe JSON decoder')));
       expect(issues, contains(contains('presence without parsing')));
       expect(issues, contains(contains('attacker-sized bit shift')));
+    });
+  });
+
+  group('cold signer vault state boundary', () {
+    const safeVault = '''
+static const maxMetadataChars = 16384;
+final decoded = decodeStrictLocalJson(raw, maxChars: maxMetadataChars);
+const allowed = {'walletId', 'name', 'createdAt', 'version', 'addresses',
+  'publicKeys', 'biometricEnabled',};
+Future<bool> hasWallet() async => await readMetadata() != null;
+CoreCryptoValidation.checkWalletId(walletId);
+''';
+    const safeController = '''
+if (metadata.walletId != pendingDeletion) throw StateError('mismatch');
+await finish(pendingDeletion, deleteNative: metadata != null);
+if (deleteNative) await crypto.deleteWallet(walletId);
+''';
+
+    test('accepts closed metadata and identity-bound deletion recovery', () {
+      expect(
+        findSignerVaultStateBoundaryIssues(safeVault, safeController),
+        isEmpty,
+      );
+    });
+
+    test('rejects presence-only metadata and unbound deletion recovery', () {
+      final issues = findSignerVaultStateBoundaryIssues('''
+$safeVault
+final metadata = jsonDecode(raw);
+Future<bool> hasWallet() async => await storage.read(metadataKey) != null;
+''', 'await crypto.deleteWallet(pendingDeletion);');
+      expect(issues, contains(contains('duplicate-unsafe JSON decoder')));
+      expect(issues, contains(contains('presence')));
+      expect(issues, contains(contains('bind tombstone')));
+      expect(issues, contains(contains('unbound native wallet')));
     });
   });
 

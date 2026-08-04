@@ -104,4 +104,51 @@ void main() {
       matchesGoldenFile('goldens/screens/pin-state-corrupted-en.png'),
     );
   });
+
+  testWidgets(
+    'ambiguous wallet metadata blocks startup before native wallet access',
+    (tester) async {
+      await (FontLoader(
+        'Inter',
+      )..addFont(rootBundle.load('fonts/Inter.ttf'))).load();
+      await (FontLoader(
+        'MaterialIcons',
+      )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final storage = InMemoryVaultStorage();
+      final crypto = MockCoreCrypto();
+      const walletId = 'cold-wallet-corrupt-metadata';
+      await crypto.storeWallet(
+        walletId: walletId,
+        mnemonic:
+            'abandon ability able about above absent absorb abstract absurd abuse access accident',
+        requireAuth: false,
+      );
+      storage.values[SecureVault.metadataKey] =
+          '{"walletId":"$walletId","walletId":"other-wallet",'
+          '"name":"KT Cold Signer","createdAt":1785888000,'
+          '"version":2,"addresses":{},"publicKeys":{},'
+          '"biometricEnabled":false}';
+      final wallet = SignerWalletController(storage: storage, crypto: crypto);
+
+      await tester.pumpWidget(
+        ColdSignerApp(
+          localeController: LocaleController(initial: const Locale('en')),
+          walletController: wallet,
+          initialLocation: '/home',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Secure storage unavailable'), findsOneWidget);
+      expect(find.text('Scan transaction to sign'), findsNothing);
+      expect(wallet.hasWallet, isFalse);
+      expect(crypto.storedWalletCount, 1);
+      await expectLater(
+        find.byType(ColdSignerApp),
+        matchesGoldenFile('goldens/screens/vault-state-corrupted-en.png'),
+      );
+    },
+  );
 }

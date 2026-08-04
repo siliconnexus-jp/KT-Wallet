@@ -2397,3 +2397,18 @@ Base64、16/32-byte 盐与哈希、1,000,000 轮 PBKDF2 上限、64 次失败上
 test_support 78/78、共享 packages 440/440、静态分析 0，公开源码门禁 12/12 通过；最近完整
 依赖/OSV 门禁仍为 13/13。英文 390×844 Golden 已加载真实字体并人工复核，页面不含钱包
 内容。Gateway 无服务端变化，不部署后端；两款移动修复须随下一版签名制品发布。
+
+同日继续复审 KT Cold Signer 的公开 metadata 与删除恢复 tombstone。旧 `SecureVault` 使用
+普通 `jsonDecode` 和开放、宽松类型 schema；重复 `walletId`（含 Unicode 转义同名）、未知
+字段、异常版本、无界记录和错误 map 类型可能产生多种解释。更严重的是启动先信任独立的原始
+walletId tombstone 并直接调用 native delete；损坏或错配标记可删除 metadata 所属钱包之外的
+原生 key。4 项失败优先测试完整复现：歧义 metadata 被接受、非法 marker 被接受、A metadata +
+B marker 删除 B，以及没有 metadata 的孤立 marker 删除同名有效 key。修复后 PIN 与 metadata
+共用递归 duplicate-safe JSON 解码器；metadata 限制 16,384 字符并使用闭合 v1/v2 schema，
+验证 walletId、名称可见性、时间、链 map 与规范公钥；`hasWallet` 必须完整解析。删除恢复先解析
+metadata 并要求 walletId 精确一致；marker 无 metadata 只可能是“native 已删、metadata 已擦除”
+的崩溃残留，因此只收尾本地清理，绝不再次选择未绑定 native key。静态门禁锁定上述不变量。
+新增边界/兼容/UI 7/7，KT Cold Signer 583/583、KT Wallet 1668/1668、test_support 80/80、
+共享 packages 442/442、静态分析 0、公开源码门禁 12/12 通过。英文 390×844 Golden 已人工
+复核，损坏 metadata 只显示启动硬锁且不含钱包内容；Gateway 无变化，不部署后端。移动修复
+仍需进入下一版签名制品，并在真机 Keychain/Keystore 与进程中断窗口做最终验证。

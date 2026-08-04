@@ -2,6 +2,7 @@ import 'package:cold_signer/src/security/mnemonic_wordlist.dart';
 import 'package:cold_signer/src/security/secure_vault.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'dart:convert';
 import 'dart:math';
 
 /// Vault + wordlist behavior over the in-memory fake. MethodChannel plugins
@@ -51,6 +52,40 @@ void main() {
 
       await vault.wipe();
       expect(await vault.hasWallet(), isFalse);
+      expect(storage.values, isEmpty);
+    });
+
+    test(
+      'reads the closed legacy v1 descriptor without inventing fields',
+      () async {
+        final storage = InMemoryVaultStorage();
+        storage.values[SecureVault.metadataKey] = jsonEncode({
+          'walletId': 'legacy_wallet',
+          'name': 'Legacy wallet',
+          'createdAt': 1,
+        });
+
+        final metadata = await SecureVault(storage).readMetadata();
+
+        expect(metadata?.version, 1);
+        expect(metadata?.addresses, isEmpty);
+        expect(metadata?.publicKeys, isEmpty);
+        expect(metadata?.biometricEnabled, isFalse);
+      },
+    );
+
+    test('refuses to persist invalid metadata', () async {
+      final storage = InMemoryVaultStorage();
+      await expectLater(
+        SecureVault(storage).storeMetadata(
+          const WalletMetadata(
+            walletId: '../wallet',
+            name: 'Invalid',
+            createdAt: 1,
+          ),
+        ),
+        throwsA(isA<VaultStateCorruptedException>()),
+      );
       expect(storage.values, isEmpty);
     });
   });

@@ -118,7 +118,20 @@ class SignerWalletController extends ChangeNotifier {
     await _vault.removeLegacyMnemonic();
     final pendingDeletion = await _vault.pendingDeletionWalletId();
     if (pendingDeletion != null) {
-      await _finishPendingDeletion(pendingDeletion);
+      final metadata = await _vault.readMetadata();
+      if (metadata != null && metadata.walletId != pendingDeletion) {
+        // A tombstone may only resume deletion of the exact wallet described
+        // by the remaining metadata. Never let corrupted local state choose a
+        // different native key for an irreversible delete.
+        throw const VaultStateCorruptedException();
+      }
+      // Native deletion always precedes metadata removal. Therefore a marker
+      // without metadata is post-delete crash residue: finish local cleanup,
+      // but do not call deleteWallet for an unbound identifier.
+      await _finishPendingDeletion(
+        pendingDeletion,
+        deleteNative: metadata != null,
+      );
       return;
     }
     final loadedMetadata = await _vault.readMetadata();
@@ -639,11 +652,16 @@ class SignerWalletController extends ChangeNotifier {
     _clearWalletState();
   }
 
-  Future<void> _finishPendingDeletion(String walletId) async {
-    try {
-      await _crypto.deleteWallet(walletId);
-    } on WalletNotFoundException {
-      // Idempotent recovery after a crash following native key deletion.
+  Future<void> _finishPendingDeletion(
+    String walletId, {
+    bool deleteNative = true,
+  }) async {
+    if (deleteNative) {
+      try {
+        await _crypto.deleteWallet(walletId);
+      } on WalletNotFoundException {
+        // Idempotent recovery after a crash following native key deletion.
+      }
     }
     var recordsCleared = true;
     try {

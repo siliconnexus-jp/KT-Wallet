@@ -1,8 +1,20 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import 'strict_local_json.dart';
+
+/// Public signer metadata or deletion recovery state exists but is not valid
+/// under the closed local schema. Startup must remain blocked.
+class VaultStateCorruptedException implements Exception {
+  const VaultStateCorruptedException();
+
+  @override
+  String toString() => 'VaultStateCorruptedException';
+}
 
 /// True inside `flutter test`. MethodChannel plugins are unavailable there:
 /// their futures never even complete under the fake-async test zone, so
@@ -113,16 +125,72 @@ class WalletMetadata {
     this.biometricEnabled = false,
   });
 
-  factory WalletMetadata.fromJson(Map<String, Object?> json) => WalletMetadata(
-    walletId: json['walletId']! as String,
-    name: json['name']! as String,
-    createdAt: json['createdAt']! as int,
-    version: json['version'] as int? ?? 1,
-    addresses: ((json['addresses'] as Map?) ?? const {}).cast<String, String>(),
-    publicKeys: ((json['publicKeys'] as Map?) ?? const {})
-        .cast<String, String>(),
-    biometricEnabled: json['biometricEnabled'] as bool? ?? false,
+  factory WalletMetadata.fromJson(Map<String, Object?> json) {
+    try {
+      const allowed = {
+        'walletId',
+        'name',
+        'createdAt',
+        'version',
+        'addresses',
+        'publicKeys',
+        'biometricEnabled',
+      };
+      const legacyRequired = {'walletId', 'name', 'createdAt'};
+      const currentRequired = allowed;
+      if (json.keys.any((key) => !allowed.contains(key)) ||
+          legacyRequired.any((key) => !json.containsKey(key))) {
+        throw const VaultStateCorruptedException();
+      }
+      final version = json.containsKey('version') ? json['version'] : 1;
+      if (version is! int || (version != 1 && version != 2)) {
+        throw const VaultStateCorruptedException();
+      }
+      if (version == 2 &&
+          currentRequired.any((key) => !json.containsKey(key))) {
+        throw const VaultStateCorruptedException();
+      }
+      final metadata = WalletMetadata(
+        walletId: json['walletId']! as String,
+        name: json['name']! as String,
+        createdAt: json['createdAt']! as int,
+        version: version,
+        addresses: json.containsKey('addresses')
+            ? _decodeStringMap(json['addresses'])
+            : const {},
+        publicKeys: json.containsKey('publicKeys')
+            ? _decodeStringMap(json['publicKeys'])
+            : const {},
+        biometricEnabled: json.containsKey('biometricEnabled')
+            ? json['biometricEnabled'] as bool
+            : false,
+      );
+      metadata.validate();
+      return metadata;
+    } on VaultStateCorruptedException {
+      rethrow;
+    } on Object {
+      throw const VaultStateCorruptedException();
+    }
+  }
+
+  static const supportedChainKeys = {
+    'eth',
+    'polygon',
+    'base',
+    'arbitrum',
+    'avalanche',
+    'bnb',
+    'tron',
+    'solana',
+  };
+  static const maxNameRunes = 80;
+  static const maxCreatedAt = 4102444800; // 2100-01-01 UTC.
+
+  static final _unsafeNameCharacters = RegExp(
+    r'[\x00-\x1f\x7f\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]',
   );
+  static final _nonAsciiAddressCharacters = RegExp(r'[^\x21-\x7e]');
 
   final String walletId;
   final String name;
@@ -135,6 +203,27 @@ class WalletMetadata {
   /// Base64-encoded public keys only; private material remains native.
   final Map<String, String> publicKeys;
   final bool biometricEnabled;
+
+  void validate() {
+    try {
+      CoreCryptoValidation.checkWalletId(walletId);
+      if (name.isEmpty ||
+          name != name.trim() ||
+          name.runes.length > maxNameRunes ||
+          _unsafeNameCharacters.hasMatch(name) ||
+          createdAt < 0 ||
+          createdAt > maxCreatedAt ||
+          (version != 1 && version != 2)) {
+        throw const VaultStateCorruptedException();
+      }
+      _validateAddressMap(addresses);
+      _validatePublicKeyMap(publicKeys);
+    } on VaultStateCorruptedException {
+      rethrow;
+    } on Object {
+      throw const VaultStateCorruptedException();
+    }
+  }
 
   WalletMetadata copyWith({
     String? name,
@@ -160,6 +249,45 @@ class WalletMetadata {
     'publicKeys': publicKeys,
     'biometricEnabled': biometricEnabled,
   };
+
+  static Map<String, String> _decodeStringMap(Object? value) {
+    if (value is! Map ||
+        value.keys.any((key) => key is! String) ||
+        value.values.any((entry) => entry is! String)) {
+      throw const VaultStateCorruptedException();
+    }
+    return Map.unmodifiable(value.cast<String, String>());
+  }
+
+  static void _validateAddressMap(Map<String, String> addresses) {
+    for (final entry in addresses.entries) {
+      if (!supportedChainKeys.contains(entry.key) ||
+          entry.value.isEmpty ||
+          entry.value.length > 128 ||
+          _nonAsciiAddressCharacters.hasMatch(entry.value)) {
+        throw const VaultStateCorruptedException();
+      }
+    }
+  }
+
+  static void _validatePublicKeyMap(Map<String, String> publicKeys) {
+    for (final entry in publicKeys.entries) {
+      if (!supportedChainKeys.contains(entry.key)) {
+        throw const VaultStateCorruptedException();
+      }
+      final decoded = base64Decode(entry.value);
+      if (base64Encode(decoded) != entry.value) {
+        throw const VaultStateCorruptedException();
+      }
+      if (entry.key == 'solana') {
+        if (decoded.length != 32) {
+          throw const VaultStateCorruptedException();
+        }
+      } else if (decoded.length != 65 || decoded.first != 4) {
+        throw const VaultStateCorruptedException();
+      }
+    }
+  }
 }
 
 /// The signer's non-secret descriptor store.
@@ -181,28 +309,52 @@ class SecureVault {
   static const pinKey = 'signer.pin';
   static const pinLockoutKey = 'signer.pin_lockout';
   static const deletionPendingKey = 'signer.wallet_delete_pending.v1';
+  static const maxMetadataChars = 16384;
 
-  Future<bool> hasWallet() async => await _storage.read(metadataKey) != null;
+  Future<bool> hasWallet() async => await readMetadata() != null;
 
   Future<void> storeMetadata(WalletMetadata metadata) async {
+    metadata.validate();
     await _storage.write(metadataKey, jsonEncode(metadata.toJson()));
   }
 
   Future<WalletMetadata?> readMetadata() async {
     final raw = await _storage.read(metadataKey);
     if (raw == null) return null;
-    return WalletMetadata.fromJson(
-      (jsonDecode(raw) as Map).cast<String, Object?>(),
-    );
+    try {
+      final decoded = decodeStrictLocalJson(raw, maxChars: maxMetadataChars);
+      if (decoded is! Map || decoded.keys.any((key) => key is! String)) {
+        throw const VaultStateCorruptedException();
+      }
+      return WalletMetadata.fromJson(decoded.cast<String, Object?>());
+    } on VaultStateCorruptedException {
+      rethrow;
+    } on Object {
+      throw const VaultStateCorruptedException();
+    }
   }
 
   Future<void> removeLegacyMnemonic() => _storage.delete(mnemonicKey);
 
-  Future<void> markDeletionPending(String walletId) =>
-      _storage.write(deletionPendingKey, walletId);
+  Future<void> markDeletionPending(String walletId) async {
+    _validateWalletId(walletId);
+    await _storage.write(deletionPendingKey, walletId);
+  }
 
-  Future<String?> pendingDeletionWalletId() =>
-      _storage.read(deletionPendingKey);
+  Future<String?> pendingDeletionWalletId() async {
+    final walletId = await _storage.read(deletionPendingKey);
+    if (walletId == null) return null;
+    _validateWalletId(walletId);
+    return walletId;
+  }
+
+  static void _validateWalletId(String walletId) {
+    try {
+      CoreCryptoValidation.checkWalletId(walletId);
+    } on Object {
+      throw const VaultStateCorruptedException();
+    }
+  }
 
   /// Erases all Dart-side state. Native key material is deleted separately by
   /// `CoreCrypto.deleteWallet` before this method is called.
