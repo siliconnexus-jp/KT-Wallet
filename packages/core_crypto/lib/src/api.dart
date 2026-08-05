@@ -50,6 +50,15 @@ abstract class CoreCrypto {
     String? kdfPassword,
   });
 
+  /// Reports whether native secure storage contains this wallet without
+  /// opening its secret or showing a system-authentication prompt.
+  ///
+  /// This is suitable for startup presence checks. It deliberately does not
+  /// prove that persisted public addresses match the secret; callers that
+  /// need that stronger guarantee must use [deriveAddresses] from an
+  /// explicitly authenticated flow.
+  Future<bool> walletExists(String walletId);
+
   /// Derives public addresses for all supported chains.
   Future<ChainAddresses> deriveAddresses(String walletId);
 

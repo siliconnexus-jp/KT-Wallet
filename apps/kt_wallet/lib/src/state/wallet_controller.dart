@@ -85,10 +85,21 @@ class WalletController extends ChangeNotifier {
   int get count => _manager.count;
   bool get canAddMore => _manager.canAddMore;
 
-  /// Proves that every persisted hot wallet still has native key material and
-  /// that the database addresses belong to that exact key. A transient native
-  /// failure propagates to the bootstrap guard; it never removes or rewrites
-  /// the persisted wallet.
+  /// Checks that every persisted hot wallet still has a native secure-storage
+  /// record, without opening its secret or showing an authentication prompt.
+  /// A missing record fails startup closed; it is never removed or rewritten.
+  Future<void> validateNativeWalletPresence() async {
+    for (final wallet in _manager.wallets.whereType<HotWallet>()) {
+      if (!await _crypto.walletExists(wallet.id)) {
+        throw WalletNotFoundException(wallet.id);
+      }
+    }
+  }
+
+  /// Proves that persisted public addresses belong to the native key material.
+  /// This opens each wallet secret and can therefore require system
+  /// authentication. Keep it out of automatic startup; call it only from an
+  /// explicit authenticated integrity-check flow.
   Future<void> validateNativeWallets() async {
     for (final wallet in _manager.wallets.whereType<HotWallet>()) {
       final derived = await _crypto.deriveAddresses(wallet.id);

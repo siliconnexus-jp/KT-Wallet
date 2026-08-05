@@ -244,6 +244,12 @@ class MockCoreCrypto implements CoreCrypto {
   }
 
   @override
+  Future<bool> walletExists(String walletId) async {
+    CoreCryptoValidation.checkWalletId(walletId);
+    return _wallets.containsKey(walletId);
+  }
+
+  @override
   Future<ChainAddresses> deriveAddresses(String walletId) async {
     CoreCryptoValidation.checkWalletId(walletId);
     final wallet = _walletOrThrow(walletId);

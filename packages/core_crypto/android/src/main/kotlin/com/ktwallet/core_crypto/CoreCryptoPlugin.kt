@@ -32,6 +32,7 @@ class CoreCryptoPlugin :
 
     private val walletIdMethods = setOf(
         "storeWallet",
+        "walletExists",
         "deriveAddresses",
         "derivePublicKeys",
         "signTransaction",
@@ -119,6 +120,16 @@ class CoreCryptoPlugin :
                         storeWallet(call)
                         result.success(true)
                     }
+                }
+                // Check both halves of Android's native wallet record without
+                // opening the auth-bound Keystore key or showing a prompt.
+                "walletExists" -> {
+                    val walletId = requireValidWalletId(call.argument<Any?>("walletId"))
+                    result.success(
+                        synchronized(walletStorageLock) {
+                            blobStore.exists(walletId) && keystore.exists(walletId)
+                        },
+                    )
                 }
                 "deriveAddresses" -> result.success(deriveAddresses(call))
                 "derivePublicKeys" -> result.success(derivePublicKeys(call))

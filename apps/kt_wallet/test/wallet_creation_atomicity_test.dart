@@ -236,26 +236,28 @@ void main() {
     },
   );
 
-  test(
-    'startup native validation blocks missing or mismatched hot keys',
-    () async {
-      final missing = HotWallet(
-        id: 'missing-key',
-        name: 'Missing',
-        avatarColor: 1,
-        addresses: _addresses('3'),
-        backedUp: true,
-      );
-      final missingController = WalletController(
-        WalletManager(initial: <Wallet>[missing]),
-        crypto: MockCoreCrypto(),
-      );
-      await expectLater(
-        missingController.validateNativeWallets(),
-        throwsA(isA<WalletNotFoundException>()),
-      );
-      expect(missingController.wallets.single.id, 'missing-key');
+  test('startup native presence check blocks missing hot keys', () async {
+    final missing = HotWallet(
+      id: 'missing-key',
+      name: 'Missing',
+      avatarColor: 1,
+      addresses: _addresses('3'),
+      backedUp: true,
+    );
+    final missingController = WalletController(
+      WalletManager(initial: <Wallet>[missing]),
+      crypto: MockCoreCrypto(),
+    );
+    await expectLater(
+      missingController.validateNativeWalletPresence(),
+      throwsA(isA<WalletNotFoundException>()),
+    );
+    expect(missingController.wallets.single.id, 'missing-key');
+  });
 
+  test(
+    'explicit native integrity validation blocks mismatched hot keys',
+    () async {
       final crypto = MockCoreCrypto();
       final mnemonic = await crypto.generateMnemonic();
       await crypto.storeWallet(walletId: 'wrong-address', mnemonic: mnemonic);

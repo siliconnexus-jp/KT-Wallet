@@ -86,6 +86,12 @@ class MethodChannelCoreCrypto implements CoreCrypto {
   }
 
   @override
+  Future<bool> walletExists(String walletId) {
+    CoreCryptoValidation.checkWalletId(walletId);
+    return _invoke<bool>('walletExists', {'walletId': walletId});
+  }
+
+  @override
   Future<ChainAddresses> deriveAddresses(String walletId) async {
     CoreCryptoValidation.checkWalletId(walletId);
     final map = await _invoke<Map<Object?, Object?>>('deriveAddresses', {

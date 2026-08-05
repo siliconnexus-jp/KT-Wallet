@@ -72,7 +72,11 @@ Future<WalletController> _bootstrapWallet() async {
     store: store,
   );
   await controller.recoverPendingDeletions();
-  await controller.validateNativeWallets();
+  // Startup must not open auth-bound key material: doing so shows one system
+  // prompt per hot wallet before AppLockGate can perform the actual app
+  // unlock. A non-interactive presence check still fails closed when either
+  // side of a persisted wallet has disappeared.
+  await controller.validateNativeWalletPresence();
   await controller.restoreDurableFinalityMetrics();
   return controller;
 }

@@ -9,7 +9,8 @@ import WalletCore
 /// can reach authentication, Keychain, KDF, or Wallet Core.
 public class CoreCryptoPlugin: NSObject, FlutterPlugin {
   private static let walletIdMethods: Set<String> = [
-    "storeWallet", "deriveAddresses", "derivePublicKeys", "signTransaction",
+    "storeWallet", "walletExists", "deriveAddresses", "derivePublicKeys",
+    "signTransaction",
     "exportMnemonic", "createBackup", "deleteWallet",
   ]
 
@@ -62,6 +63,11 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
       case "storeWallet":
         try storeWallet(a)
         result(true)
+
+      // Presence checks must never open the auth-bound item: startup uses
+      // this to detect a missing native wallet before showing AppLockGate.
+      case "walletExists":
+        result(try KeychainStore.exists(walletId: requireValidWalletId(a["walletId"])))
 
       case "deriveAddresses":
         result(try deriveAddresses(a))

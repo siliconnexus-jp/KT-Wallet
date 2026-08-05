@@ -255,6 +255,24 @@ void main() {
   });
 
   group('validation (shared across implementations)', () {
+    test('wallet presence does not authenticate or open the secret', () async {
+      var authenticationAttempts = 0;
+      final mock = MockCoreCrypto(
+        authenticator: () async {
+          authenticationAttempts++;
+          return true;
+        },
+      );
+      await mock.storeWallet(
+        walletId: 'w1',
+        mnemonic: await mock.generateMnemonic(),
+      );
+
+      expect(await mock.walletExists('w1'), isTrue);
+      expect(await mock.walletExists('missing'), isFalse);
+      expect(authenticationAttempts, 0);
+    });
+
     test('bad strength rejected before any backend call', () {
       final mock = MockCoreCrypto();
       expect(() => mock.generateMnemonic(strength: 160), throwsArgumentError);
@@ -262,6 +280,7 @@ void main() {
 
     test('bad walletId rejected', () {
       final mock = MockCoreCrypto();
+      expect(() => mock.walletExists('bad wallet id!'), throwsArgumentError);
       expect(() => mock.deriveAddresses('bad wallet id!'), throwsArgumentError);
       expect(() => mock.deriveAddresses(''), throwsArgumentError);
     });

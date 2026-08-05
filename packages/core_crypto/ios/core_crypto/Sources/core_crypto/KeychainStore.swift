@@ -74,15 +74,25 @@ enum KeychainStore {
     }
   }
 
-  static func exists(walletId: String) -> Bool {
-    guard let walletId = try? requireValidWalletId(walletId) else { return false }
+  static func exists(walletId: String) throws -> Bool {
+    let walletId = try requireValidWalletId(walletId)
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
       kSecAttrAccount as String: walletId,
       kSecUseAuthenticationUI as String: kSecUseAuthenticationUISkip,
     ]
-    return SecItemCopyMatching(query as CFDictionary, nil) != errSecItemNotFound
+    let status = SecItemCopyMatching(query as CFDictionary, nil)
+    switch status {
+    case errSecSuccess, errSecInteractionNotAllowed:
+      // interactionNotAllowed proves the auth-bound item was found while also
+      // confirming that this presence query did not show system UI.
+      return true
+    case errSecItemNotFound:
+      return false
+    default:
+      throw StoreError.unexpectedStatus(status)
+    }
   }
 
   /// Deletes the item after overwriting its stored value (best-effort scrub).

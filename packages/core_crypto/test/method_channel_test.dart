@@ -69,6 +69,21 @@ void main() {
       expect(addrs.forCoin(Coin.tron), 'T1');
     });
 
+    test(
+      'walletExists uses the non-interactive native presence method',
+      () async {
+        late MethodCall received;
+        mockNative((call) async {
+          received = call;
+          return true;
+        });
+
+        expect(await api.walletExists('w1'), isTrue);
+        expect(received.method, 'walletExists');
+        expect(received.arguments, {'walletId': 'w1'});
+      },
+    );
+
     test('getAuthState decodes state map', () async {
       mockNative(
         (call) async => {'locked': true, 'failCount': 5, 'cooldownSec': 42},
