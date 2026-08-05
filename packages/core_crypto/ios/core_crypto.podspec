@@ -21,7 +21,7 @@ signing, and encrypted backup support for the KT Wallet Flutter applications.
   s.dependency 'Flutter'
   # Trust Wallet Core: audited C++ crypto (mnemonic, derivation, signing).
   s.dependency 'TrustWalletCore', '4.7.0'
-  s.platform = :ios, '13.0'
+  s.platform = :ios, '15.0'
 
   # Flutter.framework does not contain a i386 slice.
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }

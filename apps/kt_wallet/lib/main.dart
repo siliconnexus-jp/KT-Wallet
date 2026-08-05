@@ -72,11 +72,11 @@ Future<WalletController> _bootstrapWallet() async {
     store: store,
   );
   await controller.recoverPendingDeletions();
-  // Startup must not open auth-bound key material: doing so shows one system
-  // prompt per hot wallet before AppLockGate can perform the actual app
-  // unlock. A non-interactive presence check still fails closed when either
-  // side of a persisted wallet has disappeared.
-  await controller.validateNativeWalletPresence();
+  // Do not inspect native key material during startup. AppLockGate owns the
+  // single unlock prompt; signing/export flows validate and open the selected
+  // wallet only when the user explicitly needs its secret. Even a nominally
+  // non-interactive Keychain/Keystore probe can report device-specific access
+  // states and must not turn readable wallet metadata into a bootstrap error.
   await controller.restoreDurableFinalityMetrics();
   return controller;
 }

@@ -153,6 +153,20 @@ class RunnerTests: XCTestCase {
       try KeychainStore.load(walletId: walletID, context: LAContext()), original)
   }
 
+  func testKeychainPresenceCheckDoesNotOpenAuthBoundWallet() throws {
+    let walletID = "presence_\(UUID().uuidString.replacingOccurrences(of: "-", with: "_"))"
+    defer { try? KeychainStore.delete(walletId: walletID) }
+
+    try KeychainStore.save(
+      walletId: walletID,
+      ciphertext: Data([0x00, 0x01, 0x02]),
+      requireAuth: true
+    )
+
+    XCTAssertTrue(try KeychainStore.exists(walletId: walletID))
+    XCTAssertFalse(try KeychainStore.exists(walletId: "missing_\(UUID().uuidString)"))
+  }
+
   func testPortableBackupCipherMatchesCrossPlatformVector() throws {
     let entropy = Data((0x00...0x1F).map(UInt8.init))
     let salt = Data((0x00...0x0F).map(UInt8.init))

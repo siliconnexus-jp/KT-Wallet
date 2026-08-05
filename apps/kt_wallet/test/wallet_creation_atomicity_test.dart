@@ -236,7 +236,7 @@ void main() {
     },
   );
 
-  test('startup native presence check blocks missing hot keys', () async {
+  test('explicit native presence check blocks missing hot keys', () async {
     final missing = HotWallet(
       id: 'missing-key',
       name: 'Missing',
