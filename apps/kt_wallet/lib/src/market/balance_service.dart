@@ -4,6 +4,7 @@ import 'package:core_crypto/core_crypto.dart' show ChainAddresses, Coin;
 
 import '../rpc/http_transport.dart';
 import 'gateway_client.dart';
+import 'native_denomination.dart';
 
 /// Default public mainnet endpoints (no API keys). Overridable per instance
 /// for tests or self-hosted nodes.
@@ -93,28 +94,14 @@ class BalanceService {
   final GatewayResolver _gateway;
 
   /// Native-unit decimals per chain (wei / wei / SUN / lamports).
-  static const decimalsFor = {
-    Coin.eth: 18,
-    Coin.polygon: 18,
-    Coin.base: 18,
-    Coin.arbitrum: 18,
-    Coin.avalanche: 18,
-    Coin.bnb: 18,
-    Coin.tron: 6,
-    Coin.solana: 9,
-  };
+  ///
+  /// Aliases the shared table so this service and [GatewayClient] — which
+  /// validates gateway answers against the same constant one layer below —
+  /// cannot drift apart. See `native_denomination.dart`.
+  static const decimalsFor = nativeDecimalsFor;
 
   /// Native-coin display symbol per chain.
-  static const symbolFor = {
-    Coin.eth: 'ETH',
-    Coin.polygon: 'POL',
-    Coin.base: 'ETH',
-    Coin.arbitrum: 'ETH',
-    Coin.avalanche: 'AVAX',
-    Coin.bnb: 'BNB',
-    Coin.tron: 'TRX',
-    Coin.solana: 'SOL',
-  };
+  static const symbolFor = nativeSymbolFor;
 
   /// Fetches all four chains concurrently. Never throws: every per-chain
   /// failure (RPC error, HTTP status, timeout, malformed body) collapses to

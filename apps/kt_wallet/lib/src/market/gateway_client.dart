@@ -9,6 +9,7 @@ import '../rpc/bounded_http_client.dart';
 import '../rpc/json_rpc_envelope.dart';
 import '../rpc/network_identity_value.dart';
 import 'fiat_math.dart';
+import 'native_denomination.dart';
 
 /// Thin JSON-RPC 2.0 client for the OPTIONAL KT gateway (`POST {url}/rpc`).
 ///
@@ -496,16 +497,10 @@ class GatewayClient {
     if (native is! Map || !_hasExactStringKeys(native, _nativeBalanceKeys)) {
       throw const FormatException('missing native balance');
     }
-    final (expectedDecimals, expectedSymbol) = switch (chain) {
-      Coin.eth => (18, 'ETH'),
-      Coin.polygon => (18, 'POL'),
-      Coin.base => (18, 'ETH'),
-      Coin.arbitrum => (18, 'ETH'),
-      Coin.avalanche => (18, 'AVAX'),
-      Coin.bnb => (18, 'BNB'),
-      Coin.tron => (6, 'TRX'),
-      Coin.solana => (9, 'SOL'),
-    };
+    // The same table the consuming service interprets raw amounts with — a
+    // second copy here would let the check reject a correct gateway answer.
+    final expectedDecimals = nativeDecimalsFor[chain]!;
+    final expectedSymbol = nativeSymbolFor[chain]!;
     // Native denomination is a chain protocol constant, not display metadata
     // the gateway is allowed to redefine. Accepting a mismatched scale can
     // turn 1 ETH (1e18 wei) into an apparent 1e18 ETH balance before the later
