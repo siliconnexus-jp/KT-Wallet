@@ -363,6 +363,7 @@ func alchemyHistoryResult(
 ) *historyResult {
 	self := strings.ToLower(address)
 	nativeSymbol := chains[chain].Symbol
+	nativeDecimals := chains[chain].Decimals
 	records := make([]historyRecord, 0, len(transfers))
 	for i, transfer := range transfers {
 		from := strings.ToLower(transfer.From)
@@ -402,6 +403,13 @@ func alchemyHistoryResult(
 			symbol, decimals, verified = historyTokenMeta(
 				registry, contract, transfer.Asset, decimals,
 			)
+		} else {
+			// A native transfer is denominated by the chain, not by whatever
+			// scale the indexer reports for it. This is the same table the
+			// sibling `symbol` above comes from; taking one from the registry
+			// and the other from upstream is what let a 1 BNB transfer be
+			// emitted as a verified row reading 1,000,000,000 BNB.
+			decimals = nativeDecimals
 		}
 		records = append(records, historyRecord{
 			ID:          id,

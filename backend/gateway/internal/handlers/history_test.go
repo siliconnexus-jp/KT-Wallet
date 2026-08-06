@@ -999,3 +999,77 @@ func TestTronFixtureRoutesDistinct(t *testing.T) {
 		t.Fatalf("trc20 route not matched correctly: %v", out.Data)
 	}
 }
+
+// A native-coin history row must carry the chain's own denomination, not the
+// scale Alchemy happens to report. `decimal` is upstream display metadata; the
+// native unit of a chain is a protocol constant the gateway already knows (it
+// is where the sibling `symbol` field comes from). Accepting 9 for an EVM
+// chain turns a 1 BNB transfer into an apparent 1,000,000,000 BNB row.
+func TestAlchemyNativeRowUsesChainDenomination(t *testing.T) {
+	alchemy := newRESTFake(t)
+	alchemy.route("/", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Params []map[string]any `json:"params"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&request)
+		w.Header().Set("Content-Type", "application/json")
+		if request.Params[0]["toAddress"] != nil {
+			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{"transfers":[]}}`)
+			return
+		}
+		// Well-formed in every respect except the claimed denomination.
+		_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":1,"result":{"transfers":[{
+			"uniqueId":"0xbnb:external","blockNum":"0x200","hash":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+			"from":%q,"to":"0x2222222222222222222222222222222222222222",
+			"asset":"BNB","category":"external",
+			"rawContract":{"value":"0xde0b6b3a7640000","address":null,"decimal":"0x9"},
+			"metadata":{"blockTimestamp":"2026-07-29T01:01:00Z"}
+		}]}}`, evmSelf)
+	})
+	etherscan := newRESTFake(t)
+	etherscan.routeJSON("/", `{"status":"1","message":"OK","result":[]}`)
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.AlchemyKeys = []string{"server-only-key"}
+		cfg.AlchemyURLs = map[string][]string{"bnb-testnet": {alchemy.srv.URL}}
+		cfg.EtherscanKey = "fallback-key"
+		cfg.EtherscanURL = etherscan.srv.URL
+	})
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(
+		`{"chain":"bnb","network":"bnb-testnet","address":%q}`, evmSelf,
+	)))
+	assertJSONEq(t, `[
+		{"id":"0xbnb:external","hash":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","direction":"out","from":"0x1111111111111111111111111111111111111111","to":"0x2222222222222222222222222222222222222222","amountRaw":"1000000000000000000","decimals":18,"symbol":"BNB","verified":true,"timestampMs":1785286860000,"status":"ok"}
+	]`, res["records"])
+}
+
+// Pins the upstream contract the native branch relies on: `rawContract.decimal`
+// is REQUIRED, and a row missing it invalidates the whole Alchemy page rather
+// than silently dropping that row. If this ever loosens, the native branch
+// starts losing transfers instead of failing over.
+func TestAlchemyRowWithoutDecimalRejectsWholePage(t *testing.T) {
+	alchemy := newRESTFake(t)
+	alchemy.routeJSON("/", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[{
+		"uniqueId":"0xbnb:external","blockNum":"0x200","hash":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+		"from":%q,"to":"0x2222222222222222222222222222222222222222",
+		"asset":"BNB","category":"external",
+		"rawContract":{"value":"0xde0b6b3a7640000","address":null},
+		"metadata":{"blockTimestamp":"2026-07-29T01:01:00Z"}
+	}]}}`, evmSelf))
+	etherscan := newRESTFake(t)
+	etherscan.routeJSON("/", `{"status":"1","message":"OK","result":[]}`)
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.AlchemyKeys = []string{"server-only-key"}
+		cfg.AlchemyURLs = map[string][]string{"bnb-testnet": {alchemy.srv.URL}}
+		cfg.EtherscanKey = "fallback-key"
+		cfg.EtherscanURL = etherscan.srv.URL
+	})
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(
+		`{"chain":"bnb","network":"bnb-testnet","address":%q}`, evmSelf,
+	)))
+	assertJSONEq(t, `[]`, res["records"])
+	if etherscan.hitCount("/") == 0 {
+		t.Fatal("a page missing rawContract.decimal must fail over, not be partially accepted")
+	}
+}
