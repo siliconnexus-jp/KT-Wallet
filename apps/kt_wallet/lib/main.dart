@@ -184,6 +184,9 @@ class RootApp extends StatelessWidget {
     DeviceModeController? modeController,
     LocaleController? localeController,
     this.walletBootstrap,
+    this.walletPrefs,
+    this.walletNetworks,
+    this.walletTransferSession,
   }) : modeController = modeController ?? DeviceModeController(),
        localeController = localeController ?? LocaleController();
 
@@ -193,6 +196,15 @@ class RootApp extends StatelessWidget {
   /// Builds the wallet-mode [WalletController]. Production defaults to the
   /// persistent drift-backed bootstrap; tests inject an in-memory factory.
   final Future<WalletController> Function()? walletBootstrap;
+
+  /// Optional wallet-mode preferences used by end-to-end app-shell tests.
+  /// Production owns one controller inside [_WalletBootstrap].
+  final AppPrefsController? walletPrefs;
+
+  /// Optional live state seams for physical-device integration tests. The
+  /// production bootstrap continues to create the normal defaults.
+  final NetworkController? walletNetworks;
+  final TransferSession? walletTransferSession;
 
   @override
   Widget build(BuildContext context) {
@@ -222,6 +234,9 @@ class RootApp extends StatelessWidget {
                   child: _WalletBootstrap(
                     localeController: localeController,
                     bootstrap: walletBootstrap ?? _bootstrapWallet,
+                    prefs: walletPrefs,
+                    networks: walletNetworks,
+                    transferSession: walletTransferSession,
                   ),
                 );
               case DeviceMode.signer:
@@ -245,10 +260,16 @@ class _WalletBootstrap extends StatefulWidget {
   const _WalletBootstrap({
     required this.localeController,
     required this.bootstrap,
+    this.prefs,
+    this.networks,
+    this.transferSession,
   });
 
   final LocaleController localeController;
   final Future<WalletController> Function() bootstrap;
+  final AppPrefsController? prefs;
+  final NetworkController? networks;
+  final TransferSession? transferSession;
 
   @override
   State<_WalletBootstrap> createState() => _WalletBootstrapState();
@@ -261,11 +282,11 @@ class _WalletBootstrapState extends State<_WalletBootstrap> {
   /// above [KtWalletApp] — outside [AppPrefsScope] — so the two used to hold
   /// separate controllers over the same SharedPreferences keys, and a toggle
   /// in 安全设置 only reached the other side on the next cold start.
-  final AppPrefsController _prefs = AppPrefsController();
+  late final AppPrefsController _prefs = widget.prefs ?? AppPrefsController();
 
   @override
   void dispose() {
-    _prefs.dispose();
+    if (widget.prefs == null) _prefs.dispose();
     // Release the DB connection when this mode subtree is torn down (mode
     // switch back to the picker). A bootstrap that failed has nothing to close.
     _controller.then((c) => c.close()).ignore();
@@ -297,6 +318,8 @@ class _WalletBootstrapState extends State<_WalletBootstrap> {
           controller: controller,
           localeController: widget.localeController,
           prefs: _prefs,
+          networkController: widget.networks,
+          transferSession: widget.transferSession,
           initialLocation: controller.current == null ? '/add-wallet' : '/home',
         );
         // There is nothing sensitive to unlock before the first wallet is

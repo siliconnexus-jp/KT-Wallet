@@ -12,6 +12,7 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
     "storeWallet", "walletExists", "deriveAddresses", "derivePublicKeys",
     "signTransaction",
     "exportMnemonic", "createBackup", "deleteWallet",
+    "signTransactionForIntegrationTest", "deleteWalletForIntegrationTest",
   ]
 
   public static func register(with registrar: FlutterPluginRegistrar) {
@@ -95,6 +96,20 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
 
       case "getAuthState":
         result(AuthGate.shared.state)
+
+      #if DEBUG
+      // Physical-device integration tests must be able to complete without a
+      // human satisfying an out-of-process Face ID sheet. These methods still
+      // use the real Keychain payload and Wallet Core implementation, and are
+      // restricted to the reserved test-wallet namespace. They do not exist
+      // in profile/release builds.
+      case "signTransactionForIntegrationTest":
+        result(try signTransactionForIntegrationTest(a))
+
+      case "deleteWalletForIntegrationTest":
+        try deleteWalletForIntegrationTest(a)
+        result(true)
+      #endif
 
       default:
         result(FlutterMethodNotImplemented)
@@ -209,6 +224,32 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
     }
     return ["signedTx": FlutterStandardTypedData(bytes: signed.signedTx), "txHash": signed.txHash]
   }
+
+  #if DEBUG
+  private func requireIntegrationTestWalletId(_ value: Any?) throws -> String {
+    let walletId = try requireValidWalletId(value)
+    guard walletId.hasPrefix("kt-e2e-") else {
+      throw WalletCoreBridge.BridgeError.invalidInput
+    }
+    return walletId
+  }
+
+  private func signTransactionForIntegrationTest(_ a: [String: Any]) throws -> [String: Any] {
+    _ = try requireIntegrationTestWalletId(a["walletId"])
+    let coin = try requireSupportedCoin(a)
+    let input = try requireSigningInput(a)
+    let context = LAContext()
+    let signed = try withEntropy(a, context: context) {
+      try WalletCoreBridge.sign(entropy: $0, coin: coin, signingInput: input)
+    }
+    return ["signedTx": FlutterStandardTypedData(bytes: signed.signedTx), "txHash": signed.txHash]
+  }
+
+  private func deleteWalletForIntegrationTest(_ a: [String: Any]) throws {
+    let walletId = try requireIntegrationTestWalletId(a["walletId"])
+    try KeychainStore.delete(walletId: walletId)
+  }
+  #endif
 
   private func exportMnemonic(_ a: [String: Any]) async throws -> String {
     let context = try await AuthGate.shared.authenticate(reason: "Reveal recovery phrase")
