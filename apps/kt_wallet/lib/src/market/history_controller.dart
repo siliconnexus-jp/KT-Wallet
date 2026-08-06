@@ -206,6 +206,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   static String _defaultSnapshotScope() => 'default';
   bool _refreshRequested = false;
   bool _disposed = false;
+  int _localReloadGeneration = 0;
 
   Future<List<db.Transaction>> _loadLocalTransactions() =>
       _wallets.localTransactions(networkIds: _activeNetworkIds?.call());
@@ -885,13 +886,49 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   void _onWalletsChanged() {
     if (_disposed) return;
     final id = _wallets.current?.id;
-    if (id == _walletId) return;
+    if (id == _walletId) {
+      final reload = ++_localReloadGeneration;
+      final generation = _generation;
+      unawaited(_reloadSameWalletTransactions(id, generation, reload));
+      return;
+    }
+    _localReloadGeneration++;
     if (id == null) {
       _clearWalletState();
       return;
     }
     _refreshing = false;
     refresh();
+  }
+
+  /// WalletController also notifies when a transaction is inserted or its
+  /// lifecycle state changes. Those notifications keep the same selected
+  /// wallet id, but the history still has to reload its local rows immediately
+  /// instead of waiting for a wallet switch, app resume or indexer refresh.
+  Future<void> _reloadSameWalletTransactions(
+    String? walletId,
+    int generation,
+    int reload,
+  ) async {
+    if (walletId == null) return;
+    try {
+      final local = await _loadLocalTransactions();
+      final pending = await _loadPendingTransactions();
+      if (_disposed ||
+          generation != _generation ||
+          reload != _localReloadGeneration ||
+          walletId != _walletId ||
+          walletId != _wallets.current?.id) {
+        return;
+      }
+      _localTransactions = local;
+      _hasPendingTransactions = pending.isNotEmpty;
+      _schedulePoll();
+      notifyListeners();
+    } catch (_) {
+      // The durable writer already surfaced its own database failure. Keep
+      // the last-good list; a later wallet notification/refresh retries.
+    }
   }
 
   /// Clears every wallet-derived row and invalidates in-flight explorer/RPC
@@ -933,6 +970,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _localReloadGeneration++;
     // Invalidates every async refresh/poll callback before the notifier is
     // disposed. Explorer and RPC futures cannot be cancelled, but their late
     // answers must never publish into a route that has already gone away.

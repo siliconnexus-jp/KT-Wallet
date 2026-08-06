@@ -201,6 +201,17 @@ void main() {
       await tester.tap(find.text(correct).last);
       await tester.pumpAndSettle();
       await tester.tap(find.text('确认'));
+      // The durable commit clears pendingMnemonic before the router reaches
+      // home. No intermediate frame may reinterpret that successful cleanup
+      // as a missing phrase and flash the refusal panel.
+      for (var frame = 0; frame < 10; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(
+          find.text('无法显示助记词'),
+          findsNothing,
+          reason: 'successful wallet creation flashed a false error page',
+        );
+      }
       await tester.pumpAndSettle();
       expect(controller.count, before + 1); // the new wallet is committed
       expect(controller.pendingMnemonic, isNull);

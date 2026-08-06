@@ -1961,6 +1961,8 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
     final network = NetworkScope.maybeOf(context)?.activeFor(draft.chain);
     final chainId = network?.evmChainId ?? _defaultEvmChainId(draft.chain);
     if (isEvm && chainId == null) {
+      TransferSessionScope.maybeOf(context)?.preparationFailure =
+          'StateError: missing EVM chain id';
       _state = _FeeEstimate.failed;
       return;
     }
@@ -2088,7 +2090,8 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
       ..preparedTron = null
       ..preparedSolana = null
       ..preparedNetworkId = null
-      ..preparedAtMs = null;
+      ..preparedAtMs = null
+      ..preparationFailure = null;
     _insufficientFunds = false;
     _rentReserve = null;
     _evmAssetChanges = null;
@@ -2146,6 +2149,7 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
           );
       }
       metricSucceeded = true;
+      session?.preparationFailure = null;
       if (!mounted) return;
       final quotedAt = DateTime.now().millisecondsSinceEpoch;
       setState(() {
@@ -2186,13 +2190,15 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
           ),
         );
       });
-    } on TransferInsufficientFunds {
+    } on TransferInsufficientFunds catch (error) {
+      session?.preparationFailure = '${error.runtimeType}: $error';
       if (!mounted) return;
       setState(() {
         _insufficientFunds = true;
         _state = _FeeEstimate.failed;
       });
-    } catch (_) {
+    } catch (error) {
+      session?.preparationFailure = '${error.runtimeType}: $error';
       if (!mounted) return;
       setState(() => _state = _FeeEstimate.failed);
     } finally {
@@ -2309,6 +2315,8 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
                       ? l10n.tokenRiskBlockedHint
                       : _insufficientFunds
                       ? l10n.insufficientBalance
+                      : _state == _FeeEstimate.estimating
+                      ? l10n.feeEstimating
                       : l10n.feeUnavailableHint)
                 : (isHot ? l10n.hotConfirmHint : l10n.watchConfirmHint),
             style: TextStyle(

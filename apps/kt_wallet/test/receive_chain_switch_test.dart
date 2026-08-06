@@ -14,6 +14,44 @@ const _mnemonic =
     'abandon ability able about above absent absorb abstract absurd abuse access accident';
 
 void main() {
+  testWidgets('home receive action and nav back return to the same wallet', (
+    tester,
+  ) async {
+    final crypto = MockCoreCrypto();
+    final controller = WalletController(WalletManager(), crypto: crypto);
+    await crypto.storeWallet(walletId: 'w1', mnemonic: _mnemonic);
+    final addresses = await crypto.deriveAddresses('w1');
+    await controller.add(
+      HotWallet(
+        id: 'w1',
+        name: '日常钱包',
+        avatarColor: 0xFFF59E0B,
+        addresses: addresses,
+        backedUp: true,
+      ),
+    );
+
+    tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+    await tester.pumpWidget(
+      KtWalletApp(controller: controller, initialLocation: '/home'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('日常钱包'), findsOneWidget);
+    await tester.tap(find.text('收款'));
+    await tester.pumpAndSettle();
+    expect(find.text('USDT · TRON'), findsOneWidget);
+
+    final back = find.byTooltip('返回').hitTestable();
+    expect(back, findsOneWidget);
+    await tester.tap(back);
+    await tester.pumpAndSettle();
+
+    expect(find.text('日常钱包'), findsOneWidget);
+    expect(find.text('USDT · TRON'), findsNothing);
+  });
+
   testWidgets('chain picker switches the displayed receive address', (
     tester,
   ) async {

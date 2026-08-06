@@ -568,22 +568,31 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
   String? _selected;
   String? _submitError;
   bool _submitting = false;
+  String? _correctWord;
+  List<String>? _challengeOptions;
+  bool _challengeInitialized = false;
 
-  /// Null when there is no real phrase behind this step — see
-  /// [_activeMnemonic]. The screen then refuses instead of quizzing the user
-  /// on words the wallet never used.
-  List<String>? _words() => _activeMnemonic(context);
-  String? _correct() => _words()?[_challengePosition - 1];
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_challengeInitialized) return;
+    _challengeInitialized = true;
+    final words = _activeMnemonic(context);
+    if (words == null) return;
+    final correct = words[_challengePosition - 1];
+    final distractors = words.where((word) => word != correct).toSet().take(5);
+    _correctWord = correct;
+    _challengeOptions = <String>[correct, ...distractors]..sort();
+  }
+
+  String? _correct() => _correctWord;
 
   /// Correct word + up to 5 distinct distractors from the same mnemonic,
-  /// alphabetically ordered for a stable layout.
-  List<String>? _options() {
-    final words = _words();
-    if (words == null) return null;
-    final correct = words[_challengePosition - 1];
-    final distractors = words.where((w) => w != correct).toSet().take(5);
-    return [correct, ...distractors]..sort();
-  }
+  /// alphabetically ordered for a stable layout. The challenge is captured
+  /// once on route entry: a successful finalize clears pendingMnemonic before
+  /// navigation, and rebuilding from that transient null used to flash the
+  /// misleading "mnemonic unavailable" page for one frame.
+  List<String>? _options() => _challengeOptions;
 
   Future<void> _confirm() async {
     if (_selected == null || _submitting) return;
@@ -606,14 +615,13 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
     });
 
     String? failure;
+    String? successMessage;
     try {
       if (controller.pendingMnemonic != null) {
         // Create-onboarding: commit the new wallet now that backup is verified.
         final name = l10n.walletDefaultName(controller.count + 1);
         await controller.finalizeCreate(name: name);
-        messenger.showSnackBar(
-          SnackBar(content: Text(l10n.walletCreatedBackedUp)),
-        );
+        successMessage = l10n.walletCreatedBackedUp;
       } else {
         // Gallery / golden rendering only: under a real [WalletScope] a null
         // pendingMnemonic means [_activeMnemonic] returned null, the screen
@@ -621,7 +629,7 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
         // gallery's demo controller still completes the flow end to end.
         final current = controller.current;
         if (current != null) await controller.markBackedUp(current.id);
-        messenger.showSnackBar(SnackBar(content: Text(l10n.backupVerified)));
+        successMessage = l10n.backupVerified;
       }
     } on AuthLockedException catch (error) {
       failure = l10n.walletCreateAuthLocked(error.cooldownSec);
@@ -643,8 +651,8 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
       });
       return;
     }
-    setState(() => _submitting = false);
     context.go('/home');
+    messenger.showSnackBar(SnackBar(content: Text(successMessage!)));
   }
 
   // The challenge options are drawn from the real phrase, so this screen gets

@@ -284,6 +284,12 @@ class TransferSession {
   String? preparedNetworkId;
   int? preparedAtMs;
 
+  /// Ephemeral, privacy-sanitized reason from the most recent preparation
+  /// attempt. It is never persisted or shown in the consumer UI; physical E2E
+  /// evidence can record it instead of reducing every failure to the same
+  /// generic fee-estimation message.
+  String? preparationFailure;
+
   /// Returns the exact quote only while it is fresh and still matches every
   /// field the user approved. Any network, sender, recipient, amount or token
   /// drift fails closed.
@@ -390,6 +396,7 @@ class TransferSession {
     preparedSolana = null;
     preparedNetworkId = null;
     preparedAtMs = null;
+    preparationFailure = null;
   }
 }
 

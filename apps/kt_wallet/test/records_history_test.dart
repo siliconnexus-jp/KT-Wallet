@@ -532,6 +532,62 @@ void main() {
   );
 
   test(
+    'same-wallet transaction writes appear without a wallet switch or remote refresh',
+    () async {
+      final database = WalletDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final wallet = HotWallet(
+        id: 'same-wallet',
+        name: 'Same wallet',
+        avatarColor: 0xFF000000,
+        addresses: const ChainAddresses(
+          eth: '0x1111111111111111111111111111111111111111',
+          polygon: '0x1111111111111111111111111111111111111111',
+          tron: 'TJRabPrwbZy45sbavfcjinPJC18kjpRTv8',
+          solana: '11111111111111111111111111111111',
+        ),
+        backedUp: true,
+      );
+      final store = WalletStore(database);
+      await store.save(wallet);
+      final wallets = WalletController(
+        WalletManager(initial: [wallet]),
+        store: store,
+      );
+      final controller = HistoryController(
+        wallets: wallets,
+        service: _FakeHistoryService({
+          for (final coin in Coin.values) coin: _unsupported,
+        }),
+      );
+      addTearDown(controller.dispose);
+      await controller.refresh();
+      expect(controller.records, isEmpty);
+
+      final hash = '0x${'c' * 64}';
+      await wallets.saveOutgoingTransaction(
+        id: 'same-wallet-new-transaction',
+        coin: Coin.eth,
+        networkId: 'eth-sepolia',
+        from: wallet.addresses.eth,
+        to: '0x2222222222222222222222222222222222222222',
+        amountRaw: '10000000000000',
+        hash: hash,
+        status: TxStatus.confirmed,
+        signMode: SignMode.local,
+        createdAt: DateTime(2026, 8, 6).millisecondsSinceEpoch,
+      );
+      final deadline = DateTime.now().add(const Duration(seconds: 1));
+      while (!controller.records.any((record) => record.hash == hash) &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      expect(controller.records.map((record) => record.hash), contains(hash));
+    },
+  );
+
+  test(
     'removing the last wallet clears history and drops late explorer rows',
     () async {
       final service = _DelayedHistoryService();

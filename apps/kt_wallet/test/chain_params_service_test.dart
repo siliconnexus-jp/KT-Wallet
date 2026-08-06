@@ -940,7 +940,8 @@ void main() {
 
       // While the chain-state fetch is in flight the fee is honestly pending —
       // not a number pulled from a static table.
-      expect(find.text('估算中…'), findsOneWidget);
+      expect(find.text('估算中…'), findsNWidgets(2));
+      expect(find.text('无法估算网络费，暂时无法发送'), findsNothing);
       expect(find.text('≈ 0.00042 ETH'), findsNothing); // demo standard tier
       expect(
         tester
@@ -961,6 +962,7 @@ void main() {
       expect(find.text('≈ --'), findsOneWidget);
       expect(find.text('≈ \$0.5'), findsNothing);
       expect(session.preparedEvm, isNotNull);
+      expect(session.preparationFailure, isNull);
       expect(session.preparedEvm!.maximumFee, BigInt.from(672000000000000));
       expect(session.preparedNetworkId, 'eth-mainnet');
       expect(session.preparedAtMs, isNotNull);
@@ -1171,6 +1173,7 @@ void main() {
 
       expect(find.text('无法获取网络费'), findsOneWidget);
       expect(find.text('无法估算网络费，暂时无法发送'), findsOneWidget);
+      expect(session.preparationFailure, contains('RpcException'));
       expect(
         tester
             .widget<FilledButton>(find.widgetWithText(FilledButton, '生成待签名二维码'))
