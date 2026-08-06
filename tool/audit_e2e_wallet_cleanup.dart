@@ -18,6 +18,7 @@ const _strictCleanupHelpers = <String>{
 void main() {
   final selfTestFailures = <String>[
     ..._classifierSelfTestFailures(),
+    ..._cleanupTargetSelfTestFailures(),
     ..._cleanupHelperSelfTestFailures(),
     ..._staleReplacementHelperSelfTestFailures(),
     ..._deleteOnlyEntrypointSelfTestFailures(),
@@ -472,13 +473,13 @@ _CleanupAudit _auditCleanup(String source) {
     final hasImmediateRegistration = visitor.registrations.any(
       (registration) =>
           registration.walletId == store.walletId &&
-          registration.target == store.target &&
+          _cleanupTargetsMatch(store.target, registration.target) &&
           _isImmediatelyAfter(store.statement, registration.statement),
     );
     final hasFinallyDeletion = visitor.finallyDeletions.any(
       (deletion) =>
           deletion.walletId == store.walletId &&
-          deletion.target == store.target &&
+          _cleanupTargetsMatch(store.target, deletion.target) &&
           _finallyCoversStore(deletion.owner, store.statement),
     );
     if (!hasImmediateRegistration && !hasFinallyDeletion) {
@@ -491,6 +492,19 @@ _CleanupAudit _auditCleanup(String source) {
     missingWalletIds: Set<String>.unmodifiable(missing),
   );
 }
+
+bool _cleanupTargetsMatch(String? storeTarget, String? cleanupTarget) =>
+    storeTarget == cleanupTarget ||
+    (storeTarget == 'super' && cleanupTarget == 'this');
+
+List<String> _cleanupTargetSelfTestFailures() => <String>[
+  if (!_cleanupTargetsMatch('super', 'this'))
+    'super store must be cleanable through the current instance',
+  if (_cleanupTargetsMatch('super', 'other'))
+    'super store must not be cleanable through another instance',
+  if (_cleanupTargetsMatch('native', 'other'))
+    'unrelated crypto instances must remain distinct',
+];
 
 String? _namedArgument(MethodInvocation node, String name) {
   for (final argument in node.argumentList.arguments) {

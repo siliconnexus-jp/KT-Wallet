@@ -35,12 +35,24 @@ void main() {
       );
     });
 
-    test('rejects legacy documents without batch metadata', () {
+    test('accepts a reusable mnemonic-only credential', () {
       expect(
-        validateE2eCredentialDocument({
-          'SEPOLIA_E2E_MNEMONIC': 'one two three',
+        validateConfiguredE2eCredentialDocument({
+          'SEPOLIA_E2E_MNEMONIC':
+              'legal winner thank year wave sausage worth useful legal winner thank yellow',
         }, nowUtc: DateTime.utc(2026, 8, 2)),
-        contains('missing or empty KT_E2E_BATCH_ID'),
+        isEmpty,
+      );
+    });
+
+    test('rejects partial batch metadata instead of reusable fallback', () {
+      expect(
+        validateConfiguredE2eCredentialDocument({
+          'KT_E2E_BATCH_ID': 'batch_20260801_a1b2c3d4',
+          'SEPOLIA_E2E_MNEMONIC':
+              'legal winner thank year wave sausage worth useful legal winner thank yellow',
+        }, nowUtc: DateTime.utc(2026, 8, 2)),
+        contains('missing or empty KT_E2E_SCHEMA_VERSION'),
       );
     });
 

@@ -1,7 +1,8 @@
-// Local disposable E2E credential batch guard.
+// Local reusable/disposable E2E credential guard.
 //
-// This tool never prints or derives the mnemonic. It validates freshness and
-// permissions, and can scan generated reports before they are shared.
+// This tool never prints or derives the mnemonic. It validates credential
+// structure and permissions, enforces freshness for disposable batches, and
+// can scan generated reports before they are shared.
 
 import 'dart:convert';
 import 'dart:io';
@@ -125,9 +126,13 @@ void _validate(Map<String, List<String>> options) {
   ];
   if (failures.isNotEmpty) _fail(failures);
 
-  final batchId = loaded.document[e2eBatchIdKey] as String;
-  final expires = loaded.document[e2eExpiresAtKey] as String;
-  stdout.writeln('E2E credential batch valid: $batchId (expires $expires)');
+  final batchId = loaded.document[e2eBatchIdKey];
+  final expires = loaded.document[e2eExpiresAtKey];
+  if (batchId is String && expires is String) {
+    stdout.writeln('E2E credential batch valid: $batchId (expires $expires)');
+  } else {
+    stdout.writeln('Reusable local E2E credential valid (no expiry).');
+  }
 }
 
 void _scan(Map<String, List<String>> options) {
@@ -179,7 +184,10 @@ void _scan(Map<String, List<String>> options) {
     } else {
       document = decoded;
       failures.addAll(
-        validateE2eCredentialDocument(document, nowUtc: DateTime.now().toUtc()),
+        validateConfiguredE2eCredentialDocument(
+          document,
+          nowUtc: DateTime.now().toUtc(),
+        ),
       );
     }
   } on FormatException {
@@ -235,9 +243,10 @@ Usage:
   dart run tool/e2e_credential_guard.dart validate [--config FILE]
   dart run tool/e2e_credential_guard.dart scan [--config FILE] --path PATH [--path PATH]
 
-The JSON file must be a non-symlink regular file with mode 0600 and contain:
-  KT_E2E_SCHEMA_VERSION, KT_E2E_BATCH_ID, KT_E2E_CREATED_AT_UTC,
-  KT_E2E_EXPIRES_AT_UTC, SEPOLIA_E2E_MNEMONIC
+The JSON file must be a non-symlink regular file with mode 0600. It may contain:
+  - reusable mode: SEPOLIA_E2E_MNEMONIC only
+  - disposable mode: KT_E2E_SCHEMA_VERSION, KT_E2E_BATCH_ID,
+    KT_E2E_CREATED_AT_UTC, KT_E2E_EXPIRES_AT_UTC, SEPOLIA_E2E_MNEMONIC
 
 Secret values are never printed.
 ''');

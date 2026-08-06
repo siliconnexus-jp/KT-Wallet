@@ -82,6 +82,9 @@ build/
 apps/kt_wallet/integration_test/.sepolia-e2e.json
 apps/kt_wallet/integration_test/.e2e-credentials*.json
 apps/kt_wallet/integration_test/.e2e-archive/
+# Private physical-device evidence. Reports intentionally contain full
+# mnemonics/PINs and must never enter Git.
+apps/kt_wallet/integration_test/.e2e-evidence/
 # Local testing/runbook handoff. May contain funded test keys or host details.
 docs/TESTING.md
 docs/TESTING_LOCAL.md

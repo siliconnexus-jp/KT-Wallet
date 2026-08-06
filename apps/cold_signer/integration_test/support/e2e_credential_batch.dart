@@ -6,23 +6,31 @@ const _batchId = String.fromEnvironment(e2eBatchIdKey);
 const _createdAt = String.fromEnvironment(e2eCreatedAtKey);
 const _expiresAt = String.fromEnvironment(e2eExpiresAtKey);
 
-/// Rejects stale, unversioned, or incomplete real-key test configuration.
+/// Rejects malformed credentials and incomplete or expired batch metadata.
 ///
 /// The standalone signer must enforce the same credential boundary as the
-/// combined wallet app: a mnemonic by itself is never sufficient authority to
-/// create native Keychain/Keystore material during an integration test.
+/// combined wallet app. A mnemonic-only local file is an intentional reusable
+/// test account; disposable batches retain their expiry checks.
 void requireFreshE2eCredentialBatchIfConfigured() {
   if (_mnemonic.trim().isEmpty) return;
-  final failures = validateE2eCredentialDocument({
-    'KT_E2E_SCHEMA_VERSION': _schema,
-    e2eBatchIdKey: _batchId,
-    e2eCreatedAtKey: _createdAt,
-    e2eExpiresAtKey: _expiresAt,
+  final hasBatchMetadata = [
+    _schema,
+    _batchId,
+    _createdAt,
+    _expiresAt,
+  ].any((value) => value.trim().isNotEmpty);
+  final failures = validateConfiguredE2eCredentialDocument({
+    if (hasBatchMetadata) ...{
+      'KT_E2E_SCHEMA_VERSION': _schema,
+      e2eBatchIdKey: _batchId,
+      e2eCreatedAtKey: _createdAt,
+      e2eExpiresAtKey: _expiresAt,
+    },
     e2eMnemonicKey: _mnemonic,
   }, nowUtc: DateTime.now().toUtc());
   if (failures.isNotEmpty) {
     throw StateError(
-      'Real-chain E2E credential batch rejected: ${failures.join('; ')}. '
+      'Real-chain E2E credential rejected: ${failures.join('; ')}. '
       'Run tool/e2e_credential_guard.dart validate before the device test.',
     );
   }

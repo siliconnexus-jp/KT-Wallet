@@ -691,10 +691,10 @@ bool applePackageMetadataEmbedsPrivacyManifest({
 
 /// Ensures a Flutter iOS Podfile declares the same minimum supported version
 /// as the Runner and raises older transitive Pod targets during generation.
-bool podfileEnforcesIos13Floor(String podfile) {
-  return RegExp(r'''platform\s+:ios\s*,\s*['"]13\.0['"]''').hasMatch(podfile) &&
+bool podfileEnforcesIos15Floor(String podfile) {
+  return RegExp(r'''platform\s+:ios\s*,\s*['"]15\.0['"]''').hasMatch(podfile) &&
       podfile.contains("config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']") &&
-      podfile.contains("Gem::Version.new('13.0')");
+      podfile.contains("Gem::Version.new('15.0')");
 }
 
 /// Network-capable `dart:io` symbols. The signer legitimately imports
@@ -843,7 +843,8 @@ List<String> findGatewayReleaseVersionIssues({
 }
 
 /// Every real-chain integration entrypoint that reads the funded mnemonic must
-/// validate the versioned batch metadata before registering or running tests.
+/// validate its reusable credential or disposable batch metadata before
+/// registering or running tests.
 bool realE2eEntrypointHasCredentialGuard(String contents) {
   const readsMnemonic = "String.fromEnvironment('SEPOLIA_E2E_MNEMONIC')";
   const guard = 'requireFreshE2eCredentialBatchIfConfigured();';

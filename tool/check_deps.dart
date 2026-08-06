@@ -728,8 +728,8 @@ void main() {
     File('apps/cold_signer/ios/Podfile'),
   ]) {
     final contents = podfile.existsSync() ? podfile.readAsStringSync() : '';
-    if (!podfileEnforcesIos13Floor(contents)) {
-      failures.add('${podfile.path} does not enforce the iOS 13 Pod floor');
+    if (!podfileEnforcesIos15Floor(contents)) {
+      failures.add('${podfile.path} does not enforce the iOS 15 Pod floor');
     }
   }
 

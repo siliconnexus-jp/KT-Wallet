@@ -184,18 +184,18 @@ s.resource_bundles = {
       );
     });
 
-    test('Podfile must declare and propagate the iOS 13 floor', () {
+    test('Podfile must declare and propagate the iOS 15 floor', () {
       const podfile = '''
-platform :ios, '13.0'
+platform :ios, '15.0'
 deployment_target = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
-if deployment_target && Gem::Version.new(deployment_target) < Gem::Version.new('13.0')
-  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+if deployment_target && Gem::Version.new(deployment_target) < Gem::Version.new('15.0')
+  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
 end
 ''';
-      expect(podfileEnforcesIos13Floor(podfile), isTrue);
+      expect(podfileEnforcesIos15Floor(podfile), isTrue);
       expect(
-        podfileEnforcesIos13Floor(
-          podfile.replaceFirst("platform :ios, '13.0'", ''),
+        podfileEnforcesIos15Floor(
+          podfile.replaceFirst("platform :ios, '15.0'", ''),
         ),
         isFalse,
       );

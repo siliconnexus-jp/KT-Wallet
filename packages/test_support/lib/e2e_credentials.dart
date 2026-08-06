@@ -1,8 +1,9 @@
-/// Test-only credential-batch policy for real-chain E2E runs.
+/// Test-only credential policy for real-chain E2E runs.
 ///
 /// This library never derives addresses and never logs secret values. It only
-/// validates the metadata surrounding a locally stored, disposable test
-/// mnemonic and detects accidental disclosure in text reports.
+/// validates a locally stored reusable credential or the metadata surrounding
+/// a disposable credential batch, and detects accidental disclosure in text
+/// reports.
 library;
 
 import 'dart:math' as math;
@@ -19,6 +20,13 @@ const e2eCredentialRequiredKeys = {
   e2eCreatedAtKey,
   e2eExpiresAtKey,
   e2eMnemonicKey,
+};
+
+const _e2eCredentialBatchMetadataKeys = {
+  'KT_E2E_SCHEMA_VERSION',
+  e2eBatchIdKey,
+  e2eCreatedAtKey,
+  e2eExpiresAtKey,
 };
 
 /// Text files that can carry credentials and are safe to decode as UTF-8.
@@ -105,7 +113,45 @@ Map<String, String> buildE2eCredentialDocument({
   e2eMnemonicKey: mnemonic.trim(),
 };
 
-/// Validates a decoded `--dart-define-from-file` credential document.
+/// Validates either a reusable mnemonic-only test credential or a disposable
+/// credential batch.
+///
+/// Reusable credentials deliberately have no expiry and are intended for a
+/// funded, local-only test account. If any batch metadata key is present, the
+/// complete disposable-batch contract is enforced so a partial or expired
+/// batch cannot silently fall back to reusable mode.
+List<String> validateConfiguredE2eCredentialDocument(
+  Map<String, Object?> document, {
+  required DateTime nowUtc,
+  Duration maximumLifetime = e2eCredentialMaximumLifetime,
+}) {
+  final hasBatchMetadata = document.keys.any(
+    _e2eCredentialBatchMetadataKeys.contains,
+  );
+  if (hasBatchMetadata) {
+    return validateE2eCredentialDocument(
+      document,
+      nowUtc: nowUtc,
+      maximumLifetime: maximumLifetime,
+    );
+  }
+  return validateReusableE2eCredentialDocument(document);
+}
+
+/// Validates a mnemonic-only reusable test credential.
+List<String> validateReusableE2eCredentialDocument(
+  Map<String, Object?> document,
+) {
+  final mnemonic = document[e2eMnemonicKey];
+  if (mnemonic is! String || mnemonic.trim().isEmpty) {
+    return ['missing or empty $e2eMnemonicKey'];
+  }
+  final failures = <String>[];
+  _validateE2eMnemonic(mnemonic, failures);
+  return failures;
+}
+
+/// Validates a decoded disposable `--dart-define-from-file` credential batch.
 ///
 /// All values must be strings because Flutter's define-from-file contract is
 /// a string map. The mnemonic is deliberately validated only structurally;
@@ -157,7 +203,13 @@ List<String> validateE2eCredentialDocument(
     }
   }
 
-  final mnemonic = (document[e2eMnemonicKey]! as String).trim();
+  _validateE2eMnemonic(document[e2eMnemonicKey]! as String, failures);
+
+  return failures;
+}
+
+void _validateE2eMnemonic(String value, List<String> failures) {
+  final mnemonic = value.trim();
   final words = mnemonic.split(RegExp(r'\s+'));
   if (!const {12, 18, 24}.contains(words.length)) {
     failures.add('test mnemonic must contain 12, 18, or 24 words');
@@ -175,8 +227,6 @@ List<String> validateE2eCredentialDocument(
   if (words.toSet().length == 1) {
     failures.add('repeated-word mnemonic cannot be used as a test account');
   }
-
-  return failures;
 }
 
 DateTime? _parseUtc(String value) {
