@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:chains/chains.dart' show Chain;
 import 'package:core_crypto/core_crypto.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +21,7 @@ import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
 import 'package:kt_wallet/src/wallets/wallet_store.dart';
 import 'package:kt_wallet/src/widgets/pin_pad.dart';
+import 'package:kt_wallet/src/widgets/scan_viewfinder.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ui_kit/ui_kit.dart';
 import 'package:wallet_data/wallet_data.dart' as db;
@@ -61,7 +63,12 @@ void main() {
       final crypto = _PhysicalIosE2eCoreCrypto();
       final pinStorage = _NamespacedSecurePinStorage();
       final originalPin = WalletPin.instance;
+      final originalCameraAvailability = CameraAvailability.instance;
       WalletPin.instance = WalletPin(pinStorage);
+      // Exercise the scan destination and its controls without allowing a
+      // first-run iOS camera permission sheet to escape Flutter's test tree.
+      // Wallet, market, RPC and transaction data remain fully live.
+      CameraAvailability.instance = const FakeCameraAvailability(false);
       await WalletPin.instance.clear();
 
       SharedPreferences.setMockInitialValues(const <String, Object>{});
@@ -315,6 +322,14 @@ void main() {
           facts: <String, Object?>{'funded_balance_labels': liveBalances},
         );
 
+        await _exerciseAlignedHome(
+          binding,
+          tester,
+          evidence,
+          wallets: wallets,
+          networks: networks,
+        );
+
         await _exerciseReceiveFlows(
           binding,
           tester,
@@ -564,11 +579,233 @@ void main() {
           // The namespaced key cannot affect production PIN state.
         }
         WalletPin.instance = originalPin;
+        CameraAvailability.instance = originalCameraAvailability;
         prefs.dispose();
       }
     },
     timeout: const Timeout(Duration(minutes: 45)),
   );
+}
+
+Future<void> _exerciseAlignedHome(
+  IntegrationTestWidgetsFlutterBinding binding,
+  WidgetTester tester,
+  FullDeviceEvidence evidence, {
+  required WalletController wallets,
+  required NetworkController networks,
+}) async {
+  const searchKey = ValueKey('home-search-field');
+  const scanKey = ValueKey('home-scan-button');
+  const scrollKey = ValueKey('home-scroll-view');
+  const headerKey = ValueKey('home-category-header');
+  const coinsKey = ValueKey('home-category-coins');
+  const networksKey = ValueKey('home-category-networks');
+  const customKey = ValueKey('home-category-custom');
+  const manageKey = ValueKey('home-category-manage');
+
+  await _jumpHomeToTop(tester, scrollKey);
+  final wallet = wallets.current!;
+  expect(find.byKey(searchKey).hitTestable(), findsOneWidget);
+  expect(find.byKey(scanKey).hitTestable(), findsOneWidget);
+  expect(find.byKey(headerKey).hitTestable(), findsOneWidget);
+  expect(find.byKey(coinsKey), findsOneWidget);
+  expect(find.byKey(networksKey), findsOneWidget);
+  expect(find.byKey(customKey), findsOneWidget);
+  expect(find.byKey(manageKey).hitTestable(), findsOneWidget);
+  for (var index = 0; index < 3; index++) {
+    expect(
+      find.byKey(ValueKey('home-tab-$index')).hitTestable(),
+      findsOneWidget,
+    );
+  }
+  for (final action in const <String>['收款', '转账', '记录', '更多']) {
+    expect(_semanticsFinder(action).hitTestable(), findsOneWidget);
+  }
+
+  final shouldShowBackup = wallet is HotWallet && !wallet.backedUp;
+  expect(
+    find.text('助记词尚未备份'),
+    shouldShowBackup ? findsOneWidget : findsNothing,
+  );
+  expect(_homePillColor(tester, coinsKey), WalletColors.text);
+  expect(_homePillColor(tester, networksKey), WalletColors.bg);
+  expect(_homePillColor(tester, customKey), WalletColors.bg);
+  await evidence.scanPage(
+    binding,
+    tester,
+    '13 W1A 首页初始态与完整控件',
+    facts: <String, Object?>{
+      'wallet_id': wallet.id,
+      'wallet_name': wallet.name,
+      'wallet_backed_up': wallet is HotWallet ? wallet.backedUp : null,
+      'backup_banner_expected': shouldShowBackup,
+      'quick_actions': const <String>['收款', '转账', '记录', '更多'],
+      'bottom_tabs': const <String>['首页', '资产', '设置'],
+      'selected_category': '币种',
+    },
+  );
+
+  await evidence.event(
+    '点击首页扫描按钮',
+    details: const <String, Object?>{
+      'control_key': 'home-scan-button',
+      'camera_mode': 'permission-neutral no-camera route probe',
+    },
+  );
+  await tester.tap(find.byKey(scanKey).hitTestable());
+  await _waitUntil(tester, () => find.text('扫描账户二维码').evaluate().isNotEmpty);
+  expect(find.byIcon(Icons.qr_code_2), findsOneWidget);
+  await evidence.snapshot(binding, tester, '14 扫描入口真实路由');
+  final close = find.byTooltip('关闭').hitTestable();
+  expect(close, findsOneWidget);
+  await tester.tap(close);
+  await _waitUntil(
+    tester,
+    () => find.byKey(searchKey).hitTestable().evaluate().isNotEmpty,
+  );
+
+  final search = find.byKey(searchKey).hitTestable();
+  await evidence.event(
+    '输入首页搜索',
+    details: const <String, Object?>{'value': '__no_such_asset__'},
+  );
+  await tester.enterText(search, '__no_such_asset__');
+  await tester.pumpAndSettle();
+  expect(find.text('没有匹配的资产'), findsOneWidget);
+  expect(
+    tester.widget<TextField>(search).controller!.text,
+    '__no_such_asset__',
+  );
+  await evidence.snapshot(binding, tester, '15 W1B 搜索无结果状态');
+  final clear = find.byTooltip('关闭').hitTestable();
+  expect(clear, findsOneWidget);
+  await tester.tap(clear);
+  await tester.pumpAndSettle();
+  expect(tester.widget<TextField>(search).controller!.text, isEmpty);
+  expect(find.text('没有匹配的资产'), findsNothing);
+
+  await evidence.event(
+    '切换首页分类',
+    details: const <String, Object?>{'category': '网络'},
+  );
+  await tester.tap(find.byKey(networksKey).hitTestable());
+  await tester.pumpAndSettle();
+  expect(_homePillColor(tester, coinsKey), WalletColors.bg);
+  expect(_homePillColor(tester, networksKey), WalletColors.text);
+  expect(_homePillColor(tester, customKey), WalletColors.bg);
+  final activeNetworkNames = <String>[
+    for (final chain in Chain.values) networks.activeFor(chain).name,
+  ];
+  for (final name in activeNetworkNames) {
+    expect(find.text(name), findsOneWidget);
+  }
+  await evidence.scanPage(
+    binding,
+    tester,
+    '16 W1B 网络分类真实数据',
+    facts: <String, Object?>{
+      'active_network_names': activeNetworkNames,
+      'network_environment': networks.environment.name,
+    },
+  );
+
+  await evidence.event(
+    '切换首页分类',
+    details: const <String, Object?>{'category': '自定义'},
+  );
+  await tester.tap(find.byKey(customKey).hitTestable());
+  await tester.pumpAndSettle();
+  expect(_homePillColor(tester, coinsKey), WalletColors.bg);
+  expect(_homePillColor(tester, networksKey), WalletColors.bg);
+  expect(_homePillColor(tester, customKey), WalletColors.text);
+  if (wallets.tokens.isEmpty) {
+    expect(find.text('还没有自定义代币，点右上角 + 添加'), findsOneWidget);
+  } else {
+    for (final token in wallets.tokens) {
+      expect(find.text(token.symbol), findsWidgets);
+    }
+  }
+  await evidence.snapshot(
+    binding,
+    tester,
+    '17 W1C 自定义分类真实数据',
+    facts: <String, Object?>{
+      'custom_token_count': wallets.tokens.length,
+      'custom_token_symbols': <String>[
+        for (final token in wallets.tokens) token.symbol,
+      ],
+    },
+  );
+  await tester.tap(find.byKey(manageKey).hitTestable());
+  await _waitUntil(tester, () => find.text('代币管理').evaluate().isNotEmpty);
+  await evidence.snapshot(binding, tester, '18 自定义分类管理入口');
+  await _tapBack(tester);
+  await _waitUntil(
+    tester,
+    () => find.byKey(headerKey).hitTestable().evaluate().isNotEmpty,
+  );
+
+  await tester.tap(find.byKey(coinsKey).hitTestable());
+  await tester.pumpAndSettle();
+  final headerBefore = tester.getTopLeft(find.byKey(headerKey)).dy;
+  await tester.drag(find.byKey(scrollKey), const Offset(0, -900));
+  await tester.pumpAndSettle();
+  final headerAfter = tester.getTopLeft(find.byKey(headerKey)).dy;
+  expect(headerAfter, lessThan(headerBefore));
+  expect(find.byKey(headerKey).hitTestable(), findsOneWidget);
+  expect(find.byKey(searchKey).hitTestable(), findsNothing);
+  await evidence.snapshot(
+    binding,
+    tester,
+    '19 W1C 仅币种分类行滚动吸顶',
+    facts: <String, Object?>{
+      'header_top_before_scroll': headerBefore,
+      'header_top_after_scroll': headerAfter,
+      'category_header_hit_testable': true,
+      'search_field_hit_testable': false,
+    },
+  );
+
+  await tester.tap(find.byKey(const ValueKey('home-tab-1')).hitTestable());
+  await _waitUntil(tester, () => find.text('按持仓价值排序').evaluate().isNotEmpty);
+  await evidence.snapshot(binding, tester, '19A 底栏资产入口');
+  await tester.tap(find.byKey(const ValueKey('home-tab-2')).hitTestable());
+  await _waitUntil(
+    tester,
+    () => find.text('安全设置').hitTestable().evaluate().isNotEmpty,
+  );
+  await evidence.snapshot(binding, tester, '19B 底栏设置入口');
+  await tester.tap(find.byKey(const ValueKey('home-tab-0')).hitTestable());
+  await _waitUntil(
+    tester,
+    () => find.byKey(headerKey).hitTestable().evaluate().isNotEmpty,
+  );
+  await _jumpHomeToTop(tester, scrollKey);
+}
+
+Future<void> _jumpHomeToTop(
+  WidgetTester tester,
+  ValueKey<String> scrollKey,
+) async {
+  final scrollable = find.descendant(
+    of: find.byKey(scrollKey),
+    matching: find.byType(Scrollable),
+  );
+  if (scrollable.evaluate().isEmpty) return;
+  final state = tester.state<ScrollableState>(scrollable.first);
+  state.position.jumpTo(state.position.minScrollExtent);
+  await tester.pumpAndSettle();
+}
+
+Color? _homePillColor(WidgetTester tester, ValueKey<String> key) {
+  final animated = find.descendant(
+    of: find.byKey(key),
+    matching: find.byType(AnimatedContainer),
+  );
+  expect(animated, findsOneWidget);
+  final decoration = tester.widget<AnimatedContainer>(animated).decoration;
+  expect(decoration, isA<BoxDecoration>());
+  return (decoration! as BoxDecoration).color;
 }
 
 Finder _historyRowForHash(String hash) {

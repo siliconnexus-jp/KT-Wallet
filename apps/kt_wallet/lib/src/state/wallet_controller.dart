@@ -598,12 +598,13 @@ class WalletController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Commits the pending mnemonic as a new, backed-up hot wallet. [name] is the
-  /// localized default name built by the caller (which has an l10n context).
+  /// Commits the pending mnemonic after the creation flow has displayed it
+  /// and the user has passed the backup challenge. [name] is the localized
+  /// default name built by the caller (which has an l10n context).
   Future<HotWallet> finalizeCreate({required String name}) async {
     final mnemonic = _pendingMnemonic;
     if (mnemonic == null) throw StateError('no pending mnemonic to finalize');
-    final wallet = await _materialize(name, mnemonic);
+    final wallet = await _materialize(name, mnemonic, backedUp: true);
     // A failed materialization has already compensated every native/database
     // write. Keep the still-uncommitted phrase in memory so transient native
     // authentication or storage failures remain retryable on the verification
@@ -614,14 +615,21 @@ class WalletController extends ChangeNotifier {
 
   // ---- onboarding: import ------------------------------------------------
 
-  /// Imports an existing mnemonic as a hot wallet (already backed up elsewhere).
+  /// Imports an existing mnemonic as a hot wallet. Possessing a phrase is not
+  /// proof that the user still has a durable backup after this import, so the
+  /// wallet remains unbacked-up until the authenticated "I wrote it down"
+  /// action records that fact explicitly.
   /// [name] is the localized default name built by the caller.
   Future<HotWallet> importWallet(String mnemonic, {required String name}) =>
-      _materialize(name, mnemonic.trim());
+      _materialize(name, mnemonic.trim(), backedUp: false);
 
   /// Stores the key in CoreCrypto, derives public addresses, builds the domain
   /// wallet, persists it, then publishes it to the manager and selects it.
-  Future<HotWallet> _materialize(String name, String mnemonic) async {
+  Future<HotWallet> _materialize(
+    String name,
+    String mnemonic, {
+    required bool backedUp,
+  }) async {
     if (!_manager.canAddMore) {
       throw WalletError('wallet limit reached (${WalletManager.maxWallets})');
     }
@@ -655,7 +663,7 @@ class WalletController extends ChangeNotifier {
         avatarColor: _nextColor(),
         addresses: addresses,
         sortOrder: _manager.count,
-        backedUp: true,
+        backedUp: backedUp,
       );
 
       // Drift's wallet + account write is transactional. Do not expose this

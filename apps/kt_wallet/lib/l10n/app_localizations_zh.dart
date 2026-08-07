@@ -57,6 +57,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tabSettings => '设置';
 
   @override
+  String get homeSearchHint => '搜索币种、地址或网络';
+
+  @override
+  String get homeCategoryCoins => '币种';
+
+  @override
+  String get homeCategoryNetworks => '网络';
+
+  @override
+  String get homeCategoryCustom => '自定义';
+
+  @override
+  String get homeNoMatchingAssets => '没有匹配的资产';
+
+  @override
+  String get homeNoMatchingNetworks => '没有匹配的网络';
+
+  @override
   String get walletKindHot => '普通';
 
   @override
@@ -88,7 +106,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get backupBannerText => '尚未备份助记词，存在丢失风险';
+  String get backupBannerText => '助记词尚未备份';
 
   @override
   String get backupNow => '立即备份';

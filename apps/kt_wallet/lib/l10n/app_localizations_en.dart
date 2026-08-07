@@ -57,6 +57,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tabSettings => 'Settings';
 
   @override
+  String get homeSearchHint => 'Search assets, addresses, or networks';
+
+  @override
+  String get homeCategoryCoins => 'Coins';
+
+  @override
+  String get homeCategoryNetworks => 'Networks';
+
+  @override
+  String get homeCategoryCustom => 'Custom';
+
+  @override
+  String get homeNoMatchingAssets => 'No matching assets';
+
+  @override
+  String get homeNoMatchingNetworks => 'No matching networks';
+
+  @override
   String get walletKindHot => 'Standard';
 
   @override
@@ -88,7 +106,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get backupBannerText => 'Recovery phrase not backed up — risk of loss';
+  String get backupBannerText => 'Recovery phrase not backed up';
 
   @override
   String get backupNow => 'Back up now';

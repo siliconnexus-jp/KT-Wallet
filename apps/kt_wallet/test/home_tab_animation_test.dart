@@ -18,10 +18,6 @@ Widget _app({bool reduceMotion = false}) => MaterialApp(
   ),
 );
 
-AnimatedAlign _indicator(WidgetTester tester) => tester.widget<AnimatedAlign>(
-  find.byKey(const ValueKey('home-tab-indicator')),
-);
-
 AnimatedOpacity _tabOpacity(WidgetTester tester, int index) => tester
     .widget<AnimatedOpacity>(find.byKey(ValueKey('home-tab-opacity-$index')));
 
@@ -30,7 +26,7 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
   });
 
-  testWidgets('tab change animates the page and selection indicator', (
+  testWidgets('tab change animates the page without an extra top indicator', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -41,14 +37,13 @@ void main() {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
-    expect(_indicator(tester).alignment, const Alignment(-1, 0));
+    expect(find.byKey(const ValueKey('home-tab-indicator')), findsNothing);
     expect(_tabOpacity(tester, 0).opacity, 1);
     expect(_tabOpacity(tester, 1).opacity, 0);
 
     await tester.tap(find.byKey(const ValueKey('home-tab-1')));
     await tester.pump();
 
-    expect(_indicator(tester).alignment, Alignment.center);
     expect(_tabOpacity(tester, 0).opacity, 0);
     expect(_tabOpacity(tester, 1).opacity, 1);
     expect(tester.hasRunningAnimations, isTrue);
@@ -69,7 +64,6 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('home-tab-0')));
     await tester.pumpAndSettle();
 
-    expect(_indicator(tester).alignment, const Alignment(-1, 0));
     expect(_tabOpacity(tester, 0).opacity, 1);
     expect(_tabOpacity(tester, 1).opacity, 0);
     expect(tester.takeException(), isNull);

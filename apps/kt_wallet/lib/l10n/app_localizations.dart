@@ -196,6 +196,42 @@ abstract class AppLocalizations {
   /// **'设置'**
   String get tabSettings;
 
+  /// No description provided for @homeSearchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索币种、地址或网络'**
+  String get homeSearchHint;
+
+  /// No description provided for @homeCategoryCoins.
+  ///
+  /// In zh, this message translates to:
+  /// **'币种'**
+  String get homeCategoryCoins;
+
+  /// No description provided for @homeCategoryNetworks.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络'**
+  String get homeCategoryNetworks;
+
+  /// No description provided for @homeCategoryCustom.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义'**
+  String get homeCategoryCustom;
+
+  /// No description provided for @homeNoMatchingAssets.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有匹配的资产'**
+  String get homeNoMatchingAssets;
+
+  /// No description provided for @homeNoMatchingNetworks.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有匹配的网络'**
+  String get homeNoMatchingNetworks;
+
   /// No description provided for @walletKindHot.
   ///
   /// In zh, this message translates to:
@@ -253,7 +289,7 @@ abstract class AppLocalizations {
   /// No description provided for @backupBannerText.
   ///
   /// In zh, this message translates to:
-  /// **'尚未备份助记词，存在丢失风险'**
+  /// **'助记词尚未备份'**
   String get backupBannerText;
 
   /// No description provided for @backupNow.

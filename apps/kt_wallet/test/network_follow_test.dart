@@ -451,8 +451,9 @@ void main() {
       expect(find.textContaining(r'$'), findsNothing); // 任何法币数字都不出现
       // 原生余额仍然真实展示(1 X = 1000000 raw / 6 decimals)。
       expect(find.textContaining('1 '), findsWidgets);
-      // 网络芯片显示活动测试网名称("Ethereum" 仍作为资产行名出现,
-      // 故只断言测试网芯片存在)。
+      // W1B 的网络分类显示每条链当前真正激活的测试网。
+      await tester.tap(find.byKey(const ValueKey('home-category-networks')));
+      await tester.pumpAndSettle();
       expect(find.text('Sepolia'), findsOneWidget);
       expect(find.text('Amoy'), findsOneWidget);
       expect(find.text('Nile'), findsOneWidget);

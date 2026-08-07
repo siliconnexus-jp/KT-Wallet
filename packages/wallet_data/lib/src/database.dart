@@ -32,8 +32,11 @@ class WalletDatabase extends _$WalletDatabase {
   /// v7: persisted pending/unknown outcome of that lookup.
   /// v8: explicit transfer / ERC-20 approval-revoke transaction operation.
   /// v9: crash-safe, privacy-minimal transaction-finality metric ring.
+  /// v10: invalidate legacy hot-wallet backup flags. Before v10 mnemonic
+  /// imports were incorrectly persisted as backed up without an explicit
+  /// backup confirmation, so the old boolean cannot be trusted.
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   /// Backfill map for [Transactions.networkId]: the chain family's MAINNET
   /// network id, keyed by the `coin` column. Kept as literals because
@@ -100,6 +103,14 @@ class WalletDatabase extends _$WalletDatabase {
       }
       if (from < 9) {
         await m.createTable(finalityMetrics);
+      }
+      if (from < 10) {
+        // WalletType.hot is intEnum value 0. Reset once, fail-safe: genuinely
+        // backed-up users only need to reconfirm, while an unbacked wallet can
+        // no longer silently lose its reminder.
+        await customStatement(
+          'UPDATE wallets SET backed_up = 0 WHERE type = 0',
+        );
       }
     },
     beforeOpen: (details) async {

@@ -20,7 +20,7 @@ void main() {
 
     // Home shows the first seeded wallet (日常钱包, hot, not backed up → banner).
     expect(find.text('日常钱包'), findsOneWidget);
-    expect(find.text('尚未备份助记词，存在丢失风险'), findsOneWidget);
+    expect(find.text('助记词尚未备份'), findsOneWidget);
 
     // Tap the wallet pill to open the switcher.
     await tester.tap(find.text('日常钱包'));
@@ -35,7 +35,7 @@ void main() {
     // Home now reflects the watch wallet: no backup banner, and the watch
     // action row includes 扫签名 instead of 更多.
     expect(find.text('主钱包'), findsOneWidget);
-    expect(find.text('尚未备份助记词，存在丢失风险'), findsNothing);
+    expect(find.text('助记词尚未备份'), findsNothing);
     expect(find.text('扫签名'), findsOneWidget);
   });
 
@@ -56,7 +56,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('储蓄钱包'), findsOneWidget);
-    expect(find.text('尚未备份助记词，存在丢失风险'), findsNothing);
+    expect(find.text('助记词尚未备份'), findsNothing);
     // Backed-up hot wallet still shows the hot action row (更多, not 扫签名).
     expect(find.text('更多'), findsOneWidget);
   });

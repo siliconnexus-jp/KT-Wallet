@@ -16,6 +16,12 @@
   "tabAssets": "资产",
   "tabRecords": "记录",
   "tabSettings": "设置",
+  "homeSearchHint": "搜索币种、地址或网络",
+  "homeCategoryCoins": "币种",
+  "homeCategoryNetworks": "网络",
+  "homeCategoryCustom": "自定义",
+  "homeNoMatchingAssets": "没有匹配的资产",
+  "homeNoMatchingNetworks": "没有匹配的网络",
   "walletKindHot": "普通",
   "walletKindWatch": "观察",
   "walletStateBackedUp": "已备份",
@@ -39,7 +45,7 @@
       }
     }
   },
-  "backupBannerText": "尚未备份助记词，存在丢失风险",
+  "backupBannerText": "助记词尚未备份",
   "backupNow": "立即备份",
   "balanceTitle": "总资产估值 (USD)",
   "balanceChangePeriod": "过去24小时",

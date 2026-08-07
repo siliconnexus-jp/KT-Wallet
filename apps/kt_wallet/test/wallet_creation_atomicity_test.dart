@@ -188,6 +188,7 @@ void main() {
       final controller = WalletController(WalletManager(), crypto: crypto);
       final mnemonic = await crypto.generateMnemonic();
       final first = await controller.importWallet(mnemonic, name: 'First');
+      expect((first).backedUp, isFalse);
 
       await expectLater(
         controller.importWallet(mnemonic, name: 'Duplicate'),
@@ -198,6 +199,32 @@ void main() {
       expect(controller.wallets.single.id, first.id);
       expect(crypto.storedWalletCount, 1);
       expect(crypto.deleteCalls, 1);
+    },
+  );
+
+  test(
+    'only verified creation starts backed up; mnemonic import does not',
+    () async {
+      final importedCrypto = _TrackingCrypto();
+      final importedController = WalletController(
+        WalletManager(),
+        crypto: importedCrypto,
+      );
+      final importedMnemonic = await importedCrypto.generateMnemonic();
+      final imported = await importedController.importWallet(
+        importedMnemonic,
+        name: 'Imported',
+      );
+      expect(imported.backedUp, isFalse);
+
+      final createdCrypto = _TrackingCrypto();
+      final createdController = WalletController(
+        WalletManager(),
+        crypto: createdCrypto,
+      );
+      await createdController.beginCreate();
+      final created = await createdController.finalizeCreate(name: 'Created');
+      expect(created.backedUp, isTrue);
     },
   );
 

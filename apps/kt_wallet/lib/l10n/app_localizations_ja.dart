@@ -57,6 +57,24 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tabSettings => '設定';
 
   @override
+  String get homeSearchHint => '銘柄・アドレス・ネットワークを検索';
+
+  @override
+  String get homeCategoryCoins => '銘柄';
+
+  @override
+  String get homeCategoryNetworks => 'ネットワーク';
+
+  @override
+  String get homeCategoryCustom => 'カスタム';
+
+  @override
+  String get homeNoMatchingAssets => '該当する資産がありません';
+
+  @override
+  String get homeNoMatchingNetworks => '該当するネットワークがありません';
+
+  @override
   String get walletKindHot => '通常';
 
   @override
@@ -88,7 +106,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get backupBannerText => 'リカバリーフレーズが未バックアップ — 紛失の恐れがあります';
+  String get backupBannerText => 'リカバリーフレーズは未バックアップです';
 
   @override
   String get backupNow => '今すぐバックアップ';

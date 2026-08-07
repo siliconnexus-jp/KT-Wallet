@@ -103,7 +103,7 @@ void main() {
       final controller = await _controller();
       await _pump(tester, controller, '/home');
 
-      await tester.tap(find.text('尚未备份助记词，存在丢失风险'));
+      await tester.tap(find.text('助记词尚未备份'));
       await tester.pumpAndSettle();
 
       expect(find.text('钱包详情'), findsOneWidget);
