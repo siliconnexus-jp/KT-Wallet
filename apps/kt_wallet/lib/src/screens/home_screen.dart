@@ -151,14 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 left: 0,
                 right: 0,
                 bottom: 0,
-                child: ColoredBox(
-                  key: const ValueKey('home-tab-background'),
-                  color: WalletColors.surface,
-                  child: SafeArea(
-                    top: false,
-                    child: _TabBar(selected: _tab, onTap: _selectTab),
-                  ),
-                ),
+                child: _TabBar(selected: _tab, onTap: _selectTab),
               ),
             ],
           ),
@@ -170,7 +163,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
 /// Room a tab's scroll view must leave at the bottom so its last row is not
 /// stuck under the floating tab bar.
-const kTabBarInset = 82.0;
+const kTabBarInset = 67.0;
+const _largeTextTabBarInset = 94.0;
+const _inactiveTabColor = Color(0xFF8A8F98);
+
+double _tabBarInsetFor(BuildContext context) =>
+    MediaQuery.textScalerOf(context).scale(18) >= 29
+    ? _largeTextTabBarInset
+    : kTabBarInset;
 
 const _tabFadeDuration = Duration(milliseconds: 140);
 const _tabMotionCurve = Cubic(0.2, 0.8, 0.2, 1);
@@ -578,7 +578,12 @@ class _HomeTabState extends State<_HomeTab> {
           ),
         ),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(18, 0, 18, 24 + kTabBarInset),
+          padding: EdgeInsets.fromLTRB(
+            18,
+            0,
+            18,
+            24 + _tabBarInsetFor(context),
+          ),
           sliver: SliverToBoxAdapter(
             child: _categoryContent(
               context,
@@ -1165,7 +1170,7 @@ class _AssetsTab extends StatelessWidget {
     final offline = market?.isOffline ?? false;
     final live = market != null;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24 + kTabBarInset),
+      padding: EdgeInsets.fromLTRB(20, 8, 20, 24 + _tabBarInsetFor(context)),
       children: [
         const SizedBox(height: 8),
         Row(
@@ -1764,7 +1769,7 @@ class _SettingsTab extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final items = _settingsItems(l10n);
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24 + kTabBarInset),
+      padding: EdgeInsets.fromLTRB(20, 8, 20, 24 + _tabBarInsetFor(context)),
       children: [
         const SizedBox(height: 8),
         Row(
@@ -2738,14 +2743,15 @@ class _TabBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final tabs = <(String, IconData)>[
-      (l10n.tabHome, Icons.home_outlined),
+      (l10n.tabHome, Icons.account_balance_wallet_outlined),
       (l10n.tabAssets, Icons.toll_outlined),
       (l10n.tabSettings, Icons.settings_outlined),
     ];
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    final largeText = MediaQuery.textScalerOf(context).scale(10) >= 16;
+    final height = _tabBarInsetFor(context);
     return Container(
-      height: largeText ? 62 : 48,
+      key: const ValueKey('home-tab-background'),
+      height: height,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: const BoxDecoration(
         color: WalletColors.surface,
@@ -2825,28 +2831,44 @@ class _TabBarItemState extends State<_TabBarItem> {
               : const Duration(milliseconds: 180),
           curve: _tabMotionCurve,
           builder: (context, progress, _) {
-            final color = Color.lerp(
-              WalletColors.text3,
-              WalletColors.accent,
-              progress,
-            );
+            final color = Color.lerp(_inactiveTabColor, Colors.black, progress);
             return Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(widget.icon, size: 20, color: color),
-                const SizedBox(height: 3),
-                Text(
-                  widget.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.lerp(
-                      FontWeight.w500,
-                      FontWeight.w700,
-                      progress,
-                    ),
-                    color: color,
+                Expanded(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Positioned(
+                        top: 5,
+                        left: 0,
+                        right: 0,
+                        child: Icon(widget.icon, size: 28, color: color),
+                      ),
+                      Positioned(
+                        top: MediaQuery.textScalerOf(context).scale(18) >= 29
+                            ? 55
+                            : 41,
+                        left: 0,
+                        right: 0,
+                        child: Text(
+                          widget.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1,
+                            fontWeight: FontWeight.lerp(
+                              FontWeight.w500,
+                              FontWeight.w700,
+                              progress,
+                            ),
+                            color: color,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],

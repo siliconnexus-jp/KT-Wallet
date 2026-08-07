@@ -44,6 +44,40 @@ void main() {
     expect(find.byKey(const ValueKey('home-tab-2')), findsOneWidget);
     expect(find.byKey(const ValueKey('home-tab-3')), findsNothing);
     expect(
+      tester.getSize(find.byKey(const ValueKey('home-tab-background'))).height,
+      67,
+    );
+    final firstTab = find.byKey(const ValueKey('home-tab-0'));
+    final firstTabIcon = find.descendant(
+      of: firstTab,
+      matching: find.byType(Icon),
+    );
+    final firstTabLabel = find.descendant(
+      of: firstTab,
+      matching: find.text('首页'),
+    );
+    final selectedIcon = tester.widget<Icon>(firstTabIcon);
+    expect(selectedIcon.icon, Icons.account_balance_wallet_outlined);
+    expect(selectedIcon.size, 28);
+    expect(selectedIcon.color, Colors.black);
+    expect(tester.widget<Text>(firstTabLabel).style!.fontSize, 13);
+    expect(tester.widget<Text>(firstTabLabel).style!.color, Colors.black);
+
+    final secondTab = find.byKey(const ValueKey('home-tab-1'));
+    final secondTabIcon = find.descendant(
+      of: secondTab,
+      matching: find.byType(Icon),
+    );
+    final secondTabLabel = find.descendant(
+      of: secondTab,
+      matching: find.text('资产'),
+    );
+    expect(tester.widget<Icon>(secondTabIcon).color, const Color(0xFF8A8F98));
+    expect(
+      tester.widget<Text>(secondTabLabel).style!.color,
+      const Color(0xFF8A8F98),
+    );
+    expect(
       tester.getSize(find.byKey(const ValueKey('home-search-surface'))).height,
       40,
     );
