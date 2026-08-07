@@ -33,7 +33,6 @@
   "walletImportedName": "インポートウォレット {index}",
   "backupBannerText": "リカバリーフレーズは未バックアップです",
   "backupNow": "今すぐバックアップ",
-  "balanceTitle": "総資産評価額 (USD)",
   "walletAddressesTitle": "ウォレットアドレス",
   "walletAddressSearchHint": "ネットワークまたはアドレスを検索",
   "balanceChangePeriod": "1日",

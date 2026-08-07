@@ -112,9 +112,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get backupNow => '今すぐバックアップ';
 
   @override
-  String get balanceTitle => '総資産評価額 (USD)';
-
-  @override
   String get walletAddressesTitle => 'ウォレットアドレス';
 
   @override

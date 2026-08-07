@@ -528,7 +528,7 @@ class _HomeTabState extends State<_HomeTab> {
                   const SizedBox(height: 12),
                   const MarketOfflineBanner(),
                 ],
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 _Balance(
                   amount: live
                       ? (testnet || total == null
@@ -2872,40 +2872,39 @@ class _Balance extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              key: const ValueKey('home-balance-title-row'),
-              mainAxisSize: MainAxisSize.min,
+              key: const ValueKey('home-balance-amount-row'),
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Flexible(
                   child: Text(
-                    l10n.balanceTitle,
-                    maxLines: 2,
+                    key: const ValueKey('home-balance-amount'),
+                    hidden ? '••••••' : amount,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 13,
-                      color: WalletColors.text2,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.5,
+                      color: WalletColors.text,
                     ),
                   ),
                 ),
-                const SizedBox(width: 6),
-                Icon(
-                  hidden
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                  size: 16,
-                  color: WalletColors.text3,
+                const SizedBox(width: 8),
+                SizedBox.square(
+                  key: const ValueKey('home-balance-privacy-button'),
+                  dimension: 44,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Icon(
+                      hidden
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      size: 16,
+                      color: WalletColors.text3,
+                    ),
+                  ),
                 ),
               ],
-            ),
-            const SizedBox(height: 3),
-            Text(
-              key: const ValueKey('home-balance-amount'),
-              hidden ? '••••••' : amount,
-              style: const TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.5,
-                color: WalletColors.text,
-              ),
             ),
             const SizedBox(height: 3),
             Text(

@@ -33,7 +33,6 @@
   "walletImportedName": "Imported Wallet {index}",
   "backupBannerText": "Recovery phrase not backed up",
   "backupNow": "Back up now",
-  "balanceTitle": "Total value (USD)",
   "walletAddressesTitle": "Wallet addresses",
   "walletAddressSearchHint": "Search network or address",
   "balanceChangePeriod": "1D",

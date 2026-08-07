@@ -112,9 +112,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backupNow => 'Back up now';
 
   @override
-  String get balanceTitle => 'Total value (USD)';
-
-  @override
   String get walletAddressesTitle => 'Wallet addresses';
 
   @override

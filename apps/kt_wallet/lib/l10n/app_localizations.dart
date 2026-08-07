@@ -298,12 +298,6 @@ abstract class AppLocalizations {
   /// **'立即备份'**
   String get backupNow;
 
-  /// No description provided for @balanceTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'总资产估值 (USD)'**
-  String get balanceTitle;
-
   /// No description provided for @walletAddressesTitle.
   ///
   /// In zh, this message translates to:

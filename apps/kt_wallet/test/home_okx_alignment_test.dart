@@ -123,15 +123,24 @@ void main() {
     final headerBottom = tester
         .getBottomLeft(find.byKey(const ValueKey('home-wallet-header')))
         .dy;
-    final balanceTitle = find.byKey(const ValueKey('home-balance-title-row'));
+    final balanceRow = find.byKey(const ValueKey('home-balance-amount-row'));
     final balanceAmount = find.byKey(const ValueKey('home-balance-amount'));
-    expect(tester.getTopLeft(balanceTitle).dy - headerBottom, 4);
-    expect(
-      tester.getTopLeft(balanceAmount).dy -
-          tester.getBottomLeft(balanceTitle).dy,
-      3,
+    final privacyButton = find.byKey(
+      const ValueKey('home-balance-privacy-button'),
     );
-    await tester.tap(balanceTitle);
+    expect(find.text('总资产估值 (USD)'), findsNothing);
+    expect(tester.getTopLeft(balanceRow).dy - headerBottom, 2);
+    expect(
+      tester.getTopLeft(privacyButton).dx -
+          tester.getTopRight(balanceAmount).dx,
+      8,
+    );
+    expect(
+      tester.getCenter(privacyButton).dy,
+      tester.getCenter(balanceAmount).dy,
+    );
+    expect(tester.getSize(privacyButton), const Size.square(44));
+    await tester.tap(privacyButton);
     await tester.pumpAndSettle();
     expect(find.text('••••••'), findsOneWidget);
 
