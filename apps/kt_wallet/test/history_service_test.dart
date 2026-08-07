@@ -945,6 +945,68 @@ void main() {
     },
   );
 
+  test(
+    'EVM direct history keeps a verified token row while the internal index catches up',
+    () async {
+      const owner = '0x16ecf0fbda41792334e7444bb86775117de2c9d5';
+      const hash =
+          '0xaaf45bdfede5d5dcdb5a3119da23986b35a2e8631fa663cf047d63eea7ae23d3';
+      final service = HistoryService(
+        endpoints: (_) => 'https://rpc.ankr.com/eth',
+        client: MockClient((request) async {
+          final action = request.url.queryParameters['action'];
+          if (action == 'txlistinternal') {
+            return http.Response(
+              jsonEncode({
+                'status': '2',
+                'message':
+                    'Some internal transactions within this block range have not yet been processed',
+                'result': <Object?>[],
+              }),
+              200,
+            );
+          }
+          final result = action == 'tokentx'
+              ? <Object?>[
+                  {
+                    'blockNumber': '25703724',
+                    'timeStamp': '1786113335',
+                    'hash': hash,
+                    'blockHash':
+                        '0xa36c9207681cf28e8d559623fc126a66d480f1e80ab7227de772d93ec59aff9c',
+                    'from': '0x559432e18b281731c054cd703d4b49872be4ed53',
+                    'to': owner,
+                    'value': '3000000',
+                    'tokenSymbol': 'USDT',
+                    'tokenDecimal': '6',
+                    'contractAddress':
+                        '0xdac17f958d2ee523a2206206994597c13d831ec7',
+                    'transactionIndex': '137',
+                    'confirmations': '94',
+                    'logIndex': '253',
+                  },
+                ]
+              : <Object?>[];
+          return http.Response(
+            jsonEncode({'status': '1', 'message': 'OK', 'result': result}),
+            200,
+          );
+        }),
+      );
+
+      final result = await service.fetch(Coin.eth, owner);
+
+      expect(result.status, HistoryStatus.ok);
+      expect(result.records, hasLength(1));
+      final record = result.records.single;
+      expect(record.hash, hash);
+      expect(record.outgoing, isFalse);
+      expect(record.amountText, '3 USDT');
+      expect(record.assetSymbol, 'USDT');
+      expect(record.assetVerified, isTrue);
+    },
+  );
+
   test('Avalanche direct history includes native internal receipts', () async {
     final actions = <String>[];
     final service = HistoryService(

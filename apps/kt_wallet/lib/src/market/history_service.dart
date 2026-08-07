@@ -263,7 +263,9 @@ class HistoryService {
       final lower = _evmAddress(address, 'history owner').toLowerCase();
       final base = _evmHistoryApi(coin);
 
-      Future<List<Map<Object?, Object?>>> fetchList(String action) async {
+      Future<({List<Map<Object?, Object?>> items, bool incomplete})> fetchList(
+        String action,
+      ) async {
         final uri = Uri.parse(base).replace(
           queryParameters: {
             'module': 'account',
@@ -279,16 +281,28 @@ class HistoryService {
           throw http.ClientException('HTTP ${response.statusCode}', uri);
         }
         final body = decodeJsonWithoutDuplicateKeys(response.body);
-        final rows = _evmExplorerRows(body, limit: limit);
-        return [
-          for (final row in rows)
-            switch (action) {
-              'txlist' => _evmNormalRow(row),
-              'tokentx' => _evmTokenRow(row),
-              'txlistinternal' => _evmInternalRow(row),
-              _ => throw const FormatException('unknown explorer action'),
-            },
-        ];
+        try {
+          final rows = _evmExplorerRows(body, limit: limit);
+          return (
+            items: [
+              for (final row in rows)
+                switch (action) {
+                  'txlist' => _evmNormalRow(row),
+                  'tokentx' => _evmTokenRow(row),
+                  'txlistinternal' => _evmInternalRow(row),
+                  _ => throw const FormatException('unknown explorer action'),
+                },
+            ],
+            incomplete: false,
+          );
+        } on _EvmExplorerIndexIncomplete {
+          // Blockscout can index ERC-20 events before its internal-call index
+          // finishes the same block range. Preserve already strict-validated
+          // normal/token rows, but only for this exact, explicit provider
+          // outcome. HTTP failures and malformed envelopes still fail closed.
+          if (action != 'txlistinternal') rethrow;
+          return (items: const <Map<Object?, Object?>>[], incomplete: true);
+        }
       }
 
       final results = await (
@@ -296,9 +310,10 @@ class HistoryService {
         fetchList('tokentx'),
         fetchList('txlistinternal'),
       ).wait;
-      final normalItems = results.$1;
-      final tokenItems = results.$2;
-      final internalItems = results.$3;
+      final normalItems = results.$1.items;
+      final tokenItems = results.$2.items;
+      final internalItems = results.$3.items;
+      final internalIndexIncomplete = results.$3.incomplete;
 
       final registry = _tokenRegistry();
       final records = <ChainTxRecord>[];
@@ -398,6 +413,13 @@ class HistoryService {
             status: _evmTokenTransferExecutionStatus(item),
           ),
         );
+      }
+
+      // Never turn an explicitly incomplete internal index into an
+      // authoritative empty history. It may only coexist with concrete rows
+      // proved by the independent normal/token feeds.
+      if (internalIndexIncomplete && records.isEmpty) {
+        throw const FormatException('internal history index incomplete');
       }
 
       records.sort((a, b) => b.timestamp.compareTo(a.timestamp));
@@ -1672,7 +1694,17 @@ List<Object?> _evmExplorerRows(Object? raw, {required int limit}) {
   if (status == '0' && message == 'No transactions found' && result.isEmpty) {
     return result;
   }
+  if (status == '2' &&
+      message ==
+          'Some internal transactions within this block range have not yet been processed' &&
+      result.isEmpty) {
+    throw const _EvmExplorerIndexIncomplete();
+  }
   throw const FormatException('explorer rejected request');
+}
+
+final class _EvmExplorerIndexIncomplete implements Exception {
+  const _EvmExplorerIndexIncomplete();
 }
 
 Map<Object?, Object?> _evmNormalRow(Object? raw) {
