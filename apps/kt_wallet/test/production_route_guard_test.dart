@@ -96,12 +96,15 @@ void main() {
       '/assets',
       '/records',
       '/wallet-detail',
+      '/wallet-addresses',
       '/backup',
     ]) {
       expect(_redirect(path, wallets: empty), '/add-wallet');
     }
     expect(_redirect('/wallet-detail?id=missing'), '/wallet-manage');
     expect(_redirect('/wallet-detail?id=wallet-1'), isNull);
+    expect(_redirect('/wallet-addresses?id=missing'), '/wallet-manage');
+    expect(_redirect('/wallet-addresses?id=wallet-1'), isNull);
   });
 
   test('production creation pages require the live pending mnemonic', () async {

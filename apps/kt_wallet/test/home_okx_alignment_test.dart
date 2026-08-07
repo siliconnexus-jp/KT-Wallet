@@ -140,7 +140,7 @@ void main() {
       tester.getCenter(balanceAmount).dy,
     );
     expect(tester.getSize(privacyButton), const Size.square(44));
-    await tester.tap(privacyButton);
+    await tester.tap(balanceAmount);
     await tester.pumpAndSettle();
     expect(find.text('••••••'), findsOneWidget);
 
@@ -199,7 +199,7 @@ void main() {
       find.byKey(const ValueKey('wallet-addresses-sheet')),
       findsOneWidget,
     );
-    expect(find.text('钱包地址'), findsOneWidget);
+    expect(find.text('账户地址'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('wallet-address-search-field')),
       findsOneWidget,

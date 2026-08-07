@@ -33,7 +33,7 @@
   "walletImportedName": "インポートウォレット {index}",
   "backupBannerText": "リカバリーフレーズは未バックアップです",
   "backupNow": "今すぐバックアップ",
-  "walletAddressesTitle": "ウォレットアドレス",
+  "walletAddressesTitle": "アカウントアドレス",
   "walletAddressSearchHint": "ネットワークまたはアドレスを検索",
   "balanceChangePeriod": "1日",
   "marketUpdating": "残高を更新中…",

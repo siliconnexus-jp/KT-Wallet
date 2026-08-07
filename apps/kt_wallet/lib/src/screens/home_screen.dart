@@ -2300,9 +2300,12 @@ Chain _chainForWalletCoin(Coin coin) => switch (coin) {
   Coin.solana => Chain.solana,
 };
 
-Future<void> _showWalletAddresses(BuildContext context, Wallet wallet) async {
+List<_WalletNetworkAddress> _walletNetworkAddresses(
+  BuildContext context,
+  Wallet wallet,
+) {
   final networks = NetworkScope.of(context);
-  final entries = <_WalletNetworkAddress>[
+  return <_WalletNetworkAddress>[
     for (final coin in wallet.addresses.enabledCoins)
       if (wallet.addresses.forCoin(coin).trim().isNotEmpty)
         _WalletNetworkAddress(
@@ -2310,6 +2313,48 @@ Future<void> _showWalletAddresses(BuildContext context, Wallet wallet) async {
           address: wallet.addresses.forCoin(coin),
         ),
   ];
+}
+
+/// Full-page account-address directory reached from wallet details. It reuses
+/// the exact same address derivation, filtering, alphabet index and copy UI as
+/// the compact home sheet so those two production entry points cannot drift.
+class WalletAddressesScreen extends StatelessWidget {
+  const WalletAddressesScreen({super.key, this.walletId});
+
+  final String? walletId;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final controller = WalletScope.of(context);
+    final wallet = walletId == null
+        ? controller.current
+        : controller.wallets.where((w) => w.id == walletId).firstOrNull;
+    return KtScreen(
+      key: const ValueKey('wallet-addresses-screen'),
+      backgroundColor: WalletColors.surface,
+      navBar: KtNavBar(
+        title: l10n.walletAddressesTitle,
+        onBack: () => Navigator.of(context).maybePop(),
+      ),
+      padding: EdgeInsets.zero,
+      gap: 0,
+      scrollable: false,
+      children: [
+        if (wallet != null)
+          Expanded(
+            child: _WalletAddressesDirectory(
+              entries: _walletNetworkAddresses(context, wallet),
+              showSheetHeader: false,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+Future<void> _showWalletAddresses(BuildContext context, Wallet wallet) async {
+  final entries = _walletNetworkAddresses(context, wallet);
   final maxHeight = MediaQuery.sizeOf(context).height * 0.82;
   final desiredHeight = (146.0 + entries.length * 72.0).clamp(320.0, maxHeight);
   await showModalBottomSheet<void>(
@@ -2323,22 +2368,27 @@ Future<void> _showWalletAddresses(BuildContext context, Wallet wallet) async {
       top: false,
       child: SizedBox(
         height: desiredHeight,
-        child: _WalletAddressesSheet(entries: entries),
+        child: _WalletAddressesDirectory(entries: entries),
       ),
     ),
   );
 }
 
-class _WalletAddressesSheet extends StatefulWidget {
-  const _WalletAddressesSheet({required this.entries});
+class _WalletAddressesDirectory extends StatefulWidget {
+  const _WalletAddressesDirectory({
+    required this.entries,
+    this.showSheetHeader = true,
+  });
 
   final List<_WalletNetworkAddress> entries;
+  final bool showSheetHeader;
 
   @override
-  State<_WalletAddressesSheet> createState() => _WalletAddressesSheetState();
+  State<_WalletAddressesDirectory> createState() =>
+      _WalletAddressesDirectoryState();
 }
 
-class _WalletAddressesSheetState extends State<_WalletAddressesSheet> {
+class _WalletAddressesDirectoryState extends State<_WalletAddressesDirectory> {
   static const _alphabet = <String>[
     'A',
     'B',
@@ -2372,6 +2422,10 @@ class _WalletAddressesSheetState extends State<_WalletAddressesSheet> {
   final _scroll = ScrollController();
   String? _copiedNetworkId;
 
+  bool get _usesLargeText => MediaQuery.textScalerOf(context).scale(14) >= 20;
+  double get _rowHeight => _usesLargeText ? 104 : 70;
+  double get _sectionHeight => _usesLargeText ? 36 : 24;
+
   @override
   void dispose() {
     _search.dispose();
@@ -2387,7 +2441,7 @@ class _WalletAddressesSheetState extends State<_WalletAddressesSheet> {
     var offset = 0.0;
     for (final group in groups.entries) {
       if (group.key == letter) break;
-      offset += 24 + group.value.length * 70;
+      offset += _sectionHeight + group.value.length * _rowHeight;
     }
     _scroll.animateTo(
       offset.clamp(0, _scroll.position.maxScrollExtent),
@@ -2400,7 +2454,7 @@ class _WalletAddressesSheetState extends State<_WalletAddressesSheet> {
     final copied = _copiedNetworkId == entry.network.id;
     return SizedBox(
       key: ValueKey('wallet-address-row-${entry.network.id}'),
-      height: 70,
+      height: _rowHeight,
       child: Row(
         children: [
           ChainIcon(chain: entry.network.chain, size: 38),
@@ -2490,26 +2544,32 @@ class _WalletAddressesSheetState extends State<_WalletAddressesSheet> {
       groups.putIfAbsent(letter, () => []).add(entry);
     }
     return Column(
-      key: const ValueKey('wallet-addresses-sheet'),
+      key: ValueKey(
+        widget.showSheetHeader
+            ? 'wallet-addresses-sheet'
+            : 'wallet-addresses-directory',
+      ),
       children: [
-        const SizedBox(height: 10),
-        Container(
-          width: 36,
-          height: 4,
-          decoration: BoxDecoration(
-            color: WalletColors.border,
-            borderRadius: BorderRadius.circular(2),
+        if (widget.showSheetHeader) ...[
+          const SizedBox(height: 10),
+          Container(
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: WalletColors.border,
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
-        ),
-        const SizedBox(height: 14),
-        Text(
-          l10n.walletAddressesTitle,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            color: WalletColors.text,
+          const SizedBox(height: 14),
+          Text(
+            l10n.walletAddressesTitle,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: WalletColors.text,
+            ),
           ),
-        ),
+        ],
         const SizedBox(height: 14),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -2569,14 +2629,14 @@ class _WalletAddressesSheetState extends State<_WalletAddressesSheet> {
                     ListView(
                       key: const ValueKey('wallet-address-list'),
                       controller: _scroll,
-                      padding: const EdgeInsets.fromLTRB(18, 0, 34, 12),
+                      padding: const EdgeInsets.fromLTRB(18, 0, 52, 12),
                       children: [
                         for (final group in groups.entries) ...[
                           SizedBox(
                             key: ValueKey(
                               'wallet-address-section-${group.key}',
                             ),
-                            height: 24,
+                            height: _sectionHeight,
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: Text(
@@ -2596,50 +2656,65 @@ class _WalletAddressesSheetState extends State<_WalletAddressesSheet> {
                     ),
                     Positioned(
                       key: const ValueKey('wallet-address-alphabet-index'),
-                      right: 3,
+                      right: 0,
                       top: 0,
                       bottom: 0,
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final letterHeight =
-                              (constraints.maxHeight / _alphabet.length).clamp(
-                                9.0,
-                                14.0,
-                              );
-                          return Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                for (final letter in _alphabet)
-                                  GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: groups.containsKey(letter)
-                                        ? () => _jumpToLetter(letter, groups)
-                                        : null,
-                                    child: SizedBox(
-                                      key: ValueKey(
-                                        'wallet-address-index-$letter',
-                                      ),
-                                      width: 22,
-                                      height: letterHeight,
-                                      child: Center(
-                                        child: Text(
-                                          letter,
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w600,
-                                            color: groups.containsKey(letter)
-                                                ? WalletColors.text2
-                                                : WalletColors.border,
+                      width: 48,
+                      child: Semantics(
+                        container: true,
+                        label: '${l10n.walletAddressesTitle} A–Z',
+                        customSemanticsActions: {
+                          for (final letter in _alphabet)
+                            if (groups.containsKey(letter))
+                              CustomSemanticsAction(label: letter): () =>
+                                  _jumpToLetter(letter, groups),
+                        },
+                        child: ExcludeSemantics(
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final letterHeight =
+                                  (constraints.maxHeight / _alphabet.length)
+                                      .clamp(0.0, 14.0);
+                              return Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    for (final letter in _alphabet)
+                                      GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onTap: groups.containsKey(letter)
+                                            ? () =>
+                                                  _jumpToLetter(letter, groups)
+                                            : null,
+                                        child: SizedBox(
+                                          key: ValueKey(
+                                            'wallet-address-index-$letter',
+                                          ),
+                                          width: 48,
+                                          height: letterHeight,
+                                          child: Center(
+                                            child: MediaQuery.withNoTextScaling(
+                                              child: Text(
+                                                letter,
+                                                style: TextStyle(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w600,
+                                                  color:
+                                                      groups.containsKey(letter)
+                                                      ? WalletColors.text2
+                                                      : WalletColors.border,
+                                                ),
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          );
-                        },
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                       ),
                     ),
                   ],

@@ -112,7 +112,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupNow => '立即备份';
 
   @override
-  String get walletAddressesTitle => '钱包地址';
+  String get walletAddressesTitle => '账户地址';
 
   @override
   String get walletAddressSearchHint => '搜索网络或地址';

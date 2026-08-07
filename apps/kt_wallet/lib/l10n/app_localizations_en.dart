@@ -112,7 +112,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backupNow => 'Back up now';
 
   @override
-  String get walletAddressesTitle => 'Wallet addresses';
+  String get walletAddressesTitle => 'Account addresses';
 
   @override
   String get walletAddressSearchHint => 'Search network or address';

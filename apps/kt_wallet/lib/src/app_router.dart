@@ -36,6 +36,7 @@ final screenRegistry = <String, (String, WidgetBuilder)>{
   'W21 钱包切换器': ('/switcher', (c) => const WalletSwitcherSheet()),
   'W27 钱包管理': ('/wallet-manage', (c) => const WalletManageScreen()),
   'W28 钱包详情编辑': ('/wallet-detail', (c) => const WalletDetailScreen()),
+  'W36 账户地址': ('/wallet-addresses', (c) => const WalletAddressesScreen()),
   'W2 资产列表': ('/assets', (c) => const AssetsListScreen()),
   'W3 Token 详情': ('/token', (c) => const TokenDetailScreen()),
   'W14 收款': ('/receive', (c) => const ReceiveScreen()),
@@ -123,12 +124,15 @@ GoRouter buildRouter({
         else
           GoRoute(
             path: entry.value.$1,
-            // Wallet detail accepts ?id=<walletId> when pushed from the manage
-            // list; import-confirm accepts the decoded AccountExport from the
-            // pairing scan via `extra`. Without them (gallery / goldens) both
-            // render their demo snapshots.
+            // Wallet-scoped detail pages accept ?id=<walletId>; import-confirm
+            // accepts the decoded AccountExport from the pairing scan via
+            // `extra`. Without them (gallery / goldens) they render against
+            // the current design-snapshot wallet.
             builder: switch (entry.value.$1) {
               '/wallet-detail' => (c, s) => WalletDetailScreen(
+                walletId: s.uri.queryParameters['id'],
+              ),
+              '/wallet-addresses' => (c, s) => WalletAddressesScreen(
                 walletId: s.uri.queryParameters['id'],
               ),
               '/import-confirm' => (c, s) => ImportConfirmScreen(
@@ -217,6 +221,7 @@ String? productionRouteRedirect({
         '/switcher',
         '/wallet-manage',
         '/wallet-detail',
+        '/wallet-addresses',
         '/assets',
         '/token',
         '/receive',
@@ -233,7 +238,7 @@ String? productionRouteRedirect({
   // to the current wallet would show/export/delete the wrong account while
   // the URL still names another one.
   final requestedWalletId = uri.queryParameters['id']?.trim();
-  if (path == '/wallet-detail' &&
+  if ({'/wallet-detail', '/wallet-addresses'}.contains(path) &&
       requestedWalletId != null &&
       requestedWalletId.isNotEmpty &&
       !walletController.wallets.any((w) => w.id == requestedWalletId)) {

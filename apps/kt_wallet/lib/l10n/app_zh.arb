@@ -47,7 +47,7 @@
   },
   "backupBannerText": "助记词尚未备份",
   "backupNow": "立即备份",
-  "walletAddressesTitle": "钱包地址",
+  "walletAddressesTitle": "账户地址",
   "walletAddressSearchHint": "搜索网络或地址",
   "balanceChangePeriod": "1日",
   "marketUpdating": "正在更新余额…",

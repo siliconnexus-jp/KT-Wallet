@@ -112,7 +112,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get backupNow => '今すぐバックアップ';
 
   @override
-  String get walletAddressesTitle => 'ウォレットアドレス';
+  String get walletAddressesTitle => 'アカウントアドレス';
 
   @override
   String get walletAddressSearchHint => 'ネットワークまたはアドレスを検索';

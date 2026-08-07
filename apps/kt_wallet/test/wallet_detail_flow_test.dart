@@ -115,13 +115,65 @@ void main() {
       findsOneWidget,
     );
     expect(
+      find.byKey(const ValueKey('wallet-detail-account-addresses')),
+      findsOneWidget,
+    );
+    expect(
       find.byKey(const ValueKey('wallet-detail-view-mnemonic')),
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('wallet-detail-delete')), findsOneWidget);
     expect(find.byIcon(Icons.key), findsNothing);
     expect(find.byIcon(Icons.delete_outline), findsNothing);
-    expect(find.byType(Divider), findsNWidgets(2));
+    expect(find.byType(Divider), findsNWidgets(3));
+  });
+
+  testWidgets('account-address row opens the shared full-page directory', (
+    tester,
+  ) async {
+    final controller = await _controller(backedUp: true);
+    await _pump(tester, controller, '/wallet-detail?id=w1');
+
+    await tester.tap(
+      find.byKey(const ValueKey('wallet-detail-account-addresses')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('账户地址'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('wallet-addresses-screen')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('wallet-addresses-directory')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('wallet-address-search-field')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('wallet-address-alphabet-index')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('wallet-address-row-eth-mainnet')),
+      findsOneWidget,
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('wallet-address-search-field')),
+      'sol',
+    );
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('wallet-address-row-sol-mainnet')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('wallet-address-row-eth-mainnet')),
+      findsNothing,
+    );
   });
 
   testWidgets('tapping a palette color applies it to the wallet', (
@@ -177,7 +229,9 @@ void main() {
     final controller = await _controller();
     await _pump(tester, controller, '/wallet-detail?id=w1');
 
-    await tester.tap(find.text('删除钱包').first);
+    final deleteRow = find.byKey(const ValueKey('wallet-detail-delete'));
+    await tester.ensureVisible(deleteRow);
+    await tester.tap(deleteRow);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('kt-dialog-confirm')));
     await tester.pumpAndSettle();
@@ -192,7 +246,9 @@ void main() {
     final controller = await _controller(crypto: _DeleteFailingCrypto());
     await _pump(tester, controller, '/wallet-detail?id=w1');
 
-    await tester.tap(find.text('删除钱包').first);
+    final deleteRow = find.byKey(const ValueKey('wallet-detail-delete'));
+    await tester.ensureVisible(deleteRow);
+    await tester.tap(deleteRow);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('kt-dialog-confirm')));
     await tester.pumpAndSettle();

@@ -2386,6 +2386,17 @@ class WalletDetailScreen extends StatelessWidget {
           key: const ValueKey('wallet-detail-action-list'),
           children: [
             const Divider(height: 1, color: WalletColors.border),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => context.push(
+                '/wallet-addresses?id=${Uri.encodeQueryComponent(wallet.id)}',
+              ),
+              child: SecurityRow(
+                key: const ValueKey('wallet-detail-account-addresses'),
+                l10n.walletAddressesTitle,
+              ),
+            ),
+            const Divider(height: 1, color: WalletColors.border),
             if (isHot) ...[
               GestureDetector(
                 behavior: HitTestBehavior.opaque,

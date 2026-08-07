@@ -301,7 +301,7 @@ abstract class AppLocalizations {
   /// No description provided for @walletAddressesTitle.
   ///
   /// In zh, this message translates to:
-  /// **'钱包地址'**
+  /// **'账户地址'**
   String get walletAddressesTitle;
 
   /// No description provided for @walletAddressSearchHint.
