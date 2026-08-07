@@ -304,10 +304,22 @@ abstract class AppLocalizations {
   /// **'总资产估值 (USD)'**
   String get balanceTitle;
 
+  /// No description provided for @walletAddressesTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包地址'**
+  String get walletAddressesTitle;
+
+  /// No description provided for @walletAddressSearchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索网络或地址'**
+  String get walletAddressSearchHint;
+
   /// No description provided for @balanceChangePeriod.
   ///
   /// In zh, this message translates to:
-  /// **'过去24小时'**
+  /// **'1日'**
   String get balanceChangePeriod;
 
   /// No description provided for @marketUpdating.

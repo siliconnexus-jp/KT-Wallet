@@ -191,6 +191,34 @@ class MarketController extends ChangeNotifier {
     return sawAny;
   }
 
+  /// True only when every native and registry-token balance that belongs to
+  /// the current wallet is known and exactly zero.
+  ///
+  /// This is intentionally stricter than [totalUsd] == 0: a partial outage
+  /// can also produce a zero total from the known subset. The home screen uses
+  /// this distinction to render a real `0.00` daily movement only when zero is
+  /// proven; otherwise it keeps the row visible with unavailable markers.
+  bool get portfolioBalanceIsDefinitelyZero {
+    final wallet = _wallets.current;
+    if (wallet == null) return false;
+    var sawAny = false;
+
+    bool include(BalanceResult result) {
+      final amount = result.amount;
+      if (result.status != BalanceStatus.ok || amount == null) return false;
+      sawAny = true;
+      return amount.raw == BigInt.zero;
+    }
+
+    for (final coin in wallet.addresses.enabledCoins) {
+      if (!include(balanceFor(coin))) return false;
+    }
+    for (final token in tokens) {
+      if (!include(tokenBalanceFor(token.id))) return false;
+    }
+    return sawAny;
+  }
+
   double? fiatTotalFor(Iterable<AssetDeployment> deployments, String symbol) {
     var total = 0.0;
     var sawAny = false;

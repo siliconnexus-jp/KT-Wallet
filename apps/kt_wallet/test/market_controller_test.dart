@@ -683,6 +683,38 @@ void main() {
     },
   );
 
+  test('portfolio zero requires every active balance to be known', () async {
+    final zeroResults = {
+      for (final entry in _okResults().entries)
+        entry.key: BalanceResult.ok(
+          Amount(
+            raw: BigInt.zero,
+            decimals: entry.value.amount!.decimals,
+            symbol: entry.value.amount!.symbol,
+          ),
+        ),
+    };
+    final balances = FakeBalanceService(zeroResults);
+    final controller = MarketController(
+      wallets: _wallets(),
+      balances: balances,
+      prices: FakePriceService(_prices),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.refresh();
+    expect(controller.totalUsd, 0);
+    expect(controller.portfolioChange24h, isNull);
+    expect(controller.portfolioBalanceIsDefinitelyZero, isTrue);
+
+    balances.results = {
+      ...zeroResults,
+      Coin.solana: const BalanceResult.error(),
+    };
+    await controller.refresh();
+    expect(controller.portfolioBalanceIsDefinitelyZero, isFalse);
+  });
+
   test('wallet switch auto-refreshes with the new wallet addresses', () async {
     final wallets = _wallets();
     final balances = FakeBalanceService(_okResults());

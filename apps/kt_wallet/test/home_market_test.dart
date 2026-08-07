@@ -15,6 +15,7 @@ import 'package:kt_wallet/src/state/wallet_controller.dart';
 import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import 'support/test_wallet_scope.dart';
 
@@ -151,6 +152,38 @@ MarketController _offlineController() => MarketController(
   }),
 );
 
+MarketController _zeroController({bool partial = false}) => MarketController(
+  wallets: _wallets(),
+  balances: _FakeBalanceService({
+    for (final coin in const [Coin.eth, Coin.polygon, Coin.tron, Coin.solana])
+      coin: partial && coin == Coin.solana
+          ? const BalanceResult.error()
+          : BalanceResult.ok(
+              Amount(
+                raw: BigInt.zero,
+                decimals: switch (coin) {
+                  Coin.tron => 6,
+                  Coin.solana => 9,
+                  _ => 18,
+                },
+                symbol: switch (coin) {
+                  Coin.eth => 'ETH',
+                  Coin.polygon => 'POL',
+                  Coin.tron => 'TRX',
+                  Coin.solana => 'SOL',
+                  _ => '',
+                },
+              ),
+            ),
+  }),
+  prices: _FakePriceService(const {
+    Coin.eth: 2000,
+    Coin.polygon: 0.5,
+    Coin.tron: 0.1,
+    Coin.solana: 100,
+  }),
+);
+
 Widget _app(Widget home) => MaterialApp(
   debugShowCheckedModeBanner: false,
   locale: const Locale('zh'),
@@ -163,6 +196,10 @@ void main() {
   testWidgets('home under a MarketScope shows live balances and fiat total', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final controller = _liveController();
     await tester.pumpWidget(
       _app(MarketScope(controller: controller, child: const HomeScreen())),
@@ -173,31 +210,51 @@ void main() {
     // Live total: 1 ETH*2000 + 2 POL*0.5 + 5 TRX*0.1 + 0.5 SOL*100 = 2051.50,
     // plus live-priced tokens: 25*0.99 + 10*1.01 = 2086.35.
     expect(find.text(r'$2,086.35'), findsOneWidget);
-    expect(find.text(r'+$189.67 (+10.00%) 过去24小时'), findsOneWidget);
-    expect(find.text('+10.00%'), findsWidgets);
-    // Live rows (home tab card; the assets tab inside the IndexedStack builds
-    // them too, hence findsWidgets).
-    // ETH is native on Ethereum, Base and Arbitrum, so it is ONE row across
-    // three chains — not three rows that each say "0 ETH".
-    expect(find.text('1 ETH · 3 条链'), findsWidgets);
-    expect(find.text('0.5 SOL · Solana'), findsWidgets);
-    expect(find.text(r'$2,000.00'), findsWidgets);
-    // Token rows render under the native rows using live market quotes; the
-    // errored TRON USDT stays an honest '--'.
-    // USDT is deployed on Ethereum and TRON, so it is ONE row now, not two.
-    // TronGrid rejected the demo address, so that leg is excluded from the
-    // sum and shows '--' in the detail breakdown — the row still reports the
-    // 25 that did load.
-    expect(find.text('25 USDT · 7 条链'), findsWidgets);
-    expect(find.text('10 USDC · 6 条链'), findsWidgets);
-    expect(find.text(r'$24.75'), findsWidgets);
-    expect(find.text(r'$10.10'), findsWidgets);
+    expect(find.text(r'+$189.67 (+10.00%) 1日'), findsOneWidget);
+    expect(find.textContaining('+10.00%'), findsWidgets);
+    // W1A splits amount and network coverage into separate columns. ETH is
+    // still one aggregate row across three chains, not three duplicated rows.
+    expect(find.text('ETH'), findsOneWidget);
+    expect(find.text('1 ETH'), findsOneWidget);
+    expect(find.text('3 条链'), findsWidgets);
+    expect(find.text(r'$2,000.00'), findsOneWidget);
+    // The dedicated assets-list assertions below cover the token row details;
+    // this home assertion locks the aggregate total that includes their live
+    // quotes and ensures the failed TRON leg is never rendered separately.
     expect(find.text('-- USDT · TRON'), findsNothing);
     // The demo constants must NOT render as if they were live.
     expect(find.text(r'$862.40'), findsNothing);
     expect(find.text('0.0842 ETH'), findsNothing);
     // No offline banner in live mode.
     expect(find.text('离线，显示演示数据'), findsNothing);
+    controller.dispose();
+  });
+
+  testWidgets('zero portfolio keeps the 1-day row with a verified zero', (
+    tester,
+  ) async {
+    final controller = _zeroController();
+    await tester.pumpWidget(
+      _app(MarketScope(controller: controller, child: const HomeScreen())),
+    );
+    await tester.pumpAndSettle();
+
+    final change = find.byKey(const ValueKey('home-balance-change'));
+    expect(find.text(r'$0.00 (0.00%) 1日'), findsOneWidget);
+    expect(tester.widget<Text>(change).style!.color, WalletColors.text3);
+    controller.dispose();
+  });
+
+  testWidgets('partial balance data keeps the 1-day row unavailable', (
+    tester,
+  ) async {
+    final controller = _zeroController(partial: true);
+    await tester.pumpWidget(
+      _app(MarketScope(controller: controller, child: const HomeScreen())),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('-- (--%) 1日'), findsOneWidget);
     controller.dispose();
   });
 

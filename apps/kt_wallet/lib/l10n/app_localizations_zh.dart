@@ -115,7 +115,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get balanceTitle => '总资产估值 (USD)';
 
   @override
-  String get balanceChangePeriod => '过去24小时';
+  String get walletAddressesTitle => '钱包地址';
+
+  @override
+  String get walletAddressSearchHint => '搜索网络或地址';
+
+  @override
+  String get balanceChangePeriod => '1日';
 
   @override
   String get marketUpdating => '正在更新余额…';

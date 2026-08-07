@@ -115,7 +115,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get balanceTitle => 'Total value (USD)';
 
   @override
-  String get balanceChangePeriod => 'past 24h';
+  String get walletAddressesTitle => 'Wallet addresses';
+
+  @override
+  String get walletAddressSearchHint => 'Search network or address';
+
+  @override
+  String get balanceChangePeriod => '1D';
 
   @override
   String get marketUpdating => 'Updating balances…';

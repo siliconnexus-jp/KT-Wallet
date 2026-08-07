@@ -1,6 +1,7 @@
 import 'package:chains/chains.dart' show Amount, Chain;
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -484,6 +485,13 @@ class _HomeTabState extends State<_HomeTab> {
     final testnet = NetworkScope.of(context).anyTestnetActive;
     final total = live ? market.totalUsd : null;
     final portfolioChange = live && !testnet ? market.portfolioChange24h : null;
+    final balanceChange = _portfolioChangeDisplay(
+      context,
+      market: market,
+      testnet: testnet,
+      change: portfolioChange,
+      period: l10n.balanceChangePeriod,
+    );
     final networks = NetworkScope.of(context);
     final visibleAssets = live
         ? preferredAssetRows(
@@ -520,20 +528,15 @@ class _HomeTabState extends State<_HomeTab> {
                   const SizedBox(height: 12),
                   const MarketOfflineBanner(),
                 ],
-                const SizedBox(height: 10),
+                const SizedBox(height: 4),
                 _Balance(
                   amount: live
                       ? (testnet || total == null
                             ? '--'
                             : formatFiatForContext(context, total))
                       : r'$862.40',
-                  change: live
-                      ? (portfolioChange == null
-                            ? ''
-                            : '${formatSignedFiatForContext(context, portfolioChange.deltaUsd)} '
-                                  '(${formatChange24h(portfolioChange.percent)}) '
-                                  '${l10n.balanceChangePeriod}')
-                      : '+\$12.06 (+1.4%) ${l10n.balanceChangePeriod}',
+                  change: balanceChange.text,
+                  changeColor: balanceChange.color,
                 ),
                 if (live && market.isRefreshing && market.hasLiveBalances) ...[
                   const SizedBox(height: 8),
@@ -2159,12 +2162,17 @@ class _Header extends StatelessWidget {
       label: isHot ? l10n.walletKindHot : l10n.walletKindWatch,
     );
     return Row(
+      key: const ValueKey('home-wallet-header'),
       children: [
         Expanded(
           child: Semantics(
             button: true,
             label:
                 '${wallet.name}, ${isHot ? l10n.walletKindHot : l10n.walletKindWatch}',
+            customSemanticsActions: {
+              CustomSemanticsAction(label: l10n.walletAddressesTitle): () =>
+                  _showWalletAddresses(context, wallet),
+            },
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: onTapPill,
@@ -2183,40 +2191,81 @@ class _Header extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final largeText =
+                                  MediaQuery.textScalerOf(context).scale(10) >=
+                                  16;
+                              final hideBadge =
+                                  largeText && constraints.maxWidth < 210;
+                              return Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      wallet.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                        color: WalletColors.text,
+                                      ),
+                                    ),
+                                  ),
+                                  if (!hideBadge) ...[
+                                    const SizedBox(width: 6),
+                                    kindBadge,
+                                  ],
+                                  const SizedBox(width: 6),
+                                  const Icon(
+                                    Icons.keyboard_arrow_down_rounded,
+                                    size: 15,
+                                    color: WalletColors.text2,
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 2),
                           Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Flexible(
                                 child: Text(
-                                  wallet.name,
+                                  key: const ValueKey('home-wallet-address'),
+                                  _shortAddress(wallet.addresses.eth),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: WalletColors.text,
+                                    fontFamily: 'monospace',
+                                    fontSize: 10,
+                                    color: WalletColors.text3,
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 6),
-                              kindBadge,
-                              const SizedBox(width: 6),
-                              const Icon(
-                                Icons.keyboard_arrow_down_rounded,
-                                size: 15,
-                                color: WalletColors.text2,
+                              const SizedBox(width: 3),
+                              ExcludeSemantics(
+                                child: Tooltip(
+                                  message: l10n.walletAddressesTitle,
+                                  child: InkResponse(
+                                    key: const ValueKey(
+                                      'home-wallet-addresses-button',
+                                    ),
+                                    onTap: () =>
+                                        _showWalletAddresses(context, wallet),
+                                    radius: 18,
+                                    child: const SizedBox.square(
+                                      dimension: 20,
+                                      child: Icon(
+                                        Icons.content_copy_rounded,
+                                        size: 14,
+                                        color: WalletColors.text3,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _shortAddress(wallet.addresses.eth),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 10,
-                              color: WalletColors.text3,
-                            ),
                           ),
                         ],
                       ),
@@ -2228,6 +2277,374 @@ class _Header extends StatelessWidget {
           ),
         ),
         const TestnetBadge(),
+      ],
+    );
+  }
+}
+
+class _WalletNetworkAddress {
+  const _WalletNetworkAddress({required this.network, required this.address});
+
+  final Network network;
+  final String address;
+}
+
+Chain _chainForWalletCoin(Coin coin) => switch (coin) {
+  Coin.eth => Chain.ethereum,
+  Coin.polygon => Chain.polygon,
+  Coin.base => Chain.base,
+  Coin.arbitrum => Chain.arbitrum,
+  Coin.avalanche => Chain.avalanche,
+  Coin.bnb => Chain.bnb,
+  Coin.tron => Chain.tron,
+  Coin.solana => Chain.solana,
+};
+
+Future<void> _showWalletAddresses(BuildContext context, Wallet wallet) async {
+  final networks = NetworkScope.of(context);
+  final entries = <_WalletNetworkAddress>[
+    for (final coin in wallet.addresses.enabledCoins)
+      if (wallet.addresses.forCoin(coin).trim().isNotEmpty)
+        _WalletNetworkAddress(
+          network: networks.activeFor(_chainForWalletCoin(coin)),
+          address: wallet.addresses.forCoin(coin),
+        ),
+  ];
+  final maxHeight = MediaQuery.sizeOf(context).height * 0.82;
+  final desiredHeight = (146.0 + entries.length * 72.0).clamp(320.0, maxHeight);
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: WalletColors.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (ctx) => SafeArea(
+      top: false,
+      child: SizedBox(
+        height: desiredHeight,
+        child: _WalletAddressesSheet(entries: entries),
+      ),
+    ),
+  );
+}
+
+class _WalletAddressesSheet extends StatefulWidget {
+  const _WalletAddressesSheet({required this.entries});
+
+  final List<_WalletNetworkAddress> entries;
+
+  @override
+  State<_WalletAddressesSheet> createState() => _WalletAddressesSheetState();
+}
+
+class _WalletAddressesSheetState extends State<_WalletAddressesSheet> {
+  static const _alphabet = <String>[
+    'A',
+    'B',
+    'C',
+    'D',
+    'E',
+    'F',
+    'G',
+    'H',
+    'I',
+    'J',
+    'K',
+    'L',
+    'M',
+    'N',
+    'O',
+    'P',
+    'Q',
+    'R',
+    'S',
+    'T',
+    'U',
+    'V',
+    'W',
+    'X',
+    'Y',
+    'Z',
+  ];
+
+  final _search = TextEditingController();
+  final _scroll = ScrollController();
+  String? _copiedNetworkId;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _jumpToLetter(
+    String letter,
+    Map<String, List<_WalletNetworkAddress>> groups,
+  ) {
+    if (!_scroll.hasClients || !groups.containsKey(letter)) return;
+    var offset = 0.0;
+    for (final group in groups.entries) {
+      if (group.key == letter) break;
+      offset += 24 + group.value.length * 70;
+    }
+    _scroll.animateTo(
+      offset.clamp(0, _scroll.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  Widget _addressRow(_WalletNetworkAddress entry, AppLocalizations l10n) {
+    final copied = _copiedNetworkId == entry.network.id;
+    return SizedBox(
+      key: ValueKey('wallet-address-row-${entry.network.id}'),
+      height: 70,
+      child: Row(
+        children: [
+          ChainIcon(chain: entry.network.chain, size: 38),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.network.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: WalletColors.text,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  entry.address,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 11,
+                    height: 1.25,
+                    color: WalletColors.text3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            key: ValueKey('wallet-address-copy-${entry.network.id}'),
+            tooltip: l10n.copyAddress,
+            onPressed: () => _copy(entry),
+            icon: Icon(
+              copied ? Icons.check_rounded : Icons.copy_outlined,
+              size: 21,
+              color: copied ? WalletColors.green : WalletColors.text,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _copy(_WalletNetworkAddress entry) async {
+    await Clipboard.setData(ClipboardData(text: entry.address));
+    if (!mounted) return;
+    setState(() => _copiedNetworkId = entry.network.id);
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger
+      ?..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(l10n.addressCopied),
+          duration: const Duration(milliseconds: 1200),
+        ),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final query = _search.text.trim().toLowerCase();
+    final entries =
+        <_WalletNetworkAddress>[
+          for (final entry in widget.entries)
+            if (query.isEmpty ||
+                entry.network.name.toLowerCase().contains(query) ||
+                entry.network.symbol.toLowerCase().contains(query) ||
+                entry.address.toLowerCase().contains(query))
+              entry,
+        ]..sort(
+          (a, b) => a.network.name.toLowerCase().compareTo(
+            b.network.name.toLowerCase(),
+          ),
+        );
+    final groups = <String, List<_WalletNetworkAddress>>{};
+    for (final entry in entries) {
+      final first = entry.network.name.characters.first.toUpperCase();
+      final letter = RegExp(r'^[A-Z]$').hasMatch(first) ? first : '#';
+      groups.putIfAbsent(letter, () => []).add(entry);
+    }
+    return Column(
+      key: const ValueKey('wallet-addresses-sheet'),
+      children: [
+        const SizedBox(height: 10),
+        Container(
+          width: 36,
+          height: 4,
+          decoration: BoxDecoration(
+            color: WalletColors.border,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          l10n.walletAddressesTitle,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: WalletColors.text,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: TextField(
+            key: const ValueKey('wallet-address-search-field'),
+            controller: _search,
+            onChanged: (_) => setState(() {}),
+            textInputAction: TextInputAction.search,
+            autocorrect: false,
+            decoration: InputDecoration(
+              hintText: l10n.walletAddressSearchHint,
+              hintStyle: const TextStyle(
+                fontSize: 14,
+                color: WalletColors.text3,
+              ),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                size: 22,
+                color: WalletColors.text,
+              ),
+              filled: true,
+              fillColor: WalletColors.bg,
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(
+                  color: WalletColors.text,
+                  width: 1.2,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: entries.isEmpty
+              ? Center(
+                  child: Text(
+                    l10n.homeNoMatchingNetworks,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: WalletColors.text3,
+                    ),
+                  ),
+                )
+              : Stack(
+                  children: [
+                    ListView(
+                      key: const ValueKey('wallet-address-list'),
+                      controller: _scroll,
+                      padding: const EdgeInsets.fromLTRB(18, 0, 34, 12),
+                      children: [
+                        for (final group in groups.entries) ...[
+                          SizedBox(
+                            key: ValueKey(
+                              'wallet-address-section-${group.key}',
+                            ),
+                            height: 24,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                group.key,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: WalletColors.text3,
+                                ),
+                              ),
+                            ),
+                          ),
+                          for (final entry in group.value)
+                            _addressRow(entry, l10n),
+                        ],
+                      ],
+                    ),
+                    Positioned(
+                      key: const ValueKey('wallet-address-alphabet-index'),
+                      right: 3,
+                      top: 0,
+                      bottom: 0,
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final letterHeight =
+                              (constraints.maxHeight / _alphabet.length).clamp(
+                                9.0,
+                                14.0,
+                              );
+                          return Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (final letter in _alphabet)
+                                  GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: groups.containsKey(letter)
+                                        ? () => _jumpToLetter(letter, groups)
+                                        : null,
+                                    child: SizedBox(
+                                      key: ValueKey(
+                                        'wallet-address-index-$letter',
+                                      ),
+                                      width: 22,
+                                      height: letterHeight,
+                                      child: Center(
+                                        child: Text(
+                                          letter,
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w600,
+                                            color: groups.containsKey(letter)
+                                                ? WalletColors.text2
+                                                : WalletColors.border,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+        ),
       ],
     );
   }
@@ -2428,8 +2845,13 @@ class _BackupBanner extends StatelessWidget {
 }
 
 class _Balance extends StatelessWidget {
-  const _Balance({required this.amount, required this.change});
+  const _Balance({
+    required this.amount,
+    required this.change,
+    required this.changeColor,
+  });
   final String amount, change;
+  final Color changeColor;
 
   @override
   Widget build(BuildContext context) {
@@ -2438,61 +2860,117 @@ class _Balance extends StatelessWidget {
     // Absent scope (gallery/goldens): the eye is inert rather than pretending
     // to toggle something nothing else can see.
     final toggle = BalancePrivacy.toggleOf(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+    return Semantics(
+      button: toggle != null,
+      enabled: toggle != null,
+      label: l10n.privacyMode,
+      onTap: toggle,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: toggle,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Flexible(
-              child: Text(
-                l10n.balanceTitle,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13, color: WalletColors.text2),
+            Row(
+              key: const ValueKey('home-balance-title-row'),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    l10n.balanceTitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: WalletColors.text2,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Icon(
+                  hidden
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  size: 16,
+                  color: WalletColors.text3,
+                ),
+              ],
+            ),
+            const SizedBox(height: 3),
+            Text(
+              key: const ValueKey('home-balance-amount'),
+              hidden ? '••••••' : amount,
+              style: const TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.5,
+                color: WalletColors.text,
               ),
             ),
-            const SizedBox(width: 6),
-            IconButton(
-              tooltip: l10n.privacyMode,
-              onPressed: toggle,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 48, height: 48),
-              icon: Icon(
-                hidden
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-                size: 14,
-                color: WalletColors.text3,
+            const SizedBox(height: 3),
+            Text(
+              key: const ValueKey('home-balance-change'),
+              hidden ? '••••' : change,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: changeColor,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 3),
-        Text(
-          hidden ? '••••••' : amount,
-          style: const TextStyle(
-            fontSize: 32,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.5,
-            color: WalletColors.text,
-          ),
-        ),
-        if (change.isNotEmpty) ...[
-          const SizedBox(height: 3),
-          Text(
-            hidden ? '••••' : change,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: change.startsWith('-')
-                  ? WalletColors.red
-                  : WalletColors.green,
-            ),
-          ),
-        ],
-      ],
+      ),
     );
   }
+}
+
+class _PortfolioChangeDisplay {
+  const _PortfolioChangeDisplay(this.text, this.color);
+
+  final String text;
+  final Color color;
+}
+
+_PortfolioChangeDisplay _portfolioChangeDisplay(
+  BuildContext context, {
+  required MarketController? market,
+  required bool testnet,
+  required PortfolioChange24h? change,
+  required String period,
+}) {
+  if (market == null) {
+    return _PortfolioChangeDisplay(
+      '+\$12.06 (+1.4%) $period',
+      WalletColors.green,
+    );
+  }
+  if (testnet) {
+    return _PortfolioChangeDisplay('-- (--%) $period', WalletColors.text3);
+  }
+  if (change == null) {
+    if (!market.portfolioBalanceIsDefinitelyZero) {
+      return _PortfolioChangeDisplay('-- (--%) $period', WalletColors.text3);
+    }
+    final zero = formatFiatForContext(context, 0);
+    return _PortfolioChangeDisplay(
+      zero == '--' ? '-- (--%) $period' : '$zero (0.00%) $period',
+      WalletColors.text3,
+    );
+  }
+
+  final neutral = change.deltaUsd.abs() < 0.005 && change.percent.abs() < 0.005;
+  if (neutral) {
+    final zero = formatFiatForContext(context, 0);
+    return _PortfolioChangeDisplay(
+      zero == '--' ? '-- (--%) $period' : '$zero (0.00%) $period',
+      WalletColors.text3,
+    );
+  }
+  return _PortfolioChangeDisplay(
+    '${formatSignedFiatForContext(context, change.deltaUsd)} '
+    '(${formatChange24h(change.percent)}) $period',
+    change.deltaUsd < 0 ? WalletColors.red : WalletColors.green,
+  );
 }
 
 class _ActionRow extends StatelessWidget {

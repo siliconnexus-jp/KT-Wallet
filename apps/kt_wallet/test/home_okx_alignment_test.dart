@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/src/screens/home_screen.dart';
@@ -39,6 +40,10 @@ void main() {
 
     expect(find.byKey(const ValueKey('home-search-field')), findsOneWidget);
     expect(find.byKey(const ValueKey('home-scan-button')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('home-wallet-addresses-button')),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('home-tab-0')), findsOneWidget);
     expect(find.byKey(const ValueKey('home-tab-1')), findsOneWidget);
     expect(find.byKey(const ValueKey('home-tab-2')), findsOneWidget);
@@ -115,6 +120,21 @@ void main() {
       TextAlignVertical.center,
     );
 
+    final headerBottom = tester
+        .getBottomLeft(find.byKey(const ValueKey('home-wallet-header')))
+        .dy;
+    final balanceTitle = find.byKey(const ValueKey('home-balance-title-row'));
+    final balanceAmount = find.byKey(const ValueKey('home-balance-amount'));
+    expect(tester.getTopLeft(balanceTitle).dy - headerBottom, 4);
+    expect(
+      tester.getTopLeft(balanceAmount).dy -
+          tester.getBottomLeft(balanceTitle).dy,
+      3,
+    );
+    await tester.tap(balanceTitle);
+    await tester.pumpAndSettle();
+    expect(find.text('••••••'), findsOneWidget);
+
     expect(
       _pillDecoration(tester, 'home-category-coins').color,
       WalletColors.text,
@@ -132,6 +152,118 @@ void main() {
     );
     expect(find.text('Ethereum'), findsOneWidget);
     expect(find.text('BNB Smart Chain'), findsOneWidget);
+  });
+
+  testWidgets('wallet address sheet lists only this wallet enabled networks', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    String? clipboardText;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          clipboardText =
+              (call.arguments as Map<Object?, Object?>)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+
+    await tester.pumpWidget(_app());
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('home-wallet-addresses-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('wallet-addresses-sheet')),
+      findsOneWidget,
+    );
+    expect(find.text('钱包地址'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('wallet-address-search-field')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('wallet-address-alphabet-index')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('wallet-address-index-A')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('wallet-address-index-Z')),
+      findsOneWidget,
+    );
+    for (final id in const [
+      'eth-mainnet',
+      'polygon-mainnet',
+      'tron-mainnet',
+      'sol-mainnet',
+    ]) {
+      expect(find.byKey(ValueKey('wallet-address-row-$id')), findsOneWidget);
+    }
+    for (final id in const [
+      'base-mainnet',
+      'arbitrum-mainnet',
+      'avalanche-mainnet',
+      'bnb-mainnet',
+    ]) {
+      expect(find.byKey(ValueKey('wallet-address-row-$id')), findsNothing);
+    }
+
+    await tester.enterText(
+      find.byKey(const ValueKey('wallet-address-search-field')),
+      'sol',
+    );
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('wallet-address-row-sol-mainnet')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('wallet-address-row-eth-mainnet')),
+      findsNothing,
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('wallet-address-search-field')),
+      '',
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('wallet-address-index-T')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<ListView>(find.byKey(const ValueKey('wallet-address-list')))
+          .controller!
+          .offset,
+      greaterThan(0),
+    );
+    tester
+        .widget<ListView>(find.byKey(const ValueKey('wallet-address-list')))
+        .controller!
+        .jumpTo(0);
+    await tester.pump();
+
+    await tester.tap(
+      find.byKey(const ValueKey('wallet-address-copy-eth-mainnet')),
+    );
+    await tester.pump();
+    expect(clipboardText, '0xa71c8B29b3d4b79E19bE1');
+    expect(find.text('地址已复制'), findsOneWidget);
   });
 
   testWidgets('W1B and W1C pin only the category row', (tester) async {

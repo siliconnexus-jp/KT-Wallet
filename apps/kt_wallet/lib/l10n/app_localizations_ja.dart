@@ -115,7 +115,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get balanceTitle => '総資産評価額 (USD)';
 
   @override
-  String get balanceChangePeriod => '過去24時間';
+  String get walletAddressesTitle => 'ウォレットアドレス';
+
+  @override
+  String get walletAddressSearchHint => 'ネットワークまたはアドレスを検索';
+
+  @override
+  String get balanceChangePeriod => '1日';
 
   @override
   String get marketUpdating => '残高を更新中…';
