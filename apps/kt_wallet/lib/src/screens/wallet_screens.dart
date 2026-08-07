@@ -2135,8 +2135,14 @@ class WalletDetailScreen extends StatelessWidget {
     final colors = _palette.contains(wallet.avatarColor)
         ? _palette
         : [..._palette, wallet.avatarColor];
+    final avatarColor = Color(wallet.avatarColor);
+    final avatarForeground = avatarColor.computeLuminance() > 0.30
+        ? WalletColors.text
+        : Colors.white;
     return KtScreen(
+      key: const ValueKey('wallet-detail-screen'),
       gap: 16,
+      backgroundColor: WalletColors.surface,
       navBar: KtNavBar(
         title: l10n.walletDetailTitle,
         onBack: () => Navigator.of(context).maybePop(),
@@ -2144,10 +2150,23 @@ class WalletDetailScreen extends StatelessWidget {
       children: [
         Column(
           children: [
-            KtAvatar(
-              color: Color(wallet.avatarColor),
-              initial: wallet.name.characters.first,
-              size: 72,
+            Container(
+              key: const ValueKey('wallet-detail-avatar'),
+              width: 72,
+              height: 72,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: avatarColor,
+                borderRadius: BorderRadius.circular(72 * 0.31),
+              ),
+              child: Text(
+                wallet.name.characters.first,
+                style: TextStyle(
+                  fontSize: 72 * 0.45,
+                  fontWeight: FontWeight.w600,
+                  color: avatarForeground,
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             Semantics(
@@ -2232,30 +2251,6 @@ class WalletDetailScreen extends StatelessWidget {
               ],
             ),
           ],
-        ),
-        KtCard(
-          child: Column(
-            children: [
-              KtDetailRow(
-                label: l10n.walletTypeLabel,
-                value: isHot ? l10n.standardWallet : l10n.walletKindWatch,
-              ),
-              const SizedBox(height: 14),
-              KtDetailRow(
-                label: l10n.walletIdLabel,
-                value: wallet.id,
-                mono: true,
-              ),
-              if (wallet is WatchWallet) ...[
-                const SizedBox(height: 14),
-                KtDetailRow(
-                  label: l10n.coldSignerWalletIdLabel,
-                  value: wallet.coldWalletId,
-                  mono: true,
-                ),
-              ],
-            ],
-          ),
         ),
         if (isHot && !backedUp)
           GestureDetector(
@@ -2357,33 +2352,65 @@ class WalletDetailScreen extends StatelessWidget {
                     ),
             ),
           ),
-        if (isHot)
-          KtCard(
-            child: GestureDetector(
+        Container(
+          key: const ValueKey('wallet-detail-info-card'),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: WalletColors.bg,
+            borderRadius: BorderRadius.circular(KtDimens.radiusLg),
+          ),
+          child: Column(
+            children: [
+              KtDetailRow(
+                label: l10n.walletTypeLabel,
+                value: isHot ? l10n.standardWallet : l10n.walletKindWatch,
+              ),
+              const SizedBox(height: 14),
+              KtDetailRow(
+                label: l10n.walletIdLabel,
+                value: wallet.id,
+                mono: true,
+              ),
+              if (wallet is WatchWallet) ...[
+                const SizedBox(height: 14),
+                KtDetailRow(
+                  label: l10n.coldSignerWalletIdLabel,
+                  value: wallet.coldWalletId,
+                  mono: true,
+                ),
+              ],
+            ],
+          ),
+        ),
+        Column(
+          key: const ValueKey('wallet-detail-action-list'),
+          children: [
+            const Divider(height: 1, color: WalletColors.border),
+            if (isHot) ...[
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _showMnemonicSheet(
+                  context,
+                  wallet,
+                  offerMarkBackedUp: !backedUp,
+                ),
+                child: SecurityRow(
+                  key: const ValueKey('wallet-detail-view-mnemonic'),
+                  l10n.viewMnemonic,
+                ),
+              ),
+              const Divider(height: 1, color: WalletColors.border),
+            ],
+            GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () => _showMnemonicSheet(
-                context,
-                wallet,
-                offerMarkBackedUp: !backedUp,
-              ),
+              onTap: () => _confirmDelete(context, wallet),
               child: SecurityRow(
-                Icons.key,
-                l10n.viewMnemonic,
-                l10n.viewMnemonicDesc,
+                key: const ValueKey('wallet-detail-delete'),
+                l10n.deleteWalletTitle,
+                danger: true,
               ),
             ),
-          ),
-        KtCard(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _confirmDelete(context, wallet),
-            child: SecurityRow(
-              Icons.delete_outline,
-              l10n.deleteWalletTitle,
-              l10n.deleteWalletDesc,
-              danger: true,
-            ),
-          ),
+          ],
         ),
       ],
     );
@@ -2391,49 +2418,25 @@ class WalletDetailScreen extends StatelessWidget {
 }
 
 class SecurityRow extends StatelessWidget {
-  const SecurityRow(
-    this.icon,
-    this.label,
-    this.sub, {
-    super.key,
-    this.danger = false,
-  });
-  final IconData icon;
-  final String label, sub;
+  const SecurityRow(this.label, {super.key, this.danger = false});
+  final String label;
   final bool danger;
   @override
   Widget build(BuildContext context) => ConstrainedBox(
-    constraints: const BoxConstraints(minHeight: 48),
+    constraints: const BoxConstraints(minHeight: 64),
     child: Row(
       children: [
-        Icon(
-          icon,
-          size: 19,
-          color: danger ? WalletColors.red : WalletColors.text2,
-        ),
-        const SizedBox(width: 12),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: danger ? WalletColors.red : WalletColors.text,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                sub,
-                style: const TextStyle(fontSize: 12, color: WalletColors.text3),
-              ),
-            ],
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: danger ? WalletColors.red : WalletColors.text,
+            ),
           ),
         ),
-        const Icon(Icons.chevron_right, size: 16, color: WalletColors.text3),
+        const Icon(Icons.chevron_right, size: 22, color: WalletColors.text3),
       ],
     ),
   );

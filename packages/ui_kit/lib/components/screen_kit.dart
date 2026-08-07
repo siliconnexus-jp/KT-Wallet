@@ -218,6 +218,7 @@ class KtScreen extends StatelessWidget {
     this.padding = const EdgeInsets.fromLTRB(20, 8, 20, 24),
     this.gap = 20,
     this.scrollable = true,
+    this.backgroundColor,
   });
   final List<Widget> children;
   final AppTheme theme;
@@ -226,6 +227,7 @@ class KtScreen extends StatelessWidget {
   final EdgeInsets padding;
   final double gap;
   final bool scrollable;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context) {
@@ -242,7 +244,7 @@ class KtScreen extends StatelessWidget {
       ),
     );
     return Scaffold(
-      backgroundColor: theme.bg,
+      backgroundColor: backgroundColor ?? theme.bg,
       body: SafeArea(
         bottom: false,
         child: Column(

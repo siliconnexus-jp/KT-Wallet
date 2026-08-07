@@ -6,6 +6,7 @@ import 'package:kt_wallet/main.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
 import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 /// Proves the wallet-detail screen (W28) is bound to the live controller:
 /// rename and color changes mutate the controller, the backup sheet marks the
@@ -84,6 +85,43 @@ void main() {
 
     expect(controller.wallets.single.name, '旅行钱包');
     expect(find.text('旅行钱包'), findsOneWidget);
+  });
+
+  testWidgets('detail uses the flat OKX-aligned visual hierarchy', (
+    tester,
+  ) async {
+    final controller = await _controller(backedUp: true);
+    await _pump(tester, controller, '/wallet-detail?id=w1');
+
+    final screen = tester.widget<KtScreen>(
+      find.byKey(const ValueKey('wallet-detail-screen')),
+    );
+    expect(screen.backgroundColor, WalletColors.surface);
+
+    final avatar = tester.widget<Container>(
+      find.byKey(const ValueKey('wallet-detail-avatar')),
+    );
+    final avatarDecoration = avatar.decoration! as BoxDecoration;
+    expect(avatarDecoration.shape, BoxShape.rectangle);
+    expect(avatarDecoration.borderRadius, BorderRadius.circular(72 * 0.31));
+
+    final infoCard = tester.widget<Container>(
+      find.byKey(const ValueKey('wallet-detail-info-card')),
+    );
+    expect((infoCard.decoration! as BoxDecoration).color, WalletColors.bg);
+
+    expect(
+      find.byKey(const ValueKey('wallet-detail-action-list')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('wallet-detail-view-mnemonic')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('wallet-detail-delete')), findsOneWidget);
+    expect(find.byIcon(Icons.key), findsNothing);
+    expect(find.byIcon(Icons.delete_outline), findsNothing);
+    expect(find.byType(Divider), findsNWidgets(2));
   });
 
   testWidgets('tapping a palette color applies it to the wallet', (
