@@ -3,6 +3,14 @@ import 'dart:typed_data';
 /// Supported chains (SLIP-44 mapping happens on the native side).
 enum Coin { eth, polygon, base, arbitrum, avalanche, bnb, tron, solana }
 
+/// How an authenticated private-key export is placed on the system clipboard.
+///
+/// [safe] deliberately omits the final six characters. Only that short suffix
+/// is returned to Dart for the user to transcribe manually; the complete key
+/// never crosses the native boundary. [full] copies the complete key only
+/// after a separate UI confirmation and returns an empty suffix.
+enum PrivateKeyCopyMode { safe, full }
+
 /// Public addresses derived for one wallet. ETH and Polygon share an address.
 class ChainAddresses {
   const ChainAddresses({

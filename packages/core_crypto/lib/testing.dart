@@ -99,6 +99,8 @@ class MockCoreCrypto implements CoreCrypto {
   final Future<bool> Function() _authenticate;
   final DateTime Function() _now;
   final _wallets = <String, _StoredWallet>{};
+  final _privateKeySessions = <String, String>{};
+  int _privateKeySessionCounter = 0;
 
   int _generateCounter = 0;
   int _failCount = 0;
@@ -316,6 +318,50 @@ class MockCoreCrypto implements CoreCrypto {
   }
 
   @override
+  Future<String> beginPrivateKeyExport(String walletId) async {
+    CoreCryptoValidation.checkWalletId(walletId);
+    _walletOrThrow(walletId);
+    await _requireAuth();
+    final sessionId = 'mock_private_key_${_privateKeySessionCounter++}';
+    _privateKeySessions[sessionId] = walletId;
+    return sessionId;
+  }
+
+  @override
+  Future<String> copyPrivateKey({
+    required String sessionId,
+    required Coin coin,
+    required PrivateKeyCopyMode mode,
+  }) async {
+    CoreCryptoValidation.checkPrivateKeySessionId(sessionId);
+    final walletId = _privateKeySessions[sessionId];
+    if (walletId == null) throw const InvalidInputException();
+    final wallet = _walletOrThrow(walletId);
+    final family = switch (coin) {
+      Coin.eth ||
+      Coin.polygon ||
+      Coin.base ||
+      Coin.arbitrum ||
+      Coin.avalanche ||
+      Coin.bnb => 'evm',
+      Coin.tron => 'tron',
+      Coin.solana => 'solana',
+    };
+    final encoded = coin == Coin.solana
+        ? _base58Stream('${wallet.mnemonic}:$family:private', 44)
+        : _hexStream('${wallet.mnemonic}:$family:private', 64);
+    return mode == PrivateKeyCopyMode.safe
+        ? encoded.substring(encoded.length - 6)
+        : '';
+  }
+
+  @override
+  Future<void> endPrivateKeyExport(String sessionId) async {
+    CoreCryptoValidation.checkPrivateKeySessionId(sessionId);
+    _privateKeySessions.remove(sessionId);
+  }
+
+  @override
   Future<Uint8List> createBackup({
     required String walletId,
     required String password,
@@ -368,6 +414,7 @@ class MockCoreCrypto implements CoreCrypto {
     CoreCryptoValidation.checkWalletId(walletId);
     _walletOrThrow(walletId);
     await _requireAuth();
+    _privateKeySessions.removeWhere((_, id) => id == walletId);
     _wallets.remove(walletId);
   }
 

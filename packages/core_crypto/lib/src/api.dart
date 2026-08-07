@@ -76,6 +76,28 @@ abstract class CoreCrypto {
   /// Returns the mnemonic for backup review. Strong auth enforced natively.
   Future<String> exportMnemonic(String walletId);
 
+  /// Starts a short-lived authenticated private-key export session.
+  ///
+  /// The returned identifier is an opaque capability, never key material.
+  /// Native code derives and retains the supported account keys only for the
+  /// lifetime of this session and wipes them when [endPrivateKeyExport] runs.
+  Future<String> beginPrivateKeyExport(String walletId);
+
+  /// Copies one account private key without returning the complete key.
+  ///
+  /// Safe copy places every character except the final six on the native
+  /// clipboard and returns those six characters for manual completion. Full
+  /// copy places the complete key on the native clipboard and returns an empty
+  /// string. The caller must obtain explicit confirmation before full copy.
+  Future<String> copyPrivateKey({
+    required String sessionId,
+    required Coin coin,
+    required PrivateKeyCopyMode mode,
+  });
+
+  /// Ends a private-key export session and requests immediate native wiping.
+  Future<void> endPrivateKeyExport(String sessionId);
+
   /// Seals the wallet's entropy under [password] for off-device backup.
   ///
   /// Strong auth is enforced natively, exactly as for [exportMnemonic] — the
@@ -118,6 +140,7 @@ abstract final class CoreCryptoValidation {
   static const maxBackupPasswordUtf8Bytes = 4096;
   static const maxSigningInputBytes = 1024 * 1024;
   static const maxBackupBlobBytes = 1024 * 1024;
+  static final _privateKeySessionIdRe = RegExp(r'^[A-Za-z0-9_-]{1,80}$');
 
   static void checkStrength(int strength) {
     if (!allowedMnemonicStrengths.contains(strength)) {
@@ -134,6 +157,19 @@ abstract final class CoreCryptoValidation {
       throw ArgumentError.value(walletId, 'walletId', 'invalid wallet id');
     }
   }
+
+  static void checkPrivateKeySessionId(String sessionId) {
+    if (!isValidPrivateKeySessionId(sessionId)) {
+      throw ArgumentError.value(
+        sessionId,
+        'sessionId',
+        'invalid private-key session id',
+      );
+    }
+  }
+
+  static bool isValidPrivateKeySessionId(String sessionId) =>
+      _privateKeySessionIdRe.hasMatch(sessionId);
 
   static void checkMnemonicNotEmpty(String mnemonic) {
     if (mnemonic.trim().isEmpty ||

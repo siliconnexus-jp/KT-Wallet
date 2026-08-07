@@ -16,6 +16,15 @@ let supportedCoins: Set<String> = [
 ]
 let validEntropySizes: Set<Int> = [16, 24, 32]
 let validStoredWalletPayloadSizes: Set<Int> = [17, 25, 33, 61, 69, 77]
+let privateKeyCopyModes: Set<String> = ["safe", "full"]
+
+func requireExactArgumentKeys(
+  _ arguments: [String: Any], _ expected: Set<String>
+) throws {
+  guard Set(arguments.keys) == expected else {
+    throw NativeArgumentValidationError.invalid
+  }
+}
 
 /// MethodChannel is a native trust boundary. Reject malformed direct calls
 /// before authentication, Keychain, KDF, Wallet Core, or force casts.
@@ -110,6 +119,22 @@ func requireSupportedCoin(_ arguments: [String: Any]) throws -> String {
   let coin = try requireStringArgument(arguments, "coin")
   guard supportedCoins.contains(coin) else { throw NativeArgumentValidationError.invalid }
   return coin
+}
+
+func requirePrivateKeySessionId(_ arguments: [String: Any]) throws -> String {
+  let sessionId = try requireStringArgument(arguments, "sessionId")
+  guard sessionId.count <= 80,
+    sessionId.range(of: "^[A-Za-z0-9_-]{1,80}$", options: .regularExpression) != nil
+  else { throw NativeArgumentValidationError.invalid }
+  return sessionId
+}
+
+func requirePrivateKeyCopyMode(_ arguments: [String: Any]) throws -> String {
+  let mode = try requireStringArgument(arguments, "mode")
+  guard privateKeyCopyModes.contains(mode) else {
+    throw NativeArgumentValidationError.invalid
+  }
+  return mode
 }
 
 func requireSigningInput(_ arguments: [String: Any]) throws -> Data {

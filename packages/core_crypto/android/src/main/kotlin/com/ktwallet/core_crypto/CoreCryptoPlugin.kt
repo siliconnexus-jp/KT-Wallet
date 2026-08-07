@@ -1,5 +1,20 @@
 package com.ktwallet.core_crypto
 
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
+import android.content.ComponentCallbacks2
+import android.content.Context
+import android.content.res.Configuration
+import android.graphics.Typeface
+import android.os.Build
+import android.os.PersistableBundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.view.Gravity
+import android.view.View
+import android.widget.TextView
 import androidx.annotation.NonNull
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
@@ -10,7 +25,13 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
+import io.flutter.plugin.common.StandardMessageCodec
+import io.flutter.plugin.platform.PlatformView
+import io.flutter.plugin.platform.PlatformViewFactory
+import java.lang.ref.WeakReference
+import java.util.UUID
 import java.util.concurrent.Executor
+import java.security.MessageDigest
 
 /**
  * Channel dispatcher for `kt/core_crypto` (detailed-design.md §2.1). Auth-bound
@@ -20,15 +41,27 @@ import java.util.concurrent.Executor
 class CoreCryptoPlugin :
     FlutterPlugin,
     ActivityAware,
-    MethodCallHandler {
+    MethodCallHandler,
+    ComponentCallbacks2 {
     private lateinit var channel: MethodChannel
     private val keystore = KeystoreManager()
     private val cipher = EntropyCipher()
     private val portableBackupCipher = PortableBackupCipher()
     private lateinit var authGate: AuthGate
+    private lateinit var applicationContext: Context
     private var activity: FragmentActivity? = null
     private lateinit var blobStore: BlobStore
     private val walletStorageLock = Any()
+    private val privateKeySessionLock = Any()
+    private val privateKeySessions = mutableMapOf<String, PrivateKeySession>()
+    private val privateKeyViews = mutableListOf<WeakReference<PrivateKeyPlatformView>>()
+    private val clipboardHandler = Handler(Looper.getMainLooper())
+
+    private data class PrivateKeySession(
+        val walletId: String,
+        val keys: MutableMap<String, ByteArray>,
+        val expiresAtMs: Long,
+    )
 
     private val walletIdMethods = setOf(
         "storeWallet",
@@ -37,6 +70,7 @@ class CoreCryptoPlugin :
         "derivePublicKeys",
         "signTransaction",
         "exportMnemonic",
+        "beginPrivateKeyExport",
         "createBackup",
         "deleteWallet",
     )
@@ -45,10 +79,18 @@ class CoreCryptoPlugin :
         channel = MethodChannel(binding.binaryMessenger, "kt/core_crypto")
         blobStore = BlobStore(binding.applicationContext)
         authGate = AuthGate(PrefsAuthGateStore(binding.applicationContext))
+        applicationContext = binding.applicationContext
+        applicationContext.registerComponentCallbacks(this)
+        binding.platformViewRegistry.registerViewFactory(
+            "kt/private_key_view",
+            PrivateKeyPlatformViewFactory(this),
+        )
         channel.setMethodCallHandler(this)
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        clearPrivateKeySessions()
+        applicationContext.unregisterComponentCallbacks(this)
         channel.setMethodCallHandler(null)
     }
 
@@ -56,13 +98,27 @@ class CoreCryptoPlugin :
         activity = binding.activity as? FragmentActivity
     }
 
-    override fun onDetachedFromActivity() { activity = null }
+    override fun onDetachedFromActivity() {
+        clearPrivateKeySessions()
+        activity = null
+    }
     override fun onReattachedToActivityForConfigChanges(b: ActivityPluginBinding) =
         onAttachedToActivity(b)
     override fun onDetachedFromActivityForConfigChanges() = onDetachedFromActivity()
 
     override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
         try {
+            when (call.method) {
+                "beginPrivateKeyExport" ->
+                    requireExactArgumentKeys(call.arguments, setOf("walletId"))
+                "copyPrivateKey" ->
+                    requireExactArgumentKeys(
+                        call.arguments,
+                        setOf("sessionId", "coin", "mode"),
+                    )
+                "endPrivateKeyExport" ->
+                    requireExactArgumentKeys(call.arguments, setOf("sessionId"))
+            }
             // Validate before any BiometricPrompt or filesystem/Keychain work.
             // The Dart API checks too, but the native MethodChannel is a trust
             // boundary and must not accept path separators or arbitrary IDs.
@@ -135,6 +191,12 @@ class CoreCryptoPlugin :
                 "derivePublicKeys" -> result.success(derivePublicKeys(call))
                 "signTransaction" -> signTransaction(call, result)
                 "exportMnemonic" -> exportMnemonic(call, result)
+                "beginPrivateKeyExport" -> beginPrivateKeyExport(call, result)
+                "copyPrivateKey" -> result.success(copyPrivateKey(call))
+                "endPrivateKeyExport" -> {
+                    endPrivateKeyExport(call)
+                    result.success(true)
+                }
                 // Same secret as exportMnemonic, same prompt. The difference is
                 // only where it goes: a file the user carries off the device
                 // rather than the screen.
@@ -263,6 +325,165 @@ class CoreCryptoPlugin :
         }
     }
 
+    private fun beginPrivateKeyExport(call: MethodCall, result: Result) {
+        promptThen(result, "View private keys") {
+            val walletId = requireValidWalletId(call.argument<Any?>("walletId"))
+            var keys = emptyMap<String, ByteArray>()
+            withEntropy(call) { keys = WalletCoreBridge.privateKeys(it) }
+            val owned = keys.mapValuesTo(mutableMapOf()) { (_, key) -> key.copyOf() }
+            keys.values.forEach { it.fill(0) }
+            val sessionId = UUID.randomUUID().toString()
+            synchronized(privateKeySessionLock) {
+                clearExpiredPrivateKeySessionsLocked()
+                val previous = privateKeySessions.filterValues {
+                    it.walletId == walletId
+                }.keys.toList()
+                previous.forEach { privateKeySessions.remove(it)?.wipe() }
+                privateKeySessions[sessionId] = PrivateKeySession(
+                    walletId = walletId,
+                    keys = owned,
+                    expiresAtMs = SystemClock.elapsedRealtime() + 5 * 60 * 1000L,
+                )
+            }
+            sessionId
+        }
+    }
+
+    private fun copyPrivateKey(call: MethodCall): Map<String, String> {
+        val sessionId = requirePrivateKeySessionId(call.argument<Any?>("sessionId"))
+        val coin = requireSupportedCoin(call.argument<Any?>("coin"))
+        val mode = requirePrivateKeyCopyMode(call.argument<Any?>("mode"))
+        val family = privateKeyFamily(coin)
+        val key = synchronized(privateKeySessionLock) {
+            clearExpiredPrivateKeySessionsLocked()
+            privateKeySessions[sessionId]?.keys?.get(family)?.copyOf()
+                ?: throw InvalidNativeArgumentException()
+        }
+        var encoded = ""
+        try {
+            encoded = WalletCoreBridge.encodePrivateKey(key, coin)
+            if (encoded.length <= 6) throw InvalidNativeArgumentException()
+            val suffix = if (mode == "safe") encoded.takeLast(6) else ""
+            val clipboardText = if (mode == "safe") encoded.dropLast(6) else encoded
+            writeSensitiveClipboard(clipboardText)
+            return mapOf("suffix" to suffix)
+        } finally {
+            key.fill(0)
+            encoded = ""
+        }
+    }
+
+    private fun endPrivateKeyExport(call: MethodCall) {
+        val sessionId = requirePrivateKeySessionId(call.argument<Any?>("sessionId"))
+        synchronized(privateKeySessionLock) {
+            privateKeySessions.remove(sessionId)?.wipe()
+        }
+    }
+
+    private fun privateKeyFamily(coin: String): String = when (coin) {
+        "eth", "polygon", "base", "arbitrum", "avalanche", "bnb" -> "evm"
+        "tron" -> "tron"
+        "solana" -> "solana"
+        else -> throw InvalidNativeArgumentException()
+    }
+
+    internal fun privateKeyText(arguments: Any?): String {
+        val values = arguments as? Map<*, *> ?: throw InvalidNativeArgumentException()
+        if (values.keys != setOf("sessionId", "coin")) {
+            throw InvalidNativeArgumentException()
+        }
+        val sessionId = requirePrivateKeySessionId(values["sessionId"])
+        val coin = requireSupportedCoin(values["coin"])
+        val family = privateKeyFamily(coin)
+        val key = synchronized(privateKeySessionLock) {
+            clearExpiredPrivateKeySessionsLocked()
+            privateKeySessions[sessionId]?.keys?.get(family)?.copyOf()
+                ?: throw InvalidNativeArgumentException()
+        }
+        return try {
+            WalletCoreBridge.encodePrivateKey(key, coin)
+        } finally {
+            key.fill(0)
+        }
+    }
+
+    internal fun registerPrivateKeyView(view: PrivateKeyPlatformView) {
+        synchronized(privateKeyViews) {
+            privateKeyViews.removeAll { it.get() == null }
+            privateKeyViews += WeakReference(view)
+        }
+    }
+
+    private fun writeSensitiveClipboard(value: String) {
+        val manager = applicationContext.getSystemService(Context.CLIPBOARD_SERVICE)
+            as ClipboardManager
+        val clip = ClipData.newPlainText("", value)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            clip.description.extras = PersistableBundle().apply {
+                putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+            }
+        }
+        manager.setPrimaryClip(clip)
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(value.toByteArray(Charsets.UTF_8))
+        clipboardHandler.postDelayed({
+            try {
+                val current = manager.primaryClip
+                    ?.getItemAt(0)
+                    ?.coerceToText(applicationContext)
+                    ?.toString()
+                    ?: return@postDelayed
+                val currentDigest = MessageDigest.getInstance("SHA-256")
+                    .digest(current.toByteArray(Charsets.UTF_8))
+                try {
+                    if (currentDigest.contentEquals(digest)) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            manager.clearPrimaryClip()
+                        } else {
+                            manager.setPrimaryClip(ClipData.newPlainText("", ""))
+                        }
+                    }
+                } finally {
+                    currentDigest.fill(0)
+                }
+            } finally {
+                digest.fill(0)
+            }
+        }, 60_000L)
+    }
+
+    private fun PrivateKeySession.wipe() {
+        keys.values.forEach { it.fill(0) }
+        keys.clear()
+    }
+
+    private fun clearExpiredPrivateKeySessionsLocked() {
+        val now = SystemClock.elapsedRealtime()
+        val expired = privateKeySessions.filterValues { it.expiresAtMs <= now }.keys
+        expired.forEach { privateKeySessions.remove(it)?.wipe() }
+    }
+
+    private fun clearPrivateKeySessions() {
+        synchronized(privateKeySessionLock) {
+            privateKeySessions.values.forEach { it.wipe() }
+            privateKeySessions.clear()
+        }
+        val views = synchronized(privateKeyViews) {
+            privateKeyViews.mapNotNull { it.get() }.also { privateKeyViews.clear() }
+        }
+        clipboardHandler.post { views.forEach { it.conceal() } }
+    }
+
+    override fun onTrimMemory(level: Int) {
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+            clearPrivateKeySessions()
+        }
+    }
+
+    override fun onLowMemory() = clearPrivateKeySessions()
+
+    override fun onConfigurationChanged(newConfig: Configuration) = Unit
+
     /** Re-seals the stored entropy under the user's backup password. Note this
      *  re-seals rather than copying the stored blob: that blob is wrapped in a
      *  Keystore key that never leaves this device, and its optional KDF layer
@@ -298,6 +519,12 @@ class CoreCryptoPlugin :
     private fun deleteWallet(call: MethodCall, result: Result) {
         promptThen(result, "Confirm wallet deletion") {
             val walletId = requireValidWalletId(call.argument<Any?>("walletId"))
+            synchronized(privateKeySessionLock) {
+                val owned = privateKeySessions.filterValues {
+                    it.walletId == walletId
+                }.keys.toList()
+                owned.forEach { privateKeySessions.remove(it)?.wipe() }
+            }
             blobStore.delete(walletId)
             keystore.deleteKey(walletId)
             true
@@ -409,6 +636,49 @@ class CoreCryptoPlugin :
 
     private fun errorDetails(e: Exception): Any? =
         if (e is AuthGate.LockedException) mapOf("cooldownSec" to e.cooldownSec) else null
+}
+
+internal class PrivateKeyPlatformViewFactory(
+    private val plugin: CoreCryptoPlugin,
+) : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
+    override fun create(context: Context, viewId: Int, args: Any?): PlatformView {
+        val text = runCatching { plugin.privateKeyText(args) }.getOrDefault("")
+        return PrivateKeyPlatformView(context, text).also(plugin::registerPrivateKeyView)
+    }
+}
+
+internal class PrivateKeyPlatformView(
+    context: Context,
+    private var secret: String,
+) : PlatformView {
+    private val handler = Handler(Looper.getMainLooper())
+    private val label = TextView(context).apply {
+        setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        setTextColor(android.graphics.Color.BLACK)
+        typeface = Typeface.MONOSPACE
+        textSize = 15f
+        gravity = Gravity.CENTER
+        setPadding(22, 30, 22, 20)
+        setTextIsSelectable(false)
+        text = secret
+    }
+    private val concealTask = Runnable { conceal() }
+
+    init {
+        handler.postDelayed(concealTask, 60_000L)
+    }
+
+    override fun getView(): View = label
+
+    override fun dispose() {
+        handler.removeCallbacks(concealTask)
+        conceal()
+    }
+
+    fun conceal() {
+        secret = ""
+        label.text = ""
+    }
 }
 
 internal class BackupFormatVersionException : Exception("unsupported backup format")

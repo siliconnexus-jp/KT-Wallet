@@ -12,6 +12,12 @@ internal val SUPPORTED_COINS = setOf(
     "eth", "polygon", "base", "arbitrum", "avalanche", "bnb", "tron", "solana",
 )
 internal val VALID_ENTROPY_SIZES = setOf(16, 24, 32)
+internal val PRIVATE_KEY_COPY_MODES = setOf("safe", "full")
+
+internal fun requireExactArgumentKeys(arguments: Any?, expected: Set<String>) {
+    val values = arguments as? Map<*, *> ?: throw InvalidNativeArgumentException()
+    if (values.keys != expected) throw InvalidNativeArgumentException()
+}
 
 /**
  * MethodChannel is a native trust boundary. These helpers deliberately accept
@@ -85,6 +91,20 @@ internal fun requireSupportedCoin(value: Any?): String {
     val coin = requireNativeString(value)
     if (coin !in SUPPORTED_COINS) throw InvalidNativeArgumentException()
     return coin
+}
+
+internal fun requirePrivateKeySessionId(value: Any?): String {
+    val sessionId = requireNativeString(value)
+    if (!Regex("^[A-Za-z0-9_-]{1,80}$").matches(sessionId)) {
+        throw InvalidNativeArgumentException()
+    }
+    return sessionId
+}
+
+internal fun requirePrivateKeyCopyMode(value: Any?): String {
+    val mode = requireNativeString(value)
+    if (mode !in PRIVATE_KEY_COPY_MODES) throw InvalidNativeArgumentException()
+    return mode
 }
 
 internal fun requireSigningInput(value: Any?): ByteArray {

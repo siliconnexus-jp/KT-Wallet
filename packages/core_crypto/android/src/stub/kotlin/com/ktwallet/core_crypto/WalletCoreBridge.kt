@@ -29,6 +29,8 @@ object WalletCoreBridge {
     fun addresses(entropy: ByteArray): Map<String, String> = throw UnavailableException()
     fun publicKeys(entropy: ByteArray): Map<String, ByteArray> = throw UnavailableException()
     fun exportMnemonic(entropy: ByteArray): String = throw UnavailableException()
+    fun privateKeys(entropy: ByteArray): Map<String, ByteArray> = throw UnavailableException()
+    fun encodePrivateKey(key: ByteArray, coin: String): String = throw UnavailableException()
 
     data class Signed(val signedTx: ByteArray, val txHash: String)
 

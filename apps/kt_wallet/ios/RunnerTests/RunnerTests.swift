@@ -72,6 +72,16 @@ class RunnerTests: XCTestCase {
     XCTAssertEqual(try requireSuggestionLimit(["limit": 20]), 20)
     XCTAssertEqual(try requireSupportedCoin(["coin": "solana"]), "solana")
     XCTAssertEqual(
+      try requirePrivateKeySessionId(["sessionId": "session_01-A"]), "session_01-A")
+    XCTAssertEqual(try requirePrivateKeyCopyMode(["mode": "safe"]), "safe")
+    XCTAssertEqual(try requirePrivateKeyCopyMode(["mode": "full"]), "full")
+    XCTAssertNoThrow(try requireExactArgumentKeys(
+      ["sessionId": "session_1", "coin": "eth", "mode": "safe"],
+      ["sessionId", "coin", "mode"]))
+    XCTAssertThrowsError(try requireExactArgumentKeys(
+      ["sessionId": "session_1", "coin": "eth", "mode": "safe", "extra": true],
+      ["sessionId", "coin", "mode"]))
+    XCTAssertEqual(
       try requireSigningInput([
         "signingInput": FlutterStandardTypedData(bytes: Data([1])),
       ]), Data([1]))
@@ -99,6 +109,9 @@ class RunnerTests: XCTestCase {
       { _ = try requireMnemonicText(["mnemonic": String(repeating: "x", count: 513)]) },
       { _ = try requireWordText(["word": String(repeating: "x", count: 65)]) },
       { _ = try requireSupportedCoin(["coin": "bitcoin"]) },
+      { _ = try requirePrivateKeySessionId(["sessionId": "../session"]) },
+      { _ = try requirePrivateKeySessionId(["sessionId": ""]) },
+      { _ = try requirePrivateKeyCopyMode(["mode": "partial"]) },
       {
         _ = try requireSigningInput([
           "signingInput": FlutterStandardTypedData(bytes: Data()),
@@ -132,6 +145,35 @@ class RunnerTests: XCTestCase {
     for size in [0, 16, 18, 60, 62, 76, 78, 4096] {
       XCTAssertThrowsError(try requireStoredWalletPayloadSize(Data(count: size)))
     }
+  }
+
+  func testPrivateKeyExportEncodingIsBoundedAndChainSpecific() throws {
+    let mnemonic =
+      "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+    var entropy = try WalletCoreBridge.entropy(from: mnemonic)
+    defer { entropy.resetBytes(in: 0..<entropy.count) }
+    var keys = try WalletCoreBridge.privateKeys(fromEntropy: entropy)
+    defer {
+      for (name, var value) in keys {
+        value.resetBytes(in: 0..<value.count)
+        keys[name] = value
+      }
+    }
+
+    XCTAssertEqual(keys["evm"]?.count, 32)
+    XCTAssertEqual(keys["tron"]?.count, 32)
+    XCTAssertEqual(keys["solana"]?.count, 32)
+    XCTAssertEqual(
+      try WalletCoreBridge.encodePrivateKey(keys["evm"]!, coin: "eth").count,
+      64)
+    XCTAssertEqual(
+      try WalletCoreBridge.encodePrivateKey(keys["tron"]!, coin: "tron").count,
+      64)
+    XCTAssertTrue(
+      (43...44).contains(
+        try WalletCoreBridge.encodePrivateKey(keys["solana"]!, coin: "solana").count))
+    XCTAssertThrowsError(
+      try WalletCoreBridge.encodePrivateKey(keys["evm"]!, coin: "bitcoin"))
   }
 
   func testKeychainWalletSlotIsCreateOnly() throws {

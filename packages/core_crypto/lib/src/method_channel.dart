@@ -135,6 +135,54 @@ class MethodChannelCoreCrypto implements CoreCrypto {
   }
 
   @override
+  Future<String> beginPrivateKeyExport(String walletId) async {
+    CoreCryptoValidation.checkWalletId(walletId);
+    final sessionId = await _invoke<String>('beginPrivateKeyExport', {
+      'walletId': walletId,
+    });
+    if (!CoreCryptoValidation.isValidPrivateKeySessionId(sessionId)) {
+      throw const InvalidInputException();
+    }
+    return sessionId;
+  }
+
+  @override
+  Future<String> copyPrivateKey({
+    required String sessionId,
+    required Coin coin,
+    required PrivateKeyCopyMode mode,
+  }) async {
+    CoreCryptoValidation.checkPrivateKeySessionId(sessionId);
+    final result = await _invoke<Map<Object?, Object?>>('copyPrivateKey', {
+      'sessionId': sessionId,
+      'coin': coin.name,
+      'mode': mode.name,
+    });
+    final suffix = result['suffix'];
+    final validSuffix = switch (coin) {
+      Coin.solana => RegExp(r'^[1-9A-HJ-NP-Za-km-z]{6}$').hasMatch,
+      _ => RegExp(r'^[0-9a-f]{6}$').hasMatch,
+    };
+    if (result.length != 1 ||
+        suffix is! String ||
+        (mode == PrivateKeyCopyMode.safe && suffix.length != 6) ||
+        (mode == PrivateKeyCopyMode.safe && !validSuffix(suffix)) ||
+        (mode == PrivateKeyCopyMode.full && suffix.isNotEmpty)) {
+      throw const InvalidInputException();
+    }
+    return suffix;
+  }
+
+  @override
+  Future<void> endPrivateKeyExport(String sessionId) async {
+    CoreCryptoValidation.checkPrivateKeySessionId(sessionId);
+    final ended = await _invoke<bool>('endPrivateKeyExport', {
+      'sessionId': sessionId,
+    });
+    if (!ended) throw const InvalidInputException();
+  }
+
+  @override
   Future<Uint8List> createBackup({
     required String walletId,
     required String password,

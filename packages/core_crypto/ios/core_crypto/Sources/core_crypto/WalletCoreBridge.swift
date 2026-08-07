@@ -78,6 +78,32 @@ enum WalletCoreBridge {
     ]
   }
 
+  /// Derives the three unique account keys used by KT Wallet. All EVM
+  /// networks intentionally share the Ethereum account path/address.
+  /// Returned buffers are owned by the caller and must be wiped.
+  static func privateKeys(fromEntropy entropy: Data) throws -> [String: Data] {
+    let wallet = try wallet(fromEntropy: entropy)
+    let keys = [
+      "evm": wallet.getKeyForCoin(coin: .ethereum).data,
+      "tron": wallet.getKeyForCoin(coin: .tron).data,
+      "solana": wallet.getKeyForCoin(coin: .solana).data,
+    ]
+    guard keys.values.allSatisfy({ $0.count == 32 }) else {
+      throw BridgeError.invalidInput
+    }
+    return keys
+  }
+
+  static func encodePrivateKey(_ key: Data, coin: String) throws -> String {
+    guard key.count == 32 else { throw BridgeError.invalidInput }
+    switch coin {
+    case "solana": return Base58.encodeNoCheck(data: key)
+    case "eth", "polygon", "base", "arbitrum", "avalanche", "bnb", "tron":
+      return key.hexString
+    default: throw BridgeError.invalidInput
+    }
+  }
+
   private static func coinType(_ coin: String) -> CoinType? {
     switch coin {
     case "eth": return .ethereum

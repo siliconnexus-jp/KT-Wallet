@@ -8,17 +8,60 @@ import WalletCore
 /// Every argument is validated again at this native trust boundary before it
 /// can reach authentication, Keychain, KDF, or Wallet Core.
 public class CoreCryptoPlugin: NSObject, FlutterPlugin {
+  private final class PrivateKeySession {
+    let walletId: String
+    var keys: [String: NSMutableData]
+    let expiresAt: Date
+
+    init(walletId: String, keys: [String: Data], expiresAt: Date) {
+      self.walletId = walletId
+      self.keys = keys.mapValues { NSMutableData(data: $0) }
+      self.expiresAt = expiresAt
+    }
+
+    func wipe() {
+      for value in keys.values where value.length > 0 {
+        memset(value.mutableBytes, 0, value.length)
+      }
+      keys.removeAll(keepingCapacity: false)
+    }
+
+    deinit { wipe() }
+  }
+
+  private let privateKeySessionLock = NSLock()
+  private var privateKeySessions: [String: PrivateKeySession] = [:]
+  private let privateKeyViews = NSHashTable<PrivateKeyPlatformView>.weakObjects()
+
   private static let walletIdMethods: Set<String> = [
     "storeWallet", "walletExists", "deriveAddresses", "derivePublicKeys",
     "signTransaction",
-    "exportMnemonic", "createBackup", "deleteWallet",
+    "exportMnemonic", "beginPrivateKeyExport", "createBackup", "deleteWallet",
     "signTransactionForIntegrationTest", "deleteWalletForIntegrationTest",
   ]
+
+  public override init() {
+    super.init()
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(clearPrivateKeySessionsForBackground),
+      name: UIApplication.didEnterBackgroundNotification,
+      object: nil)
+  }
+
+  deinit {
+    NotificationCenter.default.removeObserver(self)
+    clearPrivateKeySessions()
+  }
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
       name: "kt/core_crypto", binaryMessenger: registrar.messenger())
-    registrar.addMethodCallDelegate(CoreCryptoPlugin(), channel: channel)
+    let plugin = CoreCryptoPlugin()
+    registrar.addMethodCallDelegate(plugin, channel: channel)
+    registrar.register(
+      PrivateKeyPlatformViewFactory(plugin: plugin),
+      withId: "kt/private_key_view")
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -32,6 +75,16 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
   private func dispatch(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) async {
     let a = args(call)
     do {
+      switch call.method {
+      case "beginPrivateKeyExport":
+        try requireExactArgumentKeys(a, ["walletId"])
+      case "copyPrivateKey":
+        try requireExactArgumentKeys(a, ["sessionId", "coin", "mode"])
+      case "endPrivateKeyExport":
+        try requireExactArgumentKeys(a, ["sessionId"])
+      default:
+        break
+      }
       // Reject malformed identifiers before authentication or native storage.
       // The Dart wrapper validates too; the MethodChannel remains its own
       // trust boundary and must be safe when invoked directly.
@@ -81,6 +134,16 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
 
       case "exportMnemonic":
         result(try await exportMnemonic(a))
+
+      case "beginPrivateKeyExport":
+        result(try await beginPrivateKeyExport(a))
+
+      case "copyPrivateKey":
+        result(try await copyPrivateKey(a))
+
+      case "endPrivateKeyExport":
+        try endPrivateKeyExport(a)
+        result(true)
 
       // Same secret as exportMnemonic, same auth. The difference is only where
       // it goes — a file the user carries off the device instead of the screen.
@@ -261,6 +324,126 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
     }
   }
 
+  private func beginPrivateKeyExport(_ a: [String: Any]) async throws -> String {
+    let walletId = try requireValidWalletId(a["walletId"])
+    let context = try await AuthGate.shared.authenticate(reason: "View private keys")
+    var keys = try withEntropy(a, context: context) {
+      try WalletCoreBridge.privateKeys(fromEntropy: $0)
+    }
+    defer {
+      for (name, var value) in keys {
+        value.resetBytes(in: 0..<value.count)
+        keys[name] = value
+      }
+      keys.removeAll(keepingCapacity: false)
+    }
+    let sessionId = UUID().uuidString
+    let session = PrivateKeySession(
+      walletId: walletId,
+      keys: keys,
+      expiresAt: Date().addingTimeInterval(5 * 60))
+    storePrivateKeySession(session, id: sessionId)
+    return sessionId
+  }
+
+  private func copyPrivateKey(_ a: [String: Any]) async throws -> [String: String] {
+    let sessionId = try requirePrivateKeySessionId(a)
+    let coin = try requireSupportedCoin(a)
+    let mode = try requirePrivateKeyCopyMode(a)
+    let family = try privateKeyFamily(coin)
+    var key = try privateKeyData(sessionId: sessionId, family: family)
+    defer { key.resetBytes(in: 0..<key.count) }
+    var encoded = try WalletCoreBridge.encodePrivateKey(key, coin: coin)
+    guard encoded.count > 6 else { throw NativeArgumentValidationError.invalid }
+    let suffix = mode == "safe" ? String(encoded.suffix(6)) : ""
+    let clipboardValue = mode == "safe" ? String(encoded.dropLast(6)) : encoded
+    await MainActor.run {
+      UIPasteboard.general.setItems(
+        [["public.utf8-plain-text": clipboardValue]],
+        options: [
+          .localOnly: true,
+          .expirationDate: Date().addingTimeInterval(60),
+        ])
+    }
+    encoded = ""
+    return ["suffix": suffix]
+  }
+
+  private func endPrivateKeyExport(_ a: [String: Any]) throws {
+    let sessionId = try requirePrivateKeySessionId(a)
+    privateKeySessionLock.lock()
+    privateKeySessions.removeValue(forKey: sessionId)?.wipe()
+    privateKeySessionLock.unlock()
+  }
+
+  private func storePrivateKeySession(_ session: PrivateKeySession, id: String) {
+    privateKeySessionLock.lock()
+    clearExpiredPrivateKeySessionsLocked()
+    let previous = privateKeySessions.filter { $0.value.walletId == session.walletId }.map(\.key)
+    for sessionId in previous {
+      privateKeySessions.removeValue(forKey: sessionId)?.wipe()
+    }
+    privateKeySessions[id] = session
+    privateKeySessionLock.unlock()
+  }
+
+  private func privateKeyData(sessionId: String, family: String) throws -> Data {
+    privateKeySessionLock.lock()
+    defer { privateKeySessionLock.unlock() }
+    clearExpiredPrivateKeySessionsLocked()
+    guard let stored = privateKeySessions[sessionId]?.keys[family] else {
+      throw NativeArgumentValidationError.invalid
+    }
+    return Data(bytes: stored.bytes, count: stored.length)
+  }
+
+  fileprivate func privateKeyText(_ arguments: Any?) throws -> String {
+    guard let a = arguments as? [String: Any],
+          Set(a.keys) == Set(["sessionId", "coin"])
+    else { throw NativeArgumentValidationError.invalid }
+    let sessionId = try requirePrivateKeySessionId(a)
+    let coin = try requireSupportedCoin(a)
+    let family = try privateKeyFamily(coin)
+    var key = try privateKeyData(sessionId: sessionId, family: family)
+    defer { key.resetBytes(in: 0..<key.count) }
+    return try WalletCoreBridge.encodePrivateKey(key, coin: coin)
+  }
+
+  fileprivate func registerPrivateKeyView(_ view: PrivateKeyPlatformView) {
+    privateKeyViews.add(view)
+  }
+
+  private func privateKeyFamily(_ coin: String) throws -> String {
+    switch coin {
+    case "eth", "polygon", "base", "arbitrum", "avalanche", "bnb": return "evm"
+    case "tron": return "tron"
+    case "solana": return "solana"
+    default: throw NativeArgumentValidationError.invalid
+    }
+  }
+
+  private func clearExpiredPrivateKeySessionsLocked() {
+    let expired = privateKeySessions.filter { $0.value.expiresAt <= Date() }.map(\.key)
+    for sessionId in expired {
+      privateKeySessions.removeValue(forKey: sessionId)?.wipe()
+    }
+  }
+
+  private func clearPrivateKeySessions() {
+    privateKeySessionLock.lock()
+    for session in privateKeySessions.values { session.wipe() }
+    privateKeySessions.removeAll(keepingCapacity: false)
+    privateKeySessionLock.unlock()
+    let views = privateKeyViews.allObjects
+    DispatchQueue.main.async {
+      for view in views { view.conceal() }
+    }
+  }
+
+  @objc private func clearPrivateKeySessionsForBackground() {
+    clearPrivateKeySessions()
+  }
+
   /// Seals the stored entropy under the user's backup password. Note this
   /// re-seals rather than copying the Keychain blob: that blob may carry the
   /// KDF layer under a *different* password, and a backup nobody can open is
@@ -306,5 +489,86 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
     case .signFailed:
       return FlutterError(code: "SIGN_FAILED", message: nil, details: nil)
     }
+  }
+}
+
+fileprivate final class PrivateKeyPlatformViewFactory: NSObject, FlutterPlatformViewFactory {
+  private weak var plugin: CoreCryptoPlugin?
+
+  init(plugin: CoreCryptoPlugin) {
+    self.plugin = plugin
+    super.init()
+  }
+
+  func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol {
+    FlutterStandardMessageCodec.sharedInstance()
+  }
+
+  func create(
+    withFrame frame: CGRect,
+    viewIdentifier viewId: Int64,
+    arguments args: Any?
+  ) -> FlutterPlatformView {
+    let text = try? plugin?.privateKeyText(args)
+    let view = PrivateKeyPlatformView(frame: frame, text: text ?? "")
+    plugin?.registerPrivateKeyView(view)
+    return view
+  }
+}
+
+fileprivate final class PrivateKeyPlatformView: NSObject, FlutterPlatformView {
+  private let container: UIView
+  private let label: UITextView
+  private var concealTimer: Timer?
+
+  init(frame: CGRect, text: String) {
+    container = UIView(frame: frame)
+    container.backgroundColor = .clear
+    label = UITextView(frame: container.bounds)
+    label.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    label.backgroundColor = .clear
+    label.text = text
+    label.textColor = .label
+    label.font = .monospacedSystemFont(ofSize: 15, weight: .medium)
+    label.textAlignment = .center
+    label.isEditable = false
+    label.isSelectable = false
+    label.isScrollEnabled = false
+    label.textContainerInset = UIEdgeInsets(top: 38, left: 22, bottom: 20, right: 22)
+    container.addSubview(label)
+    super.init()
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(conceal),
+      name: UIApplication.didEnterBackgroundNotification,
+      object: nil)
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(captureStateChanged),
+      name: UIScreen.capturedDidChangeNotification,
+      object: nil)
+    concealTimer = Timer.scheduledTimer(
+      timeInterval: 60,
+      target: self,
+      selector: #selector(conceal),
+      userInfo: nil,
+      repeats: false)
+    captureStateChanged()
+  }
+
+  deinit {
+    concealTimer?.invalidate()
+    NotificationCenter.default.removeObserver(self)
+    conceal()
+  }
+
+  func view() -> UIView { container }
+
+  @objc fileprivate func conceal() {
+    label.text = nil
+  }
+
+  @objc private func captureStateChanged() {
+    if UIScreen.main.isCaptured { conceal() }
   }
 }

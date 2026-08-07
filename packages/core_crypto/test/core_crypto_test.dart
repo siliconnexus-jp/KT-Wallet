@@ -84,6 +84,38 @@ void main() {
       expect(s1.txHash, s2.txHash);
       expect(s1.txHash, isNot(s3.txHash));
     });
+
+    test('private-key export exposes only safe-copy suffix', () async {
+      final mock = MockCoreCrypto();
+      await mock.storeWallet(
+        walletId: 'w1',
+        mnemonic: await mock.generateMnemonic(),
+      );
+
+      final session = await mock.beginPrivateKeyExport('w1');
+      final suffix = await mock.copyPrivateKey(
+        sessionId: session,
+        coin: Coin.eth,
+        mode: PrivateKeyCopyMode.safe,
+      );
+      final fullResult = await mock.copyPrivateKey(
+        sessionId: session,
+        coin: Coin.eth,
+        mode: PrivateKeyCopyMode.full,
+      );
+
+      expect(suffix, hasLength(6));
+      expect(fullResult, isEmpty);
+      await mock.endPrivateKeyExport(session);
+      await expectLater(
+        () => mock.copyPrivateKey(
+          sessionId: session,
+          coin: Coin.eth,
+          mode: PrivateKeyCopyMode.safe,
+        ),
+        throwsA(isA<InvalidInputException>()),
+      );
+    });
   });
 
   group('MockCoreCrypto lifecycle and errors', () {

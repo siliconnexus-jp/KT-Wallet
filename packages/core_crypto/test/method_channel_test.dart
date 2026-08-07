@@ -95,6 +95,86 @@ void main() {
     });
 
     test(
+      'private-key export uses opaque session and never returns full key',
+      () async {
+        final received = <MethodCall>[];
+        mockNative((call) async {
+          received.add(call);
+          return switch (call.method) {
+            'beginPrivateKeyExport' => 'native_session_1',
+            'copyPrivateKey' => {'suffix': 'a1b2c3'},
+            'endPrivateKeyExport' => true,
+            _ => throw StateError('unexpected ${call.method}'),
+          };
+        });
+
+        final session = await api.beginPrivateKeyExport('w1');
+        final suffix = await api.copyPrivateKey(
+          sessionId: session,
+          coin: Coin.tron,
+          mode: PrivateKeyCopyMode.safe,
+        );
+        await api.endPrivateKeyExport(session);
+
+        expect(session, 'native_session_1');
+        expect(suffix, 'a1b2c3');
+        expect(received[0].arguments, {'walletId': 'w1'});
+        expect(received[1].arguments, {
+          'sessionId': 'native_session_1',
+          'coin': 'tron',
+          'mode': 'safe',
+        });
+        expect(received[2].arguments, {'sessionId': 'native_session_1'});
+      },
+    );
+
+    test('full private-key copy requires an empty returned suffix', () async {
+      mockNative((call) async => {'suffix': 'must-not-cross'});
+      await expectLater(
+        () => api.copyPrivateKey(
+          sessionId: 'native_session_1',
+          coin: Coin.eth,
+          mode: PrivateKeyCopyMode.full,
+        ),
+        throwsA(isA<InvalidInputException>()),
+      );
+    });
+
+    test('private-key responses are decoded strictly', () async {
+      mockNative((call) async => '../invalid-session');
+      await expectLater(
+        () => api.beginPrivateKeyExport('w1'),
+        throwsA(isA<InvalidInputException>()),
+      );
+
+      mockNative((call) async => {'suffix': 'a1b2c3', 'unexpected': true});
+      await expectLater(
+        () => api.copyPrivateKey(
+          sessionId: 'native_session_1',
+          coin: Coin.eth,
+          mode: PrivateKeyCopyMode.safe,
+        ),
+        throwsA(isA<InvalidInputException>()),
+      );
+
+      mockNative((call) async => {'suffix': 'zzzzzz'});
+      await expectLater(
+        () => api.copyPrivateKey(
+          sessionId: 'native_session_1',
+          coin: Coin.tron,
+          mode: PrivateKeyCopyMode.safe,
+        ),
+        throwsA(isA<InvalidInputException>()),
+      );
+
+      mockNative((call) async => false);
+      await expectLater(
+        () => api.endPrivateKeyExport('native_session_1'),
+        throwsA(isA<InvalidInputException>()),
+      );
+    });
+
+    test(
       'readBackup binds the payload to its declared format version',
       () async {
         late MethodCall received;
@@ -257,6 +337,23 @@ void main() {
       });
       await expectLater(
         () => api.exportMnemonic('bad id!'),
+        throwsArgumentError,
+      );
+      expect(nativeCalled, isFalse);
+    });
+
+    test('invalid private-key session id never reaches native', () async {
+      var nativeCalled = false;
+      mockNative((call) async {
+        nativeCalled = true;
+        return {'suffix': 'abcdef'};
+      });
+      await expectLater(
+        () => api.copyPrivateKey(
+          sessionId: '../escape',
+          coin: Coin.eth,
+          mode: PrivateKeyCopyMode.safe,
+        ),
         throwsArgumentError,
       );
       expect(nativeCalled, isFalse);

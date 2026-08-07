@@ -20,6 +20,13 @@ class NativeArgumentValidationTest {
         assertEquals(1, requireSuggestionLimit(1))
         assertEquals(20, requireSuggestionLimit(20))
         assertEquals("eth", requireSupportedCoin("eth"))
+        assertEquals("session_01-A", requirePrivateKeySessionId("session_01-A"))
+        assertEquals("safe", requirePrivateKeyCopyMode("safe"))
+        assertEquals("full", requirePrivateKeyCopyMode("full"))
+        requireExactArgumentKeys(
+            mapOf("sessionId" to "session_1", "coin" to "eth", "mode" to "safe"),
+            setOf("sessionId", "coin", "mode"),
+        )
         assertContentEquals(byteArrayOf(1), requireSigningInput(byteArrayOf(1)))
         assertContentEquals(ByteArray(60), requireBackupBlob(ByteArray(60)))
         assertEquals("password", requireBackupPassword("password"))
@@ -46,6 +53,20 @@ class NativeArgumentValidationTest {
             { requireMnemonicText("x".repeat(MAX_MNEMONIC_UTF8_BYTES + 1)) },
             { requireWordText("x".repeat(MAX_WORD_UTF8_BYTES + 1)) },
             { requireSupportedCoin("bitcoin") },
+            { requirePrivateKeySessionId("../session") },
+            { requirePrivateKeySessionId("") },
+            { requirePrivateKeyCopyMode("partial") },
+            {
+                requireExactArgumentKeys(
+                    mapOf(
+                        "sessionId" to "session_1",
+                        "coin" to "eth",
+                        "mode" to "safe",
+                        "extra" to true,
+                    ),
+                    setOf("sessionId", "coin", "mode"),
+                )
+            },
             { requireSigningInput(ByteArray(0)) },
             { requireSigningInput(ByteArray(MAX_SIGNING_INPUT_BYTES + 1)) },
             { requireBackupBlob(ByteArray(59)) },

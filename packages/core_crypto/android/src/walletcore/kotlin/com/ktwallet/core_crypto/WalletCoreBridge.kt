@@ -86,6 +86,27 @@ object WalletCoreBridge {
 
     fun exportMnemonic(entropy: ByteArray): String = HDWallet(entropy, "").mnemonic()
 
+    /** Derives the three unique account keys used by KT Wallet.
+     *
+     * Every supported EVM network intentionally shares Ethereum's account
+     * path/address. Returned arrays are owned by the caller and must be wiped.
+     */
+    fun privateKeys(entropy: ByteArray): Map<String, ByteArray> {
+        val wallet = HDWallet(entropy, "")
+        return mapOf(
+            "evm" to wallet.getKeyForCoin(CoinType.ETHEREUM).data(),
+            "tron" to wallet.getKeyForCoin(CoinType.TRON).data(),
+            "solana" to wallet.getKeyForCoin(CoinType.SOLANA).data(),
+        )
+    }
+
+    fun encodePrivateKey(key: ByteArray, coin: String): String = when (coin) {
+        "solana" -> Base58.encodeNoCheck(key)
+        "eth", "polygon", "base", "arbitrum", "avalanche", "bnb", "tron" ->
+            key.toHex()
+        else -> throw InvalidInputException()
+    }
+
     data class Signed(val signedTx: ByteArray, val txHash: String)
 
     fun sign(entropy: ByteArray, coin: String, signingInput: ByteArray): Signed {
