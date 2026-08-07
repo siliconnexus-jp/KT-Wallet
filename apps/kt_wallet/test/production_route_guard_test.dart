@@ -97,6 +97,7 @@ void main() {
       '/records',
       '/wallet-detail',
       '/wallet-addresses',
+      '/private-keys',
       '/backup',
     ]) {
       expect(_redirect(path, wallets: empty), '/add-wallet');
@@ -105,6 +106,36 @@ void main() {
     expect(_redirect('/wallet-detail?id=wallet-1'), isNull);
     expect(_redirect('/wallet-addresses?id=missing'), '/wallet-manage');
     expect(_redirect('/wallet-addresses?id=wallet-1'), isNull);
+    expect(_redirect('/private-keys'), '/wallet-manage');
+    expect(_redirect('/private-keys?id=missing'), '/wallet-manage');
+    expect(_redirect('/private-keys?id=wallet-1'), isNull);
+  });
+
+  test('private-key route rejects watch wallets', () {
+    final wallets = WalletController(
+      WalletManager(
+        initial: [
+          WatchWallet(
+            id: 'watch-1',
+            name: 'Watch',
+            avatarColor: 0xFF2557E8,
+            addresses: const ChainAddresses(
+              eth: '0x0000000000000000000000000000000000000001',
+              polygon: '0x0000000000000000000000000000000000000001',
+              tron: 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
+              solana: '11111111111111111111111111111111',
+            ),
+            coldWalletId: 'cold-1',
+            protocolVersion: 1,
+          ),
+        ],
+      ),
+      crypto: MockCoreCrypto(),
+    );
+    expect(
+      _redirect('/private-keys?id=watch-1', wallets: wallets),
+      '/wallet-detail?id=watch-1',
+    );
   });
 
   test('production creation pages require the live pending mnemonic', () async {

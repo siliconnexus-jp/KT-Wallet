@@ -419,6 +419,99 @@ class AppLocalizationsZh extends AppLocalizations {
   String get viewMnemonicDesc => '需要生物识别或密码验证';
 
   @override
+  String get viewPrivateKey => '查看私钥';
+
+  @override
+  String privateKeyWarningProgress(int current, int total) {
+    return '请注意 $current/$total';
+  }
+
+  @override
+  String get privateKeyWarningOneTitle => '确认你的周围无人旁观，并且没有摄像和录屏';
+
+  @override
+  String get privateKeyWarningOneBody =>
+      '切勿让他人观看你查看私钥的过程。若私钥被摄像或录屏，你将永久失去钱包的控制权。';
+
+  @override
+  String get privateKeyWarningTwoTitle => '请勿通过截屏或复制来保存私钥';
+
+  @override
+  String get privateKeyWarningTwoBody =>
+      '复制操作会将私钥暂存于剪贴板。若不慎发送至云盘或通讯工具，极易被他人窃取。';
+
+  @override
+  String get privateKeyWarningThreeTitle => '谁拥有私钥，谁就能控制钱包';
+
+  @override
+  String get privateKeyWarningThreeBody =>
+      '私钥一旦泄露，可能导致你的资产被盗。掌握私钥的人可以完全控制你的钱包。';
+
+  @override
+  String get privateKeyAcknowledge => '我已知悉';
+
+  @override
+  String get privateKeyBackupNow => '立即备份';
+
+  @override
+  String get privateKeyNotNow => '暂不备份';
+
+  @override
+  String privateKeyCountdownButton(String label, int seconds) {
+    return '$label（${seconds}s）';
+  }
+
+  @override
+  String get privateKeyAuthFailed => '无法验证身份，未显示或复制任何私钥。';
+
+  @override
+  String get privateKeyRetryAuth => '重新验证';
+
+  @override
+  String get privateKeyEvmNetworks => 'EVM 网络';
+
+  @override
+  String get privateKeyPrivacyHint => '请确保周围没有其他人及摄像头';
+
+  @override
+  String get privateKeySecureCopy => '安全复制';
+
+  @override
+  String get privateKeyFullCopy => '完整复制';
+
+  @override
+  String get privateKeySecureCopyTitle => '安全复制';
+
+  @override
+  String get privateKeySecureCopyBody =>
+      '为保障你的资产安全，已复制缺少末尾 6 位字符的私钥。请手动补充以下字符，确保私钥可用。';
+
+  @override
+  String get privateKeySecureCopyConfirm => '确认';
+
+  @override
+  String get privateKeyFullCopyTitle => '完整复制';
+
+  @override
+  String get privateKeyFullCopyBody =>
+      '请避免将完整私钥复制到剪贴板，防止泄露或被第三方滥用。建议使用安全复制，保障资产安全。';
+
+  @override
+  String get privateKeyCopyAction => '复制';
+
+  @override
+  String get privateKeyCopiedSecurely => '已安全复制';
+
+  @override
+  String get privateKeyCopiedFully => '完整私钥已复制，剪贴板将在 60 秒后清除';
+
+  @override
+  String get privateKeySessionExpired => '私钥查看会话已失效，请重新验证。';
+
+  @override
+  String get privateKeyNoAccounts => '当前钱包没有可导出的私钥';
+
+  @override
   String get deleteWalletDesc => '需身份验证，删除前将再次确认备份状态';
 
   @override

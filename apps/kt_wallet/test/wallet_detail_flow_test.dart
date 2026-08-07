@@ -122,10 +122,14 @@ void main() {
       find.byKey(const ValueKey('wallet-detail-view-mnemonic')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const ValueKey('wallet-detail-view-private-key')),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('wallet-detail-delete')), findsOneWidget);
     expect(find.byIcon(Icons.key), findsNothing);
     expect(find.byIcon(Icons.delete_outline), findsNothing);
-    expect(find.byType(Divider), findsNWidgets(3));
+    expect(find.byType(Divider), findsNWidgets(4));
   });
 
   testWidgets('account-address row opens the shared full-page directory', (

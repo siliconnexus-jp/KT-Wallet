@@ -12,6 +12,7 @@ import 'screens/assets_screens.dart';
 import 'screens/backup_screens.dart';
 import 'screens/camera_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/private_key_screens.dart';
 import 'screens/settings_screens.dart';
 import 'screens/transfer_screens.dart';
 import 'screens/wallet_screens.dart';
@@ -19,6 +20,7 @@ import 'state/wallet_controller.dart';
 import 'state/developer_mode.dart';
 import 'transfer/local_transfer_service.dart';
 import 'transfer/transfer_draft.dart';
+import 'wallets/wallet_model.dart';
 
 /// Registry of every implemented screen, powering both the router and a gallery
 /// index (so each screen can be opened and compared against its Pencil design).
@@ -37,6 +39,7 @@ final screenRegistry = <String, (String, WidgetBuilder)>{
   'W27 钱包管理': ('/wallet-manage', (c) => const WalletManageScreen()),
   'W28 钱包详情编辑': ('/wallet-detail', (c) => const WalletDetailScreen()),
   'W36 账户地址': ('/wallet-addresses', (c) => const WalletAddressesScreen()),
+  'W37 查看私钥': ('/private-keys', (c) => const PrivateKeyExportScreen()),
   'W2 资产列表': ('/assets', (c) => const AssetsListScreen()),
   'W3 Token 详情': ('/token', (c) => const TokenDetailScreen()),
   'W14 收款': ('/receive', (c) => const ReceiveScreen()),
@@ -135,6 +138,9 @@ GoRouter buildRouter({
               '/wallet-addresses' => (c, s) => WalletAddressesScreen(
                 walletId: s.uri.queryParameters['id'],
               ),
+              '/private-keys' => (c, s) => PrivateKeyExportScreen(
+                walletId: s.uri.queryParameters['id'],
+              ),
               '/import-confirm' => (c, s) => ImportConfirmScreen(
                 export: s.extra is AccountExport
                     ? s.extra as AccountExport
@@ -222,6 +228,7 @@ String? productionRouteRedirect({
         '/wallet-manage',
         '/wallet-detail',
         '/wallet-addresses',
+        '/private-keys',
         '/assets',
         '/token',
         '/receive',
@@ -238,11 +245,23 @@ String? productionRouteRedirect({
   // to the current wallet would show/export/delete the wrong account while
   // the URL still names another one.
   final requestedWalletId = uri.queryParameters['id']?.trim();
-  if ({'/wallet-detail', '/wallet-addresses'}.contains(path) &&
+  if ({'/wallet-detail', '/wallet-addresses', '/private-keys'}.contains(path) &&
       requestedWalletId != null &&
       requestedWalletId.isNotEmpty &&
       !walletController.wallets.any((w) => w.id == requestedWalletId)) {
     return '/wallet-manage';
+  }
+
+  if (path == '/private-keys') {
+    if (requestedWalletId == null || requestedWalletId.isEmpty) {
+      return '/wallet-manage';
+    }
+    final requested = walletController.wallets
+        .where((wallet) => wallet.id == requestedWalletId)
+        .firstOrNull;
+    if (requested is! HotWallet) {
+      return '/wallet-detail?id=${Uri.encodeQueryComponent(requestedWalletId)}';
+    }
   }
 
   if (path == '/import-confirm' && extra is! AccountExport) {

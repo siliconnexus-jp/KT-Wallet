@@ -443,6 +443,107 @@ class AppLocalizationsEn extends AppLocalizations {
   String get viewMnemonicDesc => 'Requires biometrics or passcode';
 
   @override
+  String get viewPrivateKey => 'View private keys';
+
+  @override
+  String privateKeyWarningProgress(int current, int total) {
+    return 'Please note $current/$total';
+  }
+
+  @override
+  String get privateKeyWarningOneTitle =>
+      'Make sure nobody can see you and no camera or screen recorder is active';
+
+  @override
+  String get privateKeyWarningOneBody =>
+      'Never let anyone watch while you view a private key. A recording can permanently cost you control of this wallet.';
+
+  @override
+  String get privateKeyWarningTwoTitle =>
+      'Do not save private keys with screenshots or ordinary copy';
+
+  @override
+  String get privateKeyWarningTwoBody =>
+      'Copying temporarily places key material on the clipboard. Cloud drives or messaging apps can expose it to others.';
+
+  @override
+  String get privateKeyWarningThreeTitle =>
+      'Anyone with a private key controls the wallet';
+
+  @override
+  String get privateKeyWarningThreeBody =>
+      'A leaked private key can lead to stolen assets. Whoever possesses it has complete control of your wallet.';
+
+  @override
+  String get privateKeyAcknowledge => 'I understand';
+
+  @override
+  String get privateKeyBackupNow => 'Back up now';
+
+  @override
+  String get privateKeyNotNow => 'Not now';
+
+  @override
+  String privateKeyCountdownButton(String label, int seconds) {
+    return '$label (${seconds}s)';
+  }
+
+  @override
+  String get privateKeyAuthFailed =>
+      'Authentication was not completed. No private key was shown or copied.';
+
+  @override
+  String get privateKeyRetryAuth => 'Authenticate again';
+
+  @override
+  String get privateKeyEvmNetworks => 'EVM networks';
+
+  @override
+  String get privateKeyPrivacyHint =>
+      'Make sure nobody and no camera can see your screen';
+
+  @override
+  String get privateKeySecureCopy => 'Secure copy';
+
+  @override
+  String get privateKeyFullCopy => 'Full copy';
+
+  @override
+  String get privateKeySecureCopyTitle => 'Secure copy';
+
+  @override
+  String get privateKeySecureCopyBody =>
+      'For your safety, the copied private key omits its final 6 characters. Add the characters below manually before using it.';
+
+  @override
+  String get privateKeySecureCopyConfirm => 'Confirm';
+
+  @override
+  String get privateKeyFullCopyTitle => 'Full copy';
+
+  @override
+  String get privateKeyFullCopyBody =>
+      'Avoid placing a complete private key on the clipboard, where it may leak or be read by another app. Secure copy is recommended.';
+
+  @override
+  String get privateKeyCopyAction => 'Copy';
+
+  @override
+  String get privateKeyCopiedSecurely => 'Securely copied';
+
+  @override
+  String get privateKeyCopiedFully =>
+      'Complete private key copied; clipboard clears in 60 seconds';
+
+  @override
+  String get privateKeySessionExpired =>
+      'The private-key session expired. Authenticate again.';
+
+  @override
+  String get privateKeyNoAccounts =>
+      'This wallet has no exportable private keys';
+
+  @override
   String get deleteWalletDesc =>
       'Requires authentication; backup status is reconfirmed before deletion';
 

@@ -2400,6 +2400,17 @@ class WalletDetailScreen extends StatelessWidget {
             if (isHot) ...[
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
+                onTap: () => context.push(
+                  '/private-keys?id=${Uri.encodeQueryComponent(wallet.id)}',
+                ),
+                child: SecurityRow(
+                  key: const ValueKey('wallet-detail-view-private-key'),
+                  l10n.viewPrivateKey,
+                ),
+              ),
+              const Divider(height: 1, color: WalletColors.border),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () => _showMnemonicSheet(
                   context,
                   wallet,

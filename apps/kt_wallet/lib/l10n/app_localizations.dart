@@ -862,6 +862,174 @@ abstract class AppLocalizations {
   /// **'需要生物识别或密码验证'**
   String get viewMnemonicDesc;
 
+  /// No description provided for @viewPrivateKey.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看私钥'**
+  String get viewPrivateKey;
+
+  /// No description provided for @privateKeyWarningProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'请注意 {current}/{total}'**
+  String privateKeyWarningProgress(int current, int total);
+
+  /// No description provided for @privateKeyWarningOneTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认你的周围无人旁观，并且没有摄像和录屏'**
+  String get privateKeyWarningOneTitle;
+
+  /// No description provided for @privateKeyWarningOneBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'切勿让他人观看你查看私钥的过程。若私钥被摄像或录屏，你将永久失去钱包的控制权。'**
+  String get privateKeyWarningOneBody;
+
+  /// No description provided for @privateKeyWarningTwoTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'请勿通过截屏或复制来保存私钥'**
+  String get privateKeyWarningTwoTitle;
+
+  /// No description provided for @privateKeyWarningTwoBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制操作会将私钥暂存于剪贴板。若不慎发送至云盘或通讯工具，极易被他人窃取。'**
+  String get privateKeyWarningTwoBody;
+
+  /// No description provided for @privateKeyWarningThreeTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'谁拥有私钥，谁就能控制钱包'**
+  String get privateKeyWarningThreeTitle;
+
+  /// No description provided for @privateKeyWarningThreeBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'私钥一旦泄露，可能导致你的资产被盗。掌握私钥的人可以完全控制你的钱包。'**
+  String get privateKeyWarningThreeBody;
+
+  /// No description provided for @privateKeyAcknowledge.
+  ///
+  /// In zh, this message translates to:
+  /// **'我已知悉'**
+  String get privateKeyAcknowledge;
+
+  /// No description provided for @privateKeyBackupNow.
+  ///
+  /// In zh, this message translates to:
+  /// **'立即备份'**
+  String get privateKeyBackupNow;
+
+  /// No description provided for @privateKeyNotNow.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂不备份'**
+  String get privateKeyNotNow;
+
+  /// No description provided for @privateKeyCountdownButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'{label}（{seconds}s）'**
+  String privateKeyCountdownButton(String label, int seconds);
+
+  /// No description provided for @privateKeyAuthFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法验证身份，未显示或复制任何私钥。'**
+  String get privateKeyAuthFailed;
+
+  /// No description provided for @privateKeyRetryAuth.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新验证'**
+  String get privateKeyRetryAuth;
+
+  /// No description provided for @privateKeyEvmNetworks.
+  ///
+  /// In zh, this message translates to:
+  /// **'EVM 网络'**
+  String get privateKeyEvmNetworks;
+
+  /// No description provided for @privateKeyPrivacyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'请确保周围没有其他人及摄像头'**
+  String get privateKeyPrivacyHint;
+
+  /// No description provided for @privateKeySecureCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'安全复制'**
+  String get privateKeySecureCopy;
+
+  /// No description provided for @privateKeyFullCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'完整复制'**
+  String get privateKeyFullCopy;
+
+  /// No description provided for @privateKeySecureCopyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'安全复制'**
+  String get privateKeySecureCopyTitle;
+
+  /// No description provided for @privateKeySecureCopyBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'为保障你的资产安全，已复制缺少末尾 6 位字符的私钥。请手动补充以下字符，确保私钥可用。'**
+  String get privateKeySecureCopyBody;
+
+  /// No description provided for @privateKeySecureCopyConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认'**
+  String get privateKeySecureCopyConfirm;
+
+  /// No description provided for @privateKeyFullCopyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'完整复制'**
+  String get privateKeyFullCopyTitle;
+
+  /// No description provided for @privateKeyFullCopyBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'请避免将完整私钥复制到剪贴板，防止泄露或被第三方滥用。建议使用安全复制，保障资产安全。'**
+  String get privateKeyFullCopyBody;
+
+  /// No description provided for @privateKeyCopyAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制'**
+  String get privateKeyCopyAction;
+
+  /// No description provided for @privateKeyCopiedSecurely.
+  ///
+  /// In zh, this message translates to:
+  /// **'已安全复制'**
+  String get privateKeyCopiedSecurely;
+
+  /// No description provided for @privateKeyCopiedFully.
+  ///
+  /// In zh, this message translates to:
+  /// **'完整私钥已复制，剪贴板将在 60 秒后清除'**
+  String get privateKeyCopiedFully;
+
+  /// No description provided for @privateKeySessionExpired.
+  ///
+  /// In zh, this message translates to:
+  /// **'私钥查看会话已失效，请重新验证。'**
+  String get privateKeySessionExpired;
+
+  /// No description provided for @privateKeyNoAccounts.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前钱包没有可导出的私钥'**
+  String get privateKeyNoAccounts;
+
   /// No description provided for @deleteWalletDesc.
   ///
   /// In zh, this message translates to:

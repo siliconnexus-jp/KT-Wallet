@@ -422,6 +422,100 @@ class AppLocalizationsJa extends AppLocalizations {
   String get viewMnemonicDesc => '生体認証またはパスコードが必要です';
 
   @override
+  String get viewPrivateKey => '秘密鍵を表示';
+
+  @override
+  String privateKeyWarningProgress(int current, int total) {
+    return 'ご注意 $current/$total';
+  }
+
+  @override
+  String get privateKeyWarningOneTitle =>
+      '周囲に人がおらず、カメラや画面収録が動作していないことを確認してください';
+
+  @override
+  String get privateKeyWarningOneBody =>
+      '秘密鍵を表示する操作を他人に見せないでください。撮影や録画をされると、ウォレットの管理権を永久に失うおそれがあります。';
+
+  @override
+  String get privateKeyWarningTwoTitle => 'スクリーンショットや通常のコピーで秘密鍵を保存しないでください';
+
+  @override
+  String get privateKeyWarningTwoBody =>
+      'コピーすると秘密鍵が一時的にクリップボードへ保存されます。クラウドやメッセージアプリへ送ると盗まれる危険があります。';
+
+  @override
+  String get privateKeyWarningThreeTitle => '秘密鍵を持つ人がウォレットを管理できます';
+
+  @override
+  String get privateKeyWarningThreeBody =>
+      '秘密鍵が漏れると資産を盗まれる可能性があります。秘密鍵を持つ人はウォレットを完全に操作できます。';
+
+  @override
+  String get privateKeyAcknowledge => '理解しました';
+
+  @override
+  String get privateKeyBackupNow => '今すぐバックアップ';
+
+  @override
+  String get privateKeyNotNow => '今回はしない';
+
+  @override
+  String privateKeyCountdownButton(String label, int seconds) {
+    return '$label（$seconds秒）';
+  }
+
+  @override
+  String get privateKeyAuthFailed => '認証が完了しなかったため、秘密鍵は表示もコピーもされていません。';
+
+  @override
+  String get privateKeyRetryAuth => 'もう一度認証';
+
+  @override
+  String get privateKeyEvmNetworks => 'EVM ネットワーク';
+
+  @override
+  String get privateKeyPrivacyHint => '周囲の人やカメラから画面が見えないことを確認してください';
+
+  @override
+  String get privateKeySecureCopy => '安全にコピー';
+
+  @override
+  String get privateKeyFullCopy => 'すべてコピー';
+
+  @override
+  String get privateKeySecureCopyTitle => '安全にコピー';
+
+  @override
+  String get privateKeySecureCopyBody =>
+      '安全のため、末尾6文字を除いた秘密鍵をコピーしました。使用する前に、以下の文字を手動で追加してください。';
+
+  @override
+  String get privateKeySecureCopyConfirm => '確認';
+
+  @override
+  String get privateKeyFullCopyTitle => 'すべてコピー';
+
+  @override
+  String get privateKeyFullCopyBody =>
+      '秘密鍵全体をクリップボードへコピーすると、漏えいや他のアプリによる取得の危険があります。安全なコピーを推奨します。';
+
+  @override
+  String get privateKeyCopyAction => 'コピー';
+
+  @override
+  String get privateKeyCopiedSecurely => '安全にコピーしました';
+
+  @override
+  String get privateKeyCopiedFully => '秘密鍵全体をコピーしました。60秒後にクリップボードを消去します';
+
+  @override
+  String get privateKeySessionExpired => '秘密鍵の表示セッションが期限切れです。もう一度認証してください。';
+
+  @override
+  String get privateKeyNoAccounts => 'このウォレットにはエクスポート可能な秘密鍵がありません';
+
+  @override
   String get deleteWalletDesc => '認証が必要です。削除前にバックアップ状態を再確認します';
 
   @override
