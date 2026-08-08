@@ -39,7 +39,6 @@ func TestEtherscanResponseRejectsAmbiguousProviderJSON(t *testing.T) {
 		`"to":"0x2222222222222222222222222222222222222222","value":"1",` +
 		`"isError":"0","txreceipt_status":"1"}`
 	valid := fmt.Sprintf(`{"status":"1","message":"OK","result":[%s]}`, row)
-	rowUnknown := strings.Replace(row, `"value":"1"`, `"value":"1","unexpected":true`, 1)
 	rowHashAlias := strings.Replace(row, `"hash":`, `"Hash":`, 1)
 	rowDuplicateHash := strings.Replace(row, `"hash":`, `"hash":"0xdead","hash":`, 1)
 	rowDuplicateValue := strings.Replace(row, `"value":"1"`, `"value":"2","value":"1"`, 1)
@@ -48,7 +47,6 @@ func TestEtherscanResponseRejectsAmbiguousProviderJSON(t *testing.T) {
 		name    string
 		payload string
 	}{
-		{"unknown envelope member", strings.Replace(valid, `,"result":`, `,"unexpected":true,"result":`, 1)},
 		{"status case alias", strings.Replace(valid, `"status":`, `"Status":`, 1)},
 		{"result case alias", strings.Replace(valid, `"result":`, `"Result":`, 1)},
 		{"duplicate status ending success", strings.Replace(valid, `"status":"1"`, `"status":"0","status":"1"`, 1)},
@@ -56,7 +54,6 @@ func TestEtherscanResponseRejectsAmbiguousProviderJSON(t *testing.T) {
 		{"success status with rejection message", strings.Replace(valid, `"message":"OK"`, `"message":"NOTOK"`, 1)},
 		{"rate limit disguised as empty result", `{"status":"0","message":"Max rate limit reached","result":[]}`},
 		{"no transactions status with nonempty result", fmt.Sprintf(`{"status":"0","message":"No transactions found","result":[%s]}`, row)},
-		{"unknown transaction member", fmt.Sprintf(`{"status":"1","message":"OK","result":[%s]}`, rowUnknown)},
 		{"transaction hash case alias", fmt.Sprintf(`{"status":"1","message":"OK","result":[%s]}`, rowHashAlias)},
 		{"duplicate transaction hash", fmt.Sprintf(`{"status":"1","message":"OK","result":[%s]}`, rowDuplicateHash)},
 		{"duplicate transaction value", fmt.Sprintf(`{"status":"1","message":"OK","result":[%s]}`, rowDuplicateValue)},
@@ -79,12 +76,95 @@ func TestEtherscanResponseRejectsAmbiguousProviderJSON(t *testing.T) {
 	}
 }
 
+func TestExplorerHistoryAllowsAdditiveProviderFields(t *testing.T) {
+	t.Parallel()
+
+	rows, rejected, err := decodeExplorerAccountEnvelope([]byte(
+		`{"status":"1","message":"OK","providerVersion":"v2","result":[]}`,
+	))
+	if err != nil || rejected || rows == nil {
+		t.Fatalf("additive envelope field broke history: rows=%#v rejected=%v err=%v", rows, rejected, err)
+	}
+	normal, err := decodeEtherscanTx(json.RawMessage(
+		`{"timeStamp":"1700000000",` +
+			`"hash":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",` +
+			`"from":"0x1111111111111111111111111111111111111111",` +
+			`"to":"0x2222222222222222222222222222222222222222","value":"1",` +
+			`"isError":"0","futureField":{"version":2}}`,
+	))
+	if err != nil || normal.Value != "1" {
+		t.Fatalf("additive normal row field broke history: tx=%#v err=%v", normal, err)
+	}
+
+	// Captured from the current provider tokentx shape. statusRep was added
+	// after the original strict allowlist shipped. It is intentionally ignored:
+	// block location remains the reviewed execution evidence for token logs.
+	token, err := decodeEtherscanTokenTx(json.RawMessage(`{
+		"blockNumber":"75445526","timeStamp":"1786135052",
+		"hash":"0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+		"blockHash":"0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+		"from":"0x1111111111111111111111111111111111111111",
+		"to":"0x2222222222222222222222222222222222222222","value":"1000000",
+		"tokenSymbol":"USDT","tokenDecimal":"6",
+		"contractAddress":"0x3333333333333333333333333333333333333333",
+		"transactionIndex":"2","confirmations":"12","logIndex":"7",
+		"statusRep":"1","futureIndexerField":[]
+	}`))
+	if err != nil || EtherscanTokenExecutionStatus(token) != ExecutionConfirmed {
+		t.Fatalf("current token row shape broke history: tx=%#v err=%v", token, err)
+	}
+}
+
+func TestExplorerHistoryKeepsValidRowsWhenOneRowIsMalformed(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		var row string
+		switch r.URL.Query().Get("action") {
+		case "txlist":
+			row = `{"timeStamp":"1700000000",` +
+				`"hash":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",` +
+				`"from":"0x1111111111111111111111111111111111111111",` +
+				`"to":"0x2222222222222222222222222222222222222222","value":"1","isError":"0"}`
+		case "tokentx":
+			row = `{"blockNumber":"123","timeStamp":"1700000000",` +
+				`"hash":"0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",` +
+				`"blockHash":"0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",` +
+				`"from":"0x1111111111111111111111111111111111111111",` +
+				`"to":"0x2222222222222222222222222222222222222222","value":"1",` +
+				`"tokenSymbol":"USDC","tokenDecimal":"6",` +
+				`"contractAddress":"0x3333333333333333333333333333333333333333",` +
+				`"transactionIndex":"0","confirmations":"1","logIndex":"0"}`
+		default:
+			row = `{"timeStamp":"1700000000",` +
+				`"hash":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",` +
+				`"traceId":"0_1","from":"0x1111111111111111111111111111111111111111",` +
+				`"to":"0x2222222222222222222222222222222222222222","value":"1","isError":"0"}`
+		}
+		_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[{},%s]}`, row)
+	}))
+	defer server.Close()
+
+	client := NewEtherscan(server.URL, "", server.Client(), time.Second)
+	if rows, err := client.TxList(context.Background(), 1, "0x1111111111111111111111111111111111111111", 20); err != nil || len(rows) != 1 {
+		t.Fatalf("normal history discarded valid row: rows=%#v err=%v", rows, err)
+	}
+	if rows, err := client.TokenTxList(context.Background(), 1, "0x1111111111111111111111111111111111111111", 20); err != nil || len(rows) != 1 {
+		t.Fatalf("token history discarded valid row: rows=%#v err=%v", rows, err)
+	}
+	if rows, err := client.InternalTxList(context.Background(), 1, "0x1111111111111111111111111111111111111111", 20); err != nil || len(rows) != 1 {
+		t.Fatalf("internal history discarded valid row: rows=%#v err=%v", rows, err)
+	}
+}
+
 func TestExplorerAccountEnvelopeAllowsOnlyDocumentedEmptyHistory(t *testing.T) {
 	t.Parallel()
 
 	for _, payload := range []string{
 		`{"status":"1","message":"OK","result":[]}`,
 		`{"status":"0","message":"No transactions found","result":[]}`,
+		`{"status":"0","message":"No internal transactions found","result":[]}`,
+		`{"status":"0","message":"No token transfers found","result":[]}`,
 	} {
 		rows, rejected, err := decodeExplorerAccountEnvelope([]byte(payload))
 		if err != nil || rejected || rows == nil || len(rows) != 0 {
@@ -268,7 +348,6 @@ func TestHeliusResponseRejectsAmbiguousProviderJSON(t *testing.T) {
 		`"amount":"42","decimals":9,"uiAmount":"0.000000042","confirmationStatus":"finalized",` +
 		`"transactionIdx":1,"instructionIdx":2,"innerInstructionIdx":null}`
 	validResult := fmt.Sprintf(`{"data":[%s]}`, row)
-	rowUnknown := strings.Replace(row, `"instructionIdx":2`, `"instructionIdx":2,"unexpected":true`, 1)
 	rowAmountAlias := strings.Replace(row, `"amount":"42"`, `"Amount":"42"`, 1)
 	rowDuplicateAmount := strings.Replace(row, `"amount":"42"`, `"amount":"1","amount":"42"`, 1)
 
@@ -279,15 +358,12 @@ func TestHeliusResponseRejectsAmbiguousProviderJSON(t *testing.T) {
 		{"wrong response id", fmt.Sprintf(`{"jsonrpc":"2.0","id":"other","result":%s}`, validResult)},
 		{"missing response id", fmt.Sprintf(`{"jsonrpc":"2.0","result":%s}`, validResult)},
 		{"wrong version", fmt.Sprintf(`{"jsonrpc":"1.0","id":"kt-wallet","result":%s}`, validResult)},
-		{"unknown envelope member", fmt.Sprintf(`{"jsonrpc":"2.0","id":"kt-wallet","result":%s,"unexpected":true}`, validResult)},
 		{"result case alias", fmt.Sprintf(`{"jsonrpc":"2.0","id":"kt-wallet","Result":%s}`, validResult)},
 		{"result case collision", fmt.Sprintf(`{"jsonrpc":"2.0","id":"kt-wallet","result":{"data":[]},"Result":%s}`, validResult)},
 		{"duplicate response id ending expected", fmt.Sprintf(`{"jsonrpc":"2.0","id":"other","id":"kt-wallet","result":%s}`, validResult)},
 		{"duplicate result ending valid", fmt.Sprintf(`{"jsonrpc":"2.0","id":"kt-wallet","result":{"data":[]},"result":%s}`, validResult)},
-		{"unknown result member", fmt.Sprintf(`{"jsonrpc":"2.0","id":"kt-wallet","result":{"data":[%s],"unexpected":true}}`, row)},
 		{"data case alias", fmt.Sprintf(`{"jsonrpc":"2.0","id":"kt-wallet","result":{"Data":[%s]}}`, row)},
 		{"duplicate data ending valid", fmt.Sprintf(`{"jsonrpc":"2.0","id":"kt-wallet","result":{"data":[],"data":[%s]}}`, row)},
-		{"unknown transfer member", fmt.Sprintf(`{"jsonrpc":"2.0","id":"kt-wallet","result":{"data":[%s]}}`, rowUnknown)},
 		{"transfer field alias", fmt.Sprintf(`{"jsonrpc":"2.0","id":"kt-wallet","result":{"data":[%s]}}`, rowAmountAlias)},
 		{"duplicate transfer amount", fmt.Sprintf(`{"jsonrpc":"2.0","id":"kt-wallet","result":{"data":[%s]}}`, rowDuplicateAmount)},
 	}
@@ -309,7 +385,21 @@ func TestHeliusResponseRejectsAmbiguousProviderJSON(t *testing.T) {
 	}
 }
 
-func TestHeliusResponseRejectsInvalidOfficialTransferValues(t *testing.T) {
+func TestHeliusHistoryAllowsAdditiveProviderFields(t *testing.T) {
+	t.Parallel()
+	payload := `{"jsonrpc":"2.0","id":"kt-wallet","providerVersion":2,"result":{` +
+		`"futurePageInfo":{},"paginationToken":null,"data":[{"signature":"sig","blockTime":1700000200,` +
+		`"type":"transfer","fromUserAccount":"from","toUserAccount":"to",` +
+		`"mint":"So11111111111111111111111111111111111111111","amount":"42",` +
+		`"decimals":9,"uiAmount":"NaN","feeAmount":{},"confirmationStatus":"finalized",` +
+		`"transactionIdx":1,"instructionIdx":2,"futureField":[]},{}]}}`
+	transfers, rejected, err := decodeHeliusTransfers([]byte(payload))
+	if err != nil || rejected || len(transfers) != 1 || transfers[0].Amount != "42" {
+		t.Fatalf("additive Helius fields broke history: transfers=%#v rejected=%v err=%v", transfers, rejected, err)
+	}
+}
+
+func TestHeliusResponseRejectsInvalidCriticalTransferValues(t *testing.T) {
 	t.Parallel()
 
 	const row = `{"signature":"sig","slot":123,"blockTime":1700000200,"type":"transfer",` +
@@ -321,25 +411,15 @@ func TestHeliusResponseRejectsInvalidOfficialTransferValues(t *testing.T) {
 		name string
 		row  string
 	}{
-		{"missing slot", strings.Replace(row, `"slot":123,`, "", 1)},
-		{"missing UI amount", strings.Replace(row, `"uiAmount":"0.000000042",`, "", 1)},
-		{"missing inner instruction index", strings.Replace(row, `,"innerInstructionIdx":null`, "", 1)},
 		{"negative raw amount", strings.Replace(row, `"amount":"42"`, `"amount":"-42"`, 1)},
 		{"fractional raw amount", strings.Replace(row, `"amount":"42"`, `"amount":"4.2"`, 1)},
-		{"invalid UI amount", strings.Replace(row, `"uiAmount":"0.000000042"`, `"uiAmount":"NaN"`, 1)},
 		{"unknown transfer type", strings.Replace(row, `"type":"transfer"`, `"type":"airdrop"`, 1)},
 		{"both owners null", strings.Replace(row, `"fromUserAccount":"from","toUserAccount":"to"`, `"fromUserAccount":null,"toUserAccount":null`, 1)},
-		{"null optional token account", strings.Replace(row, `"mint":`, `"fromTokenAccount":null,"mint":`, 1)},
-		{"partial token fee", strings.Replace(row, `"confirmationStatus":`, `"feeAmount":"1","confirmationStatus":`, 1)},
-		{"null pagination token", row},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			result := fmt.Sprintf(`{"data":[%s]}`, tc.row)
-			if tc.name == "null pagination token" {
-				result = fmt.Sprintf(`{"data":[%s],"paginationToken":null}`, tc.row)
-			}
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":"kt-wallet","result":%s}`, result)
@@ -441,13 +521,10 @@ func TestAlchemyTransferResponseRejectsAmbiguousProviderJSON(t *testing.T) {
 		`"rawContract":{"value":"0x1","address":null,"decimal":"0x12"},` +
 		`"metadata":{"blockTimestamp":"2026-07-29T01:01:00Z"}}`
 	validResult := fmt.Sprintf(`{"transfers":[%s],"pageKey":""}`, row)
-	rowUnknown := strings.Replace(row, `"metadata":`, `"unexpected":true,"metadata":`, 1)
 	rowHashAlias := strings.Replace(row, `"hash":`, `"Hash":`, 1)
 	rowDuplicateHash := strings.Replace(row, `"hash":`, `"hash":"0xdead","hash":`, 1)
-	rowRawUnknown := strings.Replace(row, `"decimal":"0x12"`, `"decimal":"0x12","unexpected":true`, 1)
 	rowRawAlias := strings.Replace(row, `"value":"0x1"`, `"Value":"0x1"`, 1)
 	rowRawDuplicate := strings.Replace(row, `"value":"0x1"`, `"value":"0x2","value":"0x1"`, 1)
-	rowMetadataUnknown := strings.Replace(row, `"blockTimestamp":"2026-07-29T01:01:00Z"`, `"blockTimestamp":"2026-07-29T01:01:00Z","unexpected":true`, 1)
 	rowTimestampAlias := strings.Replace(row, `"blockTimestamp":`, `"BlockTimestamp":`, 1)
 	rowTimestampDuplicate := strings.Replace(row, `"blockTimestamp":`, `"blockTimestamp":"2020-01-01T00:00:00Z","blockTimestamp":`, 1)
 
@@ -458,21 +535,16 @@ func TestAlchemyTransferResponseRejectsAmbiguousProviderJSON(t *testing.T) {
 		{"wrong response id", fmt.Sprintf(`{"jsonrpc":"2.0","id":2,"result":%s}`, validResult)},
 		{"missing response id", fmt.Sprintf(`{"jsonrpc":"2.0","result":%s}`, validResult)},
 		{"wrong version", fmt.Sprintf(`{"jsonrpc":"1.0","id":1,"result":%s}`, validResult)},
-		{"unknown envelope member", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":%s,"unexpected":true}`, validResult)},
 		{"result case alias", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"Result":%s}`, validResult)},
 		{"result case collision", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[]},"Result":%s}`, validResult)},
 		{"duplicate response id ending expected", fmt.Sprintf(`{"jsonrpc":"2.0","id":2,"id":1,"result":%s}`, validResult)},
 		{"duplicate result ending valid", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[]},"result":%s}`, validResult)},
-		{"unknown result member", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s],"unexpected":true}}`, row)},
 		{"transfers case alias", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"Transfers":[%s]}}`, row)},
 		{"duplicate transfers ending valid", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[],"transfers":[%s]}}`, row)},
-		{"unknown transfer member", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowUnknown)},
 		{"transfer hash case alias", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowHashAlias)},
 		{"duplicate transfer hash", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowDuplicateHash)},
-		{"unknown raw contract member", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowRawUnknown)},
 		{"raw value case alias", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowRawAlias)},
 		{"duplicate raw value", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowRawDuplicate)},
-		{"unknown metadata member", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowMetadataUnknown)},
 		{"timestamp case alias", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowTimestampAlias)},
 		{"duplicate timestamp", fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"transfers":[%s]}}`, rowTimestampDuplicate)},
 	}
@@ -505,39 +577,26 @@ func TestAlchemyTransferResponseRejectsInvalidFinancialFields(t *testing.T) {
 		`"rawContract":{"value":"0x1","address":null,"decimal":"0x12"},` +
 		`"metadata":{"blockTimestamp":"2026-07-29T01:01:00Z"}}`
 	tests := []struct {
-		name   string
-		row    string
-		result string
+		name string
+		row  string
 	}{
-		{"missing block number", strings.Replace(row, `"blockNum":"0xabc",`, "", 1), ""},
-		{"invalid block number", strings.Replace(row, `"blockNum":"0xabc"`, `"blockNum":"latest"`, 1), ""},
-		{"invalid transaction hash", strings.Replace(row, `"hash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`, `"hash":"0x1234"`, 1), ""},
-		{"invalid sender", strings.Replace(row, `"from":"0x1111111111111111111111111111111111111111"`, `"from":"0x1234"`, 1), ""},
-		{"invalid recipient", strings.Replace(row, `"to":"0x2222222222222222222222222222222222222222"`, `"to":"0x1234"`, 1), ""},
-		{"unsupported category", strings.Replace(row, `"category":"external"`, `"category":"erc721"`, 1), ""},
-		{"missing raw decimal", strings.Replace(row, `,"decimal":"0x12"`, "", 1), ""},
-		{"invalid raw value", strings.Replace(row, `"value":"0x1"`, `"value":"-1"`, 1), ""},
-		{"zero raw value excluded by request", strings.Replace(row, `"value":"0x1"`, `"value":"0x0"`, 1), ""},
-		{"decimal exceeds ERC20 range", strings.Replace(row, `"decimal":"0x12"`, `"decimal":"0x100"`, 1), ""},
-		{"native row with token contract", strings.Replace(row, `"address":null`, `"address":"0x3333333333333333333333333333333333333333"`, 1), ""},
-		{"token row without contract", strings.Replace(row, `"category":"external"`, `"category":"erc20"`, 1), ""},
-		{"invalid block timestamp", strings.Replace(row, `"blockTimestamp":"2026-07-29T01:01:00Z"`, `"blockTimestamp":"yesterday"`, 1), ""},
-		{"value must be numeric", strings.Replace(row, `"asset":"ETH"`, `"value":"1","asset":"ETH"`, 1), ""},
-		{"erc721 token id must be string", strings.Replace(row, `"asset":"ETH"`, `"erc721TokenId":{},"asset":"ETH"`, 1), ""},
-		{"erc1155 metadata must be array", strings.Replace(row, `"asset":"ETH"`, `"erc1155Metadata":{},"asset":"ETH"`, 1), ""},
-		{"erc721 token id is inapplicable", strings.Replace(row, `"asset":"ETH"`, `"erc721TokenId":"0x1","asset":"ETH"`, 1), ""},
-		{"erc1155 metadata is inapplicable", strings.Replace(row, `"asset":"ETH"`, `"erc1155Metadata":[],"asset":"ETH"`, 1), ""},
-		{"generic token id is inapplicable", strings.Replace(row, `"asset":"ETH"`, `"tokenId":"1","asset":"ETH"`, 1), ""},
-		{"trace address must be string", strings.Replace(row, `"asset":"ETH"`, `"typeTraceAddress":7,"asset":"ETH"`, 1), ""},
-		{"null page key", row, `{"transfers":[%s],"pageKey":null}`},
+		{"missing block number", strings.Replace(row, `"blockNum":"0xabc",`, "", 1)},
+		{"invalid block number", strings.Replace(row, `"blockNum":"0xabc"`, `"blockNum":"latest"`, 1)},
+		{"invalid transaction hash", strings.Replace(row, `"hash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`, `"hash":"0x1234"`, 1)},
+		{"invalid sender", strings.Replace(row, `"from":"0x1111111111111111111111111111111111111111"`, `"from":"0x1234"`, 1)},
+		{"invalid recipient", strings.Replace(row, `"to":"0x2222222222222222222222222222222222222222"`, `"to":"0x1234"`, 1)},
+		{"unsupported category", strings.Replace(row, `"category":"external"`, `"category":"erc721"`, 1)},
+		{"missing raw decimal", strings.Replace(row, `,"decimal":"0x12"`, "", 1)},
+		{"invalid raw value", strings.Replace(row, `"value":"0x1"`, `"value":"-1"`, 1)},
+		{"zero raw value excluded by request", strings.Replace(row, `"value":"0x1"`, `"value":"0x0"`, 1)},
+		{"decimal exceeds ERC20 range", strings.Replace(row, `"decimal":"0x12"`, `"decimal":"0x100"`, 1)},
+		{"native row with token contract", strings.Replace(row, `"address":null`, `"address":"0x3333333333333333333333333333333333333333"`, 1)},
+		{"token row without contract", strings.Replace(row, `"category":"external"`, `"category":"erc20"`, 1)},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			result := fmt.Sprintf(`{"transfers":[%s]}`, tc.row)
-			if tc.result != "" {
-				result = fmt.Sprintf(tc.result, tc.row)
-			}
 			payload := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":%s}`, result)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
@@ -557,21 +616,21 @@ func TestAlchemyTransferResponseRejectsInvalidFinancialFields(t *testing.T) {
 func TestAlchemyTransferResponseAllowsDocumentedNullableFields(t *testing.T) {
 	t.Parallel()
 
-	payload := `{"jsonrpc":"2.0","id":1,"result":{"transfers":[` +
+	payload := `{"jsonrpc":"2.0","id":1,"providerVersion":"2026-08","result":{"transfers":[` +
 		`{"blockNum":"0xabc","uniqueId":"0xcreate:external",` +
 		`"hash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",` +
 		`"from":"0x1111111111111111111111111111111111111111","to":null,` +
 		`"value":1,"erc721TokenId":null,"erc1155Metadata":null,"tokenId":null,` +
-		`"asset":"ETH","category":"external","typeTraceAddress":null,` +
-		`"rawContract":{"value":"0x1","address":null,"decimal":"0x12"},"metadata":null},` +
+		`"asset":"ETH","category":"external","typeTraceAddress":null,"futureField":{},` +
+		`"rawContract":{"value":"0x1","address":null,"decimal":"0x12","futureRaw":true},"metadata":null},` +
 		`{"blockNum":"0xabd","uniqueId":"0xtoken:log:1",` +
 		`"hash":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",` +
 		`"from":"0x2222222222222222222222222222222222222222",` +
 		`"to":"0x1111111111111111111111111111111111111111",` +
-		`"asset":"USDC","category":"erc20",` +
+		`"asset":"USDC","category":"erc20","erc1155Metadata":[],` +
 		`"rawContract":{"value":"0x2","address":"0x3333333333333333333333333333333333333333","decimal":"0x6"},` +
-		`"metadata":{"blockTimestamp":"2026-07-29T01:01:00.123Z"}}` +
-		`],"pageKey":"page-2"}}`
+		`"metadata":{"blockTimestamp":"2026-07-29T01:01:00.123Z","futureMetadata":[]}},` +
+		`{}],"pageKey":null,"futurePageInfo":{}}}`
 	transfers, rejected, err := decodeAlchemyTransfers([]byte(payload))
 	if err != nil || rejected || len(transfers) != 2 {
 		t.Fatalf("documented Alchemy shape must decode: transfers=%#v rejected=%v err=%v", transfers, rejected, err)
@@ -580,6 +639,65 @@ func TestAlchemyTransferResponseAllowsDocumentedNullableFields(t *testing.T) {
 		transfers[1].Raw.Address != "0x3333333333333333333333333333333333333333" ||
 		transfers[1].BlockTime != "2026-07-29T01:01:00.123Z" {
 		t.Fatalf("documented nullable/metadata semantics were not preserved: %#v", transfers)
+	}
+}
+
+func TestAlchemyTransfersPreservesValidDirectionWithoutCachingPartialEmpty(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name        string
+		incoming    string
+		wantCount   int
+		wantFailure bool
+	}{
+		{
+			name: "valid incoming survives outgoing failure",
+			incoming: `[{"blockNum":"0xabc","uniqueId":"0xtoken:log:1",` +
+				`"hash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",` +
+				`"from":"0x2222222222222222222222222222222222222222",` +
+				`"to":"0x1111111111111111111111111111111111111111",` +
+				`"asset":"USDT","category":"erc20","erc1155Metadata":[],` +
+				`"rawContract":{"value":"0xf4240","address":"0x3333333333333333333333333333333333333333",` +
+				`"decimal":"0x6"},"metadata":{"blockTimestamp":"2026-08-08T01:02:03Z"}}]`,
+			wantCount: 1,
+		},
+		{
+			name:        "successful empty incoming does not hide outgoing failure",
+			incoming:    `[]`,
+			wantFailure: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var request struct {
+					Params []map[string]any `json:"params"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil || len(request.Params) != 1 {
+					http.Error(w, "bad request", http.StatusBadRequest)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				if request.Params[0]["fromAddress"] != nil {
+					_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"outgoing unavailable"}}`)
+					return
+				}
+				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":1,"result":{"transfers":%s}}`, tc.incoming)
+			}))
+			defer server.Close()
+
+			transfers, err := NewAlchemy([]string{server.URL}, server.Client(), time.Second).
+				Transfers(context.Background(), "0x1111111111111111111111111111111111111111", 20)
+			if tc.wantFailure {
+				if err == nil {
+					t.Fatalf("partial empty page must remain unavailable: %#v", transfers)
+				}
+				return
+			}
+			if err != nil || len(transfers) != tc.wantCount {
+				t.Fatalf("valid direction was discarded: transfers=%#v err=%v", transfers, err)
+			}
+		})
 	}
 }
 
@@ -594,7 +712,6 @@ func TestAlchemyBlockBatchRejectsAmbiguousProviderJSON(t *testing.T) {
 		payload string
 	}{
 		{"wrong version", fmt.Sprintf(`[{"jsonrpc":"1.0","id":1,"result":%s}]`, block)},
-		{"unknown envelope member", fmt.Sprintf(`[{"jsonrpc":"2.0","id":1,"result":%s,"unexpected":true}]`, block)},
 		{"result case alias", fmt.Sprintf(`[{"jsonrpc":"2.0","id":1,"Result":%s}]`, block)},
 		{"duplicate id ending expected", fmt.Sprintf(`[{"jsonrpc":"2.0","id":2,"id":1,"result":%s}]`, block)},
 		{"duplicate result ending valid", fmt.Sprintf(`[{"jsonrpc":"2.0","id":1,"result":null,"result":%s}]`, block)},
@@ -632,7 +749,7 @@ func TestAlchemyBlockBatchAllowsDocumentedExtensibleBlocks(t *testing.T) {
 	const firstTimestamp = "0x6889777b"
 	const secondTimestamp = "0x68897780"
 	payload := `[` +
-		`{"jsonrpc":"2.0","id":2,"result":{"number":"0xabd",` +
+		`{"jsonrpc":"2.0","id":2,"providerVersion":"2026-08","result":{"number":"0xabd",` +
 		`"hash":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",` +
 		`"parentHash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",` +
 		`"transactions":[],"timestamp":"` + secondTimestamp + `"}},` +

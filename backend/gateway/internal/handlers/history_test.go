@@ -185,6 +185,45 @@ func TestTronHistoryUpstreamFailure(t *testing.T) {
 	}
 }
 
+func TestTronHistoryKeepsValidRecordsWhenOtherResourcesFail(t *testing.T) {
+	grid := newRESTFake(t)
+	grid.routeJSON(
+		"/v1/accounts/"+tronSelfB58+"/transactions/trc20",
+		fmt.Sprintf(`{"data":[{"transaction_id":%q,"from":%q,"to":%q,"type":"Transfer",`+
+			`"value":"1000000","block_timestamp":5000,"token_info":{"symbol":"USDT",`+
+			`"decimals":6,"address":%q}}],"success":true}`,
+			tronTx1, tronOtherB58, tronSelfB58, tronUSDT),
+	)
+	grid.route("/v1/accounts/"+tronSelfB58+"/internal-transactions", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	})
+	grid.route("/v1/accounts/"+tronSelfB58+"/transactions", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	})
+	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"tron","address":%q}`, tronSelfB58)))
+	records := res["records"].([]any)
+	if len(records) != 1 || records[0].(map[string]any)["amountRaw"] != "1000000" {
+		t.Fatalf("valid TRC-20 history was discarded by unrelated resource failures: %v", records)
+	}
+}
+
+func TestTronHistoryPartialEmptyIsNotAuthoritative(t *testing.T) {
+	grid := newRESTFake(t)
+	grid.routeJSON("/v1/accounts/"+tronSelfB58+"/transactions/trc20", `{"data":[],"success":true}`)
+	grid.route("/v1/accounts/"+tronSelfB58+"/internal-transactions", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	})
+	grid.route("/v1/accounts/"+tronSelfB58+"/transactions", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	})
+	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
+
+	resp := e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"tron","address":%q}`, tronSelfB58))
+	assertErrCode(t, resp, rpc.CodeUpstream)
+}
+
 func TestEthHistoryWithoutKeyUsesPublicExplorer(t *testing.T) {
 	explorer := newRESTFake(t)
 	explorer.route("/", func(w http.ResponseWriter, r *http.Request) {
@@ -677,6 +716,94 @@ func TestEthHistoryEtherscanFailureFallsBackToPublicExplorer(t *testing.T) {
 		t.Fatalf("expected primary then fallback, got scan=%d explorer=%d",
 			scan.hitCount("/"), explorer.hitCount("/"))
 	}
+}
+
+func TestEVMHistoryKeepsNativeWhenTokenFeedFails(t *testing.T) {
+	explorer := newRESTFake(t)
+	explorer.route("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("action") {
+		case "txlist":
+			_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[{`+
+				`"hash":"0x1111111111111111111111111111111111111111111111111111111111111111",`+
+				`"from":%q,"to":"0x2222222222222222222222222222222222222222",`+
+				`"value":"77","timeStamp":"1700000300","isError":"0"}]}`, evmSelf)
+		default:
+			_, _ = fmt.Fprint(w, `{"status":"0","message":"NOTOK","result":"indexer unavailable"}`)
+		}
+	})
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.EVMHistoryFallbackURLs = map[string]string{"eth-mainnet": explorer.srv.URL}
+	})
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf)))
+	records := res["records"].([]any)
+	if len(records) != 1 || records[0].(map[string]any)["amountRaw"] != "77" {
+		t.Fatalf("valid native history was discarded by token feed failure: %v", records)
+	}
+}
+
+func TestEVMHistoryFallsBackPerAccountStream(t *testing.T) {
+	primary := newRESTFake(t)
+	primary.route("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("action") == "txlist" {
+			_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[{`+
+				`"hash":"0x1111111111111111111111111111111111111111111111111111111111111111",`+
+				`"from":%q,"to":"0x2222222222222222222222222222222222222222",`+
+				`"value":"77","timeStamp":"1700000300","isError":"0"}]}`, evmSelf)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"status":"0","message":"NOTOK","result":"primary stream unavailable"}`)
+	})
+	fallback := newRESTFake(t)
+	fallback.route("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("action") {
+		case "txlist":
+			t.Error("normal feed must not be repeated after the primary returned a valid page")
+			_, _ = fmt.Fprint(w, `{"status":"1","message":"OK","result":[]}`)
+		case "tokentx":
+			_, _ = fmt.Fprintf(w, `{"status":"1","message":"OK","result":[{`+
+				`"blockNumber":"123","timeStamp":"1700000400",`+
+				`"hash":"0x2222222222222222222222222222222222222222222222222222222222222222",`+
+				`"blockHash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",`+
+				`"from":"0x2222222222222222222222222222222222222222","to":%q,"value":"1000000",`+
+				`"tokenSymbol":"USDT","tokenDecimal":"6","contractAddress":"0x3333333333333333333333333333333333333333",`+
+				`"transactionIndex":"1","confirmations":"3","logIndex":"0","statusRep":"1"}]}`, evmSelf)
+		default:
+			_, _ = fmt.Fprint(w, `{"status":"0","message":"No internal transactions found","result":[]}`)
+		}
+	})
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.EtherscanKey = "key"
+		cfg.EtherscanURL = primary.srv.URL
+		cfg.EVMHistoryFallbackURLs = map[string]string{"eth-mainnet": fallback.srv.URL}
+	})
+
+	res := result(t, e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf)))
+	records := res["records"].([]any)
+	if len(records) != 2 {
+		t.Fatalf("independent source fallback did not merge native and token rows: %v", records)
+	}
+}
+
+func TestEVMHistoryPartialEmptyIsNotAuthoritative(t *testing.T) {
+	explorer := newRESTFake(t)
+	explorer.route("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("action") == "txlist" {
+			_, _ = fmt.Fprint(w, `{"status":"1","message":"OK","result":[]}`)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"status":"0","message":"NOTOK","result":"indexer unavailable"}`)
+	})
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.EVMHistoryFallbackURLs = map[string]string{"eth-mainnet": explorer.srv.URL}
+	})
+
+	resp := e.rpc("kt_getHistory", fmt.Sprintf(`{"chain":"eth","address":%q}`, evmSelf))
+	assertErrCode(t, resp, rpc.CodeUpstream)
 }
 
 func TestSolanaHistoryWithoutKeyUsesRPC(t *testing.T) {

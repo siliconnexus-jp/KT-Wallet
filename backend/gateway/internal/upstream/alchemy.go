@@ -51,7 +51,7 @@ type AlchemyTransfer struct {
 }
 
 func decodeAlchemyTransfers(data []byte) ([]AlchemyTransfer, bool, error) {
-	fields, err := decodeExactJSONObject(data, "jsonrpc", "id", "result", "error")
+	fields, err := decodeExtensibleJSONObject(data, "jsonrpc", "id", "result", "error")
 	if err != nil {
 		return nil, false, err
 	}
@@ -67,7 +67,7 @@ func decodeAlchemyTransfers(data []byte) ([]AlchemyTransfer, bool, error) {
 		return nil, false, fmt.Errorf("invalid Alchemy JSON-RPC response envelope")
 	}
 	if hasError {
-		errorFields, err := decodeExactJSONObject(errorRaw, "code", "message", "data")
+		errorFields, err := decodeExtensibleJSONObject(errorRaw, "code", "message")
 		if err != nil {
 			return nil, false, err
 		}
@@ -81,16 +81,9 @@ func decodeAlchemyTransfers(data []byte) ([]AlchemyTransfer, bool, error) {
 		return nil, true, nil
 	}
 
-	resultFields, err := decodeExactJSONObject(resultRaw, "transfers", "pageKey")
+	resultFields, err := decodeExtensibleJSONObject(resultRaw, "transfers")
 	if err != nil {
 		return nil, false, err
-	}
-	if pageKeyRaw, ok := resultFields["pageKey"]; ok {
-		var pageKey *string
-		if err := json.Unmarshal(pageKeyRaw, &pageKey); err != nil ||
-			pageKey == nil || len(*pageKey) > 512 {
-			return nil, false, fmt.Errorf("invalid Alchemy page key")
-		}
 	}
 	transfersRaw, ok := resultFields["transfers"]
 	if !ok {
@@ -101,33 +94,33 @@ func decodeAlchemyTransfers(data []byte) ([]AlchemyTransfer, bool, error) {
 		return nil, false, fmt.Errorf("Alchemy transfers is not an array")
 	}
 	transfers := make([]AlchemyTransfer, 0, len(entries))
+	malformed := false
 	for _, entry := range entries {
 		transfer, err := decodeAlchemyTransfer(entry)
 		if err != nil {
-			return nil, false, err
+			malformed = true
+			continue
 		}
 		transfers = append(transfers, transfer)
+	}
+	if malformed && len(transfers) == 0 {
+		return nil, false, fmt.Errorf("Alchemy transfer page has no valid rows")
 	}
 	return transfers, false, nil
 }
 
 func decodeAlchemyTransfer(raw json.RawMessage) (AlchemyTransfer, error) {
-	fields, err := decodeExactJSONObject(
+	fields, err := decodeExtensibleJSONObject(
 		raw,
 		"blockNum",
 		"uniqueId",
 		"hash",
 		"from",
 		"to",
-		"value",
-		"erc721TokenId",
-		"erc1155Metadata",
-		"tokenId",
 		"asset",
 		"category",
 		"rawContract",
 		"metadata",
-		"typeTraceAddress",
 	)
 	if err != nil {
 		return AlchemyTransfer{}, err
@@ -158,13 +151,6 @@ func decodeAlchemyTransfer(raw json.RawMessage) (AlchemyTransfer, error) {
 		!validAlchemyHash(*wire.Hash) || !validAlchemyAddress(*wire.From) {
 		return AlchemyTransfer{}, fmt.Errorf("invalid Alchemy transfer identity")
 	}
-	if !validOptionalJSONNumber(fields["value"]) ||
-		!missingOrJSONNull(fields["erc721TokenId"]) ||
-		!missingOrJSONNull(fields["erc1155Metadata"]) ||
-		!missingOrJSONNull(fields["tokenId"]) ||
-		!validOptionalJSONString(fields["typeTraceAddress"]) {
-		return AlchemyTransfer{}, fmt.Errorf("invalid Alchemy transfer field type")
-	}
 	to := ""
 	if wire.To != nil {
 		if !validAlchemyAddress(*wire.To) {
@@ -178,7 +164,7 @@ func decodeAlchemyTransfer(raw json.RawMessage) (AlchemyTransfer, error) {
 		return AlchemyTransfer{}, fmt.Errorf("invalid Alchemy transfer category")
 	}
 
-	rawFields, err := decodeExactJSONObject(fields["rawContract"], "value", "address", "decimal")
+	rawFields, err := decodeExtensibleJSONObject(fields["rawContract"], "value", "address", "decimal")
 	if err != nil {
 		return AlchemyTransfer{}, err
 	}
@@ -216,19 +202,18 @@ func decodeAlchemyTransfer(raw json.RawMessage) (AlchemyTransfer, error) {
 	blockTime := ""
 	if metadataRaw, ok := fields["metadata"]; ok &&
 		!bytes.Equal(bytes.TrimSpace(metadataRaw), []byte("null")) {
-		metadataFields, err := decodeExactJSONObject(metadataRaw, "blockTimestamp")
+		metadataFields, err := decodeExtensibleJSONObject(metadataRaw, "blockTimestamp")
 		if err != nil {
 			return AlchemyTransfer{}, err
 		}
-		var timestamp *string
-		if err := json.Unmarshal(metadataFields["blockTimestamp"], &timestamp); err != nil ||
-			timestamp == nil {
-			return AlchemyTransfer{}, fmt.Errorf("invalid Alchemy transfer metadata")
+		if timestampRaw, present := metadataFields["blockTimestamp"]; present {
+			var timestamp *string
+			if err := json.Unmarshal(timestampRaw, &timestamp); err == nil && timestamp != nil {
+				if _, err := time.Parse(time.RFC3339Nano, *timestamp); err == nil {
+					blockTime = *timestamp
+				}
+			}
 		}
-		if _, err := time.Parse(time.RFC3339Nano, *timestamp); err != nil {
-			return AlchemyTransfer{}, fmt.Errorf("invalid Alchemy transfer timestamp")
-		}
-		blockTime = *timestamp
 	}
 	asset := ""
 	if wire.Asset != nil {
@@ -280,32 +265,6 @@ func validAlchemyQuantity(value string) bool {
 	return true
 }
 
-func validOptionalJSONNumber(raw json.RawMessage) bool {
-	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-		return true
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	var value any
-	if decoder.Decode(&value) != nil {
-		return false
-	}
-	_, ok := value.(json.Number)
-	return ok
-}
-
-func validOptionalJSONString(raw json.RawMessage) bool {
-	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-		return true
-	}
-	var value string
-	return json.Unmarshal(raw, &value) == nil
-}
-
-func missingOrJSONNull(raw json.RawMessage) bool {
-	return len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null"))
-}
-
 // Transfers returns confirmed native and ERC-20 movements involving address.
 // Incoming and outgoing feeds are requested concurrently. Internal transfers
 // are requested where supported; if a network rejects that category, the
@@ -328,17 +287,26 @@ func (a *Alchemy) Transfers(ctx context.Context, address string, limit int) ([]A
 	}
 
 	var (
-		all      []AlchemyTransfer
-		firstErr error
+		all       []AlchemyTransfer
+		firstErr  error
+		succeeded int
 	)
 	for range 2 {
 		r := <-results
-		if r.err != nil && firstErr == nil {
-			firstErr = r.err
+		if r.err != nil {
+			if firstErr == nil {
+				firstErr = r.err
+			}
+			continue
 		}
+		succeeded++
 		all = append(all, r.items...)
 	}
-	if firstErr != nil {
+	// A provider-direction failure must not discard valid movements from the
+	// other direction. However, one successful empty feed cannot prove that
+	// the complete address history is empty, so preserve the failure in that
+	// case instead of caching a false empty result.
+	if succeeded < 2 && len(all) == 0 {
 		return nil, firstErr
 	}
 	if err := a.fillMissingBlockTimes(ctx, all); err != nil {
@@ -566,7 +534,7 @@ func decodeAlchemyBlockTimestamps(
 	timestamps := make(map[string]string, len(entries))
 	seenIDs := make(map[int]struct{}, len(entries))
 	for _, entry := range entries {
-		fields, err := decodeExactJSONObject(entry, "jsonrpc", "id", "result", "error")
+		fields, err := decodeExtensibleJSONObject(entry, "jsonrpc", "id", "result", "error")
 		if err != nil {
 			return nil, false, err
 		}
@@ -588,7 +556,7 @@ func decodeAlchemyBlockTimestamps(
 			return nil, false, fmt.Errorf("invalid Alchemy batch result")
 		}
 		if hasError {
-			errorFields, err := decodeExactJSONObject(errorRaw, "code", "message", "data")
+			errorFields, err := decodeExtensibleJSONObject(errorRaw, "code", "message")
 			if err != nil {
 				return nil, false, err
 			}

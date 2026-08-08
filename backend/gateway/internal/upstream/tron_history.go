@@ -12,7 +12,7 @@ import (
 )
 
 func decodeTronHistoryEnvelope(data []byte) ([]json.RawMessage, error) {
-	fields, err := decodeExactJSONObject(data, "data", "success", "meta")
+	fields, err := decodeExtensibleJSONObject(data, "data", "success")
 	if err != nil {
 		return nil, err
 	}
@@ -24,43 +24,7 @@ func decodeTronHistoryEnvelope(data []byte) ([]json.RawMessage, error) {
 	if err := json.Unmarshal(fields["data"], &rows); err != nil || rows == nil {
 		return nil, fmt.Errorf("invalid TronGrid history data")
 	}
-	if meta, ok := fields["meta"]; ok {
-		if err := validateTronHistoryMeta(meta); err != nil {
-			return nil, err
-		}
-	}
 	return rows, nil
-}
-
-func validateTronHistoryMeta(raw json.RawMessage) error {
-	fields, err := decodeExactJSONObject(raw, "at", "page_size", "fingerprint", "links")
-	if err != nil {
-		return err
-	}
-	for _, key := range []string{"at", "page_size"} {
-		if value, ok := fields[key]; ok {
-			if _, err := tronJSONUint(value, 64); err != nil {
-				return fmt.Errorf("invalid TronGrid history meta %s", key)
-			}
-		}
-	}
-	if raw, ok := fields["fingerprint"]; ok {
-		value, err := tronJSONString(raw)
-		if err != nil || !validTronText(value, 2048, false) {
-			return fmt.Errorf("invalid TronGrid history fingerprint")
-		}
-	}
-	if raw, ok := fields["links"]; ok {
-		links, err := decodeExactJSONObject(raw, "next")
-		if err != nil {
-			return err
-		}
-		next, err := requiredTronString(links, "next")
-		if err != nil || !validTronText(next, 8192, false) {
-			return fmt.Errorf("invalid TronGrid history next link")
-		}
-	}
-	return nil
 }
 
 func decodeTronTRC20History(data []byte) ([]TRC20Transfer, error) {
@@ -69,20 +33,25 @@ func decodeTronTRC20History(data []byte) ([]TRC20Transfer, error) {
 		return nil, err
 	}
 	transfers := make([]TRC20Transfer, 0, len(rows))
+	malformed := false
 	for _, raw := range rows {
 		transfer, include, err := decodeTronTRC20Transfer(raw)
 		if err != nil {
-			return nil, err
+			malformed = true
+			continue
 		}
 		if include {
 			transfers = append(transfers, transfer)
 		}
 	}
+	if malformed && len(transfers) == 0 {
+		return nil, fmt.Errorf("TronGrid TRC-20 page has no valid transfer rows")
+	}
 	return transfers, nil
 }
 
 func decodeTronTRC20Transfer(raw json.RawMessage) (TRC20Transfer, bool, error) {
-	fields, err := decodeExactJSONObject(
+	fields, err := decodeExtensibleJSONObject(
 		raw, "transaction_id", "token_info", "block_timestamp", "from", "to", "type", "value",
 	)
 	if err != nil {
@@ -121,7 +90,7 @@ func decodeTronTRC20Transfer(raw json.RawMessage) (TRC20Transfer, bool, error) {
 	if !ok {
 		return TRC20Transfer{}, false, fmt.Errorf("missing TronGrid token info")
 	}
-	token, err := decodeExactJSONObject(tokenRaw, "symbol", "address", "decimals", "name")
+	token, err := decodeExtensibleJSONObject(tokenRaw, "symbol", "address", "decimals")
 	if err != nil {
 		return TRC20Transfer{}, false, err
 	}
@@ -137,12 +106,6 @@ func decodeTronTRC20Transfer(raw json.RawMessage) (TRC20Transfer, bool, error) {
 	if err != nil || decimals < 0 || decimals > 255 {
 		return TRC20Transfer{}, false, fmt.Errorf("invalid TronGrid token decimals")
 	}
-	if nameRaw, ok := token["name"]; ok {
-		name, err := tronJSONString(nameRaw)
-		if err != nil || !validTronText(name, 256, true) {
-			return TRC20Transfer{}, false, fmt.Errorf("invalid TronGrid token name")
-		}
-	}
 	return TRC20Transfer{
 		TransactionID: txID, From: from, To: to, Value: value,
 		BlockTimestamp: timestamp, Symbol: symbol, Decimals: int(decimals), Contract: contract,
@@ -155,23 +118,25 @@ func decodeTronNativeHistory(data []byte) ([]NativeTransfer, error) {
 		return nil, err
 	}
 	var transfers []NativeTransfer
+	malformed := false
 	for _, raw := range rows {
 		row, err := decodeTronNativeTransaction(raw)
 		if err != nil {
-			return nil, err
+			malformed = true
+			continue
 		}
 		transfers = append(transfers, row...)
+	}
+	if malformed && len(transfers) == 0 {
+		return nil, fmt.Errorf("TronGrid native page has no valid transfer rows")
 	}
 	return transfers, nil
 }
 
 func decodeTronNativeTransaction(raw json.RawMessage) ([]NativeTransfer, error) {
-	fields, err := decodeExactJSONObject(
+	fields, err := decodeExtensibleJSONObject(
 		raw,
-		"ret", "signature", "txID", "net_usage", "raw_data_hex", "net_fee",
-		"energy_usage", "blockNumber", "block_timestamp", "energy_fee",
-		"energy_usage_total", "raw_data", "internal_transactions", "fee_limit",
-		"ref_block_bytes", "ref_block_hash", "expiration", "timestamp",
+		"ret", "txID", "block_timestamp", "raw_data",
 	)
 	if err != nil {
 		return nil, err
@@ -192,9 +157,7 @@ func decodeTronNativeTransaction(raw json.RawMessage) ([]NativeTransfer, error) 
 	if !ok {
 		return nil, fmt.Errorf("missing TronGrid raw transaction")
 	}
-	rawFields, err := decodeExactJSONObject(
-		rawData, "contract", "ref_block_bytes", "ref_block_hash", "expiration", "timestamp", "fee_limit", "data",
-	)
+	rawFields, err := decodeExtensibleJSONObject(rawData, "contract")
 	if err != nil {
 		return nil, err
 	}
@@ -204,24 +167,22 @@ func decodeTronNativeTransaction(raw json.RawMessage) ([]NativeTransfer, error) 
 	}
 	transfers := make([]NativeTransfer, 0, len(contracts))
 	for index, contractRaw := range contracts {
-		contract, err := decodeExactJSONObject(contractRaw, "parameter", "type", "Permission_id", "permission_id")
+		contract, err := decodeExtensibleJSONObject(contractRaw, "parameter", "type")
 		if err != nil {
 			return nil, err
-		}
-		if _, upper := contract["Permission_id"]; upper {
-			if _, lower := contract["permission_id"]; lower {
-				return nil, fmt.Errorf("ambiguous TronGrid permission id")
-			}
 		}
 		contractType, err := requiredTronString(contract, "type")
 		if err != nil || !validTronText(contractType, 128, false) {
 			return nil, fmt.Errorf("invalid TronGrid contract type")
 		}
+		if contractType != "TransferContract" && contractType != "TransferAssetContract" {
+			continue
+		}
 		parameterRaw, ok := contract["parameter"]
 		if !ok {
 			return nil, fmt.Errorf("missing TronGrid contract parameter")
 		}
-		parameter, err := decodeExactJSONObject(parameterRaw, "value", "type_url")
+		parameter, err := decodeExtensibleJSONObject(parameterRaw, "value", "type_url")
 		if err != nil {
 			return nil, err
 		}
@@ -229,19 +190,13 @@ func decodeTronNativeTransaction(raw json.RawMessage) ([]NativeTransfer, error) 
 		if !ok {
 			return nil, fmt.Errorf("missing TronGrid contract value")
 		}
-		if contractType != "TransferContract" && contractType != "TransferAssetContract" {
-			if _, err := decodeUniqueJSONObject(valueRaw); err != nil {
-				return nil, err
-			}
-			continue
-		}
 		if typeURLRaw, present := parameter["type_url"]; present {
 			typeURL, err := tronJSONString(typeURLRaw)
 			if err != nil || typeURL != "type.googleapis.com/protocol."+contractType {
 				return nil, fmt.Errorf("mismatched TronGrid contract type URL")
 			}
 		}
-		value, err := decodeExactJSONObject(valueRaw, "amount", "owner_address", "to_address", "asset_name")
+		value, err := decodeExtensibleJSONObject(valueRaw, "amount", "owner_address", "to_address", "asset_name")
 		if err != nil {
 			return nil, err
 		}
@@ -287,7 +242,7 @@ func decodeTronNativeStatus(raw json.RawMessage) (ExecutionStatus, error) {
 	}
 	status := ExecutionConfirmed
 	for _, raw := range rows {
-		fields, err := decodeExactJSONObject(raw, "contractRet", "fee")
+		fields, err := decodeExtensibleJSONObject(raw, "contractRet")
 		if err != nil {
 			return ExecutionUnknown, err
 		}
@@ -302,11 +257,6 @@ func decodeTronNativeStatus(raw json.RawMessage) (ExecutionStatus, error) {
 		if result != "SUCCESS" {
 			status = ExecutionFailed
 		}
-		if fee, ok := fields["fee"]; ok {
-			if _, err := tronJSONUint(fee, 63); err != nil {
-				return ExecutionUnknown, fmt.Errorf("invalid TronGrid receipt fee")
-			}
-		}
 	}
 	return status, nil
 }
@@ -317,18 +267,23 @@ func decodeTronInternalHistory(data []byte) ([]InternalTransfer, error) {
 		return nil, err
 	}
 	var transfers []InternalTransfer
+	malformed := false
 	for _, raw := range rows {
 		row, err := decodeTronInternalTransaction(raw)
 		if err != nil {
-			return nil, err
+			malformed = true
+			continue
 		}
 		transfers = append(transfers, row...)
+	}
+	if malformed && len(transfers) == 0 {
+		return nil, fmt.Errorf("TronGrid internal page has no valid transfer rows")
 	}
 	return transfers, nil
 }
 
 func decodeTronInternalTransaction(raw json.RawMessage) ([]InternalTransfer, error) {
-	fields, err := decodeExactJSONObject(
+	fields, err := decodeExtensibleJSONObject(
 		raw, "internal_tx_id", "data", "block_timestamp", "to_address", "tx_id", "from_address",
 	)
 	if err != nil {
@@ -358,15 +313,9 @@ func decodeTronInternalTransaction(raw json.RawMessage) ([]InternalTransfer, err
 	if !ok {
 		return nil, fmt.Errorf("missing TronGrid internal data")
 	}
-	data, err := decodeExactJSONObject(dataRaw, "note", "rejected", "call_value", "call_token_value", "token_id")
+	data, err := decodeExtensibleJSONObject(dataRaw, "rejected", "call_value", "call_token_value", "token_id")
 	if err != nil {
 		return nil, err
-	}
-	if noteRaw, ok := data["note"]; ok {
-		note, err := tronJSONString(noteRaw)
-		if err != nil || !validTronText(note, 256, true) {
-			return nil, fmt.Errorf("invalid TronGrid internal note")
-		}
 	}
 	status := ExecutionUnknown
 	if rejectedRaw, ok := data["rejected"]; ok {
@@ -481,7 +430,7 @@ func optionalTronScalar(raw json.RawMessage, bits int) (string, error) {
 		return "", nil
 	}
 	if trimmed[0] == '{' {
-		fields, err := decodeExactJSONObject(trimmed, "_")
+		fields, err := decodeExtensibleJSONObject(trimmed, "_")
 		if err != nil {
 			return "", err
 		}

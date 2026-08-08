@@ -342,6 +342,23 @@ func TestOfficialIdentityIsSafeOnlyAfterExternalCheckFindsNoExplicitThreat(t *te
 	}
 }
 
+func TestBaseOfficialUSDTIsNotBlockedByDifferentTokenFromSameCreator(t *testing.T) {
+	const usdt = "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2"
+	provider := newRESTFake(t)
+	provider.routeJSON("/8453", `{"code":1,"result":{"0xfde4c96c8593536e31f229ea8f37b2ada2699bb2":{`+
+		`"is_honeypot":"0","honeypot_with_same_creator":"1"}}}`)
+	e := newEnv(t, func(cfg *handlers.Config) {
+		cfg.DisableExternalTokenRisk = false
+		cfg.GoPlusURL = provider.srv.URL
+	})
+	got := result(t, e.rpc("kt_checkTokenRisk", map[string]any{
+		"chain": "base", "network": "base-mainnet", "contract": usdt,
+	}))
+	if got["status"] != "safe" || got["source"] != "official_catalog+goplus" {
+		t.Fatalf("Base official USDT creator-history result = %v", got)
+	}
+}
+
 func TestOfficialIdentityStaysUnknownWhenProviderReturnsNoBoundRecord(t *testing.T) {
 	const usdt = "0xdac17f958d2ee523a2206206994597c13d831ec7"
 	provider := newRESTFake(t)

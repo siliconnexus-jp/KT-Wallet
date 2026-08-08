@@ -178,7 +178,6 @@ func explicitTokenThreatCategory(recordRaw json.RawMessage) (string, bool, error
 	if err := rejectConsumedFieldAliases(
 		record,
 		"is_honeypot",
-		"honeypot_with_same_creator",
 		"fake_token",
 		"malicious_address",
 		"gas_abuse",
@@ -187,10 +186,6 @@ func explicitTokenThreatCategory(recordRaw json.RawMessage) (string, bool, error
 	}
 
 	honeypotPresent, honeypot, err := parseOptionalBinaryFlag(record, "is_honeypot")
-	if err != nil {
-		return "", false, err
-	}
-	_, relatedHoneypot, err := parseOptionalBinaryFlag(record, "honeypot_with_same_creator")
 	if err != nil {
 		return "", false, err
 	}
@@ -207,7 +202,7 @@ func explicitTokenThreatCategory(recordRaw json.RawMessage) (string, bool, error
 		return "", false, err
 	}
 
-	if honeypot || relatedHoneypot {
+	if honeypot {
 		return "honeypot", true, nil
 	}
 	if fakeToken {

@@ -129,17 +129,38 @@ func (g *Gateway) tronHistory(ctx context.Context, network, address string, limi
 	selfHex := tronAddrHex(address)
 
 	tron := g.tron[network]
-	trc20, err := tron.TRC20Transfers(ctx, address, limit)
-	if err != nil {
-		return nil, upstreamError("trongrid", err)
+	var (
+		trc20       []upstream.TRC20Transfer
+		native      []upstream.NativeTransfer
+		internal    []upstream.InternalTransfer
+		trc20Err    error
+		nativeErr   error
+		internalErr error
+	)
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		trc20, trc20Err = tron.TRC20Transfers(ctx, address, limit)
+	}()
+	go func() {
+		defer wg.Done()
+		native, nativeErr = tron.NativeTransactions(ctx, address, limit)
+	}()
+	go func() {
+		defer wg.Done()
+		internal, internalErr = tron.InternalTransactions(ctx, address, limit)
+	}()
+	wg.Wait()
+	firstErr := trc20Err
+	if firstErr == nil {
+		firstErr = nativeErr
 	}
-	native, err := tron.NativeTransactions(ctx, address, limit)
-	if err != nil {
-		return nil, upstreamError("trongrid", err)
+	if firstErr == nil {
+		firstErr = internalErr
 	}
-	internal, err := tron.InternalTransactions(ctx, address, limit)
-	if err != nil {
-		return nil, upstreamError("trongrid", err)
+	if trc20Err != nil && nativeErr != nil && internalErr != nil {
+		return nil, upstreamError("trongrid", firstErr)
 	}
 
 	records := make([]historyRecord, 0, len(trc20)+len(native)+len(internal))
@@ -266,6 +287,12 @@ func (g *Gateway) tronHistory(ctx context.Context, network, address string, limi
 			break
 		}
 	}
+	// Preserve independently validated records when one TronGrid resource is
+	// unavailable. A partial set with no usable records is not proof that the
+	// wallet has no history, so do not cache it as an authoritative empty page.
+	if firstErr != nil && len(deduped) == 0 {
+		return nil, upstreamError("trongrid", firstErr)
+	}
 	return &historyResult{Status: "ok", Records: deduped}, nil
 }
 
@@ -305,48 +332,38 @@ func (g *Gateway) evmHistory(ctx context.Context, chain, network, address string
 		primaryErr = err
 	}
 	// Etherscan v2 is multichain and covers every supported EVM network,
-	// including Polygon Amoy, when a key is configured.
+	// including Polygon Amoy, when a key is configured. Each account stream
+	// falls back independently so one broken token/internal endpoint cannot
+	// discard valid native history (and vice versa).
+	explorers := make([]*upstream.Etherscan, 0, 2)
 	if g.cfg.EtherscanKey != "" {
-		var etherscanErr error
-		txs, tokenTxs, internalTxs, etherscanErr = evmHistoryLists(
-			ctx, g.scan, chainID, address, limit, true,
-		)
-		if etherscanErr == nil {
-			return evmHistoryResult(
-				chain,
-				address,
-				limit,
-				txs,
-				tokenTxs,
-				internalTxs,
-				g.officialByNetwork[network],
-			), nil
-		}
-		if primaryErr == nil {
-			primaryErr = etherscanErr
-		}
+		explorers = append(explorers, g.scan)
 	}
 	// Blockscout and Routescan expose the same account/txlist response shape
 	// without credentials. They also keep history available when Etherscan is
 	// temporarily unhealthy.
 	if fallback := g.historyScan[network]; fallback != nil {
-		var err error
-		txs, tokenTxs, internalTxs, err = evmHistoryLists(
-			ctx, fallback, chainID, address, limit, true,
+		explorers = append(explorers, fallback)
+	}
+	if len(explorers) > 0 {
+		var explorerErr error
+		txs, tokenTxs, internalTxs, explorerErr = evmHistoryLists(
+			ctx, explorers, chainID, address, limit, true,
 		)
-		if err == nil {
-			return evmHistoryResult(
-				chain,
-				address,
-				limit,
-				txs,
-				tokenTxs,
-				internalTxs,
-				g.officialByNetwork[network],
-			), nil
+		result := evmHistoryResult(
+			chain,
+			address,
+			limit,
+			txs,
+			tokenTxs,
+			internalTxs,
+			g.officialByNetwork[network],
+		)
+		if explorerErr == nil || len(result.Records) > 0 {
+			return result, nil
 		}
 		if primaryErr == nil {
-			primaryErr = err
+			primaryErr = explorerErr
 		}
 	}
 	if primaryErr != nil {
@@ -466,7 +483,7 @@ func parseAlchemyHexInt(value string) (int, bool) {
 
 func evmHistoryLists(
 	ctx context.Context,
-	source *upstream.Etherscan,
+	sources []*upstream.Etherscan,
 	chainID int,
 	address string,
 	limit int,
@@ -483,11 +500,11 @@ func evmHistoryLists(
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		txs, txErr = source.TxList(ctx, chainID, address, limit)
+		txs, txErr = firstExplorerTxList(ctx, sources, chainID, address, limit)
 	}()
 	go func() {
 		defer wg.Done()
-		tokenTxs, tokenErr = source.TokenTxList(ctx, chainID, address, limit)
+		tokenTxs, tokenErr = firstExplorerTokenTxList(ctx, sources, chainID, address, limit)
 	}()
 	if includeInternal {
 		// Internal traces are an enrichment layer. Some otherwise compatible
@@ -496,17 +513,80 @@ func evmHistoryLists(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			internalTxs, _ = source.InternalTxList(ctx, chainID, address, limit)
+			internalTxs, _ = firstExplorerInternalTxList(ctx, sources, chainID, address, limit)
 		}()
 	}
 	wg.Wait()
-	if txErr != nil {
-		return nil, nil, nil, txErr
-	}
-	if tokenErr != nil {
-		return nil, nil, nil, tokenErr
+	if txErr != nil || tokenErr != nil {
+		if txErr != nil {
+			return txs, tokenTxs, internalTxs, txErr
+		}
+		return txs, tokenTxs, internalTxs, tokenErr
 	}
 	return txs, tokenTxs, internalTxs, nil
+}
+
+func firstExplorerTxList(
+	ctx context.Context,
+	sources []*upstream.Etherscan,
+	chainID int,
+	address string,
+	limit int,
+) ([]upstream.EtherscanTx, error) {
+	var lastErr error
+	for _, source := range sources {
+		rows, err := source.TxList(ctx, chainID, address, limit)
+		if err == nil {
+			return rows, nil
+		}
+		lastErr = err
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	return nil, lastErr
+}
+
+func firstExplorerTokenTxList(
+	ctx context.Context,
+	sources []*upstream.Etherscan,
+	chainID int,
+	address string,
+	limit int,
+) ([]upstream.EtherscanTokenTx, error) {
+	var lastErr error
+	for _, source := range sources {
+		rows, err := source.TokenTxList(ctx, chainID, address, limit)
+		if err == nil {
+			return rows, nil
+		}
+		lastErr = err
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	return nil, lastErr
+}
+
+func firstExplorerInternalTxList(
+	ctx context.Context,
+	sources []*upstream.Etherscan,
+	chainID int,
+	address string,
+	limit int,
+) ([]upstream.EtherscanInternalTx, error) {
+	var lastErr error
+	for _, source := range sources {
+		rows, err := source.InternalTxList(ctx, chainID, address, limit)
+		if err == nil {
+			return rows, nil
+		}
+		lastErr = err
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	return nil, lastErr
 }
 
 func evmHistoryResult(

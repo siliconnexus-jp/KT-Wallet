@@ -209,6 +209,22 @@ func newPool(
 // Call performs one JSON-RPC call, failing over between endpoints. The
 // returned error is either *NodeError or *Unavailable.
 func (p *Pool) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	return p.call(ctx, method, params, false)
+}
+
+// CallExtensible is reserved for read-only provider responses whose JSON-RPC
+// envelope may acquire additive metadata. It preserves the same version, id,
+// result/error exclusivity, duplicate-key, and case-alias checks as Call.
+func (p *Pool) CallExtensible(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	return p.call(ctx, method, params, true)
+}
+
+func (p *Pool) call(
+	ctx context.Context,
+	method string,
+	params any,
+	extensibleEnvelope bool,
+) (json.RawMessage, error) {
 	body, err := rpcRequestBody(method, params)
 	if err != nil {
 		return nil, &Unavailable{Upstream: p.name, Message: "could not encode upstream request"}
@@ -222,7 +238,7 @@ func (p *Pool) Call(ctx context.Context, method string, params any) (json.RawMes
 		}
 		attempted = true
 		started := time.Now()
-		result, nodeErr, failure := p.attempt(ctx, ep.url, body)
+		result, nodeErr, failure := p.attempt(ctx, ep.url, body, extensibleEnvelope)
 		latency := time.Since(started)
 		if failure != nil {
 			kind := failureKindOf(failure)
@@ -277,7 +293,7 @@ func (p *Pool) CallOnce(ctx context.Context, method string, params any) (json.Ra
 			continue
 		}
 		started := time.Now()
-		result, nodeErr, failure := p.attempt(ctx, ep.url, body)
+		result, nodeErr, failure := p.attempt(ctx, ep.url, body, false)
 		latency := time.Since(started)
 		if failure != nil {
 			kind := failureKindOf(failure)
@@ -364,7 +380,12 @@ func (p *Pool) endpointsForCall() []*endpoint {
 
 // attempt runs a single HTTP exchange. failure != nil marks a failover-worthy
 // problem; nodeErr is a valid JSON-RPC error answer.
-func (p *Pool) attempt(ctx context.Context, u string, body []byte) (result json.RawMessage, nodeErr *NodeError, failure error) {
+func (p *Pool) attempt(
+	ctx context.Context,
+	u string,
+	body []byte,
+	extensibleEnvelope bool,
+) (result json.RawMessage, nodeErr *NodeError, failure error) {
 	actx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(actx, http.MethodPost, u, bytes.NewReader(body))
@@ -406,7 +427,12 @@ func (p *Pool) attempt(ctx context.Context, u string, body []byte) (result json.
 			err:  errors.New(publicFailureMessage(failureTransport)),
 		}
 	}
-	fields, err := decodeExactJSONObject(data, "jsonrpc", "id", "result", "error")
+	var fields map[string]json.RawMessage
+	if extensibleEnvelope {
+		fields, err = decodeExtensibleJSONObject(data, "jsonrpc", "id", "result", "error")
+	} else {
+		fields, err = decodeExactJSONObject(data, "jsonrpc", "id", "result", "error")
+	}
 	if err != nil {
 		return nil, nil, &attemptFailure{
 			kind: failureMalformed,
@@ -431,7 +457,12 @@ func (p *Pool) attempt(ctx context.Context, u string, body []byte) (result json.
 		}
 	}
 	if hasError {
-		errorFields, err := decodeExactJSONObject(rpcErrorRaw, "code", "message", "data")
+		var errorFields map[string]json.RawMessage
+		if extensibleEnvelope {
+			errorFields, err = decodeExtensibleJSONObject(rpcErrorRaw, "code", "message")
+		} else {
+			errorFields, err = decodeExactJSONObject(rpcErrorRaw, "code", "message", "data")
+		}
 		if err != nil {
 			return nil, nil, &attemptFailure{
 				kind: failureMalformed,

@@ -244,6 +244,49 @@ func TestGoPlusIncompleteNonMaliciousRecordStaysUnknown(t *testing.T) {
 	}
 }
 
+func TestGoPlusDoesNotConfuseCreatorHistoryWithCurrentTokenHoneypot(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name       string
+		record     string
+		wantFound  bool
+		wantUnsafe bool
+	}{
+		{
+			name:       "current token explicitly not honeypot",
+			record:     `{"is_honeypot":"0","honeypot_with_same_creator":"1"}`,
+			wantFound:  true,
+			wantUnsafe: false,
+		},
+		{
+			name:       "current token is honeypot",
+			record:     `{"is_honeypot":"1","honeypot_with_same_creator":"0"}`,
+			wantFound:  true,
+			wantUnsafe: true,
+		},
+		{
+			name:       "creator signal alone does not evaluate current token",
+			record:     `{"honeypot_with_same_creator":"1"}`,
+			wantFound:  false,
+			wantUnsafe: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprintf(w, `{"code":1,"result":{%q:%s}}`, testTokenContract, tc.record)
+			}))
+			defer server.Close()
+
+			got, err := NewGoPlus(server.URL, "", server.Client(), time.Second).
+				TokenRisk(context.Background(), "8453", testTokenContract)
+			if err != nil || got.Found != tc.wantFound || got.Unsafe != tc.wantUnsafe {
+				t.Fatalf("creator/current-token semantics = %#v err=%v", got, err)
+			}
+		})
+	}
+}
+
 func TestGoPlusRejectsInvalidIdentityBeforeNetwork(t *testing.T) {
 	var calls int
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {

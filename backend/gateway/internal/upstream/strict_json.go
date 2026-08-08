@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // decodeExactJSONObject parses one JSON object while preserving each value as
@@ -24,6 +25,32 @@ func decodeExactJSONObject(raw []byte, allowedKeys ...string) (map[string]json.R
 	for key := range values {
 		if _, known := allowed[key]; !known {
 			return nil, fmt.Errorf("unknown JSON object key %q", key)
+		}
+	}
+	return values, nil
+}
+
+// decodeExtensibleJSONObject parses a third-party object whose provider may
+// add unrelated members over time. Exact duplicate keys and case aliases of
+// fields consumed by KT Wallet remain ambiguous and are rejected, while
+// genuinely unknown fields are ignored by the caller.
+//
+// This is intentionally narrower than accepting a response into a Go struct:
+// callers still have to require and validate every security-relevant field.
+// It only avoids treating an additive provider schema change as corruption.
+func decodeExtensibleJSONObject(
+	raw []byte,
+	consumedKeys ...string,
+) (map[string]json.RawMessage, error) {
+	values, err := decodeUniqueJSONObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	for key := range values {
+		for _, expected := range consumedKeys {
+			if key != expected && strings.EqualFold(key, expected) {
+				return nil, fmt.Errorf("ambiguous JSON object key %q", key)
+			}
 		}
 	}
 	return values, nil

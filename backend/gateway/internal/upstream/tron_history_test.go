@@ -39,10 +39,6 @@ func TestTronHistoryResponsesRejectAmbiguousProviderJSON(t *testing.T) {
 		payload string
 		call    func(*Tron) error
 	}{
-		{"trc20 unknown envelope", "/v1/accounts/", `{"data":[` + trc20Row + `],"success":true,"unexpected":1}`, func(client *Tron) error {
-			_, err := client.TRC20Transfers(context.Background(), tronHistoryAddress, 20)
-			return err
-		}},
 		{"trc20 data alias collision", "/v1/accounts/", `{"Data":[],"data":[` + trc20Row + `],"success":true}`, func(client *Tron) error {
 			_, err := client.TRC20Transfers(context.Background(), tronHistoryAddress, 20)
 			return err
@@ -55,20 +51,12 @@ func TestTronHistoryResponsesRejectAmbiguousProviderJSON(t *testing.T) {
 			_, err := client.TRC20Transfers(context.Background(), tronHistoryAddress, 20)
 			return err
 		}},
-		{"trc20 unknown row member", "/v1/accounts/", `{"data":[` + strings.Replace(trc20Row, `"value":"1000000"`, `"value":"1000000","unexpected":1`, 1) + `],"success":true}`, func(client *Tron) error {
-			_, err := client.TRC20Transfers(context.Background(), tronHistoryAddress, 20)
-			return err
-		}},
 		{"trc20 duplicate value", "/v1/accounts/", `{"data":[` + strings.Replace(trc20Row, `"value":"1000000"`, `"value":"1","value":"1000000"`, 1) + `],"success":true}`, func(client *Tron) error {
 			_, err := client.TRC20Transfers(context.Background(), tronHistoryAddress, 20)
 			return err
 		}},
 		{"trc20 token info alias", "/v1/accounts/", `{"data":[` + strings.Replace(trc20Row, `"symbol":"USDT"`, `"Symbol":"FAKE","symbol":"USDT"`, 1) + `],"success":true}`, func(client *Tron) error {
 			_, err := client.TRC20Transfers(context.Background(), tronHistoryAddress, 20)
-			return err
-		}},
-		{"native unknown row member", "/v1/accounts/", `{"data":[` + strings.Replace(nativeRow, `"txID":`, `"unexpected":1,"txID":`, 1) + `],"success":true}`, func(client *Tron) error {
-			_, err := client.NativeTransactions(context.Background(), tronHistoryAddress, 20)
 			return err
 		}},
 		{"native duplicate amount", "/v1/accounts/", `{"data":[` + strings.Replace(nativeRow, `"amount":42`, `"amount":1,"amount":42`, 1) + `],"success":true}`, func(client *Tron) error {
@@ -81,14 +69,6 @@ func TestTronHistoryResponsesRejectAmbiguousProviderJSON(t *testing.T) {
 		}},
 		{"native contract type URL mismatch", "/v1/accounts/", `{"data":[` + strings.Replace(nativeRow, `type.googleapis.com/protocol.TransferContract`, `type.googleapis.com/protocol.TriggerSmartContract`, 1) + `],"success":true}`, func(client *Tron) error {
 			_, err := client.NativeTransactions(context.Background(), tronHistoryAddress, 20)
-			return err
-		}},
-		{"native permission aliases", "/v1/accounts/", `{"data":[` + strings.Replace(nativeRow, `"type":"TransferContract"`, `"type":"TransferContract","Permission_id":1,"permission_id":1`, 1) + `],"success":true}`, func(client *Tron) error {
-			_, err := client.NativeTransactions(context.Background(), tronHistoryAddress, 20)
-			return err
-		}},
-		{"internal unknown data member", "/v1/accounts/", `{"data":[` + strings.Replace(internalRow, `"rejected":false`, `"unexpected":1,"rejected":false`, 1) + `],"success":true}`, func(client *Tron) error {
-			_, err := client.InternalTransactions(context.Background(), tronHistoryAddress, 20)
 			return err
 		}},
 		{"internal duplicate scalar", "/v1/accounts/", `{"data":[` + strings.Replace(internalRow, `"_":42`, `"_":1,"_":42`, 1) + `],"success":true}`, func(client *Tron) error {
@@ -114,6 +94,45 @@ func TestTronHistoryResponsesRejectAmbiguousProviderJSON(t *testing.T) {
 				t.Fatal("ambiguous TronGrid history response must fail closed")
 			}
 		})
+	}
+}
+
+func TestTronHistoryAllowsAdditiveProviderFields(t *testing.T) {
+	t.Parallel()
+
+	trc20 := `{"data":[{"transaction_id":"` + tronHistoryTxID + `",` +
+		`"token_info":{"symbol":"USDT","address":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",` +
+		`"decimals":6,"name":"Tether USD","futureTokenField":{}},` +
+		`"block_timestamp":1700000000000,"from":"TQguVRm3tDmZG7AeZ47Mk6qi6GTF1ZDqkZ",` +
+		`"to":"` + tronHistoryAddress + `","type":"Transfer","value":"1000000","futureRowField":[]},{}],` +
+		`"success":true,"futureEnvelopeField":1,"meta":{"page_size":1,"futureMetaField":true,` +
+		`"links":{"next":"https://example.test/next","futureLinkField":null}}}`
+	trc20Rows, err := decodeTronTRC20History([]byte(trc20))
+	if err != nil || len(trc20Rows) != 1 || trc20Rows[0].Value != "1000000" {
+		t.Fatalf("additive TRC-20 fields broke history: rows=%#v err=%v", trc20Rows, err)
+	}
+
+	native := `{"data":[{"ret":[{"contractRet":"SUCCESS","fee":0,"futureReceipt":true}],` +
+		`"txID":"` + tronHistoryTxID + `","block_timestamp":1700000000000,"futureRow":{},` +
+		`"raw_data":{"futureRaw":1,"contract":[{"Permission_id":2,"permission_id":2,"futureContract":null,` +
+		`"parameter":{"futureParameter":[],"value":{"amount":42,` +
+		`"owner_address":"4178d80a0c4f4106c1119c20e69e852c256c02ddaa",` +
+		`"to_address":"41608f8da72479edc7dd921e4c30bb7e7cddbe722e","futureValue":true},` +
+		`"type_url":"type.googleapis.com/protocol.TransferContract"},"type":"TransferContract"}]}},{}],` +
+		`"success":true,"futureEnvelope":[]}`
+	nativeRows, err := decodeTronNativeHistory([]byte(native))
+	if err != nil || len(nativeRows) != 1 || nativeRows[0].Amount != "42" {
+		t.Fatalf("additive native fields broke history: rows=%#v err=%v", nativeRows, err)
+	}
+
+	internal := `{"data":[{"internal_tx_id":"` + tronInternalID + `","futureRow":1,` +
+		`"data":{"note":"call","rejected":false,"call_value":{"_":42,"futureScalar":true},"futureData":{}},` +
+		`"block_timestamp":1700000000000,"to_address":"41608f8da72479edc7dd921e4c30bb7e7cddbe722e",` +
+		`"tx_id":"` + tronHistoryTxID + `","from_address":"4178d80a0c4f4106c1119c20e69e852c256c02ddaa"},{}],` +
+		`"success":true,"futureEnvelope":{}}`
+	internalRows, err := decodeTronInternalHistory([]byte(internal))
+	if err != nil || len(internalRows) != 1 || internalRows[0].Amount != "42" {
+		t.Fatalf("additive internal fields broke history: rows=%#v err=%v", internalRows, err)
 	}
 }
 
@@ -256,16 +275,18 @@ func TestTronTRC20AuthorizationIsNotAssetHistory(t *testing.T) {
 	}
 }
 
-func TestTronHistoryMetaRejectsAmbiguity(t *testing.T) {
+func TestTronHistoryIgnoresNonSemanticPaginationMeta(t *testing.T) {
 	t.Parallel()
 	for _, payload := range []string{
 		`{"data":[],"success":true,"meta":{"page_size":1,"Page_size":2}}`,
 		`{"data":[],"success":true,"meta":{"fingerprint":"a","fingerprint":"b"}}`,
 		`{"data":[],"success":true,"meta":{"links":{"next":"https://example.test","Next":"bad"}}}`,
 		`{"data":[],"success":true,"meta":{"page_size":1.5}}`,
+		`{"data":[],"success":true,"meta":"provider-defined"}`,
 	} {
-		if _, err := decodeTronHistoryEnvelope([]byte(payload)); err == nil {
-			t.Fatalf("ambiguous meta must fail closed: %s", payload)
+		rows, err := decodeTronHistoryEnvelope([]byte(payload))
+		if err != nil || rows == nil || len(rows) != 0 {
+			t.Fatalf("non-semantic pagination metadata broke history: rows=%#v err=%v payload=%s", rows, err, payload)
 		}
 	}
 }

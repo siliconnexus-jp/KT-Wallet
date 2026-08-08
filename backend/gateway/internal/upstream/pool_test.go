@@ -522,6 +522,49 @@ func TestJSONRPCResponseEnvelopeRejectsAliasesUnknownAndDuplicates(t *testing.T)
 	}
 }
 
+func TestExtensibleJSONRPCCallAllowsOnlyAdditiveEnvelopeMembers(t *testing.T) {
+	t.Parallel()
+
+	t.Run("additive member", func(t *testing.T) {
+		node := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"value":7},"providerMetadata":{}}`))
+		})
+		p := NewPool(
+			"solana",
+			[]string{node.srv.URL},
+			clock.NewFake(time.Unix(1_700_000_000, 0)),
+			nil,
+			time.Second,
+		)
+		result, err := p.CallExtensible(context.Background(), "getSignaturesForAddress", nil)
+		if err != nil || string(result) != `{"value":7}` {
+			t.Fatalf("additive provider metadata broke read-only call: result=%s err=%v", result, err)
+		}
+	})
+
+	for name, payload := range map[string]string{
+		"case alias":       `{"jsonrpc":"2.0","id":1,"Result":"stale"}`,
+		"case collision":   `{"jsonrpc":"2.0","id":1,"result":"first","Result":"stale"}`,
+		"duplicate result": `{"jsonrpc":"2.0","id":1,"result":"first","result":"stale"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			node := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(payload))
+			})
+			p := NewPool(
+				"solana",
+				[]string{node.srv.URL},
+				clock.NewFake(time.Unix(1_700_000_000, 0)),
+				nil,
+				time.Second,
+			)
+			if _, err := p.CallExtensible(context.Background(), "getSignaturesForAddress", nil); err == nil {
+				t.Fatal("ambiguous read-only envelope must still fail closed")
+			}
+		})
+	}
+}
+
 func TestJSONRPCResponseErrorAllowsStandardDataMember(t *testing.T) {
 	rejecting := newFakeNode(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"nonce too low","data":{"nonce":"0x1"}}}`))

@@ -117,7 +117,7 @@ func (s *Solana) GetOwnedTokenAccounts(ctx context.Context, owner string) ([]str
 	seen := map[string]bool{}
 	accounts := make([]string, 0)
 	for _, programID := range []string{splTokenProgram, splToken2022Program} {
-		raw, err := s.pool.Call(ctx, "getTokenAccountsByOwner", []any{
+		raw, err := s.pool.CallExtensible(ctx, "getTokenAccountsByOwner", []any{
 			owner,
 			map[string]string{"programId": programID},
 			map[string]string{"encoding": "jsonParsed", "commitment": "confirmed"},
@@ -147,7 +147,7 @@ func (s *Solana) GetOwnedTokenAccounts(ctx context.Context, owner string) ([]str
 // GetSignaturesForAddress returns the newest transaction signatures touching
 // address. This is a standard Solana JSON-RPC method and needs no indexer key.
 func (s *Solana) GetSignaturesForAddress(ctx context.Context, address string, limit int) ([]SolanaSignature, error) {
-	raw, err := s.pool.Call(ctx, "getSignaturesForAddress", []any{
+	raw, err := s.pool.CallExtensible(ctx, "getSignaturesForAddress", []any{
 		address,
 		map[string]int{"limit": limit},
 	})
@@ -201,7 +201,7 @@ func (s SolanaSignature) ExecutionStatus() ExecutionStatus {
 // transfer touches only the recipient ATA and omits the owner public key from
 // the transaction account list.
 func (s *Solana) GetTransactionAccountImpact(ctx context.Context, signature, address string) (*SolanaAccountImpact, error) {
-	raw, err := s.pool.Call(ctx, "getTransaction", []any{
+	raw, err := s.pool.CallExtensible(ctx, "getTransaction", []any{
 		signature,
 		map[string]any{
 			"encoding":                       "jsonParsed",

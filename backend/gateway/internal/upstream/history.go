@@ -158,7 +158,7 @@ func (t EtherscanInternalTx) CanonicalTraceID() string {
 }
 
 func decodeExplorerAccountEnvelope(data []byte) ([]json.RawMessage, bool, error) {
-	fields, err := decodeExactJSONObject(data, "status", "message", "result")
+	fields, err := decodeExtensibleJSONObject(data, "status", "message", "result")
 	if err != nil {
 		return nil, false, err
 	}
@@ -179,23 +179,26 @@ func decodeExplorerAccountEnvelope(data []byte) ([]json.RawMessage, bool, error)
 	switch {
 	case *status == "1" && *message == "OK":
 		return entries, false, nil
-	case *status == "0" && *message == "No transactions found" && len(entries) == 0:
+	case *status == "0" && explorerEmptyHistoryMessage(*message) && len(entries) == 0:
 		return entries, false, nil
 	default:
 		return nil, true, nil
 	}
 }
 
+func explorerEmptyHistoryMessage(message string) bool {
+	switch strings.TrimSpace(message) {
+	case "No transactions found", "No internal transactions found", "No token transfers found":
+		return true
+	default:
+		return false
+	}
+}
+
 func decodeEtherscanTx(raw json.RawMessage) (EtherscanTx, error) {
-	fields, err := decodeExactJSONObject(
+	fields, err := decodeExtensibleJSONObject(
 		raw,
-		"blockNumber", "blockHash", "timeStamp", "hash", "nonce",
-		"transactionIndex", "from", "to", "value", "gas", "gasPrice",
-		"input", "methodId", "functionName", "contractAddress",
-		"cumulativeGasUsed", "txreceipt_status", "gasUsed", "confirmations",
-		"isError", "maxFeePerGas", "maxPriorityFeePerGas", "type",
-		"l1Fee", "l1GasPrice", "l1GasUsed", "l1FeeScalar",
-		"blobGasUsed", "blobGasPrice", "authorizationList",
+		"timeStamp", "hash", "from", "to", "value", "isError", "txreceipt_status",
 	)
 	if err != nil {
 		return EtherscanTx{}, err
@@ -242,16 +245,12 @@ func decodeEtherscanTx(raw json.RawMessage) (EtherscanTx, error) {
 }
 
 func decodeEtherscanTokenTx(raw json.RawMessage) (EtherscanTokenTx, error) {
-	fields, err := decodeExactJSONObject(
+	fields, err := decodeExtensibleJSONObject(
 		raw,
-		"blockNumber", "timeStamp", "hash", "nonce", "blockHash", "from",
-		"contractAddress", "to", "value", "tokenName", "tokenSymbol",
-		"tokenDecimal", "transactionIndex", "gas", "gasPrice", "gasUsed",
-		"cumulativeGasUsed", "input", "methodId", "functionName",
-		"confirmations", "logIndex", "isError", "txreceipt_status",
-		"maxFeePerGas", "maxPriorityFeePerGas", "type", "l1Fee",
-		"l1GasPrice", "l1GasUsed", "l1FeeScalar", "blobGasUsed",
-		"blobGasPrice", "authorizationList",
+		"blockNumber", "timeStamp", "hash", "blockHash", "from",
+		"contractAddress", "to", "value", "tokenSymbol",
+		"tokenDecimal", "transactionIndex", "confirmations", "logIndex",
+		"isError", "txreceipt_status",
 	)
 	if err != nil {
 		return EtherscanTokenTx{}, err
@@ -311,11 +310,10 @@ func decodeEtherscanTokenTx(raw json.RawMessage) (EtherscanTokenTx, error) {
 }
 
 func decodeEtherscanInternalTx(raw json.RawMessage) (EtherscanInternalTx, error) {
-	fields, err := decodeExactJSONObject(
+	fields, err := decodeExtensibleJSONObject(
 		raw,
-		"blockNumber", "timeStamp", "hash", "transactionHash", "from", "to",
-		"value", "contractAddress", "input", "type", "callType", "gas",
-		"gasUsed", "traceId", "index", "isError", "txreceipt_status", "errCode",
+		"timeStamp", "hash", "transactionHash", "from", "to",
+		"value", "traceId", "index", "isError", "txreceipt_status",
 	)
 	if err != nil {
 		return EtherscanInternalTx{}, err
@@ -488,12 +486,17 @@ func (e *Etherscan) TxList(ctx context.Context, chainID int, address string, lim
 		return nil, err
 	}
 	txs := make([]EtherscanTx, 0, len(rows))
+	malformed := false
 	for _, row := range rows {
 		tx, err := decodeEtherscanTx(row)
 		if err != nil {
-			return nil, &Unavailable{Upstream: "etherscan", Message: "malformed explorer transaction row"}
+			malformed = true
+			continue
 		}
 		txs = append(txs, tx)
+	}
+	if malformed && len(txs) == 0 {
+		return nil, &Unavailable{Upstream: "etherscan", Message: "explorer page has no valid transaction rows"}
 	}
 	return txs, nil
 }
@@ -505,12 +508,17 @@ func (e *Etherscan) TokenTxList(ctx context.Context, chainID int, address string
 		return nil, err
 	}
 	txs := make([]EtherscanTokenTx, 0, len(rows))
+	malformed := false
 	for _, row := range rows {
 		tx, err := decodeEtherscanTokenTx(row)
 		if err != nil {
-			return nil, &Unavailable{Upstream: "etherscan", Message: "malformed explorer token row"}
+			malformed = true
+			continue
 		}
 		txs = append(txs, tx)
+	}
+	if malformed && len(txs) == 0 {
+		return nil, &Unavailable{Upstream: "etherscan", Message: "explorer page has no valid token rows"}
 	}
 	return txs, nil
 }
@@ -522,12 +530,17 @@ func (e *Etherscan) InternalTxList(ctx context.Context, chainID int, address str
 		return nil, err
 	}
 	txs := make([]EtherscanInternalTx, 0, len(rows))
+	malformed := false
 	for _, row := range rows {
 		tx, err := decodeEtherscanInternalTx(row)
 		if err != nil {
-			return nil, &Unavailable{Upstream: "etherscan", Message: "malformed explorer internal row"}
+			malformed = true
+			continue
 		}
 		txs = append(txs, tx)
+	}
+	if malformed && len(txs) == 0 {
+		return nil, &Unavailable{Upstream: "etherscan", Message: "explorer page has no valid internal rows"}
 	}
 	return txs, nil
 }
@@ -616,7 +629,7 @@ type HeliusTransfer struct {
 }
 
 func decodeHeliusTransfers(data []byte) ([]HeliusTransfer, bool, error) {
-	fields, err := decodeExactJSONObject(data, "jsonrpc", "id", "result", "error")
+	fields, err := decodeExtensibleJSONObject(data, "jsonrpc", "id", "result", "error")
 	if err != nil {
 		return nil, false, err
 	}
@@ -633,7 +646,7 @@ func decodeHeliusTransfers(data []byte) ([]HeliusTransfer, bool, error) {
 		return nil, false, fmt.Errorf("invalid Helius JSON-RPC response envelope")
 	}
 	if hasError {
-		errorFields, err := decodeExactJSONObject(errorRaw, "code", "message", "data")
+		errorFields, err := decodeExtensibleJSONObject(errorRaw, "code", "message")
 		if err != nil {
 			return nil, false, err
 		}
@@ -647,16 +660,9 @@ func decodeHeliusTransfers(data []byte) ([]HeliusTransfer, bool, error) {
 		return nil, true, nil
 	}
 
-	resultFields, err := decodeExactJSONObject(resultRaw, "data", "paginationToken")
+	resultFields, err := decodeExtensibleJSONObject(resultRaw, "data")
 	if err != nil {
 		return nil, false, err
-	}
-	if paginationRaw, ok := resultFields["paginationToken"]; ok {
-		var paginationToken string
-		if err := json.Unmarshal(paginationRaw, &paginationToken); err != nil ||
-			paginationToken == "" || len(paginationToken) > 512 {
-			return nil, false, fmt.Errorf("invalid Helius pagination token")
-		}
 	}
 	dataRaw, ok := resultFields["data"]
 	if !ok {
@@ -667,33 +673,32 @@ func decodeHeliusTransfers(data []byte) ([]HeliusTransfer, bool, error) {
 		return nil, false, fmt.Errorf("Helius result data is not an array")
 	}
 	transfers := make([]HeliusTransfer, 0, len(entries))
+	malformed := false
 	for _, entry := range entries {
 		transfer, err := decodeHeliusTransfer(entry)
 		if err != nil {
-			return nil, false, err
+			malformed = true
+			continue
 		}
 		transfers = append(transfers, transfer)
+	}
+	if malformed && len(transfers) == 0 {
+		return nil, false, fmt.Errorf("Helius transfer page has no valid rows")
 	}
 	return transfers, false, nil
 }
 
 func decodeHeliusTransfer(raw json.RawMessage) (HeliusTransfer, error) {
-	fields, err := decodeExactJSONObject(
+	fields, err := decodeExtensibleJSONObject(
 		raw,
 		"signature",
-		"slot",
 		"blockTime",
 		"type",
 		"fromUserAccount",
 		"toUserAccount",
-		"fromTokenAccount",
-		"toTokenAccount",
 		"mint",
 		"amount",
 		"decimals",
-		"uiAmount",
-		"feeAmount",
-		"feeUiAmount",
 		"confirmationStatus",
 		"transactionIdx",
 		"instructionIdx",
@@ -704,7 +709,6 @@ func decodeHeliusTransfer(raw json.RawMessage) (HeliusTransfer, error) {
 	}
 	for _, required := range []string{
 		"signature",
-		"slot",
 		"blockTime",
 		"type",
 		"fromUserAccount",
@@ -712,11 +716,9 @@ func decodeHeliusTransfer(raw json.RawMessage) (HeliusTransfer, error) {
 		"mint",
 		"amount",
 		"decimals",
-		"uiAmount",
 		"confirmationStatus",
 		"transactionIdx",
 		"instructionIdx",
-		"innerInstructionIdx",
 	} {
 		if _, ok := fields[required]; !ok {
 			return HeliusTransfer{}, fmt.Errorf("incomplete Helius transfer row")
@@ -724,19 +726,13 @@ func decodeHeliusTransfer(raw json.RawMessage) (HeliusTransfer, error) {
 	}
 	type transferWire struct {
 		Signature           *string `json:"signature"`
-		Slot                *uint64 `json:"slot"`
 		BlockTime           *int64  `json:"blockTime"`
 		Type                *string `json:"type"`
 		FromUserAccount     *string `json:"fromUserAccount"`
 		ToUserAccount       *string `json:"toUserAccount"`
-		FromTokenAccount    *string `json:"fromTokenAccount"`
-		ToTokenAccount      *string `json:"toTokenAccount"`
 		Mint                *string `json:"mint"`
 		Amount              *string `json:"amount"`
 		Decimals            *int    `json:"decimals"`
-		UIAmount            *string `json:"uiAmount"`
-		FeeAmount           *string `json:"feeAmount"`
-		FeeUIAmount         *string `json:"feeUiAmount"`
 		ConfirmationStatus  *string `json:"confirmationStatus"`
 		TransactionIndex    *int    `json:"transactionIdx"`
 		InstructionIndex    *int    `json:"instructionIdx"`
@@ -744,20 +740,21 @@ func decodeHeliusTransfer(raw json.RawMessage) (HeliusTransfer, error) {
 	}
 	var wire transferWire
 	if err := json.Unmarshal(raw, &wire); err != nil ||
-		wire.Signature == nil || wire.Slot == nil || wire.BlockTime == nil || wire.Type == nil ||
+		wire.Signature == nil || wire.BlockTime == nil || wire.Type == nil ||
 		(wire.FromUserAccount == nil && wire.ToUserAccount == nil) || wire.Mint == nil ||
-		wire.Amount == nil || wire.Decimals == nil || wire.UIAmount == nil ||
-		wire.ConfirmationStatus == nil ||
+		wire.Amount == nil || wire.Decimals == nil || wire.ConfirmationStatus == nil ||
 		wire.TransactionIndex == nil || wire.InstructionIndex == nil {
 		return HeliusTransfer{}, fmt.Errorf("incomplete Helius transfer row")
 	}
-	if bytes.Equal(bytes.TrimSpace(fields["innerInstructionIdx"]), []byte("null")) {
-		wire.InnerInstructionIdx = nil
-	} else if wire.InnerInstructionIdx == nil {
-		return HeliusTransfer{}, fmt.Errorf("invalid Helius inner instruction index")
+	if innerRaw, present := fields["innerInstructionIdx"]; present {
+		if bytes.Equal(bytes.TrimSpace(innerRaw), []byte("null")) {
+			wire.InnerInstructionIdx = nil
+		} else if wire.InnerInstructionIdx == nil {
+			return HeliusTransfer{}, fmt.Errorf("invalid Helius inner instruction index")
+		}
 	}
 	if *wire.Signature == "" || *wire.Mint == "" || !validUnsignedProviderInteger(*wire.Amount) ||
-		!validProviderDecimal(*wire.UIAmount) || *wire.Decimals < 0 || *wire.Decimals > 36 ||
+		*wire.Decimals < 0 || *wire.Decimals > 36 ||
 		*wire.BlockTime < 0 ||
 		*wire.TransactionIndex < 0 || *wire.InstructionIndex < 0 ||
 		(wire.InnerInstructionIdx != nil && *wire.InnerInstructionIdx < 0) {
@@ -771,22 +768,6 @@ func decodeHeliusTransfer(raw json.RawMessage) (HeliusTransfer, error) {
 	if (wire.FromUserAccount != nil && *wire.FromUserAccount == "") ||
 		(wire.ToUserAccount != nil && *wire.ToUserAccount == "") {
 		return HeliusTransfer{}, fmt.Errorf("invalid Helius owner account")
-	}
-	for key, value := range map[string]*string{
-		"fromTokenAccount": wire.FromTokenAccount,
-		"toTokenAccount":   wire.ToTokenAccount,
-	} {
-		if _, present := fields[key]; present && (value == nil || *value == "") {
-			return HeliusTransfer{}, fmt.Errorf("invalid Helius token account")
-		}
-	}
-	_, hasFeeAmount := fields["feeAmount"]
-	_, hasFeeUIAmount := fields["feeUiAmount"]
-	if hasFeeAmount != hasFeeUIAmount ||
-		(hasFeeAmount && (wire.FeeAmount == nil || wire.FeeUIAmount == nil ||
-			!validUnsignedProviderInteger(*wire.FeeAmount) ||
-			!validProviderDecimal(*wire.FeeUIAmount))) {
-		return HeliusTransfer{}, fmt.Errorf("invalid Helius transfer fee")
 	}
 	fromUserAccount, toUserAccount := "", ""
 	if wire.FromUserAccount != nil {
