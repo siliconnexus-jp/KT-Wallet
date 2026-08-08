@@ -56,6 +56,7 @@ String _abbrevAddress(String a) =>
 Widget _sheetField(
   TextEditingController controller, {
   required String label,
+  Key? fieldKey,
   bool mono = false,
   int? maxLength,
   VoidCallback? onChanged,
@@ -79,6 +80,7 @@ Widget _sheetField(
         border: Border.all(color: WalletColors.border),
       ),
       child: TextField(
+        key: fieldKey,
         controller: controller,
         onChanged: (_) => onChanged?.call(),
         inputFormatters: maxLength == null
@@ -734,30 +736,54 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
     if (tokens.isEmpty && controller.allowsTestBypass) {
       // Explicit gallery/golden fixture only. A missing persistence store must
       // never make a production controller invent owned tokens.
-      for (final (symbol, name, network, contract, enabled) in [
-        ('USDT', 'Tether USD', 'TRON · TRC-20', usdtTronToken.contract, true),
+      for (final (symbol, name, network, contract, networkId, enabled) in [
+        (
+          'USDT',
+          'Tether USD',
+          'TRON · TRC-20',
+          usdtTronToken.contract,
+          'tron-mainnet',
+          true,
+        ),
         (
           'USDT',
           'Tether USD',
           'Ethereum · ERC-20',
           usdtEthToken.contract,
+          'eth-mainnet',
           true,
         ),
-        ('USDC', 'USD Coin', 'Solana · SPL', usdcSolanaToken.contract, true),
+        (
+          'USDC',
+          'USD Coin',
+          'Solana · SPL',
+          usdcSolanaToken.contract,
+          'sol-mainnet',
+          true,
+        ),
         (
           'BUSD',
           'Binance USD',
           'Ethereum · ERC-20',
           officialBusdEthereumContract,
+          'eth-mainnet',
           false,
         ),
-        ('UNI', 'Uniswap', 'Ethereum · ERC-20', uniEthToken.contract, false),
+        (
+          'UNI',
+          'Uniswap',
+          'Ethereum · ERC-20',
+          uniEthToken.contract,
+          'eth-mainnet',
+          false,
+        ),
       ]) {
         await controller.addToken(
           symbol: symbol,
           name: name,
           contract: contract,
           network: network,
+          networkId: networkId,
           enabled: enabled,
         );
       }
@@ -925,6 +951,20 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
     _ => network,
   };
 
+  static String _networkTokenStandard(Chain chain) => switch (chain) {
+    Chain.ethereum ||
+    Chain.polygon ||
+    Chain.base ||
+    Chain.arbitrum ||
+    Chain.avalanche ||
+    Chain.bnb => 'ERC-20',
+    Chain.tron => 'TRC-20',
+    Chain.solana => 'SPL',
+  };
+
+  static String _networkDisplayLabel(Network network) =>
+      '${network.name} · ${_networkTokenStandard(network.chain)}';
+
   Future<void> _addOfficialToken(GatewayOfficialToken official) async {
     final controller = _controller!;
     final existing = _storedToken(official);
@@ -938,6 +978,7 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
         name: official.name,
         contract: official.contract,
         network: _networkLabel(official.network),
+        networkId: official.network,
       );
     }
     if (!mounted) return;
@@ -961,6 +1002,11 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
   /// appended to the in-memory list as an enabled row.
   Future<void> _addToken() async {
     final l10n = AppLocalizations.of(context);
+    final networkController = NetworkScope.of(context);
+    final availableNetworks = [
+      for (final chain in Chain.values) networkController.activeFor(chain),
+    ];
+    var selectedNetworkId = availableNetworks.first.id;
     final symbolController = TextEditingController();
     final nameController = TextEditingController();
     final contractController = TextEditingController();
@@ -972,132 +1018,184 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-          ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 36,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: WalletColors.border,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    l10n.addTokenTitle,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: WalletColors.text,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _sheetField(
-                    symbolController,
-                    label: l10n.tokenSymbolLabel,
-                    onChanged: () => setSheetState(() {}),
-                  ),
-                  const SizedBox(height: 14),
-                  _sheetField(
-                    nameController,
-                    label: l10n.nameLabel,
-                    onChanged: () => setSheetState(() {}),
-                  ),
-                  const SizedBox(height: 14),
-                  _sheetField(
-                    contractController,
-                    label: l10n.contractAddress,
-                    mono: true,
-                    onChanged: () => setSheetState(() {}),
-                  ),
-                  if (isProtectedTokenSymbol(symbolController.text.trim()) &&
-                      !_isOfficial(
-                        symbolController.text.trim(),
-                        contractController.text.trim(),
-                      )) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: WalletColors.amber.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: WalletColors.amber.withValues(alpha: 0.32),
+        builder: (ctx, setSheetState) {
+          final selectedNetwork = availableNetworks.firstWhere(
+            (network) => network.id == selectedNetworkId,
+          );
+          final contract = contractController.text.trim();
+          final contractValid =
+              contract.isNotEmpty &&
+              Addresses.validate(selectedNetwork.chain, contract).isValid;
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            ),
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: WalletColors.border,
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(
-                            Icons.warning_amber_rounded,
-                            size: 20,
-                            color: WalletColors.amber,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              l10n.tokenImpersonationWarning(
-                                symbolController.text.trim().toUpperCase(),
-                              ),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                height: 1.4,
-                                fontWeight: FontWeight.w600,
-                                color: WalletColors.amber,
-                              ),
-                            ),
-                          ),
-                        ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      l10n.addTokenTitle,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: WalletColors.text,
                       ),
                     ),
+                    const SizedBox(height: 16),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.chooseNetwork,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: WalletColors.text2,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          decoration: BoxDecoration(
+                            color: WalletColors.bg,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: WalletColors.border),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              key: const ValueKey('custom-token-network'),
+                              value: selectedNetworkId,
+                              isExpanded: true,
+                              borderRadius: BorderRadius.circular(12),
+                              items: [
+                                for (final network in availableNetworks)
+                                  DropdownMenuItem(
+                                    value: network.id,
+                                    child: Text(_networkDisplayLabel(network)),
+                                  ),
+                              ],
+                              onChanged: (value) {
+                                if (value == null) return;
+                                setSheetState(() => selectedNetworkId = value);
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    _sheetField(
+                      symbolController,
+                      label: l10n.tokenSymbolLabel,
+                      fieldKey: const ValueKey('custom-token-symbol'),
+                      onChanged: () => setSheetState(() {}),
+                    ),
+                    const SizedBox(height: 14),
+                    _sheetField(
+                      nameController,
+                      label: l10n.nameLabel,
+                      fieldKey: const ValueKey('custom-token-name'),
+                      onChanged: () => setSheetState(() {}),
+                    ),
+                    const SizedBox(height: 14),
+                    _sheetField(
+                      contractController,
+                      label: l10n.contractAddress,
+                      fieldKey: const ValueKey('custom-token-contract'),
+                      mono: true,
+                      onChanged: () => setSheetState(() {}),
+                    ),
+                    if (isProtectedTokenSymbol(symbolController.text.trim()) &&
+                        !_isOfficial(
+                          symbolController.text.trim(),
+                          contractController.text.trim(),
+                        )) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: WalletColors.amber.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: WalletColors.amber.withValues(alpha: 0.32),
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              size: 20,
+                              color: WalletColors.amber,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                l10n.tokenImpersonationWarning(
+                                  symbolController.text.trim().toUpperCase(),
+                                ),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  height: 1.4,
+                                  fontWeight: FontWeight.w600,
+                                  color: WalletColors.amber,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 18),
+                    KtPrimaryButton(
+                      label: l10n.actionSave,
+                      onPressed:
+                          symbolController.text.trim().isEmpty ||
+                              nameController.text.trim().isEmpty ||
+                              !contractValid
+                          ? null
+                          : () async {
+                              final symbol = symbolController.text
+                                  .trim()
+                                  .toUpperCase();
+                              final name = nameController.text.trim();
+                              final controller = _controller!;
+                              final navigator = Navigator.of(ctx);
+                              await controller.addToken(
+                                symbol: symbol,
+                                name: name,
+                                contract: contract,
+                                network: _networkDisplayLabel(selectedNetwork),
+                                networkId: selectedNetwork.id,
+                              );
+                              if (mounted) {
+                                setState(() => _tokens = controller.tokens);
+                              }
+                              navigator.pop();
+                            },
+                    ),
                   ],
-                  const SizedBox(height: 18),
-                  KtPrimaryButton(
-                    label: l10n.actionSave,
-                    onPressed:
-                        symbolController.text.trim().isEmpty ||
-                            nameController.text.trim().isEmpty
-                        ? null
-                        : () async {
-                            final symbol = symbolController.text
-                                .trim()
-                                .toUpperCase();
-                            final name = nameController.text.trim();
-                            final contract = contractController.text.trim();
-                            final sub = contract.isEmpty
-                                ? name
-                                : '$name · ${_abbrevAddress(contract)}';
-                            final controller = _controller!;
-                            final navigator = Navigator.of(ctx);
-                            await controller.addToken(
-                              symbol: symbol,
-                              name: name,
-                              contract: contract.isEmpty ? null : contract,
-                              network: sub,
-                            );
-                            if (mounted) {
-                              setState(() => _tokens = controller.tokens);
-                            }
-                            navigator.pop();
-                          },
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
     // Not disposed here: the sheet's exit animation still holds the fields.

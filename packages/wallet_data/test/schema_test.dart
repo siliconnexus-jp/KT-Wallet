@@ -7,7 +7,7 @@ import 'package:test/test.dart';
 import 'package:wallet_data/wallet_data.dart';
 
 void main() {
-  test('schemaVersion is 10 and all tables are created', () async {
+  test('schemaVersion is 11 and all tables are created', () async {
     final db = WalletDatabase(NativeDatabase.memory());
     addTearDown(db.close);
 
@@ -22,7 +22,7 @@ void main() {
             .map((r) => r.data['name'] as String)
             .toSet();
 
-    expect(db.schemaVersion, 10);
+    expect(db.schemaVersion, 11);
     for (final expected in [
       'wallets',
       'accounts',
@@ -41,55 +41,59 @@ void main() {
     }
   });
 
-  test('v9 → v10 resets only untrustworthy hot-wallet backup flags', () async {
-    final dir = await Directory.systemTemp.createTemp('wallet_data_v9');
-    addTearDown(() => dir.delete(recursive: true));
-    final file = File('${dir.path}/v9.sqlite');
+  test(
+    'v9 → v11 resets backup flags and adds custom-token network id',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('wallet_data_v9');
+      addTearDown(() => dir.delete(recursive: true));
+      final file = File('${dir.path}/v9.sqlite');
 
-    final created = WalletDatabase(NativeDatabase(file));
-    final createdRepo = WalletsRepository(created);
-    await createdRepo.insert(
-      WalletsCompanion.insert(
-        id: 'hot',
-        name: 'imported hot wallet',
-        type: WalletType.hot,
-        avatarColor: 1,
-        backedUp: const Value(true),
-        createdAt: 1,
-      ),
-    );
-    await createdRepo.insert(
-      WalletsCompanion.insert(
-        id: 'watch',
-        name: 'watch wallet',
-        type: WalletType.watch,
-        avatarColor: 2,
-        backedUp: const Value(true),
-        createdAt: 2,
-      ),
-    );
-    await created.close();
+      final created = WalletDatabase(NativeDatabase(file));
+      final createdRepo = WalletsRepository(created);
+      await createdRepo.insert(
+        WalletsCompanion.insert(
+          id: 'hot',
+          name: 'imported hot wallet',
+          type: WalletType.hot,
+          avatarColor: 1,
+          backedUp: const Value(true),
+          createdAt: 1,
+        ),
+      );
+      await createdRepo.insert(
+        WalletsCompanion.insert(
+          id: 'watch',
+          name: 'watch wallet',
+          type: WalletType.watch,
+          avatarColor: 2,
+          backedUp: const Value(true),
+          createdAt: 2,
+        ),
+      );
+      await created.close();
 
-    final raw = sqlite3.sqlite3.open(file.path);
-    raw
-      ..execute('PRAGMA user_version = 9')
-      ..close();
+      final raw = sqlite3.sqlite3.open(file.path);
+      raw
+        ..execute('ALTER TABLE custom_tokens DROP COLUMN network_id')
+        ..execute('PRAGMA user_version = 9')
+        ..close();
 
-    final migrated = WalletDatabase(NativeDatabase(file));
-    addTearDown(migrated.close);
-    final migratedRepo = WalletsRepository(migrated);
-    expect((await migratedRepo.byId('hot'))!.backedUp, isFalse);
-    expect((await migratedRepo.byId('watch'))!.backedUp, isTrue);
-    final version =
-        (await migrated.customSelect('PRAGMA user_version').getSingle())
-            .data
-            .values
-            .first;
-    expect(version, 10);
-  });
+      final migrated = WalletDatabase(NativeDatabase(file));
+      addTearDown(migrated.close);
+      final migratedRepo = WalletsRepository(migrated);
+      expect((await migratedRepo.byId('hot'))!.backedUp, isFalse);
+      expect((await migratedRepo.byId('watch'))!.backedUp, isTrue);
+      final version =
+          (await migrated.customSelect('PRAGMA user_version').getSingle())
+              .data
+              .values
+              .first;
+      expect(version, 11);
+    },
+  );
 
   test(
-    'v1 → v10 migration keeps data and invalidates legacy backup flags',
+    'v1 → v11 migration keeps data and invalidates legacy backup flags',
     () async {
       // Build the two v1 tables touched by later migrations. The old
       // transactions schema deliberately has none of the EVM replacement
@@ -180,7 +184,9 @@ void main() {
           createdAt: 1,
         ),
       );
-      expect((await tokensRepo.list()).single.symbol, 'USDT');
+      final migratedToken = (await tokensRepo.list()).single;
+      expect(migratedToken.symbol, 'USDT');
+      expect(migratedToken.networkId, isNull);
 
       // The v1 transaction survives and all v3 fields are safely null.
       final legacy = (await WalletsRepository(
@@ -207,11 +213,11 @@ void main() {
           .data
           .values
           .first;
-      expect(version, 10);
+      expect(version, 11);
     },
   );
 
-  test('v3 → v10 adds metadata and invalidates legacy backup flags', () async {
+  test('v3 → v11 adds metadata and invalidates legacy backup flags', () async {
     final dir = await Directory.systemTemp.createTemp('wallet_data_v3');
     addTearDown(() => dir.delete(recursive: true));
     final file = File('${dir.path}/v3.sqlite');
@@ -332,7 +338,7 @@ void main() {
         .data
         .values
         .first;
-    expect(version, 10);
+    expect(version, 11);
   });
 
   test('concurrent transactions on separate wallets do not corrupt', () async {

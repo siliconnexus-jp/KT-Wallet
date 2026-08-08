@@ -35,8 +35,10 @@ class WalletDatabase extends _$WalletDatabase {
   /// v10: invalidate legacy hot-wallet backup flags. Before v10 mnemonic
   /// imports were incorrectly persisted as backed up without an explicit
   /// backup confirmation, so the old boolean cannot be trusted.
+  /// v11: exact network identity for user-added custom tokens. Legacy rows
+  /// remain null rather than guessing across EVM networks.
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   /// Backfill map for [Transactions.networkId]: the chain family's MAINNET
   /// network id, keyed by the `coin` column. Kept as literals because
@@ -111,6 +113,12 @@ class WalletDatabase extends _$WalletDatabase {
         await customStatement(
           'UPDATE wallets SET backed_up = 0 WHERE type = 0',
         );
+      }
+      // A v1 upgrade creates `custom_tokens` above from the current table
+      // definition, which already contains this column. Existing v2-v10
+      // databases need the additive migration.
+      if (from >= 2 && from < 11) {
+        await m.addColumn(customTokens, customTokens.networkId);
       }
     },
     beforeOpen: (details) async {

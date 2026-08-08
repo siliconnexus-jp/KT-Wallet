@@ -183,6 +183,22 @@ class AppLocalizationsJa extends AppLocalizations {
   String get historyLoadingMore => '読み込み中…';
 
   @override
+  String get historyNoRecognizedTransactions => '確認済み資産の取引履歴はまだありません';
+
+  @override
+  String get historyUnverifiedRecordsTitle => '未検証・リスクトークンの履歴';
+
+  @override
+  String get historyUnverifiedRecordsDescription =>
+      'メイン履歴から非表示です。操作前にネットワークとコントラクトを確認してください。';
+
+  @override
+  String get historyCustomTokenBadge => 'カスタム';
+
+  @override
+  String get historyRiskTokenBadge => 'リスク';
+
+  @override
   String get transactionConfirmedNotice => '取引がオンチェーンで確認されました';
 
   @override

@@ -183,6 +183,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get historyLoadingMore => '正在加载更多…';
 
   @override
+  String get historyNoRecognizedTransactions => '暂无已识别资产的交易记录';
+
+  @override
+  String get historyUnverifiedRecordsTitle => '未验证与风险代币记录';
+
+  @override
+  String get historyUnverifiedRecordsDescription => '已从主记录隐藏，请核对网络与合约后再操作';
+
+  @override
+  String get historyCustomTokenBadge => '自定义';
+
+  @override
+  String get historyRiskTokenBadge => '风险';
+
+  @override
   String get transactionConfirmedNotice => '交易已在链上确认';
 
   @override

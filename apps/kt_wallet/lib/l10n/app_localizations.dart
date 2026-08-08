@@ -424,6 +424,36 @@ abstract class AppLocalizations {
   /// **'正在加载更多…'**
   String get historyLoadingMore;
 
+  /// No description provided for @historyNoRecognizedTransactions.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无已识别资产的交易记录'**
+  String get historyNoRecognizedTransactions;
+
+  /// No description provided for @historyUnverifiedRecordsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'未验证与风险代币记录'**
+  String get historyUnverifiedRecordsTitle;
+
+  /// No description provided for @historyUnverifiedRecordsDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'已从主记录隐藏，请核对网络与合约后再操作'**
+  String get historyUnverifiedRecordsDescription;
+
+  /// No description provided for @historyCustomTokenBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义'**
+  String get historyCustomTokenBadge;
+
+  /// No description provided for @historyRiskTokenBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'风险'**
+  String get historyRiskTokenBadge;
+
   /// No description provided for @transactionConfirmedNotice.
   ///
   /// In zh, this message translates to:

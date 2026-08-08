@@ -65,6 +65,7 @@ void main() {
         name: 'Chainlink',
         contract: '0x514910771AF9Ca656af840dff83E8264EcF986CA',
         network: 'Chainlink · 0x514910…F986CA',
+        networkId: 'eth-mainnet',
       );
       await before.addToken(
         symbol: 'ARB',
@@ -79,6 +80,7 @@ void main() {
       final restored = tokens.firstWhere((t) => t.id == link.id);
       expect(restored.symbol, 'LINK');
       expect(restored.contract, '0x514910771AF9Ca656af840dff83E8264EcF986CA');
+      expect(restored.networkId, 'eth-mainnet');
       expect(restored.enabled, isFalse);
       expect(tokens.firstWhere((t) => t.symbol == 'ARB').enabled, isTrue);
     },

@@ -94,4 +94,48 @@ void main() {
     expect(find.byIcon(Icons.verified_rounded), findsWidgets);
     wallets.dispose();
   });
+
+  testWidgets('manually added token stores its exact selected network', (
+    tester,
+  ) async {
+    final wallets = _wallets();
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: WalletScope(
+          controller: wallets,
+          child: TokenManageScreen(catalogClient: _catalogClient()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('custom-token-network')), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('custom-token-symbol')),
+      'mine',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('custom-token-name')),
+      'My Token',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('custom-token-contract')),
+      '0x2222222222222222222222222222222222222222',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(wallets.tokens, hasLength(1));
+    expect(wallets.tokens.single.symbol, 'MINE');
+    expect(wallets.tokens.single.networkId, 'eth-mainnet');
+    expect(wallets.tokens.single.network, 'Ethereum · ERC-20');
+    wallets.dispose();
+  });
 }

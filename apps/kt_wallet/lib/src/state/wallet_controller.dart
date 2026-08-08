@@ -908,6 +908,7 @@ class WalletController extends ChangeNotifier {
     required String name,
     String? contract,
     required String network,
+    String? networkId,
     bool enabled = true,
   }) async {
     final token = CustomToken(
@@ -916,6 +917,7 @@ class WalletController extends ChangeNotifier {
       name: name,
       contract: contract,
       network: network,
+      networkId: networkId,
       enabled: enabled,
       sortOrder: _tokens.length,
       createdAt: DateTime.now().millisecondsSinceEpoch,

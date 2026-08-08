@@ -12,6 +12,7 @@ import '../../l10n/app_localizations.dart';
 import '../market/asset_ref.dart';
 import '../market/balance_service.dart';
 import '../market/history_controller.dart';
+import '../market/history_asset_policy.dart';
 import '../market/history_service.dart';
 import '../market/transaction_status_service.dart';
 import '../market/market_controller.dart';
@@ -1242,6 +1243,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
   /// under a live market context (no `main.dart` wiring). Tests inject their
   /// own controller via [HistoryScope], which always wins over the lazy one.
   HistoryController? _owned;
+  bool _showUnverifiedRecords = false;
 
   @override
   void didChangeDependencies() {
@@ -1313,12 +1315,12 @@ class _RecordsScreenState extends State<RecordsScreen> {
     super.dispose();
   }
 
-  Widget _emptyCard(AppLocalizations l10n) => KtCard(
+  Widget _emptyCard(AppLocalizations l10n, {String? message}) => KtCard(
     child: Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 18),
         child: Text(
-          l10n.historyEmpty,
+          message ?? l10n.historyEmpty,
           style: const TextStyle(fontSize: 13, color: WalletColors.text3),
         ),
       ),
@@ -1353,52 +1355,35 @@ class _RecordsScreenState extends State<RecordsScreen> {
     if (records.isEmpty) {
       return _emptyCard(l10n);
     }
+    final customTokens =
+        WalletScope.maybeOf(context)?.tokens ?? const <CustomToken>[];
+    final classified = [
+      for (final record in records)
+        (
+          record,
+          widget.asset == null
+              ? classifyHistoryAsset(record, customTokens)
+              : HistoryAssetKind.official,
+        ),
+    ];
+    final primary = [
+      for (final item in classified)
+        if (item.$2.visibleInPrimaryHistory) item,
+    ];
+    final unverified = [
+      for (final item in classified)
+        if (!item.$2.visibleInPrimaryHistory) item,
+    ];
     return Column(
       children: [
-        KtCard(
-          child: Column(
-            children: [
-              for (final (i, r) in records.indexed) ...[
-                if (i > 0)
-                  Divider(
-                    height: 1,
-                    color: WalletColors.text.withValues(alpha: 0.06),
-                  ),
-                Builder(
-                  builder: (context) {
-                    final local = history.localTransactionForRecord(r);
-                    final amount =
-                        local?.operation == TxOperationKind.approvalRevoke
-                        ? l10n.approvalRevoke
-                        : '${r.amountText ?? '--'}${r.assetVerified ? '' : ' ⚠'}';
-                    return _RecordRow(
-                      key: ValueKey('history-record-${r.id ?? r.hash}'),
-                      record: _TxRecord(
-                        r.outgoing,
-                        amount,
-                        _formatRecordTime(l10n, r.timestamp),
-                        status: local?.status,
-                        statusUnknown:
-                            local != null &&
-                            (local.status == TxStatus.submitted ||
-                                local.status == TxStatus.broadcast ||
-                                local.status == TxStatus.pending) &&
-                            local.lastCheckOutcome == TxCheckOutcome.unknown,
-                      ),
-                      // A row we broadcast ourselves opens its local record;
-                      // one that only exists on chain travels as `extra`.
-                      onTap: () => local == null
-                          ? context.push('/tx-detail', extra: r)
-                          : context.push(
-                              '/tx-detail?id=${Uri.encodeComponent(local.id)}',
-                            ),
-                    );
-                  },
-                ),
-              ],
-            ],
-          ),
-        ),
+        if (primary.isEmpty)
+          _emptyCard(l10n, message: l10n.historyNoRecognizedTransactions)
+        else
+          _recordsCard(context, l10n, history, primary),
+        if (unverified.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _unverifiedRecordsCard(context, l10n, history, unverified),
+        ],
         if (history.canLoadMore || history.isLoadingMore) ...[
           const SizedBox(height: 12),
           Semantics(
@@ -1422,6 +1407,154 @@ class _RecordsScreenState extends State<RecordsScreen> {
       ],
     );
   }
+
+  Widget _recordsCard(
+    BuildContext context,
+    AppLocalizations l10n,
+    HistoryController history,
+    List<(ChainTxRecord, HistoryAssetKind)> records,
+  ) => KtCard(
+    child: Column(
+      children: [
+        for (final (index, item) in records.indexed) ...[
+          if (index > 0)
+            Divider(
+              height: 1,
+              color: WalletColors.text.withValues(alpha: 0.06),
+            ),
+          _historyRecordRow(context, l10n, history, item.$1, item.$2),
+        ],
+      ],
+    ),
+  );
+
+  Widget _historyRecordRow(
+    BuildContext context,
+    AppLocalizations l10n,
+    HistoryController history,
+    ChainTxRecord record,
+    HistoryAssetKind assetKind,
+  ) {
+    final local = history.localTransactionForRecord(record);
+    final marker = switch (assetKind) {
+      HistoryAssetKind.official => '',
+      HistoryAssetKind.userAdded => ' · ${l10n.historyCustomTokenBadge}',
+      HistoryAssetKind.unverified => ' ⚠',
+      HistoryAssetKind.risky => ' · ${l10n.historyRiskTokenBadge}',
+    };
+    final amount = local?.operation == TxOperationKind.approvalRevoke
+        ? l10n.approvalRevoke
+        : '${record.amountText ?? '--'}$marker';
+    return _RecordRow(
+      key: ValueKey('history-record-${record.id ?? record.hash}'),
+      record: _TxRecord(
+        record.outgoing,
+        amount,
+        _formatRecordTime(l10n, record.timestamp),
+        status: local?.status,
+        statusUnknown:
+            local != null &&
+            (local.status == TxStatus.submitted ||
+                local.status == TxStatus.broadcast ||
+                local.status == TxStatus.pending) &&
+            local.lastCheckOutcome == TxCheckOutcome.unknown,
+      ),
+      // A row we broadcast ourselves opens its local record; one that only
+      // exists on chain travels as `extra`.
+      onTap: () => local == null
+          ? context.push('/tx-detail', extra: record)
+          : context.push('/tx-detail?id=${Uri.encodeComponent(local.id)}'),
+    );
+  }
+
+  Widget _unverifiedRecordsCard(
+    BuildContext context,
+    AppLocalizations l10n,
+    HistoryController history,
+    List<(ChainTxRecord, HistoryAssetKind)> records,
+  ) => KtCard(
+    child: Column(
+      children: [
+        Semantics(
+          button: true,
+          expanded: _showUnverifiedRecords,
+          label: '${l10n.historyUnverifiedRecordsTitle}, ${records.length}',
+          child: InkWell(
+            key: const ValueKey('history-unverified-toggle'),
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => setState(
+              () => _showUnverifiedRecords = !_showUnverifiedRecords,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: WalletColors.amber.withValues(alpha: 0.11),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.gpp_maybe_outlined,
+                      size: 20,
+                      color: WalletColors.amber,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${l10n.historyUnverifiedRecordsTitle} (${records.length})',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: WalletColors.text,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          l10n.historyUnverifiedRecordsDescription,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            height: 1.35,
+                            color: WalletColors.text3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: _showUnverifiedRecords ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: WalletColors.text3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (_showUnverifiedRecords) ...[
+          const SizedBox(height: 8),
+          Divider(height: 1, color: WalletColors.text.withValues(alpha: 0.06)),
+          for (final (index, item) in records.indexed) ...[
+            if (index > 0)
+              Divider(
+                height: 1,
+                color: WalletColors.text.withValues(alpha: 0.06),
+              ),
+            _historyRecordRow(context, l10n, history, item.$1, item.$2),
+          ],
+        ],
+      ],
+    ),
+  );
 
   Widget _cachedHistoryLabel(AppLocalizations l10n, HistoryController history) {
     final timestamp = history.lastUpdatedAt;

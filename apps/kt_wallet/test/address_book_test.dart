@@ -142,12 +142,17 @@ void main() {
 
     await tester.enterText(_sheetField(0), 'KTT');
     await tester.enterText(_sheetField(1), 'KT Test Token');
+    await tester.enterText(
+      _sheetField(2),
+      '0x2222222222222222222222222222222222222222',
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
     expect(find.text('添加代币'), findsNothing); // sheet closed
     expect(find.text('KTT'), findsOneWidget);
-    expect(find.text('KT Test Token'), findsOneWidget);
+    expect(find.text('Ethereum · ERC-20'), findsWidgets);
+    expect(find.text('0x222222…22222222'), findsOneWidget);
   });
 
   testWidgets('token manage search filters by symbol, name, and contract', (

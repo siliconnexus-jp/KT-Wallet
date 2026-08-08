@@ -15,6 +15,7 @@ import 'package:kt_wallet/src/market/transaction_status_service.dart';
 import 'package:kt_wallet/src/observability/experience_metrics.dart';
 import 'package:kt_wallet/src/screens/home_screen.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
+import 'package:kt_wallet/src/state/wallet_scope.dart';
 import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
 import 'package:kt_wallet/src/wallets/wallet_store.dart';
@@ -235,6 +236,21 @@ Widget _app(HistoryController controller) => MaterialApp(
   supportedLocales: AppLocalizations.supportedLocales,
   home: HistoryScope(controller: controller, child: const RecordsScreen()),
 );
+
+Widget _walletApp(HistoryController controller, WalletController wallets) =>
+    MaterialApp(
+      debugShowCheckedModeBanner: false,
+      locale: const Locale('zh'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: WalletScope(
+        controller: wallets,
+        child: HistoryScope(
+          controller: controller,
+          child: const RecordsScreen(),
+        ),
+      ),
+    );
 
 const _unsupported = HistoryResult.unsupported();
 
@@ -776,6 +792,85 @@ void main() {
     expect(find.text('离线，显示演示数据'), findsNothing);
     controller.dispose();
   });
+
+  testWidgets(
+    'wallet history keeps official and user-added assets primary and folds unknown tokens',
+    (tester) async {
+      const customContract = '0x2222222222222222222222222222222222222222';
+      const unknownContract = '0x3333333333333333333333333333333333333333';
+      final wallets = _wallets();
+      await wallets.addToken(
+        symbol: 'CUSTOM',
+        name: 'My custom token',
+        contract: customContract,
+        network: 'Polygon · ERC-20',
+        networkId: 'polygon-mainnet',
+      );
+      final service = _FakeHistoryService({
+        for (final coin in Coin.values) coin: _unsupported,
+        Coin.eth: HistoryResult.ok([
+          ChainTxRecord(
+            coin: Coin.eth,
+            networkId: 'eth-mainnet',
+            id: 'official',
+            hash: 'official-hash',
+            outgoing: false,
+            amountText: '1 USDT',
+            assetContract: usdtEthToken.contract,
+            assetSymbol: 'USDT',
+            assetVerified: true,
+            timestamp: DateTime.utc(2026, 8, 8, 1),
+            confirmed: true,
+          ),
+        ]),
+        Coin.polygon: HistoryResult.ok([
+          ChainTxRecord(
+            coin: Coin.polygon,
+            networkId: 'polygon-mainnet',
+            id: 'unknown',
+            hash: 'unknown-hash',
+            outgoing: false,
+            amountText: '3370 TOKEN',
+            assetContract: unknownContract,
+            assetSymbol: 'TOKEN',
+            assetVerified: false,
+            timestamp: DateTime.utc(2026, 8, 8, 3),
+            confirmed: true,
+          ),
+          ChainTxRecord(
+            coin: Coin.polygon,
+            networkId: 'polygon-mainnet',
+            id: 'custom',
+            hash: 'custom-hash',
+            outgoing: false,
+            amountText: '2 CUSTOM',
+            assetContract: customContract,
+            assetSymbol: 'CUSTOM',
+            assetVerified: false,
+            timestamp: DateTime.utc(2026, 8, 8, 2),
+            confirmed: true,
+          ),
+        ]),
+      });
+      final controller = HistoryController(wallets: wallets, service: service);
+      addTearDown(controller.dispose);
+      addTearDown(wallets.dispose);
+      await controller.refresh();
+
+      await tester.pumpWidget(_walletApp(controller, wallets));
+      await tester.pumpAndSettle();
+
+      expect(find.text('+1 USDT'), findsOneWidget);
+      expect(find.text('+2 CUSTOM · 自定义'), findsOneWidget);
+      expect(find.textContaining('3370 TOKEN'), findsNothing);
+      expect(find.text('未验证与风险代币记录 (1)'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('history-unverified-toggle')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('+3370 TOKEN ⚠'), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'records page reports network failure without substituting demo rows',

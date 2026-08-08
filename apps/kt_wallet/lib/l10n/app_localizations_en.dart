@@ -184,6 +184,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get historyLoadingMore => 'Loading more…';
 
   @override
+  String get historyNoRecognizedTransactions =>
+      'No transactions for recognized assets yet';
+
+  @override
+  String get historyUnverifiedRecordsTitle =>
+      'Unverified and risky token records';
+
+  @override
+  String get historyUnverifiedRecordsDescription =>
+      'Hidden from the main history. Verify the network and contract before interacting.';
+
+  @override
+  String get historyCustomTokenBadge => 'Custom';
+
+  @override
+  String get historyRiskTokenBadge => 'Risk';
+
+  @override
   String get transactionConfirmedNotice => 'Transaction confirmed on-chain';
 
   @override

@@ -5565,6 +5565,17 @@ class $CustomTokensTable extends CustomTokens
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _networkIdMeta = const VerificationMeta(
+    'networkId',
+  );
+  @override
+  late final GeneratedColumn<String> networkId = GeneratedColumn<String>(
+    'network_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _enabledMeta = const VerificationMeta(
     'enabled',
   );
@@ -5610,6 +5621,7 @@ class $CustomTokensTable extends CustomTokens
     name,
     contract,
     network,
+    networkId,
     enabled,
     sortOrder,
     createdAt,
@@ -5661,6 +5673,12 @@ class $CustomTokensTable extends CustomTokens
     } else if (isInserting) {
       context.missing(_networkMeta);
     }
+    if (data.containsKey('network_id')) {
+      context.handle(
+        _networkIdMeta,
+        networkId.isAcceptableOrUnknown(data['network_id']!, _networkIdMeta),
+      );
+    }
     if (data.containsKey('enabled')) {
       context.handle(
         _enabledMeta,
@@ -5710,6 +5728,10 @@ class $CustomTokensTable extends CustomTokens
         DriftSqlType.string,
         data['${effectivePrefix}network'],
       )!,
+      networkId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}network_id'],
+      ),
       enabled: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}enabled'],
@@ -5739,6 +5761,14 @@ class CustomToken extends DataClass implements Insertable<CustomToken> {
 
   /// Display label for where the token lives (e.g. 'TRON · TRC-20').
   final String network;
+
+  /// Exact network instance selected when the user added the token.
+  ///
+  /// Older rows are null because the original token form stored only a
+  /// human-readable label. Callers must not guess a network from that label:
+  /// the same contract address can identify unrelated tokens on two EVM
+  /// chains.
+  final String? networkId;
   final bool enabled;
   final int sortOrder;
   final int createdAt;
@@ -5748,6 +5778,7 @@ class CustomToken extends DataClass implements Insertable<CustomToken> {
     required this.name,
     this.contract,
     required this.network,
+    this.networkId,
     required this.enabled,
     required this.sortOrder,
     required this.createdAt,
@@ -5762,6 +5793,9 @@ class CustomToken extends DataClass implements Insertable<CustomToken> {
       map['contract'] = Variable<String>(contract);
     }
     map['network'] = Variable<String>(network);
+    if (!nullToAbsent || networkId != null) {
+      map['network_id'] = Variable<String>(networkId);
+    }
     map['enabled'] = Variable<bool>(enabled);
     map['sort_order'] = Variable<int>(sortOrder);
     map['created_at'] = Variable<int>(createdAt);
@@ -5777,6 +5811,9 @@ class CustomToken extends DataClass implements Insertable<CustomToken> {
           ? const Value.absent()
           : Value(contract),
       network: Value(network),
+      networkId: networkId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(networkId),
       enabled: Value(enabled),
       sortOrder: Value(sortOrder),
       createdAt: Value(createdAt),
@@ -5794,6 +5831,7 @@ class CustomToken extends DataClass implements Insertable<CustomToken> {
       name: serializer.fromJson<String>(json['name']),
       contract: serializer.fromJson<String?>(json['contract']),
       network: serializer.fromJson<String>(json['network']),
+      networkId: serializer.fromJson<String?>(json['networkId']),
       enabled: serializer.fromJson<bool>(json['enabled']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
@@ -5808,6 +5846,7 @@ class CustomToken extends DataClass implements Insertable<CustomToken> {
       'name': serializer.toJson<String>(name),
       'contract': serializer.toJson<String?>(contract),
       'network': serializer.toJson<String>(network),
+      'networkId': serializer.toJson<String?>(networkId),
       'enabled': serializer.toJson<bool>(enabled),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'createdAt': serializer.toJson<int>(createdAt),
@@ -5820,6 +5859,7 @@ class CustomToken extends DataClass implements Insertable<CustomToken> {
     String? name,
     Value<String?> contract = const Value.absent(),
     String? network,
+    Value<String?> networkId = const Value.absent(),
     bool? enabled,
     int? sortOrder,
     int? createdAt,
@@ -5829,6 +5869,7 @@ class CustomToken extends DataClass implements Insertable<CustomToken> {
     name: name ?? this.name,
     contract: contract.present ? contract.value : this.contract,
     network: network ?? this.network,
+    networkId: networkId.present ? networkId.value : this.networkId,
     enabled: enabled ?? this.enabled,
     sortOrder: sortOrder ?? this.sortOrder,
     createdAt: createdAt ?? this.createdAt,
@@ -5840,6 +5881,7 @@ class CustomToken extends DataClass implements Insertable<CustomToken> {
       name: data.name.present ? data.name.value : this.name,
       contract: data.contract.present ? data.contract.value : this.contract,
       network: data.network.present ? data.network.value : this.network,
+      networkId: data.networkId.present ? data.networkId.value : this.networkId,
       enabled: data.enabled.present ? data.enabled.value : this.enabled,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
@@ -5854,6 +5896,7 @@ class CustomToken extends DataClass implements Insertable<CustomToken> {
           ..write('name: $name, ')
           ..write('contract: $contract, ')
           ..write('network: $network, ')
+          ..write('networkId: $networkId, ')
           ..write('enabled: $enabled, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt')
@@ -5868,6 +5911,7 @@ class CustomToken extends DataClass implements Insertable<CustomToken> {
     name,
     contract,
     network,
+    networkId,
     enabled,
     sortOrder,
     createdAt,
@@ -5881,6 +5925,7 @@ class CustomToken extends DataClass implements Insertable<CustomToken> {
           other.name == this.name &&
           other.contract == this.contract &&
           other.network == this.network &&
+          other.networkId == this.networkId &&
           other.enabled == this.enabled &&
           other.sortOrder == this.sortOrder &&
           other.createdAt == this.createdAt);
@@ -5892,6 +5937,7 @@ class CustomTokensCompanion extends UpdateCompanion<CustomToken> {
   final Value<String> name;
   final Value<String?> contract;
   final Value<String> network;
+  final Value<String?> networkId;
   final Value<bool> enabled;
   final Value<int> sortOrder;
   final Value<int> createdAt;
@@ -5902,6 +5948,7 @@ class CustomTokensCompanion extends UpdateCompanion<CustomToken> {
     this.name = const Value.absent(),
     this.contract = const Value.absent(),
     this.network = const Value.absent(),
+    this.networkId = const Value.absent(),
     this.enabled = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -5913,6 +5960,7 @@ class CustomTokensCompanion extends UpdateCompanion<CustomToken> {
     required String name,
     this.contract = const Value.absent(),
     required String network,
+    this.networkId = const Value.absent(),
     this.enabled = const Value.absent(),
     this.sortOrder = const Value.absent(),
     required int createdAt,
@@ -5928,6 +5976,7 @@ class CustomTokensCompanion extends UpdateCompanion<CustomToken> {
     Expression<String>? name,
     Expression<String>? contract,
     Expression<String>? network,
+    Expression<String>? networkId,
     Expression<bool>? enabled,
     Expression<int>? sortOrder,
     Expression<int>? createdAt,
@@ -5939,6 +5988,7 @@ class CustomTokensCompanion extends UpdateCompanion<CustomToken> {
       if (name != null) 'name': name,
       if (contract != null) 'contract': contract,
       if (network != null) 'network': network,
+      if (networkId != null) 'network_id': networkId,
       if (enabled != null) 'enabled': enabled,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (createdAt != null) 'created_at': createdAt,
@@ -5952,6 +6002,7 @@ class CustomTokensCompanion extends UpdateCompanion<CustomToken> {
     Value<String>? name,
     Value<String?>? contract,
     Value<String>? network,
+    Value<String?>? networkId,
     Value<bool>? enabled,
     Value<int>? sortOrder,
     Value<int>? createdAt,
@@ -5963,6 +6014,7 @@ class CustomTokensCompanion extends UpdateCompanion<CustomToken> {
       name: name ?? this.name,
       contract: contract ?? this.contract,
       network: network ?? this.network,
+      networkId: networkId ?? this.networkId,
       enabled: enabled ?? this.enabled,
       sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
@@ -5988,6 +6040,9 @@ class CustomTokensCompanion extends UpdateCompanion<CustomToken> {
     if (network.present) {
       map['network'] = Variable<String>(network.value);
     }
+    if (networkId.present) {
+      map['network_id'] = Variable<String>(networkId.value);
+    }
     if (enabled.present) {
       map['enabled'] = Variable<bool>(enabled.value);
     }
@@ -6011,6 +6066,7 @@ class CustomTokensCompanion extends UpdateCompanion<CustomToken> {
           ..write('name: $name, ')
           ..write('contract: $contract, ')
           ..write('network: $network, ')
+          ..write('networkId: $networkId, ')
           ..write('enabled: $enabled, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
@@ -10319,6 +10375,7 @@ typedef $$CustomTokensTableCreateCompanionBuilder =
       required String name,
       Value<String?> contract,
       required String network,
+      Value<String?> networkId,
       Value<bool> enabled,
       Value<int> sortOrder,
       required int createdAt,
@@ -10331,6 +10388,7 @@ typedef $$CustomTokensTableUpdateCompanionBuilder =
       Value<String> name,
       Value<String?> contract,
       Value<String> network,
+      Value<String?> networkId,
       Value<bool> enabled,
       Value<int> sortOrder,
       Value<int> createdAt,
@@ -10368,6 +10426,11 @@ class $$CustomTokensTableFilterComposer
 
   ColumnFilters<String> get network => $composableBuilder(
     column: $table.network,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get networkId => $composableBuilder(
+    column: $table.networkId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -10421,6 +10484,11 @@ class $$CustomTokensTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get networkId => $composableBuilder(
+    column: $table.networkId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get enabled => $composableBuilder(
     column: $table.enabled,
     builder: (column) => ColumnOrderings(column),
@@ -10460,6 +10528,9 @@ class $$CustomTokensTableAnnotationComposer
 
   GeneratedColumn<String> get network =>
       $composableBuilder(column: $table.network, builder: (column) => column);
+
+  GeneratedColumn<String> get networkId =>
+      $composableBuilder(column: $table.networkId, builder: (column) => column);
 
   GeneratedColumn<bool> get enabled =>
       $composableBuilder(column: $table.enabled, builder: (column) => column);
@@ -10507,6 +10578,7 @@ class $$CustomTokensTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String?> contract = const Value.absent(),
                 Value<String> network = const Value.absent(),
+                Value<String?> networkId = const Value.absent(),
                 Value<bool> enabled = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
@@ -10517,6 +10589,7 @@ class $$CustomTokensTableTableManager
                 name: name,
                 contract: contract,
                 network: network,
+                networkId: networkId,
                 enabled: enabled,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
@@ -10529,6 +10602,7 @@ class $$CustomTokensTableTableManager
                 required String name,
                 Value<String?> contract = const Value.absent(),
                 required String network,
+                Value<String?> networkId = const Value.absent(),
                 Value<bool> enabled = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 required int createdAt,
@@ -10539,6 +10613,7 @@ class $$CustomTokensTableTableManager
                 name: name,
                 contract: contract,
                 network: network,
+                networkId: networkId,
                 enabled: enabled,
                 sortOrder: sortOrder,
                 createdAt: createdAt,

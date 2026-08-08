@@ -254,6 +254,14 @@ class CustomTokens extends Table {
 
   /// Display label for where the token lives (e.g. 'TRON · TRC-20').
   TextColumn get network => text()();
+
+  /// Exact network instance selected when the user added the token.
+  ///
+  /// Older rows are null because the original token form stored only a
+  /// human-readable label. Callers must not guess a network from that label:
+  /// the same contract address can identify unrelated tokens on two EVM
+  /// chains.
+  TextColumn get networkId => text().nullable()();
   BoolColumn get enabled => boolean().withDefault(const Constant(true))();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   IntColumn get createdAt => integer()();
