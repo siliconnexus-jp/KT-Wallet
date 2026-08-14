@@ -17,7 +17,8 @@ import '../market/explorer_links.dart';
 import '../market/receive_card.dart';
 import '../market/market_controller.dart';
 import '../market/market_scope.dart';
-import '../market/token_balance_service.dart' show TokenInfo;
+import '../market/token_balance_service.dart'
+    show TokenInfo, builtinTokensByNetworkId;
 import '../platform/external_actions.dart';
 import '../platform/media_gallery.dart';
 import '../transfer/airgap_codec.dart' show truncateMiddle;
@@ -33,6 +34,7 @@ import '../widgets/token_icon.dart';
 import '../widgets/tron_activation_badge.dart';
 import '../state/networks.dart';
 import '../state/app_prefs.dart';
+import '../state/wallet_controller.dart';
 import '../state/wallet_scope.dart';
 
 /// W2 资产列表 — search + network filter + full asset list. Live: the search
@@ -1187,25 +1189,63 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
   }
 }
 
-/// A chain selectable on the receive screen: coin, network name, pill label,
-/// token glyph + color, and the ChainColors dot shown in the picker sheet.
+/// A network selectable on the receive screen, together with the metadata for
+/// its native coin. Tokens are deliberately kept separate: choosing a network
+/// is only step one of the receive flow.
 class _ReceiveChain {
   const _ReceiveChain(
     this.coin,
     this.network,
-    this.pillLabel,
+    this.nativeSymbol,
     this.glyph,
     this.tokenColor,
     this.dotColor,
   );
   final Coin coin;
-  final String network, pillLabel, glyph;
+  final String network, nativeSymbol, glyph;
   final Color tokenColor, dotColor;
 }
 
-/// W14 收款 — chain selector + QR + address + warning. Live: the pill opens a
-/// chain picker; the displayed address (and what copy/share puts on the
-/// clipboard) is the current wallet's address for the selected chain.
+/// One asset that can be received on a concrete active network.
+///
+/// Receiving does not need token decimals or private material, but it must
+/// retain the contract identity so two custom tokens with the same symbol do
+/// not collapse into one picker row.
+class _ReceiveAsset {
+  const _ReceiveAsset({
+    required this.id,
+    required this.symbol,
+    required this.name,
+    required this.isToken,
+    this.contract,
+  });
+
+  factory _ReceiveAsset.native(_ReceiveChain chain) => _ReceiveAsset(
+    id: 'native:${chain.coin.name}',
+    symbol: chain.nativeSymbol,
+    name: chain.network,
+    isToken: false,
+  );
+
+  factory _ReceiveAsset.official(TokenInfo token) => _ReceiveAsset(
+    id: 'official:${token.id}',
+    symbol: token.symbol,
+    name: token.symbol,
+    isToken: true,
+    contract: token.contract,
+  );
+
+  final String id;
+  final String symbol;
+  final String name;
+  final bool isToken;
+  final String? contract;
+}
+
+/// W14 收款 — network + asset selector, QR, address and warning. Live: the
+/// pill first selects a network, then an asset available on that exact active
+/// network. The displayed address (and what copy/share puts on the clipboard)
+/// is the current wallet's address for the selected network.
 class ReceiveScreen extends StatefulWidget {
   const ReceiveScreen({
     super.key,
@@ -1227,8 +1267,9 @@ class ReceiveScreen extends StatefulWidget {
   /// "ETH · Ethereum" — the right address, labelled as the wrong asset, which
   /// is exactly the confusion that gets funds sent to the wrong place.
   ///
-  /// When it names a multi-chain token the picker is narrowed to that token's
-  /// deployments; the symbol itself is never selectable here.
+  /// It only determines the initial selection. The picker remains available
+  /// so the user can choose a different network and then one of that network's
+  /// native/official/custom assets.
   final AssetRef? asset;
 
   /// Injectable http client for the devnet airdrop faucet (tests); null in
@@ -1258,7 +1299,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     _ReceiveChain(
       Coin.eth,
       'Ethereum',
-      'ETH · Ethereum',
+      'ETH',
       'Ξ',
       Color(0xFF627EEA),
       ChainColors.ethereum,
@@ -1266,7 +1307,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     _ReceiveChain(
       Coin.polygon,
       'Polygon',
-      'POL · Polygon',
+      'POL',
       '⬡',
       Color(0xFF8247E5),
       ChainColors.polygon,
@@ -1274,7 +1315,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     _ReceiveChain(
       Coin.base,
       'Base',
-      'ETH · Base',
+      'ETH',
       'B',
       Color(0xFF0052FF),
       Color(0xFF0052FF),
@@ -1282,7 +1323,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     _ReceiveChain(
       Coin.arbitrum,
       'Arbitrum One',
-      'ETH · Arbitrum',
+      'ETH',
       'A',
       Color(0xFF28A0F0),
       Color(0xFF28A0F0),
@@ -1290,7 +1331,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     _ReceiveChain(
       Coin.avalanche,
       'Avalanche C-Chain',
-      'AVAX · Avalanche',
+      'AVAX',
       'A',
       Color(0xFFE84142),
       Color(0xFFE84142),
@@ -1298,7 +1339,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     _ReceiveChain(
       Coin.bnb,
       'BNB Smart Chain',
-      'BNB · BNB Smart Chain',
+      'BNB',
       'B',
       Color(0xFFF3BA2F),
       Color(0xFFF3BA2F),
@@ -1306,15 +1347,15 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     _ReceiveChain(
       Coin.tron,
       'TRON',
-      'USDT · TRON',
-      '₮',
-      Color(0xFF26A17B),
+      'TRX',
+      '◇',
+      Color(0xFFEF0027),
       ChainColors.tron,
     ),
     _ReceiveChain(
       Coin.solana,
       'Solana',
-      'SOL · Solana',
+      'SOL',
       '◎',
       Color(0xFF9945FF),
       ChainColors.solana,
@@ -1324,19 +1365,34 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   // Default TRON, matching the design; overridden by [widget.initialCoin].
   int _selected = 2;
 
+  /// Stable identity of the selected asset on [_chain]. A symbol is not an
+  /// identity: user-added contracts are allowed to share a ticker.
+  String? _selectedAssetId;
+
   /// The caller's chain is applied once, after the first dependency
   /// resolution (the available list needs a WalletScope).
   bool _appliedInitial = false;
+  WalletController? _tokenController;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_appliedInitial) return;
-    _appliedInitial = true;
-    final wanted = widget.initialCoin ?? widget.asset?.coin;
-    if (wanted == null) return;
-    final index = _availableChains.indexWhere((c) => c.coin == wanted);
-    if (index >= 0) _selected = index;
+    final controller = WalletScope.of(context);
+    if (!identical(controller, _tokenController)) {
+      _tokenController = controller;
+      controller.loadTokens().then((_) {
+        if (mounted && identical(controller, _tokenController)) setState(() {});
+      });
+    }
+    if (!_appliedInitial) {
+      _appliedInitial = true;
+      final wanted = widget.initialCoin ?? widget.asset?.coin;
+      if (wanted != null) {
+        final index = _availableChains.indexWhere((c) => c.coin == wanted);
+        if (index >= 0) _selected = index;
+      }
+      _selectedAssetId = _initialAssetFor(_chain).id;
+    }
   }
 
   /// True while a devnet airdrop request is in flight (guards double-taps).
@@ -1347,49 +1403,110 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   bool _sharing = false;
 
   List<_ReceiveChain> get _availableChains {
-    // An asset that lives on specific chains restricts the picker to those:
-    // offering Solana while the user is receiving USDT on Ethereum invites a
-    // cross-chain mistake the wallet cannot undo.
-    final group = widget.asset?.group ?? const [];
-    if (group.isNotEmpty) {
-      return [
-        for (final at in group) ..._chains.where((c) => c.coin == at.coin),
-      ];
-    }
-    final expanded =
-        WalletScope.of(context).current?.addresses.hasExpandedEvm ?? false;
-    final order = expanded
-        ? const [
-            Coin.eth,
-            Coin.polygon,
-            Coin.tron,
-            Coin.solana,
-            Coin.bnb,
-            Coin.base,
-            Coin.arbitrum,
-            Coin.avalanche,
-          ]
-        : const [Coin.eth, Coin.polygon, Coin.tron, Coin.solana];
+    final enabled = WalletScope.of(context).current?.addresses.enabledCoins;
+    final requested = widget.initialCoin ?? widget.asset?.coin;
+    const order = [
+      Coin.eth,
+      Coin.polygon,
+      Coin.tron,
+      Coin.solana,
+      Coin.bnb,
+      Coin.base,
+      Coin.arbitrum,
+      Coin.avalanche,
+    ];
     return [
       for (final coin in order)
-        _chains.firstWhere((chain) => chain.coin == coin),
+        if (enabled == null || enabled.contains(coin) || coin == requested)
+          _chains.firstWhere((chain) => chain.coin == coin),
     ];
   }
 
   _ReceiveChain get _chain =>
       _availableChains[_selected.clamp(0, _availableChains.length - 1)];
 
-  /// What the user came here to receive. With an asset in hand that is the
-  /// token on its chain ("USDT · Ethereum"); otherwise the chain's own pill
-  /// ("ETH · Ethereum").
-  String get _assetLabel {
-    final symbol = widget.asset?.symbol;
-    return symbol == null ? _chain.pillLabel : '$symbol · ${_chain.network}';
+  /// Native coin plus the official registry and user-enabled custom tokens on
+  /// this exact active network. A custom token created before `networkId` was
+  /// persisted is intentionally omitted: guessing from a display label could
+  /// bind the same contract to the wrong EVM network.
+  List<_ReceiveAsset> _assetsFor(_ReceiveChain chain) {
+    final network = NetworkScope.of(context).activeFor(_familyOf(chain.coin));
+    final result = <_ReceiveAsset>[_ReceiveAsset.native(chain)];
+    final contracts = <String>{};
+
+    String contractKey(String contract) => switch (chain.coin) {
+      Coin.eth ||
+      Coin.polygon ||
+      Coin.base ||
+      Coin.arbitrum ||
+      Coin.avalanche ||
+      Coin.bnb => contract.toLowerCase(),
+      Coin.tron || Coin.solana => contract,
+    };
+
+    for (final token
+        in builtinTokensByNetworkId[network.id] ?? const <TokenInfo>[]) {
+      if (token.chain != chain.coin) continue;
+      result.add(_ReceiveAsset.official(token));
+      contracts.add(contractKey(token.contract));
+    }
+
+    for (final token in WalletScope.of(context).tokens) {
+      final contract = token.contract?.trim();
+      if (!token.enabled ||
+          token.networkId != network.id ||
+          contract == null ||
+          contract.isEmpty) {
+        continue;
+      }
+      final identity = contractKey(contract);
+      if (!contracts.add(identity)) continue;
+      result.add(
+        _ReceiveAsset(
+          id: 'custom:${token.id}',
+          symbol: token.symbol.trim().toUpperCase(),
+          name: token.name.trim().isEmpty ? token.symbol : token.name.trim(),
+          isToken: true,
+          contract: contract,
+        ),
+      );
+    }
+    return result;
   }
 
+  _ReceiveAsset _initialAssetFor(_ReceiveChain chain) {
+    final assets = _assetsFor(chain);
+    final requested = widget.asset;
+    if (requested != null) {
+      for (final asset in assets) {
+        if (asset.isToken == requested.isToken &&
+            asset.symbol.toUpperCase() == requested.symbol.toUpperCase()) {
+          return asset;
+        }
+      }
+    }
+    // Preserve the long-standing home Receive default while still allowing
+    // TRX to be selected explicitly in the second step.
+    if (requested == null && chain.coin == Coin.tron) {
+      for (final asset in assets) {
+        if (asset.isToken && asset.symbol == 'USDT') return asset;
+      }
+    }
+    return assets.first;
+  }
+
+  _ReceiveAsset get _asset {
+    final assets = _assetsFor(_chain);
+    for (final asset in assets) {
+      if (asset.id == _selectedAssetId) return asset;
+    }
+    return _initialAssetFor(_chain);
+  }
+
+  String get _assetLabel => '${_asset.symbol} · ${_chain.network}';
+
   /// Symbol the pill's icon stands for — the token when there is one.
-  String get _iconSymbol =>
-      widget.asset?.symbol ?? _chain.pillLabel.split(' ').first;
+  String get _iconSymbol => _asset.symbol;
 
   /// Asset artwork for the receive pill.
   ///
@@ -1398,7 +1515,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   /// Native coins only need the chain mark once.
   Widget _receiveAssetIcon(_ReceiveChain chain) {
     final family = _familyOf(chain.coin);
-    if (widget.asset?.isToken != true) {
+    if (!_asset.isToken) {
       return ChainIcon(
         key: const ValueKey('receive-network-icon'),
         chain: family,
@@ -1570,78 +1687,206 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   Future<void> _pickChain() async {
     final l10n = AppLocalizations.of(context);
     final chains = _availableChains;
+    var chainIndex = _selected.clamp(0, chains.length - 1);
+    var choosingAsset = chains.length == 1;
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: WalletColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: WalletColors.border,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    Text(
-                      l10n.networkRow,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: WalletColors.text,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, sheetSetState) {
+          final chain = chains[chainIndex];
+          final assets = choosingAsset
+              ? _assetsFor(chain)
+              : const <_ReceiveAsset>[];
+          return SafeArea(
+            child: SizedBox(
+              height: MediaQuery.sizeOf(ctx).height * 0.72,
+              child: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: WalletColors.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: SizedBox(
+                      height: 48,
+                      child: Row(
+                        children: [
+                          if (choosingAsset && chains.length > 1)
+                            IconButton(
+                              key: const ValueKey(
+                                'receive-picker-back-to-networks',
+                              ),
+                              tooltip: MaterialLocalizations.of(
+                                ctx,
+                              ).backButtonTooltip,
+                              onPressed: () =>
+                                  sheetSetState(() => choosingAsset = false),
+                              icon: const Icon(Icons.arrow_back_ios_new),
+                              color: WalletColors.text,
+                            )
+                          else
+                            const SizedBox(width: 48),
+                          Expanded(
+                            child: Text(
+                              choosingAsset
+                                  ? l10n.selectAsset
+                                  : l10n.chooseNetwork,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: WalletColors.text,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 48),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              for (var i = 0; i < chains.length; i++)
-                ListTile(
-                  leading: ChainIcon(chain: _familyOf(chains[i].coin)),
-                  title: Text(
-                    chains[i].network,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: WalletColors.text,
+                  ),
+                  if (choosingAsset)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                      child: Row(
+                        children: [
+                          ChainIcon(chain: _familyOf(chain.coin), size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              chain.network,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: WalletColors.text3,
+                              ),
+                            ),
+                          ),
+                          if (chain.coin == Coin.tron)
+                            const TronActivationBadge(),
+                        ],
+                      ),
+                    ),
+                  const Divider(height: 1, color: WalletColors.border),
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: choosingAsset ? assets.length : chains.length,
+                      itemBuilder: (ctx, index) {
+                        if (!choosingAsset) {
+                          final option = chains[index];
+                          return ListTile(
+                            key: ValueKey(
+                              'receive-network-${option.coin.name}',
+                            ),
+                            leading: ChainIcon(
+                              chain: _familyOf(option.coin),
+                              size: 36,
+                            ),
+                            title: Text(
+                              option.network,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: WalletColors.text,
+                              ),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (option.coin == Coin.tron) ...[
+                                  const TronActivationBadge(),
+                                  const SizedBox(width: 8),
+                                ],
+                                const Icon(
+                                  Icons.chevron_right,
+                                  color: WalletColors.text3,
+                                ),
+                              ],
+                            ),
+                            onTap: () => sheetSetState(() {
+                              chainIndex = index;
+                              choosingAsset = true;
+                            }),
+                          );
+                        }
+
+                        final asset = assets[index];
+                        final selected =
+                            chain.coin == _chain.coin && asset.id == _asset.id;
+                        final contract = asset.contract;
+                        final details = asset.isToken
+                            ? [
+                                if (asset.name != asset.symbol) asset.name,
+                                if (contract != null)
+                                  truncateMiddle(contract, head: 8, tail: 6),
+                              ].join(' · ')
+                            : chain.network;
+                        return ListTile(
+                          key: ValueKey('receive-asset-${asset.id}'),
+                          leading: asset.isToken
+                              ? TokenIcon(
+                                  symbol: asset.symbol,
+                                  size: 36,
+                                  fallbackColor: chain.tokenColor,
+                                  fallbackInitial: asset.symbol.isEmpty
+                                      ? chain.glyph
+                                      : asset.symbol.characters.first,
+                                )
+                              : ChainIcon(
+                                  chain: _familyOf(chain.coin),
+                                  size: 36,
+                                ),
+                          title: Text(
+                            asset.symbol,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: WalletColors.text,
+                            ),
+                          ),
+                          subtitle: Text(
+                            details,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: WalletColors.text3,
+                            ),
+                          ),
+                          trailing: selected
+                              ? const Icon(
+                                  Icons.check,
+                                  size: 20,
+                                  color: WalletColors.accent,
+                                )
+                              : null,
+                          onTap: () {
+                            setState(() {
+                              _selected = chainIndex;
+                              _selectedAssetId = asset.id;
+                            });
+                            Navigator.of(ctx).pop();
+                          },
+                        );
+                      },
                     ),
                   ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (chains[i].coin == Coin.tron) ...[
-                        const TronActivationBadge(),
-                        const SizedBox(width: 8),
-                      ],
-                      if (i == _selected)
-                        const Icon(
-                          Icons.check,
-                          size: 20,
-                          color: WalletColors.accent,
-                        ),
-                    ],
-                  ),
-                  onTap: () {
-                    setState(() => _selected = i);
-                    Navigator.of(ctx).pop();
-                  },
-                ),
-              const SizedBox(height: 12),
-            ],
-          ),
-        ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -1668,8 +1913,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     final network = NetworkScope.of(context).activeFor(_familyOf(chain.coin));
     final data = ReceiveCardData(
       address: address,
-      // The asset being received, matching the pill: "USDT · Ethereum" when
-      // the caller named a token, the chain's own coin otherwise.
+      // The asset chosen in step two, matching the pill exactly.
       assetLabel: _assetLabel,
       tokenIconAsset: TokenIcon.assetFor(_iconSymbol),
       networkIconAsset: ChainIcon.assetFor(_familyOf(chain.coin)),
@@ -1791,12 +2035,12 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       children: [
         Center(
           child: Semantics(
-            button: _availableChains.length > 1,
+            button: true,
             label: _assetLabel,
             image: true,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: _availableChains.length > 1 ? _pickChain : null,
+              onTap: _pickChain,
               child: Container(
                 width: largeText ? double.infinity : null,
                 constraints: const BoxConstraints(minHeight: 48),
@@ -1834,14 +2078,12 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                           color: WalletColors.text,
                         ),
                       ),
-                    if (_availableChains.length > 1) ...[
-                      const SizedBox(width: 8),
-                      const Icon(
-                        Icons.keyboard_arrow_down,
-                        size: 16,
-                        color: WalletColors.text3,
-                      ),
-                    ],
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 16,
+                      color: WalletColors.text3,
+                    ),
                   ],
                 ),
               ),

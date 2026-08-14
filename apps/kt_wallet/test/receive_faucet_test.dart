@@ -76,7 +76,9 @@ void main() {
   Future<void> switchToSolana(WidgetTester tester) async {
     await tester.tap(find.text('USDT · TRON'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Solana'));
+    await tester.tap(find.byKey(const ValueKey('receive-network-solana')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('receive-asset-native:solana')));
     await tester.pumpAndSettle();
   }
 

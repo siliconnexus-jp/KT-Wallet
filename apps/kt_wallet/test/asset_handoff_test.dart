@@ -486,7 +486,9 @@ void main() {
       );
     });
 
-    testWidgets('the chain picker is narrowed to that token', (tester) async {
+    testWidgets('the initial token still allows network then asset selection', (
+      tester,
+    ) async {
       final wallets = _wallets();
       final asset = AssetRef.tokenGroup(_usdtGroup).selecting(0);
 
@@ -495,12 +497,27 @@ void main() {
       await tester.tap(find.text('USDT · Ethereum'));
       await tester.pumpAndSettle();
 
+      expect(find.text('选择网络'), findsOneWidget);
       expect(find.text('Ethereum'), findsWidgets);
       expect(find.text('TRON'), findsWidgets);
       expect(find.text('Polygon'), findsWidgets);
-      // Solana holds no USDT in this fixture, so offering it would invite a
-      // cross-chain mistake the wallet cannot undo.
-      expect(find.text('Solana'), findsNothing);
+      expect(find.text('Solana'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('receive-network-polygon')));
+      await tester.pumpAndSettle();
+      expect(find.text('选择资产'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('receive-asset-native:polygon')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('receive-asset-official:usdt-polygon')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('receive-asset-official:usdc-polygon')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('without an asset it still names the chain\'s own coin', (
