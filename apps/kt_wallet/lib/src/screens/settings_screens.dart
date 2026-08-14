@@ -29,6 +29,7 @@ import '../security/wallet_pin.dart';
 import '../widgets/pin_pad.dart';
 import '../widgets/rpc_probe.dart';
 import '../widgets/token_icon.dart';
+import '../widgets/tron_activation_badge.dart';
 import '../state/app_prefs.dart';
 import '../state/endpoint_policy.dart';
 import '../state/networks.dart';
@@ -798,6 +799,10 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
   static String _identityKey(String symbol, String contract) =>
       '${symbol.toUpperCase()}|${_normalizedContract(contract.trim())}';
 
+  static bool _isTronNetwork(String? networkId, String label) =>
+      networkId?.startsWith('tron-') == true ||
+      label.toUpperCase().contains('TRON');
+
   bool _isOfficial(String symbol, String? contract) {
     if (contract == null || contract.trim().isEmpty) return false;
     final key = _identityKey(symbol, contract);
@@ -1265,7 +1270,21 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _verifiedSymbol(token.symbol, l10n, verified: verified),
+              Row(
+                children: [
+                  Flexible(
+                    child: _verifiedSymbol(
+                      token.symbol,
+                      l10n,
+                      verified: verified,
+                    ),
+                  ),
+                  if (_isTronNetwork(token.networkId, token.network)) ...[
+                    const SizedBox(width: 6),
+                    const TronActivationBadge(),
+                  ],
+                ],
+              ),
               const SizedBox(height: 3),
               Text(
                 token.network,
@@ -1324,7 +1343,20 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _verifiedSymbol(token.symbol, l10n, verified: true),
+              Row(
+                children: [
+                  Flexible(
+                    child: _verifiedSymbol(token.symbol, l10n, verified: true),
+                  ),
+                  if (_isTronNetwork(
+                    token.network,
+                    _networkLabel(token.network),
+                  )) ...[
+                    const SizedBox(width: 6),
+                    const TronActivationBadge(),
+                  ],
+                ],
+              ),
               const SizedBox(height: 3),
               Text(
                 '${token.name} · ${_networkLabel(token.network)}',
@@ -1968,13 +2000,25 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        label,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: WalletColors.text,
-                        ),
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: WalletColors.text,
+                              ),
+                            ),
+                          ),
+                          if (chain == Chain.tron) ...[
+                            const SizedBox(width: 7),
+                            const TronActivationBadge(),
+                          ],
+                        ],
                       ),
                     ),
                     if (active.isTestnet) ...[
@@ -2617,13 +2661,25 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        name,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: WalletColors.text,
-                        ),
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: WalletColors.text,
+                              ),
+                            ),
+                          ),
+                          if (coin == Coin.tron) ...[
+                            const SizedBox(width: 7),
+                            const TronActivationBadge(),
+                          ],
+                        ],
                       ),
                     ),
                     _healthBadge(

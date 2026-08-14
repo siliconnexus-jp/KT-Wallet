@@ -47,18 +47,35 @@ String defaultRpcEndpointFor(Coin coin) => switch (coin) {
 /// one invalid address) never taints the others.
 enum BalanceStatus { loading, ok, error, unsupported }
 
+/// Current TRON account-object state for the wallet address on the active
+/// TRON network. A TRC-20 contract can hold a positive balance for an address
+/// that does not yet exist as a native TRON account, so this is deliberately
+/// independent from both TRX and token amounts.
+enum TronActivationStatus { checking, activated, unactivated, unknown }
+
 /// A native-coin balance for one chain, or the reason there isn't one.
 /// [amount] is non-null iff [status] == [BalanceStatus.ok].
 class BalanceResult {
-  const BalanceResult.loading() : amount = null, status = BalanceStatus.loading;
-  BalanceResult.ok(Amount this.amount) : status = BalanceStatus.ok;
-  const BalanceResult.error() : amount = null, status = BalanceStatus.error;
+  const BalanceResult.loading()
+    : amount = null,
+      status = BalanceStatus.loading,
+      tronActivation = TronActivationStatus.checking;
+  BalanceResult.ok(
+    Amount this.amount, {
+    this.tronActivation = TronActivationStatus.unknown,
+  }) : status = BalanceStatus.ok;
+  const BalanceResult.error()
+    : amount = null,
+      status = BalanceStatus.error,
+      tronActivation = TronActivationStatus.unknown;
   const BalanceResult.unsupported()
     : amount = null,
-      status = BalanceStatus.unsupported;
+      status = BalanceStatus.unsupported,
+      tronActivation = TronActivationStatus.unknown;
 
   final Amount? amount;
   final BalanceStatus status;
+  final TronActivationStatus tronActivation;
 }
 
 /// Fetches live native balances for a wallet's [ChainAddresses] via the tested
@@ -108,11 +125,11 @@ class BalanceService {
   /// [BalanceStatus.error] for that chain only.
   ///
   /// GATEWAY SEMANTICS (resilience over purity): with a gateway configured,
-  /// each chain first asks the gateway (`kt_getBalances`, native only — the
-  /// token registry goes through [TokenBalanceService]); a failing gateway
-  /// call falls back to that chain's direct node path, so a broken/unreachable
-  /// gateway degrades to exactly today's behavior instead of a dead screen.
-  /// In direct mode (null resolver) the gateway is never contacted.
+  /// EVM/Solana chains first ask the gateway (`kt_getBalances`, native only —
+  /// the token registry goes through [TokenBalanceService]); a failing call
+  /// falls back to that chain's direct node path. TRON uses one direct account
+  /// read because the same response is the authoritative activation signal as
+  /// well as the TRX balance; its token reads may still use the Gateway.
   Future<Map<Coin, BalanceResult>> fetchAll(
     ChainAddresses addresses, {
     BalanceResultCallback? onResult,
@@ -149,23 +166,79 @@ class BalanceService {
       Coin.arbitrum: () => arbitrum.getBalance(addresses.arbitrum),
       Coin.avalanche: () => avalanche.getBalance(addresses.avalanche),
       Coin.bnb: () => bnb.getBalance(addresses.bnb),
-      Coin.tron: () => tron.getTrxBalance(addresses.tron),
       Coin.solana: () => solana.getBalance(addresses.solana),
     };
     final gateway = _gateway();
     final entries = await Future.wait([
       for (final coin in coins)
-        _fetchChain(
-          skipGateway.contains(coin) ? null : gateway,
-          coin,
-          addresses.forCoin(coin),
-          direct[coin]!,
-        ).then((entry) {
-          onResult?.call(entry.$1, entry.$2);
-          return entry;
-        }),
+        (coin == Coin.tron
+                ? _fetchTronChain(
+                    tron,
+                    addresses.tron,
+                    skipGateway.contains(coin) ? null : gateway,
+                  )
+                : _fetchChain(
+                    skipGateway.contains(coin) ? null : gateway,
+                    coin,
+                    addresses.forCoin(coin),
+                    direct[coin]!,
+                  ))
+            .then((entry) {
+              onResult?.call(entry.$1, entry.$2);
+              return entry;
+            }),
     ]);
     return {for (final (coin, result) in entries) coin: result};
+  }
+
+  /// TRON is fetched directly even while Gateway mode is enabled because the
+  /// activation bit is wallet state, not token metadata, and the currently
+  /// deployed Gateway balance contract predates that field. This is one
+  /// account request (not a second probe): the same response supplies TRX and
+  /// activation atomically. Gateway token reads continue unchanged.
+  Future<(Coin, BalanceResult)> _fetchTronChain(
+    TronRpc rpc,
+    String address,
+    GatewayClient? gateway,
+  ) async {
+    try {
+      final account = await rpc.getAccountBalances(address);
+      return (
+        Coin.tron,
+        BalanceResult.ok(
+          Amount(
+            raw: account.trx,
+            decimals: decimalsFor[Coin.tron]!,
+            symbol: symbolFor[Coin.tron]!,
+          ),
+          tronActivation: account.activated
+              ? TronActivationStatus.activated
+              : TronActivationStatus.unactivated,
+        ),
+      );
+    } catch (_) {
+      if (gateway != null) {
+        try {
+          final balances = await gateway.getBalances(
+            chain: Coin.tron,
+            address: address,
+          );
+          return (
+            Coin.tron,
+            BalanceResult.ok(
+              Amount(
+                raw: balances.native.raw,
+                decimals: balances.native.decimals,
+                symbol: balances.native.symbol,
+              ),
+            ),
+          );
+        } catch (_) {
+          // Both independently scoped sources failed: keep the state unknown.
+        }
+      }
+      return (Coin.tron, const BalanceResult.error());
+    }
   }
 
   Future<(Coin, BalanceResult)> _fetchChain(

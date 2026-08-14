@@ -188,6 +188,12 @@ class AssetRef {
 
   bool get isToken => tokenId != null || group.any((d) => d.isToken);
 
+  /// True only when this reference points at one concrete TRON deployment.
+  /// An unnarrowed cross-chain row such as USDT may contain TRON among seven
+  /// deployments, but the row itself is not a TRON account and must not carry
+  /// that account's activation badge.
+  bool get isTronSelectedDeployment => coin == Coin.tron && network != null;
+
   /// True when the same symbol lives on more than one chain.
   bool get isMultiChain => group.length > 1;
 }

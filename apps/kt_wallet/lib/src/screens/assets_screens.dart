@@ -30,6 +30,7 @@ import 'home_screen.dart'
         tokensBySymbol;
 import '../widgets/market_offline_banner.dart';
 import '../widgets/token_icon.dart';
+import '../widgets/tron_activation_badge.dart';
 import '../state/networks.dart';
 import '../state/app_prefs.dart';
 import '../state/wallet_scope.dart';
@@ -428,6 +429,7 @@ class _AssetTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final largeText = MediaQuery.textScalerOf(context).scale(14) >= 20;
+    final showsTronAccountState = a.$9?.isTronSelectedDeployment ?? false;
     return Semantics(
       button: true,
       label: '${a.$3}, ${a.$4}, ${a.$5}',
@@ -448,13 +450,23 @@ class _AssetTile extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          a.$3,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: WalletColors.text,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                a.$3,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: WalletColors.text,
+                                ),
+                              ),
+                            ),
+                            if (showsTronAccountState) ...[
+                              const SizedBox(width: 6),
+                              const TronActivationBadge(),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 3),
                         Text(
@@ -522,13 +534,25 @@ class _AssetTile extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          a.$3,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: WalletColors.text,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                a.$3,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: WalletColors.text,
+                                ),
+                              ),
+                            ),
+                            if (showsTronAccountState) ...[
+                              const SizedBox(width: 6),
+                              const TronActivationBadge(),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 3),
                         Text(
@@ -774,6 +798,10 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
                 label: ref.network ?? network.name,
                 dotColor: _chainDot[chainOf(actionCoin)]!,
               ),
+            if (actionCoin == Coin.tron) ...[
+              const SizedBox(height: 8),
+              const TronActivationBadge(),
+            ],
           ],
         ),
         Row(
@@ -978,13 +1006,21 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
                       color: WalletColors.text2,
                     ),
                   ),
-                  trailing: i == _chainIndex
-                      ? const Icon(
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (at.coin == Coin.tron) ...[
+                        const TronActivationBadge(),
+                        const SizedBox(width: 8),
+                      ],
+                      if (i == _chainIndex)
+                        const Icon(
                           Icons.check,
                           size: 20,
                           color: WalletColors.accent,
-                        )
-                      : null,
+                        ),
+                    ],
+                  ),
                   onTap: () {
                     setState(() => _chainIndex = i);
                     Navigator.of(ctx).pop();
@@ -1582,13 +1618,21 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                       color: WalletColors.text,
                     ),
                   ),
-                  trailing: i == _selected
-                      ? const Icon(
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (chains[i].coin == Coin.tron) ...[
+                        const TronActivationBadge(),
+                        const SizedBox(width: 8),
+                      ],
+                      if (i == _selected)
+                        const Icon(
                           Icons.check,
                           size: 20,
                           color: WalletColors.accent,
-                        )
-                      : null,
+                        ),
+                    ],
+                  ),
                   onTap: () {
                     setState(() => _selected = i);
                     Navigator.of(ctx).pop();
@@ -1804,6 +1848,10 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
             ),
           ),
         ),
+        if (chain.coin == Coin.tron) ...[
+          const Center(child: TronActivationBadge()),
+          const TronActivationNotice(),
+        ],
         KtCard(
           padding: const EdgeInsets.all(24),
           child: Column(

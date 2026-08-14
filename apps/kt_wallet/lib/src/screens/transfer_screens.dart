@@ -24,7 +24,8 @@ import 'package:wallet_data/wallet_data.dart'
 
 import '../../l10n/app_localizations.dart';
 import 'home_screen.dart' show tokenRowMeta;
-import '../market/balance_service.dart' show BalanceService, BalanceStatus;
+import '../market/balance_service.dart'
+    show BalanceService, BalanceStatus, TronActivationStatus;
 import '../market/asset_ref.dart' show AssetDeployment, AssetRef, chainOf;
 import '../market/explorer_links.dart' show explorerTxUrl;
 import '../market/history_service.dart' show ChainTxRecord, ChainTxStatus;
@@ -73,6 +74,7 @@ import '../transfer/transfer_draft.dart';
 import '../widgets/scan_viewfinder.dart';
 import '../widgets/pin_pad.dart';
 import '../widgets/token_icon.dart';
+import '../widgets/tron_activation_badge.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
 
@@ -1125,13 +1127,21 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                       color: WalletColors.text3,
                     ),
                   ),
-                  trailing: i == _assetIndex
-                      ? const Icon(
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_assetAt(i).chain == Chain.tron) ...[
+                        const TronActivationBadge(),
+                        const SizedBox(width: 8),
+                      ],
+                      if (i == _assetIndex)
+                        const Icon(
                           Icons.check,
                           size: 20,
                           color: WalletColors.accent,
-                        )
-                      : null,
+                        ),
+                    ],
+                  ),
                   onTap: () {
                     setState(() {
                       _assetIndex = i;
@@ -1159,7 +1169,15 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     final riskAcknowledged =
         recipientRisk == null ||
         _acknowledgedRiskAddress == recipientRisk.candidate;
-    final canProceed = addrCheck.isValid && riskAcknowledged && _amount != null;
+    final tronUnactivated =
+        _asset.chain == Chain.tron &&
+        MarketScope.maybeOf(context)?.tronActivationStatus ==
+            TronActivationStatus.unactivated;
+    final canProceed =
+        addrCheck.isValid &&
+        riskAcknowledged &&
+        _amount != null &&
+        !tronUnactivated;
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(
@@ -1217,13 +1235,23 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          _asset.symbol,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: WalletColors.text,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _asset.symbol,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: WalletColors.text,
+                                ),
+                              ),
+                            ),
+                            if (_asset.chain == Chain.tron) ...[
+                              const SizedBox(width: 7),
+                              const TronActivationBadge(),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -1247,6 +1275,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
             ),
           ),
         ),
+        if (_asset.chain == Chain.tron) const TronActivationNotice(),
         KtCard(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -1933,6 +1962,7 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
   EvmAssetChanges? _evmAssetChanges;
   bool _requested = false;
   bool _insufficientFunds = false;
+  bool _tronNotActivated = false;
   _TokenRiskUiState _tokenRisk = _TokenRiskUiState.notApplicable;
   Timer? _quoteRefreshTimer;
 
@@ -2093,6 +2123,7 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
       ..preparedAtMs = null
       ..preparationFailure = null;
     _insufficientFunds = false;
+    _tronNotActivated = false;
     _rentReserve = null;
     _evmAssetChanges = null;
     try {
@@ -2190,6 +2221,13 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
           ),
         );
       });
+    } on TronAccountNotActivated catch (error) {
+      session?.preparationFailure = '${error.runtimeType}: $error';
+      if (!mounted) return;
+      setState(() {
+        _tronNotActivated = true;
+        _state = _FeeEstimate.failed;
+      });
     } on TransferInsufficientFunds catch (error) {
       session?.preparationFailure = '${error.runtimeType}: $error';
       if (!mounted) return;
@@ -2264,6 +2302,7 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
       toValue = truncateMiddle(preview.to, head: 8, tail: 9);
       feeValue = switch (_state) {
         _FeeEstimate.estimating => l10n.feeEstimating,
+        _FeeEstimate.failed when _tronNotActivated => l10n.tronUnactivated,
         _FeeEstimate.failed when _insufficientFunds => l10n.insufficientBalance,
         _FeeEstimate.failed => l10n.feeUnavailable,
         _ when fee == null => '--',
@@ -2313,6 +2352,8 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
                       ? l10n.tokenRiskChecking
                       : _tokenRisk == _TokenRiskUiState.unsafe
                       ? l10n.tokenRiskBlockedHint
+                      : _tronNotActivated
+                      ? l10n.tronActivationRequiredHint
                       : _insufficientFunds
                       ? l10n.insufficientBalance
                       : _state == _FeeEstimate.estimating
@@ -2345,8 +2386,20 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
             ),
             const SizedBox(height: 8),
             NetworkBadge(label: networkLabel, dotColor: dotColor),
+            if (draft?.chain == Chain.tron) ...[
+              const SizedBox(height: 8),
+              TronActivationBadge(
+                status: _tronNotActivated
+                    ? TronActivationStatus.unactivated
+                    : null,
+              ),
+            ],
           ],
         ),
+        if (draft?.chain == Chain.tron)
+          TronActivationNotice(
+            status: _tronNotActivated ? TronActivationStatus.unactivated : null,
+          ),
         KtCard(
           child: Column(
             children: [
@@ -3355,6 +3408,7 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
     var headline = '-120.00 USDT';
     var networkLabel = 'TRON · TRC-20';
     var dotColor = ChainColors.tron;
+    var displayChain = Chain.tron;
     var toValue = 'TWd4qCEU…nMxR38uQz';
     var signerValue = 'TQm9xPa2…Vb7L3kFa';
     var hashValue = '8f6d2c…a94e07';
@@ -3362,6 +3416,7 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
     if (result != null) {
       final summary = request?.summary;
       final chain = chainForCoin(result.coin);
+      displayChain = chain;
       headline = session?.draft?.operation == TxOperation.approvalRevoke
           ? l10n.approvalRevoke
           : '-${summary?[SummaryKeys.amount] ?? ''}';
@@ -3483,6 +3538,10 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
             ),
             const SizedBox(height: 8),
             NetworkBadge(label: networkLabel, dotColor: dotColor),
+            if (displayChain == Chain.tron) ...[
+              const SizedBox(height: 8),
+              const TronActivationBadge(),
+            ],
           ],
         ),
         KtCard(
@@ -5008,6 +5067,10 @@ class _TxDetailScreenState extends State<TxDetailScreen>
               '${_statusLabel(l10n, tx)} · ${_date(tx.createdAt)}',
               style: const TextStyle(fontSize: 13, color: WalletColors.text3),
             ),
+            if (chain == Chain.tron) ...[
+              const SizedBox(height: 8),
+              const TronActivationBadge(),
+            ],
           ],
         ),
         KtCard(
@@ -5233,6 +5296,10 @@ class _TxDetailScreenState extends State<TxDetailScreen>
                 color: _chainTxStatusColor(record.status),
               ),
             ),
+            if (record.coin == Coin.tron) ...[
+              const SizedBox(height: 8),
+              const TronActivationBadge(),
+            ],
           ],
         ),
         KtCard(

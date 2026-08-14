@@ -720,5 +720,11 @@
   "approvalRevokePending": "Revocation pending",
   "approvalRevokeFailed": "The revocation was not submitted. Nothing is shown as revoked.",
   "approvalRevokeAuthFailed": "Authentication was not completed. Nothing was signed.",
-  "approvalRevokeHotOnly": "No signing-capable wallet is available for this revocation."
+  "approvalRevokeHotOnly": "No signing-capable wallet is available for this revocation.",
+  "tronAccountStatus": "TRON account status",
+  "tronActivationChecking": "Checking",
+  "tronActivated": "Activated",
+  "tronUnactivated": "Not activated",
+  "tronActivationUnknown": "Status unknown",
+  "tronActivationRequiredHint": "This TRON address is not activated. It can receive and display TRC-20 assets, but it cannot initiate transactions yet. Transfer TRX to this address to activate it on-chain and retain enough TRX for network fees."
 }

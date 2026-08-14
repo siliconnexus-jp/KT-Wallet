@@ -706,5 +706,11 @@
   "approvalRevokePending": "承認解除は確認待ちです",
   "approvalRevokeFailed": "解除取引は送信されませんでした。解除済みとして表示しません。",
   "approvalRevokeAuthFailed": "認証が完了しなかったため、署名していません。",
-  "approvalRevokeHotOnly": "この承認解除に使用できる署名対応ウォレットがありません。"
+  "approvalRevokeHotOnly": "この承認解除に使用できる署名対応ウォレットがありません。",
+  "tronAccountStatus": "TRON アカウント状態",
+  "tronActivationChecking": "確認中",
+  "tronActivated": "有効化済み",
+  "tronUnactivated": "未有効化",
+  "tronActivationUnknown": "状態不明",
+  "tronActivationRequiredHint": "この TRON アドレスはまだ有効化されていません。TRC-20 資産の受取・表示はできますが、取引は開始できません。まずこのアドレスへ TRX を送ってオンチェーンで有効化し、ネットワーク手数料分の TRX も確保してください。"
 }

@@ -91,6 +91,12 @@ class MarketController extends ChangeNotifier {
   BalanceResult balanceFor(Coin coin) =>
       _results[coin] ?? const BalanceResult.unsupported();
 
+  /// Wallet-wide TRON account state for the active network. Every screen uses
+  /// this one value so home, assets, receive, transfer and account directories
+  /// cannot disagree about whether the address is activated.
+  TronActivationStatus get tronActivationStatus =>
+      balanceFor(Coin.tron).tronActivation;
+
   /// The token registry rendered under the native rows (empty when no token
   /// service was wired up).
   List<TokenInfo> get tokens => _tokens?.tokens ?? const [];
@@ -416,16 +422,38 @@ class MarketController extends ChangeNotifier {
         );
         balanceFuture = tokenFuture.then((batch) async {
           final missing = wallet.addresses.enabledCoins
-              .where((coin) => !batch.native.containsKey(coin))
+              .where(
+                (coin) => coin == Coin.tron || !batch.native.containsKey(coin),
+              )
               .toList();
           if (missing.isEmpty) return batch.native;
           final fallback = await _balances.fetchCoins(
             wallet.addresses,
             missing,
-            onResult: revealNative,
-            skipGateway: batch.gatewayFailedChains,
+            onResult: (coin, result) {
+              if (coin == Coin.tron &&
+                  result.status == BalanceStatus.error &&
+                  batch.native.containsKey(Coin.tron)) {
+                return;
+              }
+              revealNative(coin, result);
+            },
+            // The portfolio response already supplied the Gateway's best
+            // TRON balance. This pass exists only to obtain the account-object
+            // activation bit directly, so it must not repeat that Gateway
+            // request when the direct probe fails.
+            skipGateway: {...batch.gatewayFailedChains, Coin.tron},
           );
-          return {...batch.native, ...fallback};
+          final merged = {...batch.native, ...fallback};
+          final directTron = fallback[Coin.tron];
+          final gatewayTron = batch.native[Coin.tron];
+          if (directTron?.status == BalanceStatus.error &&
+              gatewayTron != null) {
+            // Preserve the already validated amount, but never infer an
+            // activation state from the legacy Gateway response.
+            merged[Coin.tron] = gatewayTron;
+          }
+          return merged;
         });
       } else {
         balanceFuture = _balances.fetchAll(
@@ -479,11 +507,18 @@ class MarketController extends ChangeNotifier {
       var retainedStale = false;
       BalanceResult retainLastGood(
         BalanceResult? previous,
-        BalanceResult fresh,
-      ) {
+        BalanceResult fresh, {
+        bool clearTronActivation = false,
+      }) {
         if (fresh.status == BalanceStatus.error &&
             previous?.status == BalanceStatus.ok) {
           retainedStale = true;
+          if (clearTronActivation && previous?.amount != null) {
+            return BalanceResult.ok(
+              previous!.amount!,
+              tronActivation: TronActivationStatus.unknown,
+            );
+          }
           return previous!;
         }
         return fresh;
@@ -494,6 +529,7 @@ class MarketController extends ChangeNotifier {
           coin: retainLastGood(
             _results[coin],
             balances[coin] ?? const BalanceResult.unsupported(),
+            clearTronActivation: coin == Coin.tron,
           ),
       };
       _tokenResults = {

@@ -170,14 +170,18 @@ class _TronActivationRest implements RestTransport {
   _TronActivationRest({
     required this.genesisBlockId,
     required this.sourceBalance,
+    this.sourceActivated = true,
   });
 
   final String genesisBlockId;
   final int sourceBalance;
+  final bool sourceActivated;
+  final List<String> posts = [];
 
   @override
   Future<Object?> getJson(String url) async {
     if (url.endsWith('/TNXoiAJ3dct8Fjg4M9fkLFh9S2v9TXc32G')) {
+      if (!sourceActivated) return {'data': <Object?>[]};
       return {
         'data': [
           {'balance': sourceBalance},
@@ -189,8 +193,38 @@ class _TronActivationRest implements RestTransport {
 
   @override
   Future<Object?> postJson(String url, Object body) async {
+    posts.add(url);
     if (url.endsWith('/wallet/getblockbynum')) {
       return {'blockID': genesisBlockId};
+    }
+    if (url.endsWith('/wallet/triggerconstantcontract')) {
+      final request = body as Map;
+      final parameter = request['parameter'];
+      return {
+        'transaction': {
+          'raw_data': {
+            'contract': [
+              {
+                'parameter': {
+                  'value': {
+                    'owner_address': request['owner_address'],
+                    'contract_address': request['contract_address'],
+                    'data': '70a08231$parameter',
+                  },
+                  'type_url':
+                      'type.googleapis.com/protocol.TriggerSmartContract',
+                },
+                'type': 'TriggerSmartContract',
+              },
+            ],
+          },
+          'visible': true,
+        },
+        'constant_result': [
+          BigInt.from(10000000).toRadixString(16).padLeft(64, '0'),
+        ],
+        'result': {'result': true},
+      };
     }
     if (url.endsWith('/wallet/getnowblock')) {
       return {
@@ -522,6 +556,42 @@ void main() {
         ),
         throwsA(isA<TransferInsufficientFunds>()),
       );
+    },
+  );
+
+  test(
+    'an unactivated TRON sender is rejected before fee estimation',
+    () async {
+      final rest = _TronActivationRest(
+        genesisBlockId: tronGenesis,
+        sourceBalance: 0,
+        sourceActivated: false,
+      );
+      final service = LocalTransferService(
+        endpoints: (_) => 'https://tron.invalid',
+        restTransport: rest,
+      );
+
+      await expectLater(
+        service.prepareTron(
+          draft: TransferDraft(
+            symbol: 'USDT',
+            networkLabel: 'TRON · TRC-20',
+            chain: Chain.tron,
+            recipient: 'TJRabPrwbZy45sbavfcjinPJC18kjpRTv8',
+            amount: Amount.parse('1', 6, symbol: 'USDT'),
+            feeTier: 1,
+            tokenContract: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+          ),
+          from: 'TNXoiAJ3dct8Fjg4M9fkLFh9S2v9TXc32G',
+          expectedNetworkIdentity: tronGenesis,
+        ),
+        throwsA(isA<TronAccountNotActivated>()),
+      );
+      expect(rest.posts, [
+        endsWith('/wallet/getblockbynum'),
+        endsWith('/wallet/triggerconstantcontract'),
+      ]);
     },
   );
 

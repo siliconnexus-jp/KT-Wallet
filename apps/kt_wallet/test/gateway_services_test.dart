@@ -1778,15 +1778,27 @@ void main() {
           gateway: () => prefs.gatewayUrl == null ? null : gateway.client,
         );
 
-        await service.fetchAll(_addresses);
-        expect(gateway.calls, hasLength(4)); // gateway mode
+        final gatewayMode = await service.fetchAll(_addresses);
+        // TRON uses the direct account response once so the same read binds
+        // native balance to the account activation state. Other chains keep
+        // the normal Gateway-first path.
+        expect(gateway.calls, hasLength(3));
         expect(direct.calls, isEmpty);
+        expect(rest.gets, hasLength(1));
+        expect(
+          gatewayMode[Coin.tron]!.tronActivation,
+          TronActivationStatus.unactivated,
+        );
 
         await prefs.setGatewayUrl(null); // user clears the field
-        await service.fetchAll(_addresses);
-        expect(gateway.calls, hasLength(4)); // unchanged: no new gateway calls
+        final directMode = await service.fetchAll(_addresses);
+        expect(gateway.calls, hasLength(3)); // unchanged: no new gateway calls
         expect(direct.calls, hasLength(3)); // direct mode again
-        expect(rest.gets, hasLength(1));
+        expect(rest.gets, hasLength(2));
+        expect(
+          directMode[Coin.tron]!.tronActivation,
+          TronActivationStatus.unactivated,
+        );
       },
     );
   });

@@ -89,6 +89,8 @@ void main() {
       final ref = AssetRef.tokenGroup(_usdtGroup);
       final onTron = ref.selecting(1);
 
+      expect(ref.isTronSelectedDeployment, isFalse);
+      expect(onTron.isTronSelectedDeployment, isTrue);
       expect(onTron.symbol, 'USDT');
       expect(onTron.coin, Coin.tron);
       expect(onTron.contract, usdtTronToken.contract);

@@ -891,5 +891,11 @@
   "approvalRevokePending": "撤销确认中",
   "approvalRevokeFailed": "撤销交易未提交，不会把授权显示为已撤销。",
   "approvalRevokeAuthFailed": "未完成身份验证，没有签名任何内容。",
-  "approvalRevokeHotOnly": "当前没有可用于这笔撤销交易的签名钱包。"
+  "approvalRevokeHotOnly": "当前没有可用于这笔撤销交易的签名钱包。",
+  "tronAccountStatus": "TRON 账户状态",
+  "tronActivationChecking": "检测中",
+  "tronActivated": "已激活",
+  "tronUnactivated": "未激活",
+  "tronActivationUnknown": "状态未知",
+  "tronActivationRequiredHint": "此 TRON 地址尚未激活，可以接收并显示 TRC-20 资产，但暂时不能发起交易。请先向该地址转入 TRX 完成链上激活，并预留网络手续费。"
 }

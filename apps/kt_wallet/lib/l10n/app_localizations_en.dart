@@ -2050,4 +2050,23 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get approvalRevokeHotOnly =>
       'No signing-capable wallet is available for this revocation.';
+
+  @override
+  String get tronAccountStatus => 'TRON account status';
+
+  @override
+  String get tronActivationChecking => 'Checking';
+
+  @override
+  String get tronActivated => 'Activated';
+
+  @override
+  String get tronUnactivated => 'Not activated';
+
+  @override
+  String get tronActivationUnknown => 'Status unknown';
+
+  @override
+  String get tronActivationRequiredHint =>
+      'This TRON address is not activated. It can receive and display TRC-20 assets, but it cannot initiate transactions yet. Transfer TRX to this address to activate it on-chain and retain enough TRX for network fees.';
 }

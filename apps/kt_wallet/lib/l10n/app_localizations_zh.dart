@@ -1915,4 +1915,23 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get approvalRevokeHotOnly => '当前没有可用于这笔撤销交易的签名钱包。';
+
+  @override
+  String get tronAccountStatus => 'TRON 账户状态';
+
+  @override
+  String get tronActivationChecking => '检测中';
+
+  @override
+  String get tronActivated => '已激活';
+
+  @override
+  String get tronUnactivated => '未激活';
+
+  @override
+  String get tronActivationUnknown => '状态未知';
+
+  @override
+  String get tronActivationRequiredHint =>
+      '此 TRON 地址尚未激活，可以接收并显示 TRC-20 资产，但暂时不能发起交易。请先向该地址转入 TRX 完成链上激活，并预留网络手续费。';
 }

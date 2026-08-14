@@ -67,6 +67,14 @@ class TransferInsufficientFunds extends LocalTransferException {
   final String asset;
 }
 
+/// A TRC-20 mapping may contain funds before the owner address exists as a
+/// native TRON account. Such an address can receive/display tokens but cannot
+/// originate a transaction until it has been activated on-chain.
+class TronAccountNotActivated extends LocalTransferException {
+  const TronAccountNotActivated()
+    : super('TRON sender account is not activated');
+}
+
 class EvmInsufficientFunds extends TransferInsufficientFunds {
   const EvmInsufficientFunds(super.asset);
 }
@@ -583,6 +591,10 @@ class LocalTransferService {
     final recipientFuture = tokenContract == null
         ? rpc.getAccountBalances(draft.recipient)
         : null;
+    final balances = await balancesFuture;
+    if (!balances.activated) {
+      throw const TronAccountNotActivated();
+    }
     final block = await rpc.getNowBlock();
     final blockId = _hexDecode(block.blockId);
     final now = block.timestamp;
@@ -635,7 +647,6 @@ class LocalTransferService {
       feeState: feeState,
     );
     final maximumFee = bandwidth.maximumFeeSun + BigInt.from(feeLimit ?? 0);
-    final balances = await balancesFuture;
     final nativeSpend = tokenContract == null ? draft.amount.raw : BigInt.zero;
     if (balances.trx < nativeSpend + maximumFee) {
       throw const TransferInsufficientFunds('TRX');

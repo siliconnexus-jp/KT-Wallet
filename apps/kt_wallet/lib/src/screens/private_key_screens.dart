@@ -14,6 +14,7 @@ import '../state/networks.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
 import '../widgets/token_icon.dart';
+import '../widgets/tron_activation_badge.dart';
 
 /// OKX-aligned private-key export flow.
 ///
@@ -740,15 +741,25 @@ class _PrivateKeyAccountTile extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          account.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            color: WalletColors.text,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                account.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                  color: WalletColors.text,
+                                ),
+                              ),
+                            ),
+                            if (account.chain == Chain.tron) ...[
+                              const SizedBox(width: 7),
+                              const TronActivationBadge(),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 3),
                         Text(

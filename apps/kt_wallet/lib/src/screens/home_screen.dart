@@ -20,6 +20,7 @@ import '../market/market_scope.dart';
 import '../market/token_balance_service.dart';
 import '../widgets/market_offline_banner.dart';
 import '../widgets/token_icon.dart';
+import '../widgets/tron_activation_badge.dart';
 import '../state/app_prefs.dart';
 import '../state/networks.dart';
 import '../state/wallet_controller.dart';
@@ -900,6 +901,7 @@ class _HomeAssetTile extends StatelessWidget {
                   : '${ref.group.length}');
 
     return SizedBox(
+      key: ValueKey('home-asset-$symbol-${ref?.network ?? 'aggregate'}'),
       height: largeText ? 78 : 58,
       child: Row(
         children: [
@@ -915,15 +917,25 @@ class _HomeAssetTile extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  symbol,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: WalletColors.text,
-                  ),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        symbol,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: WalletColors.text,
+                        ),
+                      ),
+                    ),
+                    if (ref?.isTronSelectedDeployment ?? false) ...[
+                      const SizedBox(width: 6),
+                      const TronActivationBadge(),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -1015,15 +1027,25 @@ class _HomeNetworkList extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          network.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: WalletColors.text,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                network.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: WalletColors.text,
+                                ),
+                              ),
+                            ),
+                            if (network.chain == Chain.tron) ...[
+                              const SizedBox(width: 7),
+                              const TronActivationBadge(),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 3),
                         Text(
@@ -1451,6 +1473,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
         record.outgoing,
         amount,
         _formatRecordTime(l10n, record.timestamp),
+        isTron: record.coin == Coin.tron,
         status: local?.status,
         statusUnknown:
             local != null &&
@@ -1832,13 +1855,23 @@ class _RecordRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    sent ? l10n.txSent : l10n.txReceived,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: WalletColors.text,
-                    ),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          sent ? l10n.txSent : l10n.txReceived,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: WalletColors.text,
+                          ),
+                        ),
+                      ),
+                      if (record.isTron) ...[
+                        const SizedBox(width: 6),
+                        const TronActivationBadge(),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -1878,11 +1911,13 @@ class _TxRecord {
     this.outgoing,
     this.amount,
     this.time, {
+    this.isTron = false,
     this.status,
     this.statusUnknown = false,
   });
   final bool outgoing;
   final String amount, time;
+  final bool isTron;
   final TxStatus? status;
   final bool statusUnknown;
 }
@@ -2416,10 +2451,15 @@ class _Header extends StatelessWidget {
 }
 
 class _WalletNetworkAddress {
-  const _WalletNetworkAddress({required this.network, required this.address});
+  const _WalletNetworkAddress({
+    required this.network,
+    required this.address,
+    this.tronActivation,
+  });
 
   final Network network;
   final String address;
+  final TronActivationStatus? tronActivation;
 }
 
 Chain _chainForWalletCoin(Coin coin) => switch (coin) {
@@ -2438,12 +2478,16 @@ List<_WalletNetworkAddress> _walletNetworkAddresses(
   Wallet wallet,
 ) {
   final networks = NetworkScope.of(context);
+  final isCurrentWallet = WalletScope.of(context).current?.id == wallet.id;
   return <_WalletNetworkAddress>[
     for (final coin in wallet.addresses.enabledCoins)
       if (wallet.addresses.forCoin(coin).trim().isNotEmpty)
         _WalletNetworkAddress(
           network: networks.activeFor(_chainForWalletCoin(coin)),
           address: wallet.addresses.forCoin(coin),
+          tronActivation: coin == Coin.tron && !isCurrentWallet
+              ? TronActivationStatus.unknown
+              : null,
         ),
   ];
 }
@@ -2597,15 +2641,25 @@ class _WalletAddressesDirectoryState extends State<_WalletAddressesDirectory> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  entry.network.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: WalletColors.text,
-                  ),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        entry.network.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: WalletColors.text,
+                        ),
+                      ),
+                    ),
+                    if (entry.network.chain == Chain.tron) ...[
+                      const SizedBox(width: 7),
+                      TronActivationBadge(status: entry.tronActivation),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 3),
                 Text(
@@ -3316,13 +3370,25 @@ class _AssetTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                a.name,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: WalletColors.text,
-                ),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      a.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: WalletColors.text,
+                      ),
+                    ),
+                  ),
+                  if (a.ref?.isTronSelectedDeployment ?? false) ...[
+                    const SizedBox(width: 6),
+                    const TronActivationBadge(),
+                  ],
+                ],
               ),
               const SizedBox(height: 3),
               Text(

@@ -92,6 +92,7 @@ WalletController _wallets() => WalletController(
 
 MarketController _liveController({
   Map<String, double> fiatRates = const {'USD': 1},
+  TronActivationStatus tronActivation = TronActivationStatus.activated,
 }) => MarketController(
   wallets: _wallets(),
   balances: _FakeBalanceService({
@@ -111,6 +112,7 @@ MarketController _liveController({
     ),
     Coin.tron: BalanceResult.ok(
       Amount(raw: BigInt.from(5000000), decimals: 6, symbol: 'TRX'),
+      tronActivation: tronActivation,
     ),
     Coin.solana: BalanceResult.ok(
       Amount(raw: BigInt.from(500000000), decimals: 9, symbol: 'SOL'),
@@ -193,6 +195,39 @@ Widget _app(Widget home) => MaterialApp(
 );
 
 void main() {
+  testWidgets('TRON activation state is visible across the live home surface', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = _liveController(
+      tronActivation: TronActivationStatus.unactivated,
+    );
+    await tester.pumpWidget(
+      _app(MarketScope(controller: controller, child: const HomeScreen())),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('tron-activation-unactivated')),
+      findsWidgets,
+    );
+    expect(find.text('未激活'), findsWidgets);
+    final aggregateUsdt = find.byKey(
+      const ValueKey('home-asset-USDT-aggregate'),
+    );
+    expect(aggregateUsdt, findsOneWidget);
+    expect(
+      find.descendant(
+        of: aggregateUsdt,
+        matching: find.byKey(const ValueKey('tron-activation-unactivated')),
+      ),
+      findsNothing,
+    );
+  });
+
   testWidgets('home under a MarketScope shows live balances and fiat total', (
     tester,
   ) async {

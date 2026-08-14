@@ -3687,6 +3687,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'当前没有可用于这笔撤销交易的签名钱包。'**
   String get approvalRevokeHotOnly;
+
+  /// No description provided for @tronAccountStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'TRON 账户状态'**
+  String get tronAccountStatus;
+
+  /// No description provided for @tronActivationChecking.
+  ///
+  /// In zh, this message translates to:
+  /// **'检测中'**
+  String get tronActivationChecking;
+
+  /// No description provided for @tronActivated.
+  ///
+  /// In zh, this message translates to:
+  /// **'已激活'**
+  String get tronActivated;
+
+  /// No description provided for @tronUnactivated.
+  ///
+  /// In zh, this message translates to:
+  /// **'未激活'**
+  String get tronUnactivated;
+
+  /// No description provided for @tronActivationUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'状态未知'**
+  String get tronActivationUnknown;
+
+  /// No description provided for @tronActivationRequiredHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'此 TRON 地址尚未激活，可以接收并显示 TRC-20 资产，但暂时不能发起交易。请先向该地址转入 TRX 完成链上激活，并预留网络手续费。'**
+  String get tronActivationRequiredHint;
 }
 
 class _AppLocalizationsDelegate

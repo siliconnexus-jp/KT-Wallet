@@ -1941,4 +1941,23 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get approvalRevokeHotOnly => 'この承認解除に使用できる署名対応ウォレットがありません。';
+
+  @override
+  String get tronAccountStatus => 'TRON アカウント状態';
+
+  @override
+  String get tronActivationChecking => '確認中';
+
+  @override
+  String get tronActivated => '有効化済み';
+
+  @override
+  String get tronUnactivated => '未有効化';
+
+  @override
+  String get tronActivationUnknown => '状態不明';
+
+  @override
+  String get tronActivationRequiredHint =>
+      'この TRON アドレスはまだ有効化されていません。TRC-20 資産の受取・表示はできますが、取引は開始できません。まずこのアドレスへ TRX を送ってオンチェーンで有効化し、ネットワーク手数料分の TRX も確保してください。';
 }
