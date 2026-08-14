@@ -597,7 +597,12 @@ class LocalTransferService {
       tokenSymbol: draft.tokenContract == null ? null : draft.symbol,
     );
     int? feeLimit;
+    TronFeeState? feeState;
     if (tokenContract != null) {
+      // Energy and Bandwidth consume the same account-resource and governance
+      // fee snapshot. Reading both endpoints twice in one quote can make the
+      // second identical TronGrid request hit its unauthenticated rate limit.
+      feeState = await rpc.getFeeState(from);
       final calldata = Trc20.transferCalldata(
         to: draft.recipient,
         amount: draft.amount.raw,
@@ -606,6 +611,7 @@ class LocalTransferService {
         owner: from,
         contract: tokenContract,
         parameter: _hexEncodeBytes(calldata.sublist(4)),
+        feeState: feeState,
       );
       feeLimit = energy.feeLimitSun;
     }
@@ -626,6 +632,7 @@ class LocalTransferService {
       owner: from,
       rawDataLength: raw.length,
       activatesRecipient: activatesRecipient,
+      feeState: feeState,
     );
     final maximumFee = bandwidth.maximumFeeSun + BigInt.from(feeLimit ?? 0);
     final balances = await balancesFuture;

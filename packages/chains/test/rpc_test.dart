@@ -55,6 +55,8 @@ const _tronHash =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const _otherTronHash =
     'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const _tronHolder = 'TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C';
+const _tronContract = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 const _solanaOwner = 'A1TMhSGzQxMr1TboBKtgixKz1sS6REASMxPo1qsyTSJd';
 const _solanaOtherOwner = '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin';
 const _solanaMint = '2cHr7QS3xfuSV8wdxo3ztuF4xbiarF6Nrgx3qpx3HzXR';
@@ -62,6 +64,42 @@ const _solanaOtherMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const _solanaTokenAccount = 'BGocb4GEpbTFm8UFV2VsDSaBXHELPfAXrvd4vtt8QWrA';
 const _solanaSignature =
     '4cdd1oX7cfVALfr26tP52BZ6cSzrgnNGtYD7BFhm6FFeZV5sPTnRvg6NRn8yC6DbEikXcrNChBM5vVJnTgKhGhVu';
+
+String _tronAddressWord(String address) => base58Decode(
+  address,
+).sublist(1, 21).map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+
+Map<String, Object?> _tronBalanceResponse({
+  String holder = _tronHolder,
+  String contract = _tronContract,
+  BigInt? amount,
+}) {
+  final parameter = '${'0' * 24}${_tronAddressWord(holder)}';
+  return {
+    'transaction': {
+      'raw_data': {
+        'contract': [
+          {
+            'parameter': {
+              'value': {
+                'owner_address': holder,
+                'contract_address': contract,
+                'data': '70a08231$parameter',
+              },
+              'type_url': 'type.googleapis.com/protocol.TriggerSmartContract',
+            },
+            'type': 'TriggerSmartContract',
+          },
+        ],
+      },
+      'visible': true,
+    },
+    'constant_result': [
+      (amount ?? BigInt.from(99000000)).toRadixString(16).padLeft(64, '0'),
+    ],
+    'result': {'result': true},
+  };
+}
 
 Map<String, Object?> _solanaTokenAccountRow({
   String pubkey = _solanaTokenAccount,
@@ -1324,31 +1362,57 @@ void main() {
     });
 
     test(
-      'account balances preserve activation and requested TRC-20 balance',
+      'account balances combine activation with bound TRC-20 balanceOf',
       () async {
         final rpc = TronRpc(
           baseUrl: 'https://api',
           transport: FakeRest(
             onGet: (u) => {
               'data': [
-                {
-                  'balance': 1200000,
-                  'trc20': [
-                    {'TToken': '99000000'},
-                  ],
-                },
+                {'balance': 1200000},
               ],
             },
+            onPost: (u, b) => _tronBalanceResponse(),
           ),
         );
 
         final balances = await rpc.getAccountBalances(
-          'Tabc',
-          tokenContract: 'TToken',
+          _tronHolder,
+          tokenContract: _tronContract,
         );
         expect(balances.activated, isTrue);
         expect(balances.trx, BigInt.from(1200000));
         expect(balances.token, BigInt.from(99000000));
+      },
+    );
+
+    test(
+      'unactivated account can still hold an authoritative TRC-20 balance',
+      () async {
+        final transport = FakeRest(
+          onGet: (u) => {'data': <Object?>[]},
+          onPost: (u, b) => _tronBalanceResponse(amount: BigInt.from(10000000)),
+        );
+        final rpc = TronRpc(baseUrl: 'https://api', transport: transport);
+
+        final balances = await rpc.getAccountBalances(
+          _tronHolder,
+          tokenContract: _tronContract,
+        );
+        expect(balances.activated, isFalse);
+        expect(balances.trx, BigInt.zero);
+        expect(balances.token, BigInt.from(10000000));
+        expect(
+          transport.posts.single.$1,
+          'https://api/wallet/triggerconstantcontract',
+        );
+        expect(transport.posts.single.$2, {
+          'owner_address': _tronHolder,
+          'contract_address': _tronContract,
+          'function_selector': 'balanceOf(address)',
+          'parameter': '${'0' * 24}${_tronAddressWord(_tronHolder)}',
+          'visible': true,
+        });
       },
     );
 
@@ -1358,18 +1422,32 @@ void main() {
         transport: FakeRest(
           onGet: (u) => {
             'data': [
-              {
-                'trc20': [
-                  {'TToken': 123},
-                ],
-              },
+              {'balance': 0},
             ],
+          },
+          onPost: (u, b) => {
+            ..._tronBalanceResponse(),
+            'constant_result': ['not-a-word'],
           },
         ),
       );
 
       expect(
-        () => rpc.getAccountBalances('Tabc', tokenContract: 'TToken'),
+        () => rpc.getAccountBalances(_tronHolder, tokenContract: _tronContract),
+        throwsA(isA<RpcException>()),
+      );
+    });
+
+    test('TRC-20 balance rejects a response bound to another holder', () {
+      final rpc = TronRpc(
+        baseUrl: 'https://api',
+        transport: FakeRest(
+          onPost: (u, b) => _tronBalanceResponse(holder: _tronContract),
+        ),
+      );
+
+      expect(
+        () => rpc.getTrc20Balance(_tronHolder, _tronContract),
         throwsA(isA<RpcException>()),
       );
     });

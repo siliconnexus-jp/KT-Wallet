@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chains/chains.dart' show solanaToken2022Program;
+import 'package:chains/chains.dart' show base58Decode, solanaToken2022Program;
 import 'package:chains/rpc.dart';
 import 'package:core_crypto/core_crypto.dart' show ChainAddresses, Coin;
 import 'package:flutter_test/flutter_test.dart';
@@ -18,19 +18,21 @@ class _FakeJsonRpc implements JsonRpcTransport {
 }
 
 class _FakeRest implements RestTransport {
-  _FakeRest({this.onGet});
-  final Future<Object?> Function(String url)? onGet;
+  _FakeRest({this.onPost});
+  final Future<Object?> Function(String url, Object body)? onPost;
   @override
-  Future<Object?> getJson(String url) => onGet!(url);
+  Future<Object?> getJson(String url) =>
+      throw UnsupportedError('unexpected GET $url');
   @override
-  Future<Object?> postJson(String url, Object body) =>
-      throw UnimplementedError('token balance fetches never POST to TronGrid');
+  Future<Object?> postJson(String url, Object body) => onPost!(url, body);
 }
+
+const _tronHolder = 'TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C';
 
 const _addresses = ChainAddresses(
   eth: '0xEthAddr',
   polygon: '0xPolyAddr',
-  tron: 'TTronAddr',
+  tron: _tronHolder,
   solana: 'SolAddr',
 );
 
@@ -47,6 +49,36 @@ Map<String, Object?> _rpcResult(Object? result) => {
 
 String _abiUint256(int value) =>
     '0x${BigInt.from(value).toRadixString(16).padLeft(64, '0')}';
+
+String _tronAddressWord(String address) => base58Decode(
+  address,
+).sublist(1, 21).map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+
+Map<String, Object?> _trc20BalanceResponse(BigInt raw) {
+  final parameter = '${'0' * 24}${_tronAddressWord(_tronHolder)}';
+  return {
+    'transaction': {
+      'raw_data': {
+        'contract': [
+          {
+            'parameter': {
+              'value': {
+                'owner_address': _tronHolder,
+                'contract_address': _usdtTron,
+                'data': '70a08231$parameter',
+              },
+              'type_url': 'type.googleapis.com/protocol.TriggerSmartContract',
+            },
+            'type': 'TriggerSmartContract',
+          },
+        ],
+      },
+      'visible': true,
+    },
+    'constant_result': [raw.toRadixString(16).padLeft(64, '0')],
+    'result': {'result': true},
+  };
+}
 
 void main() {
   test('protected symbols require a known official contract identity', () {
@@ -167,19 +199,16 @@ void main() {
           fail('unexpected url $url');
         }),
         restTransport: _FakeRest(
-          onGet: (url) async {
-            expect(url, '$defaultTronApiUrl/v1/accounts/TTronAddr');
-            return {
-              'data': [
-                {
-                  'balance': 5000000,
-                  'trc20': [
-                    {'TOtherContract': '1'},
-                    {_usdtTron: '12345678'},
-                  ],
-                },
-              ],
-            };
+          onPost: (url, body) async {
+            expect(url, '$defaultTronApiUrl/wallet/triggerconstantcontract');
+            expect(body, {
+              'owner_address': _tronHolder,
+              'contract_address': _usdtTron,
+              'function_selector': 'balanceOf(address)',
+              'parameter': '${'0' * 24}${_tronAddressWord(_tronHolder)}',
+              'visible': true,
+            });
+            return _trc20BalanceResponse(BigInt.from(12345678));
           },
         ),
       );
@@ -213,7 +242,7 @@ void main() {
         return _rpcResult(_abiUint256(10000000));
       }),
       restTransport: _FakeRest(
-        onGet: (url) => throw TimeoutException('rest timeout'),
+        onPost: (url, body) => throw TimeoutException('rest timeout'),
       ),
     );
 
@@ -225,45 +254,30 @@ void main() {
   });
 
   test(
-    'unactivated account / missing trc20 entry read as a real zero',
+    'contract balanceOf covers zero and an unactivated token holder',
     () async {
-      Future<Map<String, BalanceResult>> fetchWith(Object? tronBody) {
+      Future<Map<String, BalanceResult>> fetchWith(BigInt raw) {
         final service = TokenBalanceService(
           tokens: const [usdtEthToken, usdtTronToken],
           jsonRpcTransport: _FakeJsonRpc(
             (url, body) async => _rpcResult(_abiUint256(0)),
           ),
-          restTransport: _FakeRest(onGet: (url) async => tronBody),
+          restTransport: _FakeRest(
+            onPost: (url, body) async => _trc20BalanceResponse(raw),
+          ),
         );
         return service.fetchAll(_addresses);
       }
 
-      // Unactivated account: TronGrid returns an empty data list.
-      var results = await fetchWith({'data': <Object?>[]});
+      var results = await fetchWith(BigInt.zero);
       expect(results['usdt-tron']!.status, BalanceStatus.ok);
       expect(results['usdt-tron']!.amount!.raw, BigInt.zero);
 
-      // Activated account that never touched any TRC-20 (no trc20 key).
-      results = await fetchWith({
-        'data': [
-          {'balance': 42},
-        ],
-      });
+      // The native account object may still be absent; balanceOf nevertheless
+      // returns the contract's real token balance.
+      results = await fetchWith(BigInt.from(10000000));
       expect(results['usdt-tron']!.status, BalanceStatus.ok);
-      expect(results['usdt-tron']!.amount!.raw, BigInt.zero);
-
-      // trc20 array present but without the registry contract.
-      results = await fetchWith({
-        'data': [
-          {
-            'trc20': [
-              {'TOtherContract': '9'},
-            ],
-          },
-        ],
-      });
-      expect(results['usdt-tron']!.status, BalanceStatus.ok);
-      expect(results['usdt-tron']!.amount!.raw, BigInt.zero);
+      expect(results['usdt-tron']!.amount!.raw, BigInt.from(10000000));
     },
   );
 
@@ -271,18 +285,9 @@ void main() {
     final service = TokenBalanceService(
       jsonRpcTransport: _FakeJsonRpc((url, body) async => 'not a map'),
       restTransport: _FakeRest(
-        onGet: (url) async {
-          return {
-            'data': [
-              {
-                'trc20': [
-                  {
-                    _usdtTron: 12345678,
-                  }, // non-string value: malformed, not zero
-                ],
-              },
-            ],
-          };
+        onPost: (url, body) async => {
+          ..._trc20BalanceResponse(BigInt.one),
+          'constant_result': ['not-a-uint256-word'],
         },
       ),
     );
@@ -303,9 +308,9 @@ void main() {
         return _rpcResult(_abiUint256(0));
       }),
       restTransport: _FakeRest(
-        onGet: (url) async {
+        onPost: (url, body) async {
           seenRestUrls.add(url);
-          return {'data': <Object?>[]};
+          return _trc20BalanceResponse(BigInt.zero);
         },
       ),
     );
@@ -320,7 +325,7 @@ void main() {
     );
     expect(
       seenRestUrls.single,
-      'https://custom-tron.example/v1/accounts/TTronAddr',
+      'https://custom-tron.example/wallet/triggerconstantcontract',
     );
   });
 

@@ -122,6 +122,105 @@ func (t *Tron) GetAccount(ctx context.Context, addr string) (*Account, error) {
 	return acct, nil
 }
 
+// TRC20Balance reads the contract's authoritative balanceOf(holder) mapping.
+// A contract can credit an address before TRON creates its native account
+// object, in which case /v1/accounts/{holder} legitimately returns data: [].
+func (t *Tron) TRC20Balance(ctx context.Context, holder, contract string) (*big.Int, error) {
+	holderHex, holderOK := tronBase58AddressHex(holder)
+	_, contractOK := tronBase58AddressHex(contract)
+	if !holderOK || !contractOK {
+		return nil, t.unavailable("invalid TRC-20 balance identity")
+	}
+	parameter := strings.Repeat("0", 24) + holderHex[2:]
+	callData := "70a08231" + parameter
+	body, err := json.Marshal(map[string]any{
+		"owner_address":     holder,
+		"contract_address":  contract,
+		"function_selector": "balanceOf(address)",
+		"parameter":         parameter,
+		"visible":           true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	data, err := t.fetch(ctx, http.MethodPost, "/wallet/triggerconstantcontract", body)
+	if err != nil {
+		return nil, err
+	}
+	balance, err := decodeTronTRC20Balance(data, holder, contract, callData)
+	if err != nil {
+		return nil, t.unavailable("malformed or unbound TRC-20 balance response")
+	}
+	return balance, nil
+}
+
+func decodeTronTRC20Balance(data []byte, holder, contract, callData string) (*big.Int, error) {
+	response, err := decodeExtensibleJSONObject(data, "transaction", "constant_result", "result")
+	if err != nil {
+		return nil, err
+	}
+	result, err := decodeExtensibleJSONObject(response["result"], "result")
+	if err != nil || !bytes.Equal(bytes.TrimSpace(result["result"]), []byte("true")) {
+		return nil, errors.New("TRC-20 balance call failed")
+	}
+
+	transaction, err := decodeExtensibleJSONObject(response["transaction"], "raw_data", "visible")
+	if err != nil || !bytes.Equal(bytes.TrimSpace(transaction["visible"]), []byte("true")) {
+		return nil, errors.New("unbound TRC-20 balance response")
+	}
+	rawData, err := decodeExtensibleJSONObject(transaction["raw_data"], "contract")
+	if err != nil {
+		return nil, err
+	}
+	calls, err := decodeRawJSONArray(rawData["contract"], 1)
+	if err != nil || len(calls) != 1 {
+		return nil, errors.New("unbound TRC-20 balance response")
+	}
+	call, err := decodeExtensibleJSONObject(calls[0], "parameter", "type")
+	if err != nil {
+		return nil, err
+	}
+	callType, err := tronJSONString(call["type"])
+	if err != nil || callType != "TriggerSmartContract" {
+		return nil, errors.New("unbound TRC-20 balance response")
+	}
+	parameter, err := decodeExtensibleJSONObject(call["parameter"], "value", "type_url")
+	if err != nil {
+		return nil, err
+	}
+	typeURL, err := tronJSONString(parameter["type_url"])
+	if err != nil || typeURL != "type.googleapis.com/protocol.TriggerSmartContract" {
+		return nil, errors.New("unbound TRC-20 balance response")
+	}
+	value, err := decodeExtensibleJSONObject(
+		parameter["value"], "owner_address", "contract_address", "data",
+	)
+	if err != nil {
+		return nil, err
+	}
+	owner, ownerErr := tronJSONString(value["owner_address"])
+	returnedContract, contractErr := tronJSONString(value["contract_address"])
+	returnedData, dataErr := tronJSONString(value["data"])
+	if ownerErr != nil || contractErr != nil || dataErr != nil ||
+		owner != holder || returnedContract != contract || returnedData != callData {
+		return nil, errors.New("unbound TRC-20 balance response")
+	}
+
+	words, err := decodeRawJSONArray(response["constant_result"], 1)
+	if err != nil || len(words) != 1 {
+		return nil, errors.New("malformed TRC-20 balance result")
+	}
+	word, err := tronJSONString(words[0])
+	if err != nil || len(word) != 64 {
+		return nil, errors.New("malformed TRC-20 balance result")
+	}
+	decoded, err := hex.DecodeString(word)
+	if err != nil || len(decoded) != 32 {
+		return nil, errors.New("malformed TRC-20 balance result")
+	}
+	return new(big.Int).SetBytes(decoded), nil
+}
+
 // decodeTronAccount treats an account balance as financial data rather than a
 // best-effort display hint. TronGrid's account object is intentionally
 // extensible, but the envelope and every field consumed by KT Wallet are

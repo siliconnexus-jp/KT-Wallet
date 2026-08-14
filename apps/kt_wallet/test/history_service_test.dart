@@ -1486,6 +1486,40 @@ void main() {
     },
   );
 
+  test(
+    'TRON direct history preserves a validated TRC-20 row during sibling outage',
+    () async {
+      final service = _service(
+        body: (request) {
+          if (request.url.path.endsWith('/transactions/trc20')) {
+            return {
+              'data': [
+                _trc20Item(
+                  hash: _tronHashA,
+                  from: _other,
+                  to: _me,
+                  ts: 1700000000000,
+                  value: '10000000',
+                ),
+              ],
+              'success': true,
+            };
+          }
+          if (request.url.path.endsWith('/internal-transactions')) {
+            return http.Response('server error', 500);
+          }
+          return {'data': <Object?>[], 'success': true};
+        },
+      );
+
+      final result = await service.fetch(Coin.tron, _me);
+      expect(result.status, HistoryStatus.ok);
+      expect(result.records, hasLength(1));
+      expect(result.records.single.hash, _tronHashA);
+      expect(result.records.single.amountText, '10 USDT');
+    },
+  );
+
   test('timeout surfaces as error status (never throws)', () async {
     final service = HistoryService(
       timeout: const Duration(milliseconds: 1),

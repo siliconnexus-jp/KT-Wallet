@@ -3,6 +3,7 @@ package handlers_test
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,51 @@ import (
 	"ktwallet/gateway/internal/handlers"
 	"ktwallet/gateway/internal/rpc"
 )
+
+func scriptTronTokenBalances(t *testing.T, grid *restFake, balances map[string]string) {
+	t.Helper()
+	grid.route("/wallet/triggerconstantcontract", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Owner     string `json:"owner_address"`
+			Contract  string `json:"contract_address"`
+			Selector  string `json:"function_selector"`
+			Parameter string `json:"parameter"`
+			Visible   bool   `json:"visible"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		word, ok := balances[request.Contract]
+		if !ok || request.Selector != "balanceOf(address)" || !request.Visible {
+			http.Error(w, "unexpected token balance request", http.StatusBadRequest)
+			return
+		}
+		response := map[string]any{
+			"transaction": map[string]any{
+				"raw_data": map[string]any{
+					"contract": []any{map[string]any{
+						"parameter": map[string]any{
+							"value": map[string]any{
+								"owner_address":    request.Owner,
+								"contract_address": request.Contract,
+								"data":             "70a08231" + request.Parameter,
+							},
+							"type_url": "type.googleapis.com/protocol.TriggerSmartContract",
+						},
+						"type": "TriggerSmartContract",
+					}},
+				},
+				"visible": true,
+			},
+			"constant_result": []string{word},
+			"result":          map[string]any{"result": true},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
 
 // scriptEVMBalances wires eth_getBalance -> 1 ETH and eth_call balanceOf
 // responses keyed by contract address.
@@ -212,20 +258,44 @@ func TestEVMMalformedNativeBalanceFailsCallInsteadOfReportingZero(t *testing.T) 
 func TestTronBalances(t *testing.T) {
 	grid := newRESTFake(t)
 	grid.routeJSON("/v1/accounts/"+tronSelfB58, fmt.Sprintf(
-		`{"data":[{"address":%q,"balance":5000000,"trc20":[{%q:"123456"}]}],"success":true}`,
-		tronSelfHex, tronUSDT))
+		`{"data":[{"address":%q,"balance":5000000}],"success":true}`,
+		tronSelfHex))
+	scriptTronTokenBalances(t, grid, map[string]string{
+		tronUSDT:     fmt.Sprintf("%064x", 123456),
+		tronOtherB58: strings.Repeat("0", 64),
+	})
 	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
 
 	resp := e.rpc("kt_getBalances", balancesParams("tron", tronSelfB58,
-		fmt.Sprintf(`[{"contract":%q,"decimals":6,"symbol":"USDT"},{"contract":"TVj7RNVHy6thbM7BWdSe9G6gXwKhjhdNaS","decimals":18,"symbol":"JST"}]`, tronUSDT)))
+		fmt.Sprintf(`[{"contract":%q,"decimals":6,"symbol":"USDT"},{"contract":%q,"decimals":18,"symbol":"JST"}]`, tronUSDT, tronOtherB58)))
 
 	assertJSONEq(t, fmt.Sprintf(`{
 		"chain":"tron","network":"tron-mainnet","address":%q,
 		"native":{"raw":"5000000","decimals":6,"symbol":"TRX"},
 		"tokens":[
 			{"contract":%q,"raw":"123456","decimals":6,"symbol":"USDT"},
-			{"contract":"TVj7RNVHy6thbM7BWdSe9G6gXwKhjhdNaS","raw":"0","decimals":18,"symbol":"JST"}
-		]}`, tronSelfB58, tronUSDT), result(t, resp))
+			{"contract":%q,"raw":"0","decimals":18,"symbol":"JST"}
+		]}`, tronSelfB58, tronUSDT, tronOtherB58), result(t, resp))
+}
+
+func TestTronUnactivatedAccountStillReturnsContractTokenBalance(t *testing.T) {
+	grid := newRESTFake(t)
+	grid.routeJSON("/v1/accounts/", `{"data":[],"success":true}`)
+	scriptTronTokenBalances(t, grid, map[string]string{
+		tronUSDT: fmt.Sprintf("%064x", 10000000),
+	})
+	e := newEnv(t, func(cfg *handlers.Config) { cfg.TronURL = grid.srv.URL })
+
+	resp := e.rpc("kt_getBalances", balancesParams(
+		"tron",
+		tronSelfB58,
+		fmt.Sprintf(`[{"contract":%q,"decimals":6,"symbol":"USDT"}]`, tronUSDT),
+	))
+	assertJSONEq(t, fmt.Sprintf(`{
+		"chain":"tron","network":"tron-mainnet","address":%q,
+		"native":{"raw":"0","decimals":6,"symbol":"TRX"},
+		"tokens":[{"contract":%q,"raw":"10000000","decimals":6,"symbol":"USDT"}]
+	}`, tronSelfB58, tronUSDT), result(t, resp))
 }
 
 func TestTronMalformedNativeBalanceFailsCallInsteadOfBecomingZero(t *testing.T) {

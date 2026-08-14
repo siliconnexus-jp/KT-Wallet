@@ -1,3 +1,5 @@
+import '../address.dart';
+import '../base58.dart';
 import 'transport.dart';
 
 final RegExp _tronTransactionIdPattern = RegExp(r'^[0-9a-fA-F]{64}$');
@@ -126,7 +128,7 @@ class TronRpc {
   Future<BigInt> getTrxBalance(String address) async =>
       (await getAccountBalances(address)).trx;
 
-  /// Uncached TRX and optional TRC-20 balances from one account response.
+  /// Uncached TRX plus an optional authoritative TRC-20 contract balance.
   /// [activated] distinguishes a real zero-balance account from an address
   /// that does not yet exist and will incur TRON's activation fee.
   Future<TronAccountBalances> getAccountBalances(
@@ -137,7 +139,13 @@ class TronRpc {
     if (resp is! Map) throw RpcException('bad account response');
     final data = resp['data'];
     if (data is! List || data.isEmpty) {
-      return TronAccountBalances(activated: false, trx: BigInt.zero);
+      return TronAccountBalances(
+        activated: false,
+        trx: BigInt.zero,
+        token: tokenContract == null
+            ? null
+            : await getTrc20Balance(address, tokenContract),
+      );
     }
     final account = data.first;
     if (account is! Map) throw RpcException('bad account entry');
@@ -147,29 +155,42 @@ class TronRpc {
     if (balance != null && balance is! int) {
       throw RpcException('non-integer balance');
     }
-    BigInt? token;
-    if (tokenContract != null) {
-      token = BigInt.zero;
-      final rows = account['trc20'];
-      if (rows != null && rows is! List) {
-        throw RpcException('bad trc20 balance list');
-      }
-      if (rows is List) {
-        for (final row in rows) {
-          if (row is! Map || !row.containsKey(tokenContract)) continue;
-          final raw = row[tokenContract];
-          if (raw is! String || !RegExp(r'^[0-9]+$').hasMatch(raw)) {
-            throw RpcException('bad trc20 balance');
-          }
-          token = BigInt.parse(raw);
-          break;
-        }
-      }
-    }
+    // A smart contract can credit a TRC-20 mapping before the recipient has a
+    // native TRON account object. `/v1/accounts/{address}` then returns an
+    // empty data list even though balanceOf(address) is non-zero. The contract
+    // call is therefore the authoritative token balance source.
+    final token = tokenContract == null
+        ? null
+        : await getTrc20Balance(address, tokenContract);
     return TronAccountBalances(
       activated: true,
       trx: balance == null ? BigInt.zero : BigInt.from(balance as int),
       token: token,
+    );
+  }
+
+  /// Reads one TRC-20 balance from the contract's authoritative mapping.
+  ///
+  /// The response is bound back to the exact holder, contract and calldata;
+  /// an unrelated/stale constant-call response is never accepted as money.
+  Future<BigInt> getTrc20Balance(String holder, String contract) async {
+    final holderWord = _tronAddressWord(holder, 'holder');
+    _tronAddressWord(contract, 'contract');
+    final parameter = '${'0' * 24}$holderWord';
+    final callData = '70a08231$parameter';
+    final response = await transport
+        .postJson('$baseUrl/wallet/triggerconstantcontract', {
+          'owner_address': holder,
+          'contract_address': contract,
+          'function_selector': 'balanceOf(address)',
+          'parameter': parameter,
+          'visible': true,
+        });
+    return _parseBoundTrc20Balance(
+      response,
+      holder: holder,
+      contract: contract,
+      callData: callData,
     );
   }
 
@@ -228,6 +249,73 @@ class TronRpc {
     return TronBlockRef(number: number, blockId: blockId, timestamp: timestamp);
   }
 
+  /// Reads the owner's current resource allowances and the chain-governed fee
+  /// schedule once so every component of one quote uses the same snapshot.
+  ///
+  /// A TRC-20 quote needs this state for both Energy and Bandwidth. Fetching
+  /// the two endpoints independently for each calculation doubles the burst
+  /// against TronGrid and can make the second identical resource request hit
+  /// the unauthenticated rate limit even though the first one succeeded.
+  Future<TronFeeState> getFeeState(String owner) async {
+    final responses = await Future.wait<Object?>([
+      transport.postJson('$baseUrl/wallet/getaccountresource', {
+        'address': owner,
+        'visible': true,
+      }),
+      transport.postJson('$baseUrl/wallet/getchainparameters', {}),
+    ]);
+    final resources = responses[0];
+    final parameters = responses[1];
+    if (resources is! Map || parameters is! Map) {
+      throw RpcException('TRON resource estimation failed');
+    }
+
+    int nonNegative(String key) {
+      final value = resources[key];
+      if (value == null) return 0;
+      if (value is! int || value < 0) {
+        throw RpcException('bad TRON resource $key');
+      }
+      return value;
+    }
+
+    final energyLimit = nonNegative('EnergyLimit');
+    final energyAvailable = (energyLimit - nonNegative('EnergyUsed')).clamp(
+      0,
+      energyLimit,
+    ).toInt();
+    final netLimit = nonNegative('NetLimit');
+    final stakedBandwidth = (netLimit - nonNegative('NetUsed')).clamp(
+      0,
+      netLimit,
+    ).toInt();
+    final freeNetLimit = nonNegative('freeNetLimit');
+    final freeBandwidth = (freeNetLimit - nonNegative('freeNetUsed')).clamp(
+      0,
+      freeNetLimit,
+    ).toInt();
+
+    final chainParameters = parameters['chainParameter'];
+    if (chainParameters is! List) {
+      throw RpcException('TRON fee schedule unavailable');
+    }
+    final values = <String, int>{};
+    for (final entry in chainParameters) {
+      if (entry is Map && entry['key'] is String && entry['value'] is int) {
+        values[entry['key'] as String] = entry['value'] as int;
+      }
+    }
+    return TronFeeState(
+      energyAvailable: energyAvailable,
+      stakedBandwidthAvailable: stakedBandwidth,
+      freeBandwidthAvailable: freeBandwidth,
+      energyPriceSun: values['getEnergyFee'],
+      bandwidthPriceSun: values['getTransactionFee'],
+      activationFeeSun: values['getCreateNewAccountFeeInSystemContract'],
+      activationBandwidthFeeSun: values['getCreateAccountFee'],
+    );
+  }
+
   /// Estimates the TRX that may be burned by a TRC-20 contract call. The
   /// returned feeLimit includes a 20% headroom over the node's energy result
   /// after subtracting the account's currently available staked energy.
@@ -235,6 +323,7 @@ class TronRpc {
     required String owner,
     required String contract,
     required String parameter,
+    TronFeeState? feeState,
   }) async {
     final responses = await Future.wait<Object?>([
       transport.postJson('$baseUrl/wallet/triggerconstantcontract', {
@@ -244,43 +333,23 @@ class TronRpc {
         'parameter': parameter,
         'visible': true,
       }),
-      transport.postJson('$baseUrl/wallet/getaccountresource', {
-        'address': owner,
-        'visible': true,
-      }),
-      transport.postJson('$baseUrl/wallet/getchainparameters', {}),
+      feeState == null ? getFeeState(owner) : Future.value(feeState),
     ]);
     final trigger = responses[0];
-    final resources = responses[1];
-    final parameters = responses[2];
+    final state = responses[1];
     if (trigger is! Map ||
         trigger['result'] is! Map ||
         (trigger['result'] as Map)['result'] != true ||
         trigger['energy_used'] is! int) {
       throw RpcException('TRON energy estimation failed');
     }
-    if (resources is! Map || parameters is! Map) {
+    if (state is! TronFeeState) {
       throw RpcException('TRON resource estimation failed');
     }
     final required = trigger['energy_used'] as int;
-    final limit = resources['EnergyLimit'] is int
-        ? resources['EnergyLimit'] as int
-        : 0;
-    final used = resources['EnergyUsed'] is int
-        ? resources['EnergyUsed'] as int
-        : 0;
-    final available = (limit - used).clamp(0, limit).toInt();
-    final chainParameters = parameters['chainParameter'];
-    if (chainParameters is! List) {
-      throw RpcException('TRON energy price unavailable');
-    }
-    int? price;
-    for (final entry in chainParameters) {
-      if (entry is Map && entry['key'] == 'getEnergyFee') {
-        final value = entry['value'];
-        if (value is int) price = value;
-      }
-    }
+    if (required < 0) throw RpcException('TRON energy estimation failed');
+    final available = state.energyAvailable;
+    final price = state.energyPriceSun;
     if (price == null || price <= 0) {
       throw RpcException('TRON energy price unavailable');
     }
@@ -308,50 +377,17 @@ class TronRpc {
     required String owner,
     required int rawDataLength,
     required bool activatesRecipient,
+    TronFeeState? feeState,
   }) async {
     if (rawDataLength <= 0) {
       throw ArgumentError.value(rawDataLength, 'rawDataLength');
     }
-    final responses = await Future.wait<Object?>([
-      transport.postJson('$baseUrl/wallet/getaccountresource', {
-        'address': owner,
-        'visible': true,
-      }),
-      transport.postJson('$baseUrl/wallet/getchainparameters', {}),
-    ]);
-    final resources = responses[0];
-    final parameters = responses[1];
-    if (resources is! Map || parameters is! Map) {
-      throw RpcException('TRON bandwidth estimation failed');
-    }
-    int nonNegative(String key) {
-      final value = resources[key];
-      if (value == null) return 0;
-      if (value is! int || value < 0) {
-        throw RpcException('bad TRON resource $key');
-      }
-      return value;
-    }
-
-    final staked = (nonNegative('NetLimit') - nonNegative('NetUsed')).clamp(
-      0,
-      nonNegative('NetLimit'),
-    );
-    final free = (nonNegative('freeNetLimit') - nonNegative('freeNetUsed'))
-        .clamp(0, nonNegative('freeNetLimit'));
-    final chainParameters = parameters['chainParameter'];
-    if (chainParameters is! List) {
-      throw RpcException('TRON bandwidth price unavailable');
-    }
-    final values = <String, int>{};
-    for (final entry in chainParameters) {
-      if (entry is Map && entry['key'] is String && entry['value'] is int) {
-        values[entry['key'] as String] = entry['value'] as int;
-      }
-    }
-    final unitPrice = values['getTransactionFee'];
-    final activationFee = values['getCreateNewAccountFeeInSystemContract'];
-    final activationBandwidthFee = values['getCreateAccountFee'];
+    final state = feeState ?? await getFeeState(owner);
+    final staked = state.stakedBandwidthAvailable;
+    final free = state.freeBandwidthAvailable;
+    final unitPrice = state.bandwidthPriceSun;
+    final activationFee = state.activationFeeSun;
+    final activationBandwidthFee = state.activationBandwidthFeeSun;
     if (unitPrice == null || unitPrice <= 0) {
       throw RpcException('TRON bandwidth price unavailable');
     }
@@ -454,6 +490,30 @@ class TronEnergyEstimate {
   final int feeLimitSun;
 }
 
+/// One internally consistent resource and governance-fee snapshot used by a
+/// single TRON transfer quote. Nullable prices remain fail-closed in the
+/// estimator that actually needs them, so a native transfer does not require
+/// an unrelated Energy parameter and a token transfer cannot invent one.
+class TronFeeState {
+  const TronFeeState({
+    required this.energyAvailable,
+    required this.stakedBandwidthAvailable,
+    required this.freeBandwidthAvailable,
+    required this.energyPriceSun,
+    required this.bandwidthPriceSun,
+    required this.activationFeeSun,
+    required this.activationBandwidthFeeSun,
+  });
+
+  final int energyAvailable;
+  final int stakedBandwidthAvailable;
+  final int freeBandwidthAvailable;
+  final int? energyPriceSun;
+  final int? bandwidthPriceSun;
+  final int? activationFeeSun;
+  final int? activationBandwidthFeeSun;
+}
+
 class TronBandwidthEstimate {
   const TronBandwidthEstimate({
     required this.estimatedBandwidth,
@@ -470,6 +530,102 @@ class TronBandwidthEstimate {
   final int activationFeeSun;
 
   BigInt get maximumFeeSun => BigInt.from(bandwidthFeeSun + activationFeeSun);
+}
+
+String _tronAddressWord(String address, String label) {
+  final validated = Addresses.validate(Chain.tron, address);
+  if (!validated.isValid) throw RpcException('invalid TRON $label address');
+  final decoded = base58Decode(validated.normalized!);
+  if (decoded.length != 25 || decoded.first != 0x41) {
+    throw RpcException('invalid TRON $label address');
+  }
+  return decoded
+      .sublist(1, 21)
+      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+      .join();
+}
+
+BigInt _parseBoundTrc20Balance(
+  Object? raw, {
+  required String holder,
+  required String contract,
+  required String callData,
+}) {
+  final response = _tronExtensibleMap(raw, const {
+    'transaction',
+    'constant_result',
+    'result',
+  });
+  final result = _tronExtensibleMap(response['result'], const {'result'});
+  if (result['result'] != true) {
+    throw RpcException('TRC-20 balance call failed');
+  }
+
+  final transaction = _tronExtensibleMap(response['transaction'], const {
+    'raw_data',
+    'visible',
+  });
+  if (transaction['visible'] != true) {
+    throw RpcException('unbound TRC-20 balance response');
+  }
+  final rawData = _tronExtensibleMap(transaction['raw_data'], const {
+    'contract',
+  });
+  final calls = rawData['contract'];
+  if (calls is! List || calls.length != 1) {
+    throw RpcException('unbound TRC-20 balance response');
+  }
+  final call = _tronExtensibleMap(calls.single, const {'parameter', 'type'});
+  if (call['type'] != 'TriggerSmartContract') {
+    throw RpcException('unbound TRC-20 balance response');
+  }
+  final parameter = _tronExtensibleMap(call['parameter'], const {
+    'value',
+    'type_url',
+  });
+  if (parameter['type_url'] !=
+      'type.googleapis.com/protocol.TriggerSmartContract') {
+    throw RpcException('unbound TRC-20 balance response');
+  }
+  final value = _tronExtensibleMap(parameter['value'], const {
+    'owner_address',
+    'contract_address',
+    'data',
+  });
+  if (value['owner_address'] != holder ||
+      value['contract_address'] != contract ||
+      value['data'] != callData) {
+    throw RpcException('unbound TRC-20 balance response');
+  }
+
+  final words = response['constant_result'];
+  if (words is! List || words.length != 1) {
+    throw RpcException('malformed TRC-20 balance result');
+  }
+  final word = words.single;
+  if (word is! String || !RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(word)) {
+    throw RpcException('malformed TRC-20 balance result');
+  }
+  return BigInt.parse(word, radix: 16);
+}
+
+Map<Object?, Object?> _tronExtensibleMap(Object? raw, Set<String> consumed) {
+  if (raw is! Map || raw.keys.any((key) => key is! String)) {
+    throw RpcException('malformed TRON response');
+  }
+  for (final key in raw.keys.cast<String>()) {
+    for (final expected in consumed) {
+      if (key != expected && key.toLowerCase() == expected.toLowerCase()) {
+        throw RpcException('ambiguous TRON response');
+      }
+    }
+  }
+  for (final required in consumed) {
+    if (!raw.containsKey(required)) {
+      throw RpcException('incomplete TRON response');
+    }
+  }
+  return raw.cast<Object?, Object?>();
 }
 
 int _varintLength(int value) {

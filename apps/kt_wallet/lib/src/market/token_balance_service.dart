@@ -597,14 +597,13 @@ typedef NativeBalanceResultCallback =
 ///
 /// * ERC-20 on Ethereum/Polygon via `eth_call` with `balanceOf(address)`
 ///   calldata (the tested [EvmRpc.erc20Balance] helper in `chains/rpc`);
-/// * TRC-20 via TronGrid's account endpoint (`/v1/accounts/{address}` → the
-///   `trc20` array of `{contract: rawValue}` entries).
+/// * TRC-20 via the token contract's `balanceOf(address)` constant call. This
+///   also covers an address that holds tokens before native TRON activation.
 ///
 /// Same per-item honesty contract as [BalanceService]: one failing endpoint
 /// (or the demo mock addresses being rejected on-chain) degrades only that
 /// token to [BalanceStatus.error], rendered as '--' — never a made-up number.
-/// An activated account with no balance record for the contract is a real
-/// zero, not an error.
+/// A successful `balanceOf` result of zero is a real zero, not an error.
 class TokenBalanceService {
   TokenBalanceService({
     JsonRpcTransport? jsonRpcTransport,
@@ -864,7 +863,10 @@ class TokenBalanceService {
         final rpc = EvmRpc(url: _endpoints(token.chain), transport: _jsonRpc);
         return rpc.erc20Balance(token.contract, addresses.forCoin(token.chain));
       case Coin.tron:
-        return _trc20Balance(token, addresses.tron);
+        return TronRpc(
+          baseUrl: _endpoints(Coin.tron),
+          transport: _rest,
+        ).getTrc20Balance(addresses.tron, token.contract);
       case Coin.solana:
         final rpc = SolanaRpc(
           url: _endpoints(token.chain),
@@ -876,33 +878,5 @@ class TokenBalanceService {
           expectedDecimals: token.decimals,
         );
     }
-  }
-
-  /// TronGrid account response shape:
-  /// `{data: [{balance: ..., trc20: [{"TR7...": "12345678"}, ...]}], ...}`.
-  /// Empty `data` = unactivated account = zero; a `trc20` array without the
-  /// contract = no balance record = zero; anything malformed throws (→ error).
-  Future<BigInt> _trc20Balance(TokenInfo token, String address) async {
-    final resp = await _rest.getJson(
-      '${_endpoints(Coin.tron)}/v1/accounts/$address',
-    );
-    if (resp is! Map) throw const FormatException('bad account response');
-    final data = resp['data'];
-    if (data is! List) throw const FormatException('missing data list');
-    if (data.isEmpty) return BigInt.zero; // unactivated account
-    final account = data.first;
-    if (account is! Map) throw const FormatException('bad account entry');
-    final trc20 = account['trc20'];
-    if (trc20 == null) return BigInt.zero; // no token balances at all
-    if (trc20 is! List) throw const FormatException('bad trc20 list');
-    for (final entry in trc20) {
-      if (entry is Map && entry.containsKey(token.contract)) {
-        final value = entry[token.contract];
-        final raw = value is String ? BigInt.tryParse(value) : null;
-        if (raw == null) throw const FormatException('non-numeric trc20 value');
-        return raw;
-      }
-    }
-    return BigInt.zero; // activated account, no record for this contract
   }
 }

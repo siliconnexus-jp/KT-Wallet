@@ -214,25 +214,38 @@ func (g *Gateway) evmBalances(ctx context.Context, chain, network string, meta c
 }
 
 func (g *Gateway) tronBalances(ctx context.Context, network string, meta chainMeta, address string, tokens []tokenRef) (*balancesResult, *rpc.Error) {
-	acct, err := g.tron[network].GetAccount(ctx, address)
+	tron := g.tron[network]
+	acct, err := tron.GetAccount(ctx, address)
 	if err != nil {
 		return nil, upstreamError("trongrid", err)
 	}
 	res := &balancesResult{
 		Native: balanceEntry{Raw: acct.Balance.String(), Decimals: meta.Decimals, Symbol: meta.Symbol},
-		Tokens: make([]tokenBalanceEntry, 0, len(tokens)),
+		Tokens: make([]tokenBalanceEntry, len(tokens)),
 	}
-	for _, t := range tokens {
-		entry := tokenBalanceEntry{Contract: t.Contract, Raw: "0", Decimals: t.Decimals, Symbol: t.Symbol}
-		if raw, ok := acct.TRC20[t.Contract]; ok {
-			if _, valid := newDecimal(raw); valid {
-				entry.Raw = raw
-			} else {
-				entry.Error = "token provider returned a malformed balance"
+	var wg sync.WaitGroup
+	limit := make(chan struct{}, tokenBalanceConcurrency)
+	for i, token := range tokens {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			limit <- struct{}{}
+			defer func() { <-limit }()
+			entry := tokenBalanceEntry{
+				Contract: token.Contract,
+				Raw:      "0",
+				Decimals: token.Decimals,
+				Symbol:   token.Symbol,
 			}
-		}
-		res.Tokens = append(res.Tokens, entry)
+			if balance, err := tron.TRC20Balance(ctx, address, token.Contract); err != nil {
+				entry.Error = "token balance temporarily unavailable"
+			} else {
+				entry.Raw = balance.String()
+			}
+			res.Tokens[i] = entry
+		}()
 	}
+	wg.Wait()
 	return res, nil
 }
 

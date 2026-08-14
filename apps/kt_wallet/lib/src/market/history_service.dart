@@ -915,34 +915,75 @@ class HistoryService {
       if (myHex == null) {
         throw const FormatException('invalid TRON history owner');
       }
+      Future<List<Map<Object?, Object?>>?> fetchStream(String url) async {
+        try {
+          return await _getTronData(url, limit);
+        } catch (_) {
+          return null;
+        }
+      }
+
       final (trc20, native, internal) = await (
-        _getTronData(
+        fetchStream(
           '$tronApiUrl/v1/accounts/$address/transactions/trc20'
           '?limit=$limit&only_confirmed=true&order_by=block_timestamp,desc',
-          limit,
         ),
-        _getTronData(
+        fetchStream(
           '$tronApiUrl/v1/accounts/$address/transactions'
           '?limit=$limit&only_confirmed=true&order_by=block_timestamp,desc',
-          limit,
         ),
-        _getTronData(
+        fetchStream(
           '$tronApiUrl/v1/accounts/$address/internal-transactions'
           '?limit=$limit&only_confirmed=true&order_by=block_timestamp,desc',
-          limit,
         ),
       ).wait;
 
       final records = <ChainTxRecord>[];
-      for (final item in trc20) {
-        final record = _parseTrc20(item, address, myHex);
-        if (record != null) records.add(record);
+      var incomplete = false;
+      if (trc20 == null) {
+        incomplete = true;
+      } else {
+        try {
+          final parsed = <ChainTxRecord>[];
+          for (final item in trc20) {
+            final record = _parseTrc20(item, address, myHex);
+            if (record != null) parsed.add(record);
+          }
+          records.addAll(parsed);
+        } catch (_) {
+          incomplete = true;
+        }
       }
-      for (final item in native) {
-        records.addAll(_parseNative(item, myHex, address));
+      if (native == null) {
+        incomplete = true;
+      } else {
+        try {
+          final parsed = <ChainTxRecord>[];
+          for (final item in native) {
+            parsed.addAll(_parseNative(item, myHex, address));
+          }
+          records.addAll(parsed);
+        } catch (_) {
+          incomplete = true;
+        }
       }
-      for (final item in internal) {
-        records.addAll(_parseTronInternal(item, myHex, address));
+      if (internal == null) {
+        incomplete = true;
+      } else {
+        try {
+          final parsed = <ChainTxRecord>[];
+          for (final item in internal) {
+            parsed.addAll(_parseTronInternal(item, myHex, address));
+          }
+          records.addAll(parsed);
+        } catch (_) {
+          incomplete = true;
+        }
+      }
+      // Preserve independently validated movements, but never turn a partial
+      // outage with zero usable rows into an authoritative empty history.
+      if (incomplete && records.isEmpty) {
+        return const HistoryResult.error();
       }
       records.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       final seen = <String>{};

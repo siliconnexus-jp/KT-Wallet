@@ -46,8 +46,9 @@ class _FakeJsonRpc implements JsonRpcTransport {
 }
 
 class _FakeRest implements RestTransport {
-  _FakeRest(this.onGet);
+  _FakeRest(this.onGet, {this.onPost});
   final Future<Object?> Function(String url) onGet;
+  final Future<Object?> Function(String url, Object body)? onPost;
   final seenUrls = <String>[];
   @override
   Future<Object?> getJson(String url) {
@@ -56,8 +57,38 @@ class _FakeRest implements RestTransport {
   }
 
   @override
-  Future<Object?> postJson(String url, Object body) =>
-      throw UnimplementedError('本测试不应发起 POST');
+  Future<Object?> postJson(String url, Object body) {
+    seenUrls.add(url);
+    final handler = onPost;
+    if (handler == null) throw UnimplementedError('本测试不应发起 POST');
+    return handler(url, body);
+  }
+}
+
+Map<String, Object?> _trc20BalanceResponse(Object body, String raw) {
+  final request = body as Map;
+  return {
+    'transaction': {
+      'raw_data': {
+        'contract': [
+          {
+            'parameter': {
+              'value': {
+                'owner_address': request['owner_address'],
+                'contract_address': request['contract_address'],
+                'data': '70a08231${request['parameter']}',
+              },
+              'type_url': 'type.googleapis.com/protocol.TriggerSmartContract',
+            },
+            'type': 'TriggerSmartContract',
+          },
+        ],
+      },
+      'visible': true,
+    },
+    'constant_result': [raw],
+    'result': {'result': true},
+  };
 }
 
 class _CountingBalanceService extends BalanceService {
@@ -123,10 +154,11 @@ class _FakeTokenService extends TokenBalanceService {
       results;
 }
 
+const _tronAddress = 'TS6pWDWcKRYfZFzDMgUp7vzjVhyHfq4c4C';
 const _addresses = ChainAddresses(
   eth: '0xEthAddr',
   polygon: '0xPolyAddr',
-  tron: 'TTronAddr',
+  tron: _tronAddress,
   solana: '47eFuHR9ste9kopiJ9eRxcwahmE62JovbKe5r7AjANut',
 );
 
@@ -236,7 +268,10 @@ void main() {
           solanaDevnet.rpcUrl,
         ]),
       );
-      expect(rest.seenUrls.single, '${tronNile.rpcUrl}/v1/accounts/TTronAddr');
+      expect(
+        rest.seenUrls.single,
+        '${tronNile.rpcUrl}/v1/accounts/$_tronAddress',
+      );
     });
   });
 
@@ -303,7 +338,10 @@ void main() {
         }
         return _rpcResult('0x${'0' * 64}');
       });
-      final rest = _FakeRest((url) async => {'data': <Object>[]});
+      final rest = _FakeRest(
+        (url) async => {'data': <Object>[]},
+        onPost: (url, body) async => _trc20BalanceResponse(body, '0' * 64),
+      );
       final service = TokenBalanceService(
         registry: networkTokenRegistry(networks),
         endpoints: effectiveRpcEndpoints(null, networks),
@@ -324,7 +362,10 @@ void main() {
       ]);
       final results = await service.fetchAll(_addresses);
       for (final token in service.tokens) {
-        expect(results[token.id]!.amount!.raw, BigInt.zero);
+        final result = results[token.id];
+        expect(result, isNotNull, reason: token.id);
+        expect(result!.status, BalanceStatus.ok, reason: token.id);
+        expect(result.amount!.raw, BigInt.zero, reason: token.id);
       }
       expect(jsonRpc.seenUrls, [
         ethSepolia.rpcUrl,
@@ -337,7 +378,7 @@ void main() {
         solanaDevnet.rpcUrl,
       ]);
       expect(rest.seenUrls, [
-        '${tronNile.rpcUrl}/v1/accounts/${_addresses.tron}',
+        '${tronNile.rpcUrl}/wallet/triggerconstantcontract',
       ]);
     });
 
