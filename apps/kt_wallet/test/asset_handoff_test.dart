@@ -15,12 +15,10 @@ import 'package:kt_wallet/src/state/wallet_scope.dart';
 import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
 
-/// Send and Receive used to lose the asset on the way in. Send carried nothing
-/// at all, so it fell through to the first row of its own list — USDT on TRON
-/// — no matter which asset you tapped it from, and its dropdown offered every
-/// other coin besides. Receive carried only the Coin, so opening it from USDT
-/// on Ethereum announced "ETH · Ethereum": the right address under the wrong
-/// asset's name. These pin the hand-off down.
+/// Send and Receive used to lose the asset on the way in. The incoming
+/// [AssetRef] still determines the exact initial deployment, while both pages
+/// now require an explicit network step before they expose the assets on that
+/// network. These tests pin both halves down.
 
 const _usdtGroup = [usdtEthToken, usdtTronToken, usdtPolygonToken];
 
@@ -134,11 +132,40 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('USDT'), findsWidgets);
-      expect(find.text('Ethereum'), findsWidgets);
+      expect(find.textContaining('Ethereum · ERC-20'), findsWidgets);
       expect(find.text('TRON · TRC-20'), findsNothing);
     });
 
-    testWidgets('the picker offers other chains, never other assets', (
+    testWidgets('shows both the USDT and TRON artwork', (tester) async {
+      final wallets = _wallets();
+      final asset = AssetRef.tokenGroup(_usdtGroup).selecting(1);
+
+      await tester.pumpWidget(_app(TransferInputScreen(asset: asset), wallets));
+      await tester.pumpAndSettle();
+
+      final tokenImage = tester.widget<Image>(
+        find.descendant(
+          of: find.byKey(const ValueKey('transfer-token-icon')),
+          matching: find.byType(Image),
+        ),
+      );
+      final networkImage = tester.widget<Image>(
+        find.descendant(
+          of: find.byKey(const ValueKey('transfer-network-icon')),
+          matching: find.byType(Image),
+        ),
+      );
+      expect(
+        (tokenImage.image as AssetImage).assetName,
+        'assets/tokens/usdt.png',
+      );
+      expect(
+        (networkImage.image as AssetImage).assetName,
+        'assets/tokens/trx.png',
+      );
+    });
+
+    testWidgets('the picker chooses a network before one of its assets', (
       tester,
     ) async {
       final wallets = _wallets();
@@ -151,16 +178,47 @@ void main() {
 
       expect(find.text('选择网络'), findsOneWidget);
       expect(find.text('选择资产'), findsNothing);
-      // Every USDT chain is offered...
-      expect(find.text('TRON'), findsWidgets);
-      expect(find.text('Polygon'), findsWidgets);
-      // ...and nothing that would change the asset.
-      expect(find.text('ETH'), findsNothing);
-      expect(find.text('USDC'), findsNothing);
-      expect(find.text('SOL'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('transfer-network-tron')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('transfer-network-polygon')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('transfer-network-polygon')));
+      await tester.pumpAndSettle();
+      expect(find.text('选择资产'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('transfer-asset-option-polygon:native')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          ValueKey(
+            'transfer-asset-option-polygon:${usdtPolygonToken.contract.toLowerCase()}',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          ValueKey(
+            'transfer-asset-option-polygon:${usdcPolygonToken.contract.toLowerCase()}',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('transfer-asset-option-solana:native')),
+        findsNothing,
+      );
     });
 
-    testWidgets('switching chain keeps the symbol', (tester) async {
+    testWidgets('selecting TRON then USDT changes network and asset together', (
+      tester,
+    ) async {
       final wallets = _wallets();
       final asset = AssetRef.tokenGroup(_usdtGroup).selecting(0);
 
@@ -168,23 +226,36 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('transfer-asset')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('TRON').last);
+      await tester.tap(find.byKey(const ValueKey('transfer-network-tron')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(
+          ValueKey('transfer-asset-option-tron:${usdtTronToken.contract}'),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('USDT'), findsWidgets);
-      expect(find.text('TRON'), findsWidgets);
+      expect(find.text('TRON · TRC-20'), findsOneWidget);
     });
 
-    testWidgets('a single-chain asset shows no picker at all', (tester) async {
-      final wallets = _wallets();
-      final asset = AssetRef.token(usdtEthToken);
+    testWidgets(
+      'a single-chain initial asset still opens the two-stage picker',
+      (tester) async {
+        final wallets = _wallets();
+        final asset = AssetRef.token(usdtEthToken);
 
-      await tester.pumpWidget(_app(TransferInputScreen(asset: asset), wallets));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          _app(TransferInputScreen(asset: asset), wallets),
+        );
+        await tester.pumpAndSettle();
 
-      // Nothing to choose, so no chevron inviting a tap that does nothing.
-      expect(find.byIcon(Icons.keyboard_arrow_down), findsNothing);
-    });
+        expect(find.byIcon(Icons.keyboard_arrow_down), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('transfer-asset')));
+        await tester.pumpAndSettle();
+        expect(find.text('选择网络'), findsOneWidget);
+      },
+    );
 
     testWidgets('Arbitrum address book accepts Ethereum contacts only', (
       tester,
@@ -298,9 +369,8 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('transfer-asset')));
       await tester.pumpAndSettle();
 
-      // The home Send button is the one legitimate "choose what to send" entry
-      // point and must keep working.
-      expect(find.text('选择资产'), findsOneWidget);
+      expect(find.text('选择网络'), findsOneWidget);
+      expect(find.text('选择资产'), findsNothing);
     });
 
     testWidgets('live scope never exposes fixture balance before refresh', (

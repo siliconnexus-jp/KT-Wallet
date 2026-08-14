@@ -1515,47 +1515,15 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   /// Native coins only need the chain mark once.
   Widget _receiveAssetIcon(_ReceiveChain chain) {
     final family = _familyOf(chain.coin);
-    if (!_asset.isToken) {
-      return ChainIcon(
-        key: const ValueKey('receive-network-icon'),
-        chain: family,
-        size: 24,
-      );
-    }
-    return SizedBox(
-      width: 28,
-      height: 28,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(
-            left: 0,
-            top: 0,
-            child: TokenIcon(
-              key: const ValueKey('receive-token-icon'),
-              symbol: _iconSymbol,
-              size: 24,
-              fallbackColor: chain.tokenColor,
-              fallbackInitial: chain.glyph,
-            ),
-          ),
-          Positioned(
-            right: 0,
-            bottom: 0,
-            child: DecoratedBox(
-              key: const ValueKey('receive-network-icon'),
-              decoration: const BoxDecoration(
-                color: WalletColors.surface,
-                shape: BoxShape.circle,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(1.5),
-                child: ChainIcon(chain: family, size: 12),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return NetworkAssetIcon(
+      chain: family,
+      symbol: _iconSymbol,
+      isToken: _asset.isToken,
+      size: 24,
+      fallbackColor: chain.tokenColor,
+      fallbackInitial: chain.glyph,
+      tokenKey: const ValueKey('receive-token-icon'),
+      networkKey: const ValueKey('receive-network-icon'),
     );
   }
 

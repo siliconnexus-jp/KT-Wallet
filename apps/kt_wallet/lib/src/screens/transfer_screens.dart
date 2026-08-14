@@ -26,7 +26,7 @@ import '../../l10n/app_localizations.dart';
 import 'home_screen.dart' show tokenRowMeta;
 import '../market/balance_service.dart'
     show BalanceService, BalanceStatus, TronActivationStatus;
-import '../market/asset_ref.dart' show AssetDeployment, AssetRef, chainOf;
+import '../market/asset_ref.dart' show AssetRef, chainOf;
 import '../market/explorer_links.dart' show explorerTxUrl;
 import '../market/history_service.dart' show ChainTxRecord, ChainTxStatus;
 import '../market/gateway_client.dart'
@@ -42,7 +42,6 @@ import '../market/market_scope.dart'
 import '../market/token_balance_service.dart'
     show
         TokenInfo,
-        builtinTokenForNetwork,
         builtinTokensByNetworkId,
         usdcArbitrumToken,
         usdcAvalancheToken,
@@ -237,11 +236,13 @@ class TransferInputScreen extends StatefulWidget {
   const TransferInputScreen({super.key, this.asset});
 
   /// The asset to send, when the caller already knows it — arriving from a
-  /// token detail page. The symbol is then FIXED: the only thing the picker
-  /// offers is that symbol's other chains.
+  /// token detail page. It becomes the initial selection; the same two-stage
+  /// network/asset picker remains available afterwards.
   ///
-  /// Null from the home Send button, which is the one legitimate "choose what
-  /// to send" entry point and keeps the full asset list.
+  /// Null from the home Send button: the latest successfully submitted local
+  /// outgoing transaction is restored when it still belongs to an active,
+  /// supported network. With no usable history the legacy USDT/TRON default
+  /// is retained.
   final AssetRef? asset;
 
   @override
@@ -260,6 +261,7 @@ class _TransferAsset {
     this.availableLabel,
     this.color,
     this.initial, {
+    this.tokenId,
     this.contract,
     this.tokenProgram,
     this.supported = true,
@@ -270,6 +272,9 @@ class _TransferAsset {
   final String available, availableLabel;
   final Color color;
   final String initial;
+
+  /// Registry identity for token-balance lookup; null for native coins.
+  final String? tokenId;
 
   /// Token contract for token assets; null for native coins.
   final String? contract;
@@ -315,6 +320,7 @@ class _TransferAsset {
     availableLabel,
     color,
     initial,
+    tokenId: token.id,
     contract: token.contract,
     tokenProgram: token.tokenProgram,
   );
@@ -332,6 +338,7 @@ class _TransferAsset {
     value,
     color,
     initial,
+    tokenId: tokenId,
     contract: contract,
     tokenProgram: tokenProgram,
     supported: supported,
@@ -350,56 +357,25 @@ class _TransferAsset {
     '--',
     color,
     initial,
+    tokenId: tokenId,
     contract: contract,
     tokenProgram: tokenProgram,
     supported: supported,
   );
 
-  _TransferAsset forNetwork(Network activeNetwork) {
-    if (contract == null) {
-      return _TransferAsset(
-        symbol,
-        activeNetwork.name,
-        activeNetwork.name,
-        chain,
-        BalanceService.decimalsFor[rpcCoinForChain(chain)]!,
-        available,
-        availableLabel,
-        color,
-        initial,
-      );
-    }
-
-    final token = builtinTokenForNetwork(
-      networkId: activeNetwork.id,
-      chain: rpcCoinForChain(chain),
-      symbol: symbol,
-    );
-    if (token == null) {
-      return _TransferAsset(
-        symbol,
-        activeNetwork.name,
-        activeNetwork.name,
-        chain,
-        decimals,
-        '0',
-        '0',
-        color,
-        initial,
-        contract: contract,
-        tokenProgram: tokenProgram,
-        supported: false,
-      );
-    }
-    return _TransferAsset.token(
-      token,
-      network: '${activeNetwork.name} · ${_tokenStandard(chain)}',
-      networkName: activeNetwork.name,
-      available: available,
-      availableLabel: availableLabel,
-      color: color,
-      initial: initial,
-    );
+  String get selectionKey {
+    final value = contract;
+    if (value == null) return '${chain.name}:native';
+    final normalized = switch (chain) {
+      Chain.ethereum ||
+      Chain.polygon ||
+      Chain.base ||
+      Chain.arbitrum ||
+      Chain.avalanche ||
+      Chain.bnb => value.toLowerCase(),
+      Chain.tron || Chain.solana => value,
+    };
+    return '${chain.name}:$normalized';
   }
 
   static String _tokenStandard(Chain chain) => switch (chain) {
@@ -410,7 +386,7 @@ class _TransferAsset {
 }
 
 class _TransferInputScreenState extends State<TransferInputScreen> {
-  static final _assets = [
+  static final _demoAssets = [
     _TransferAsset.token(
       usdtTronToken,
       network: 'TRON · TRC-20',
@@ -516,110 +492,173 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
       initial: r'$',
     ),
   ];
-  int _assetIndex = 0;
+  Chain _selectedChain = Chain.tron;
+  String? _selectedAssetKey;
+  bool _appliedInitialAsset = false;
+  bool _userSelectedAsset = false;
   bool _liveInputInitialized = false;
 
-  /// True when the caller already decided WHAT to send. The picker then only
-  /// offers that symbol's other chains — arriving from the USDT page and
-  /// finding ETH and USDC in the dropdown is how a user sends the wrong coin.
-  bool get _assetLocked => widget.asset != null;
-
-  /// The rows the picker may switch between: this symbol's deployments when
-  /// locked, the full list when the user came from the home Send button.
-  List<_TransferAsset> get _options {
-    final asset = widget.asset;
-    if (asset == null) return _assets;
-    return [for (final at in asset.group) _refAsset(asset, at)];
+  List<Chain> get _availableChains {
+    final enabled = WalletScope.of(context).current?.addresses.enabledCoins;
+    final requested = widget.asset?.coin;
+    const order = [
+      Coin.eth,
+      Coin.polygon,
+      Coin.tron,
+      Coin.solana,
+      Coin.bnb,
+      Coin.base,
+      Coin.arbitrum,
+      Coin.avalanche,
+    ];
+    return [
+      for (final coin in order)
+        if (enabled == null || enabled.contains(coin) || coin == requested)
+          chainOf(coin),
+    ];
   }
 
-  /// A transfer row for one deployment of the incoming asset. Balance is left
-  /// at zero here; [_assetAt] fills in the live figure the same way it does
-  /// for the built-in list.
-  static _TransferAsset _refAsset(AssetRef ref, AssetDeployment at) {
-    final (color, glyph) =
-        tokenRowMeta[ref.symbol] ??
-        (WalletColors.accent, ref.symbol.substring(0, 1));
-    return _TransferAsset(
-      ref.symbol,
-      at.network,
-      at.network,
-      chainOf(at.coin),
-      at.decimals,
-      '0',
-      '0',
-      color,
-      glyph,
-      contract: at.contract,
-      tokenProgram: at.tokenProgram,
+  static (Color, String) _nativeMeta(Chain chain) => switch (chain) {
+    Chain.ethereum => (const Color(0xFF627EEA), 'Ξ'),
+    Chain.polygon => (const Color(0xFF8247E5), '⬡'),
+    Chain.base => (const Color(0xFF0052FF), 'B'),
+    Chain.arbitrum => (const Color(0xFF28A0F0), 'A'),
+    Chain.avalanche => (const Color(0xFFE84142), 'A'),
+    Chain.bnb => (const Color(0xFFF3BA2F), 'B'),
+    Chain.tron => (const Color(0xFFEF0027), '◇'),
+    Chain.solana => (const Color(0xFF9945FF), '◎'),
+  };
+
+  _TransferAsset _nativeAsset(Chain chain, Network network) {
+    final coin = rpcCoinForChain(chain);
+    final (color, glyph) = _nativeMeta(chain);
+    final symbol = BalanceService.symbolFor[coin]!;
+    return _TransferAsset.native(
+      symbol: symbol,
+      network: network.name,
+      networkName: network.name,
+      coin: coin,
+      available: '0',
+      availableLabel: '0',
+      color: color,
+      initial: glyph,
     );
   }
 
-  @override
-  void initState() {
-    super.initState();
-    // Open on the chain the caller was looking at, not on index 0.
-    _assetIndex = widget.asset?.chainIndex ?? 0;
+  _TransferAsset _tokenAsset(TokenInfo token, Network network) {
+    final (color, glyph) =
+        tokenRowMeta[token.symbol] ??
+        (WalletColors.accent, token.symbol.characters.first);
+    return _TransferAsset.token(
+      token,
+      network:
+          '${network.name} · ${_TransferAsset._tokenStandard(chainOf(token.chain))}',
+      networkName: network.name,
+      available: '0',
+      availableLabel: '0',
+      color: color,
+      initial: glyph,
+    );
   }
 
-  _TransferAsset _assetAt(int index) {
-    final options = _options;
-    final selected = options[index.clamp(0, options.length - 1)];
-    final network = NetworkScope.maybeOf(context)?.activeFor(selected.chain);
-    final networkAsset = network == null
-        ? selected
-        : selected.forNetwork(network);
+  /// Native coin plus every built-in token registered for this exact active
+  /// network. Unknown custom tokens are not offered here: their persisted row
+  /// has no decimals, and constructing a transfer by guessing decimals would
+  /// violate the amount/precision boundary.
+  List<_TransferAsset> _assetsFor(Chain chain) {
+    final network = NetworkScope.of(context).activeFor(chain);
+    final assets = <_TransferAsset>[_nativeAsset(chain, network)];
+    for (final token
+        in builtinTokensByNetworkId[network.id] ?? const <TokenInfo>[]) {
+      if (chainOf(token.chain) == chain) {
+        assets.add(_tokenAsset(token, network));
+      }
+    }
+    return [for (final asset in assets) _withDisplayedBalance(asset)];
+  }
+
+  _TransferAsset _withDisplayedBalance(_TransferAsset asset) {
     final market = MarketScope.maybeOf(context);
     // A missing scope means a gallery/golden fixture and retains the design
     // values. A mounted production scope must never expose those fixture
     // balances while its first wallet-scoped refresh is still in flight.
+    if (market == null) {
+      for (final demo in _demoAssets) {
+        if (demo.selectionKey == asset.selectionKey) {
+          return asset.withAvailable(demo.available);
+        }
+      }
+      return asset;
+    }
     final wallet = WalletScope.of(context).current;
-    if (market == null) return networkAsset;
     if (!market.hasRefreshed ||
         wallet == null ||
         !wallet.addresses.hasExpandedEvm) {
-      return networkAsset.withUnavailableBalance();
+      return asset.withUnavailableBalance();
     }
 
-    final result = networkAsset.contract == null
-        ? market.balanceFor(switch (networkAsset.chain) {
-            Chain.ethereum => Coin.eth,
-            Chain.polygon => Coin.polygon,
-            Chain.base => Coin.base,
-            Chain.arbitrum => Coin.arbitrum,
-            Chain.avalanche => Coin.avalanche,
-            Chain.bnb => Coin.bnb,
-            Chain.tron => Coin.tron,
-            Chain.solana => Coin.solana,
-          })
-        : market.tokens
-              .where(
-                (token) =>
-                    token.chain ==
-                        switch (networkAsset.chain) {
-                          Chain.ethereum => Coin.eth,
-                          Chain.polygon => Coin.polygon,
-                          Chain.base => Coin.base,
-                          Chain.arbitrum => Coin.arbitrum,
-                          Chain.avalanche => Coin.avalanche,
-                          Chain.bnb => Coin.bnb,
-                          Chain.tron => Coin.tron,
-                          Chain.solana => Coin.solana,
-                        } &&
-                    token.contract.toLowerCase() ==
-                        networkAsset.contract!.toLowerCase(),
-              )
-              .map((token) => market.tokenBalanceFor(token.id))
-              .firstOrNull;
-    final amount = result?.amount;
-    return networkAsset.withAvailable(
-      result?.status == BalanceStatus.ok && amount != null
+    final result = asset.tokenId == null
+        ? market.balanceFor(rpcCoinForChain(asset.chain))
+        : market.tokenBalanceFor(asset.tokenId!);
+    final amount = result.amount;
+    return asset.withAvailable(
+      result.status == BalanceStatus.ok && amount != null
           ? amount.format()
           : '0',
     );
   }
 
+  _TransferAsset _initialAssetFor(Chain chain) {
+    final assets = _assetsFor(chain);
+    final requested = widget.asset;
+    if (requested != null && chainOf(requested.coin) == chain) {
+      final contract = requested.contract;
+      if (contract != null) {
+        final wanted = _selectionKey(chain, contract);
+        for (final asset in assets) {
+          if (asset.selectionKey == wanted) return asset;
+        }
+      }
+      for (final asset in assets) {
+        if (asset.symbol.toUpperCase() == requested.symbol.toUpperCase() &&
+            asset.contract == null) {
+          return asset;
+        }
+      }
+      for (final asset in assets) {
+        if (asset.symbol.toUpperCase() == requested.symbol.toUpperCase()) {
+          return asset;
+        }
+      }
+    }
+    if (requested == null && chain == Chain.tron) {
+      for (final asset in assets) {
+        if (asset.symbol == 'USDT') return asset;
+      }
+    }
+    return assets.first;
+  }
+
+  static String _selectionKey(Chain chain, String? contract) {
+    if (contract == null) return '${chain.name}:native';
+    final normalized = switch (chain) {
+      Chain.ethereum ||
+      Chain.polygon ||
+      Chain.base ||
+      Chain.arbitrum ||
+      Chain.avalanche ||
+      Chain.bnb => contract.toLowerCase(),
+      Chain.tron || Chain.solana => contract,
+    };
+    return '${chain.name}:$normalized';
+  }
+
   _TransferAsset get _asset {
-    return _assetAt(_assetIndex);
+    final assets = _assetsFor(_selectedChain);
+    for (final asset in assets) {
+      if (asset.selectionKey == _selectedAssetKey) return asset;
+    }
+    return _initialAssetFor(_selectedChain);
   }
 
   /// The recipient and amount fields start EMPTY. They are only seeded with
@@ -648,6 +687,13 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (!_appliedInitialAsset) {
+      _appliedInitialAsset = true;
+      _selectedChain = widget.asset == null
+          ? Chain.tron
+          : chainOf(widget.asset!.coin);
+      _selectedAssetKey = _initialAssetFor(_selectedChain).selectionKey;
+    }
     if (!_liveInputInitialized) {
       _liveInputInitialized = true;
       if (!_isLiveContext) {
@@ -670,6 +716,9 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     if (!mounted) return;
     final contacts = values[0] as List<Contact>;
     final transactions = values[1] as List<Transaction>;
+    final recentAsset = widget.asset == null && !_userSelectedAsset
+        ? _recentOutgoingAsset(transactions)
+        : null;
     final known = <KnownRecipientAddress>[
       for (final contact in contacts)
         KnownRecipientAddress(address: contact.address, label: contact.name),
@@ -693,7 +742,59 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
           ),
         ),
     ];
-    setState(() => _knownRecipients = known);
+    setState(() {
+      _knownRecipients = known;
+      if (recentAsset != null && !_userSelectedAsset) {
+        _selectedChain = recentAsset.chain;
+        _selectedAssetKey = recentAsset.selectionKey;
+      }
+    });
+  }
+
+  /// Resolves the newest transaction that was actually submitted with a hash
+  /// to an asset on the same currently-active network. A failed/dropped row,
+  /// approval revoke, stale testnet/mainnet row or unknown contract never
+  /// silently changes the transfer default.
+  _TransferAsset? _recentOutgoingAsset(List<Transaction> transactions) {
+    Transaction? latest;
+    for (final transaction in transactions) {
+      final sent = switch (transaction.status) {
+        TxStatus.broadcast ||
+        TxStatus.confirmed ||
+        TxStatus.submitted ||
+        TxStatus.pending => true,
+        TxStatus.draft ||
+        TxStatus.awaitingSig ||
+        TxStatus.signed ||
+        TxStatus.failed ||
+        TxStatus.expired ||
+        TxStatus.dropped ||
+        TxStatus.replaced => false,
+      };
+      if (transaction.direction == TxDirection.outgoing &&
+          transaction.operation == TxOperationKind.transfer &&
+          transaction.hash?.isNotEmpty == true &&
+          sent) {
+        latest = transaction;
+        break;
+      }
+    }
+    if (latest == null) return null;
+
+    final coin = Coin.values
+        .where((coin) => coin.name == latest!.coin)
+        .firstOrNull;
+    if (coin == null) return null;
+    final chain = chainOf(coin);
+    if (!_availableChains.contains(chain)) return null;
+    final activeNetwork = NetworkScope.of(context).activeFor(chain);
+    if (latest.networkId != activeNetwork.id) return null;
+
+    final wanted = _selectionKey(chain, latest.contract);
+    for (final asset in _assetsFor(chain)) {
+      if (asset.selectionKey == wanted) return asset;
+    }
+    return null;
   }
 
   /// Design-demo literals — gallery/goldens ONLY (see [_addrController]).
@@ -1044,116 +1145,205 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     if (tier != null && mounted) setState(() => _fee = tier);
   }
 
-  /// Bottom sheet listing the demo assets (same visual pattern as the language
-  /// picker sheet); selecting one switches chain / decimals / symbol / balance.
+  /// Two-stage transfer selector: a network must be chosen before one of the
+  /// assets registered on that exact active network can be selected.
   Future<void> _pickAsset() async {
     final l10n = AppLocalizations.of(context);
+    final chains = _availableChains;
+    var chainIndex = chains.indexOf(_selectedChain);
+    if (chainIndex < 0) chainIndex = 0;
+    var choosingAsset = chains.length == 1;
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: WalletColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: WalletColors.border,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    Text(
-                      _assetLocked ? l10n.chooseNetwork : l10n.selectAsset,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: WalletColors.text,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, sheetSetState) {
+          final chain = chains[chainIndex];
+          final network = NetworkScope.of(context).activeFor(chain);
+          final assets = choosingAsset
+              ? _assetsFor(chain)
+              : const <_TransferAsset>[];
+          return SafeArea(
+            child: SizedBox(
+              height: MediaQuery.sizeOf(ctx).height * 0.72,
+              child: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: WalletColors.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: SizedBox(
+                      height: 48,
+                      child: Row(
+                        children: [
+                          if (choosingAsset && chains.length > 1)
+                            IconButton(
+                              key: const ValueKey(
+                                'transfer-picker-back-to-networks',
+                              ),
+                              tooltip: MaterialLocalizations.of(
+                                ctx,
+                              ).backButtonTooltip,
+                              onPressed: () =>
+                                  sheetSetState(() => choosingAsset = false),
+                              icon: const Icon(Icons.arrow_back_ios_new),
+                              color: WalletColors.text,
+                            )
+                          else
+                            const SizedBox(width: 48),
+                          Expanded(
+                            child: Text(
+                              choosingAsset
+                                  ? l10n.selectAsset
+                                  : l10n.chooseNetwork,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: WalletColors.text,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 48),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              for (var i = 0; i < _options.length; i++)
-                ListTile(
-                  // Locked to one symbol: the row identifies the CHAIN, so it
-                  // carries the chain's logo and name. Unlocked, it identifies
-                  // the asset.
-                  leading: _assetLocked
-                      ? ChainIcon(chain: _assetAt(i).chain, size: 36)
-                      : TokenIcon(
-                          symbol: _assetAt(i).symbol,
-                          size: 36,
-                          fallbackColor: _assetAt(i).color,
-                          fallbackInitial: _assetAt(i).initial,
-                        ),
-                  title: Text(
-                    _assetLocked
-                        ? _assetAt(i).networkName
-                        : switch (_assetAt(i).chain) {
-                            Chain.base ||
-                            Chain.arbitrum ||
-                            Chain.avalanche ||
-                            Chain.bnb =>
-                              '${_assetAt(i).symbol} · ${_assetAt(i).networkName}',
-                            _ => _assetAt(i).symbol,
+                  ),
+                  if (choosingAsset)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                      child: Row(
+                        children: [
+                          ChainIcon(chain: chain, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              network.name,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: WalletColors.text3,
+                              ),
+                            ),
+                          ),
+                          if (chain == Chain.tron) const TronActivationBadge(),
+                        ],
+                      ),
+                    ),
+                  const Divider(height: 1, color: WalletColors.border),
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: choosingAsset ? assets.length : chains.length,
+                      itemBuilder: (ctx, index) {
+                        if (!choosingAsset) {
+                          final option = chains[index];
+                          final optionNetwork = NetworkScope.of(
+                            context,
+                          ).activeFor(option);
+                          return ListTile(
+                            key: ValueKey(
+                              'transfer-network-${rpcCoinForChain(option).name}',
+                            ),
+                            leading: ChainIcon(chain: option, size: 36),
+                            title: Text(
+                              optionNetwork.name,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: WalletColors.text,
+                              ),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (option == Chain.tron) ...[
+                                  const TronActivationBadge(),
+                                  const SizedBox(width: 8),
+                                ],
+                                const Icon(
+                                  Icons.chevron_right,
+                                  color: WalletColors.text3,
+                                ),
+                              ],
+                            ),
+                            onTap: () => sheetSetState(() {
+                              chainIndex = index;
+                              choosingAsset = true;
+                            }),
+                          );
+                        }
+
+                        final asset = assets[index];
+                        final selected =
+                            chain == _selectedChain &&
+                            asset.selectionKey == _asset.selectionKey;
+                        return ListTile(
+                          key: ValueKey(
+                            'transfer-asset-option-${asset.selectionKey}',
+                          ),
+                          leading: NetworkAssetIcon(
+                            chain: chain,
+                            symbol: asset.symbol,
+                            isToken: asset.contract != null,
+                            size: 36,
+                            fallbackColor: asset.color,
+                            fallbackInitial: asset.initial,
+                          ),
+                          title: Text(
+                            asset.symbol,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: WalletColors.text,
+                            ),
+                          ),
+                          subtitle: Text(
+                            '${asset.network} · ${l10n.availableBalance(asset.availableLabel, asset.symbol)}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: WalletColors.text3,
+                            ),
+                          ),
+                          trailing: selected
+                              ? const Icon(
+                                  Icons.check,
+                                  size: 20,
+                                  color: WalletColors.accent,
+                                )
+                              : null,
+                          onTap: () {
+                            setState(() {
+                              _selectedChain = chain;
+                              _selectedAssetKey = asset.selectionKey;
+                              _userSelectedAsset = true;
+                              _selectedContact = null;
+                              _acknowledgedRiskAddress = null;
+                            });
+                            Navigator.of(ctx).pop();
                           },
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: WalletColors.text,
+                        );
+                      },
                     ),
                   ),
-                  subtitle: Text(
-                    _assetLocked
-                        ? l10n.availableBalance(
-                            _assetAt(i).availableLabel,
-                            _assetAt(i).symbol,
-                          )
-                        : '${_assetAt(i).network} · ${l10n.availableBalance(_assetAt(i).availableLabel, _assetAt(i).symbol)}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: WalletColors.text3,
-                    ),
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_assetAt(i).chain == Chain.tron) ...[
-                        const TronActivationBadge(),
-                        const SizedBox(width: 8),
-                      ],
-                      if (i == _assetIndex)
-                        const Icon(
-                          Icons.check,
-                          size: 20,
-                          color: WalletColors.accent,
-                        ),
-                    ],
-                  ),
-                  onTap: () {
-                    setState(() {
-                      _assetIndex = i;
-                      _acknowledgedRiskAddress = null;
-                    });
-                    Navigator.of(ctx).pop();
-                  },
-                ),
-              const SizedBox(height: 12),
-            ],
-          ),
-        ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -1216,16 +1406,17 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
           child: GestureDetector(
             key: const ValueKey('transfer-asset'),
             behavior: HitTestBehavior.opaque,
-            // Nothing to choose when the asset is locked to a single chain —
-            // an inert row that still shows a chevron just invites a tap that
-            // does nothing.
-            onTap: _options.length > 1 ? _pickAsset : null,
+            onTap: _pickAsset,
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 48),
               child: Row(
                 children: [
-                  TokenIcon(
+                  NetworkAssetIcon(
+                    tokenKey: const ValueKey('transfer-token-icon'),
+                    networkKey: const ValueKey('transfer-network-icon'),
+                    chain: _asset.chain,
                     symbol: _asset.symbol,
+                    isToken: _asset.contract != null,
                     size: 36,
                     fallbackColor: _asset.color,
                     fallbackInitial: _asset.initial,
@@ -1264,12 +1455,11 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                       ],
                     ),
                   ),
-                  if (_options.length > 1)
-                    const Icon(
-                      Icons.keyboard_arrow_down,
-                      size: 18,
-                      color: WalletColors.text3,
-                    ),
+                  const Icon(
+                    Icons.keyboard_arrow_down,
+                    size: 18,
+                    color: WalletColors.text3,
+                  ),
                 ],
               ),
             ),

@@ -1,15 +1,22 @@
 import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:chains/chains.dart';
+import 'package:core_crypto/core_crypto.dart' show ChainAddresses, Coin;
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/main.dart';
 import 'package:kt_wallet/src/app_router.dart';
+import 'package:kt_wallet/src/market/token_balance_service.dart'
+    show usdcPolygonToken, usdtTronToken;
 import 'package:kt_wallet/src/state/wallet_controller.dart';
 import 'package:kt_wallet/src/wallets/pairing_airgap.dart';
 import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
+import 'package:kt_wallet/src/wallets/wallet_store.dart';
 import 'package:ui_kit/ui_kit.dart';
+import 'package:wallet_data/wallet_data.dart'
+    show SignMode, TxStatus, WalletDatabase;
 
 import 'support/test_wallet_scope.dart';
 
@@ -130,6 +137,72 @@ void main() {
     expect(find.text('自定义'), findsNothing);
   });
 
+  testWidgets('home send defaults to the latest successfully sent asset', (
+    tester,
+  ) async {
+    final database = WalletDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final wallet = HotWallet(
+      id: 'recent-send-wallet',
+      name: 'Recent send',
+      avatarColor: 0xFF2557E8,
+      addresses: const ChainAddresses(
+        eth: '0x85f6be9460291e86e0fb49b07d0a83cc5f7206cd',
+        polygon: '0x85f6be9460291e86e0fb49b07d0a83cc5f7206cd',
+        base: '0x85f6be9460291e86e0fb49b07d0a83cc5f7206cd',
+        arbitrum: '0x85f6be9460291e86e0fb49b07d0a83cc5f7206cd',
+        avalanche: '0x85f6be9460291e86e0fb49b07d0a83cc5f7206cd',
+        bnb: '0x85f6be9460291e86e0fb49b07d0a83cc5f7206cd',
+        tron: 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVb7L3kFa',
+        solana: '6yKpXwMWd4qmDqVr2W1111111111111111111111',
+      ),
+      backedUp: true,
+    );
+    final store = WalletStore(database);
+    await store.save(wallet);
+    final controller = WalletController(
+      WalletManager(initial: [wallet]),
+      store: store,
+    );
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await controller.saveOutgoingTransaction(
+      id: 'confirmed-polygon-usdc',
+      coin: Coin.polygon,
+      networkId: 'polygon-mainnet',
+      contract: usdcPolygonToken.contract,
+      from: wallet.addresses.polygon,
+      to: '0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed',
+      amountRaw: '1000000',
+      hash:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      status: TxStatus.confirmed,
+      signMode: SignMode.local,
+      createdAt: now - 1000,
+    );
+    // A newer failed attempt is not a successfully sent asset and must not
+    // replace the last real transfer default.
+    await controller.saveOutgoingTransaction(
+      id: 'failed-tron-usdt',
+      coin: Coin.tron,
+      networkId: 'tron-mainnet',
+      contract: usdtTronToken.contract,
+      from: wallet.addresses.tron,
+      to: 'TWd4qCEUf3aVpXe2HKk9gJt6nMxR38uQz',
+      amountRaw: '1000000',
+      hash:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      status: TxStatus.failed,
+      signMode: SignMode.local,
+      createdAt: now,
+    );
+
+    await _openLive(tester, controller: controller);
+
+    expect(find.text('USDC'), findsWidgets);
+    expect(find.text('Polygon · ERC-20'), findsOneWidget);
+    expect(find.text('TRON · TRC-20'), findsNothing);
+  });
+
   testWidgets('a paired watch wallet also starts empty', (tester) async {
     // The paired shape (no expanded EVM addresses) was the exact case the old
     // "clear only when hasExpandedEvm" guard never cleared.
@@ -205,10 +278,16 @@ void main() {
     await _openGallery(tester);
     expect(find.text('地址格式正确 · TRON 网络'), findsOneWidget);
 
-    // Open the asset sheet from the token card and pick ETH.
+    // Open the asset sheet, choose Ethereum first, then its native ETH.
     await tester.tap(find.text('TRON · TRC-20'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('ETH'));
+    expect(find.text('选择网络'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('transfer-network-eth')));
+    await tester.pumpAndSettle();
+    expect(find.text('选择资产'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('transfer-asset-option-ethereum:native')),
+    );
     await tester.pumpAndSettle();
 
     // The TRON address is now a wrong-network paste for Ethereum.

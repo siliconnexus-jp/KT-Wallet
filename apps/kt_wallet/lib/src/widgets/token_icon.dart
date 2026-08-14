@@ -141,3 +141,79 @@ class ChainIcon extends StatelessWidget {
     );
   }
 }
+
+/// An asset logo with its concrete network shown as a small lower-right mark.
+///
+/// Tokens such as USDT exist on several networks, so the token artwork alone
+/// is not enough to identify what the user is about to receive or transfer.
+/// Native assets use only the chain artwork because the second mark would be
+/// redundant.
+class NetworkAssetIcon extends StatelessWidget {
+  const NetworkAssetIcon({
+    super.key,
+    required this.chain,
+    required this.symbol,
+    required this.isToken,
+    this.size = 24,
+    this.fallbackColor,
+    this.fallbackInitial,
+    this.official = true,
+    this.tokenKey,
+    this.networkKey,
+  });
+
+  final Chain chain;
+  final String symbol;
+  final bool isToken;
+  final double size;
+  final Color? fallbackColor;
+  final String? fallbackInitial;
+  final bool official;
+  final Key? tokenKey;
+  final Key? networkKey;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isToken) {
+      return ChainIcon(key: networkKey, chain: chain, size: size);
+    }
+
+    final extent = size + size / 6;
+    return SizedBox(
+      width: extent,
+      height: extent,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: 0,
+            top: 0,
+            child: TokenIcon(
+              key: tokenKey,
+              symbol: symbol,
+              size: size,
+              fallbackColor: fallbackColor,
+              fallbackInitial: fallbackInitial,
+              official: official,
+            ),
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: DecoratedBox(
+              key: networkKey,
+              decoration: const BoxDecoration(
+                color: WalletColors.surface,
+                shape: BoxShape.circle,
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(size / 16),
+                child: ChainIcon(chain: chain, size: size / 2),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

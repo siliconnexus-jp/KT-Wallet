@@ -149,11 +149,11 @@ class AssetRef {
 
   /// Narrows a group to the deployment at [index], keeping [group] intact.
   ///
-  /// This is what Send and Receive are handed. They need to know the exact
-  /// deployment — which chain, which contract, which decimals — while still
-  /// being able to offer the network picker, and they must NOT be able to
-  /// change the symbol: arriving from the USDT page and finding a dropdown
-  /// full of other coins is how the user ended up sending the wrong asset.
+  /// This is what Send and Receive are handed. They need the exact initial
+  /// deployment — chain, contract and decimals — so the first render never
+  /// mislabels what the user tapped. Both destinations may subsequently offer
+  /// an explicit two-stage network → asset picker; changing the asset is then
+  /// a deliberate second action rather than an accidental flattened list.
   AssetRef selecting(int index) {
     if (group.isEmpty) return this;
     final at = group[index.clamp(0, group.length - 1)];
