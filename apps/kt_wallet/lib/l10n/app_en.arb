@@ -371,6 +371,7 @@
   "privacyOverlayActive": "KT Wallet Protection is active",
   "privacyOverlayHidden": "Your wallet content is hidden",
   "chooseNetwork": "Choose a network",
+  "multiChainBadge": "Multi-chain",
   "assetOnChains": "{count, plural, =1{{count} chain} other{{count} chains}}",
   "receiveCardTitle": "Receiving address",
   "receiveCardNetwork": "Network",

@@ -518,6 +518,7 @@
   "privacyOverlayActive": "KT 钱包保护已启动",
   "privacyOverlayHidden": "您的钱包内容已隐藏",
   "chooseNetwork": "选择网络",
+  "multiChainBadge": "多链",
   "assetOnChains": "{count} 条链",
   "@assetOnChains": {
     "placeholders": {

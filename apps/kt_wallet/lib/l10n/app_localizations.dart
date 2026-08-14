@@ -1978,6 +1978,12 @@ abstract class AppLocalizations {
   /// **'选择网络'**
   String get chooseNetwork;
 
+  /// No description provided for @multiChainBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'多链'**
+  String get multiChainBadge;
+
   /// No description provided for @assetOnChains.
   ///
   /// In zh, this message translates to:

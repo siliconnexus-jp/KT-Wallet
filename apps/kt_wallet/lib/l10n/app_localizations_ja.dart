@@ -1033,6 +1033,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chooseNetwork => 'ネットワークを選択';
 
   @override
+  String get multiChainBadge => 'マルチチェーン';
+
+  @override
   String assetOnChains(int count) {
     return '$count チェーン';
   }

@@ -1090,6 +1090,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chooseNetwork => 'Choose a network';
 
   @override
+  String get multiChainBadge => 'Multi-chain';
+
+  @override
   String assetOnChains(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

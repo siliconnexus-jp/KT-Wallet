@@ -1020,6 +1020,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chooseNetwork => '选择网络';
 
   @override
+  String get multiChainBadge => '多链';
+
+  @override
   String assetOnChains(int count) {
     return '$count 条链';
   }

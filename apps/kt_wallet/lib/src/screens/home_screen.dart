@@ -886,11 +886,13 @@ class _HomeAssetTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final hidden = BalancePrivacy.of(context);
     final largeText = MediaQuery.textScalerOf(context).scale(14) >= 20;
     final parts = asset.sub.split(' · ');
     final amount = parts.first.trim();
     final ref = asset.ref;
+    final isMultiChain = (ref?.group.length ?? 0) > 1;
     final symbolLikeName = RegExp(r'^[A-Z0-9]{2,10}$').hasMatch(asset.name);
     final symbol = symbolLikeName ? asset.name : (ref?.symbol ?? asset.name);
     final location = parts.length > 1
@@ -899,10 +901,35 @@ class _HomeAssetTile extends StatelessWidget {
               (ref == null || ref.group.length == 1
                   ? asset.name
                   : '${ref.group.length}');
+    Widget nameText() => Text(
+      symbol,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+        color: WalletColors.text,
+      ),
+    );
+    Widget multiChainLabel() => Container(
+      key: ValueKey('home-asset-multichain-$symbol'),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: const BoxDecoration(color: WalletColors.bg),
+      child: Text(
+        l10n.multiChainBadge,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: WalletColors.text2,
+        ),
+      ),
+    );
 
     return SizedBox(
       key: ValueKey('home-asset-$symbol-${ref?.network ?? 'aggregate'}'),
-      height: largeText ? 78 : 58,
+      height: largeText ? (isMultiChain ? 138 : 94) : 58,
       child: Row(
         children: [
           TokenIcon(
@@ -917,26 +944,29 @@ class _HomeAssetTile extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        symbol,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: WalletColors.text,
-                        ),
-                      ),
-                    ),
-                    if (ref?.isTronSelectedDeployment ?? false) ...[
-                      const SizedBox(width: 6),
-                      const TronActivationBadge(),
+                if (largeText && isMultiChain)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      nameText(),
+                      const SizedBox(height: 3),
+                      Row(children: [Flexible(child: multiChainLabel())]),
                     ],
-                  ],
-                ),
+                  )
+                else
+                  Row(
+                    children: [
+                      Flexible(child: nameText()),
+                      if (isMultiChain) ...[
+                        const SizedBox(width: 6),
+                        multiChainLabel(),
+                      ],
+                      if (ref?.isTronSelectedDeployment ?? false) ...[
+                        const SizedBox(width: 6),
+                        const TronActivationBadge(),
+                      ],
+                    ],
+                  ),
                 const SizedBox(height: 2),
                 Text(
                   location,

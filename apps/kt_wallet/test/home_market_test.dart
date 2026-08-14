@@ -222,6 +222,33 @@ void main() {
     expect(
       find.descendant(
         of: aggregateUsdt,
+        matching: find.byKey(const ValueKey('home-asset-multichain-USDT')),
+      ),
+      findsOneWidget,
+    );
+    final usdtName = tester.widget<Text>(
+      find.descendant(of: aggregateUsdt, matching: find.text('USDT')),
+    );
+    expect(usdtName.style?.fontSize, 18);
+    final multiChainLabel = find.byKey(
+      const ValueKey('home-asset-multichain-USDT'),
+    );
+    final multiChainText = tester.widget<Text>(
+      find.descendant(of: multiChainLabel, matching: find.text('多链')),
+    );
+    expect(multiChainText.style?.fontSize, 16);
+    final multiChainContainer = tester.widget<Container>(multiChainLabel);
+    expect(
+      (multiChainContainer.decoration as BoxDecoration).borderRadius,
+      isNull,
+    );
+    expect(
+      find.byKey(const ValueKey('home-asset-multichain-TRX')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: aggregateUsdt,
         matching: find.byKey(const ValueKey('tron-activation-unactivated')),
       ),
       findsNothing,

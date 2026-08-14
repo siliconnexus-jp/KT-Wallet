@@ -357,6 +357,7 @@
   "privacyOverlayActive": "KT Wallet 保護が有効です",
   "privacyOverlayHidden": "ウォレットの内容は非表示です",
   "chooseNetwork": "ネットワークを選択",
+  "multiChainBadge": "マルチチェーン",
   "assetOnChains": "{count} チェーン",
   "receiveCardTitle": "受取アドレス",
   "receiveCardNetwork": "ネットワーク",
