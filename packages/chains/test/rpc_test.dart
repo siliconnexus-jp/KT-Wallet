@@ -162,6 +162,20 @@ Map<String, Object?> _solanaSignatureStatusResult({
   'value': [entry],
 };
 
+Map<String, Object?> _solanaTransactionFeeResult({
+  String signature = _solanaSignature,
+  Object? fee = 5000,
+}) => {
+  'slot': 48,
+  'blockTime': 1700000000,
+  'version': 'legacy',
+  'transaction': {
+    'signatures': [signature],
+    'message': <String, Object?>{},
+  },
+  'meta': {'fee': fee, 'err': null},
+};
+
 Map<String, Object?> _evmReceipt({
   String transactionHash = _evmHash,
   String blockHash =
@@ -169,12 +183,16 @@ Map<String, Object?> _evmReceipt({
   Object? blockNumber = '0x64',
   Object? transactionIndex = '0x0',
   Object? status = '0x1',
+  Object? gasUsed = '0xa151',
+  Object? effectiveGasPrice = '0x29951bf',
 }) => {
   'transactionHash': transactionHash,
   'blockHash': blockHash,
   'blockNumber': blockNumber,
   'transactionIndex': transactionIndex,
   'status': status,
+  'gasUsed': gasUsed,
+  'effectiveGasPrice': effectiveGasPrice,
 };
 
 void main() {
@@ -262,6 +280,9 @@ void main() {
       expect(evidence.blockNumber, BigInt.from(100));
       expect(evidence.transactionIndex, BigInt.zero);
       expect(evidence.succeeded, isTrue);
+      expect(evidence.gasUsed, BigInt.from(41297));
+      expect(evidence.effectiveGasPrice, BigInt.from(43602367));
+      expect(evidence.actualFee, BigInt.parse('1800646949999'));
       expect(
         parseEvmReceiptEvidence(
           _evmReceipt(status: '0x0'),
@@ -300,6 +321,8 @@ void main() {
         _evmReceipt(transactionIndex: '-1'),
         _evmReceipt(status: 0),
         _evmReceipt(status: '0x01'),
+        _evmReceipt(gasUsed: '0x00'),
+        _evmReceipt(effectiveGasPrice: -1),
       ];
 
       for (final receipt in invalid) {
@@ -318,6 +341,18 @@ void main() {
         ),
         throwsA(isA<RpcException>()),
       );
+    });
+
+    test('keeps status evidence but leaves actual fee absent when omitted', () {
+      final receipt = _evmReceipt()
+        ..remove('gasUsed')
+        ..remove('effectiveGasPrice');
+      final evidence = parseEvmReceiptEvidence(
+        receipt,
+        expectedTransactionHash: _evmHash,
+      );
+      expect(evidence.succeeded, isTrue);
+      expect(evidence.actualFee, isNull);
     });
   });
 
@@ -1052,6 +1087,47 @@ void main() {
       expect(transport.requests, isEmpty);
     });
 
+    test(
+      'transaction metadata fee is bound to the requested signature',
+      () async {
+        final transport = FakeJsonRpc(
+          (m, p) => _ok(_solanaTransactionFeeResult()),
+        );
+        final rpc = SolanaRpc(url: 'x', transport: transport);
+
+        expect(
+          await rpc.getTransactionFee(_solanaSignature),
+          BigInt.from(5000),
+        );
+        expect(transport.requests.single['method'], 'getTransaction');
+      },
+    );
+
+    test('transaction metadata rejects mismatched or malformed fee evidence', () {
+      const otherSignature =
+          '5h6xBEauJ3PK6SWCZ1PGjBvj8vDdWG3KpwATGy1ARAXFSDwt8GFXM7W5Ncn16wmqokgpiKRLuS83KUxyZyv2sUYv';
+      final invalid = <Object?>[
+        _solanaTransactionFeeResult(signature: otherSignature),
+        _solanaTransactionFeeResult(fee: -1),
+        _solanaTransactionFeeResult(fee: '5000'),
+        {..._solanaTransactionFeeResult()}..remove('meta'),
+        {
+          ..._solanaTransactionFeeResult(),
+          'Meta': {'fee': 5000},
+        },
+      ];
+      for (final result in invalid) {
+        expect(
+          () => parseSolanaTransactionFeeEvidence(
+            result,
+            expectedSignature: _solanaSignature,
+          ),
+          throwsA(isA<RpcException>()),
+          reason: '$result',
+        );
+      }
+    });
+
     test('fee and simulation use the exact serialized message', () async {
       final transport = FakeJsonRpc((method, params) {
         if (method == 'getFeeForMessage') {
@@ -1290,6 +1366,16 @@ void main() {
       },
     );
 
+    test('transaction evidence exposes the actual receipt fee in SUN', () {
+      final evidence = parseTronTransactionEvidence({
+        'id': _tronHash,
+        'blockNumber': 42,
+        'fee': 13845000,
+        'receipt': {'result': 'SUCCESS'},
+      }, expectedTransactionId: _tronHash);
+      expect(evidence.feeSun, BigInt.from(13845000));
+    });
+
     test(
       'transaction status rejects mismatched or incomplete evidence',
       () async {
@@ -1307,6 +1393,12 @@ void main() {
             'id': _tronHash,
             'blockNumber': 42,
             'receipt': {'result': 'NOT_A_TRON_RESULT'},
+          },
+          {
+            'id': _tronHash,
+            'blockNumber': 42,
+            'fee': -1,
+            'receipt': {'result': 'SUCCESS'},
           },
         ];
         for (final info in invalidInfo) {

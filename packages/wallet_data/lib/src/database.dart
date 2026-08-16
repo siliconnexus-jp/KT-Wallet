@@ -37,8 +37,9 @@ class WalletDatabase extends _$WalletDatabase {
   /// backup confirmation, so the old boolean cannot be trusted.
   /// v11: exact network identity for user-added custom tokens. Legacy rows
   /// remain null rather than guessing across EVM networks.
+  /// v12: receipt-backed actual network fee, separate from pre-send quotes.
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   /// Backfill map for [Transactions.networkId]: the chain family's MAINNET
   /// network id, keyed by the `coin` column. Kept as literals because
@@ -119,6 +120,9 @@ class WalletDatabase extends _$WalletDatabase {
       // databases need the additive migration.
       if (from >= 2 && from < 11) {
         await m.addColumn(customTokens, customTokens.networkId);
+      }
+      if (from < 12) {
+        await m.addColumn(transactions, transactions.actualFeeRaw);
       }
     },
     beforeOpen: (details) async {

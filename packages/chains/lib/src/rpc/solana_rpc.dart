@@ -375,6 +375,76 @@ class SolanaRpc {
       failed: failed,
     );
   }
+
+  /// Actual fee charged to an included transaction, bound to the requested
+  /// signature through the transaction's canonical first signature.
+  Future<BigInt?> getTransactionFee(String signature) async {
+    _solanaTransactionSignature(signature);
+    final result = await _call('getTransaction', [
+      signature,
+      {
+        'commitment': 'confirmed',
+        'encoding': 'json',
+        'maxSupportedTransactionVersion': 0,
+      },
+    ]);
+    if (result == null) return null;
+    return parseSolanaTransactionFeeEvidence(
+      result,
+      expectedSignature: signature,
+    ).feeLamports;
+  }
+}
+
+class SolanaTransactionFeeEvidence {
+  const SolanaTransactionFeeEvidence({
+    required this.signature,
+    required this.slot,
+    required this.feeLamports,
+  });
+
+  final String signature;
+  final int slot;
+  final BigInt feeLamports;
+}
+
+SolanaTransactionFeeEvidence parseSolanaTransactionFeeEvidence(
+  Object? raw, {
+  required String expectedSignature,
+}) {
+  _solanaTransactionSignature(expectedSignature);
+  final result = _consumedSolanaMap(
+    raw,
+    consumed: const {'slot', 'transaction', 'meta'},
+    label: 'transaction fee result',
+  );
+  final slot = _u64(result['slot'], 'transaction fee slot');
+  final transaction = _consumedSolanaMap(
+    result['transaction'],
+    consumed: const {'signatures'},
+    label: 'transaction fee identity',
+  );
+  final signatures = transaction['signatures'];
+  if (signatures is! List || signatures.isEmpty || signatures.length > 64) {
+    throw RpcException('bad transaction fee signatures');
+  }
+  for (final rawSignature in signatures) {
+    _solanaTransactionSignature(rawSignature);
+  }
+  final signature = signatures.first! as String;
+  if (signature != expectedSignature) {
+    throw RpcException('transaction fee signature mismatch');
+  }
+  final meta = _consumedSolanaMap(
+    result['meta'],
+    consumed: const {'fee'},
+    label: 'transaction fee metadata',
+  );
+  return SolanaTransactionFeeEvidence(
+    signature: signature,
+    slot: slot,
+    feeLamports: BigInt.from(_u64(meta['fee'], 'transaction fee')),
+  );
 }
 
 class SolanaLatestBlockhash {
@@ -473,6 +543,32 @@ Map<Object?, Object?> _exactMap(
       raw.keys.any((key) => key is! String || !allowed.contains(key)) ||
       required.any((key) => !raw.containsKey(key))) {
     throw RpcException('bad $label');
+  }
+  return raw;
+}
+
+/// Reads only fields consumed by this client while rejecting ambiguous
+/// case-variants. Solana nodes may add unrelated metadata without changing the
+/// meaning of the receipt fields we bind to the request.
+Map<Object?, Object?> _consumedSolanaMap(
+  Object? raw, {
+  required Set<String> consumed,
+  required String label,
+}) {
+  if (raw is! Map ||
+      raw.length > 128 ||
+      raw.keys.any((key) => key is! String)) {
+    throw RpcException('bad $label');
+  }
+  for (final key in raw.keys.cast<String>()) {
+    for (final canonical in consumed) {
+      if (key.toLowerCase() == canonical.toLowerCase() && key != canonical) {
+        throw RpcException('ambiguous $label');
+      }
+    }
+  }
+  if (consumed.any((field) => !raw.containsKey(field))) {
+    throw RpcException('incomplete $label');
   }
   return raw;
 }

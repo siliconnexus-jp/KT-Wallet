@@ -9,6 +9,8 @@ class EvmReceiptEvidence {
     required this.blockNumber,
     required this.transactionIndex,
     required this.succeeded,
+    required this.gasUsed,
+    required this.effectiveGasPrice,
   });
 
   final String transactionHash;
@@ -16,6 +18,18 @@ class EvmReceiptEvidence {
   final BigInt blockNumber;
   final BigInt transactionIndex;
   final bool succeeded;
+
+  /// Receipt-backed execution units. Providers predating EIP-1559 may omit
+  /// [effectiveGasPrice]; status evidence remains usable in that case, but the
+  /// wallet must not present the pre-send maximum as the actual fee.
+  final BigInt? gasUsed;
+  final BigInt? effectiveGasPrice;
+
+  BigInt? get actualFee {
+    final used = gasUsed;
+    final price = effectiveGasPrice;
+    return used == null || price == null ? null : used * price;
+  }
 }
 
 /// Minimal mempool evidence returned by `eth_getTransactionByHash`, bound to
@@ -75,13 +89,28 @@ EvmReceiptEvidence parseEvmReceiptEvidence(
     '0x0' => false,
     _ => throw RpcException('malformed EVM receipt status'),
   };
+  final gasUsed = _parseOptionalEvmReceiptQuantity(receipt, 'gasUsed');
+  final effectiveGasPrice = _parseOptionalEvmReceiptQuantity(
+    receipt,
+    'effectiveGasPrice',
+  );
   return EvmReceiptEvidence(
     transactionHash: transactionHash,
     blockHash: blockHash,
     blockNumber: blockNumber,
     transactionIndex: transactionIndex,
     succeeded: succeeded,
+    gasUsed: gasUsed,
+    effectiveGasPrice: effectiveGasPrice,
   );
+}
+
+BigInt? _parseOptionalEvmReceiptQuantity(
+  Map<Object?, Object?> receipt,
+  String field,
+) {
+  if (!receipt.containsKey(field)) return null;
+  return _parseEvmReceiptQuantity(receipt[field], field);
 }
 
 /// Validates the fields used to decide that a requested EVM transaction is

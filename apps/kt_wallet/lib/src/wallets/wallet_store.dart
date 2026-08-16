@@ -364,6 +364,19 @@ class WalletStore {
     String nonce,
   ) => _wallets.scoped(walletId).setTransactionNonceIfAbsent(id, nonce);
 
+  Future<bool> updateTransactionActualFee({
+    required String walletId,
+    required String id,
+    required String expectedHash,
+    required String actualFeeRaw,
+  }) => _wallets
+      .scoped(walletId)
+      .updateTransactionActualFee(
+        id: id,
+        expectedHash: expectedHash,
+        actualFeeRaw: actualFeeRaw,
+      );
+
   Future<bool> recordEvmReplacementBroadcast({
     required String walletId,
     required String originalId,

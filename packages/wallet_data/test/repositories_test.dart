@@ -181,6 +181,40 @@ void main() {
       expect(tx.amountRaw, huge);
       expect(BigInt.parse(tx.amountRaw), BigInt.parse(huge));
     });
+
+    test(
+      'actual network fee is hash-bound and does not overwrite quote',
+      () async {
+        final repo = wallets.scoped('A');
+        await repo.upsertTransaction(
+          _evmTx('fee-tx', 'A').copyWith(
+            hash: const Value('0xexpected'),
+            status: const Value(TxStatus.confirmed),
+          ),
+        );
+
+        expect(
+          await repo.updateTransactionActualFee(
+            id: 'fee-tx',
+            expectedHash: '0xdifferent',
+            actualFeeRaw: '1800646949999',
+          ),
+          isFalse,
+        );
+        expect(
+          await repo.updateTransactionActualFee(
+            id: 'fee-tx',
+            expectedHash: '0xexpected',
+            actualFeeRaw: '1800646949999',
+          ),
+          isTrue,
+        );
+
+        final transaction = await repo.transactionById('fee-tx');
+        expect(transaction!.feeRaw, '420000');
+        expect(transaction.actualFeeRaw, '1800646949999');
+      },
+    );
   });
 
   group('EVM nonce reservation and replacement', () {

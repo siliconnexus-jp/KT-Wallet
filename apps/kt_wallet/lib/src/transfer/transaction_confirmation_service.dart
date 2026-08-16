@@ -12,6 +12,7 @@ class TransactionConfirmation {
     required this.status,
     required this.confirmations,
     this.finalized = false,
+    this.actualFeeRaw,
   });
 
   final TxStatus status;
@@ -22,6 +23,10 @@ class TransactionConfirmation {
 
   /// True when the chain explicitly reports irreversible/finalized state.
   final bool finalized;
+
+  /// Receipt/transaction-metadata-derived fee in the chain's native base
+  /// unit. Null while pending or when the provider omits consumed fee fields.
+  final BigInt? actualFeeRaw;
 }
 
 /// Read-only confirmation lookup for a transaction that has already been
@@ -74,6 +79,7 @@ class TransactionConfirmationService {
     return TransactionConfirmation(
       status: status,
       confirmations: await _evmConfirmationDepth(rpc, evidence.blockNumber),
+      actualFeeRaw: evidence.actualFee,
     );
   }
 
@@ -101,6 +107,7 @@ class TransactionConfirmationService {
     return TransactionConfirmation(
       status: evidence.succeeded ? TxStatus.confirmed : TxStatus.failed,
       confirmations: await _tronConfirmationDepth(rpc, evidence.blockNumber),
+      actualFeeRaw: evidence.feeSun,
     );
   }
 
@@ -134,7 +141,19 @@ class TransactionConfirmationService {
       status: txStatus,
       confirmations: result.confirmations,
       finalized: confirmationStatus == 'finalized',
+      actualFeeRaw:
+          confirmationStatus == 'confirmed' || confirmationStatus == 'finalized'
+          ? await _solanaActualFee(rpc, hash)
+          : null,
     );
+  }
+
+  Future<BigInt?> _solanaActualFee(SolanaRpc rpc, String hash) async {
+    try {
+      return await rpc.getTransactionFee(hash);
+    } on RpcException {
+      return null;
+    }
   }
 
   static int? _boundedDepth(BigInt depth) {

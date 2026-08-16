@@ -53,9 +53,20 @@ const _otherTronHash =
 const _solanaSignature =
     '4cdd1oX7cfVALfr26tP52BZ6cSzrgnNGtYD7BFhm6FFeZV5sPTnRvg6NRn8yC6DbEikXcrNChBM5vVJnTgKhGhVu';
 
+Map<String, Object?> _solanaTransactionFee() => {
+  'slot': 48,
+  'transaction': {
+    'signatures': [_solanaSignature],
+    'message': <String, Object?>{},
+  },
+  'meta': {'fee': 5000},
+};
+
 Map<String, Object?> _evmReceipt({
   String transactionHash = _evmHash,
   Object? status = '0x1',
+  Object? gasUsed = '0xa151',
+  Object? effectiveGasPrice = '0x29951bf',
 }) => {
   'transactionHash': transactionHash,
   'blockHash':
@@ -63,6 +74,8 @@ Map<String, Object?> _evmReceipt({
   'blockNumber': '0x64',
   'transactionIndex': '0x0',
   'status': status,
+  'gasUsed': gasUsed,
+  'effectiveGasPrice': effectiveGasPrice,
 };
 
 Transaction _tx(
@@ -93,6 +106,54 @@ Transaction _tx(
 );
 
 void main() {
+  test('actual EVM fee comes from the hash-bound receipt', () async {
+    final rpc = _JsonRpc({'eth_getTransactionReceipt': _evmReceipt()});
+    final service = TransactionStatusService(
+      endpoints: (_) => 'https://rpc.example',
+      jsonRpcTransport: rpc,
+      restTransport: _Rest(null),
+    );
+
+    expect(
+      await service.actualEvmFee(_tx(Coin.eth.name, _evmHash)),
+      BigInt.parse('1800646949999'),
+    );
+    expect(rpc.methods, ['eth_getTransactionReceipt']);
+  });
+
+  test('actual TRON fee comes from transaction receipt evidence', () async {
+    final service = TransactionStatusService(
+      endpoints: (_) => 'https://rpc.example',
+      jsonRpcTransport: _JsonRpc({}),
+      restTransport: _Rest({
+        'id': _tronHash,
+        'blockNumber': 42,
+        'fee': 13845000,
+        'receipt': {'result': 'SUCCESS'},
+      }),
+    );
+
+    expect(
+      await service.actualNetworkFee(_tx(Coin.tron.name, _tronHash)),
+      BigInt.from(13845000),
+    );
+  });
+
+  test('actual Solana fee comes from bound transaction metadata', () async {
+    final rpc = _JsonRpc({'getTransaction': _solanaTransactionFee()});
+    final service = TransactionStatusService(
+      endpoints: (_) => 'https://rpc.example',
+      jsonRpcTransport: rpc,
+      restTransport: _Rest(null),
+    );
+
+    expect(
+      await service.actualNetworkFee(_tx(Coin.solana.name, _solanaSignature)),
+      BigInt.from(5000),
+    );
+    expect(rpc.methods, ['getTransaction']);
+  });
+
   test('EVM receipt confirms immediately without account history', () async {
     final rpc = _JsonRpc({'eth_getTransactionReceipt': _evmReceipt()});
     final service = TransactionStatusService(

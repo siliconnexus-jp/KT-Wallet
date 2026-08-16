@@ -27,11 +27,13 @@ class TronTransactionEvidence {
     required this.transactionId,
     required this.blockNumber,
     required this.result,
+    required this.feeSun,
   });
 
   final String transactionId;
   final int blockNumber;
   final String result;
+  final BigInt? feeSun;
 
   bool get succeeded => result == 'SUCCESS';
 }
@@ -77,10 +79,17 @@ TronTransactionEvidence parseTronTransactionEvidence(
       !_tronReceiptResults.contains(normalizedResult)) {
     throw RpcException('unknown TRON receipt result');
   }
+  final rawFee = response['fee'];
+  final feeSun = rawFee == null
+      ? null
+      : rawFee is int && rawFee >= 0
+      ? BigInt.from(rawFee)
+      : throw RpcException('malformed TRON transaction fee');
   return TronTransactionEvidence(
     transactionId: transactionId,
     blockNumber: blockNumber,
     result: normalizedResult,
+    feeSun: feeSun,
   );
 }
 

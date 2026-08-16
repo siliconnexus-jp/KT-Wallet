@@ -2010,6 +2010,17 @@ class $TransactionsTable extends Transactions
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _actualFeeRawMeta = const VerificationMeta(
+    'actualFeeRaw',
+  );
+  @override
+  late final GeneratedColumn<String> actualFeeRaw = GeneratedColumn<String>(
+    'actual_fee_raw',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _hashMeta = const VerificationMeta('hash');
   @override
   late final GeneratedColumn<String> hash = GeneratedColumn<String>(
@@ -2213,6 +2224,7 @@ class $TransactionsTable extends Transactions
     toAddr,
     amountRaw,
     feeRaw,
+    actualFeeRaw,
     hash,
     status,
     signMode,
@@ -2311,6 +2323,15 @@ class $TransactionsTable extends Transactions
       context.handle(
         _feeRawMeta,
         feeRaw.isAcceptableOrUnknown(data['fee_raw']!, _feeRawMeta),
+      );
+    }
+    if (data.containsKey('actual_fee_raw')) {
+      context.handle(
+        _actualFeeRawMeta,
+        actualFeeRaw.isAcceptableOrUnknown(
+          data['actual_fee_raw']!,
+          _actualFeeRawMeta,
+        ),
       );
     }
     if (data.containsKey('hash')) {
@@ -2481,6 +2502,10 @@ class $TransactionsTable extends Transactions
         DriftSqlType.string,
         data['${effectivePrefix}fee_raw'],
       ),
+      actualFeeRaw: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}actual_fee_raw'],
+      ),
       hash: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}hash'],
@@ -2622,7 +2647,16 @@ class Transaction extends DataClass implements Insertable<Transaction> {
   final String fromAddr;
   final String toAddr;
   final String amountRaw;
+
+  /// Pre-broadcast fee bound/quote. For EVM rows this is `gasLimit *
+  /// maxFeePerGas`, not the amount eventually charged by the network.
   final String? feeRaw;
+
+  /// Receipt-backed fee actually charged by the network: EVM uses
+  /// `gasUsed * effectiveGasPrice`, TRON uses receipt `fee`, and Solana uses
+  /// transaction metadata `fee`. Null until hash/signature-bound evidence has
+  /// been read. Kept separate so a quote can never be mislabeled as actual.
+  final String? actualFeeRaw;
   final String? hash;
   final TxStatus status;
   final SignMode signMode;
@@ -2678,6 +2712,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     required this.toAddr,
     required this.amountRaw,
     this.feeRaw,
+    this.actualFeeRaw,
     this.hash,
     required this.status,
     required this.signMode,
@@ -2727,6 +2762,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     map['amount_raw'] = Variable<String>(amountRaw);
     if (!nullToAbsent || feeRaw != null) {
       map['fee_raw'] = Variable<String>(feeRaw);
+    }
+    if (!nullToAbsent || actualFeeRaw != null) {
+      map['actual_fee_raw'] = Variable<String>(actualFeeRaw);
     }
     if (!nullToAbsent || hash != null) {
       map['hash'] = Variable<String>(hash);
@@ -2813,6 +2851,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       feeRaw: feeRaw == null && nullToAbsent
           ? const Value.absent()
           : Value(feeRaw),
+      actualFeeRaw: actualFeeRaw == null && nullToAbsent
+          ? const Value.absent()
+          : Value(actualFeeRaw),
       hash: hash == null && nullToAbsent ? const Value.absent() : Value(hash),
       status: Value(status),
       signMode: Value(signMode),
@@ -2882,6 +2923,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       toAddr: serializer.fromJson<String>(json['toAddr']),
       amountRaw: serializer.fromJson<String>(json['amountRaw']),
       feeRaw: serializer.fromJson<String?>(json['feeRaw']),
+      actualFeeRaw: serializer.fromJson<String?>(json['actualFeeRaw']),
       hash: serializer.fromJson<String?>(json['hash']),
       status: $TransactionsTable.$converterstatus.fromJson(
         serializer.fromJson<int>(json['status']),
@@ -2936,6 +2978,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       'toAddr': serializer.toJson<String>(toAddr),
       'amountRaw': serializer.toJson<String>(amountRaw),
       'feeRaw': serializer.toJson<String?>(feeRaw),
+      'actualFeeRaw': serializer.toJson<String?>(actualFeeRaw),
       'hash': serializer.toJson<String?>(hash),
       'status': serializer.toJson<int>(
         $TransactionsTable.$converterstatus.toJson(status),
@@ -2978,6 +3021,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     String? toAddr,
     String? amountRaw,
     Value<String?> feeRaw = const Value.absent(),
+    Value<String?> actualFeeRaw = const Value.absent(),
     Value<String?> hash = const Value.absent(),
     TxStatus? status,
     SignMode? signMode,
@@ -3009,6 +3053,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     toAddr: toAddr ?? this.toAddr,
     amountRaw: amountRaw ?? this.amountRaw,
     feeRaw: feeRaw.present ? feeRaw.value : this.feeRaw,
+    actualFeeRaw: actualFeeRaw.present ? actualFeeRaw.value : this.actualFeeRaw,
     hash: hash.present ? hash.value : this.hash,
     status: status ?? this.status,
     signMode: signMode ?? this.signMode,
@@ -3054,6 +3099,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       toAddr: data.toAddr.present ? data.toAddr.value : this.toAddr,
       amountRaw: data.amountRaw.present ? data.amountRaw.value : this.amountRaw,
       feeRaw: data.feeRaw.present ? data.feeRaw.value : this.feeRaw,
+      actualFeeRaw: data.actualFeeRaw.present
+          ? data.actualFeeRaw.value
+          : this.actualFeeRaw,
       hash: data.hash.present ? data.hash.value : this.hash,
       status: data.status.present ? data.status.value : this.status,
       signMode: data.signMode.present ? data.signMode.value : this.signMode,
@@ -3110,6 +3158,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ..write('toAddr: $toAddr, ')
           ..write('amountRaw: $amountRaw, ')
           ..write('feeRaw: $feeRaw, ')
+          ..write('actualFeeRaw: $actualFeeRaw, ')
           ..write('hash: $hash, ')
           ..write('status: $status, ')
           ..write('signMode: $signMode, ')
@@ -3146,6 +3195,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     toAddr,
     amountRaw,
     feeRaw,
+    actualFeeRaw,
     hash,
     status,
     signMode,
@@ -3181,6 +3231,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           other.toAddr == this.toAddr &&
           other.amountRaw == this.amountRaw &&
           other.feeRaw == this.feeRaw &&
+          other.actualFeeRaw == this.actualFeeRaw &&
           other.hash == this.hash &&
           other.status == this.status &&
           other.signMode == this.signMode &&
@@ -3214,6 +3265,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
   final Value<String> toAddr;
   final Value<String> amountRaw;
   final Value<String?> feeRaw;
+  final Value<String?> actualFeeRaw;
   final Value<String?> hash;
   final Value<TxStatus> status;
   final Value<SignMode> signMode;
@@ -3246,6 +3298,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.toAddr = const Value.absent(),
     this.amountRaw = const Value.absent(),
     this.feeRaw = const Value.absent(),
+    this.actualFeeRaw = const Value.absent(),
     this.hash = const Value.absent(),
     this.status = const Value.absent(),
     this.signMode = const Value.absent(),
@@ -3279,6 +3332,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     required String toAddr,
     required String amountRaw,
     this.feeRaw = const Value.absent(),
+    this.actualFeeRaw = const Value.absent(),
     this.hash = const Value.absent(),
     required TxStatus status,
     required SignMode signMode,
@@ -3321,6 +3375,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Expression<String>? toAddr,
     Expression<String>? amountRaw,
     Expression<String>? feeRaw,
+    Expression<String>? actualFeeRaw,
     Expression<String>? hash,
     Expression<int>? status,
     Expression<int>? signMode,
@@ -3354,6 +3409,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       if (toAddr != null) 'to_addr': toAddr,
       if (amountRaw != null) 'amount_raw': amountRaw,
       if (feeRaw != null) 'fee_raw': feeRaw,
+      if (actualFeeRaw != null) 'actual_fee_raw': actualFeeRaw,
       if (hash != null) 'hash': hash,
       if (status != null) 'status': status,
       if (signMode != null) 'sign_mode': signMode,
@@ -3391,6 +3447,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Value<String>? toAddr,
     Value<String>? amountRaw,
     Value<String?>? feeRaw,
+    Value<String?>? actualFeeRaw,
     Value<String?>? hash,
     Value<TxStatus>? status,
     Value<SignMode>? signMode,
@@ -3424,6 +3481,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       toAddr: toAddr ?? this.toAddr,
       amountRaw: amountRaw ?? this.amountRaw,
       feeRaw: feeRaw ?? this.feeRaw,
+      actualFeeRaw: actualFeeRaw ?? this.actualFeeRaw,
       hash: hash ?? this.hash,
       status: status ?? this.status,
       signMode: signMode ?? this.signMode,
@@ -3488,6 +3546,9 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     }
     if (feeRaw.present) {
       map['fee_raw'] = Variable<String>(feeRaw.value);
+    }
+    if (actualFeeRaw.present) {
+      map['actual_fee_raw'] = Variable<String>(actualFeeRaw.value);
     }
     if (hash.present) {
       map['hash'] = Variable<String>(hash.value);
@@ -3578,6 +3639,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
           ..write('toAddr: $toAddr, ')
           ..write('amountRaw: $amountRaw, ')
           ..write('feeRaw: $feeRaw, ')
+          ..write('actualFeeRaw: $actualFeeRaw, ')
           ..write('hash: $hash, ')
           ..write('status: $status, ')
           ..write('signMode: $signMode, ')
@@ -8109,6 +8171,7 @@ typedef $$TransactionsTableCreateCompanionBuilder =
       required String toAddr,
       required String amountRaw,
       Value<String?> feeRaw,
+      Value<String?> actualFeeRaw,
       Value<String?> hash,
       required TxStatus status,
       required SignMode signMode,
@@ -8143,6 +8206,7 @@ typedef $$TransactionsTableUpdateCompanionBuilder =
       Value<String> toAddr,
       Value<String> amountRaw,
       Value<String?> feeRaw,
+      Value<String?> actualFeeRaw,
       Value<String?> hash,
       Value<TxStatus> status,
       Value<SignMode> signMode,
@@ -8249,6 +8313,11 @@ class $$TransactionsTableFilterComposer
 
   ColumnFilters<String> get feeRaw => $composableBuilder(
     column: $table.feeRaw,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get actualFeeRaw => $composableBuilder(
+    column: $table.actualFeeRaw,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8434,6 +8503,11 @@ class $$TransactionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get actualFeeRaw => $composableBuilder(
+    column: $table.actualFeeRaw,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get hash => $composableBuilder(
     column: $table.hash,
     builder: (column) => ColumnOrderings(column),
@@ -8590,6 +8664,11 @@ class $$TransactionsTableAnnotationComposer
   GeneratedColumn<String> get feeRaw =>
       $composableBuilder(column: $table.feeRaw, builder: (column) => column);
 
+  GeneratedColumn<String> get actualFeeRaw => $composableBuilder(
+    column: $table.actualFeeRaw,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get hash =>
       $composableBuilder(column: $table.hash, builder: (column) => column);
 
@@ -8730,6 +8809,7 @@ class $$TransactionsTableTableManager
                 Value<String> toAddr = const Value.absent(),
                 Value<String> amountRaw = const Value.absent(),
                 Value<String?> feeRaw = const Value.absent(),
+                Value<String?> actualFeeRaw = const Value.absent(),
                 Value<String?> hash = const Value.absent(),
                 Value<TxStatus> status = const Value.absent(),
                 Value<SignMode> signMode = const Value.absent(),
@@ -8763,6 +8843,7 @@ class $$TransactionsTableTableManager
                 toAddr: toAddr,
                 amountRaw: amountRaw,
                 feeRaw: feeRaw,
+                actualFeeRaw: actualFeeRaw,
                 hash: hash,
                 status: status,
                 signMode: signMode,
@@ -8797,6 +8878,7 @@ class $$TransactionsTableTableManager
                 required String toAddr,
                 required String amountRaw,
                 Value<String?> feeRaw = const Value.absent(),
+                Value<String?> actualFeeRaw = const Value.absent(),
                 Value<String?> hash = const Value.absent(),
                 required TxStatus status,
                 required SignMode signMode,
@@ -8830,6 +8912,7 @@ class $$TransactionsTableTableManager
                 toAddr: toAddr,
                 amountRaw: amountRaw,
                 feeRaw: feeRaw,
+                actualFeeRaw: actualFeeRaw,
                 hash: hash,
                 status: status,
                 signMode: signMode,

@@ -141,7 +141,16 @@ class Transactions extends Table {
   TextColumn get fromAddr => text()();
   TextColumn get toAddr => text()();
   TextColumn get amountRaw => text()();
+
+  /// Pre-broadcast fee bound/quote. For EVM rows this is `gasLimit *
+  /// maxFeePerGas`, not the amount eventually charged by the network.
   TextColumn get feeRaw => text().nullable()();
+
+  /// Receipt-backed fee actually charged by the network: EVM uses
+  /// `gasUsed * effectiveGasPrice`, TRON uses receipt `fee`, and Solana uses
+  /// transaction metadata `fee`. Null until hash/signature-bound evidence has
+  /// been read. Kept separate so a quote can never be mislabeled as actual.
+  TextColumn get actualFeeRaw => text().nullable()();
   TextColumn get hash => text().nullable()();
   IntColumn get status => intEnum<TxStatus>()();
   IntColumn get signMode => intEnum<SignMode>()();

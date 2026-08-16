@@ -7,7 +7,7 @@ import 'package:test/test.dart';
 import 'package:wallet_data/wallet_data.dart';
 
 void main() {
-  test('schemaVersion is 11 and all tables are created', () async {
+  test('schemaVersion is 12 and all tables are created', () async {
     final db = WalletDatabase(NativeDatabase.memory());
     addTearDown(db.close);
 
@@ -22,7 +22,7 @@ void main() {
             .map((r) => r.data['name'] as String)
             .toSet();
 
-    expect(db.schemaVersion, 11);
+    expect(db.schemaVersion, 12);
     for (final expected in [
       'wallets',
       'accounts',
@@ -42,7 +42,7 @@ void main() {
   });
 
   test(
-    'v9 → v11 resets backup flags and adds custom-token network id',
+    'v9 → v12 resets backup flags and adds fee/token identity columns',
     () async {
       final dir = await Directory.systemTemp.createTemp('wallet_data_v9');
       addTearDown(() => dir.delete(recursive: true));
@@ -75,6 +75,7 @@ void main() {
       final raw = sqlite3.sqlite3.open(file.path);
       raw
         ..execute('ALTER TABLE custom_tokens DROP COLUMN network_id')
+        ..execute('ALTER TABLE transactions DROP COLUMN actual_fee_raw')
         ..execute('PRAGMA user_version = 9')
         ..close();
 
@@ -88,12 +89,12 @@ void main() {
               .data
               .values
               .first;
-      expect(version, 11);
+      expect(version, 12);
     },
   );
 
   test(
-    'v1 → v11 migration keeps data and invalidates legacy backup flags',
+    'v1 → v12 migration keeps data and invalidates legacy backup flags',
     () async {
       // Build the two v1 tables touched by later migrations. The old
       // transactions schema deliberately has none of the EVM replacement
@@ -205,6 +206,7 @@ void main() {
       expect(legacy.lastValidBlockHeight, isNull);
       expect(legacy.lastCheckedAt, isNull);
       expect(legacy.lastCheckOutcome, isNull);
+      expect(legacy.actualFeeRaw, isNull);
       expect(legacy.operation, TxOperationKind.transfer);
       // v4 backfill: an un-attributed row lands on its chain's mainnet id.
       expect(legacy.networkId, 'eth-mainnet');
@@ -213,11 +215,11 @@ void main() {
           .data
           .values
           .first;
-      expect(version, 11);
+      expect(version, 12);
     },
   );
 
-  test('v3 → v11 adds metadata and invalidates legacy backup flags', () async {
+  test('v3 → v12 adds metadata and invalidates legacy backup flags', () async {
     final dir = await Directory.systemTemp.createTemp('wallet_data_v3');
     addTearDown(() => dir.delete(recursive: true));
     final file = File('${dir.path}/v3.sqlite');
@@ -323,6 +325,7 @@ void main() {
     expect(rows['trx']!.lastValidBlockHeight, isNull);
     expect(rows['trx']!.lastCheckedAt, isNull);
     expect(rows['trx']!.lastCheckOutcome, isNull);
+    expect(rows['trx']!.actualFeeRaw, isNull);
     expect(rows['trx']!.operation, TxOperationKind.transfer);
     // An unrecognized coin stays unattributed rather than being guessed.
     expect(rows['unknown']!.networkId, isNull);
@@ -338,7 +341,7 @@ void main() {
         .data
         .values
         .first;
-    expect(version, 11);
+    expect(version, 12);
   });
 
   test('concurrent transactions on separate wallets do not corrupt', () async {

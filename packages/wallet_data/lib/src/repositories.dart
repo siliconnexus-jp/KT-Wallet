@@ -366,6 +366,31 @@ class WalletRepository {
     return changed == 1;
   }
 
+  /// Caches a hash/signature-bound, receipt-derived network fee in this wallet
+  /// scope.
+  ///
+  /// [expectedHash] is part of the update predicate so a late RPC response can
+  /// never attach fee evidence to a row whose transaction identity changed.
+  Future<bool> updateTransactionActualFee({
+    required String id,
+    required String expectedHash,
+    required String actualFeeRaw,
+  }) async {
+    final fee = BigInt.tryParse(actualFeeRaw);
+    if (fee == null || fee.isNegative) {
+      throw ArgumentError.value(actualFeeRaw, 'actualFeeRaw');
+    }
+    final changed =
+        await (_db.update(_db.transactions)..where(
+              (t) =>
+                  t.walletId.equals(walletId) &
+                  t.id.equals(id) &
+                  t.hash.equals(expectedHash),
+            ))
+            .write(TransactionsCompanion(actualFeeRaw: Value(fee.toString())));
+    return changed == 1;
+  }
+
   /// Records that an EVM node accepted a replacement for propagation.
   ///
   /// Node acceptance is not finality: the original transaction can still win

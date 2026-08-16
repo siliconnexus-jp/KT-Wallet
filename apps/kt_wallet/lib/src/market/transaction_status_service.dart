@@ -118,6 +118,72 @@ class TransactionStatusService {
     }
   }
 
+  /// Returns the actual fee from a receipt on the transaction's persisted
+  /// EVM network. This deliberately bypasses account-history indexes and never
+  /// falls back to the locally stored pre-send maximum.
+  Future<BigInt?> actualEvmFee(db.Transaction transaction) async {
+    final hash = transaction.hash;
+    final coin = Coin.values
+        .where((candidate) => candidate.name == transaction.coin)
+        .firstOrNull;
+    if (hash == null || coin == null || !_isEvm(coin)) return null;
+    final persistedNetwork = transaction.networkId;
+    final endpoint = networkEndpoints == null
+        ? _endpoints(coin)
+        : persistedNetwork == null || persistedNetwork.isEmpty
+        ? null
+        : networkEndpoints!(coin, persistedNetwork);
+    if (endpoint == null || endpoint.isEmpty) return null;
+    try {
+      final receipt = await EvmRpc(
+        url: endpoint,
+        transport: _jsonRpc,
+      ).getTransactionReceipt(hash);
+      if (receipt == null) return null;
+      return parseEvmReceiptEvidence(
+        receipt,
+        expectedTransactionHash: hash,
+      ).actualFee;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Returns the receipt/metadata-backed fee for every supported chain.
+  /// Missing or malformed evidence is represented as unavailable; the caller
+  /// must never substitute the pre-send quote as an actual charge.
+  Future<BigInt?> actualNetworkFee(db.Transaction transaction) async {
+    final coin = Coin.values
+        .where((candidate) => candidate.name == transaction.coin)
+        .firstOrNull;
+    if (coin == null) return null;
+    if (_isEvm(coin)) return actualEvmFee(transaction);
+    final hash = transaction.hash;
+    if (hash == null || hash.isEmpty) return null;
+    final persistedNetwork = transaction.networkId;
+    final endpoint = networkEndpoints == null
+        ? _endpoints(coin)
+        : persistedNetwork == null || persistedNetwork.isEmpty
+        ? null
+        : networkEndpoints!(coin, persistedNetwork);
+    if (endpoint == null || endpoint.isEmpty) return null;
+    try {
+      return switch (coin) {
+        Coin.tron => (await TronRpc(
+          baseUrl: endpoint,
+          transport: _rest,
+        ).transactionEvidence(hash))?.feeSun,
+        Coin.solana => await SolanaRpc(
+          url: endpoint,
+          transport: _jsonRpc,
+        ).getTransactionFee(hash),
+        _ => null,
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<ChainTransactionStatus> _evm(
     Coin coin,
     String endpoint,

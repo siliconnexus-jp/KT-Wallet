@@ -455,6 +455,24 @@ class WalletController extends ChangeNotifier {
     return store.setTransactionNonceIfAbsent(walletId, id, nonce);
   }
 
+  Future<bool> updateTransactionActualFeeForWallet({
+    required String walletId,
+    required String id,
+    required String expectedHash,
+    required BigInt actualFee,
+  }) async {
+    final store = _store;
+    if (store == null || actualFee.isNegative) return false;
+    final changed = await store.updateTransactionActualFee(
+      walletId: walletId,
+      id: id,
+      expectedHash: expectedHash,
+      actualFeeRaw: actualFee.toString(),
+    );
+    if (changed) notifyListeners();
+    return changed;
+  }
+
   Future<bool> recordEvmReplacementBroadcast({
     required String originalId,
     required String replacementId,

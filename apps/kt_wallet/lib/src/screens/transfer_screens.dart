@@ -4384,6 +4384,17 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
     _checkingConfirmations = true;
     try {
       final snapshot = await service.check(draft.chain, hash);
+      if (!mounted) return snapshot.status;
+      final transaction = _transaction;
+      final actualFee = snapshot.actualFeeRaw;
+      if (transaction != null && actualFee != null) {
+        await WalletScope.of(context).updateTransactionActualFeeForWallet(
+          walletId: transaction.walletId,
+          id: transaction.id,
+          expectedHash: hash,
+          actualFee: actualFee,
+        );
+      }
       if (mounted) {
         setState(() => _confirmations = snapshot.confirmations);
       }
@@ -4650,6 +4661,7 @@ class _TxDetailScreenState extends State<TxDetailScreen>
   TxCheckOutcome? _lastCheckOutcome;
   TransactionStatusService? _statusService;
   Timer? _statusTimer;
+  final Set<String> _actualFeeLookups = <String>{};
 
   @override
   void initState() {
@@ -4692,8 +4704,40 @@ class _TxDetailScreenState extends State<TxDetailScreen>
       _lastCheckedAt = transaction.lastCheckedAt;
       _lastCheckOutcome = transaction.lastCheckOutcome;
       _scheduleStatusCheck(transaction, immediately: true);
+      if (_needsActualNetworkFee(transaction)) {
+        unawaited(_cacheActualNetworkFee(transaction));
+      }
     }
     return transaction;
+  }
+
+  bool _needsActualNetworkFee(Transaction transaction) =>
+      transaction.direction == TxDirection.outgoing &&
+      transaction.actualFeeRaw == null &&
+      transaction.hash != null &&
+      (transaction.status == TxStatus.confirmed ||
+          transaction.status == TxStatus.failed);
+
+  Future<void> _cacheActualNetworkFee(Transaction transaction) async {
+    final service = _statusService;
+    final hash = transaction.hash;
+    if (service == null || hash == null) return;
+    final lookupKey = '${transaction.walletId}:${transaction.id}:$hash';
+    if (!_actualFeeLookups.add(lookupKey)) return;
+    try {
+      final actualFee = await service.actualNetworkFee(transaction);
+      if (!mounted || actualFee == null) return;
+      final changed = await WalletScope.of(context)
+          .updateTransactionActualFeeForWallet(
+            walletId: transaction.walletId,
+            id: transaction.id,
+            expectedHash: hash,
+            actualFee: actualFee,
+          );
+      if (mounted && changed) _reload(transaction.id);
+    } finally {
+      _actualFeeLookups.remove(lookupKey);
+    }
   }
 
   void _reload([String? id]) {
@@ -4798,7 +4842,12 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     final future = _transaction;
     if (future != null) {
       future.then((transaction) {
-        if (transaction != null) _checkStatus(transaction);
+        if (transaction == null || !mounted) return;
+        if (_awaitingConfirmation(transaction)) {
+          _checkStatus(transaction);
+        } else {
+          _reload(transaction.id);
+        }
       });
     }
   }
@@ -4934,6 +4983,31 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     return '${amount.format(maxFraction: 8)} $symbol';
   }
 
+  ({String label, String value})? _feePresentation(
+    AppLocalizations l10n,
+    Transaction tx,
+  ) {
+    if (tx.direction != TxDirection.outgoing) return null;
+    if (tx.status == TxStatus.confirmed || tx.status == TxStatus.failed) {
+      final actual = tx.actualFeeRaw;
+      return (
+        label: l10n.networkFee,
+        value: actual == null ? '--' : _displayNativeRaw(actual, tx),
+      );
+    }
+    if (tx.status == TxStatus.submitted ||
+        tx.status == TxStatus.broadcast ||
+        tx.status == TxStatus.pending) {
+      final quote = tx.feeRaw;
+      if (quote == null) return null;
+      final label = tx.coin == 'solana'
+          ? l10n.networkFeeEstimate
+          : l10n.maximumNetworkFee;
+      return (label: label, value: _displayNativeRaw(quote, tx));
+    }
+    return null;
+  }
+
   String _displayAmount(BuildContext context, Transaction tx) {
     if (tx.operation == TxOperationKind.approvalRevoke) {
       return AppLocalizations.of(context).approvalRevoke;
@@ -5051,6 +5125,7 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     if (explorerUrl == null) return null;
     final token = _tokenFor(tx);
     final symbol = token?.symbol ?? _nativeSymbolForChain(chain);
+    final fee = _feePresentation(l10n, tx);
     final fields = <TransactionCardField>[
       TransactionCardField(label: l10n.networkRow, value: network.name),
       TransactionCardField(
@@ -5069,11 +5144,7 @@ class _TxDetailScreenState extends State<TxDetailScreen>
           value: tx.contract!,
           mono: true,
         ),
-      if (tx.feeRaw != null)
-        TransactionCardField(
-          label: l10n.networkFee,
-          value: _displayNativeRaw(tx.feeRaw!, tx),
-        ),
+      if (fee != null) TransactionCardField(label: fee.label, value: fee.value),
       if (tx.nonce != null)
         TransactionCardField(
           label: l10n.txNonceLabel,
@@ -5606,6 +5677,7 @@ class _TxDetailScreenState extends State<TxDetailScreen>
             ? tx.coin
             : NetworkScope.of(context).activeFor(chain).name);
     final receipt = _receiptForLive(context, tx);
+    final fee = _feePresentation(l10n, tx);
     // Replacement is offered only while the row's own network is active.
     final canReplace = _canReplace(tx) && _rowNetworkIsActive(tx);
     return KtScreen(
@@ -5701,13 +5773,9 @@ class _TxDetailScreenState extends State<TxDetailScreen>
                 value: tx.amountRaw,
                 mono: true,
               ),
-              if (tx.feeRaw != null) ...[
+              if (fee != null) ...[
                 const SizedBox(height: 14),
-                KtDetailRow(
-                  label: l10n.networkFee,
-                  value: _displayNativeRaw(tx.feeRaw!, tx),
-                  mono: true,
-                ),
+                KtDetailRow(label: fee.label, value: fee.value, mono: true),
               ],
               if (tx.nonce != null) ...[
                 const SizedBox(height: 14),

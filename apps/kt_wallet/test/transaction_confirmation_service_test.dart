@@ -57,6 +57,8 @@ const _solanaSignature =
 Map<String, Object?> _evmReceipt({
   String transactionHash = _evmHash,
   Object? status = '0x1',
+  Object? gasUsed = '0xa151',
+  Object? effectiveGasPrice = '0x29951bf',
 }) => {
   'transactionHash': transactionHash,
   'blockHash':
@@ -64,6 +66,8 @@ Map<String, Object?> _evmReceipt({
   'blockNumber': '0x64',
   'transactionIndex': '0x0',
   'status': status,
+  'gasUsed': gasUsed,
+  'effectiveGasPrice': effectiveGasPrice,
 };
 
 void main() {
@@ -96,6 +100,7 @@ void main() {
       final confirmed = await service.check(Chain.ethereum, _evmHash);
       expect(confirmed.status, TxStatus.confirmed);
       expect(confirmed.confirmations, 3);
+      expect(confirmed.actualFeeRaw, BigInt.parse('1800646949999'));
 
       json.results['eth_getTransactionReceipt'] = _evmReceipt(status: '0x0');
       json.results['eth_blockNumber'] = '0x67';
@@ -173,6 +178,7 @@ void main() {
       rest.responses['/wallet/gettransactioninfobyid'] = {
         'id': _tronHash,
         'blockNumber': 100,
+        'fee': 13845000,
         'receipt': {'result': 'SUCCESS'},
       };
       rest.responses['/wallet/getnowblock'] = {
@@ -184,6 +190,7 @@ void main() {
       final confirmed = await service.check(Chain.tron, _tronHash);
       expect(confirmed.status, TxStatus.confirmed);
       expect(confirmed.confirmations, 3);
+      expect(confirmed.actualFeeRaw, BigInt.from(13845000));
 
       rest.responses['/wallet/gettransactioninfobyid'] = {
         'id': _tronHash,
@@ -280,6 +287,14 @@ void main() {
           'context': {'slot': 100},
           'value': [null],
         },
+        'getTransaction': {
+          'slot': 99,
+          'transaction': {
+            'signatures': [_solanaSignature],
+            'message': <String, Object?>{},
+          },
+          'meta': {'fee': 5000},
+        },
       });
       final service = TransactionConfirmationService(
         endpoints: _endpoint,
@@ -305,6 +320,7 @@ void main() {
       final confirmed = await service.check(Chain.solana, _solanaSignature);
       expect(confirmed.status, TxStatus.confirmed);
       expect(confirmed.confirmations, 7);
+      expect(confirmed.actualFeeRaw, BigInt.from(5000));
       json.results['getSignatureStatuses'] = {
         'context': {'slot': 100},
         'value': [
@@ -322,7 +338,8 @@ void main() {
       final failed = await service.check(Chain.solana, _solanaSignature);
       expect(failed.status, TxStatus.failed);
       expect(failed.confirmations, 8);
-      expect(json.method, 'getSignatureStatuses');
+      expect(failed.actualFeeRaw, BigInt.from(5000));
+      expect(json.method, 'getTransaction');
     });
 
     test('processed Solana execution error is not terminal yet', () async {

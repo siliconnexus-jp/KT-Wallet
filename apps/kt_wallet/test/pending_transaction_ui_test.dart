@@ -15,6 +15,8 @@ Transaction _transaction({
   TxOperationKind operation = TxOperationKind.transfer,
   String? contract,
   String amountRaw = '1000000000000000',
+  String? feeRaw = '4200000',
+  String? actualFeeRaw,
   String? networkId = 'eth-mainnet',
   String? nonce = '7',
   String? maxPriorityFeeRaw = '100',
@@ -36,7 +38,8 @@ Transaction _transaction({
   fromAddr: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
   toAddr: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
   amountRaw: amountRaw,
-  feeRaw: '4200000',
+  feeRaw: feeRaw,
+  actualFeeRaw: actualFeeRaw,
   hash: '0x1234567890abcdef1234567890abcdef1234567890abcdef',
   status: status,
   signMode: SignMode.local,
@@ -239,6 +242,102 @@ void main() {
     expect(find.text('已确认'), findsOneWidget);
     expect(find.text('加速交易'), findsNothing);
     expect(find.text('取消交易'), findsNothing);
+  });
+
+  testWidgets('pending EVM labels its pre-send bound as maximum fee', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(_transaction(feeRaw: '4341584310463', status: TxStatus.pending)),
+    );
+
+    expect(find.text('最高网络手续费'), findsOneWidget);
+    expect(find.text('0.00000434 ETH'), findsOneWidget);
+    expect(find.text('网络手续费'), findsNothing);
+  });
+
+  testWidgets('confirmed EVM shows receipt fee instead of maximum fee', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        _transaction(
+          feeRaw: '4341584310463',
+          actualFeeRaw: '1800646949999',
+          status: TxStatus.confirmed,
+        ),
+      ),
+    );
+
+    expect(find.text('网络手续费'), findsOneWidget);
+    expect(find.text('0.0000018 ETH'), findsOneWidget);
+    expect(find.text('0.00000434 ETH'), findsNothing);
+    expect(find.text('最高网络手续费'), findsNothing);
+  });
+
+  testWidgets('confirmed EVM never presents an unverified maximum as actual', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(_transaction(feeRaw: '4341584310463', status: TxStatus.confirmed)),
+    );
+
+    expect(find.text('网络手续费'), findsOneWidget);
+    expect(find.text('0.00000434 ETH'), findsNothing);
+  });
+
+  testWidgets('confirmed TRON and Solana show receipt metadata fees', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        _transaction(
+          coin: 'tron',
+          networkId: 'tron-mainnet',
+          feeRaw: '30000000',
+          actualFeeRaw: '13845000',
+          status: TxStatus.confirmed,
+        ),
+      ),
+    );
+    expect(find.text('13.845 TRX'), findsOneWidget);
+    expect(find.text('30 TRX'), findsNothing);
+
+    await tester.pumpWidget(
+      _app(
+        _transaction(
+          coin: 'solana',
+          networkId: 'sol-mainnet',
+          feeRaw: '9000',
+          actualFeeRaw: '5000',
+          status: TxStatus.confirmed,
+        ),
+      ),
+    );
+    expect(find.text('0.000005 SOL'), findsOneWidget);
+    expect(find.text('0.000009 SOL'), findsNothing);
+  });
+
+  testWidgets('pending TRON is maximum while Solana remains an estimate', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        _transaction(
+          coin: 'tron',
+          networkId: 'tron-mainnet',
+          feeRaw: '30000000',
+        ),
+      ),
+    );
+    expect(find.text('最高网络手续费'), findsOneWidget);
+
+    await tester.pumpWidget(
+      _app(
+        _transaction(coin: 'solana', networkId: 'sol-mainnet', feeRaw: '5000'),
+      ),
+    );
+    expect(find.text('网络手续费估算'), findsOneWidget);
   });
 
   testWidgets('missing persisted EVM parameters closes replacement path', (
