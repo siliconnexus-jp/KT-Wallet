@@ -306,6 +306,48 @@ void main() {
     expect(find.text('地址格式正确 · Ethereum 网络'), findsOneWidget);
   });
 
+  testWidgets('recipient card is followed by the selected network card', (
+    tester,
+  ) async {
+    await _openGallery(tester);
+
+    final card = find.byKey(const ValueKey('transfer-network-card'));
+    expect(card, findsOneWidget);
+    expect(
+      find.descendant(of: card, matching: find.text('网络')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: card, matching: find.text('TRON')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: card,
+        matching: find.byKey(const ValueKey('transfer-network-card-icon')),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('transfer-asset')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('transfer-network-eth')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('transfer-asset-option-ethereum:native')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(of: card, matching: find.text('Ethereum')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: card, matching: find.text('TRON')),
+      findsNothing,
+    );
+  });
+
   testWidgets('custom fee screen result maps back onto the segmented tier', (
     tester,
   ) async {

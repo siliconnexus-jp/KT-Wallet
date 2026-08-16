@@ -1719,6 +1719,60 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
           ),
         ),
         KtCard(
+          key: const ValueKey('transfer-network-card'),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Semantics(
+            container: true,
+            label: '${l10n.networkRow}: ${_asset.networkName}',
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Row(
+                children: [
+                  Text(
+                    l10n.networkRow,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: WalletColors.text2,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        ChainIcon(
+                          key: const ValueKey('transfer-network-card-icon'),
+                          chain: _asset.chain,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            _asset.networkName,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.end,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: WalletColors.text,
+                            ),
+                          ),
+                        ),
+                        if (_asset.chain == Chain.tron) ...[
+                          const SizedBox(width: 8),
+                          const TronActivationBadge(),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        KtCard(
           padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
