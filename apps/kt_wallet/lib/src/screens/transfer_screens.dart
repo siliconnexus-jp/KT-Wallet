@@ -233,7 +233,7 @@ Widget _amberWarn(String text) => Container(
 /// (rejecting mispastes and wrong-network addresses) and the amount is parsed
 /// with the tested [Amount] type and checked against the available balance.
 class TransferInputScreen extends StatefulWidget {
-  const TransferInputScreen({super.key, this.asset});
+  const TransferInputScreen({super.key, this.asset, this.transferService});
 
   /// The asset to send, when the caller already knows it — arriving from a
   /// token detail page. It becomes the initial selection; the same two-stage
@@ -245,8 +245,28 @@ class TransferInputScreen extends StatefulWidget {
   /// is retained.
   final AssetRef? asset;
 
+  /// Injectable real transaction preparer. Production builds the same
+  /// prefs/network-aware service used by the confirmation page; tests inject
+  /// a deterministic quote without touching a public chain.
+  final LocalTransferService? transferService;
+
   @override
   State<TransferInputScreen> createState() => _TransferInputScreenState();
+}
+
+enum _InputFeeQuoteState {
+  waiting,
+  estimating,
+  ready,
+  failed,
+  insufficientFunds,
+  tronUnactivated,
+}
+
+class _InputFeeQuote {
+  const _InputFeeQuote({required this.fee});
+
+  final Amount fee;
 }
 
 /// A demo asset selectable on the transfer screen (mirrors the home list).
@@ -679,6 +699,13 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
   bool _recipientRiskRequested = false;
   String? _acknowledgedRiskAddress;
   int _fee = 1;
+  _InputFeeQuoteState _feeQuoteState = _InputFeeQuoteState.waiting;
+  _InputFeeQuote? _feeQuote;
+  String? _insufficientAsset;
+  final ValueNotifier<Amount?> _feeDetailsFee = ValueNotifier(null);
+  Timer? _feeQuoteDebounce;
+  Timer? _feeQuoteRefresh;
+  int _feeQuoteGeneration = 0;
 
   /// True in the real app (any live surface mounts a [MarketScope]); false
   /// only for the standalone gallery/golden rendering of this screen.
@@ -704,6 +731,19 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     if (_isLiveContext && !_recipientRiskRequested) {
       _recipientRiskRequested = true;
       unawaited(_loadRecipientRiskSources());
+    }
+    // A user can finish typing while the wallet balance is still loading.
+    // MarketScope may later turn that same amount into a valid spend without
+    // another text-field callback, so begin the quote on the first frame where
+    // the complete draft becomes available.
+    if (_isLiveContext &&
+        _feeQuoteState == _InputFeeQuoteState.waiting &&
+        _currentFeeDraft() != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _feeQuoteState == _InputFeeQuoteState.waiting) {
+          _scheduleFeeEstimate();
+        }
+      });
     }
   }
 
@@ -749,6 +789,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
         _selectedAssetKey = recentAsset.selectionKey;
       }
     });
+    _scheduleFeeEstimate();
   }
 
   /// Resolves the newest transaction that was actually submitted with a hash
@@ -803,6 +844,9 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
 
   @override
   void dispose() {
+    _feeQuoteDebounce?.cancel();
+    _feeQuoteRefresh?.cancel();
+    _feeDetailsFee.dispose();
     _addrController.dispose();
     _amountController.dispose();
     super.dispose();
@@ -843,6 +887,287 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     } on AmountError {
       return null;
     }
+  }
+
+  String get _nativeFeeSymbol =>
+      NetworkScope.maybeOf(context)?.activeFor(_asset.chain).symbol ??
+      switch (_asset.chain) {
+        Chain.polygon => 'POL',
+        Chain.avalanche => 'AVAX',
+        Chain.bnb => 'BNB',
+        Chain.tron => 'TRX',
+        Chain.solana => 'SOL',
+        _ => 'ETH',
+      };
+
+  TransferDraft? _currentFeeDraft() {
+    final address = _addrCheck.normalized;
+    final amount = _amount;
+    if (!_isLiveContext || address == null || amount == null) return null;
+    return TransferDraft(
+      symbol: _asset.symbol,
+      networkLabel: _asset.network,
+      chain: _asset.chain,
+      recipient: address,
+      amount: amount,
+      feeTier: _fee,
+      tokenContract: _asset.contract,
+      tokenProgram: _asset.tokenProgram,
+    );
+  }
+
+  /// Debounces exact transaction preparation while the user is typing. The
+  /// quote is intentionally based on the same simulation/gas/resource path as
+  /// the confirmation page; no fixed gas table or invented fiat value enters
+  /// the live UI.
+  void _scheduleFeeEstimate({bool immediate = false}) {
+    _feeQuoteDebounce?.cancel();
+    _feeQuoteRefresh?.cancel();
+    final generation = ++_feeQuoteGeneration;
+    final draft = _currentFeeDraft();
+    if (draft == null) {
+      if (_feeQuoteState != _InputFeeQuoteState.waiting || _feeQuote != null) {
+        setState(() {
+          _feeQuoteState = _InputFeeQuoteState.waiting;
+          _feeQuote = null;
+          _insufficientAsset = null;
+        });
+        _feeDetailsFee.value = null;
+      }
+      return;
+    }
+    setState(() {
+      _feeQuoteState = _InputFeeQuoteState.estimating;
+      _feeQuote = null;
+      _insufficientAsset = null;
+    });
+    _feeDetailsFee.value = null;
+    _feeQuoteDebounce = Timer(
+      immediate ? Duration.zero : const Duration(milliseconds: 500),
+      () => _estimateInputFee(generation, draft),
+    );
+  }
+
+  Future<void> _estimateInputFee(int generation, TransferDraft draft) async {
+    final wallet = WalletScope.of(context).current;
+    final network = NetworkScope.of(context).activeFor(draft.chain);
+    if (wallet == null) {
+      if (mounted && generation == _feeQuoteGeneration) {
+        setState(() => _feeQuoteState = _InputFeeQuoteState.failed);
+      }
+      return;
+    }
+    final from = addressForChain(wallet.addresses, draft.chain);
+    final prefs = AppPrefsScope.maybeOf(context);
+    final networks = NetworkScope.maybeOf(context);
+    final service =
+        widget.transferService ??
+        LocalTransferService(
+          endpoints: effectiveRpcEndpoints(prefs, networks),
+          gateway: prefsGatewayResolver(prefs),
+        );
+    try {
+      late final BigInt rawFee;
+      switch (draft.chain) {
+        case Chain.ethereum:
+        case Chain.polygon:
+        case Chain.base:
+        case Chain.arbitrum:
+        case Chain.avalanche:
+        case Chain.bnb:
+          final chainId = network.evmChainId;
+          if (chainId == null) throw StateError('missing EVM chain id');
+          final prepared = await service.prepareEvm(
+            draft: draft,
+            from: from,
+            evmChainId: chainId,
+          );
+          rawFee = prepared.maximumFee;
+        case Chain.tron:
+          final prepared = await service.prepareTron(
+            draft: draft,
+            from: from,
+            expectedNetworkIdentity: network.networkIdentity,
+          );
+          rawFee = prepared.maximumFeeSun;
+        case Chain.solana:
+          final prepared = await service.prepareSolana(
+            draft: draft,
+            from: from,
+            expectedNetworkIdentity: network.networkIdentity,
+          );
+          rawFee = prepared.networkFeeLamports;
+      }
+      if (!mounted || generation != _feeQuoteGeneration) return;
+      final quote = _InputFeeQuote(
+        fee: Amount(
+          raw: rawFee,
+          decimals: BalanceService.decimalsFor[rpcCoinForChain(draft.chain)]!,
+          symbol: network.symbol,
+        ),
+      );
+      setState(() {
+        _feeQuote = quote;
+        _feeQuoteState = _InputFeeQuoteState.ready;
+        _insufficientAsset = null;
+      });
+      _feeDetailsFee.value = quote.fee;
+      _feeQuoteRefresh = Timer(TransferSession.quoteValidity, () {
+        if (mounted && generation == _feeQuoteGeneration) {
+          _scheduleFeeEstimate(immediate: true);
+        }
+      });
+    } on TronAccountNotActivated {
+      if (!mounted || generation != _feeQuoteGeneration) return;
+      setState(() => _feeQuoteState = _InputFeeQuoteState.tronUnactivated);
+      _feeDetailsFee.value = null;
+    } on TransferInsufficientFunds catch (error) {
+      if (!mounted || generation != _feeQuoteGeneration) return;
+      final rawFee = error.maximumNetworkFeeRaw;
+      final quote = rawFee == null
+          ? null
+          : _InputFeeQuote(
+              fee: Amount(
+                raw: rawFee,
+                decimals:
+                    BalanceService.decimalsFor[rpcCoinForChain(draft.chain)]!,
+                symbol: network.symbol,
+              ),
+            );
+      setState(() {
+        _feeQuote = quote;
+        _feeQuoteState = _InputFeeQuoteState.insufficientFunds;
+        _insufficientAsset = error.asset;
+      });
+      _feeDetailsFee.value = quote?.fee;
+    } catch (_) {
+      if (!mounted || generation != _feeQuoteGeneration) return;
+      setState(() => _feeQuoteState = _InputFeeQuoteState.failed);
+      _feeDetailsFee.value = null;
+    }
+  }
+
+  Amount? get _displayedFee => _isLiveContext
+      ? _feeQuote?.fee
+      : Amount(raw: BigInt.from(13700000), decimals: 6, symbol: 'TRX');
+
+  String _feeFiatLabel(AppLocalizations l10n) {
+    if (!_isLiveContext) return r'≈ $1.90';
+    switch (_feeQuoteState) {
+      case _InputFeeQuoteState.waiting:
+        return '--';
+      case _InputFeeQuoteState.estimating:
+        return l10n.feeEstimating;
+      case _InputFeeQuoteState.failed:
+        return l10n.feeUnavailable;
+      case _InputFeeQuoteState.insufficientFunds:
+        return _formattedFeeFiat();
+      case _InputFeeQuoteState.tronUnactivated:
+        return l10n.tronUnactivated;
+      case _InputFeeQuoteState.ready:
+        return _formattedFeeFiat();
+    }
+  }
+
+  String _formattedFeeFiat() {
+    final fee = _feeQuote?.fee;
+    final fiat = _fiatText(
+      context,
+      _fiatValue(
+        fee,
+        _unitPriceUsd(
+          context,
+          chain: _asset.chain,
+          symbol: fee?.symbol ?? _nativeFeeSymbol,
+          tokenContract: null,
+        ),
+      ),
+    );
+    return fiat == '--' ? fiat : '≈ $fiat';
+  }
+
+  bool get _feeQuoteHasError =>
+      _feeQuoteState == _InputFeeQuoteState.failed ||
+      _feeQuoteState == _InputFeeQuoteState.tronUnactivated;
+
+  Future<void> _showFeeDetails() async {
+    final l10n = AppLocalizations.of(context);
+    final symbol = _displayedFee?.symbol ?? _nativeFeeSymbol;
+    _feeDetailsFee.value = _displayedFee;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: WalletColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: Column(
+            key: const ValueKey('transfer-network-fee-details'),
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: WalletColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                l10n.networkFeeEstimate,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: WalletColors.text,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ValueListenableBuilder<Amount?>(
+                valueListenable: _feeDetailsFee,
+                builder: (context, fee, _) => Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 16,
+                  ),
+                  decoration: BoxDecoration(
+                    color: WalletColors.bg,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          fee == null ? '-- $symbol' : '$fee',
+                          key: const ValueKey(
+                            'transfer-network-fee-native-value',
+                          ),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: WalletColors.text,
+                          ),
+                        ),
+                      ),
+                      TokenIcon(
+                        symbol: symbol,
+                        size: 28,
+                        fallbackColor: _chainDot(_asset.chain),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// Strips leading zeros as the user types: tapping Max writes `0`, and the
@@ -919,6 +1244,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
         _acknowledgedRiskAddress = null;
         _addrController.text = text;
       });
+      _scheduleFeeEstimate();
     }
   }
 
@@ -931,6 +1257,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
         _acknowledgedRiskAddress = null;
         _addrController.text = scanned;
       });
+      _scheduleFeeEstimate();
     }
   }
 
@@ -1118,6 +1445,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
         _acknowledgedRiskAddress = null;
         _addrController.text = selected.address;
       });
+      _scheduleFeeEstimate();
     }
   }
 
@@ -1135,14 +1463,6 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
       _ => false,
     };
     return isEvm ? a.toLowerCase() == b.toLowerCase() : a == b;
-  }
-
-  /// Opens the custom fee screen and maps its result back onto the segmented
-  /// tier selection. Reachable ONLY from the standalone gallery rendering —
-  /// see the entry point in [build] and [FeeSelectScreen]'s own doc.
-  Future<void> _customFee() async {
-    final tier = await context.push<int>('/fee');
-    if (tier != null && mounted) setState(() => _fee = tier);
   }
 
   /// Two-stage transfer selector: a network must be chosen before one of the
@@ -1333,6 +1653,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                               _selectedContact = null;
                               _acknowledgedRiskAddress = null;
                             });
+                            _scheduleFeeEstimate();
                             Navigator.of(ctx).pop();
                           },
                         );
@@ -1351,7 +1672,6 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final largeText = MediaQuery.textScalerOf(context).scale(13) >= 20;
     final isHot = WalletScope.of(context).current is HotWallet;
     final addrCheck = _addrCheck;
     final selectedContact = _visibleContact;
@@ -1485,12 +1805,15 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                   Expanded(
                     child: TextField(
                       controller: _addrController,
-                      onChanged: (value) => setState(() {
-                        _acknowledgedRiskAddress = null;
-                        if (_selectedContact?.address != value.trim()) {
-                          _selectedContact = null;
-                        }
-                      }),
+                      onChanged: (value) {
+                        setState(() {
+                          _acknowledgedRiskAddress = null;
+                          if (_selectedContact?.address != value.trim()) {
+                            _selectedContact = null;
+                          }
+                        });
+                        _scheduleFeeEstimate();
+                      },
                       autocorrect: false,
                       enableSuggestions: false,
                       maxLines: null,
@@ -1649,7 +1972,11 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        addrCheck.reason ?? l10n.addressInvalid,
+                        // AddressValidation.reason is an English developer
+                        // diagnostic from packages/chains (for example,
+                        // "not a 20-byte hex address"). It must never leak
+                        // into localized consumer UI.
+                        l10n.addressInvalid,
                         style: const TextStyle(
                           fontSize: 12,
                           color: WalletColors.red,
@@ -1793,9 +2120,12 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                     label: l10n.max,
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTap: () => setState(
-                        () => _amountController.text = _asset.available,
-                      ),
+                      onTap: () {
+                        setState(
+                          () => _amountController.text = _asset.available,
+                        );
+                        _scheduleFeeEstimate();
+                      },
                       child: SizedBox(
                         width: 48,
                         height: 48,
@@ -1833,7 +2163,10 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                   Expanded(
                     child: TextField(
                       controller: _amountController,
-                      onChanged: (_) => setState(_normalizeAmount),
+                      onChanged: (_) {
+                        setState(_normalizeAmount);
+                        _scheduleFeeEstimate();
+                      },
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
@@ -1904,68 +2237,103 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
           ),
         ),
         KtCard(
+          key: const ValueKey('transfer-network-fee-card'),
           padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Builder(
-                builder: (context) {
-                  final feeLabel = Text(
-                    l10n.networkFee,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: WalletColors.text2,
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 62),
+                child: Row(
+                  children: [
+                    Text(
+                      l10n.networkFee,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: WalletColors.text2,
+                      ),
                     ),
-                  );
-                  // W31 serves a hardcoded TRON tier list with invented fiat
-                  // to every chain. Rather than lie about the fee a live
-                  // transfer will pay, it is unreachable outside the gallery:
-                  // the segmented control below selects the same tier index,
-                  // and that index resolves to the chain's REAL fee tier
-                  // (ChainParamsService.tierFor) on the confirm screen and in
-                  // the signed transaction.
-                  final customFee = Semantics(
-                    button: true,
-                    label: l10n.feeCustom,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: _customFee,
-                      child: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Center(
-                          child: Text(
-                            l10n.feeCustom,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: WalletColors.accent,
-                            ),
-                          ),
+                    Semantics(
+                      button: true,
+                      label: l10n.networkFeeEstimate,
+                      child: IconButton(
+                        key: const ValueKey('transfer-network-fee-info'),
+                        tooltip: l10n.networkFeeEstimate,
+                        onPressed: _showFeeDetails,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 44,
+                          height: 44,
+                        ),
+                        icon: const Icon(
+                          Icons.info_outline,
+                          size: 17,
+                          color: WalletColors.text3,
                         ),
                       ),
                     ),
-                  );
-                  final children = [feeLabel, if (!_isLiveContext) customFee];
-                  return largeText
-                      ? Wrap(
-                          alignment: WrapAlignment.spaceBetween,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 12,
-                          runSpacing: 4,
-                          children: children,
-                        )
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: children,
-                        );
-                },
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            _feeFiatLabel(l10n),
+                            key: const ValueKey('transfer-network-fee-fiat'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.end,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: _feeQuoteHasError
+                                  ? WalletColors.red
+                                  : WalletColors.text2,
+                            ),
+                          ),
+                          if (_feeQuoteState ==
+                              _InputFeeQuoteState.insufficientFunds) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              l10n.insufficientAssetBalance(
+                                _insufficientAsset ?? _nativeFeeSymbol,
+                              ),
+                              key: const ValueKey(
+                                'transfer-network-fee-warning',
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.end,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: WalletColors.red,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    TokenIcon(
+                      key: const ValueKey('transfer-network-fee-icon'),
+                      symbol: _nativeFeeSymbol,
+                      size: 24,
+                      fallbackColor: _chainDot(_asset.chain),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               KtSegmented(
                 options: [l10n.feeSlow, l10n.feeStandard, l10n.feeFast],
                 selected: _fee,
-                onChanged: (i) => setState(() => _fee = i),
+                onChanged: (i) {
+                  setState(() => _fee = i);
+                  _scheduleFeeEstimate();
+                },
               ),
             ],
           ),
@@ -1978,13 +2346,11 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
 /// W31 手续费选择 — DESIGN / GALLERY ONLY.
 ///
 /// The tier list below is a hardcoded TRON schedule with invented fiat. It is
-/// deliberately NOT reachable from a live transfer (the 自定义 entry point on
-/// the send screen is hidden whenever a market scope is mounted): showing a
-/// TRON tier list to someone sending ETH, with a fee they will not pay, is
-/// worse than not offering the screen. Live tier selection happens on the
-/// segmented slow/standard/fast control, whose index resolves to the chain's
-/// REAL fee tier via [EvmChainParams.tierFor]. Wiring per-chain live tiers
-/// here is deferred; until then this screen only backs the gallery/goldens.
+/// deliberately NOT linked from a transfer: showing a TRON tier list to
+/// someone sending ETH, with a fee they will not pay, is worse than not
+/// offering the screen. Live tier selection and the exact estimated maximum
+/// fee now share the two-row fee card on [TransferInputScreen]. This route only
+/// remains as a standalone gallery/golden specimen.
 class FeeSelectScreen extends StatefulWidget {
   const FeeSelectScreen({super.key});
   @override

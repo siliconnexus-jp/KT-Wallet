@@ -587,6 +587,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get insufficientBalance => '残高不足';
 
   @override
+  String insufficientAssetBalance(String symbol) {
+    return '残高不足です。$symbol が十分か確認してください';
+  }
+
+  @override
   String get amountFormatInvalid => '金額の形式が正しくありません';
 
   @override
@@ -656,6 +661,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get maximumNetworkFee => 'ネットワーク手数料の上限';
+
+  @override
+  String get networkFeeEstimate => 'ネットワーク手数料の見積もり';
 
   @override
   String upToNegativeAmount(String amount) {

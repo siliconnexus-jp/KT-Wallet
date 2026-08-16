@@ -582,6 +582,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get insufficientBalance => '余额不足';
 
   @override
+  String insufficientAssetBalance(String symbol) {
+    return '余额不足，请检查 $symbol 是否足够';
+  }
+
+  @override
   String get amountFormatInvalid => '金额格式不正确';
 
   @override
@@ -611,7 +616,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get addressInvalid => '地址无效';
+  String get addressInvalid => '地址不合法';
 
   @override
   String recipientLookalikeWarning(String label) {
@@ -651,6 +656,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get maximumNetworkFee => '最高网络手续费';
+
+  @override
+  String get networkFeeEstimate => '网络手续费估算';
 
   @override
   String upToNegativeAmount(String amount) {

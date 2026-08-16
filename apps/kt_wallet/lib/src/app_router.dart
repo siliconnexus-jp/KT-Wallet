@@ -162,6 +162,7 @@ GoRouter buildRouter({
               ),
               '/transfer' => (c, s) => TransferInputScreen(
                 asset: s.extra is AssetRef ? s.extra as AssetRef : null,
+                transferService: transferService,
               ),
               '/confirm-watch' => (c, s) => TransferConfirmScreen(
                 isHot: false,

@@ -286,6 +286,14 @@
   "deleteWalletDesc": "需身份验证，删除前将再次确认备份状态",
   "amountMustBePositive": "金额需大于 0",
   "insufficientBalance": "余额不足",
+  "insufficientAssetBalance": "余额不足，请检查 {symbol} 是否足够",
+  "@insufficientAssetBalance": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
   "amountFormatInvalid": "金额格式不正确",
   "recipientAddress": "收款地址",
   "pasteOrEnterAddress": "粘贴或输入地址",
@@ -321,7 +329,7 @@
       }
     }
   },
-  "addressInvalid": "地址无效",
+  "addressInvalid": "地址不合法",
   "recipientLookalikeWarning": "此地址与“{label}”首尾高度相似，但并不相同，可能是剪贴板地址投毒。",
   "@recipientLookalikeWarning": {
     "placeholders": {
@@ -357,6 +365,7 @@
     }
   },
   "maximumNetworkFee": "最高网络手续费",
+  "networkFeeEstimate": "网络手续费估算",
   "upToNegativeAmount": "最多 -{amount}",
   "@upToNegativeAmount": {
     "placeholders": {

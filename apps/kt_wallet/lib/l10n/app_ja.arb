@@ -214,6 +214,14 @@
   "deleteWalletDesc": "認証が必要です。削除前にバックアップ状態を再確認します",
   "amountMustBePositive": "金額は0より大きくしてください",
   "insufficientBalance": "残高不足",
+  "insufficientAssetBalance": "残高不足です。{symbol} が十分か確認してください",
+  "@insufficientAssetBalance": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
   "amountFormatInvalid": "金額の形式が正しくありません",
   "recipientAddress": "受取アドレス",
   "pasteOrEnterAddress": "アドレスを貼り付けまたは入力",
@@ -240,6 +248,7 @@
   "expectedAssetChanges": "予想される資産変動",
   "outgoingAsset": "{symbol} を送信",
   "maximumNetworkFee": "ネットワーク手数料の上限",
+  "networkFeeEstimate": "ネットワーク手数料の見積もり",
   "upToNegativeAmount": "最大 -{amount}",
   "solanaRentReserve": "回収可能なアカウント準備金",
   "feeCustom": "カスタム",

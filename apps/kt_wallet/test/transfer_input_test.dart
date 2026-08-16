@@ -292,6 +292,8 @@ void main() {
 
     // The TRON address is now a wrong-network paste for Ethereum.
     expect(find.text('地址格式正确 · TRON 网络'), findsNothing);
+    expect(find.text('地址不合法'), findsOneWidget);
+    expect(find.text('not a 20-byte hex address'), findsNothing);
     expect(_nextEnabled(tester), isFalse);
     // Symbol and balance follow the selected asset.
     expect(find.text('可用 0.0842 ETH'), findsOneWidget);
@@ -348,28 +350,31 @@ void main() {
     );
   });
 
-  testWidgets('custom fee screen result maps back onto the segmented tier', (
+  testWidgets('fee card stays two rows and reveals native units from info', (
     tester,
   ) async {
-    // Gallery-only affordance (see W31's doc): it serves a hardcoded TRON tier
-    // list, so it is hidden on every live path.
     await _openGallery(tester);
     expect(tester.widget<KtSegmented>(find.byType(KtSegmented)).selected, 1);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('transfer-network-fee-fiat')))
+          .data,
+      r'≈ $1.90',
+    );
+    expect(
+      find.byKey(const ValueKey('transfer-network-fee-icon')),
+      findsOneWidget,
+    );
 
-    // The accessibility-sized action may sit below the 600 px default widget
-    // test viewport. Exercise the same scroll-to-action behavior a user gets
-    // instead of sending a pointer event to an off-screen render object.
-    await tester.ensureVisible(find.text('自定义'));
+    final info = find.byKey(const ValueKey('transfer-network-fee-info'));
+    await tester.ensureVisible(info);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('自定义'));
+    await tester.tap(info);
     await tester.pumpAndSettle();
-    expect(find.text('确认手续费'), findsOneWidget);
-
-    // Pick the fast tier and confirm; the transfer screen mirrors it.
-    await tester.tap(find.text('快'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('确认手续费'));
-    await tester.pumpAndSettle();
-    expect(tester.widget<KtSegmented>(find.byType(KtSegmented)).selected, 2);
+    expect(
+      find.byKey(const ValueKey('transfer-network-fee-details')),
+      findsOneWidget,
+    );
+    expect(find.text('13.7 TRX'), findsOneWidget);
   });
 }

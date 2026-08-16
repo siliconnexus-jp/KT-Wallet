@@ -1162,6 +1162,12 @@ abstract class AppLocalizations {
   /// **'余额不足'**
   String get insufficientBalance;
 
+  /// No description provided for @insufficientAssetBalance.
+  ///
+  /// In zh, this message translates to:
+  /// **'余额不足，请检查 {symbol} 是否足够'**
+  String insufficientAssetBalance(String symbol);
+
   /// No description provided for @amountFormatInvalid.
   ///
   /// In zh, this message translates to:
@@ -1207,7 +1213,7 @@ abstract class AppLocalizations {
   /// No description provided for @addressInvalid.
   ///
   /// In zh, this message translates to:
-  /// **'地址无效'**
+  /// **'地址不合法'**
   String get addressInvalid;
 
   /// No description provided for @recipientLookalikeWarning.
@@ -1275,6 +1281,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'最高网络手续费'**
   String get maximumNetworkFee;
+
+  /// No description provided for @networkFeeEstimate.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络手续费估算'**
+  String get networkFeeEstimate;
 
   /// No description provided for @upToNegativeAmount.
   ///

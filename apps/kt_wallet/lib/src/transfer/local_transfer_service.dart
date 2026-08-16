@@ -61,10 +61,16 @@ class EvmPreflightFailed extends LocalTransferException {
 }
 
 class TransferInsufficientFunds extends LocalTransferException {
-  const TransferInsufficientFunds(this.asset)
+  const TransferInsufficientFunds(this.asset, {this.maximumNetworkFeeRaw})
     : super('Insufficient $asset balance for amount and maximum network fee');
 
   final String asset;
+
+  /// The already-estimated maximum fee, when preparation got far enough to
+  /// produce one. The transfer is still blocked, but callers may display the
+  /// real quote next to the insufficient-balance warning instead of replacing
+  /// it with an error label.
+  final BigInt? maximumNetworkFeeRaw;
 }
 
 /// A TRC-20 mapping may contain funds before the owner address exists as a
@@ -76,7 +82,7 @@ class TronAccountNotActivated extends LocalTransferException {
 }
 
 class EvmInsufficientFunds extends TransferInsufficientFunds {
-  const EvmInsufficientFunds(super.asset);
+  const EvmInsufficientFunds(super.asset, {super.maximumNetworkFeeRaw});
 }
 
 class NonEvmTransferResult {
@@ -312,11 +318,14 @@ class LocalTransferService {
         Chain.avalanche => 'AVAX',
         Chain.bnb => 'BNB',
         _ => 'ETH',
-      });
+      }, maximumNetworkFeeRaw: maximumFee);
     }
     if (draft.operation == TxOperation.tokenTransfer &&
         (balances.token == null || balances.token! < draft.amount.raw)) {
-      throw EvmInsufficientFunds(draft.symbol);
+      throw EvmInsufficientFunds(
+        draft.symbol,
+        maximumNetworkFeeRaw: maximumFee,
+      );
     }
     final unsigned = rawTxFor(
       draft,
@@ -512,7 +521,7 @@ class LocalTransferService {
         Chain.avalanche => 'AVAX',
         Chain.bnb => 'BNB',
         _ => 'ETH',
-      });
+      }, maximumNetworkFeeRaw: gasLimit * maxFee);
     }
     final tx = Eip1559Tx(
       chainId: BigInt.from(evmChainId),
@@ -649,11 +658,14 @@ class LocalTransferService {
     final maximumFee = bandwidth.maximumFeeSun + BigInt.from(feeLimit ?? 0);
     final nativeSpend = tokenContract == null ? draft.amount.raw : BigInt.zero;
     if (balances.trx < nativeSpend + maximumFee) {
-      throw const TransferInsufficientFunds('TRX');
+      throw TransferInsufficientFunds('TRX', maximumNetworkFeeRaw: maximumFee);
     }
     if (tokenContract != null &&
         (balances.token == null || balances.token! < draft.amount.raw)) {
-      throw TransferInsufficientFunds(draft.symbol);
+      throw TransferInsufficientFunds(
+        draft.symbol,
+        maximumNetworkFeeRaw: maximumFee,
+      );
     }
     return PreparedTronTransfer(
       from: from,
@@ -817,7 +829,7 @@ class LocalTransferService {
         ? draft.amount.raw
         : BigInt.zero;
     if (solBalance < nativeSpend + fee) {
-      throw const TransferInsufficientFunds('SOL');
+      throw TransferInsufficientFunds('SOL', maximumNetworkFeeRaw: fee);
     }
     final simulation = await rpc.simulateMessage(
       serialized,

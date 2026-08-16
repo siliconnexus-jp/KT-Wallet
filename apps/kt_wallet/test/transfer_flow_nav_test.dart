@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:chains/chains.dart' show Amount;
@@ -50,9 +51,11 @@ class _FundedTokens extends TokenBalanceService {
       };
 }
 
-class _NoPrices extends PriceService {
+class _TestPrices extends PriceService {
   @override
-  Future<Map<Coin, double>?> fetchUsdPrices() async => null;
+  Future<Map<Coin, double>?> fetchUsdPrices() async => {
+    for (final coin in Coin.values) coin: coin == Coin.tron ? 0.2 : 1.0,
+  };
 }
 
 class _TronQuoteService extends LocalTransferService {
@@ -73,6 +76,47 @@ class _TronQuoteService extends LocalTransferService {
         .millisecondsSinceEpoch,
     rawTx: Uint8List.fromList(const [1, 2, 3]),
   );
+}
+
+class _InsufficientTronQuoteService extends LocalTransferService {
+  @override
+  Future<PreparedTronTransfer> prepareTron({
+    required TransferDraft draft,
+    required String from,
+    required String? expectedNetworkIdentity,
+  }) async => throw TransferInsufficientFunds(
+    'TRX',
+    maximumNetworkFeeRaw: BigInt.from(1250000),
+  );
+}
+
+class _DelayedTronQuoteService extends LocalTransferService {
+  final Completer<PreparedTronTransfer> _quote =
+      Completer<PreparedTronTransfer>();
+
+  @override
+  Future<PreparedTronTransfer> prepareTron({
+    required TransferDraft draft,
+    required String from,
+    required String? expectedNetworkIdentity,
+  }) => _quote.future;
+
+  void completeQuote() {
+    _quote.complete(
+      PreparedTronTransfer(
+        from: 'TFrom',
+        recipient: 'TRecipient',
+        amountRaw: BigInt.one,
+        tokenContract: null,
+        maximumFeeSun: BigInt.from(1250000),
+        referenceBlockHeight: 42,
+        expiresAt: DateTime.now()
+            .add(const Duration(minutes: 10))
+            .millisecondsSinceEpoch,
+        rawTx: Uint8List.fromList(const [1, 2, 3]),
+      ),
+    );
+  }
 }
 
 ChainAddresses _addresses(String seed) => ChainAddresses(
@@ -113,7 +157,11 @@ WalletController _wallets() => WalletController(
 
 /// Walks the full transfer navigation, proving the screens are wired into one
 /// flow driven by the current wallet type.
-Future<void> _open(WidgetTester tester, String galleryEntry) async {
+Future<void> _open(
+  WidgetTester tester,
+  String galleryEntry, {
+  LocalTransferService? transferService,
+}) async {
   tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
   addTearDown(tester.platformDispatcher.clearLocalesTestValue);
   final wallets = _wallets();
@@ -121,14 +169,14 @@ Future<void> _open(WidgetTester tester, String galleryEntry) async {
     wallets: wallets,
     balances: _FundedBalances(),
     tokens: _FundedTokens(),
-    prices: _NoPrices(),
+    prices: _TestPrices(),
   );
   addTearDown(market.dispose);
   await tester.pumpWidget(
     KtWalletApp(
       controller: wallets,
       marketController: market,
-      transferService: _TronQuoteService(),
+      transferService: transferService ?? _TronQuoteService(),
       galleryMode: true,
     ),
   );
@@ -138,7 +186,10 @@ Future<void> _open(WidgetTester tester, String galleryEntry) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> _openHome(WidgetTester tester) => _open(tester, 'W1/W20 首页');
+Future<void> _openHome(
+  WidgetTester tester, {
+  LocalTransferService? transferService,
+}) => _open(tester, 'W1/W20 首页', transferService: transferService);
 
 /// The send screen no longer pre-fills anything on a live path, so every flow
 /// test types the transfer it wants to walk through. Address is a real,
@@ -147,6 +198,7 @@ Future<void> _enterTransfer(WidgetTester tester) async {
   final fields = find.byType(TextField);
   await tester.enterText(fields.at(0), 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVbAgQs8D');
   await tester.enterText(fields.at(1), '12.5');
+  await tester.pump(const Duration(milliseconds: 600));
   await tester.pumpAndSettle();
 }
 
@@ -190,6 +242,25 @@ void main() {
     expect(find.text('USDT'), findsWidgets); // transfer input
     await _enterTransfer(tester);
 
+    // 1.25 TRX maximum fee × the injected $0.20 live price. The compact card
+    // keeps native units behind the info control instead of adding a third
+    // visible row.
+    expect(find.text(r'≈ $0.25'), findsOneWidget);
+    final feeInfo = find.byKey(const ValueKey('transfer-network-fee-info'));
+    await tester.ensureVisible(feeInfo);
+    await tester.pumpAndSettle();
+    await tester.tap(feeInfo);
+    await tester.pumpAndSettle();
+    expect(find.text('网络手续费估算'), findsOneWidget);
+    expect(find.textContaining('费用支付给网络'), findsNothing);
+    expect(find.text('1.25 TRX'), findsOneWidget);
+    Navigator.of(
+      tester.element(
+        find.byKey(const ValueKey('transfer-network-fee-details')),
+      ),
+    ).pop();
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('下一步'));
     await tester.pumpAndSettle();
     // Hot confirm shows 确认转账.
@@ -206,6 +277,56 @@ void main() {
     await tester.tap(find.text('返回首页'));
     await tester.pumpAndSettle();
     expect(find.text('日常钱包'), findsOneWidget); // back on home
+  });
+
+  testWidgets('insufficient balance keeps the real fee estimate and warns', (
+    tester,
+  ) async {
+    await _openHome(tester, transferService: _InsufficientTronQuoteService());
+    await tester.tap(find.text('转账'));
+    await tester.pumpAndSettle();
+    await _enterTransfer(tester);
+
+    final feeCard = find.byKey(const ValueKey('transfer-network-fee-card'));
+    expect(
+      find.descendant(of: feeCard, matching: find.text(r'≈ $0.25')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: feeCard, matching: find.text('余额不足，请检查 TRX 是否足够')),
+      findsOneWidget,
+    );
+
+    final feeInfo = find.byKey(const ValueKey('transfer-network-fee-info'));
+    await tester.ensureVisible(feeInfo);
+    await tester.tap(feeInfo);
+    await tester.pumpAndSettle();
+    expect(find.text('1.25 TRX'), findsOneWidget);
+  });
+
+  testWidgets('open fee details refreshes when an in-flight quote arrives', (
+    tester,
+  ) async {
+    final service = _DelayedTronQuoteService();
+    await _openHome(tester, transferService: service);
+    await tester.tap(find.text('转账'));
+    await tester.pumpAndSettle();
+
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'TQm9xPa2Wc8hJdU5eRnT6yGb1sVbAgQs8D');
+    await tester.enterText(fields.at(1), '1');
+    await tester.pump(const Duration(milliseconds: 550));
+
+    final feeInfo = find.byKey(const ValueKey('transfer-network-fee-info'));
+    await tester.ensureVisible(feeInfo);
+    await tester.tap(feeInfo);
+    await tester.pumpAndSettle();
+    expect(find.text('-- TRX'), findsOneWidget);
+
+    service.completeQuote();
+    await tester.pumpAndSettle();
+    expect(find.text('-- TRX'), findsNothing);
+    expect(find.text('1.25 TRX'), findsOneWidget);
   });
 
   testWidgets('watch wallet: transfer confirm generates a sign-request QR', (

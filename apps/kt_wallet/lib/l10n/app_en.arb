@@ -214,6 +214,14 @@
   "deleteWalletDesc": "Requires authentication; backup status is reconfirmed before deletion",
   "amountMustBePositive": "Amount must be greater than 0",
   "insufficientBalance": "Insufficient balance",
+  "insufficientAssetBalance": "Insufficient balance. Check whether you have enough {symbol}.",
+  "@insufficientAssetBalance": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
   "amountFormatInvalid": "Invalid amount format",
   "recipientAddress": "Recipient address",
   "pasteOrEnterAddress": "Paste or enter address",
@@ -247,6 +255,7 @@
     }
   },
   "maximumNetworkFee": "Maximum network fee",
+  "networkFeeEstimate": "Network fee estimate",
   "upToNegativeAmount": "Up to -{amount}",
   "@upToNegativeAmount": {
     "placeholders": {

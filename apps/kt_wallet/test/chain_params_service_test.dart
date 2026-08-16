@@ -493,11 +493,13 @@ void main() {
           evmChainId: 1,
         ),
         throwsA(
-          isA<EvmInsufficientFunds>().having(
-            (error) => error.asset,
-            'asset',
-            'ETH',
-          ),
+          isA<EvmInsufficientFunds>()
+              .having((error) => error.asset, 'asset', 'ETH')
+              .having(
+                (error) => error.maximumNetworkFeeRaw,
+                'maximum network fee',
+                BigInt.from(21000) * tier.maxFeePerGas,
+              ),
         ),
       );
     });
@@ -588,11 +590,13 @@ void main() {
           evmChainId: 1,
         ),
         throwsA(
-          isA<EvmInsufficientFunds>().having(
-            (error) => error.asset,
-            'asset',
-            'USDT',
-          ),
+          isA<EvmInsufficientFunds>()
+              .having((error) => error.asset, 'asset', 'USDT')
+              .having(
+                (error) => error.maximumNetworkFeeRaw,
+                'maximum network fee',
+                BigInt.from(21000) * tier.maxFeePerGas,
+              ),
         ),
       );
     });
