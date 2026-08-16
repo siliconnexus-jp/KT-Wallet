@@ -51,6 +51,10 @@ void main() {
                 symbol: 'ETH',
               ),
             ),
+            Coin.tron: BalanceResult.ok(
+              Amount(raw: BigInt.from(10000000), decimals: 6, symbol: 'TRX'),
+              tronActivation: TronActivationStatus.activated,
+            ),
           },
           tokens: {
             'usdc-eth': BalanceResult.ok(
@@ -72,6 +76,10 @@ void main() {
       expect(restored, isNotNull);
       expect(restored!.savedAt, savedAt);
       expect(restored.native[Coin.eth]!.amount!.format(), '1.23');
+      expect(
+        restored.native[Coin.tron]!.tronActivation,
+        TronActivationStatus.activated,
+      );
       expect(restored.tokens['usdc-eth']!.amount!.format(), '2.5');
       expect(restored.nativePrices[Coin.eth], 3200);
       expect(restored.tokenChanges['USDC'], -0.01);
@@ -87,8 +95,12 @@ void main() {
                 ))!,
               )
               as Map<String, dynamic>;
+      expect(current['v'], 3);
       current['v'] = 1;
       current.remove('fiatPerUsd');
+      ((current['native'] as Map<String, dynamic>)['tron']
+              as Map<String, dynamic>)
+          .remove('tronActivation');
       await controller.putWalletSetting(
         wallet.id,
         'market.snapshot.v1',
@@ -134,6 +146,10 @@ void main() {
             Coin.eth: BalanceResult.ok(
               Amount(raw: BigInt.one, decimals: 18, symbol: 'ETH'),
             ),
+            Coin.tron: BalanceResult.ok(
+              Amount(raw: BigInt.one, decimals: 6, symbol: 'TRX'),
+              tronActivation: TronActivationStatus.activated,
+            ),
           },
           tokens: const {},
           nativePrices: const {Coin.eth: 3200},
@@ -164,6 +180,14 @@ void main() {
         ),
         valid.replaceFirst('"raw":"1"', '"raw":"1","raw":"2"'),
         valid.replaceFirst('"raw":"1"', '"raw":"1","memo":"ignored"'),
+        valid.replaceFirst(
+          '"tronActivation":"activated"',
+          '"tronActivation":"checking"',
+        ),
+        valid.replaceFirst(
+          '"tronActivation":"activated"',
+          '"tronActivation":"activated","memo":"ignored"',
+        ),
         '${valid.substring(0, valid.length - 1)},"memo":"ignored"}',
         jsonEncode(negativePrice),
         jsonEncode(unknownCoin),

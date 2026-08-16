@@ -66,6 +66,7 @@ class WalletMarketSnapshotStore implements MarketSnapshotStore {
   };
   static const _topV2 = {..._topV1, 'fiatPerUsd'};
   static const _amountMembers = {'raw', 'decimals', 'symbol'};
+  static const _tronAmountMembers = {..._amountMembers, 'tronActivation'};
   static const _fiatSymbols = {'USD', 'CNY', 'JPY'};
   final WalletController _wallets;
 
@@ -80,7 +81,7 @@ class WalletMarketSnapshotStore implements MarketSnapshotStore {
       );
       if (decoded is! Map) return null;
       final rawVersion = decoded['v'];
-      if (rawVersion != 1 && rawVersion != 2) return null;
+      if (rawVersion is! int || rawVersion < 1 || rawVersion > 3) return null;
       final body = requireExactSnapshotObject(
         decoded,
         members: rawVersion == 1 ? _topV1 : _topV2,
@@ -88,12 +89,12 @@ class WalletMarketSnapshotStore implements MarketSnapshotStore {
       if (requireBoundedSnapshotText(body['scope'], maxChars: 4096) != scope) {
         return null;
       }
-      final version = body['v'];
+      final version = rawVersion;
       final savedAtMs = requireSnapshotEpochMillis(body['savedAtMs']);
       return MarketSnapshot(
         scope: scope,
         savedAt: DateTime.fromMillisecondsSinceEpoch(savedAtMs),
-        native: _decodeNative(body['native']),
+        native: _decodeNative(body['native'], version: version),
         tokens: _decodeTokens(body['tokens']),
         nativePrices: _decodeCoinDoubles(body['nativePrices'], positive: true),
         tokenPrices: _decodeStringDoubles(body['tokenPrices'], positive: true),
@@ -113,13 +114,18 @@ class WalletMarketSnapshotStore implements MarketSnapshotStore {
   @override
   Future<void> save(String walletId, MarketSnapshot snapshot) async {
     final body = <String, Object?>{
-      'v': 2,
+      'v': 3,
       'scope': snapshot.scope,
       'savedAtMs': snapshot.savedAt.millisecondsSinceEpoch,
       'native': {
         for (final entry in snapshot.native.entries)
           if (_amount(entry.value) case final amount?)
-            entry.key.name: _encodeAmount(amount),
+            entry.key.name: _encodeAmount(
+              amount,
+              tronActivation: entry.key == Coin.tron
+                  ? _snapshotActivation(entry.value.tronActivation)
+                  : null,
+            ),
       },
       'tokens': {
         for (final entry in snapshot.tokens.entries)
@@ -144,14 +150,29 @@ class WalletMarketSnapshotStore implements MarketSnapshotStore {
   static Amount? _amount(BalanceResult result) =>
       result.status == BalanceStatus.ok ? result.amount : null;
 
-  static Map<String, Object?> _encodeAmount(Amount amount) => {
+  static TronActivationStatus _snapshotActivation(TronActivationStatus value) =>
+      value == TronActivationStatus.checking
+      ? TronActivationStatus.unknown
+      : value;
+
+  static Map<String, Object?> _encodeAmount(
+    Amount amount, {
+    TronActivationStatus? tronActivation,
+  }) => {
     'raw': amount.raw.toString(),
     'decimals': amount.decimals,
     'symbol': amount.symbol,
+    if (tronActivation != null) 'tronActivation': tronActivation.name,
   };
 
-  static BalanceResult _decodeAmount(Object? value) {
-    final amount = requireExactSnapshotObject(value, members: _amountMembers);
+  static BalanceResult _decodeAmount(
+    Object? value, {
+    bool includesTronActivation = false,
+  }) {
+    final amount = requireExactSnapshotObject(
+      value,
+      members: includesTronActivation ? _tronAmountMembers : _amountMembers,
+    );
     final raw = amount['raw'];
     final decimals = amount['decimals'];
     final symbol = requireBoundedSnapshotText(
@@ -168,12 +189,29 @@ class WalletMarketSnapshotStore implements MarketSnapshotStore {
     }
     final parsed = BigInt.tryParse(raw);
     if (parsed == null) throw const FormatException('invalid amount integer');
+    final activation = includesTronActivation
+        ? switch (requireBoundedSnapshotText(
+            amount['tronActivation'],
+            maxChars: 16,
+          )) {
+            'activated' => TronActivationStatus.activated,
+            'unactivated' => TronActivationStatus.unactivated,
+            'unknown' => TronActivationStatus.unknown,
+            _ => throw const FormatException(
+              'snapshot TRON activation is invalid',
+            ),
+          }
+        : TronActivationStatus.unknown;
     return BalanceResult.ok(
       Amount(raw: parsed, decimals: decimals, symbol: symbol),
+      tronActivation: activation,
     );
   }
 
-  static Map<Coin, BalanceResult> _decodeNative(Object? value) {
+  static Map<Coin, BalanceResult> _decodeNative(
+    Object? value, {
+    required int version,
+  }) {
     if (value is! Map || value.length > Coin.values.length) {
       throw const FormatException('native snapshot map is invalid');
     }
@@ -184,8 +222,11 @@ class WalletMarketSnapshotStore implements MarketSnapshotStore {
         throw const FormatException('native snapshot key is invalid');
       }
       final coin = Coin.values.where((coin) => coin.name == name).firstOrNull;
-      final result = _decodeAmount(entry.value);
       if (coin == null) throw const FormatException('unknown snapshot coin');
+      final result = _decodeAmount(
+        entry.value,
+        includesTronActivation: version >= 3 && coin == Coin.tron,
+      );
       out[coin] = result;
     }
     return Map.unmodifiable(out);

@@ -12,6 +12,31 @@ import 'market_snapshot.dart';
 import 'price_service.dart';
 import 'token_balance_service.dart';
 
+bool _isKnownTronActivation(TronActivationStatus value) =>
+    value == TronActivationStatus.activated ||
+    value == TronActivationStatus.unactivated;
+
+/// A Gateway/native-balance fallback can refresh the TRX amount without
+/// proving the account-object activation bit. Keep the last proven activation
+/// beside that fresh amount until a later direct TRON account query replaces
+/// it. This is display-only and never authorizes a transfer.
+BalanceResult _preserveKnownTronActivation(
+  BalanceResult? previous,
+  BalanceResult fresh,
+) {
+  if (fresh.status != BalanceStatus.ok ||
+      fresh.amount == null ||
+      fresh.tronActivation != TronActivationStatus.unknown ||
+      previous?.status != BalanceStatus.ok ||
+      !_isKnownTronActivation(previous!.tronActivation)) {
+    return fresh;
+  }
+  return BalanceResult.ok(
+    fresh.amount!,
+    tronActivation: previous.tronActivation,
+  );
+}
+
 /// Live market state for the current wallet: per-chain native balances, the
 /// built-in registry's token balances (when a [TokenBalanceService] is wired)
 /// plus spot USD prices, refreshed on home entry, wallet switch (listens to the
@@ -409,7 +434,19 @@ class MarketController extends ChangeNotifier {
       final skipPrices = wallet.addresses.enabledCoins.every(_isTestnet);
       void revealNative(Coin coin, BalanceResult result) {
         if (generation != _generation) return;
-        _results = {..._results, coin: result};
+        final previous = _results[coin];
+        if (coin == Coin.tron &&
+            result.status == BalanceStatus.error &&
+            previous?.status == BalanceStatus.ok) {
+          // The TRON account-object probe is the only source of the activation
+          // bit. A failed probe must not blank the cached TRX row while the
+          // rest of this refresh is still running.
+          return;
+        }
+        final visible = coin == Coin.tron
+            ? _preserveKnownTronActivation(previous, result)
+            : result;
+        _results = {..._results, coin: visible};
         notifyListeners();
       }
 
@@ -508,18 +545,19 @@ class MarketController extends ChangeNotifier {
       BalanceResult retainLastGood(
         BalanceResult? previous,
         BalanceResult fresh, {
-        bool clearTronActivation = false,
+        bool retainTronActivation = false,
       }) {
         if (fresh.status == BalanceStatus.error &&
             previous?.status == BalanceStatus.ok) {
           retainedStale = true;
-          if (clearTronActivation && previous?.amount != null) {
-            return BalanceResult.ok(
-              previous!.amount!,
-              tronActivation: TronActivationStatus.unknown,
-            );
-          }
           return previous!;
+        }
+        if (retainTronActivation) {
+          final merged = _preserveKnownTronActivation(previous, fresh);
+          if (merged.tronActivation != fresh.tronActivation) {
+            retainedStale = true;
+          }
+          return merged;
         }
         return fresh;
       }
@@ -529,7 +567,7 @@ class MarketController extends ChangeNotifier {
           coin: retainLastGood(
             _results[coin],
             balances[coin] ?? const BalanceResult.unsupported(),
-            clearTronActivation: coin == Coin.tron,
+            retainTronActivation: coin == Coin.tron,
           ),
       };
       _tokenResults = {

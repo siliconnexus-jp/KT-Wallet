@@ -533,6 +533,107 @@ void main() {
   );
 
   test(
+    'cached TRON activation stays visible until a direct result replaces it',
+    () async {
+      final gate = Completer<void>();
+      final live = _okResults();
+      live[Coin.tron] = BalanceResult.ok(
+        Amount(raw: BigInt.from(6000000), decimals: 6, symbol: 'TRX'),
+        tronActivation: TronActivationStatus.unactivated,
+      );
+      final balances = FakeBalanceService(live)..gate = gate;
+      final savedAt = DateTime(2026, 8, 16, 8);
+      final snapshots = FakeSnapshotStore(
+        snapshot: MarketSnapshot(
+          scope: 'mainnet',
+          savedAt: savedAt,
+          native: {
+            Coin.tron: BalanceResult.ok(
+              Amount(raw: BigInt.from(5000000), decimals: 6, symbol: 'TRX'),
+              tronActivation: TronActivationStatus.activated,
+            ),
+          },
+          tokens: const {},
+          nativePrices: const {},
+          tokenPrices: const {},
+          nativeChanges: const {},
+          tokenChanges: const {},
+        ),
+      );
+      final controller = MarketController(
+        wallets: _wallets(),
+        balances: balances,
+        prices: FakePriceService(_prices),
+        snapshots: snapshots,
+        snapshotScope: () => 'mainnet',
+      );
+      addTearDown(controller.dispose);
+
+      final done = controller.refresh();
+      await pumpEventQueue();
+
+      expect(controller.isRefreshing, isTrue);
+      expect(controller.showingCachedData, isTrue);
+      expect(controller.tronActivationStatus, TronActivationStatus.activated);
+
+      gate.complete();
+      await done;
+
+      expect(controller.showingCachedData, isFalse);
+      expect(controller.tronActivationStatus, TronActivationStatus.unactivated);
+      expect(controller.balanceFor(Coin.tron).amount!.format(), '6');
+    },
+  );
+
+  test(
+    'a balance-only TRON fallback retains the cached proven activation',
+    () async {
+      final live = _okResults();
+      live[Coin.tron] = BalanceResult.ok(
+        Amount(raw: BigInt.from(6000000), decimals: 6, symbol: 'TRX'),
+      );
+      final savedAt = DateTime(2026, 8, 16, 8);
+      final snapshots = FakeSnapshotStore(
+        snapshot: MarketSnapshot(
+          scope: 'mainnet',
+          savedAt: savedAt,
+          native: {
+            Coin.tron: BalanceResult.ok(
+              Amount(raw: BigInt.from(5000000), decimals: 6, symbol: 'TRX'),
+              tronActivation: TronActivationStatus.activated,
+            ),
+          },
+          tokens: const {},
+          nativePrices: const {},
+          tokenPrices: const {},
+          nativeChanges: const {},
+          tokenChanges: const {},
+        ),
+      );
+      final controller = MarketController(
+        wallets: _wallets(),
+        balances: FakeBalanceService(live),
+        prices: FakePriceService(_prices),
+        snapshots: snapshots,
+        snapshotScope: () => 'mainnet',
+      );
+      addTearDown(controller.dispose);
+
+      await controller.refresh();
+
+      expect(controller.showingCachedData, isTrue);
+      expect(controller.lastUpdatedAt, savedAt);
+      expect(controller.balanceFor(Coin.tron).amount!.format(), '6');
+      expect(controller.tronActivationStatus, TronActivationStatus.activated);
+      await pumpEventQueue();
+      expect(
+        snapshots.saved!.native[Coin.tron]!.tronActivation,
+        TronActivationStatus.activated,
+      );
+    },
+  );
+
+  test(
     'same-scope refresh keeps last-good rows instead of resetting to --',
     () async {
       final balances = FakeBalanceService(_okResults());
@@ -557,7 +658,7 @@ void main() {
   );
 
   test(
-    'gateway token batch supplies native balances without duplicate calls',
+    'gateway batch avoids duplicate calls while direct-probing TRON once',
     () async {
       final native = {
         for (final coin in Coin.values)
@@ -581,7 +682,9 @@ void main() {
 
       await controller.refresh();
       expect(balances.calls, 0);
-      expect(balances.subsetCalls, 0);
+      // The batch already supplies amounts. The one subset call is the
+      // intentional direct-only TRON account probe for the activation bit.
+      expect(balances.subsetCalls, 1);
       expect(controller.balanceFor(Coin.eth).status, BalanceStatus.ok);
     },
   );
