@@ -105,6 +105,7 @@ class KtNavBar extends StatelessWidget {
     this.onTrailing,
     this.trailingText,
     this.trailingTooltip,
+    this.trailingColor,
   });
   final String title;
   final AppTheme theme;
@@ -114,6 +115,7 @@ class KtNavBar extends StatelessWidget {
   final VoidCallback? onTrailing;
   final String? trailingText;
   final String? trailingTooltip;
+  final Color? trailingColor;
 
   @override
   Widget build(BuildContext context) {
@@ -194,7 +196,11 @@ class KtNavBar extends StatelessWidget {
                             onPressed: onTrailing,
                             tooltip:
                                 trailingTooltip ?? material.moreButtonTooltip,
-                            icon: Icon(trailing, size: 22, color: theme.text2),
+                            icon: Icon(
+                              trailing,
+                              size: 22,
+                              color: trailingColor ?? theme.text2,
+                            ),
                             padding: EdgeInsets.zero,
                           )
                         : const SizedBox(),
@@ -218,6 +224,7 @@ class KtScreen extends StatelessWidget {
     this.padding = const EdgeInsets.fromLTRB(20, 8, 20, 24),
     this.gap = 20,
     this.scrollable = true,
+    this.onRefresh,
     this.backgroundColor,
   });
   final List<Widget> children;
@@ -227,6 +234,10 @@ class KtScreen extends StatelessWidget {
   final EdgeInsets padding;
   final double gap;
   final bool scrollable;
+
+  /// Optional native pull-to-refresh for scrollable screens. When supplied,
+  /// short empty/error states remain overscrollable so they can also retry.
+  final RefreshCallback? onRefresh;
   final Color? backgroundColor;
 
   @override
@@ -255,11 +266,7 @@ class KtScreen extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: navBar!,
               ),
-            Expanded(
-              child: scrollable
-                  ? SingleChildScrollView(child: content)
-                  : content,
-            ),
+            Expanded(child: _scrollableContent(content)),
             if (bottom != null)
               SafeArea(
                 top: false,
@@ -270,6 +277,18 @@ class KtScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _scrollableContent(Widget content) {
+    if (!scrollable) return content;
+    final scrollView = SingleChildScrollView(
+      physics: onRefresh == null ? null : const AlwaysScrollableScrollPhysics(),
+      child: content,
+    );
+    final refresh = onRefresh;
+    return refresh == null
+        ? scrollView
+        : RefreshIndicator(onRefresh: refresh, child: scrollView);
   }
 }
 

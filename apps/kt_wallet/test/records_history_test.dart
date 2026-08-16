@@ -10,7 +10,7 @@ import 'package:kt_wallet/src/market/history_controller.dart';
 import 'package:kt_wallet/src/market/history_service.dart';
 import 'package:kt_wallet/src/market/history_snapshot.dart';
 import 'package:kt_wallet/src/market/token_balance_service.dart'
-    show usdtEthToken;
+    show usdtEthToken, usdtTronToken;
 import 'package:kt_wallet/src/market/transaction_status_service.dart';
 import 'package:kt_wallet/src/observability/experience_metrics.dart';
 import 'package:kt_wallet/src/screens/home_screen.dart';
@@ -19,6 +19,7 @@ import 'package:kt_wallet/src/state/wallet_scope.dart';
 import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
 import 'package:kt_wallet/src/wallets/wallet_store.dart';
+import 'package:ui_kit/ui_kit.dart';
 import 'package:wallet_data/wallet_data.dart';
 
 /// Real history page wiring: live rows when fetch succeeds, honest empty/error
@@ -707,6 +708,140 @@ void main() {
     expect(controller.lastUpdatedAt, cachedAt);
   });
 
+  test(
+    'resuming retries account history after a cached refresh failure',
+    () async {
+      final cachedAt = DateTime(2026, 8, 14, 12);
+      final snapshots = _HistorySnapshotMemory(
+        HistorySnapshot(
+          scope: 'scope',
+          savedAt: cachedAt,
+          results: {Coin.tron: const HistoryResult.ok([])},
+        ),
+      );
+      final service = _FakeHistoryService({
+        for (final coin in Coin.values) coin: const HistoryResult.error(),
+      });
+      final controller = HistoryController(
+        wallets: _wallets(),
+        service: service,
+        snapshots: snapshots,
+        snapshotScope: () => 'scope',
+      );
+      addTearDown(controller.dispose);
+
+      await controller.refresh();
+      expect(controller.showingCachedData, isTrue);
+
+      service.results
+        ..[Coin.eth] = _unsupported
+        ..[Coin.polygon] = _unsupported
+        ..[Coin.solana] = _unsupported
+        ..[Coin.tron] = HistoryResult.ok([
+          ChainTxRecord(
+            coin: Coin.tron,
+            networkId: 'tron-mainnet',
+            hash:
+                '3197906d8668e38b0c3b0378dadc156c9a66b3e4f50ffa103e3c0bd90fc0be17',
+            outgoing: false,
+            amountText: '10 USDT',
+            assetContract: usdtTronToken.contract,
+            assetSymbol: 'USDT',
+            timestamp: DateTime(2026, 8, 14, 10),
+            confirmed: true,
+          ),
+        ]);
+
+      controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      while (controller.isRefreshing) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      expect(controller.records.map((record) => record.amountText), [
+        '10 USDT',
+      ]);
+      expect(controller.showingCachedData, isFalse);
+      expect(service.fetchCounts[Coin.tron], 2);
+    },
+  );
+
+  testWidgets('cached history exposes a retry that reloads incoming records', (
+    tester,
+  ) async {
+    final cachedAt = DateTime(2026, 8, 14, 12);
+    final snapshots = _HistorySnapshotMemory(
+      HistorySnapshot(
+        scope: 'scope',
+        savedAt: cachedAt,
+        results: {Coin.tron: const HistoryResult.ok([])},
+      ),
+    );
+    final service = _FakeHistoryService({
+      for (final coin in Coin.values) coin: const HistoryResult.error(),
+    });
+    final controller = HistoryController(
+      wallets: _wallets(),
+      service: service,
+      snapshots: snapshots,
+      snapshotScope: () => 'scope',
+    );
+    addTearDown(controller.dispose);
+    await controller.refresh();
+
+    await tester.pumpWidget(_app(controller));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('history-cache-retry')), findsOneWidget);
+    expect(find.textContaining('真实交易记录'), findsOneWidget);
+
+    service.results
+      ..[Coin.eth] = _unsupported
+      ..[Coin.polygon] = _unsupported
+      ..[Coin.solana] = _unsupported
+      ..[Coin.tron] = HistoryResult.ok([
+        ChainTxRecord(
+          coin: Coin.tron,
+          networkId: 'tron-mainnet',
+          hash:
+              '3197906d8668e38b0c3b0378dadc156c9a66b3e4f50ffa103e3c0bd90fc0be17',
+          outgoing: false,
+          amountText: '10 USDT',
+          assetContract: usdtTronToken.contract,
+          assetSymbol: 'USDT',
+          timestamp: DateTime(2026, 8, 14, 10),
+          confirmed: true,
+        ),
+      ]);
+
+    await tester.tap(find.byKey(const ValueKey('history-cache-retry')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('+10 USDT'), findsOneWidget);
+    expect(find.byKey(const ValueKey('history-cached-label')), findsNothing);
+  });
+
+  testWidgets('records page pull-to-refresh reloads account history', (
+    tester,
+  ) async {
+    final service = _FakeHistoryService({
+      for (final coin in Coin.values) coin: _unsupported,
+      Coin.tron: const HistoryResult.ok([]),
+    });
+    final controller = HistoryController(wallets: _wallets(), service: service);
+    addTearDown(controller.dispose);
+    await controller.refresh();
+    expect(service.fetchCounts[Coin.tron], 1);
+
+    await tester.pumpWidget(_app(controller));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+    await tester.drag(find.byType(SingleChildScrollView), const Offset(0, 320));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(service.fetchCounts[Coin.tron], 2);
+  });
+
   testWidgets('history refreshes when the active network profile changes', (
     tester,
   ) async {
@@ -786,7 +921,7 @@ void main() {
 
     expect(find.text('-88.5 USDT'), findsOneWidget);
     expect(find.text('+5 TRX'), findsOneWidget);
-    expect(find.textContaining('3月9日'), findsOneWidget);
+    expect(find.text('2026/03/09'), findsOneWidget);
     // The demo rows must NOT render as if they were live.
     expect(find.text('-120.00 USDT'), findsNothing);
     expect(find.text('离线，显示演示数据'), findsNothing);
@@ -794,10 +929,11 @@ void main() {
   });
 
   testWidgets(
-    'wallet history keeps official and user-added assets primary and folds unknown tokens',
+    'wallet history filters official, user-added, and unknown token records by type',
     (tester) async {
       const customContract = '0x2222222222222222222222222222222222222222';
       const unknownContract = '0x3333333333333333333333333333333333333333';
+      const riskyContract = '0x4444444444444444444444444444444444444444';
       final wallets = _wallets();
       await wallets.addToken(
         symbol: 'CUSTOM',
@@ -824,6 +960,19 @@ void main() {
           ),
         ]),
         Coin.polygon: HistoryResult.ok([
+          ChainTxRecord(
+            coin: Coin.polygon,
+            networkId: 'polygon-mainnet',
+            id: 'risky',
+            hash: 'risky-hash',
+            outgoing: false,
+            amountText: '99 USDT',
+            assetContract: riskyContract,
+            assetSymbol: 'USDT',
+            assetVerified: false,
+            timestamp: DateTime.utc(2026, 8, 8, 4),
+            confirmed: true,
+          ),
           ChainTxRecord(
             coin: Coin.polygon,
             networkId: 'polygon-mainnet',
@@ -861,14 +1010,137 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('+1 USDT'), findsOneWidget);
-      expect(find.text('+2 CUSTOM · 自定义'), findsOneWidget);
-      expect(find.textContaining('3370 TOKEN'), findsNothing);
-      expect(find.text('未验证与风险代币记录 (1)'), findsOneWidget);
+      expect(find.text('+2 CUSTOM'), findsOneWidget);
+      expect(find.text('+3370 TOKEN'), findsNothing);
+      expect(find.text('+99 USDT'), findsNothing);
 
-      await tester.tap(find.byKey(const ValueKey('history-unverified-toggle')));
+      await tester.tap(
+        find.byKey(const ValueKey('history-type-filter-button')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('按类型筛选'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('history-filter-selected-check')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('history-type-option-transfers')),
+          matching: find.byKey(const ValueKey('history-filter-selected-check')),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('history-type-option-other')));
       await tester.pumpAndSettle();
 
-      expect(find.text('+3370 TOKEN ⚠'), findsOneWidget);
+      expect(find.text('+3370 TOKEN'), findsOneWidget);
+      expect(find.text('+99 USDT'), findsOneWidget);
+      expect(find.text('未验证'), findsOneWidget);
+      expect(find.text('风险'), findsOneWidget);
+      final dangerLabels = tester.widgetList<Container>(
+        find.byKey(const ValueKey('history-danger-token-label')),
+      );
+      expect(dangerLabels, hasLength(2));
+      for (final element
+          in find
+              .byKey(const ValueKey('history-danger-token-label'))
+              .evaluate()) {
+        expect(element.size!.height, 43);
+      }
+      for (final dangerLabel in dangerLabels) {
+        final decoration = dangerLabel.decoration! as BoxDecoration;
+        expect(decoration.color, WalletColors.red);
+        expect(decoration.borderRadius, isNull);
+      }
+      expect(find.text('+1 USDT'), findsNothing);
+      expect(find.text('+2 CUSTOM'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'standalone records use the OKX-aligned wallet tab, filters, dates, addresses, and signed amounts',
+    (tester) async {
+      final controller = _controller({
+        Coin.tron: HistoryResult.ok([
+          ChainTxRecord(
+            coin: Coin.tron,
+            networkId: 'tron-mainnet',
+            hash: 'incoming-tron',
+            outgoing: false,
+            fromAddress: 'TLaGjwhvA8XQYSxFAcAXy7Dvuue9eGYitv',
+            toAddress: 'TA5X6WfP1smMYoVx92yP9xiFPcPm7fqK2w',
+            amountText: '10 USDT',
+            assetContract: usdtTronToken.contract,
+            assetSymbol: 'USDT',
+            timestamp: DateTime(2026, 8, 15, 9),
+            confirmed: true,
+          ),
+          ChainTxRecord(
+            coin: Coin.tron,
+            networkId: 'tron-mainnet',
+            hash: 'outgoing-tron',
+            outgoing: true,
+            fromAddress: 'TA5X6WfP1smMYoVx92yP9xiFPcPm7fqK2w',
+            toAddress: 'TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE',
+            amountText: '2 TRX',
+            timestamp: DateTime(2026, 8, 14, 9),
+            confirmed: true,
+          ),
+        ]),
+        Coin.eth: _unsupported,
+        Coin.polygon: _unsupported,
+        Coin.solana: _unsupported,
+      });
+      addTearDown(controller.dispose);
+      await controller.refresh();
+
+      await tester.pumpWidget(_app(controller));
+      await tester.pumpAndSettle();
+
+      expect(find.text('交易记录'), findsOneWidget);
+      expect(find.text('钱包'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('records-wallet-tab-indicator')),
+        findsOneWidget,
+      );
+      expect(find.text('发送/接收'), findsOneWidget);
+      expect(find.text('2026/08/15'), findsOneWidget);
+      expect(find.text('2026/08/14'), findsOneWidget);
+      expect(find.text('接收'), findsOneWidget);
+      expect(find.text('发送'), findsOneWidget);
+      expect(find.textContaining('来自 TLaGjw...Yitv'), findsOneWidget);
+      expect(find.textContaining('至 TQn9Y2...bLSE'), findsOneWidget);
+      expect(find.text('+10 USDT'), findsOneWidget);
+      expect(find.text('-2 TRX'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.language_rounded));
+      await tester.pumpAndSettle();
+      expect(find.text('按网络筛选'), findsOneWidget);
+      expect(find.text('全部网络'), findsOneWidget);
+      expect(find.text('TRON'), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('history-network-option-all')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('history-type-filter-button')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('按类型筛选'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('history-type-option-transfers')),
+        findsOneWidget,
+      );
+      expect(find.text('其他'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('history-type-option-transfers')),
+          matching: find.byKey(const ValueKey('history-filter-selected-check')),
+        ),
+        findsOneWidget,
+      );
     },
   );
 

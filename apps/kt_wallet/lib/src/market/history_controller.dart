@@ -873,11 +873,13 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (_disposed) return;
     if (state == AppLifecycleState.resumed) {
-      if (_hasRefreshed) {
-        _pollPending();
-      } else {
-        refresh();
-      }
+      // Account-history indexes can lag a confirmed incoming transfer or be
+      // temporarily unreachable. Polling only locally-pending rows leaves a
+      // restored account-history snapshot stale forever, because an incoming
+      // transfer has no local pending row to trigger another explorer fetch.
+      // A foreground transition is an explicit, naturally rate-limited retry
+      // point, so refresh both account history and pending hash status.
+      refresh();
     } else {
       _pollTimer?.cancel();
     }

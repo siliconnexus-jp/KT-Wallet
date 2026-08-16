@@ -140,6 +140,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get marketCachedStale => 'ネットワークの再接続まで保存済みの実残高を表示します';
 
   @override
+  String get historyCachedStale => 'ネットワークの再接続まで保存済みの実取引履歴を表示します';
+
+  @override
   String get actionReceive => '受取';
 
   @override
@@ -175,6 +178,49 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get recordsTitle => '取引履歴';
+
+  @override
+  String get recordsWalletTab => 'ウォレット';
+
+  @override
+  String get historyTypeFilterTitle => 'タイプで絞り込み';
+
+  @override
+  String get historyTypeAll => 'すべてのタイプ';
+
+  @override
+  String get historyTypeTransfers => '送信/受信';
+
+  @override
+  String get historyTypeOther => 'その他';
+
+  @override
+  String get historyNetworkFilterTitle => 'ネットワークで絞り込み';
+
+  @override
+  String get historyAllNetworks => 'すべてのネットワーク';
+
+  @override
+  String get historySent => '送信';
+
+  @override
+  String get historyReceived => '受信';
+
+  @override
+  String historyFromAddress(String address) {
+    return '$address から';
+  }
+
+  @override
+  String historyToAddress(String address) {
+    return '$address へ';
+  }
+
+  @override
+  String get historyAddressUnavailable => 'アドレスを取得できません';
+
+  @override
+  String get historyUnverifiedTokenBadge => '未確認';
 
   @override
   String get historyLoadMore => 'さらに読み込む';

@@ -55,6 +55,7 @@
     }
   },
   "marketCachedStale": "Saved balances are shown while the network reconnects",
+  "historyCachedStale": "Saved transactions are shown while the network reconnects",
   "actionReceive": "Receive",
   "actionSend": "Send",
   "actionMore": "More",
@@ -66,6 +67,33 @@
   "assetAddFavorite": "Add {symbol} to favorites",
   "assetRemoveFavorite": "Remove {symbol} from favorites",
   "recordsTitle": "Transactions",
+  "recordsWalletTab": "Wallet",
+  "historyTypeFilterTitle": "Filter by type",
+  "historyTypeAll": "All types",
+  "historyTypeTransfers": "Send/Receive",
+  "historyTypeOther": "Other",
+  "historyNetworkFilterTitle": "Filter by network",
+  "historyAllNetworks": "All networks",
+  "historySent": "Send",
+  "historyReceived": "Receive",
+  "historyFromAddress": "From {address}",
+  "@historyFromAddress": {
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "historyToAddress": "To {address}",
+  "@historyToAddress": {
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "historyAddressUnavailable": "Address unavailable",
+  "historyUnverifiedTokenBadge": "Unverified",
   "historyLoadMore": "Load more",
   "historyLoadingMore": "Loading more…",
   "historyNoRecognizedTransactions": "No transactions for recognized assets yet",

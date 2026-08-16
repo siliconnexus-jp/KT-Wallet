@@ -141,6 +141,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Saved balances are shown while the network reconnects';
 
   @override
+  String get historyCachedStale =>
+      'Saved transactions are shown while the network reconnects';
+
+  @override
   String get actionReceive => 'Receive';
 
   @override
@@ -176,6 +180,49 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recordsTitle => 'Transactions';
+
+  @override
+  String get recordsWalletTab => 'Wallet';
+
+  @override
+  String get historyTypeFilterTitle => 'Filter by type';
+
+  @override
+  String get historyTypeAll => 'All types';
+
+  @override
+  String get historyTypeTransfers => 'Send/Receive';
+
+  @override
+  String get historyTypeOther => 'Other';
+
+  @override
+  String get historyNetworkFilterTitle => 'Filter by network';
+
+  @override
+  String get historyAllNetworks => 'All networks';
+
+  @override
+  String get historySent => 'Send';
+
+  @override
+  String get historyReceived => 'Receive';
+
+  @override
+  String historyFromAddress(String address) {
+    return 'From $address';
+  }
+
+  @override
+  String historyToAddress(String address) {
+    return 'To $address';
+  }
+
+  @override
+  String get historyAddressUnavailable => 'Address unavailable';
+
+  @override
+  String get historyUnverifiedTokenBadge => 'Unverified';
 
   @override
   String get historyLoadMore => 'Load more';

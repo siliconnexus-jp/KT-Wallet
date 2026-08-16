@@ -1290,21 +1290,31 @@ class RecordsScreen extends StatefulWidget {
   State<RecordsScreen> createState() => _RecordsScreenState();
 }
 
+enum _HistoryTypeFilter { all, transfers, other }
+
 class _RecordsScreenState extends State<RecordsScreen> {
   /// Lazily-owned [HistoryController], mounted the first time this tab builds
   /// under a live market context (no `main.dart` wiring). Tests inject their
   /// own controller via [HistoryScope], which always wins over the lazy one.
   HistoryController? _owned;
+  HistoryController? _autoRefreshRequestedFor;
   bool _showUnverifiedRecords = false;
+  _HistoryTypeFilter _typeFilter = _HistoryTypeFilter.transfers;
+  String? _selectedNetworkId;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final shared = HistoryScope.maybeOf(context);
     if (shared != null) {
-      if (HistoryScope.shouldAutoRefresh(context)) {
+      if (HistoryScope.shouldAutoRefresh(context) &&
+          !identical(_autoRefreshRequestedFor, shared)) {
+        _autoRefreshRequestedFor = shared;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) shared.refreshIfNeeded();
+          // Every new records page is an explicit request for current account
+          // history. `refreshIfNeeded` used to stop forever after restoring a
+          // stale snapshot or completing one failed live attempt.
+          if (mounted) shared.refresh();
         });
       }
       return;
@@ -1380,9 +1390,8 @@ class _RecordsScreenState extends State<RecordsScreen> {
   );
 
   /// Quiet structural placeholders that match a real transaction row.
-  Widget _loadingCard() => KtCard(
-    key: const ValueKey('history-loading-skeleton'),
-    child: ExcludeSemantics(
+  Widget _loadingCard({bool flat = false}) {
+    final rows = ExcludeSemantics(
       child: Column(
         children: [
           for (var i = 0; i < 3; i++) ...[
@@ -1395,8 +1404,12 @@ class _RecordsScreenState extends State<RecordsScreen> {
           ],
         ],
       ),
-    ),
-  );
+    );
+    return KeyedSubtree(
+      key: const ValueKey('history-loading-skeleton'),
+      child: flat ? rows : KtCard(child: rows),
+    );
+  }
 
   Widget _liveCard(
     BuildContext context,
@@ -1457,6 +1470,417 @@ class _RecordsScreenState extends State<RecordsScreen> {
           ),
         ],
       ],
+    );
+  }
+
+  List<(ChainTxRecord, HistoryAssetKind)> _classifiedRecords(
+    BuildContext context,
+    HistoryController history,
+  ) {
+    final customTokens =
+        WalletScope.maybeOf(context)?.tokens ?? const <CustomToken>[];
+    return [
+      for (final record in _visibleRecords(history))
+        (
+          record,
+          widget.asset == null
+              ? classifyHistoryAsset(record, customTokens)
+              : HistoryAssetKind.official,
+        ),
+    ];
+  }
+
+  List<_HistoryNetworkOption> _networkOptions(
+    BuildContext context,
+    List<(ChainTxRecord, HistoryAssetKind)> records,
+  ) {
+    final options = <String, _HistoryNetworkOption>{};
+    final networks = NetworkScope.maybeOf(context);
+    final wallet = WalletScope.maybeOf(context)?.current;
+    if (networks != null && wallet != null) {
+      for (final coin in wallet.addresses.enabledCoins) {
+        final network = networks.activeFor(chainOf(coin));
+        options.putIfAbsent(
+          network.id,
+          () => _HistoryNetworkOption(network.id, network.name),
+        );
+      }
+    }
+    for (final (record, _) in records) {
+      final id = record.networkId;
+      if (id == null || id.isEmpty) continue;
+      options.putIfAbsent(
+        id,
+        () => _HistoryNetworkOption(
+          id,
+          networks?.byId(id)?.name ?? _fallbackNetworkName(record.coin),
+        ),
+      );
+    }
+    return options.values.toList();
+  }
+
+  String? _effectiveNetworkId(List<_HistoryNetworkOption> options) {
+    final selected = _selectedNetworkId;
+    if (selected == null || options.any((option) => option.id == selected)) {
+      return selected;
+    }
+    return null;
+  }
+
+  String _typeFilterLabel(AppLocalizations l10n) => switch (_typeFilter) {
+    _HistoryTypeFilter.all => l10n.historyTypeAll,
+    _HistoryTypeFilter.transfers => l10n.historyTypeTransfers,
+    _HistoryTypeFilter.other => l10n.historyTypeOther,
+  };
+
+  Future<void> _showTypeFilter(AppLocalizations l10n) async {
+    final selected = await _showSingleSelectSheet<_HistoryTypeFilter>(
+      title: l10n.historyTypeFilterTitle,
+      selected: _typeFilter,
+      options: [
+        _HistoryPickerOption(
+          _HistoryTypeFilter.all,
+          l10n.historyTypeAll,
+          const ValueKey('history-type-option-all'),
+        ),
+        _HistoryPickerOption(
+          _HistoryTypeFilter.transfers,
+          l10n.historyTypeTransfers,
+          const ValueKey('history-type-option-transfers'),
+        ),
+        _HistoryPickerOption(
+          _HistoryTypeFilter.other,
+          l10n.historyTypeOther,
+          const ValueKey('history-type-option-other'),
+        ),
+      ],
+    );
+    if (selected != null && mounted) {
+      setState(() => _typeFilter = selected);
+    }
+  }
+
+  Future<void> _showNetworkFilter(
+    AppLocalizations l10n,
+    List<_HistoryNetworkOption> networks,
+  ) async {
+    final selected = _effectiveNetworkId(networks);
+    final value = await _showSingleSelectSheet<String>(
+      title: l10n.historyNetworkFilterTitle,
+      selected: selected ?? '',
+      options: [
+        _HistoryPickerOption<String>(
+          '',
+          l10n.historyAllNetworks,
+          const ValueKey('history-network-option-all'),
+        ),
+        for (final network in networks)
+          _HistoryPickerOption<String>(
+            network.id,
+            network.label,
+            ValueKey('history-network-option-${network.id}'),
+          ),
+      ],
+    );
+    if (!mounted || value == null) return;
+    final normalized = value.isEmpty ? null : value;
+    if (normalized != _selectedNetworkId) {
+      setState(() => _selectedNetworkId = normalized);
+    }
+  }
+
+  Future<T?> _showSingleSelectSheet<T>({
+    required String title,
+    required T selected,
+    required List<_HistoryPickerOption<T>> options,
+  }) => showModalBottomSheet<T>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    barrierColor: Colors.black.withValues(alpha: 0.36),
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) => Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.72,
+      ),
+      decoration: const BoxDecoration(
+        color: WalletColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(top: 10, bottom: 20),
+              decoration: BoxDecoration(
+                color: WalletColors.border,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 20,
+                height: 1.2,
+                fontWeight: FontWeight.w700,
+                color: WalletColors.text,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+              children: [
+                for (final option in options)
+                  Semantics(
+                    button: true,
+                    selected: option.value == selected,
+                    inMutuallyExclusiveGroup: true,
+                    child: InkWell(
+                      key: option.key,
+                      onTap: () => Navigator.of(sheetContext).pop(option.value),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 58),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  option.label,
+                                  style: const TextStyle(
+                                    fontSize: 17,
+                                    color: WalletColors.text,
+                                  ),
+                                ),
+                              ),
+                              if (option.value == selected)
+                                Container(
+                                  key: const ValueKey(
+                                    'history-filter-selected-check',
+                                  ),
+                                  width: 28,
+                                  height: 28,
+                                  decoration: const BoxDecoration(
+                                    color: WalletColors.text,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.check_rounded,
+                                    size: 18,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _historyFilterChip(AppLocalizations l10n) => Align(
+    alignment: Alignment.centerLeft,
+    child: Semantics(
+      button: true,
+      label: _typeFilterLabel(l10n),
+      child: InkWell(
+        key: const ValueKey('history-type-filter-button'),
+        borderRadius: BorderRadius.circular(999),
+        onTap: () => _showTypeFilter(l10n),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 36),
+          padding: const EdgeInsets.symmetric(horizontal: 11),
+          decoration: BoxDecoration(
+            color: WalletColors.text.withValues(alpha: 0.055),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _typeFilterLabel(l10n),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: WalletColors.text,
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.arrow_drop_down_rounded,
+                size: 18,
+                color: WalletColors.text,
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _flatEmptyState(AppLocalizations l10n, {String? message}) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 64),
+    child: Center(
+      child: Text(
+        message ?? l10n.historyEmpty,
+        style: const TextStyle(fontSize: 13, color: WalletColors.text3),
+      ),
+    ),
+  );
+
+  Widget _standaloneLiveList(
+    BuildContext context,
+    AppLocalizations l10n,
+    HistoryController history,
+    List<(ChainTxRecord, HistoryAssetKind)> allRecords,
+    List<_HistoryNetworkOption> networks,
+  ) {
+    final selectedNetwork = _effectiveNetworkId(networks);
+    final records =
+        allRecords.where((item) {
+          if (selectedNetwork != null && item.$1.networkId != selectedNetwork) {
+            return false;
+          }
+          return switch (_typeFilter) {
+            _HistoryTypeFilter.all => true,
+            _HistoryTypeFilter.transfers => item.$2.visibleInPrimaryHistory,
+            _HistoryTypeFilter.other => !item.$2.visibleInPrimaryHistory,
+          };
+        }).toList()..sort(
+          (left, right) => right.$1.timestamp.compareTo(left.$1.timestamp),
+        );
+    if (records.isEmpty) return _flatEmptyState(l10n);
+
+    final children = <Widget>[];
+    String? previousDay;
+    for (final item in records) {
+      final localTime = item.$1.timestamp.toLocal();
+      final day = _numericRecordDay(localTime);
+      if (day != previousDay) {
+        if (previousDay != null) {
+          children.add(
+            Divider(
+              height: 1,
+              color: WalletColors.text.withValues(alpha: 0.055),
+            ),
+          );
+        }
+        children.add(
+          Padding(
+            key: ValueKey('history-date-$day'),
+            padding: EdgeInsets.only(top: previousDay == null ? 18 : 24),
+            child: Text(
+              day,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+                color: WalletColors.text3,
+              ),
+            ),
+          ),
+        );
+        previousDay = day;
+      }
+      children.add(
+        _standaloneHistoryRecordRow(context, l10n, history, item.$1, item.$2),
+      );
+    }
+    if (history.canLoadMore || history.isLoadingMore) {
+      children.add(const SizedBox(height: 8));
+      children.add(
+        Semantics(
+          button: true,
+          label: history.isLoadingMore
+              ? l10n.historyLoadingMore
+              : l10n.historyLoadMore,
+          child: TextButton(
+            key: const ValueKey('history-load-more'),
+            onPressed: history.isLoadingMore ? null : () => history.loadMore(),
+            child: Text(
+              history.isLoadingMore
+                  ? l10n.historyLoadingMore
+                  : l10n.historyLoadMore,
+            ),
+          ),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
+  }
+
+  Widget _standaloneHistoryRecordRow(
+    BuildContext context,
+    AppLocalizations l10n,
+    HistoryController history,
+    ChainTxRecord record,
+    HistoryAssetKind assetKind,
+  ) {
+    final local = history.localTransactionForRecord(record);
+    final rawAmount = local?.operation == TxOperationKind.approvalRevoke
+        ? l10n.approvalRevoke
+        : record.amountText ?? '--';
+    final participant = record.outgoing ? record.toAddress : record.fromAddress;
+    final address = participant == null || participant.trim().isEmpty
+        ? l10n.historyAddressUnavailable
+        : record.outgoing
+        ? l10n.historyToAddress(_abbreviateHistoryAddress(participant))
+        : l10n.historyFromAddress(_abbreviateHistoryAddress(participant));
+    final localStatusUnknown =
+        local != null &&
+        (local.status == TxStatus.submitted ||
+            local.status == TxStatus.broadcast ||
+            local.status == TxStatus.pending) &&
+        local.lastCheckOutcome == TxCheckOutcome.unknown;
+    final status = _historyStatusSuffix(
+      l10n,
+      record,
+      local?.status,
+      localStatusUnknown,
+    );
+    final subtitleBadge = switch (assetKind) {
+      HistoryAssetKind.userAdded => l10n.historyCustomTokenBadge,
+      _ => null,
+    };
+    final dangerBadge = switch (assetKind) {
+      HistoryAssetKind.unverified => l10n.historyUnverifiedTokenBadge,
+      HistoryAssetKind.risky => l10n.historyRiskTokenBadge,
+      _ => null,
+    };
+    return _FlatHistoryRecordRow(
+      key: ValueKey('history-record-${record.id ?? record.hash}'),
+      outgoing: record.outgoing,
+      title: record.outgoing ? l10n.historySent : l10n.historyReceived,
+      subtitle: [address, ?subtitleBadge, ?status].join(' · '),
+      dangerBadge: dangerBadge,
+      amount: rawAmount,
+      symbol: _historyAssetSymbol(record),
+      chain: chainOf(record.coin),
+      isToken: record.assetContract != null,
+      officialAsset: assetKind == HistoryAssetKind.official,
+      showTronActivation: record.coin == Coin.tron,
+      onTap: () => local == null
+          ? context.push('/tx-detail', extra: record)
+          : context.push('/tx-detail?id=${Uri.encodeComponent(local.id)}'),
     );
   }
 
@@ -1624,7 +2048,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
       padding: const EdgeInsets.only(bottom: 12),
       child: Semantics(
         liveRegion: true,
-        label: '$relative. ${l10n.marketCachedStale}',
+        label: '$relative. ${l10n.historyCachedStale}',
         child: Row(
           key: const ValueKey('history-cached-label'),
           children: [
@@ -1636,10 +2060,30 @@ class _RecordsScreenState extends State<RecordsScreen> {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                '$relative · ${l10n.marketCachedStale}',
+                '$relative · ${l10n.historyCachedStale}',
                 style: const TextStyle(fontSize: 12, color: WalletColors.text3),
               ),
             ),
+            const SizedBox(width: 4),
+            if (history.isRefreshing)
+              const SizedBox(
+                key: ValueKey('history-cache-refreshing'),
+                width: 36,
+                height: 36,
+                child: Padding(
+                  padding: EdgeInsets.all(9),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            else
+              IconButton(
+                key: const ValueKey('history-cache-retry'),
+                tooltip: l10n.actionRetry,
+                visualDensity: VisualDensity.compact,
+                onPressed: () => history.refresh(),
+                icon: const Icon(Icons.refresh_rounded, size: 19),
+                color: WalletColors.text2,
+              ),
           ],
         ),
       ),
@@ -1745,17 +2189,338 @@ class _RecordsScreenState extends State<RecordsScreen> {
         ),
       );
     }
+
+    final classified = history == null
+        ? <(ChainTxRecord, HistoryAssetKind)>[]
+        : _classifiedRecords(context, history);
+    final networks = _networkOptions(context, classified);
+    late final Widget flatContent;
+    if (history == null) {
+      flatContent = _flatEmptyState(l10n);
+    } else if (assetStatus == HistoryStatus.unsupported ||
+        (assetStatus == null && history.allUnsupported)) {
+      flatContent = _flatEmptyState(
+        l10n,
+        message: l10n.historyUnsupportedChain,
+      );
+    } else if ((history.isLoading || assetStatus == HistoryStatus.loading) &&
+        _visibleRecords(history).isEmpty) {
+      flatContent = _loadingCard(flat: true);
+    } else if (assetStatus == HistoryStatus.error ||
+        (assetStatus == null && history.isError)) {
+      flatContent = Column(
+        children: [
+          const MarketOfflineBanner(),
+          const SizedBox(height: 16),
+          Text(
+            l10n.walletLoadErrorDesc,
+            style: const TextStyle(fontSize: 13, color: WalletColors.text3),
+          ),
+        ],
+      );
+    } else {
+      flatContent = _standaloneLiveList(
+        context,
+        l10n,
+        history,
+        classified,
+        networks,
+      );
+    }
+
     return KtScreen(
+      backgroundColor: WalletColors.surface,
+      padding: EdgeInsets.zero,
+      gap: 0,
       navBar: KtNavBar(
         title: l10n.recordsTitle,
         onBack: () => Navigator.of(context).maybePop(),
+        leading: Icons.arrow_back_ios_new_rounded,
+        trailing: Icons.language_rounded,
+        trailingColor: WalletColors.text,
+        trailingTooltip: l10n.historyNetworkFilterTitle,
+        onTrailing: () => _showNetworkFilter(l10n, networks),
       ),
+      onRefresh: history?.refresh,
       children: [
-        const Align(alignment: Alignment.centerLeft, child: TestnetBadge()),
-        body,
+        Container(
+          height: 64,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: WalletColors.text.withValues(alpha: 0.065),
+              ),
+            ),
+          ),
+          child: Align(
+            alignment: Alignment.bottomLeft,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.recordsWalletTab,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: WalletColors.text,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  key: const ValueKey('records-wallet-tab-indicator'),
+                  width: 42,
+                  height: 3,
+                  color: WalletColors.text,
+                ),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(children: [_historyFilterChip(l10n), const TestnetBadge()]),
+              if (history != null &&
+                  history.showingCachedData &&
+                  history.lastUpdatedAt != null) ...[
+                const SizedBox(height: 18),
+                _cachedHistoryLabel(l10n, history),
+              ],
+              flatContent,
+            ],
+          ),
+        ),
       ],
     );
   }
+}
+
+class _HistoryNetworkOption {
+  const _HistoryNetworkOption(this.id, this.label);
+
+  final String id;
+  final String label;
+}
+
+class _HistoryPickerOption<T> {
+  const _HistoryPickerOption(this.value, this.label, this.key);
+
+  final T value;
+  final String label;
+  final Key key;
+}
+
+class _FlatHistoryRecordRow extends StatelessWidget {
+  const _FlatHistoryRecordRow({
+    super.key,
+    required this.outgoing,
+    required this.title,
+    required this.subtitle,
+    this.dangerBadge,
+    required this.amount,
+    required this.symbol,
+    required this.chain,
+    required this.isToken,
+    required this.officialAsset,
+    required this.showTronActivation,
+    required this.onTap,
+  });
+
+  final bool outgoing;
+  final String title;
+  final String subtitle;
+  final String? dangerBadge;
+  final String amount;
+  final String symbol;
+  final Chain chain;
+  final bool isToken;
+  final bool officialAsset;
+  final bool showTronActivation;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final unsignedAmount = amount.replaceFirst(RegExp(r'^[+-]'), '');
+    final displayAmount = unsignedAmount == '--'
+        ? '--'
+        : '${outgoing ? '-' : '+'}$unsignedAmount';
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 17),
+        child: Row(
+          children: [
+            NetworkAssetIcon(
+              chain: chain,
+              symbol: symbol,
+              isToken: isToken,
+              size: 40,
+              official: officialAsset,
+            ),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: WalletColors.text,
+                          ),
+                        ),
+                      ),
+                      if (showTronActivation) ...[
+                        const SizedBox(width: 6),
+                        const TronActivationBadge(),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: WalletColors.text3,
+                          ),
+                        ),
+                      ),
+                      if (dangerBadge != null) ...[
+                        const SizedBox(width: 6),
+                        SizedBox(
+                          width: 42,
+                          height: 16,
+                          child: OverflowBox(
+                            alignment: Alignment.bottomCenter,
+                            minHeight: 43,
+                            maxHeight: 43,
+                            child: Container(
+                              key: const ValueKey('history-danger-token-label'),
+                              width: 42,
+                              height: 43,
+                              alignment: Alignment.center,
+                              decoration: const BoxDecoration(
+                                color: WalletColors.red,
+                              ),
+                              child: Text(
+                                dangerBadge!,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  height: 1.1,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 150),
+              child: Text(
+                displayAmount,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: outgoing ? WalletColors.text : WalletColors.green,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _fallbackNetworkName(Coin coin) => switch (coin) {
+  Coin.eth => 'Ethereum',
+  Coin.polygon => 'Polygon',
+  Coin.base => 'Base',
+  Coin.arbitrum => 'Arbitrum',
+  Coin.avalanche => 'Avalanche',
+  Coin.bnb => 'BNB Smart Chain',
+  Coin.tron => 'TRON',
+  Coin.solana => 'Solana',
+};
+
+String _historyAssetSymbol(ChainTxRecord record) {
+  final claimed = record.assetSymbol?.trim();
+  if (claimed != null && claimed.isNotEmpty) return claimed;
+  if (record.assetContract == null) {
+    return switch (record.coin) {
+      Coin.eth => 'ETH',
+      Coin.polygon => 'POL',
+      Coin.base => 'ETH',
+      Coin.arbitrum => 'ETH',
+      Coin.avalanche => 'AVAX',
+      Coin.bnb => 'BNB',
+      Coin.tron => 'TRX',
+      Coin.solana => 'SOL',
+    };
+  }
+  final amount = record.amountText?.trim();
+  if (amount != null) {
+    final parts = amount.split(RegExp(r'\s+'));
+    if (parts.length > 1 &&
+        RegExp(r'^[A-Za-z0-9._-]{1,16}$').hasMatch(parts.last)) {
+      return parts.last;
+    }
+  }
+  return '?';
+}
+
+String _abbreviateHistoryAddress(String address) {
+  final value = address.trim();
+  if (value.length <= 13) return value;
+  return '${value.substring(0, 6)}...${value.substring(value.length - 4)}';
+}
+
+String _numericRecordDay(DateTime value) =>
+    '${value.year.toString().padLeft(4, '0')}/'
+    '${value.month.toString().padLeft(2, '0')}/'
+    '${value.day.toString().padLeft(2, '0')}';
+
+String? _historyStatusSuffix(
+  AppLocalizations l10n,
+  ChainTxRecord record,
+  TxStatus? localStatus,
+  bool localStatusUnknown,
+) {
+  if (localStatusUnknown) return l10n.txStatusUnknown;
+  if (localStatus != null && localStatus != TxStatus.confirmed) {
+    return _txStatusLabel(l10n, localStatus);
+  }
+  return switch (record.status) {
+    ChainTxStatus.pending => l10n.txStatusPending,
+    ChainTxStatus.failed => l10n.txStatusFailed,
+    ChainTxStatus.unknown => l10n.txStatusUnknown,
+    ChainTxStatus.confirmed => null,
+  };
 }
 
 class _HistorySkeletonRow extends StatelessWidget {

@@ -140,6 +140,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketCachedStale => '网络恢复前将继续显示已保存的真实余额';
 
   @override
+  String get historyCachedStale => '网络恢复前将继续显示已保存的真实交易记录';
+
+  @override
   String get actionReceive => '收款';
 
   @override
@@ -175,6 +178,49 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get recordsTitle => '交易记录';
+
+  @override
+  String get recordsWalletTab => '钱包';
+
+  @override
+  String get historyTypeFilterTitle => '按类型筛选';
+
+  @override
+  String get historyTypeAll => '全部类型';
+
+  @override
+  String get historyTypeTransfers => '发送/接收';
+
+  @override
+  String get historyTypeOther => '其他';
+
+  @override
+  String get historyNetworkFilterTitle => '按网络筛选';
+
+  @override
+  String get historyAllNetworks => '全部网络';
+
+  @override
+  String get historySent => '发送';
+
+  @override
+  String get historyReceived => '接收';
+
+  @override
+  String historyFromAddress(String address) {
+    return '来自 $address';
+  }
+
+  @override
+  String historyToAddress(String address) {
+    return '至 $address';
+  }
+
+  @override
+  String get historyAddressUnavailable => '地址不可用';
+
+  @override
+  String get historyUnverifiedTokenBadge => '未验证';
 
   @override
   String get historyLoadMore => '加载更多';

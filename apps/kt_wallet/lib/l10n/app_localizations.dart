@@ -346,6 +346,12 @@ abstract class AppLocalizations {
   /// **'网络恢复前将继续显示已保存的真实余额'**
   String get marketCachedStale;
 
+  /// No description provided for @historyCachedStale.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络恢复前将继续显示已保存的真实交易记录'**
+  String get historyCachedStale;
+
   /// No description provided for @actionReceive.
   ///
   /// In zh, this message translates to:
@@ -411,6 +417,84 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'交易记录'**
   String get recordsTitle;
+
+  /// No description provided for @recordsWalletTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包'**
+  String get recordsWalletTab;
+
+  /// No description provided for @historyTypeFilterTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'按类型筛选'**
+  String get historyTypeFilterTitle;
+
+  /// No description provided for @historyTypeAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部类型'**
+  String get historyTypeAll;
+
+  /// No description provided for @historyTypeTransfers.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送/接收'**
+  String get historyTypeTransfers;
+
+  /// No description provided for @historyTypeOther.
+  ///
+  /// In zh, this message translates to:
+  /// **'其他'**
+  String get historyTypeOther;
+
+  /// No description provided for @historyNetworkFilterTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'按网络筛选'**
+  String get historyNetworkFilterTitle;
+
+  /// No description provided for @historyAllNetworks.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部网络'**
+  String get historyAllNetworks;
+
+  /// No description provided for @historySent.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送'**
+  String get historySent;
+
+  /// No description provided for @historyReceived.
+  ///
+  /// In zh, this message translates to:
+  /// **'接收'**
+  String get historyReceived;
+
+  /// No description provided for @historyFromAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'来自 {address}'**
+  String historyFromAddress(String address);
+
+  /// No description provided for @historyToAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'至 {address}'**
+  String historyToAddress(String address);
+
+  /// No description provided for @historyAddressUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址不可用'**
+  String get historyAddressUnavailable;
+
+  /// No description provided for @historyUnverifiedTokenBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'未验证'**
+  String get historyUnverifiedTokenBadge;
 
   /// No description provided for @historyLoadMore.
   ///

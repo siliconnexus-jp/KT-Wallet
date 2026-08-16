@@ -55,6 +55,7 @@
     }
   },
   "marketCachedStale": "ネットワークの再接続まで保存済みの実残高を表示します",
+  "historyCachedStale": "ネットワークの再接続まで保存済みの実取引履歴を表示します",
   "actionReceive": "受取",
   "actionSend": "送金",
   "actionMore": "その他",
@@ -66,6 +67,33 @@
   "assetAddFavorite": "{symbol}をお気に入りに追加",
   "assetRemoveFavorite": "{symbol}をお気に入りから削除",
   "recordsTitle": "取引履歴",
+  "recordsWalletTab": "ウォレット",
+  "historyTypeFilterTitle": "タイプで絞り込み",
+  "historyTypeAll": "すべてのタイプ",
+  "historyTypeTransfers": "送信/受信",
+  "historyTypeOther": "その他",
+  "historyNetworkFilterTitle": "ネットワークで絞り込み",
+  "historyAllNetworks": "すべてのネットワーク",
+  "historySent": "送信",
+  "historyReceived": "受信",
+  "historyFromAddress": "{address} から",
+  "@historyFromAddress": {
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "historyToAddress": "{address} へ",
+  "@historyToAddress": {
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "historyAddressUnavailable": "アドレスを取得できません",
+  "historyUnverifiedTokenBadge": "未確認",
   "historyLoadMore": "さらに読み込む",
   "historyLoadingMore": "読み込み中…",
   "historyNoRecognizedTransactions": "確認済み資産の取引履歴はまだありません",

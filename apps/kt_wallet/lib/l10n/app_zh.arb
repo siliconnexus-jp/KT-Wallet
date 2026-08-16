@@ -69,6 +69,7 @@
     }
   },
   "marketCachedStale": "网络恢复前将继续显示已保存的真实余额",
+  "historyCachedStale": "网络恢复前将继续显示已保存的真实交易记录",
   "actionReceive": "收款",
   "actionSend": "转账",
   "actionMore": "更多",
@@ -80,6 +81,33 @@
   "assetAddFavorite": "收藏 {symbol}",
   "assetRemoveFavorite": "取消收藏 {symbol}",
   "recordsTitle": "交易记录",
+  "recordsWalletTab": "钱包",
+  "historyTypeFilterTitle": "按类型筛选",
+  "historyTypeAll": "全部类型",
+  "historyTypeTransfers": "发送/接收",
+  "historyTypeOther": "其他",
+  "historyNetworkFilterTitle": "按网络筛选",
+  "historyAllNetworks": "全部网络",
+  "historySent": "发送",
+  "historyReceived": "接收",
+  "historyFromAddress": "来自 {address}",
+  "@historyFromAddress": {
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "historyToAddress": "至 {address}",
+  "@historyToAddress": {
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "historyAddressUnavailable": "地址不可用",
+  "historyUnverifiedTokenBadge": "未验证",
   "historyLoadMore": "加载更多",
   "historyLoadingMore": "正在加载更多…",
   "historyNoRecognizedTransactions": "暂无已识别资产的交易记录",
