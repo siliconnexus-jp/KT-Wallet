@@ -52,9 +52,13 @@ class _FundedTokens extends TokenBalanceService {
 }
 
 class _TestPrices extends PriceService {
+  _TestPrices({this.tronPrice = 0.2});
+
+  final double tronPrice;
+
   @override
   Future<Map<Coin, double>?> fetchUsdPrices() async => {
-    for (final coin in Coin.values) coin: coin == Coin.tron ? 0.2 : 1.0,
+    for (final coin in Coin.values) coin: coin == Coin.tron ? tronPrice : 1.0,
   };
 }
 
@@ -161,6 +165,7 @@ Future<void> _open(
   WidgetTester tester,
   String galleryEntry, {
   LocalTransferService? transferService,
+  double tronPrice = 0.2,
 }) async {
   tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
   addTearDown(tester.platformDispatcher.clearLocalesTestValue);
@@ -169,7 +174,7 @@ Future<void> _open(
     wallets: wallets,
     balances: _FundedBalances(),
     tokens: _FundedTokens(),
-    prices: _TestPrices(),
+    prices: _TestPrices(tronPrice: tronPrice),
   );
   addTearDown(market.dispose);
   await tester.pumpWidget(
@@ -189,7 +194,13 @@ Future<void> _open(
 Future<void> _openHome(
   WidgetTester tester, {
   LocalTransferService? transferService,
-}) => _open(tester, 'W1/W20 首页', transferService: transferService);
+  double tronPrice = 0.2,
+}) => _open(
+  tester,
+  'W1/W20 首页',
+  transferService: transferService,
+  tronPrice: tronPrice,
+);
 
 /// The send screen no longer pre-fills anything on a live path, so every flow
 /// test types the transfer it wants to walk through. Address is a real,
@@ -279,6 +290,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('日常钱包'), findsOneWidget); // back on home
   });
+
+  testWidgets(
+    'tiny network-fee fiat stays visible and confirm value is flush right',
+    (tester) async {
+      await _openHome(tester, tronPrice: 0.0003);
+      await tester.tap(find.text('转账'));
+      await tester.pumpAndSettle();
+      await _enterTransfer(tester);
+
+      expect(find.text(r'≈ $0.0004'), findsOneWidget);
+      await tester.tap(find.text('下一步'));
+      await tester.pumpAndSettle();
+
+      final value = find.byKey(const ValueKey('confirm-network-fee-value'));
+      final row = find.byKey(const ValueKey('confirm-network-fee-row'));
+      expect(find.text('≈ 1.25 TRX（\$0.0004）'), findsOneWidget);
+      expect(
+        tester.getTopRight(value).dx,
+        closeTo(tester.getTopRight(row).dx, 1),
+      );
+    },
+  );
 
   testWidgets('insufficient balance keeps the real fee estimate and warns', (
     tester,

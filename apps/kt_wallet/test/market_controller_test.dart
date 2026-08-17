@@ -952,6 +952,14 @@ void main() {
     expect(formatFiat(-1, 'USD'), '--');
   });
 
+  test('formatFeeFiat keeps tiny positive network costs visible', () {
+    expect(formatFeeFiat(0.000375, 'USD'), r'$0.0004');
+    expect(formatFeeFiat(0.005, 'USD'), r'$0.005');
+    expect(formatFeeFiat(0.0000004, 'USD'), r'$0.0000004');
+    expect(formatFeeFiat(0.06, 'JPY'), 'JP¥0.06');
+    expect(formatFeeFiat(0, 'USD'), r'$0.00');
+  });
+
   test('market change formatters preserve sign and precision', () {
     expect(formatChange24h(1.234), '+1.23%');
     expect(formatChange24h(-1.234), '-1.23%');

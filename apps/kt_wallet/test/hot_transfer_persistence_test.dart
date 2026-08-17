@@ -137,6 +137,37 @@ TransferSession _session(Chain chain) {
   return session;
 }
 
+TransferSession _legacySolanaTokenSession() {
+  const mint = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+  final now = DateTime.now().millisecondsSinceEpoch;
+  final draft = TransferDraft(
+    symbol: 'USDT',
+    networkLabel: 'Devnet · SPL',
+    chain: Chain.solana,
+    recipient: _solanaRecipient,
+    amount: Amount(raw: BigInt.from(1000000), decimals: 6, symbol: 'USDT'),
+    feeTier: 1,
+    tokenContract: mint,
+    // Legacy SPL assets intentionally omit the program from the catalog.
+    tokenProgram: null,
+  );
+  return TransferSession()
+    ..begin(draft)
+    ..preparedSolana = PreparedSolanaTransfer(
+      from: _solanaAddress,
+      recipient: _solanaRecipient,
+      amountRaw: draft.amount.raw,
+      tokenMint: mint,
+      tokenProgram: solanaTokenProgram,
+      networkFeeLamports: BigInt.from(5000),
+      rentDepositLamports: BigInt.from(2039280),
+      lastValidBlockHeight: 987654,
+      message: Uint8List.fromList(const [7, 8, 9]),
+    )
+    ..preparedNetworkId = solanaDevnet.id
+    ..preparedAtMs = now;
+}
+
 class _ResponseLostService extends LocalTransferService {
   _ResponseLostService({required this.wallets, required this.session});
 
@@ -246,6 +277,54 @@ Future<({WalletDatabase database, WalletController wallets})> _fixture() async {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets(
+    'legacy SPL token reaches native signing instead of reopening confirm',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final fixture = await _fixture();
+      addTearDown(fixture.database.close);
+      final session = _legacySolanaTokenSession();
+      final networks = NetworkController(
+        initialEnvironment: NetworkEnvironment.testnet,
+      );
+      final service = _ResponseLostService(
+        wallets: fixture.wallets,
+        session: session,
+      );
+      final router = buildRouter(
+        initialLocation: '/transfer-auth',
+        galleryMode: false,
+        walletController: fixture.wallets,
+        transferService: service,
+        transferSession: session,
+      );
+      addTearDown(router.dispose);
+
+      await tester.pumpWidget(
+        _app(
+          router: router,
+          wallets: fixture.wallets,
+          networks: networks,
+          session: session,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use biometrics'));
+      await tester.pumpAndSettle();
+
+      expect(service.signCalls, 1);
+      expect(service.broadcastCalls, 1);
+      expect(find.text('Confirm transaction'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('broadcast-result-title')),
+        findsOneWidget,
+      );
+    },
+  );
 
   for (final chain in [Chain.ethereum, Chain.tron, Chain.solana]) {
     testWidgets(

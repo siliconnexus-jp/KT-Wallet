@@ -37,6 +37,7 @@ import '../market/market_scope.dart'
         MarketScope,
         effectiveRpcEndpoints,
         effectiveTransactionRpcEndpoints,
+        formatFeeFiatForContext,
         formatFiatForContext,
         prefsGatewayResolver;
 import '../market/token_balance_service.dart'
@@ -171,6 +172,9 @@ double? _unitPriceUsd(
 /// Selected-fiat value, or `--` when either the USD quote or FX rate is absent.
 String _fiatText(BuildContext context, double? value) =>
     formatFiatForContext(context, value);
+
+String _feeFiatText(BuildContext context, double? value) =>
+    formatFeeFiatForContext(context, value);
 
 /// The fiat value of [amount] at [unitPrice], or null when either is unknown.
 /// Display-only double math (the same convention as [MarketController]).
@@ -1071,7 +1075,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
 
   String _formattedFeeFiat() {
     final fee = _feeQuote?.fee;
-    final fiat = _fiatText(
+    final fiat = _feeFiatText(
       context,
       _fiatValue(
         fee,
@@ -2528,6 +2532,77 @@ enum _FeeEstimate {
   failed,
 }
 
+class _ConfirmNetworkFeeRow extends StatelessWidget {
+  const _ConfirmNetworkFeeRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    const labelStyle = TextStyle(fontSize: 14, color: WalletColors.text2);
+    const valueStyle = TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w500,
+      color: WalletColors.text,
+    );
+    return Semantics(
+      key: const ValueKey('confirm-network-fee-row'),
+      container: true,
+      label: '$label, $value',
+      child: ExcludeSemantics(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final stacked =
+                MediaQuery.textScalerOf(context).scale(14) >= 20 ||
+                constraints.maxWidth < 280;
+            if (stacked) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: labelStyle),
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      value,
+                      key: const ValueKey('confirm-network-fee-value'),
+                      textAlign: TextAlign.right,
+                      style: valueStyle,
+                    ),
+                  ),
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: labelStyle),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.topRight,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.topRight,
+                      child: Text(
+                        value,
+                        key: const ValueKey('confirm-network-fee-value'),
+                        textAlign: TextAlign.right,
+                        style: valueStyle,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
 /// Shared confirm layout for W5 (watch) / W29 (hot).
 ///
 /// With a live [TransferDraft] in scope every displayed field is derived from
@@ -2918,7 +2993,7 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
         _ when fee == null => '--',
         _ when isTestnet => '≈ $fee',
         _ =>
-          '≈ $fee（${_fiatText(context, _fiatValue(fee, _unitPriceUsd(context, chain: draft.chain, symbol: fee.symbol, tokenContract: null)))}）',
+          '≈ $fee（${_feeFiatText(context, _fiatValue(fee, _unitPriceUsd(context, chain: draft.chain, symbol: fee.symbol, tokenContract: null)))}）',
       };
       // Total spend only adds the fee when it is a REAL one and the transfer
       // actually spends the native coin; otherwise it is the amount alone.
@@ -3027,7 +3102,7 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
                 mono: true,
               ),
               const SizedBox(height: 14),
-              KtDetailRow(label: l10n.networkFee, value: feeValue),
+              _ConfirmNetworkFeeRow(label: l10n.networkFee, value: feeValue),
               if (_rentReserve case final rent?) ...[
                 const SizedBox(height: 14),
                 KtDetailRow(label: l10n.solanaRentReserve, value: '$rent'),

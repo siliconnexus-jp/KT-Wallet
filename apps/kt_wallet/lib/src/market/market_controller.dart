@@ -743,6 +743,45 @@ String formatFiat(double value, String currency) {
   return '$symbol$buf$suffix';
 }
 
+/// Fee-specific fiat formatting keeps tiny positive network costs visible
+/// instead of rounding them to an apparent zero. Ordinary portfolio values
+/// continue to use [formatFiat] and its fixed currency precision.
+String formatFeeFiat(double value, String currency) {
+  if (!value.isFinite || value < 0) return '--';
+  final normalized = currency.toUpperCase();
+  final decimals = value == 0
+      ? 2
+      : value >= 0.01
+      ? 2
+      : value >= 0.0001
+      ? 4
+      : value >= 0.000001
+      ? 6
+      : 8;
+  var fixed = value.toStringAsFixed(decimals);
+  if (fixed.contains('.')) {
+    while (fixed.endsWith('0') && fixed.length - fixed.indexOf('.') - 1 > 2) {
+      fixed = fixed.substring(0, fixed.length - 1);
+    }
+  }
+  final dot = fixed.indexOf('.');
+  final intPart = dot < 0 ? fixed : fixed.substring(0, dot);
+  final buf = StringBuffer();
+  for (var i = 0; i < intPart.length; i++) {
+    buf.write(intPart[i]);
+    final remaining = intPart.length - 1 - i;
+    if (remaining > 0 && remaining % 3 == 0) buf.write(',');
+  }
+  final suffix = dot < 0 ? '' : fixed.substring(dot);
+  final symbol = switch (normalized) {
+    'USD' => r'$',
+    'CNY' => 'CN¥',
+    'JPY' => 'JP¥',
+    _ => '$normalized ',
+  };
+  return '$symbol$buf$suffix';
+}
+
 String formatChange24h(double? value) {
   if (value == null || !value.isFinite) return '';
   final normalized = value.abs() < 0.005 ? 0.0 : value;

@@ -2,8 +2,9 @@
 
 | File | Source | License |
 | --- | --- | --- |
-| `busd` `eth` `matic` `sol` `trx` `uni` `usdc` `usdt` `avax` | [spothq/cryptocurrency-icons](https://github.com/spothq/cryptocurrency-icons) | MIT |
+| `busd` `eth` `matic` `trx` `uni` `usdc` `usdt` `avax` | [spothq/cryptocurrency-icons](https://github.com/spothq/cryptocurrency-icons) | MIT |
 | `arb` `bnb` `bonk` `dai` `jup` `link` `pepe` `pyusd` `shib` `wbtc` `weth` | [trustwallet/assets](https://github.com/trustwallet/assets) | MIT |
+| `sol` | [Official Solana logomark](https://solana.com/branding), placed on the standard black circular token background | Solana brand guidelines |
 | `base` | drawn from Base's own brand kit geometry | see below |
 
 `base` is redrawn rather than copied. Base's brand kit

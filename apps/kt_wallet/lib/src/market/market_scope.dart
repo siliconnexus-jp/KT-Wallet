@@ -53,6 +53,18 @@ String formatFiatForContext(BuildContext context, double? usd) {
   return converted == null ? '--' : formatFiat(converted, currency);
 }
 
+/// Network-fee counterpart to [formatFiatForContext]. Small positive costs
+/// retain enough precision to remain non-zero in every selected currency.
+String formatFeeFiatForContext(BuildContext context, double? usd) {
+  if (usd == null || !usd.isFinite || usd < 0) return '--';
+  final currency = AppPrefsScope.maybeOf(context)?.fiat ?? 'USD';
+  final market = MarketScope.maybeOf(context);
+  final converted = currency == 'USD'
+      ? usd
+      : multiplyFiatForDisplay(usd, market?.fiatPerUsd(currency));
+  return converted == null ? '--' : formatFeeFiat(converted, currency);
+}
+
 String formatSignedFiatForContext(BuildContext context, double usd) {
   final normalized = usd.abs() < 0.005 ? 0.0 : usd;
   final formatted = formatFiatForContext(context, normalized.abs());

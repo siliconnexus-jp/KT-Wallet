@@ -441,6 +441,36 @@ void main() {
     );
   });
 
+  test('legacy SPL draft normalizes a null program before auth validation', () {
+    final draft = _solDraft(tokenProgram: null);
+    final prepared = PreparedSolanaTransfer(
+      from: _solFrom,
+      recipient: draft.recipient,
+      amountRaw: draft.amount.raw,
+      tokenMint: draft.tokenContract,
+      tokenProgram: solanaTokenProgram,
+      networkFeeLamports: BigInt.from(5000),
+      rentDepositLamports: BigInt.from(2039280),
+      lastValidBlockHeight: 777,
+      message: Uint8List.fromList(const [20, 21, 22]),
+    );
+    final session = TransferSession()
+      ..draft = draft
+      ..preparedSolana = prepared
+      ..preparedNetworkId = 'solana-devnet'
+      ..preparedAtMs = 1000;
+
+    expect(
+      session.validSolanaQuote(
+        forDraft: draft,
+        networkId: 'solana-devnet',
+        from: _solFrom,
+        nowMs: 1001,
+      ),
+      same(prepared),
+    );
+  });
+
   test('new transfer clears non-EVM quotes and validity boundaries', () {
     final tron = _tronDraft();
     final solana = _solDraft();

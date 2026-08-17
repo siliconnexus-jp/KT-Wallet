@@ -349,6 +349,9 @@ class TransferSession {
     int? nowMs,
   }) {
     final prepared = preparedSolana;
+    final expectedTokenProgram = forDraft.tokenContract == null
+        ? null
+        : forDraft.tokenProgram ?? solanaTokenProgram;
     if (!_quoteIsFresh(networkId: networkId, nowMs: nowMs) ||
         prepared == null ||
         forDraft.chain != Chain.solana ||
@@ -356,7 +359,7 @@ class TransferSession {
         prepared.recipient != forDraft.recipient ||
         prepared.amountRaw != forDraft.amount.raw ||
         (prepared.tokenMint ?? '') != (forDraft.tokenContract ?? '') ||
-        (prepared.tokenProgram ?? '') != (forDraft.tokenProgram ?? '')) {
+        (prepared.tokenProgram ?? '') != (expectedTokenProgram ?? '')) {
       return null;
     }
     return prepared;
