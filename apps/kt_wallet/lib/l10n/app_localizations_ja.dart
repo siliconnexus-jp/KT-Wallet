@@ -851,6 +851,48 @@ class AppLocalizationsJa extends AppLocalizations {
       '署名済み取引がネットワークに到達している可能性があります。再送信しないでください。KT Wallet はローカルで算出した取引ハッシュを引き続き確認します。';
 
   @override
+  String transferBroadcastInProgress(String amount, String symbol) {
+    return '$amount $symbol を送金中';
+  }
+
+  @override
+  String transferBroadcastCompleted(String amount, String symbol) {
+    return '$amount $symbol を送金済み';
+  }
+
+  @override
+  String transferBroadcastFailed(String amount, String symbol) {
+    return '$amount $symbol の送金に失敗';
+  }
+
+  @override
+  String get transferProcessingState => '処理中';
+
+  @override
+  String get transferCompletedState => '完了';
+
+  @override
+  String get transferStageProcessing => '処理中';
+
+  @override
+  String get transferStageBroadcasting => 'ブロードキャスト中';
+
+  @override
+  String get transferStageAwaitingConfirmation => '確認待ち';
+
+  @override
+  String get transferStageConfirming => '確認中';
+
+  @override
+  String get networkCost => 'ネットワーク手数料';
+
+  @override
+  String get submissionTime => '送信日時';
+
+  @override
+  String get viewOnBlockchainExplorer => 'ブロックチェーンエクスプローラーで表示';
+
+  @override
   String get txTimeLabel => '日時';
 
   @override

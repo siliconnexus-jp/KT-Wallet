@@ -211,24 +211,15 @@ Future<void> _submitTransfer(
   expect(authenticate.hitTestable(), findsOneWidget);
   await tester.tap(authenticate);
   await _waitForSubmitted(tester, timeout: const Duration(minutes: 2));
-  expect(find.text('交易已提交'), findsOneWidget);
+  expect(find.byKey(const ValueKey('broadcast-result-title')), findsOneWidget);
   expect(find.textContaining(RegExp(r'\(\d+/\d+\)')), findsNothing);
   await _capture(binding, resultMarker);
   await _waitUntil(
     tester,
-    () => find.text('已确认').evaluate().isNotEmpty,
+    () => find.text('已完成').evaluate().isNotEmpty,
     timeout: const Duration(minutes: 2),
   );
-  final confirmationRow = find.byKey(const ValueKey('broadcast-confirmations'));
-  expect(confirmationRow, findsOneWidget);
-  final confirmationValues = tester
-      .widgetList<Text>(
-        find.descendant(of: confirmationRow, matching: find.byType(Text)),
-      )
-      .map((text) => text.data)
-      .whereType<String>()
-      .where((text) => RegExp(r'^[1-9]\d*$').hasMatch(text));
-  expect(confirmationValues, isNotEmpty);
+  expect(find.text('在区块链浏览器上查看'), findsOneWidget);
   await _capture(binding, confirmedMarker);
 }
 
@@ -237,7 +228,10 @@ Future<void> _waitForSubmitted(
   required Duration timeout,
 }) async {
   final deadline = DateTime.now().add(timeout);
-  while (find.text('交易已提交').evaluate().isEmpty) {
+  while (find
+      .byKey(const ValueKey('broadcast-result-title'))
+      .evaluate()
+      .isEmpty) {
     final snackbars = find.byType(SnackBar);
     if (snackbars.evaluate().isNotEmpty) {
       final messages = tester

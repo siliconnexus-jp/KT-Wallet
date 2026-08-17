@@ -33,7 +33,10 @@ void main() {
 
     await tester.tap(find.text('使用生物识别验证'));
     await tester.pumpAndSettle();
-    expect(find.text('交易已提交'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('broadcast-result-title')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('biometric failure stays on the sheet with a snackbar', (
@@ -46,7 +49,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('验证失败，请重试'), findsOneWidget);
     expect(find.text('验证以确认转账'), findsOneWidget); // still on the sheet
-    expect(find.text('交易已提交'), findsNothing);
+    expect(find.byKey(const ValueKey('broadcast-result-title')), findsNothing);
   });
 
   testWidgets('unavailable biometrics fail closed', (tester) async {
@@ -58,7 +61,7 @@ void main() {
     await tester.tap(find.text('使用生物识别验证'));
     await tester.pumpAndSettle();
     expect(find.text('生物识别不可用，请使用钱包 PIN'), findsOneWidget);
-    expect(find.text('交易已提交'), findsNothing);
+    expect(find.byKey(const ValueKey('broadcast-result-title')), findsNothing);
   });
 
   testWidgets('wallet PIN must verify before proceeding', (tester) async {
@@ -78,7 +81,10 @@ void main() {
     }
     await tester.pumpAndSettle();
 
-    expect(find.text('交易已提交'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('broadcast-result-title')),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
@@ -102,7 +108,10 @@ void main() {
       }
       await tester.pumpAndSettle();
 
-      expect(find.text('交易已提交'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('broadcast-result-title')),
+        findsOneWidget,
+      );
     },
   );
 

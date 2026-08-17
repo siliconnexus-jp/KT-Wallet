@@ -1636,6 +1636,78 @@ abstract class AppLocalizations {
   /// **'签名交易可能已经到达网络，请勿再次发送。KT Wallet 将使用本地计算的交易哈希继续查询链上结果。'**
   String get txSubmissionUnknownMessage;
 
+  /// No description provided for @transferBroadcastInProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在转账 {amount} {symbol}'**
+  String transferBroadcastInProgress(String amount, String symbol);
+
+  /// No description provided for @transferBroadcastCompleted.
+  ///
+  /// In zh, this message translates to:
+  /// **'已转账 {amount} {symbol}'**
+  String transferBroadcastCompleted(String amount, String symbol);
+
+  /// No description provided for @transferBroadcastFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'转账失败 {amount} {symbol}'**
+  String transferBroadcastFailed(String amount, String symbol);
+
+  /// No description provided for @transferProcessingState.
+  ///
+  /// In zh, this message translates to:
+  /// **'处理中'**
+  String get transferProcessingState;
+
+  /// No description provided for @transferCompletedState.
+  ///
+  /// In zh, this message translates to:
+  /// **'已完成'**
+  String get transferCompletedState;
+
+  /// No description provided for @transferStageProcessing.
+  ///
+  /// In zh, this message translates to:
+  /// **'处理中'**
+  String get transferStageProcessing;
+
+  /// No description provided for @transferStageBroadcasting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在广播'**
+  String get transferStageBroadcasting;
+
+  /// No description provided for @transferStageAwaitingConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'等待确认'**
+  String get transferStageAwaitingConfirmation;
+
+  /// No description provided for @transferStageConfirming.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认中'**
+  String get transferStageConfirming;
+
+  /// No description provided for @networkCost.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络费用'**
+  String get networkCost;
+
+  /// No description provided for @submissionTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'提交时间'**
+  String get submissionTime;
+
+  /// No description provided for @viewOnBlockchainExplorer.
+  ///
+  /// In zh, this message translates to:
+  /// **'在区块链浏览器上查看'**
+  String get viewOnBlockchainExplorer;
+
   /// No description provided for @txTimeLabel.
   ///
   /// In zh, this message translates to:

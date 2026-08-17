@@ -902,6 +902,48 @@ class AppLocalizationsEn extends AppLocalizations {
       'The signed transaction may have reached the network. Do not send it again. KT Wallet will keep checking its locally derived transaction hash.';
 
   @override
+  String transferBroadcastInProgress(String amount, String symbol) {
+    return 'Sending $amount $symbol';
+  }
+
+  @override
+  String transferBroadcastCompleted(String amount, String symbol) {
+    return 'Sent $amount $symbol';
+  }
+
+  @override
+  String transferBroadcastFailed(String amount, String symbol) {
+    return 'Transfer failed: $amount $symbol';
+  }
+
+  @override
+  String get transferProcessingState => 'Processing';
+
+  @override
+  String get transferCompletedState => 'Completed';
+
+  @override
+  String get transferStageProcessing => 'Processing';
+
+  @override
+  String get transferStageBroadcasting => 'Broadcasting';
+
+  @override
+  String get transferStageAwaitingConfirmation => 'Waiting for confirmation';
+
+  @override
+  String get transferStageConfirming => 'Confirming';
+
+  @override
+  String get networkCost => 'Network fee';
+
+  @override
+  String get submissionTime => 'Submitted at';
+
+  @override
+  String get viewOnBlockchainExplorer => 'View on blockchain explorer';
+
+  @override
   String get txTimeLabel => 'Time';
 
   @override

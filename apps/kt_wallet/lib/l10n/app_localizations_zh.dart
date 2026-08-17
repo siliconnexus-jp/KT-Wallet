@@ -845,6 +845,48 @@ class AppLocalizationsZh extends AppLocalizations {
       '签名交易可能已经到达网络，请勿再次发送。KT Wallet 将使用本地计算的交易哈希继续查询链上结果。';
 
   @override
+  String transferBroadcastInProgress(String amount, String symbol) {
+    return '正在转账 $amount $symbol';
+  }
+
+  @override
+  String transferBroadcastCompleted(String amount, String symbol) {
+    return '已转账 $amount $symbol';
+  }
+
+  @override
+  String transferBroadcastFailed(String amount, String symbol) {
+    return '转账失败 $amount $symbol';
+  }
+
+  @override
+  String get transferProcessingState => '处理中';
+
+  @override
+  String get transferCompletedState => '已完成';
+
+  @override
+  String get transferStageProcessing => '处理中';
+
+  @override
+  String get transferStageBroadcasting => '正在广播';
+
+  @override
+  String get transferStageAwaitingConfirmation => '等待确认';
+
+  @override
+  String get transferStageConfirming => '确认中';
+
+  @override
+  String get networkCost => '网络费用';
+
+  @override
+  String get submissionTime => '提交时间';
+
+  @override
+  String get viewOnBlockchainExplorer => '在区块链浏览器上查看';
+
+  @override
   String get txTimeLabel => '时间';
 
   @override

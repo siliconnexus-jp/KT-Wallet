@@ -637,13 +637,14 @@ void main() {
         await tester.tap(find.byType(KtPrimaryButton));
         await tester.pumpAndSettle();
 
-        expect(find.text('交易已提交'), findsOneWidget); // W9
+        expect(find.text('正在转账 0.001 ETH'), findsOneWidget); // W9
         expect(session.broadcastTxHash, localHash);
         expect(
-          find.text(truncateMiddle(localHash, head: 6, tail: 6)),
+          find.text(truncateMiddle(localHash, head: 7, tail: 7)),
           findsOneWidget,
         );
-        expect(find.text('确认中'), findsOneWidget);
+        expect(find.text('处理中'), findsOneWidget);
+        expect(find.text('正在广播'), findsOneWidget);
         expect(find.textContaining(RegExp(r'\(\d+/\d+\)')), findsNothing);
         expect(jsonRpc.calls, hasLength(1));
       },
@@ -677,8 +678,10 @@ void main() {
         await tester.tap(find.byType(KtPrimaryButton));
         await tester.pumpAndSettle();
 
-        expect(find.text('Broadcast result unknown'), findsOneWidget);
-        expect(find.textContaining('Do not send it again'), findsOneWidget);
+        expect(find.text('Sending 0.001 ETH'), findsOneWidget);
+        expect(find.text('Processing'), findsOneWidget);
+        expect(find.text('Waiting for confirmation'), findsOneWidget);
+        expect(find.text('Back to home'), findsOneWidget);
         expect(session.broadcastTxHash, result.txHash);
         expect(session.broadcastOutcomeUnknown, isTrue);
         expect(jsonRpc.calls, hasLength(1));
@@ -773,8 +776,9 @@ void main() {
         await tester.tap(find.byType(KtPrimaryButton));
         await tester.pumpAndSettle();
 
-        expect(find.text('Broadcast result unknown'), findsOneWidget);
-        expect(find.textContaining('Do not send it again'), findsOneWidget);
+        expect(find.text('Sending 0.001 ETH'), findsOneWidget);
+        expect(find.text('Waiting for confirmation'), findsOneWidget);
+        expect(find.text('Back to home'), findsOneWidget);
         expect(session.broadcastTxHash, 'locally-derived-hash');
         expect(session.broadcastOutcomeUnknown, isTrue);
         expect(transport.calls, hasLength(1));
@@ -816,8 +820,9 @@ void main() {
         await tester.tap(find.byType(KtPrimaryButton));
         await tester.pumpAndSettle();
 
-        expect(find.text('Broadcast result unknown'), findsOneWidget);
-        expect(find.textContaining('Do not send it again'), findsOneWidget);
+        expect(find.text('Sending 0.001 ETH'), findsOneWidget);
+        expect(find.text('Waiting for confirmation'), findsOneWidget);
+        expect(find.text('Back to home'), findsOneWidget);
         expect(session.broadcastTxHash, 'locally-derived-hash');
         expect(session.broadcastOutcomeUnknown, isTrue);
         expect(transport.calls, 1);

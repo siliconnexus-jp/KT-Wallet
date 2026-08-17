@@ -299,8 +299,12 @@ void main() {
         expect(row.broadcastAt, isNotNull);
         expect(session.broadcastTxHash, _ResponseLostService.localHash);
         expect(session.broadcastOutcomeUnknown, isTrue);
-        expect(find.text('Broadcast result unknown'), findsOneWidget);
-        expect(find.textContaining('Do not send it again'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('broadcast-result-title')),
+          findsOneWidget,
+        );
+        expect(find.text('Waiting for confirmation'), findsOneWidget);
+        expect(find.text('Back to home'), findsOneWidget);
         if (chain == Chain.tron) {
           expect(row.referenceBlockHeight, 4242);
           expect(row.expiresAt, isNotNull);

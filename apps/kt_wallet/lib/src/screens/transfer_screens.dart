@@ -4212,9 +4212,6 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
   Timer? _timer;
   bool _loading = false;
   bool _checkingConfirmations = false;
-  int? _confirmations;
-  int? _lastCheckedAt;
-  TxCheckOutcome? _lastCheckOutcome;
 
   @override
   void initState() {
@@ -4258,8 +4255,6 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
     if (!mounted) return;
     setState(() {
       _transaction = transaction;
-      _lastCheckedAt = transaction?.lastCheckedAt;
-      _lastCheckOutcome = transaction?.lastCheckOutcome;
       _loading = false;
     });
     if (transaction != null) _scheduleCheck(transaction, immediately: true);
@@ -4296,6 +4291,9 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
     // the screen visibly pending for a full direct timeout.
     final chainStatus = await _statusService?.check(tx);
     if (!mounted) return;
+    if (chainStatus != null && chainStatus != ChainTransactionStatus.unknown) {
+      TransferSessionScope.maybeOf(context)?.broadcastOutcomeUnknown = false;
+    }
     final next = switch (chainStatus) {
       ChainTransactionStatus.confirmed => TxStatus.confirmed,
       ChainTransactionStatus.failed => TxStatus.failed,
@@ -4348,10 +4346,6 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
       await _reload();
       return;
     }
-    setState(() {
-      _lastCheckedAt = checkedAt;
-      _lastCheckOutcome = terminal ? null : outcome;
-    });
     // Confirmation depth is presentation-only. Fetch it after authoritative
     // terminal state has been persisted, and never let a blocked public RPC
     // delay the status transition. A missing depth remains honestly absent.
@@ -4387,17 +4381,17 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
       if (!mounted) return snapshot.status;
       final transaction = _transaction;
       final actualFee = snapshot.actualFeeRaw;
+      var feeUpdated = false;
       if (transaction != null && actualFee != null) {
-        await WalletScope.of(context).updateTransactionActualFeeForWallet(
-          walletId: transaction.walletId,
-          id: transaction.id,
-          expectedHash: hash,
-          actualFee: actualFee,
-        );
+        feeUpdated = await WalletScope.of(context)
+            .updateTransactionActualFeeForWallet(
+              walletId: transaction.walletId,
+              id: transaction.id,
+              expectedHash: hash,
+              actualFee: actualFee,
+            );
       }
-      if (mounted) {
-        setState(() => _confirmations = snapshot.confirmations);
-      }
+      if (feeUpdated && mounted) await _reload();
       return snapshot.status;
     } catch (_) {
       return null;
@@ -4423,18 +4417,104 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
     super.dispose();
   }
 
+  bool _isFailure(TxStatus status) =>
+      status == TxStatus.failed ||
+      status == TxStatus.dropped ||
+      status == TxStatus.expired ||
+      status == TxStatus.replaced;
+
+  Network? _transactionNetwork(TransferDraft draft, Transaction? transaction) {
+    final networks = NetworkScope.maybeOf(context);
+    if (networks == null) return null;
+    final networkId = transaction?.networkId;
+    return networkId == null
+        ? networks.activeFor(draft.chain)
+        : networks.byId(networkId);
+  }
+
+  double? _transferUsdValue(TransferDraft draft, Network? network) {
+    if (network?.isTestnet ?? false) return null;
+    final stablecoin =
+        draft.tokenContract != null &&
+        const {
+          'USDT',
+          'USDC',
+          'BUSD',
+          'PYUSD',
+        }.contains(draft.symbol.toUpperCase());
+    if (stablecoin) return fiatValueForDisplay(draft.amount, 1);
+    return _fiatValue(
+      draft.amount,
+      _unitPriceUsd(
+        context,
+        chain: draft.chain,
+        symbol: draft.symbol,
+        tokenContract: draft.tokenContract,
+      ),
+    );
+  }
+
+  String _usdText(double? value) =>
+      value == null || !value.isFinite ? '--' : '\$${value.toStringAsFixed(2)}';
+
+  String _networkFeeText(
+    TransferDraft draft,
+    Transaction? transaction, {
+    required bool completed,
+    required bool failed,
+  }) {
+    final raw = completed || failed
+        ? transaction?.actualFeeRaw
+        : transaction?.feeRaw;
+    if (raw == null) return '--';
+    final parsed = BigInt.tryParse(raw);
+    if (parsed == null || parsed.isNegative) return '--';
+    final coin = rpcCoinForChain(draft.chain);
+    final formatted =
+        '${Amount(raw: parsed, decimals: BalanceService.decimalsFor[coin]!, symbol: BalanceService.symbolFor[coin]!).format(maxFraction: 8)} ${BalanceService.symbolFor[coin]!}';
+    return !completed && !failed && draft.chain != Chain.solana
+        ? '≤ $formatted'
+        : formatted;
+  }
+
+  Future<void> _copyBroadcastValue(String value) async {
+    await Clipboard.setData(ClipboardData(text: value));
+  }
+
+  Uri? _explorerUri(
+    TransferDraft draft,
+    Transaction? transaction,
+    String? hash,
+  ) {
+    final network = _transactionNetwork(draft, transaction);
+    if (network == null || hash == null || hash.isEmpty) return null;
+    final url = explorerTxUrl(network, hash);
+    return url == null ? null : Uri.parse(url);
+  }
+
+  Future<void> _openBlockchainExplorer(Uri uri) async {
+    final opened = await ExternalActions.instance.open(uri);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context).externalActionFailed),
+          ),
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    // Prefer the hash the broadcast step actually produced (node answer or
-    // simulated short-circuit); else keep the decoded result's hash for
-    // consistency with broadcast-confirm; demo constant otherwise.
     final session = TransferSessionScope.maybeOf(context);
-    final fullHash = session?.broadcastTxHash ?? session?.result?.txHash;
     final draft = session?.draft;
-    // Signing is not submission. W9 requires a durable row and a hash plus an
-    // actual broadcast attempt. The hash can be either the node answer or the
-    // locally derived recovery key when the response was lost.
+    final transaction = _transaction;
+    final fullHash =
+        transaction?.hash ??
+        session?.broadcastTxHash ??
+        session?.result?.txHash;
     final hasSubmissionEvidence =
         draft != null &&
         session?.localTransactionId != null &&
@@ -4442,166 +4522,454 @@ class _BroadcastResultScreenState extends State<BroadcastResultScreen>
     if (!hasSubmissionEvidence && !WalletScope.of(context).allowsTestBypass) {
       return const InvalidTransferState();
     }
-    final transferLabel = draft == null
-        ? '-120.00 USDT · TRON'
-        : draft.operation == TxOperation.approvalRevoke
-        ? '${l10n.approvalRevoke} · ${draft.networkLabel}'
-        : '-${draft.amountText} · ${draft.networkLabel}';
-    final hashValue = fullHash == null
-        ? '8f6d2c…a94e07'
-        : truncateMiddle(fullHash, head: 6, tail: 6);
-    final submissionUnknown = session?.broadcastOutcomeUnknown ?? false;
-    final status =
-        _transaction?.status ??
-        (submissionUnknown ? TxStatus.submitted : TxStatus.pending);
-    final statusUnknown =
-        submissionUnknown ||
-        ((status == TxStatus.submitted ||
-                status == TxStatus.pending ||
-                status == TxStatus.broadcast) &&
-            _lastCheckOutcome == TxCheckOutcome.unknown);
-    final failed =
-        status == TxStatus.failed ||
-        status == TxStatus.dropped ||
-        status == TxStatus.expired;
-    final confirmed = status == TxStatus.confirmed;
-    final replaced = status == TxStatus.replaced;
-    final color = statusUnknown
-        ? WalletColors.text3
+
+    final liveDraft =
+        draft ??
+        TransferDraft(
+          symbol: 'USDT',
+          networkLabel: 'TRON · TRC-20',
+          chain: Chain.tron,
+          recipient: 'TA5X6WfP1smMYoVx92yP9xiFPcPm7fqK2w',
+          amount: Amount(
+            raw: BigInt.from(120000000),
+            decimals: 6,
+            symbol: 'USDT',
+          ),
+          feeTier: 1,
+          tokenContract: usdtTronToken.contract,
+        );
+    final status = transaction?.status ?? TxStatus.submitted;
+    final completed = status == TxStatus.confirmed;
+    final failed = _isFailure(status);
+    final processing = !completed && !failed;
+    final amount = liveDraft.amount.format();
+    final network = _transactionNetwork(liveDraft, transaction);
+    final usd = _usdText(_transferUsdValue(liveDraft, network));
+    final title = completed
+        ? l10n.transferBroadcastCompleted(amount, liveDraft.symbol)
         : failed
-        ? WalletColors.red
-        : replaced
-        ? const Color(0xFFF59E0B)
-        : confirmed
-        ? WalletColors.green
-        : WalletColors.accent;
-    final icon = statusUnknown
-        ? Icons.help_outline_rounded
-        : failed
-        ? Icons.error_outline_rounded
-        : replaced
-        ? Icons.swap_horiz_rounded
-        : confirmed
-        ? Icons.check
-        : Icons.schedule_rounded;
-    final statusLabel = statusUnknown
-        ? l10n.txStatusUnknown
+        ? l10n.transferBroadcastFailed(amount, liveDraft.symbol)
+        : l10n.transferBroadcastInProgress(amount, liveDraft.symbol);
+    final stateLabel = completed
+        ? l10n.transferCompletedState
         : failed
         ? l10n.txStatusFailed
-        : replaced
-        ? l10n.txStatusReplaced
-        : confirmed
-        ? l10n.txStatusConfirmed
-        : l10n.txStatusPending;
+        : l10n.transferProcessingState;
+    final submissionUnknown =
+        processing && (session?.broadcastOutcomeUnknown ?? false);
+    final stageLabel = _loading
+        ? l10n.transferStageProcessing
+        : submissionUnknown
+        ? l10n.transferStageAwaitingConfirmation
+        : switch (status) {
+            TxStatus.submitted => l10n.transferStageBroadcasting,
+            TxStatus.broadcast => l10n.transferStageAwaitingConfirmation,
+            TxStatus.pending => l10n.transferStageConfirming,
+            _ => l10n.transferStageProcessing,
+          };
+    final feeLabel = l10n.networkCost;
+    final fee = _networkFeeText(
+      liveDraft,
+      transaction,
+      completed: completed,
+      failed: failed,
+    );
+    final submittedAt = transaction?.broadcastAt ?? transaction?.createdAt;
+    final explorer = _explorerUri(liveDraft, transaction, fullHash);
+
     return KtScreen(
-      gap: 24,
-      bottom: KtPrimaryButton(
-        label: l10n.backToHome,
-        onPressed: () => context.go('/home'),
+      backgroundColor: Colors.white,
+      gap: 0,
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+      navBar: KtNavBar(
+        title: '',
+        leading: Icons.arrow_back_ios_new_rounded,
+        onBack: () => context.go('/home'),
+      ),
+      bottom: _BroadcastResultButton(
+        label: completed ? l10n.viewOnBlockchainExplorer : l10n.backToHome,
+        emphasized: completed,
+        onPressed: completed
+            ? explorer == null
+                  ? null
+                  : () => _openBlockchainExplorer(explorer)
+            : () => context.go('/home'),
       ),
       children: [
-        const SizedBox(height: 24),
+        const SizedBox(height: 4),
         Center(
-          child: Container(
-            width: 88,
-            height: 88,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.08),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-                child: Icon(icon, size: 32, color: Colors.white),
-              ),
+          child: TokenIcon(
+            key: const ValueKey('broadcast-asset-icon'),
+            symbol: liveDraft.symbol,
+            size: 32,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Semantics(
+          header: true,
+          child: Text(
+            title,
+            key: const ValueKey('broadcast-result-title'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 22,
+              height: 1.2,
+              fontWeight: FontWeight.w800,
+              color: Colors.black,
             ),
           ),
         ),
-        Column(
-          children: [
-            Text(
-              submissionUnknown ? l10n.txSubmissionUnknown : l10n.txSubmitted,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: WalletColors.text,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              transferLabel,
-              style: const TextStyle(fontSize: 14, color: WalletColors.text2),
-            ),
-          ],
+        const SizedBox(height: 8),
+        Text(
+          usd == '--' ? '--' : '≈ $usd',
+          key: const ValueKey('broadcast-usd-value'),
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: WalletColors.text3,
+          ),
         ),
-        if (submissionUnknown)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF7E8),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFFFD58A)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.warning_amber_rounded,
-                  color: Color(0xFFC56A00),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
+        const SizedBox(height: 26),
+        Padding(
+          key: const ValueKey('broadcast-status-section'),
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _BroadcastResultStatusIcon(
+                processing: processing,
+                completed: completed,
+                failed: failed,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 7),
                   child: Text(
-                    l10n.txSubmissionUnknownMessage,
+                    l10n.statusLabel,
                     style: const TextStyle(
-                      color: Color(0xFF7A4300),
-                      height: 1.45,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
                     ),
                   ),
                 ),
-              ],
-            ),
-          ),
-        KtCard(
-          child: Column(
-            children: [
-              KtDetailRow(label: l10n.txHash, value: hashValue, mono: true),
-              const SizedBox(height: 14),
-              KeyedSubtree(
-                key: const ValueKey('broadcast-confirmations'),
-                child: KtDetailRow(
-                  label: l10n.confirmations,
-                  value: _confirmations?.toString() ?? '--',
-                  mono: true,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 7),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        stateLabel,
+                        key: const ValueKey('broadcast-result-state'),
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400,
+                          color: failed ? WalletColors.red : WalletColors.text2,
+                        ),
+                      ),
+                      if (processing) ...[
+                        const SizedBox(height: 7),
+                        Text(
+                          stageLabel,
+                          key: const ValueKey('broadcast-result-stage'),
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: WalletColors.text3,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 14),
-              KtDetailRow(
-                label: l10n.statusLabel,
-                value: statusLabel,
-                valueColor: color,
-              ),
-              const SizedBox(height: 14),
-              KtDetailRow(
-                label: l10n.txBroadcastTime,
-                value: _transaction?.broadcastAt == null
-                    ? '--'
-                    : _date(_transaction!.broadcastAt!),
-              ),
-              const SizedBox(height: 14),
-              KtDetailRow(
-                label: l10n.txLastStatusCheck,
-                value: _lastCheckedAt == null
-                    ? l10n.txNotCheckedYet
-                    : _date(_lastCheckedAt!),
               ),
             ],
           ),
         ),
+        const _BroadcastResultDivider(),
+        const SizedBox(height: 18),
+        _BroadcastResultDetailRow(
+          label: l10n.addressLabel,
+          value: liveDraft.recipient,
+          copyKey: const ValueKey('copy-broadcast-address'),
+          onCopy: () => _copyBroadcastValue(liveDraft.recipient),
+        ),
+        _BroadcastResultDetailRow(label: l10n.price, value: usd),
+        _BroadcastResultDetailRow(
+          label: l10n.networkRow,
+          value: liveDraft.networkLabel,
+          leadingValue: ChainIcon(chain: liveDraft.chain, size: 16),
+        ),
+        _BroadcastResultDetailRow(label: feeLabel, value: fee),
+        if (fullHash != null && fullHash.isNotEmpty)
+          _BroadcastResultDetailRow(
+            label: l10n.txHash,
+            value: truncateMiddle(fullHash, head: 7, tail: 7),
+            copyKey: const ValueKey('copy-broadcast-hash'),
+            onCopy: () => _copyBroadcastValue(fullHash),
+          ),
+        _BroadcastResultDetailRow(
+          label: l10n.submissionTime,
+          value: submittedAt == null ? '--' : _date(submittedAt),
+        ),
       ],
+    );
+  }
+}
+
+class _BroadcastResultDivider extends StatelessWidget {
+  const _BroadcastResultDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    return SizedBox(
+      key: const ValueKey('broadcast-result-divider'),
+      height: 1,
+      child: OverflowBox(
+        minWidth: width,
+        maxWidth: width,
+        child: const ColoredBox(color: WalletColors.border),
+      ),
+    );
+  }
+}
+
+class _BroadcastResultStatusIcon extends StatelessWidget {
+  const _BroadcastResultStatusIcon({
+    required this.processing,
+    required this.completed,
+    required this.failed,
+  });
+
+  final bool processing;
+  final bool completed;
+  final bool failed;
+
+  @override
+  Widget build(BuildContext context) {
+    if (completed) {
+      return const SizedBox(
+        key: ValueKey('broadcast-completed-icon'),
+        width: 32,
+        height: 32,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Color(0xFF35C66B),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.check_rounded, color: Colors.white, size: 20),
+        ),
+      );
+    }
+    if (failed) {
+      return const SizedBox(
+        key: ValueKey('broadcast-failed-icon'),
+        width: 32,
+        height: 32,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: WalletColors.red,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.close_rounded, color: Colors.white, size: 20),
+        ),
+      );
+    }
+    final animate =
+        processing &&
+        !_isFlutterTest &&
+        !MediaQuery.disableAnimationsOf(context);
+    return SizedBox(
+      key: const ValueKey('broadcast-processing-icon'),
+      width: 32,
+      height: 32,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          SizedBox(
+            width: 30,
+            height: 30,
+            child: CircularProgressIndicator(
+              value: animate ? null : 0.78,
+              strokeWidth: 3.2,
+              strokeCap: StrokeCap.round,
+              color: const Color(0xFF35C66B),
+              backgroundColor: const Color(0xFFE8F7ED),
+            ),
+          ),
+          const Icon(
+            Icons.file_upload_outlined,
+            size: 16,
+            color: WalletColors.text3,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BroadcastResultButton extends StatelessWidget {
+  const _BroadcastResultButton({
+    required this.label,
+    required this.emphasized,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool emphasized;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    key: const ValueKey('broadcast-result-primary-action'),
+    width: double.infinity,
+    height: 52,
+    child: FilledButton(
+      onPressed: onPressed,
+      style: FilledButton.styleFrom(
+        backgroundColor: emphasized
+            ? const Color(0xFF267619)
+            : const Color(0xFFE4FFA5),
+        foregroundColor: emphasized ? Colors.white : const Color(0xFF267619),
+        disabledBackgroundColor: const Color(0xFFE7E9EE),
+        disabledForegroundColor: WalletColors.text3,
+        shape: const StadiumBorder(),
+        textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+      ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(label, textAlign: TextAlign.center),
+      ),
+    ),
+  );
+}
+
+class _BroadcastResultDetailRow extends StatelessWidget {
+  const _BroadcastResultDetailRow({
+    required this.label,
+    required this.value,
+    this.leadingValue,
+    this.copyKey,
+    this.onCopy,
+  });
+
+  final String label;
+  final String value;
+  final Widget? leadingValue;
+  final Key? copyKey;
+  final VoidCallback? onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    final valueStyle = TextStyle(
+      fontSize: 14,
+      height: 1.35,
+      fontWeight: FontWeight.w400,
+      fontFamily: KtFonts.ui,
+      color: WalletColors.text2,
+    );
+    final copy = onCopy == null
+        ? null
+        : Tooltip(
+            message: MaterialLocalizations.of(context).copyButtonLabel,
+            child: Semantics(
+              key: copyKey ?? ValueKey('copy-broadcast-$label'),
+              button: true,
+              child: SizedBox(
+                width: 44,
+                height: 44,
+                child: InkWell(
+                  onTap: onCopy,
+                  borderRadius: BorderRadius.circular(8),
+                  child: const Align(
+                    alignment: Alignment.topRight,
+                    child: Icon(
+                      Icons.copy_rounded,
+                      size: 16,
+                      color: WalletColors.text3,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+    Widget valueContent({required TextAlign textAlign}) => Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (leadingValue != null) ...[
+          Padding(padding: const EdgeInsets.only(top: 1), child: leadingValue!),
+          const SizedBox(width: 8),
+        ],
+        Flexible(
+          child: Text(value, textAlign: textAlign, style: valueStyle),
+        ),
+        if (copy != null) ...[const SizedBox(width: 2), copy],
+      ],
+    );
+
+    return Semantics(
+      container: true,
+      label: '$label, $value',
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final stacked =
+                  MediaQuery.textScalerOf(context).scale(14) >= 20 ||
+                  constraints.maxWidth < 300;
+              if (stacked) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: valueContent(textAlign: TextAlign.left),
+                    ),
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: valueContent(textAlign: TextAlign.right),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
     );
   }
 }

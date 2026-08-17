@@ -272,7 +272,8 @@ void main() {
 
     await tester.tap(find.text('使用生物识别验证'));
     await tester.pumpAndSettle();
-    expect(find.text('交易已提交'), findsOneWidget); // result
+    expect(find.text('正在转账 12.5 USDT'), findsOneWidget); // result
+    expect(find.text('处理中'), findsOneWidget);
 
     await tester.tap(find.text('返回首页'));
     await tester.pumpAndSettle();

@@ -38,10 +38,17 @@ class _ConfirmedConfirmationService extends TransactionConfirmationService {
 
   @override
   Future<TransactionConfirmation> check(Chain chain, String hash) async =>
-      const TransactionConfirmation(
+      TransactionConfirmation(
         status: TxStatus.confirmed,
         confirmations: 1,
+        actualFeeRaw: BigInt.from(1800646949999),
       );
+}
+
+class _PendingStatusService extends TransactionStatusService {
+  @override
+  Future<ChainTransactionStatus> check(Transaction transaction) async =>
+      ChainTransactionStatus.pending;
 }
 
 class _BlockingConfirmationService extends TransactionConfirmationService {
@@ -184,6 +191,143 @@ void main() {
     },
   );
 
+  testWidgets('TRON pending result follows the exchange-style KT adaptation', (
+    tester,
+  ) async {
+    final database = WalletDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final store = WalletStore(database);
+    final wallet = _wallet();
+    await store.save(wallet);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    const hash =
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    await store.upsertTransaction(
+      id: 'tron-broadcast-result',
+      walletId: _walletId,
+      coin: Coin.tron,
+      networkId: 'tron-mainnet',
+      contract: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+      from: wallet.addresses.tron,
+      to: 'TA5X6WfP1smMYoVx92yP9xiFPcPm7fqK2w',
+      amountRaw: '10000000',
+      feeRaw: '7714200',
+      hash: hash,
+      status: TxStatus.pending,
+      signMode: SignMode.local,
+      createdAt: now - 1000,
+      broadcastAt: now - 900,
+    );
+    final wallets = WalletController(
+      WalletManager(initial: [wallet]),
+      store: store,
+    );
+    addTearDown(wallets.dispose);
+    final session = TransferSession()
+      ..begin(
+        TransferDraft(
+          symbol: 'USDT',
+          networkLabel: 'TRON · TRC-20',
+          chain: Chain.tron,
+          recipient: 'TA5X6WfP1smMYoVx92yP9xiFPcPm7fqK2w',
+          amount: Amount(
+            raw: BigInt.from(10000000),
+            decimals: 6,
+            symbol: 'USDT',
+          ),
+          feeTier: 1,
+          tokenContract: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+        ),
+      )
+      ..localTransactionId = 'tron-broadcast-result'
+      ..broadcastTxHash = hash;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: WalletScope(
+          controller: wallets,
+          child: NetworkScope(
+            controller: NetworkController(),
+            child: TransferSessionScope(
+              session: session,
+              child: BroadcastResultScreen(
+                statusService: _PendingStatusService(),
+                pollInterval: const Duration(days: 1),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(find.text('正在转账 10 USDT'), findsOneWidget);
+    expect(find.text(r'≈ $10.00'), findsOneWidget);
+    expect(find.text('处理中'), findsOneWidget);
+    expect(find.text('确认中'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('broadcast-processing-icon')),
+      findsOneWidget,
+    );
+    expect(
+      tester.getSize(find.byKey(const ValueKey('broadcast-processing-icon'))),
+      const Size(32, 32),
+    );
+    final statusIconTop = tester
+        .getTopLeft(find.byKey(const ValueKey('broadcast-processing-icon')))
+        .dy;
+    final statusLabelTop = tester.getTopLeft(find.text('状态')).dy;
+    final stateValueTop = tester
+        .getTopLeft(find.byKey(const ValueKey('broadcast-result-state')))
+        .dy;
+    expect(statusLabelTop, closeTo(statusIconTop + 7, 1));
+    expect(stateValueTop, closeTo(statusIconTop + 7, 1));
+    expect(
+      find.byKey(const ValueKey('broadcast-result-divider')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('broadcast-asset-icon')), findsOneWidget);
+    expect(find.text('TRON · TRC-20'), findsOneWidget);
+    expect(find.text('≤ 7.7142 TRX'), findsOneWidget);
+    final rightEdge = tester.getTopRight(find.text(r'$10.00')).dx;
+    expect(
+      tester
+          .getTopRight(find.byKey(const ValueKey('broadcast-result-state')))
+          .dx,
+      closeTo(rightEdge, 1),
+    );
+    expect(
+      tester.getTopRight(find.text('TRON · TRC-20')).dx,
+      closeTo(rightEdge, 1),
+    );
+    final addressCopyIcon = find.descendant(
+      of: find.byKey(const ValueKey('copy-broadcast-address')),
+      matching: find.byIcon(Icons.copy_rounded),
+    );
+    final hashCopyIcon = find.descendant(
+      of: find.byKey(const ValueKey('copy-broadcast-hash')),
+      matching: find.byIcon(Icons.copy_rounded),
+    );
+    expect(tester.getTopRight(addressCopyIcon).dx, closeTo(rightEdge, 1));
+    expect(tester.getTopRight(hashCopyIcon).dx, closeTo(rightEdge, 1));
+    final hashValue = find.text('aaaaaaa…aaaaaaa');
+    expect(
+      tester.getTopLeft(hashCopyIcon).dy,
+      closeTo(tester.getTopLeft(hashValue).dy, 1),
+    );
+    final addressLabelTop = tester.getTopLeft(find.text('地址')).dy;
+    final addressValueTop = tester
+        .getTopLeft(find.text('TA5X6WfP1smMYoVx92yP9xiFPcPm7fqK2w'))
+        .dy;
+    expect(addressValueTop, closeTo(addressLabelTop, 1));
+    expect(find.text('返回首页'), findsOneWidget);
+    expect(find.textContaining('参考编号'), findsNothing);
+  });
+
   testWidgets(
     'broadcast direct confirmation is terminal and records finality once',
     (tester) async {
@@ -201,6 +345,7 @@ void main() {
         from: _owner,
         to: _recipient,
         amountRaw: '1',
+        feeRaw: '4341584310463',
         hash: _replacementHash,
         status: TxStatus.pending,
         signMode: SignMode.local,
@@ -225,7 +370,8 @@ void main() {
           ),
         )
         ..localTransactionId = 'broadcast-result'
-        ..broadcastTxHash = _replacementHash;
+        ..broadcastTxHash = _replacementHash
+        ..broadcastOutcomeUnknown = true;
 
       await tester.pumpWidget(
         MaterialApp(
@@ -255,6 +401,19 @@ void main() {
       expect(
         (await wallets.localTransactionById('broadcast-result'))?.status,
         TxStatus.confirmed,
+      );
+      expect(session.broadcastOutcomeUnknown, isFalse);
+      expect(find.text('Completed'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('broadcast-completed-icon')),
+        findsOneWidget,
+      );
+      expect(find.text('View on blockchain explorer'), findsOneWidget);
+      expect(find.text('Broadcast result unknown'), findsNothing);
+      expect(find.text('0.0000018 ETH'), findsOneWidget);
+      expect(
+        (await wallets.localTransactionById('broadcast-result'))?.actualFeeRaw,
+        '1800646949999',
       );
       final samples = ExperienceMetrics.instance.recent.where(
         (metric) => metric.name == ExperienceMetricNames.transactionFinality,

@@ -1202,43 +1202,36 @@ Future<db.Transaction> _submitRealSepoliaTransfer(
   );
 
   String? previousStatus;
-  String? previousConfirmations;
   var observedTransition = false;
   var observedPending = false;
   final deadline = DateTime.now().add(const Duration(minutes: 3));
   while (DateTime.now().isBefore(deadline)) {
     final status = _visibleStatus(tester);
-    final confirmations = _confirmationValue(tester);
-    if (status == '确认中' || status == '已提交' || confirmations == '--') {
+    if (status == '处理中' ||
+        status == '正在广播' ||
+        status == '等待确认' ||
+        status == '确认中') {
       observedPending = true;
     }
-    if (status != previousStatus || confirmations != previousConfirmations) {
-      if (previousStatus != null || previousConfirmations != null) {
+    if (status != previousStatus) {
+      if (previousStatus != null) {
         observedTransition = true;
       }
       previousStatus = status;
-      previousConfirmations = confirmations;
       await evidence.snapshot(
         binding,
         tester,
-        '50 $slug 状态变化 ${status ?? 'unknown'} ${confirmations ?? 'unknown'}',
-        facts: <String, Object?>{
-          'status': status,
-          'confirmations': confirmations,
-          'transaction_hash': hash,
-        },
+        '50 $slug 状态变化 ${status ?? 'unknown'}',
+        facts: <String, Object?>{'status': status, 'transaction_hash': hash},
       );
     }
-    if (status == '已确认' &&
-        confirmations != null &&
-        RegExp(r'^[1-9]\d*$').hasMatch(confirmations)) {
+    if (status == '已完成') {
       break;
     }
     await tester.pump(const Duration(milliseconds: 500));
     await Future<void>.delayed(const Duration(milliseconds: 500));
   }
-  expect(previousStatus, '已确认');
-  expect(previousConfirmations, matches(RegExp(r'^[1-9]\d*$')));
+  expect(previousStatus, '已完成');
   await evidence.event(
     '$slug 确认状态采样完成',
     details: <String, Object?>{
@@ -1247,7 +1240,6 @@ Future<db.Transaction> _submitRealSepoliaTransfer(
       'rapid_confirmation_before_first_sample':
           !observedPending && !observedTransition,
       'final_status': previousStatus,
-      'final_confirmations': previousConfirmations,
       'transaction_hash': hash,
     },
   );
@@ -1264,10 +1256,7 @@ Future<db.Transaction> _submitRealSepoliaTransfer(
     binding,
     tester,
     '51 $slug 链上确认完成',
-    facts: <String, Object?>{
-      'confirmations': previousConfirmations,
-      'transaction': _transactionJson(transaction),
-    },
+    facts: <String, Object?>{'transaction': _transactionJson(transaction)},
   );
   return transaction;
 }
@@ -1334,20 +1323,15 @@ Future<Map<String, String>> _waitForFundedHomeBalances(
   throw TimeoutException('Funded ETH and USDT balance labels were not visible');
 }
 
-String? _confirmationValue(WidgetTester tester) {
-  final row = find.byKey(const ValueKey('broadcast-confirmations'));
-  if (row.evaluate().isEmpty) return null;
-  final values = tester
-      .widgetList<Text>(find.descendant(of: row, matching: find.byType(Text)))
-      .map((text) => text.data)
-      .whereType<String>()
-      .where((text) => text == '--' || RegExp(r'^\d+$').hasMatch(text))
-      .toList();
-  return values.isEmpty ? null : values.last;
-}
-
 String? _visibleStatus(WidgetTester tester) {
-  for (final candidate in const <String>['已确认', '确认中', '已提交', '状态未知']) {
+  for (final candidate in const <String>[
+    '已完成',
+    '处理中',
+    '正在广播',
+    '等待确认',
+    '确认中',
+    '失败',
+  ]) {
     if (find.text(candidate).evaluate().isNotEmpty) return candidate;
   }
   return null;
@@ -1358,7 +1342,10 @@ Future<void> _waitForSubmitted(
   required Duration timeout,
 }) async {
   final deadline = DateTime.now().add(timeout);
-  while (find.text('交易已提交').evaluate().isEmpty) {
+  while (find
+      .byKey(const ValueKey('broadcast-result-title'))
+      .evaluate()
+      .isEmpty) {
     final snackbars = find.byType(SnackBar);
     if (snackbars.evaluate().isNotEmpty) {
       final messages = tester
