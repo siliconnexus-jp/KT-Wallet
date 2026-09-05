@@ -10,7 +10,6 @@ import '../../l10n/app_localizations.dart';
 import '../platform/file_exchange.dart';
 import '../security/secure_screen.dart';
 import '../security/wallet_backup.dart';
-import '../security/wallet_backup_qr.dart';
 import '../security/backup_qr_image.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';

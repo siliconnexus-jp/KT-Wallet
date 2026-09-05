@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:native_wallet_tabs/native_wallet_tabs.dart';
 import 'package:ui_kit/ui_kit.dart';
 import 'package:wallet_data/wallet_data.dart'
     show CustomToken, TxCheckOutcome, TxOperationKind, TxStatus;
@@ -169,10 +170,11 @@ class _HomeScreenState extends State<HomeScreen> {
 /// stuck under the floating tab bar.
 const kTabBarInset = 94.4;
 
-double _tabBarInsetFor(BuildContext context) =>
-    LiquidWalletTabs.heightFor(context) +
-    36 +
-    MediaQuery.paddingOf(context).bottom;
+double _tabBarInsetFor(BuildContext context) => NativeWalletTabs.supported
+    ? NativeWalletTabs.extentFor(context) + 12
+    : LiquidWalletTabs.heightFor(context) +
+          36 +
+          MediaQuery.paddingOf(context).bottom;
 
 const _tabFadeDuration = Duration(milliseconds: 140);
 const _tabMotionCurve = Cubic(0.2, 0.8, 0.2, 1);
@@ -4088,6 +4090,25 @@ class _TabBar extends StatelessWidget {
       (l10n.tabActivity, Icons.history_rounded),
       (l10n.tabSettings, Icons.settings_outlined),
     ];
-    return LiquidWalletTabs(items: tabs, selected: selected, onSelected: onTap);
+    return NativeWalletTabs(
+      items: [
+        NativeWalletTab(title: l10n.tabWallet, symbol: 'wallet.pass'),
+        NativeWalletTab(
+          title: l10n.tabActivity,
+          symbol: 'clock.arrow.circlepath',
+        ),
+        NativeWalletTab(title: l10n.tabSettings, symbol: 'gearshape'),
+      ],
+      selectedIndex: selected,
+      onSelected: onTap,
+      // A pushed route (including an authentication sheet) must not leave
+      // native controls active behind Flutter's modal surface.
+      enabled: ModalRoute.isCurrentOf(context) ?? true,
+      fallback: LiquidWalletTabs(
+        items: tabs,
+        selected: selected,
+        onSelected: onTap,
+      ),
+    );
   }
 }

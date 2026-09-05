@@ -218,14 +218,40 @@ class SignerWalletController extends ChangeNotifier {
     return List.of(_pendingMnemonic!);
   }
 
+  /// Restores only the versioned encrypted QR format used by the online app.
+  /// Decryption stays local; no vault write occurs until PIN enrollment ends.
+  Future<bool> beginQrImport(
+    String payload,
+    String password, {
+    bool Function()? isActive,
+  }) async {
+    if (_hasWallet || _pendingMnemonic != null) return false;
+    final backup = WalletBackupQr.decode(payload);
+    try {
+      await checkWalletCreationReady();
+      final mnemonic = await _crypto.readBackup(
+        blob: backup.sealed,
+        password: password,
+        format: backup.cryptoFormat,
+      );
+      if (isActive?.call() == false) return false;
+      return await beginImport(mnemonic, isActive: isActive);
+    } finally {
+      backup.sealed.fillRange(0, backup.sealed.length, 0);
+    }
+  }
+
   /// Validates a complete BIP-39 phrase, including its checksum, without
   /// persisting anything. The native wallet is created only after PIN setup.
-  Future<bool> beginImport(String mnemonic) async {
+  Future<bool> beginImport(String mnemonic, {bool Function()? isActive}) async {
     if (_hasWallet || _pendingMnemonic != null) return false;
     final normalized = mnemonic.trim().toLowerCase().split(RegExp(r'\s+'));
     if (!const {12, 18, 24}.contains(normalized.length)) return false;
     if (!await _crypto.validateMnemonic(normalized.join(' '))) return false;
     await checkWalletCreationReady();
+    if (isActive?.call() == false || _hasWallet || _pendingMnemonic != null) {
+      return false;
+    }
     _pendingMnemonic = normalized;
     _onboardingStage = SignerOnboardingStage.pinSetup;
     notifyListeners();

@@ -173,11 +173,8 @@ Widget _kv(String k, String v, {bool mono = false, Color? color}) => Row(
   ],
 );
 
-Widget _card(Widget child) => KtGlassSurface(
-  dark: true,
-  padding: const EdgeInsets.all(16),
-  child: child,
-);
+Widget _card(Widget child) =>
+    KtGlassSurface(dark: true, padding: const EdgeInsets.all(16), child: child);
 
 Widget _unavailableSigningState(AppLocalizations l10n, {String? title}) =>
     KtScreen(
@@ -381,140 +378,136 @@ class _SignerHomeScreenState extends State<SignerHomeScreen>
             ),
           ),
         ),
-        GestureDetector(
-          onTap: () => context.push('/scan'),
-          child: KtGlassSurface(
-            dark: true,
-            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
-            child: Column(
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: SignerColors.accent.withValues(alpha: 0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.qr_code_scanner,
-                    size: 30,
-                    color: SignerColors.accent,
-                  ),
+        KtGlassSurface(
+          dark: true,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(30),
+              onTap: () => context.push('/scan'),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 28,
+                  horizontal: 20,
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  l10n.scanPendingTx,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: SignerColors.text,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  l10n.scanPendingTxDesc,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: SignerColors.text2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        largeText
-            ? Column(
-                children: [
-                  for (final (icon, label, route) in [
-                    (Icons.qr_code, l10n.exportAddress, '/export'),
-                    (Icons.history, l10n.signRecords, '/records'),
-                    (
-                      Icons.shield_outlined,
-                      l10n.securityCheck,
-                      '/security-check',
-                    ),
-                    (Icons.wallet, l10n.walletManage, '/wallet'),
-                  ])
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: GestureDetector(
-                        onTap: () => context.push(route),
-                        child: Container(
-                          width: double.infinity,
-                          constraints: const BoxConstraints(minHeight: 48),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: SignerColors.surface,
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(color: SignerColors.border),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(icon, size: 20, color: SignerColors.text),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  label,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: SignerColors.text2,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: SignerColors.accent.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.qr_code_2_rounded,
+                        size: 30,
+                        color: SignerColors.accent,
                       ),
                     ),
-                ],
-              )
-            : Row(
-                children: [
-                  for (final (icon, label, route) in [
-                    (Icons.qr_code, l10n.exportAddress, '/export'),
-                    (Icons.history, l10n.signRecords, '/records'),
-                    (
-                      Icons.shield_outlined,
-                      l10n.securityCheck,
-                      '/security-check',
+                    const SizedBox(height: 12),
+                    Text(
+                      l10n.scanPendingTx,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        color: SignerColors.text,
+                      ),
                     ),
-                    (Icons.wallet, l10n.walletManage, '/wallet'),
-                  ]) ...[
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => context.push(route),
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          decoration: BoxDecoration(
-                            color: SignerColors.surface,
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(color: SignerColors.border),
-                          ),
-                          child: Column(
-                            children: [
-                              Icon(icon, size: 20, color: SignerColors.text),
-                              const SizedBox(height: 8),
-                              Text(
-                                label,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: SignerColors.text2,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                    const SizedBox(height: 6),
+                    Text(
+                      l10n.scanPendingTxDesc,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: SignerColors.text2,
                       ),
                     ),
                   ],
-                ],
+                ),
               ),
+            ),
+          ),
+        ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final actions = [
+              (Icons.qr_code_2_rounded, l10n.exportAddress, '/export'),
+              (Icons.history_rounded, l10n.signRecords, '/records'),
+              (Icons.shield_outlined, l10n.securityCheck, '/security-check'),
+              (
+                Icons.account_balance_wallet_outlined,
+                l10n.walletManage,
+                '/wallet',
+              ),
+            ];
+            final singleColumn = largeText || constraints.maxWidth < 320;
+            Widget tile(int index) {
+              final (icon, label, route) = actions[index];
+              return Material(
+                color: SignerColors.surface,
+                borderRadius: BorderRadius.circular(24),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  key: ValueKey('home-action-$index'),
+                  onTap: () => context.push(route),
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(icon, size: 24, color: SignerColors.accent),
+                            const Spacer(),
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              size: 18,
+                              color: SignerColors.text2,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          label,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            height: 1.4,
+                            fontWeight: FontWeight.w600,
+                            color: SignerColors.text,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            return Column(
+              children: [
+                for (var i = 0; i < actions.length; i += singleColumn ? 1 : 2)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: singleColumn
+                        ? SizedBox(width: double.infinity, child: tile(i))
+                        : IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(child: tile(i)),
+                                const SizedBox(width: 12),
+                                Expanded(child: tile(i + 1)),
+                              ],
+                            ),
+                          ),
+                  ),
+              ],
+            );
+          },
+        ),
       ],
     );
   }

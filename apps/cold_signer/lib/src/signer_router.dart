@@ -7,6 +7,7 @@ import '../l10n/app_localizations.dart';
 import 'screens/signer_onboarding_screens.dart';
 import 'developer_mode.dart';
 import 'screens/signer_settings_screens.dart';
+import 'screens/signer_qr_import_screen.dart';
 import 'screens/signer_signing_screens.dart';
 import 'security/secure_vault.dart';
 import 'signing/mnemonic_review.dart';
@@ -116,6 +117,18 @@ GoRouter buildSignerRouter({String initialLocation = '/'}) {
       currentWalletId: SignerWalletScope.maybeOf(context)?.localWalletId,
     ),
     routes: [
+      GoRoute(
+        path: '/qr-import',
+        builder: (c, s) =>
+            const _SensitiveSignerContent(child: SignerQrImportScreen()),
+        routes: [
+          GoRoute(
+            path: 'scan',
+            builder: (c, s) =>
+                const _SensitiveSignerContent(child: SignerBackupScanScreen()),
+          ),
+        ],
+      ),
       GoRoute(
         path: '/',
         redirect: galleryMode ? null : (c, s) => '/welcome',
@@ -227,6 +240,8 @@ String? signerProductionRouteRedirect({
       '/welcome',
       '/mnemonic-warn',
       '/mnemonic-import',
+      '/qr-import',
+      '/qr-import/scan',
     }.contains(path)) {
       return '/home';
     }
@@ -261,7 +276,9 @@ String? signerProductionRouteRedirect({
     }.contains(path)) {
       return resumeOnboarding;
     }
-    if (path == '/mnemonic-import' &&
+    if ((path == '/mnemonic-import' ||
+            path == '/qr-import' ||
+            path == '/qr-import/scan') &&
         onboardingStage != SignerOnboardingStage.idle) {
       return resumeOnboarding;
     }

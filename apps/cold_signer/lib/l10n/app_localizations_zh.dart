@@ -9,6 +9,39 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get qrImportTitle => '加密二维码导入';
+
+  @override
+  String get qrImportDescription =>
+      '扫描 KT Wallet 加密备份二维码，或选择本机保存的二维码图片。解密全程在本地完成。';
+
+  @override
+  String get qrImportScan => '扫描备份二维码';
+
+  @override
+  String get qrImportImage => '选择本地二维码图片';
+
+  @override
+  String get qrImportReady => '已识别加密备份';
+
+  @override
+  String get qrImportPassword => '备份加密密码';
+
+  @override
+  String get qrImportContinue => '解密并继续';
+
+  @override
+  String get qrImportInvalid =>
+      '无法读取此备份。请选择小于 8 MB 的本地 PNG/JPEG 图片，且只包含一个 KT Wallet 加密备份二维码。';
+
+  @override
+  String get qrImportWrongPassword => '密码错误或备份已损坏，请检查密码后重试。';
+
+  @override
+  String get qrImportSafety =>
+      '请保持设备离线。输入导出备份时设置的加密密码，而非钱包 PIN。若助记词曾在联网设备上使用，导入离线版并不能使它成为从未触网的冷钱包。';
+
+  @override
   String get walletDeviceAuthRequired =>
       '请先在系统设置中启用锁屏密码或生物识别，再重试。钱包 PIN 不能替代系统认证；模拟器也需要配置。';
 
@@ -292,7 +325,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get scanPendingTxDesc => '扫描联网钱包生成的动态二维码';
 
   @override
-  String get exportAddress => '导出地址';
+  String get exportAddress => '地址二维码';
 
   @override
   String get signRecords => '签名记录';

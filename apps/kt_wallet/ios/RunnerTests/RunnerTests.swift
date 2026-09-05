@@ -3,9 +3,101 @@ import LocalAuthentication
 import UIKit
 import XCTest
 @testable import core_crypto
+@testable import native_wallet_tabs
 @testable import Runner
 
+private final class TabsTestMessenger: NSObject, FlutterBinaryMessenger {
+  var sent: [FlutterMethodCall] = []
+  func send(onChannel channel: String, message: Data?) {
+    if let message { sent.append(FlutterStandardMethodCodec.sharedInstance().decodeMethodCall(message)) }
+  }
+  func send(onChannel channel: String, message: Data?, binaryReply callback: FlutterBinaryReply?) {
+    send(onChannel: channel, message: message)
+    callback?(nil)
+  }
+  func setMessageHandlerOnChannel(_ channel: String,
+    binaryMessageHandler handler: FlutterBinaryMessageHandler?) -> FlutterBinaryMessengerConnection {
+    1
+  }
+  func cleanUpConnection(_ connection: FlutterBinaryMessengerConnection) {}
+}
+
 class RunnerTests: XCTestCase {
+
+  private func tabsConfiguration(index: Int = 0, title: String = "钱包", revision: Int = 1,
+    enabled: Bool = true, dark: Bool = false) -> [String: Any] {
+    ["items": [
+      ["title": title, "symbol": "wallet.pass"],
+      ["title": "活动", "symbol": "clock.arrow.circlepath"],
+      ["title": "设置", "symbol": "gearshape"]
+    ], "selectedIndex": index, "revision": revision, "enabled": enabled,
+      "dark": dark, "highContrast": false]
+  }
+
+  @MainActor
+  func testNativeTabsSyncSelectionLanguageAppearanceAndRejectOldRevisions() {
+    let host = NativeWalletTabsHost(frame: CGRect(x: 0, y: 0, width: 390, height: 114),
+      viewId: 901, args: tabsConfiguration(), messenger: TabsTestMessenger())
+    defer { host.dispose() }
+    let originalPages = host.controller.viewControllers!
+    XCTAssertEqual(originalPages.count, 3)
+    XCTAssertTrue(host.update(tabsConfiguration(index: 2, title: "Wallet", revision: 2, dark: true)))
+    XCTAssertEqual(host.controller.selectedIndex, 2)
+    XCTAssertEqual(host.controller.viewControllers?.first?.tabBarItem.title, "Wallet")
+    XCTAssertTrue(host.controller.viewControllers!.first === originalPages.first)
+    XCTAssertEqual(host.controller.overrideUserInterfaceStyle, .dark)
+    XCTAssertFalse(host.update(tabsConfiguration(index: 0, revision: 1)))
+    XCTAssertFalse(host.update(tabsConfiguration(index: 9, revision: 3)))
+    XCTAssertEqual(host.controller.selectedIndex, 2)
+    XCTAssertTrue(host.update(tabsConfiguration(revision: 3, enabled: false)))
+    XCTAssertTrue(host.container.isHidden)
+    XCTAssertFalse(host.container.isUserInteractionEnabled)
+  }
+
+  @MainActor
+  func testNativeTabsContainmentDetachesAndDoesNotAccumulateOnReattachment() {
+    let messenger = TabsTestMessenger()
+    let host = NativeWalletTabsHost(frame: CGRect(x: 0, y: 730, width: 390, height: 114),
+      viewId: 902, args: tabsConfiguration(), messenger: messenger)
+    let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+    let parent = UIViewController()
+    window.rootViewController = parent
+    window.isHidden = false
+    defer { window.isHidden = true; host.dispose() }
+    for _ in 0..<5 {
+      parent.view.addSubview(host.view())
+      parent.view.layoutIfNeeded()
+      XCTAssertTrue(host.controller.parent === parent)
+      XCTAssertEqual(parent.children.count, 1)
+      host.view().removeFromSuperview()
+      XCTAssertNil(host.controller.parent)
+      XCTAssertEqual(parent.children.count, 0)
+    }
+    parent.view.addSubview(host.view())
+    host.tabBarController(host.controller, didSelect: host.controller.viewControllers![1])
+    XCTAssertEqual(messenger.sent.count, 1)
+    XCTAssertEqual(messenger.sent.first?.method, "selected")
+    XCTAssertEqual(messenger.sent.first?.arguments as? [String: Int], ["index": 1, "revision": 1])
+    XCTAssertTrue(host.update(tabsConfiguration(revision: 2, enabled: false)))
+    host.tabBarController(host.controller, didSelect: host.controller.viewControllers![2])
+    XCTAssertEqual(messenger.sent.count, 1)
+    host.dispose()
+    host.dispose()
+    XCTAssertNil(host.controller.parent)
+    XCTAssertEqual(parent.children.count, 0)
+    XCTAssertNil(host.container.hitTest(.zero, with: nil))
+  }
+
+  @MainActor
+  func testNativeTabsHideImmediatelyDuringAuthenticationOrBackgroundTransition() {
+    let host = NativeWalletTabsHost(frame: .zero, viewId: 903,
+      args: tabsConfiguration(), messenger: TabsTestMessenger())
+    defer { host.dispose() }
+    NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+    XCTAssertTrue(host.container.isHidden)
+    XCTAssertTrue(host.container.accessibilityElementsHidden)
+    XCTAssertFalse(host.container.isUserInteractionEnabled)
+  }
 
   @MainActor
   func testPrivacyWindowSelectorUsesVisibleNonKeyBackgroundWindow() {

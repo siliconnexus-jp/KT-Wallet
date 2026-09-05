@@ -12,8 +12,6 @@ import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/src/platform/file_exchange.dart';
 import 'package:kt_wallet/src/screens/backup_screens.dart';
 import 'package:kt_wallet/src/security/backup_qr_image.dart';
-import 'package:kt_wallet/src/security/wallet_backup.dart';
-import 'package:kt_wallet/src/security/wallet_backup_qr.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
 import 'package:kt_wallet/src/state/wallet_scope.dart';
 import 'package:kt_wallet/src/wallets/wallet_manager.dart';

@@ -45,6 +45,8 @@ dependencies:
     path: ../../packages/ui_kit
   wallet_data:
     path: ../../packages/wallet_data
+  native_wallet_tabs:
+    path: ../../packages/native_wallet_tabs
   http: ^1.2.0
   drift: ^2.34.3
   path_provider: ^2.1.0

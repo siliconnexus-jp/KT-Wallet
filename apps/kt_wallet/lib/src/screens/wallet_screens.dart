@@ -17,7 +17,6 @@ import '../transfer/airgap_codec.dart' show truncateMiddle;
 import '../wallets/pairing_airgap.dart';
 import '../wallets/wallet_manager.dart';
 import '../wallets/wallet_model.dart';
-import '../widgets/tron_activation_badge.dart';
 import '../widgets/secret_access_risk.dart';
 import 'camera_screen.dart';
 
@@ -2325,9 +2324,6 @@ class WalletDetailScreen extends StatelessWidget {
             ),
           ],
         ),
-        if (wallet.id == controller.current?.id &&
-            wallet.addresses.enabledCoins.contains(Coin.tron))
-          const TronActivationNotice(),
         if (isHot && !backedUp)
           GestureDetector(
             behavior: HitTestBehavior.opaque,

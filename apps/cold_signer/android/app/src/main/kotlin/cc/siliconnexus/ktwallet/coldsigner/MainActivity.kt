@@ -34,6 +34,9 @@ class MainActivity : FlutterFragmentActivity(), CoreCryptoAuthLifecycleHost {
     private lateinit var nativeAnrWatchdog: NativeAnrWatchdog
     private val systemAuthPrivacyGuard = SystemAuthPrivacyGuard()
     private val taskPrivacyState = TaskPrivacyState()
+    private var backupImageResult: MethodChannel.Result? = null
+    private val backupImageRequest = 8421
+    private val backupImageLimit = 8 * 1024 * 1024
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +53,29 @@ class MainActivity : FlutterFragmentActivity(), CoreCryptoAuthLifecycleHost {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kt/signer_backup_image")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "pick") {
+                    result.notImplemented()
+                } else if (backupImageResult != null) {
+                    result.error("BUSY", null, null)
+                } else {
+                    backupImageResult = result
+                    try {
+                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "image/*"
+                            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/png", "image/jpeg"))
+                            putExtra(Intent.EXTRA_LOCAL_ONLY, true)
+                        }
+                        @Suppress("DEPRECATION")
+                        startActivityForResult(intent, backupImageRequest)
+                    } catch (_: Exception) {
+                        backupImageResult = null
+                        result.error("UNAVAILABLE", null, null)
+                    }
+                }
+            }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "kt/native_observability"
@@ -109,6 +135,54 @@ class MainActivity : FlutterFragmentActivity(), CoreCryptoAuthLifecycleHost {
                 result.notImplemented()
             }
         }
+    }
+
+    @Deprecated("Activity result bridge for the bounded local document picker")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != backupImageRequest) return
+        val result = backupImageResult ?: return
+        if (resultCode == Activity.RESULT_CANCELED) {
+            backupImageResult = null
+            result.success(null)
+            return
+        }
+        val uri = data?.data
+        if (resultCode != Activity.RESULT_OK || uri == null || uri.scheme != "content") {
+            backupImageResult = null
+            result.error("READ_FAILED", null, null)
+            return
+        }
+        Thread {
+            try {
+                val bytes = contentResolver.openInputStream(uri)?.use { input ->
+                    val output = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(8192)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        if (output.size() + count > backupImageLimit) {
+                            throw IllegalArgumentException()
+                        }
+                        output.write(buffer, 0, count)
+                    }
+                    output.toByteArray()
+                } ?: throw IllegalArgumentException()
+                runOnUiThread {
+                    if (backupImageResult === result) {
+                        backupImageResult = null
+                        result.success(bytes)
+                    }
+                }
+            } catch (_: Exception) {
+                runOnUiThread {
+                    if (backupImageResult === result) {
+                        backupImageResult = null
+                        result.error("READ_FAILED", null, null)
+                    }
+                }
+            }
+        }.start()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -172,6 +246,8 @@ class MainActivity : FlutterFragmentActivity(), CoreCryptoAuthLifecycleHost {
     }
 
     override fun onDestroy() {
+        backupImageResult?.error("CANCELLED", null, null)
+        backupImageResult = null
         nativeAnrWatchdog.stop()
         super.onDestroy()
     }

@@ -256,6 +256,12 @@ class _SignerWelcomeScreenState extends State<SignerWelcomeScreen> {
             onPressed: _busy ? null : () => _start(importing: true),
             child: Text(l10n.importExistingWallet),
           ),
+          TextButton.icon(
+            key: const ValueKey('welcome-qr-import'),
+            onPressed: _busy ? null : () => context.push('/qr-import'),
+            icon: const Icon(Icons.qr_code_2_rounded),
+            label: Text(l10n.qrImportTitle),
+          ),
         ],
       ),
       children: [
@@ -729,6 +735,12 @@ class _SignerMnemonicImportScreenState
         onPressed: _busy ? null : _import,
       ),
       children: [
+        TextButton.icon(
+          key: const ValueKey('mnemonic-import-qr'),
+          onPressed: _busy ? null : () => context.push('/qr-import'),
+          icon: const Icon(Icons.qr_code_2_rounded),
+          label: Text(l10n.qrImportTitle),
+        ),
         KtSegmented(
           theme: _t,
           options: [
@@ -867,6 +879,11 @@ Widget _mnemonicImportPreview(BuildContext context, AppLocalizations l10n) {
       onPressed: () => context.push('/set-password'),
     ),
     children: [
+      TextButton.icon(
+        onPressed: () => context.push('/qr-import'),
+        icon: const Icon(Icons.qr_code_2_rounded),
+        label: Text(l10n.qrImportTitle),
+      ),
       KtSegmented(
         theme: _t,
         options: [

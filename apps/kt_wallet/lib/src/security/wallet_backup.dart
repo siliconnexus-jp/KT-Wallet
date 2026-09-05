@@ -5,34 +5,8 @@ import 'package:core_crypto/core_crypto.dart';
 
 import '../rpc/json_rpc_envelope.dart' show decodeJsonWithoutDuplicateKeys;
 
-/// A backup file that is not ours, or is ours but damaged. Distinct from a
-/// wrong password (which surfaces from the native seal as
-/// `StoreCorruptedException`) so the UI can tell the user which mistake they
-/// made — "that isn't a KT Wallet backup" and "wrong password" are very
-/// different things to be told at 2am.
-class BackupFormatException implements Exception {
-  const BackupFormatException(this.reason);
-
-  final String reason;
-
-  @override
-  String toString() => 'BackupFormatException: $reason';
-}
-
-/// A validated envelope plus the exact native payload format it declares.
-/// Keeping these together prevents callers from stripping the version and
-/// accidentally invoking a legacy KDF fallback for a new backup.
-class DecodedWalletBackup {
-  const DecodedWalletBackup({
-    required this.envelopeVersion,
-    required this.cryptoFormat,
-    required this.sealed,
-  });
-
-  final int envelopeVersion;
-  final BackupCipherFormat cryptoFormat;
-  final Uint8List sealed;
-}
+export 'package:core_crypto/core_crypto.dart'
+    show BackupFormatException, DecodedWalletBackup;
 
 /// The on-disk envelope for an encrypted wallet backup.
 ///

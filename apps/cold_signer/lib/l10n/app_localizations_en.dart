@@ -9,6 +9,40 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get qrImportTitle => 'Import encrypted QR';
+
+  @override
+  String get qrImportDescription =>
+      'Scan a KT Wallet encrypted backup or choose its image from this device. Decryption happens entirely offline.';
+
+  @override
+  String get qrImportScan => 'Scan backup QR';
+
+  @override
+  String get qrImportImage => 'Choose local QR image';
+
+  @override
+  String get qrImportReady => 'Encrypted backup recognized';
+
+  @override
+  String get qrImportPassword => 'Backup encryption password';
+
+  @override
+  String get qrImportContinue => 'Decrypt and continue';
+
+  @override
+  String get qrImportInvalid =>
+      'Unable to read this backup. Choose a local PNG/JPEG under 8 MB containing one KT Wallet encrypted backup QR.';
+
+  @override
+  String get qrImportWrongPassword =>
+      'Incorrect password or damaged backup. Check the password and try again.';
+
+  @override
+  String get qrImportSafety =>
+      'Keep this device offline. Use the password chosen when exporting the backup, not your wallet PIN. If this phrase has been used on an online device, importing it here does not make it a never-online cold wallet.';
+
+  @override
   String get walletDeviceAuthRequired =>
       'Set up a device screen-lock passcode or biometrics in system settings, then retry. A wallet PIN does not replace device authentication; emulators need this setup too.';
 
@@ -317,7 +351,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get scanPendingTxDesc => 'Scan the dynamic QR from the online wallet';
 
   @override
-  String get exportAddress => 'Export addresses';
+  String get exportAddress => 'Address QR';
 
   @override
   String get signRecords => 'Signing records';

@@ -1726,10 +1726,19 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     final riskAcknowledged =
         recipientRisk == null ||
         _acknowledgedRiskAddress == recipientRisk.candidate;
+    // Prefer this transfer's fresh preparation result to a cached portfolio
+    // status. A successful quote must not keep showing an old activation
+    // warning; a fresh activation failure must be visible even without cache.
+    final tronStatus = switch (_feeQuoteState) {
+      _InputFeeQuoteState.ready => TronActivationStatus.activated,
+      _InputFeeQuoteState.tronUnactivated => TronActivationStatus.unactivated,
+      _ =>
+        MarketScope.maybeOf(context)?.tronActivationStatus ??
+            TronActivationStatus.unknown,
+    };
     final tronUnactivated =
         _asset.chain == Chain.tron &&
-        MarketScope.maybeOf(context)?.tronActivationStatus ==
-            TronActivationStatus.unactivated;
+        tronStatus == TronActivationStatus.unactivated;
     final canProceed =
         addrCheck.isValid &&
         riskAcknowledged &&
@@ -1828,7 +1837,8 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
             ),
           ),
         ),
-        if (_asset.chain == Chain.tron) const TronActivationNotice(),
+        if (_asset.chain == Chain.tron)
+          TronActivationNotice(status: tronStatus),
         KtCard(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -3092,10 +3102,10 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
             NetworkBadge(label: networkLabel, dotColor: dotColor),
           ],
         ),
-        if (draft?.chain == Chain.tron)
-          TronActivationNotice(
-            status: _tronNotActivated ? TronActivationStatus.unactivated : null,
-          ),
+        // Confirmation uses this draft's fresh quote result, never a cached
+        // portfolio activation bit that may describe an older account state.
+        if (draft?.chain == Chain.tron && _tronNotActivated)
+          const TronActivationNotice(status: TronActivationStatus.unactivated),
         KtCard(
           child: Column(
             children: [

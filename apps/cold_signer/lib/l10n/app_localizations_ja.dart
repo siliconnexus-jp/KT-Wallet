@@ -9,6 +9,39 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get qrImportTitle => '暗号化QRから復元';
+
+  @override
+  String get qrImportDescription =>
+      'KT Walletの暗号化バックアップQRをスキャンするか、端末内の画像を選択します。復号はすべてオフラインで行います。';
+
+  @override
+  String get qrImportScan => 'バックアップQRをスキャン';
+
+  @override
+  String get qrImportImage => '端末内のQR画像を選択';
+
+  @override
+  String get qrImportReady => '暗号化バックアップを認識しました';
+
+  @override
+  String get qrImportPassword => 'バックアップの暗号化パスワード';
+
+  @override
+  String get qrImportContinue => '復号して次へ';
+
+  @override
+  String get qrImportInvalid =>
+      '読み取れません。KT Walletの暗号化バックアップQRが1つだけ含まれる、8 MB未満の端末内のPNG/JPEG画像を選択してください。';
+
+  @override
+  String get qrImportWrongPassword => 'パスワードが違うか、バックアップが破損しています。確認して再試行してください。';
+
+  @override
+  String get qrImportSafety =>
+      '端末をオフラインに保ってください。ウォレットPINではなく、バックアップ作成時のパスワードを入力します。オンライン端末で使用したフレーズは、ここに復元しても未接続のコールドウォレットにはなりません。';
+
+  @override
   String get walletDeviceAuthRequired =>
       'システム設定で画面ロックのパスコードまたは生体認証を設定してから再試行してください。ウォレットの PIN は端末認証の代わりにはなりません。エミュレーターでも設定が必要です。';
 
@@ -299,16 +332,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get scanPendingTx => '署名待ち取引をスキャン';
 
   @override
-  String get scanPendingTxDesc => 'オンラインウォレットが生成した動的QRをスキャン';
+  String get scanPendingTxDesc => 'オンラインウォレットの取引QRをスキャン';
 
   @override
-  String get exportAddress => 'アドレスをエクスポート';
+  String get exportAddress => 'アドレスQR';
 
   @override
   String get signRecords => '署名記録';
 
   @override
-  String get securityCheck => 'セキュリティチェック';
+  String get securityCheck => '安全性チェック';
 
   @override
   String get walletManage => 'ウォレット管理';

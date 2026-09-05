@@ -100,6 +100,66 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @qrImportTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'加密二维码导入'**
+  String get qrImportTitle;
+
+  /// No description provided for @qrImportDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'扫描 KT Wallet 加密备份二维码，或选择本机保存的二维码图片。解密全程在本地完成。'**
+  String get qrImportDescription;
+
+  /// No description provided for @qrImportScan.
+  ///
+  /// In zh, this message translates to:
+  /// **'扫描备份二维码'**
+  String get qrImportScan;
+
+  /// No description provided for @qrImportImage.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择本地二维码图片'**
+  String get qrImportImage;
+
+  /// No description provided for @qrImportReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'已识别加密备份'**
+  String get qrImportReady;
+
+  /// No description provided for @qrImportPassword.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份加密密码'**
+  String get qrImportPassword;
+
+  /// No description provided for @qrImportContinue.
+  ///
+  /// In zh, this message translates to:
+  /// **'解密并继续'**
+  String get qrImportContinue;
+
+  /// No description provided for @qrImportInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法读取此备份。请选择小于 8 MB 的本地 PNG/JPEG 图片，且只包含一个 KT Wallet 加密备份二维码。'**
+  String get qrImportInvalid;
+
+  /// No description provided for @qrImportWrongPassword.
+  ///
+  /// In zh, this message translates to:
+  /// **'密码错误或备份已损坏，请检查密码后重试。'**
+  String get qrImportWrongPassword;
+
+  /// No description provided for @qrImportSafety.
+  ///
+  /// In zh, this message translates to:
+  /// **'请保持设备离线。输入导出备份时设置的加密密码，而非钱包 PIN。若助记词曾在联网设备上使用，导入离线版并不能使它成为从未触网的冷钱包。'**
+  String get qrImportSafety;
+
   /// No description provided for @walletDeviceAuthRequired.
   ///
   /// In zh, this message translates to:
@@ -649,7 +709,7 @@ abstract class AppLocalizations {
   /// No description provided for @exportAddress.
   ///
   /// In zh, this message translates to:
-  /// **'导出地址'**
+  /// **'地址二维码'**
   String get exportAddress;
 
   /// No description provided for @signRecords.

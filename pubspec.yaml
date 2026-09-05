@@ -16,6 +16,7 @@ workspace:
   - packages/ui_kit
   - packages/test_support
   - packages/wallet_data
+  - packages/native_wallet_tabs
 
 dev_dependencies:
   analyzer: 10.2.0

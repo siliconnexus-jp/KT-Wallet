@@ -8,3 +8,4 @@ export 'src/api.dart';
 export 'src/errors.dart';
 export 'src/method_channel.dart';
 export 'src/types.dart';
+export 'src/wallet_backup_qr.dart';

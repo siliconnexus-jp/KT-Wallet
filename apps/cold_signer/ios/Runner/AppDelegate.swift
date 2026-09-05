@@ -3,6 +3,7 @@ import LocalAuthentication
 import MetricKit
 import Network
 import UIKit
+import UniformTypeIdentifiers
 
 internal func selectPrivacyHostWindow(
   from windows: [UIWindow],
@@ -57,7 +58,8 @@ final class OneShotDeviceSecurityResult {
 }
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, UIDocumentPickerDelegate {
+  private var backupImageResult: FlutterResult?
   private var privacyCover: UIView?
   private var screenSecurityChannel: FlutterMethodChannel?
   private let nativeIncidentStore = NativeIncidentStore()
@@ -124,6 +126,26 @@ final class OneShotDeviceSecurityResult {
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ScreenSecurity") {
+      let backupImageChannel = FlutterMethodChannel(
+        name: "kt/signer_backup_image", binaryMessenger: registrar.messenger())
+      backupImageChannel.setMethodCallHandler { [weak self] call, result in
+        guard let self else { return result(FlutterMethodNotImplemented) }
+        guard call.method == "pick" else { return result(FlutterMethodNotImplemented) }
+        guard self.backupImageResult == nil else {
+          return result(FlutterError(code: "BUSY", message: nil, details: nil))
+        }
+        let windows = UIApplication.shared.connectedScenes
+          .compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }
+        guard var presenter = selectPrivacyHostWindow(from: windows, fallback: self.window)?.rootViewController else {
+          return result(FlutterError(code: "UNAVAILABLE", message: nil, details: nil))
+        }
+        while let presented = presenter.presentedViewController { presenter = presented }
+        self.backupImageResult = result
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.png, .jpeg], asCopy: false)
+        picker.allowsMultipleSelection = false
+        picker.delegate = self
+        presenter.present(picker, animated: true)
+      }
       let nativeObservabilityChannel = FlutterMethodChannel(
         name: "kt/native_observability",
         binaryMessenger: registrar.messenger()
@@ -161,6 +183,48 @@ final class OneShotDeviceSecurityResult {
           return
         }
         self?.deviceSecurityState(result)
+      }
+    }
+  }
+
+  func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+    let result = backupImageResult
+    backupImageResult = nil
+    result?(nil)
+  }
+
+  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+    guard let result = backupImageResult else { return }
+    guard urls.count == 1, let url = urls.first, url.isFileURL else {
+      backupImageResult = nil
+      return result(FlutterError(code: "READ_FAILED", message: nil, details: nil))
+    }
+    DispatchQueue.global(qos: .userInitiated).async {
+      let scoped = url.startAccessingSecurityScopedResource()
+      defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+      do {
+        let limit = 8 * 1024 * 1024
+        // Never fetch a cloud-only backup on an offline signer.
+        let values = try url.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey])
+        if values.isUbiquitousItem == true && values.ubiquitousItemDownloadingStatus != .current {
+          throw CocoaError(.fileReadNoSuchFile)
+        }
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var bytes = Data()
+        while let chunk = try handle.read(upToCount: 8192), !chunk.isEmpty {
+          guard bytes.count + chunk.count <= limit else { throw CocoaError(.fileReadTooLarge) }
+          bytes.append(chunk)
+        }
+        DispatchQueue.main.async {
+          self.backupImageResult = nil
+          result(FlutterStandardTypedData(bytes: bytes))
+        }
+      } catch {
+        DispatchQueue.main.async {
+          self.backupImageResult = nil
+          result(FlutterError(code: "READ_FAILED", message: nil, details: nil))
+        }
       }
     }
   }
