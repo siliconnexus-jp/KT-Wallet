@@ -11,12 +11,9 @@ import '../state/signer_wallet_controller.dart';
 
 const _t = AppTheme.signer;
 Widget _card(Widget child, {EdgeInsets padding = const EdgeInsets.all(16)}) =>
-    Container(
+    KtGlassSurface(
+      dark: true,
       padding: padding,
-      decoration: BoxDecoration(
-        color: SignerColors.surface,
-        borderRadius: BorderRadius.circular(14),
-      ),
       child: child,
     );
 
@@ -67,7 +64,8 @@ Future<void> _pickLanguage(BuildContext context) async {
     ('English', const Locale('en')),
     ('日本語', const Locale('ja')),
   ];
-  await showModalBottomSheet<void>(
+  await showKtModalBottomSheet<void>(
+    dark: true,
     context: context,
     backgroundColor: SignerColors.surface,
     shape: const RoundedRectangleBorder(
@@ -959,7 +957,8 @@ class _SignerDeleteScreenState extends State<SignerDeleteScreen> {
 
   Future<bool> _verifyPin(SignerWalletController controller) async {
     final l10n = AppLocalizations.of(context);
-    final ok = await showModalBottomSheet<bool>(
+    final ok = await showKtModalBottomSheet<bool>(
+      dark: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: SignerColors.surface,

@@ -41,12 +41,10 @@ class KtPrimaryButton extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (icon != null) ...[Icon(icon, size: 18), const SizedBox(width: 8)],
-        if (style == KtButtonStyle.wallet) Flexible(child: text) else text,
+        Flexible(child: text),
       ],
     );
-    return style == KtButtonStyle.wallet
-        ? row
-        : FittedBox(fit: BoxFit.scaleDown, child: row);
+    return row;
   }
 
   @override
@@ -54,11 +52,11 @@ class KtPrimaryButton extends StatelessWidget {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final (background, foreground, radius) = switch (style) {
       KtButtonStyle.wallet => (WalletColors.accent, Colors.white, 28.0),
-      KtButtonStyle.signer => (SignerColors.blue, SignerColors.bg, 12.0),
+      KtButtonStyle.signer => (SignerColors.accent, SignerColors.bg, 28.0),
       KtButtonStyle.signerContrast => (
         SignerColors.text,
         SignerColors.bg,
-        12.0,
+        28.0,
       ),
     };
     return Semantics(
@@ -71,9 +69,7 @@ class KtPrimaryButton extends StatelessWidget {
         child: ConstrainedBox(
           constraints: BoxConstraints(
             minHeight: KtDimens.buttonHeight,
-            maxHeight: style == KtButtonStyle.wallet
-                ? double.infinity
-                : KtDimens.buttonHeight,
+            maxHeight: double.infinity,
           ),
           child: SizedBox(
             width: double.infinity,
@@ -83,9 +79,10 @@ class KtPrimaryButton extends StatelessWidget {
                 backgroundColor: background,
                 elevation: style == KtButtonStyle.wallet ? 2 : 0,
                 shadowColor: background.withValues(alpha: .18),
-                padding: style == KtButtonStyle.wallet
-                    ? const EdgeInsets.symmetric(horizontal: 20, vertical: 15)
-                    : null,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 15,
+                ),
                 foregroundColor: foreground,
                 disabledBackgroundColor: loading
                     ? background.withValues(alpha: 0.72)

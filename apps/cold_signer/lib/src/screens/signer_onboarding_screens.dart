@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -11,8 +12,24 @@ import '../security/secure_vault.dart' show WalletMetadata, isFlutterTestEnv;
 import '../signing/mnemonic_quiz.dart';
 import '../signing/mnemonic_review.dart';
 import '../state/signer_wallet_controller.dart';
+import '../widgets/signer_brand_mark.dart';
 
 const _t = AppTheme.signer;
+
+String _creationFailure(BuildContext context, Object error) {
+  final l10n = AppLocalizations.of(context);
+  return switch (error) {
+    AuthUnavailableException() ||
+    BiometryChangedException() => l10n.walletDeviceAuthRequired,
+    AuthCancelledException() ||
+    AuthFailedException() => l10n.walletCreationAuthRequired,
+    AuthLockedException(:final cooldownSec) =>
+      cooldownSec > 0
+          ? l10n.pinLockedRetry(cooldownSec)
+          : l10n.walletDeviceAuthRequired,
+    _ => l10n.walletSecureStorageFailed,
+  };
+}
 
 /// The canned design-snapshot mnemonic. The gallery/golden baseline renders
 /// this fixed list; the live create flow substitutes the freshly generated
@@ -113,20 +130,7 @@ class SignerSplashScreen extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 96,
-              height: 96,
-              decoration: BoxDecoration(
-                color: SignerColors.surface,
-                borderRadius: BorderRadius.circular(26),
-                border: Border.all(color: SignerColors.border),
-              ),
-              child: const Icon(
-                Icons.verified_user,
-                size: 48,
-                color: SignerColors.ok,
-              ),
-            ),
+            const SignerBrandMark(size: 96),
             const SizedBox(height: 20),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -156,17 +160,46 @@ class SignerSplashScreen extends StatelessWidget {
 }
 
 /// C1 欢迎.
-class SignerWelcomeScreen extends StatelessWidget {
+class SignerWelcomeScreen extends StatefulWidget {
   const SignerWelcomeScreen({super.key});
+  @override
+  State<SignerWelcomeScreen> createState() => _SignerWelcomeScreenState();
+}
+
+class _SignerWelcomeScreenState extends State<SignerWelcomeScreen> {
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _start({required bool importing}) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final controller = SignerWalletScope.maybeOf(context);
+      if (importing) {
+        await controller?.checkWalletCreationReady();
+      } else {
+        await controller?.beginCreate();
+      }
+      if (!mounted) return;
+      unawaited(
+        context.push(importing ? '/mnemonic-import' : '/mnemonic-warn'),
+      );
+    } on Object catch (error) {
+      if (mounted) setState(() => _error = _creationFailure(context, error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    Widget feat(IconData icon, String t, String s) => Container(
+    Widget feat(IconData icon, String t, String s) => KtGlassSurface(
+      dark: true,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: SignerColors.surface,
-        borderRadius: BorderRadius.circular(14),
-      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -177,7 +210,7 @@ class SignerWelcomeScreen extends StatelessWidget {
               color: SignerColors.surface2,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, size: 20, color: SignerColors.blue),
+            child: Icon(icon, size: 20, color: SignerColors.accent),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -212,42 +245,36 @@ class SignerWelcomeScreen extends StatelessWidget {
       gap: 24,
       bottom: Column(
         children: [
-          _signerBtn(
-            l10n.createNewWallet,
-            contrast: true,
-            onPressed: () async {
-              // Live flow: generate the real mnemonic this create session will
-              // back up and verify. Absent scope (goldens) nothing changes.
-              await SignerWalletScope.maybeOf(context)?.beginCreate();
-              if (!context.mounted) return;
-              unawaited(context.push('/mnemonic-warn'));
-            },
+          KtPrimaryButton(
+            label: l10n.createNewWallet,
+            style: KtButtonStyle.signer,
+            loading: _busy,
+            onPressed: () => _start(importing: false),
           ),
           const SizedBox(height: 12),
-          _signerBtn(
-            l10n.importExistingWallet,
-            onPressed: () => context.push('/mnemonic-import'),
+          TextButton(
+            onPressed: _busy ? null : () => _start(importing: true),
+            child: Text(l10n.importExistingWallet),
           ),
         ],
       ),
       children: [
+        if (_error != null)
+          Semantics(
+            liveRegion: true,
+            child: KtCard(
+              theme: _t,
+              child: Text(
+                _error!,
+                key: const ValueKey('wallet-creation-preflight-error'),
+                style: const TextStyle(color: SignerColors.warn, height: 1.5),
+              ),
+            ),
+          ),
         const SizedBox(height: 8),
         Column(
           children: [
-            Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                color: SignerColors.surface,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: SignerColors.border),
-              ),
-              child: const Icon(
-                Icons.verified_user,
-                size: 44,
-                color: SignerColors.ok,
-              ),
-            ),
+            const SignerBrandMark(),
             const SizedBox(height: 20),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -660,7 +687,18 @@ class _SignerMnemonicImportScreenState
       _busy = true;
       _error = null;
     });
-    final valid = await controller.beginImport(phrase);
+    final bool valid;
+    try {
+      valid = await controller.beginImport(phrase);
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = _creationFailure(context, error);
+        });
+      }
+      return;
+    }
     if (!mounted) return;
     setState(() => _busy = false);
     if (!valid) {
@@ -861,7 +899,7 @@ Widget _mnemonicImportPreview(BuildContext context, AppLocalizations l10n) {
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
                               color: active
-                                  ? SignerColors.blue
+                                  ? SignerColors.accent
                                   : SignerColors.border,
                               width: active ? 1.5 : 1,
                             ),
@@ -1160,11 +1198,13 @@ class SignerBiometricScreen extends StatelessWidget {
       if (context.mounted) {
         unawaited(context.push('/created', extra: completedWallet));
       }
-    } catch (_) {
+    } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
-        ..showSnackBar(SnackBar(content: Text(l10n.walletSecureStorageFailed)));
+        ..showSnackBar(
+          SnackBar(content: Text(_creationFailure(context, error))),
+        );
     }
   }
 
@@ -1213,7 +1253,7 @@ class SignerBiometricScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(60),
               border: Border.all(color: SignerColors.border),
             ),
-            child: const Icon(Icons.face, size: 60, color: SignerColors.blue),
+            child: const Icon(Icons.face, size: 60, color: SignerColors.accent),
           ),
         ),
         Column(

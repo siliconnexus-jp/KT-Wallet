@@ -111,15 +111,7 @@ class _ColdSignerAppState extends State<ColdSignerApp> {
     _resolveInitialLocation();
   }
 
-  ThemeData get _theme => ThemeData(
-    fontFamily: 'Inter',
-    brightness: Brightness.dark,
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: SignerColors.ok,
-      brightness: Brightness.dark,
-    ),
-    scaffoldBackgroundColor: SignerColors.bg,
-  );
+  ThemeData get _theme => ktSignerTheme();
 
   @override
   Widget build(BuildContext context) {

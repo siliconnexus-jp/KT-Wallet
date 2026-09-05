@@ -4,6 +4,7 @@ import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../state/locale_controller.dart';
+import '../widgets/signer_brand_mark.dart';
 
 const signerIntroCompletedKey = 'signer.productIntro.v1';
 
@@ -38,20 +39,13 @@ class SignerIntroApp extends StatelessWidget {
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       onGenerateTitle: (context) => AppLocalizations.of(context).appName,
-      theme: ThemeData(
-        fontFamily: 'Inter',
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: SignerColors.bg,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: SignerColors.ok,
-          brightness: Brightness.dark,
-        ),
-      ),
+      theme: ktSignerTheme(),
       home: Builder(
         builder: (context) {
           final l10n = AppLocalizations.of(context);
           return KtProductIntro(
             offline: true,
+            brandMark: const SignerBrandMark(size: 38),
             onComplete: complete,
             copy: KtIntroCopy(
               role: l10n.introRole,

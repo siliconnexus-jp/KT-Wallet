@@ -1,5 +1,6 @@
 import 'package:cold_signer/src/onboarding/product_intro_app.dart';
 import 'package:cold_signer/src/state/locale_controller.dart';
+import 'package:cold_signer/src/widgets/signer_brand_mark.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,6 +23,7 @@ void main() {
       await tester.pumpWidget(intro());
       await tester.pumpAndSettle();
       expect(find.byType(KtProductIntro), findsOneWidget);
+      expect(find.byType(SignerBrandMark), findsOneWidget);
       for (var page = 0; page < 3; page++) {
         expect(tester.takeException(), isNull);
         await tester.tap(find.byKey(const ValueKey('intro-next')));

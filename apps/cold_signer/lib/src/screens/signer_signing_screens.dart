@@ -76,7 +76,7 @@ Color _colorForCoin(int coin) => switch (coin) {
   714 => const Color(0xFFF3BA2F),
   195 => ChainColors.tron,
   501 => ChainColors.solana,
-  _ => SignerColors.blue,
+  _ => SignerColors.accent,
 };
 
 String _shortAddress(String address) {
@@ -173,12 +173,9 @@ Widget _kv(String k, String v, {bool mono = false, Color? color}) => Row(
   ],
 );
 
-Widget _card(Widget child) => Container(
+Widget _card(Widget child) => KtGlassSurface(
+  dark: true,
   padding: const EdgeInsets.all(16),
-  decoration: BoxDecoration(
-    color: SignerColors.surface,
-    borderRadius: BorderRadius.circular(14),
-  ),
   child: child,
 );
 
@@ -386,26 +383,22 @@ class _SignerHomeScreenState extends State<SignerHomeScreen>
         ),
         GestureDetector(
           onTap: () => context.push('/scan'),
-          child: Container(
+          child: KtGlassSurface(
+            dark: true,
             padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
-            decoration: BoxDecoration(
-              color: SignerColors.surface,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: SignerColors.border),
-            ),
             child: Column(
               children: [
                 Container(
                   width: 64,
                   height: 64,
                   decoration: BoxDecoration(
-                    color: SignerColors.blue.withValues(alpha: 0.12),
+                    color: SignerColors.accent.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
                     Icons.qr_code_scanner,
                     size: 30,
-                    color: SignerColors.blue,
+                    color: SignerColors.accent,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -455,7 +448,8 @@ class _SignerHomeScreenState extends State<SignerHomeScreen>
                           ),
                           decoration: BoxDecoration(
                             color: SignerColors.surface,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: SignerColors.border),
                           ),
                           child: Row(
                             children: [
@@ -498,7 +492,8 @@ class _SignerHomeScreenState extends State<SignerHomeScreen>
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           decoration: BoxDecoration(
                             color: SignerColors.surface,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: SignerColors.border),
                           ),
                           child: Column(
                             children: [
@@ -1384,7 +1379,8 @@ class SignerRiskScreen extends StatelessWidget {
 
   Future<void> _showRawTx(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return showModalBottomSheet<void>(
+    return showKtModalBottomSheet<void>(
+      dark: true,
       context: context,
       backgroundColor: SignerColors.surface,
       shape: const RoundedRectangleBorder(
@@ -1668,7 +1664,8 @@ class SignerAuthScreen extends StatelessWidget {
         );
       return;
     }
-    final ok = await showModalBottomSheet<bool>(
+    final ok = await showKtModalBottomSheet<bool>(
+      dark: true,
       context: context,
       backgroundColor: SignerColors.surface,
       isScrollControlled: true,
@@ -1752,7 +1749,7 @@ class SignerAuthScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(56),
               border: Border.all(color: SignerColors.border),
             ),
-            child: const Icon(Icons.face, size: 56, color: SignerColors.blue),
+            child: const Icon(Icons.face, size: 56, color: SignerColors.accent),
           ),
         ),
         Column(

@@ -9,6 +9,13 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get walletDeviceAuthRequired =>
+      '请先在系统设置中启用锁屏密码或生物识别，再重试。钱包 PIN 不能替代系统认证；模拟器也需要配置。';
+
+  @override
+  String get walletCreationAuthRequired => '系统认证未完成，钱包尚未创建。请重试并完成系统验证。';
+
+  @override
   String get introOpenTitle => '前后端 100% 开源';
 
   @override

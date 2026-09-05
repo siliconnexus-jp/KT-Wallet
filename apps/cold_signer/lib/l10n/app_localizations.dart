@@ -100,6 +100,18 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @walletDeviceAuthRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先在系统设置中启用锁屏密码或生物识别，再重试。钱包 PIN 不能替代系统认证；模拟器也需要配置。'**
+  String get walletDeviceAuthRequired;
+
+  /// No description provided for @walletCreationAuthRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统认证未完成，钱包尚未创建。请重试并完成系统验证。'**
+  String get walletCreationAuthRequired;
+
   /// No description provided for @introOpenTitle.
   ///
   /// In zh, this message translates to:

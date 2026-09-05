@@ -87,6 +87,9 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  assets:
+    - assets/brand/app_icon.png
+
   # Design typography (OFL). Bundled so the signer renders the Pencil design
   # 1:1 offline (air-gapped — no runtime font fetching). Variable fonts.
   fonts:

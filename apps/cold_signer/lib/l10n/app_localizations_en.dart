@@ -9,6 +9,14 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get walletDeviceAuthRequired =>
+      'Set up a device screen-lock passcode or biometrics in system settings, then retry. A wallet PIN does not replace device authentication; emulators need this setup too.';
+
+  @override
+  String get walletCreationAuthRequired =>
+      'Device authentication was not completed. The wallet has not been created. Retry and complete the system prompt.';
+
+  @override
   String get introOpenTitle => '100% open source.\nFront to back.';
 
   @override

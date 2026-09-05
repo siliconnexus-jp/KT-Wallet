@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../tokens/colors.dart';
-import '../tokens/dimens.dart';
 import 'glass.dart';
 
 /// Which app palette a shared screen widget renders for.
@@ -18,7 +17,7 @@ extension AppThemeColors on AppTheme {
   Color get border =>
       this == AppTheme.wallet ? WalletColors.border : SignerColors.border;
   Color get accent =>
-      this == AppTheme.wallet ? WalletColors.accent : SignerColors.blue;
+      this == AppTheme.wallet ? WalletColors.accent : SignerColors.accent;
 }
 
 /// Controls whether shared screens render the design-mock device chrome
@@ -136,15 +135,17 @@ class KtNavBar extends StatelessWidget {
                   tooltip: leadingLabel,
                   icon: Icon(leading, size: 22, color: theme.text),
                   padding: EdgeInsets.zero,
-                  style: theme == AppTheme.wallet
-                      ? IconButton.styleFrom(
-                          backgroundColor: const Color(0xDFFFFFFF),
-                          side: const BorderSide(color: Colors.white),
-                        )
-                      : null,
-                  alignment: theme == AppTheme.wallet
-                      ? Alignment.center
-                      : Alignment.centerLeft,
+                  style: IconButton.styleFrom(
+                    backgroundColor: theme == AppTheme.wallet
+                        ? const Color(0xDFFFFFFF)
+                        : const Color(0xF2253435),
+                    side: BorderSide(
+                      color: theme == AppTheme.wallet
+                          ? Colors.white
+                          : const Color(0xFF3C5255),
+                    ),
+                  ),
+                  alignment: Alignment.center,
                 ),
         ),
         Flexible(
@@ -211,12 +212,16 @@ class KtNavBar extends StatelessWidget {
                               color: trailingColor ?? theme.text2,
                             ),
                             padding: EdgeInsets.zero,
-                            style: theme == AppTheme.wallet
-                                ? IconButton.styleFrom(
-                                    backgroundColor: const Color(0xDFFFFFFF),
-                                    side: const BorderSide(color: Colors.white),
-                                  )
-                                : null,
+                            style: IconButton.styleFrom(
+                              backgroundColor: theme == AppTheme.wallet
+                                  ? const Color(0xDFFFFFFF)
+                                  : const Color(0xF2253435),
+                              side: BorderSide(
+                                color: theme == AppTheme.wallet
+                                    ? Colors.white
+                                    : const Color(0xFF3C5255),
+                              ),
+                            ),
                           )
                         : const SizedBox(),
                   ),
@@ -272,7 +277,7 @@ class KtScreen extends StatelessWidget {
     final screen = Scaffold(
       backgroundColor: theme == AppTheme.wallet
           ? Colors.transparent
-          : backgroundColor ?? theme.bg,
+          : backgroundColor ?? Colors.transparent,
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -280,10 +285,7 @@ class KtScreen extends StatelessWidget {
             KtStatusBar(theme: theme),
             if (navBar != null)
               Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: theme == AppTheme.wallet ? 6 : 0,
-                ),
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 6),
                 child: navBar!,
               ),
             Expanded(child: _scrollableContent(content)),
@@ -297,7 +299,7 @@ class KtScreen extends StatelessWidget {
         ),
       ),
     );
-    return theme == AppTheme.wallet ? KtWalletBackdrop(child: screen) : screen;
+    return KtWalletBackdrop(dark: theme == AppTheme.signer, child: screen);
   }
 
   Widget _scrollableContent(Widget content) {
@@ -325,16 +327,11 @@ class KtCard extends StatelessWidget {
   final AppTheme theme;
   final EdgeInsets padding;
   @override
-  Widget build(BuildContext context) => theme == AppTheme.wallet
-      ? KtGlassSurface(padding: padding, child: child)
-      : Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: theme.surface,
-            borderRadius: BorderRadius.circular(KtDimens.radiusLg),
-          ),
-          child: child,
-        );
+  Widget build(BuildContext context) => KtGlassSurface(
+    dark: theme == AppTheme.signer,
+    padding: padding,
+    child: child,
+  );
 }
 
 /// Circular avatar with an initial (wallet / token / contact).
@@ -411,10 +408,8 @@ class KtSegmented extends StatelessWidget {
         decoration: BoxDecoration(
           color: theme == AppTheme.wallet
               ? (i == selected ? Colors.white : const Color(0xB3EDF0F7))
-              : (i == selected ? theme.text : theme.surface),
-          borderRadius: BorderRadius.circular(
-            theme == AppTheme.wallet ? 24 : KtDimens.radiusSm,
-          ),
+              : (i == selected ? SignerColors.accent : theme.surface),
+          borderRadius: BorderRadius.circular(24),
           border: theme == AppTheme.wallet
               ? Border.all(
                   color: i == selected

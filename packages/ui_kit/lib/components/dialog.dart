@@ -113,17 +113,12 @@ class _DialogSurface extends StatelessWidget {
   final AppTheme theme;
   final Widget child;
   @override
-  Widget build(BuildContext context) => theme == AppTheme.wallet
-      ? KtGlassSurface(radius: 30, blur: true, child: child)
-      : Material(
-          color: theme.surface,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(KtDimens.radiusXl),
-            side: BorderSide(color: theme.border),
-          ),
-          child: child,
-        );
+  Widget build(BuildContext context) => KtGlassSurface(
+    dark: theme == AppTheme.signer,
+    radius: 30,
+    blur: true,
+    child: child,
+  );
 }
 
 class KtConfirmDialog extends StatelessWidget {

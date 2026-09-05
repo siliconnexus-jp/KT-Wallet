@@ -30,6 +30,8 @@ abstract final class SignerColors {
   static const ok = Color(0xFF34D77B);
   static const warn = Color(0xFFF5B722);
   static const danger = Color(0xFFFF5A5A);
+  static const accent = Color(0xFF48DEC1);
+  // Retain the legacy blue for existing online consumers and chain branding.
   static const blue = Color(0xFF5B8DEF);
   static const border = Color(0xFF262B34);
 }

@@ -9,6 +9,14 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get walletDeviceAuthRequired =>
+      'システム設定で画面ロックのパスコードまたは生体認証を設定してから再試行してください。ウォレットの PIN は端末認証の代わりにはなりません。エミュレーターでも設定が必要です。';
+
+  @override
+  String get walletCreationAuthRequired =>
+      '端末認証が完了していないため、ウォレットはまだ作成されていません。再試行し、システム認証を完了してください。';
+
+  @override
   String get introOpenTitle => 'フロントもバックも\n100% オープンソース。';
 
   @override

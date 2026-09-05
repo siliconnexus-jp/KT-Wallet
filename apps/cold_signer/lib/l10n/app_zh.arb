@@ -1,4 +1,6 @@
 {
+  "walletDeviceAuthRequired": "请先在系统设置中启用锁屏密码或生物识别，再重试。钱包 PIN 不能替代系统认证；模拟器也需要配置。",
+  "walletCreationAuthRequired": "系统认证未完成，钱包尚未创建。请重试并完成系统验证。",
   "introOpenTitle": "前后端 100% 开源",
   "introOpenDescription": "从钱包界面、离线签名到后端网关，代码全部公开。让信任建立在可审查的代码上。",
   "introOpenNote": "查看完整源码，了解资产如何被保护。公开可审查，也欢迎持续改进。",

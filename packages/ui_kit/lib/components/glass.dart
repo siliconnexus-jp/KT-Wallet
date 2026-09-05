@@ -4,6 +4,43 @@ import 'package:flutter/material.dart';
 
 import '../tokens/colors.dart';
 
+ThemeData ktSignerTheme() => ktWalletTheme().copyWith(
+  brightness: Brightness.dark,
+  colorScheme: ColorScheme.fromSeed(
+    seedColor: SignerColors.accent,
+    brightness: Brightness.dark,
+  ),
+  scaffoldBackgroundColor: SignerColors.bg,
+  inputDecorationTheme: InputDecorationTheme(
+    filled: true,
+    fillColor: SignerColors.surface,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(18),
+      borderSide: const BorderSide(color: SignerColors.border),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(18),
+      borderSide: const BorderSide(color: SignerColors.border),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(18),
+      borderSide: const BorderSide(color: SignerColors.accent, width: 1.5),
+    ),
+  ),
+  textButtonTheme: TextButtonThemeData(
+    style: TextButton.styleFrom(
+      minimumSize: const Size(48, 48),
+      foregroundColor: SignerColors.accent,
+    ),
+  ),
+  snackBarTheme: const SnackBarThemeData(
+    behavior: SnackBarBehavior.floating,
+    backgroundColor: SignerColors.surface2,
+    contentTextStyle: TextStyle(color: SignerColors.text),
+  ),
+);
+
 ThemeData ktWalletTheme() => ThemeData(
   fontFamily: 'Inter',
   colorScheme: ColorScheme.fromSeed(seedColor: WalletColors.accent),
@@ -44,20 +81,27 @@ ThemeData ktWalletTheme() => ThemeData(
 
 /// Static, low-contrast light behind the wallet. No full-screen blur or motion.
 class KtWalletBackdrop extends StatelessWidget {
-  const KtWalletBackdrop({super.key, required this.child});
+  const KtWalletBackdrop({super.key, required this.child, this.dark = false});
   final Widget child;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(
-      color: WalletColors.bg,
-      gradient: MediaQuery.highContrastOf(context)
+      color: dark ? SignerColors.bg : WalletColors.bg,
+      // The signer's content plane stays uniform behind sensitive text.
+      // Depth belongs to its floating controls, not a full-screen gradient.
+      gradient: dark || MediaQuery.highContrastOf(context)
           ? null
-          : const LinearGradient(
+          : LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFFEDF3FC), Color(0xFFF5F6F9), Color(0xFFEEF0F7)],
-              stops: [0, .5, 1],
+              colors: const [
+                Color(0xFFEDF3FC),
+                Color(0xFFF5F6F9),
+                Color(0xFFEEF0F7),
+              ],
+              stops: const [0, .5, 1],
             ),
     ),
     child: child,
@@ -75,6 +119,7 @@ class KtGlassSurface extends StatelessWidget {
     this.blur = false,
     this.padding = EdgeInsets.zero,
     this.borderRadius,
+    this.dark = false,
   });
 
   final Widget child;
@@ -82,6 +127,7 @@ class KtGlassSurface extends StatelessWidget {
   final bool blur;
   final EdgeInsetsGeometry padding;
   final BorderRadius? borderRadius;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) {
@@ -95,14 +141,24 @@ class KtGlassSurface extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: solid
+          colors: dark
+              ? (solid
+                    ? const [SignerColors.surface, SignerColors.surface]
+                    : blur
+                    ? const [Color(0xF2253435), Color(0xF0182328)]
+                    : const [SignerColors.surface, SignerColors.surface])
+              : solid
               ? const [Colors.white, Colors.white]
               : blur
               ? const [Color(0xF7FFFFFF), Color(0xF2F1F4FB)]
               : const [Color(0xFCFFFFFF), Color(0xF2F9FAFD)],
         ),
         border: Border.all(
-          color: solid ? WalletColors.text2 : const Color(0xEFFFFFFF),
+          color: dark
+              ? (solid ? SignerColors.text2 : const Color(0xFF3C5255))
+              : solid
+              ? WalletColors.text2
+              : const Color(0xEFFFFFFF),
         ),
       ),
       child: Material(
@@ -117,9 +173,11 @@ class KtGlassSurface extends StatelessWidget {
             ? const []
             : [
                 BoxShadow(
-                  color: const Color(
-                    0xFF22365B,
-                  ).withValues(alpha: blur ? .09 : .035),
+                  color: dark
+                      ? Colors.black.withValues(alpha: .2)
+                      : const Color(
+                          0xFF22365B,
+                        ).withValues(alpha: blur ? .09 : .035),
                   blurRadius: blur ? 24 : 16,
                   offset: Offset(0, blur ? 8 : 4),
                 ),
@@ -179,13 +237,16 @@ class KtGlassSheet extends StatelessWidget {
     required this.child,
     this.scrollable = false,
     this.padding = EdgeInsets.zero,
+    this.dark = false,
   });
   final Widget child;
   final bool scrollable;
   final EdgeInsetsGeometry padding;
+  final bool dark;
   @override
   Widget build(BuildContext context) => KtGlassSurface(
     blur: true,
+    dark: dark,
     borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
     child: ConstrainedBox(
       constraints: BoxConstraints(
@@ -217,6 +278,7 @@ Future<T?> showKtModalBottomSheet<T>({
   Color? barrierColor,
   ShapeBorder? shape,
   BoxConstraints? constraints,
+  bool dark = false,
 }) => showModalBottomSheet<T>(
   context: context,
   isScrollControlled: isScrollControlled,
@@ -226,11 +288,14 @@ Future<T?> showKtModalBottomSheet<T>({
   useRootNavigator: useRootNavigator,
   showDragHandle: showDragHandle,
   backgroundColor: Colors.transparent,
-  barrierColor: barrierColor ?? const Color(0x59212B40),
+  barrierColor:
+      barrierColor ??
+      (dark ? const Color(0x99030608) : const Color(0x59212B40)),
   elevation: 0,
   constraints: constraints,
   builder: (context) => KtGlassSurface(
     blur: true,
+    dark: dark,
     borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
     child: builder(context),
   ),

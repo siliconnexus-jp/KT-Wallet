@@ -22,6 +22,39 @@ void main() {
     ),
   );
 
+  testWidgets('dark glass respects contrast and keeps secret cards opaque', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      const KtGlassSurface(dark: true, child: Text('Recovery phrase')),
+    );
+    expect(find.byType(BackdropFilter), findsNothing);
+    await pump(
+      tester,
+      const KtGlassSurface(dark: true, blur: true, child: Text('Settings')),
+    );
+    expect(find.byType(BackdropFilter), findsOneWidget);
+    await pump(
+      tester,
+      const KtGlassSurface(dark: true, blur: true, child: Text('Settings')),
+      contrast: true,
+    );
+    expect(find.byType(BackdropFilter), findsNothing);
+    final boxes = tester.widgetList<DecoratedBox>(find.byType(DecoratedBox));
+    expect(
+      boxes.any(
+        (box) =>
+            box.decoration is BoxDecoration &&
+            ((box.decoration as BoxDecoration).gradient as LinearGradient?)
+                    ?.colors
+                    .first ==
+                SignerColors.surface,
+      ),
+      isTrue,
+    );
+  });
+
   testWidgets('content cards do not allocate backdrop filters', (tester) async {
     await pump(tester, const KtGlassSurface(child: Text('12.34 ETH')));
     expect(find.byType(BackdropFilter), findsNothing);

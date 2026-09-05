@@ -1,4 +1,6 @@
 {
+  "walletDeviceAuthRequired": "Set up a device screen-lock passcode or biometrics in system settings, then retry. A wallet PIN does not replace device authentication; emulators need this setup too.",
+  "walletCreationAuthRequired": "Device authentication was not completed. The wallet has not been created. Retry and complete the system prompt.",
   "introOpenTitle": "100% open source.\nFront to back.",
   "introOpenDescription": "Wallet apps, offline signing and the backend gateway. All source code is open, so trust can be built on what you can inspect.",
   "introOpenNote": "Explore the complete source and see how your assets are protected. Open to review. Open to improvement.",

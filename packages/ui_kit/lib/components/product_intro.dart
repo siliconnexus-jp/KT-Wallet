@@ -116,10 +116,14 @@ class KtProductIntro extends StatefulWidget {
     required this.copy,
     required this.onComplete,
     this.offline = false,
+    this.brandMark,
   });
   final KtIntroCopy copy;
   final Future<void> Function() onComplete;
   final bool offline;
+
+  /// Optional bundled application identity, constrained to the header slot.
+  final Widget? brandMark;
 
   @override
   State<KtProductIntro> createState() => _KtProductIntroState();
@@ -277,23 +281,29 @@ class _KtProductIntroState extends State<KtProductIntro> {
                     children: [
                       Row(
                         children: [
-                          Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: _accent,
-                              borderRadius: BorderRadius.circular(12),
+                          if (widget.brandMark != null)
+                            SizedBox.square(
+                              dimension: 38,
+                              child: widget.brandMark,
+                            )
+                          else
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                color: _accent,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                widget.offline
+                                    ? Icons.shield_outlined
+                                    : Icons.account_balance_wallet_outlined,
+                                size: 21,
+                                color: widget.offline
+                                    ? SignerColors.bg
+                                    : Colors.white,
+                              ),
                             ),
-                            child: Icon(
-                              widget.offline
-                                  ? Icons.shield_outlined
-                                  : Icons.account_balance_wallet_outlined,
-                              size: 21,
-                              color: widget.offline
-                                  ? SignerColors.bg
-                                  : Colors.white,
-                            ),
-                          ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
@@ -645,7 +655,7 @@ class _KtProductIntroState extends State<KtProductIntro> {
               : Icons.account_balance_wallet_outlined,
           color: offline
               ? (widget.offline ? SignerColors.ok : WalletColors.green)
-              : (widget.offline ? SignerColors.blue : WalletColors.accent),
+              : (widget.offline ? SignerColors.accent : WalletColors.accent),
           size: 36,
         ),
       ),

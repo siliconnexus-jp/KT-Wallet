@@ -39,8 +39,24 @@ class EmulatorAuthPolicyTest {
         assertFalse(policy(hardware = "", model = "", fingerprint = ""))
     }
 
-    @Test fun `offline signer and other hosts never bypass`() {
-        assertFalse(policy(pkg = "cc.siliconnexus.ktwallet.coldsigner"))
+    @Test fun `offline debug SDK emulator uses the isolated test vault`() {
+        assertTrue(policy(pkg = "cc.siliconnexus.ktwallet.coldsigner"))
+    }
+
+    @Test fun `offline signer keeps authentication outside debug SDK emulators`() {
+        val pkg = "cc.siliconnexus.ktwallet.coldsigner"
+        assertFalse(policy(pkg = pkg, buildType = "release"))
+        assertFalse(policy(pkg = pkg, buildType = "profile"))
+        assertFalse(policy(pkg = pkg, buildType = "unknown"))
+        assertFalse(policy(pkg = pkg, debug = false))
+        assertFalse(policy(pkg = pkg, debuggable = false))
+        assertFalse(policy(pkg = pkg, hardware = "tensor"))
+        assertFalse(policy(pkg = pkg, model = "Pixel 9"))
+        assertFalse(policy(pkg = pkg, fingerprint = "unknown"))
+    }
+
+    @Test fun `other hosts never bypass`() {
         assertFalse(policy(pkg = "example.app"))
+        assertFalse(policy(pkg = "cc.siliconnexus.ktwallet.coldsigner.fake"))
     }
 }

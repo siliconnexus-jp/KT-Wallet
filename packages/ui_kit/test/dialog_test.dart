@@ -87,14 +87,14 @@ void main() {
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
 
-    final materials = tester.widgetList<Material>(
+    final materials = tester.widgetList<KtGlassSurface>(
       find.descendant(
         of: find.byKey(const ValueKey('kt-dialog')),
-        matching: find.byType(Material),
+        matching: find.byType(KtGlassSurface),
       ),
     );
     expect(
-      materials.any((material) => material.color == SignerColors.surface),
+      materials.any((material) => material.dark && material.blur),
       isTrue,
     );
   });

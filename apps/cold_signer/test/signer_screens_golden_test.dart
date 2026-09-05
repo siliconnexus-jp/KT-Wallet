@@ -2,6 +2,7 @@ import 'package:cold_signer/l10n/app_localizations.dart';
 import 'package:cold_signer/src/screens/signer_signing_screens.dart';
 import 'package:cold_signer/src/signer_router.dart';
 import 'package:cold_signer/src/signing/demo_airgap.dart';
+import 'package:cold_signer/src/widgets/signer_brand_mark.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -37,6 +38,18 @@ void main() {
         ),
       );
       await tester.pump();
+      // Raster decoding runs asynchronously outside the fake frame clock.
+      // Never approve a blank icon as the splash/welcome golden baseline.
+      final brand = find.byType(SignerBrandMark);
+      if (brand.evaluate().isNotEmpty) {
+        await tester.runAsync(
+          () => precacheImage(
+            const AssetImage(SignerBrandMark.asset),
+            tester.element(brand),
+          ),
+        );
+        await tester.pump();
+      }
 
       await expectLater(
         find.byType(MaterialApp),

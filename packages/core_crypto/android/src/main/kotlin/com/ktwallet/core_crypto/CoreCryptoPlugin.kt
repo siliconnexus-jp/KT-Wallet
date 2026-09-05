@@ -224,6 +224,7 @@ class CoreCryptoPlugin :
                 "deleteWallet" -> deleteWallet(call, result)
                 "checkWalletCreationReady" -> {
                     if (emulatorTestVault) {
+                        showEmulatorTestWarning()
                         result.success(true)
                     } else {
                         authGate.ensureNotLocked()
@@ -565,6 +566,13 @@ class CoreCryptoPlugin :
         }
     }
 
+    private fun showEmulatorTestWarning() {
+        if (!emulatorWarningShown) {
+            Toast.makeText(applicationContext, R.string.kt_emulator_test_auth, Toast.LENGTH_LONG).show()
+            emulatorWarningShown = true
+        }
+    }
+
     /** Runs a biometric prompt, then [action] on success.
      *
      * Terminal provider/device errors never feed the persisted failure
@@ -573,10 +581,7 @@ class CoreCryptoPlugin :
      */
     private fun promptThen(result: Result, reason: String, action: () -> Any) {
         if (emulatorTestVault) {
-            if (!emulatorWarningShown) {
-                Toast.makeText(applicationContext, R.string.kt_emulator_test_auth, Toast.LENGTH_LONG).show()
-                emulatorWarningShown = true
-            }
+            showEmulatorTestWarning()
             try {
                 result.success(action())
             } catch (e: Exception) {

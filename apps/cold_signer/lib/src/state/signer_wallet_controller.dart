@@ -190,7 +190,15 @@ class SignerWalletController extends ChangeNotifier {
     return task;
   }
 
+  Future<void> checkWalletCreationReady() async {
+    // Widget galleries have no native channel. Production and injected
+    // authenticators always consult the native preflight, including emulators.
+    if (isFlutterTestEnv && _crypto is MethodChannelCoreCrypto) return;
+    await _crypto.checkWalletCreationReady();
+  }
+
   Future<List<String>> _beginCreate() async {
+    await checkWalletCreationReady();
     if (isFlutterTestEnv && _crypto is MethodChannelCoreCrypto) {
       _pendingMnemonic = generateMnemonic(random: _random);
       _onboardingStage = SignerOnboardingStage.mnemonicReview;
@@ -217,6 +225,7 @@ class SignerWalletController extends ChangeNotifier {
     final normalized = mnemonic.trim().toLowerCase().split(RegExp(r'\s+'));
     if (!const {12, 18, 24}.contains(normalized.length)) return false;
     if (!await _crypto.validateMnemonic(normalized.join(' '))) return false;
+    await checkWalletCreationReady();
     _pendingMnemonic = normalized;
     _onboardingStage = SignerOnboardingStage.pinSetup;
     notifyListeners();
@@ -361,6 +370,9 @@ class SignerWalletController extends ChangeNotifier {
         _hasWallet) {
       throw StateError('wallet onboarding is not ready to commit');
     }
+    // Check before writes/compensation: an unavailable device should preserve
+    // this in-memory flow for retry, not enroll then roll back a new wallet.
+    await checkWalletCreationReady();
     final walletId = _newWalletId();
     final metadata = WalletMetadata(
       walletId: walletId,
