@@ -1,4 +1,3 @@
-import 'package:cold_signer/cold_signer.dart';
 import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -11,10 +10,10 @@ import 'src/market/market_controller.dart';
 import 'src/market/market_scope.dart';
 import 'src/market/history_scope_host.dart';
 import 'src/observability/experience_metrics.dart';
+import 'src/onboarding/product_intro_app.dart';
 import 'src/security/app_lock_gate.dart';
 import 'src/security/secure_screen.dart';
 import 'src/state/app_prefs.dart';
-import 'src/state/device_mode.dart';
 import 'src/state/developer_mode.dart';
 import 'src/state/locale_controller.dart';
 import 'src/state/networks.dart';
@@ -26,10 +25,8 @@ import 'src/wallets/wallet_manager.dart';
 import 'src/wallets/wallet_model.dart';
 import 'src/wallets/wallet_store.dart';
 
-/// Production entrypoint for the combined single-installer app: loads the
-/// persisted language and device-mode preferences, then shows either the
-/// first-launch mode picker (online wallet vs offline signer), the full
-/// wallet experience, or the embedded Cold Signer experience.
+/// Production entrypoint for the standalone online wallet.
+/// Loads the saved language and opens wallet onboarding or the wallet home.
 Future<void> main() async {
   final startupStopwatch = Stopwatch()..start();
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,12 +36,7 @@ Future<void> main() async {
 
   final localeController = LocaleController();
   await localeController.load();
-  final modeController = DeviceModeController();
-  await modeController.load();
-
-  runApp(
-    RootApp(localeController: localeController, modeController: modeController),
-  );
+  runApp(RootApp(localeController: localeController));
   WidgetsBinding.instance.addPostFrameCallback((_) {
     ExperienceMetrics.instance.record(
       ExperienceMetricNames.appStartup,
@@ -54,7 +46,7 @@ Future<void> main() async {
   });
 }
 
-/// Wallet-mode bootstrap (runs only once the user has picked "online wallet"):
+/// Online-wallet bootstrap:
 /// opens the on-device drift database, wires a persistent [WalletStore]
 /// backed by the native [MethodChannelCoreCrypto], and loads saved wallets
 /// (seeding a starter set on first run, named in the active language).
@@ -170,27 +162,17 @@ void _pushPrivacyStrings(Locale? override) {
   }).ignore();
 }
 
-/// Root gate of the combined installer. Listens to the [DeviceModeController]:
-///
-/// * no mode chosen yet → [ModeSelectApp] (first-launch picker);
-/// * [DeviceMode.wallet] → the persistent wallet bootstrap + [KtWalletApp];
-/// * [DeviceMode.signer] → the embedded [ColdSignerApp].
-///
-/// Both mode subtrees run under a [DeviceModeScope] whose `exitMode` clears
-/// the persisted choice and returns to the picker.
+/// Root of the standalone online wallet. Legacy device-mode preferences are
+/// ignored; the offline signer is distributed as a separate application.
 class RootApp extends StatelessWidget {
   RootApp({
     super.key,
-    DeviceModeController? modeController,
     LocaleController? localeController,
     this.walletBootstrap,
     this.walletPrefs,
     this.walletNetworks,
     this.walletTransferSession,
-  }) : modeController = modeController ?? DeviceModeController(),
-       localeController = localeController ?? LocaleController();
-
-  final DeviceModeController modeController;
+  }) : localeController = localeController ?? LocaleController();
   final LocaleController localeController;
 
   /// Builds the wallet-mode [WalletController]. Production defaults to the
@@ -212,50 +194,26 @@ class RootApp extends StatelessWidget {
     // MaterialApp, so it needs the chosen language handed to it explicitly.
     return ListenableBuilder(
       listenable: localeController,
-      builder: (context, _) => ScreenSecurityGuard(
-        // Null = the user is following the system, which is exactly the
-        // guard's own fallback.
-        locale: localeController.locale,
-        child: ListenableBuilder(
-          listenable: modeController,
-          builder: (context, _) {
-            // Hand the overlay wording to the platform, which draws it while
-            // backgrounded and otherwise falls back to the system language.
-            _pushPrivacyStrings(localeController.locale);
-            switch (modeController.mode) {
-              case null:
-                return ModeSelectApp(
-                  localeController: localeController,
-                  modeController: modeController,
-                );
-              case DeviceMode.wallet:
-                return DeviceModeScope(
-                  exitMode: modeController.clear,
-                  child: _WalletBootstrap(
-                    localeController: localeController,
-                    bootstrap: walletBootstrap ?? _bootstrapWallet,
-                    prefs: walletPrefs,
-                    networks: walletNetworks,
-                    transferSession: walletTransferSession,
-                  ),
-                );
-              case DeviceMode.signer:
-                return DeviceModeScope(
-                  exitMode: modeController.clear,
-                  child: ColdSignerApp(initialLocation: '/welcome'),
-                );
-            }
-          },
-        ),
-      ),
+      builder: (context, _) {
+        _pushPrivacyStrings(localeController.locale);
+        return ScreenSecurityGuard(
+          locale: localeController.locale,
+          child: _WalletBootstrap(
+            localeController: localeController,
+            bootstrap: walletBootstrap ?? _bootstrapWallet,
+            prefs: walletPrefs,
+            networks: walletNetworks,
+            transferSession: walletTransferSession,
+          ),
+        );
+      },
     );
   }
 }
 
-/// Runs the async wallet bootstrap behind a plain dark splash (just the picker
-/// background color) and hands off to [KtWalletApp] once loaded. A failed
-/// bootstrap (e.g. unreadable database) shows a retryable error screen instead
-/// of hanging on the splash. Leaving wallet mode closes the database.
+/// Runs wallet bootstrap behind a splash and opens [KtWalletApp] once loaded.
+/// A failed bootstrap shows a retryable error screen. Disposing the app
+/// releases the database connection.
 class _WalletBootstrap extends StatefulWidget {
   const _WalletBootstrap({
     required this.localeController,
@@ -287,8 +245,8 @@ class _WalletBootstrapState extends State<_WalletBootstrap> {
   @override
   void dispose() {
     if (widget.prefs == null) _prefs.dispose();
-    // Release the DB connection when this mode subtree is torn down (mode
-    // switch back to the picker). A bootstrap that failed has nothing to close.
+    // Release the DB connection when the app subtree is torn down.
+    // A bootstrap that failed has nothing to close.
     _controller.then((c) => c.close()).ignore();
     super.dispose();
   }
@@ -325,7 +283,12 @@ class _WalletBootstrapState extends State<_WalletBootstrap> {
         // There is nothing sensitive to unlock before the first wallet is
         // created/imported/paired. A stale persisted app-lock preference must
         // not trap an empty production install behind biometrics.
-        if (controller.current == null) return walletApp;
+        if (controller.current == null) {
+          return WalletIntroApp(
+            localeController: widget.localeController,
+            child: walletApp,
+          );
+        }
         return AppLockGate(
           localeController: widget.localeController,
           prefs: _prefs,
@@ -422,249 +385,6 @@ class _BootstrapErrorApp extends StatelessWidget {
               ),
             );
           },
-        ),
-      ),
-    );
-  }
-}
-
-/// Minimal MaterialApp hosting the first-launch device-mode picker: dark theme
-/// consistent with the ui_kit design system, full l10n via kt_wallet's ARBs.
-class ModeSelectApp extends StatelessWidget {
-  const ModeSelectApp({
-    super.key,
-    required this.localeController,
-    required this.modeController,
-  });
-
-  final LocaleController localeController;
-  final DeviceModeController modeController;
-
-  @override
-  Widget build(BuildContext context) {
-    return LocaleScope(
-      controller: localeController,
-      child: ListenableBuilder(
-        listenable: localeController,
-        builder: (context, _) => MaterialApp(
-          onGenerateTitle: (context) => AppLocalizations.of(context).appName,
-          debugShowCheckedModeBanner: false,
-          locale: localeController.locale,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          theme: ThemeData(
-            fontFamily: 'Inter',
-            brightness: Brightness.dark,
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: WalletColors.accent,
-              brightness: Brightness.dark,
-            ),
-            scaffoldBackgroundColor: SignerColors.bg,
-          ),
-          home: KtDeviceChrome(
-            mockStatusBar: false,
-            child: ModeSelectScreen(onSelect: modeController.setMode),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// First-launch picker: this phone is either the online wallet or the offline
-/// signer. The signer choice is gated behind an air-gap warning dialog.
-class ModeSelectScreen extends StatefulWidget {
-  const ModeSelectScreen({super.key, required this.onSelect});
-
-  final Future<void> Function(DeviceMode) onSelect;
-
-  @override
-  State<ModeSelectScreen> createState() => _ModeSelectScreenState();
-}
-
-class _ModeSelectScreenState extends State<ModeSelectScreen> {
-  bool _saving = false;
-
-  Future<void> _select(DeviceMode mode) async {
-    if (_saving) return;
-    setState(() => _saving = true);
-    try {
-      await widget.onSelect(mode);
-    } on Object {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context).walletUpdateFailed),
-        ),
-      );
-      setState(() => _saving = false);
-    }
-  }
-
-  Future<void> _chooseSigner(BuildContext context) async {
-    final l10n = AppLocalizations.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => KtConfirmDialog(
-        title: l10n.modeSignerConfirmTitle,
-        message: l10n.modeSignerConfirmBody,
-        cancelLabel: l10n.actionCancel,
-        confirmLabel: l10n.actionConfirm,
-        theme: AppTheme.signer,
-        icon: Icons.phonelink_lock_rounded,
-        iconColor: SignerColors.ok,
-      ),
-    );
-    if (confirmed == true) await _select(DeviceMode.signer);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return Scaffold(
-      backgroundColor: SignerColors.bg,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Spacer(flex: 2),
-              Center(
-                child: Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: WalletColors.accent,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: const Icon(
-                    Icons.account_balance_wallet_outlined,
-                    size: 32,
-                    color: Color(0xFFFFFFFF),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Center(
-                child: Text(
-                  'KT Wallet',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    color: SignerColors.text,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 40),
-              Text(
-                l10n.modeSelectTitle,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: SignerColors.text,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                l10n.modeSelectSubtitle,
-                style: const TextStyle(fontSize: 13, color: SignerColors.text2),
-              ),
-              const SizedBox(height: 20),
-              _ModeCard(
-                icon: Icons.account_balance_wallet_outlined,
-                iconColor: SignerColors.blue,
-                title: l10n.modeWalletTitle,
-                description: l10n.modeWalletDesc,
-                onTap: _saving ? null : () => _select(DeviceMode.wallet),
-              ),
-              const SizedBox(height: 14),
-              _ModeCard(
-                icon: Icons.qr_code_scanner,
-                iconColor: SignerColors.ok,
-                title: l10n.modeSignerTitle,
-                description: l10n.modeSignerDesc,
-                onTap: _saving ? null : () => _chooseSigner(context),
-              ),
-              const Spacer(flex: 3),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ModeCard extends StatelessWidget {
-  const _ModeCard({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.description,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String description;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: SignerColors.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: SignerColors.border),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: SignerColors.surface2,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, size: 22, color: iconColor),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: SignerColors.text,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    description,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      height: 1.5,
-                      color: SignerColors.text2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Icon(
-              Icons.chevron_right,
-              size: 18,
-              color: SignerColors.text2,
-            ),
-          ],
         ),
       ),
     );
@@ -790,11 +510,7 @@ class _KtWalletAppState extends State<KtWalletApp> {
           locale: widget.localeController.locale,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          theme: ThemeData(
-            fontFamily: 'Inter',
-            colorScheme: ColorScheme.fromSeed(seedColor: WalletColors.accent),
-            scaffoldBackgroundColor: WalletColors.bg,
-          ),
+          theme: ktWalletTheme(),
           routerConfig: _router,
           builder: (context, child) => KtDeviceChrome(
             mockStatusBar: false,

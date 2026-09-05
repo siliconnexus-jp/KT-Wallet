@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:core_crypto/core_crypto.dart';
@@ -17,6 +18,7 @@ import '../wallets/pairing_airgap.dart';
 import '../wallets/wallet_manager.dart';
 import '../wallets/wallet_model.dart';
 import '../widgets/tron_activation_badge.dart';
+import '../widgets/secret_access_risk.dart';
 import 'camera_screen.dart';
 
 /// Design-gallery placeholder ONLY. This is not, and must never stand in for,
@@ -217,36 +219,45 @@ class SplashScreen extends StatelessWidget {
 }
 
 /// W22 添加钱包.
-class AddWalletScreen extends StatelessWidget {
+class AddWalletScreen extends StatefulWidget {
   const AddWalletScreen({super.key});
 
-  /// Returns to the route that opened this screen. On a fresh install this
-  /// screen is the router's initial location, so there is no route to pop;
-  /// leave wallet mode instead and reveal the enclosing device-mode picker.
-  Future<void> _goBack(BuildContext context) async {
-    if (context.canPop()) {
-      context.pop();
-      return;
-    }
-    final scope = DeviceModeScope.maybeOf(context);
-    if (scope == null) return;
-    try {
-      await scope.exitMode();
-    } on Object {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context).walletUpdateFailed),
-        ),
-      );
-    }
-  }
+  @override
+  State<AddWalletScreen> createState() => _AddWalletScreenState();
+}
+
+class _AddWalletScreenState extends State<AddWalletScreen> {
+  bool _creating = false;
+  String? _creationError;
 
   /// Starts the create-onboarding flow: generate a fresh mnemonic, then walk
   /// the backup show → verify screens before the wallet is committed.
   Future<void> _createHotWallet(BuildContext context) async {
-    await WalletScope.of(context).beginCreate();
-    if (context.mounted) unawaited(context.push('/create-warn'));
+    if (_creating) return;
+    final l10n = AppLocalizations.of(context);
+    final controller = WalletScope.of(context);
+    setState(() {
+      _creating = true;
+      _creationError = null;
+    });
+    try {
+      await controller.beginCreate();
+      if (context.mounted) await context.push('/create-warn');
+    } on AuthUnavailableException {
+      if (mounted) {
+        setState(() => _creationError = l10n.walletDeviceAuthUnavailable);
+      }
+    } on AuthLockedException catch (error) {
+      if (mounted) {
+        setState(
+          () => _creationError = l10n.walletCreateAuthLocked(error.cooldownSec),
+        );
+      }
+    } catch (_) {
+      if (mounted) setState(() => _creationError = l10n.walletCreateFailed);
+    } finally {
+      if (mounted) setState(() => _creating = false);
+    }
   }
 
   @override
@@ -260,7 +271,7 @@ class AddWalletScreen extends StatelessWidget {
       VoidCallback? onTap,
     }) => GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: onTap,
+      onTap: _creating ? null : onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -322,9 +333,21 @@ class AddWalletScreen extends StatelessWidget {
       gap: 16,
       navBar: KtNavBar(
         title: l10n.addWalletTitle,
-        onBack: () async => _goBack(context),
+        onBack: GoRouter.maybeOf(context)?.canPop() == true
+            ? () => context.pop()
+            : null,
       ),
       children: [
+        if (_creationError != null)
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              _creationError!,
+              key: const ValueKey('wallet-create-preflight-error'),
+              style: const TextStyle(color: WalletColors.red, height: 1.5),
+            ),
+          ),
+        if (_creating) const LinearProgressIndicator(),
         Text(
           l10n.addWalletStandardSection,
           style: const TextStyle(
@@ -338,7 +361,7 @@ class AddWalletScreen extends StatelessWidget {
           Icons.add,
           l10n.createNewWallet,
           l10n.createNewWalletDesc,
-          onTap: () => _createHotWallet(context),
+          onTap: _creating ? null : () => _createHotWallet(context),
         ),
         entry(
           Icons.key,
@@ -563,8 +586,11 @@ class MnemonicVerifyScreen extends StatefulWidget {
 }
 
 class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
-  // Challenge the 4th word; options are built from the actual mnemonic.
-  static const _challengePosition = 4; // 1-based
+  List<int> _challengePositions = const [];
+  List<String> _words = const [];
+  int _round = 0;
+  late Random _challengeRandom;
+  int get _challengePosition => _challengePositions[_round];
 
   String? _selected;
   String? _submitError;
@@ -580,17 +606,32 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
     _challengeInitialized = true;
     final words = _activeMnemonic(context);
     if (words == null) return;
-    final correct = words[_challengePosition - 1];
-    final distractors = words.where((word) => word != correct).toSet().take(5);
+    _words = List.of(words);
+    // Only the explicit, scope-less design fixture needs deterministic art.
+    // Every real wallet flow uses independently randomized challenges.
+    _challengeRandom = WalletScope.maybeOf(context) == null
+        ? Random(0)
+        : Random.secure();
+    final positions = List.generate(words.length, (i) => i + 1)
+      ..shuffle(_challengeRandom);
+    _challengePositions = positions.take(3).toList();
+    _loadChallenge();
+  }
+
+  void _loadChallenge() {
+    final correct = _words[_challengePosition - 1];
+    final distractors = _words.where((word) => word != correct).toSet().toList()
+      ..shuffle(_challengeRandom);
     _correctWord = correct;
-    _challengeOptions = <String>[correct, ...distractors]..sort();
+    _challengeOptions = <String>[correct, ...distractors.take(5)]
+      ..shuffle(_challengeRandom);
   }
 
   String? _correct() => _correctWord;
 
   /// Correct word + up to 5 distinct distractors from the same mnemonic,
-  /// alphabetically ordered for a stable layout. The challenge is captured
-  /// once on route entry: a successful finalize clears pendingMnemonic before
+  /// shuffled once per round. The phrase is captured once on route entry:
+  /// a successful finalize clears pendingMnemonic before
   /// navigation, and rebuilding from that transient null used to flash the
   /// misleading "mnemonic unavailable" page for one frame.
   List<String>? _options() => _challengeOptions;
@@ -607,6 +648,15 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
     if (_selected != _correct()) {
       setState(() => _selected = null);
       messenger.showSnackBar(SnackBar(content: Text(l10n.verifyWrong)));
+      return;
+    }
+
+    if (_round < _challengePositions.length - 1) {
+      setState(() {
+        _round++;
+        _selected = null;
+        _loadChallenge();
+      });
       return;
     }
 
@@ -638,6 +688,8 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
       failure = l10n.mnemonicAuthRequired;
     } on AuthFailedException catch (_) {
       failure = l10n.mnemonicAuthRequired;
+    } on AuthUnavailableException catch (_) {
+      failure = l10n.walletDeviceAuthUnavailable;
     } on CoreCryptoException catch (_) {
       failure = l10n.walletCreateFailed;
     } catch (_) {
@@ -687,15 +739,24 @@ class _MnemonicVerifyScreenState extends State<MnemonicVerifyScreen> {
         trailingText: '3 / 3',
       ),
       bottom: KtPrimaryButton(
-        label: l10n.actionConfirm,
+        key: const ValueKey('backup-check-submit'),
+        label: _round < _challengePositions.length - 1
+            ? l10n.actionNext
+            : l10n.actionConfirm,
         onPressed: _selected == null ? null : _confirm,
         loading: _submitting,
       ),
       children: [
+        Text(
+          l10n.backupCheckProgress(_round + 1, _challengePositions.length),
+          key: const ValueKey('backup-check-progress'),
+          textAlign: TextAlign.center,
+        ),
         Column(
           children: [
             Text(
               l10n.mnemonicWordChallenge(_challengePosition),
+              key: const ValueKey('backup-challenge-position'),
               style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
@@ -875,6 +936,14 @@ class _MnemonicImportScreenState extends State<MnemonicImportScreen> {
         messenger.showSnackBar(SnackBar(content: Text(l10n.mnemonicInvalid)));
       }
       return;
+    } on AuthUnavailableException catch (_) {
+      if (mounted) {
+        setState(() => _submitting = false);
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.walletDeviceAuthUnavailable)),
+        );
+      }
+      return;
     } on CoreCryptoException catch (_) {
       if (mounted) {
         setState(() => _submitting = false);
@@ -971,8 +1040,12 @@ class _MnemonicImportScreenState extends State<MnemonicImportScreen> {
                                       color: WalletColors.text,
                                     ),
                                     decoration: const InputDecoration(
+                                      filled: false,
                                       isCollapsed: true,
                                       border: InputBorder.none,
+                                      enabledBorder: InputBorder.none,
+                                      focusedBorder: InputBorder.none,
+                                      disabledBorder: InputBorder.none,
                                       contentPadding: EdgeInsets.symmetric(
                                         vertical: 13,
                                       ),
@@ -1119,7 +1192,7 @@ class ConnectColdScreen extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 13,
                     height: 1.5,
-                    color: Color(0xFF0A7A45),
+                    color: WalletColors.green,
                   ),
                 ),
               ),
@@ -1528,13 +1601,10 @@ class WalletSwitcherSheet extends StatelessWidget {
           child: Align(
             alignment: Alignment.bottomCenter,
             child: GestureDetector(
+              excludeFromSemantics: true,
               onTap: () {},
-              child: Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  color: WalletColors.surface,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                ),
+              child: KtGlassSheet(
+                scrollable: true,
                 padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1796,59 +1866,61 @@ class _WalletManageScreenState extends State<WalletManageScreen> {
     };
     final largeText = MediaQuery.textScalerOf(context).scale(14) >= 20;
     return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (largeText) ...[
-            Text(
-              w.name,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: WalletColors.text,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: WalletTypeBadge(
-                kind: kind,
-                label: isHot ? l10n.walletKindHot : l10n.walletKindWatch,
-              ),
-            ),
-          ] else
-            Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    w.name,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: WalletColors.text,
-                    ),
-                  ),
+      child: LayoutBuilder(
+        builder: (context, constraints) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (largeText || constraints.maxWidth < 180) ...[
+              Text(
+                w.name,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: WalletColors.text,
                 ),
-                const SizedBox(width: 8),
-                WalletTypeBadge(
+              ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: WalletTypeBadge(
                   kind: kind,
                   label: isHot ? l10n.walletKindHot : l10n.walletKindWatch,
                 ),
-              ],
+              ),
+            ] else
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      w.name,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: WalletColors.text,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  WalletTypeBadge(
+                    kind: kind,
+                    label: isHot ? l10n.walletKindHot : l10n.walletKindWatch,
+                  ),
+                ],
+              ),
+            const SizedBox(height: 3),
+            Text(
+              state,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: unbacked ? FontWeight.w600 : FontWeight.w400,
+                color: unbacked ? WalletColors.red : WalletColors.text3,
+              ),
             ),
-          const SizedBox(height: 3),
-          Text(
-            state,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: unbacked ? FontWeight.w600 : FontWeight.w400,
-              color: unbacked ? WalletColors.red : WalletColors.text3,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2062,7 +2134,7 @@ class WalletDetailScreen extends StatelessWidget {
   }) async {
     final controller = WalletScope.of(context);
     final messenger = ScaffoldMessenger.of(context);
-    await showModalBottomSheet<void>(
+    await showKtModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: WalletColors.surface,
@@ -2205,8 +2277,8 @@ class WalletDetailScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            Wrap(
+              alignment: WrapAlignment.center,
               children: [
                 for (final c in colors)
                   Semantics(
@@ -2386,57 +2458,60 @@ class WalletDetailScreen extends StatelessWidget {
             ],
           ),
         ),
-        Column(
-          key: const ValueKey('wallet-detail-action-list'),
-          children: [
-            const Divider(height: 1, color: WalletColors.border),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => context.push(
-                '/wallet-addresses?id=${Uri.encodeQueryComponent(wallet.id)}',
-              ),
-              child: SecurityRow(
-                key: const ValueKey('wallet-detail-account-addresses'),
-                l10n.walletAddressesTitle,
-              ),
-            ),
-            const Divider(height: 1, color: WalletColors.border),
-            if (isHot) ...[
+        KtGlassSurface(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: Column(
+            key: const ValueKey('wallet-detail-action-list'),
+            children: [
+              const Divider(height: 1, color: WalletColors.border),
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => context.push(
-                  '/private-keys?id=${Uri.encodeQueryComponent(wallet.id)}',
+                  '/wallet-addresses?id=${Uri.encodeQueryComponent(wallet.id)}',
                 ),
                 child: SecurityRow(
-                  key: const ValueKey('wallet-detail-view-private-key'),
-                  l10n.viewPrivateKey,
+                  key: const ValueKey('wallet-detail-account-addresses'),
+                  l10n.walletAddressesTitle,
                 ),
               ),
               const Divider(height: 1, color: WalletColors.border),
+              if (isHot) ...[
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => context.push(
+                    '/private-keys?id=${Uri.encodeQueryComponent(wallet.id)}',
+                  ),
+                  child: SecurityRow(
+                    key: const ValueKey('wallet-detail-view-private-key'),
+                    l10n.viewPrivateKey,
+                  ),
+                ),
+                const Divider(height: 1, color: WalletColors.border),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _showMnemonicSheet(
+                    context,
+                    wallet,
+                    offerMarkBackedUp: !backedUp,
+                  ),
+                  child: SecurityRow(
+                    key: const ValueKey('wallet-detail-view-mnemonic'),
+                    l10n.viewMnemonic,
+                  ),
+                ),
+                const Divider(height: 1, color: WalletColors.border),
+              ],
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () => _showMnemonicSheet(
-                  context,
-                  wallet,
-                  offerMarkBackedUp: !backedUp,
-                ),
+                onTap: () => _confirmDelete(context, wallet),
                 child: SecurityRow(
-                  key: const ValueKey('wallet-detail-view-mnemonic'),
-                  l10n.viewMnemonic,
+                  key: const ValueKey('wallet-detail-delete'),
+                  l10n.deleteWalletTitle,
+                  danger: true,
                 ),
               ),
-              const Divider(height: 1, color: WalletColors.border),
             ],
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _confirmDelete(context, wallet),
-              child: SecurityRow(
-                key: const ValueKey('wallet-detail-delete'),
-                l10n.deleteWalletTitle,
-                danger: true,
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     );
@@ -2501,25 +2576,60 @@ class _MnemonicSheetBody extends StatefulWidget {
 
 enum _MnemonicSheetError { auth, unavailable }
 
-class _MnemonicSheetBodyState extends State<_MnemonicSheetBody> {
+class _MnemonicSheetBodyState extends State<_MnemonicSheetBody>
+    with WidgetsBindingObserver {
   List<String>? _words;
   _MnemonicSheetError? _error;
-  bool _loading = true;
+  bool _riskAccepted = false;
+  bool _loading = false;
+  bool _backgrounded = false;
+  int _authAttempt = 0;
 
   @override
   void initState() {
     super.initState();
-    _export();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _authAttempt++;
+    _words = null;
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // A system authentication prompt can make the app inactive. Only a real
+    // background transition revokes this view's authentication and contents.
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      _backgrounded = true;
+      _authAttempt++;
+      setState(() {
+        _words = null;
+        _loading = false;
+        _error = _MnemonicSheetError.auth;
+      });
+    } else if (state == AppLifecycleState.resumed) {
+      _backgrounded = false;
+    }
   }
 
   Future<void> _export() async {
+    if (_loading || _backgrounded) return;
+    final attempt = ++_authAttempt;
     setState(() {
+      _riskAccepted = true;
       _loading = true;
       _error = null;
       _words = null;
     });
     try {
       final phrase = await widget.controller.exportMnemonic(widget.wallet.id);
+      if (!mounted || attempt != _authAttempt || _backgrounded) return;
       final words = phrase
           .split(RegExp(r'\s+'))
           .where((w) => w.isNotEmpty)
@@ -2535,7 +2645,7 @@ class _MnemonicSheetBodyState extends State<_MnemonicSheetBody> {
         }
       });
     } on CoreCryptoException catch (e) {
-      if (!mounted) return;
+      if (!mounted || attempt != _authAttempt) return;
       setState(() {
         _loading = false;
         _error =
@@ -2583,7 +2693,26 @@ class _MnemonicSheetBodyState extends State<_MnemonicSheetBody> {
               ),
             ),
             const SizedBox(height: 12),
-            if (_loading)
+            if (!_riskAccepted) ...[
+              const SecretAccessRisk(
+                key: ValueKey('mnemonic-risk-notice'),
+                kind: SecretAccessKind.mnemonic,
+              ),
+              const SizedBox(height: 24),
+              KtPrimaryButton(
+                key: const ValueKey('mnemonic-risk-continue'),
+                label: l10n.secretAccessContinue,
+                onPressed: _export,
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: TextButton(
+                  key: const ValueKey('mnemonic-risk-cancel'),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(l10n.actionCancel),
+                ),
+              ),
+            ] else if (_loading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 32),
                 child: Center(child: CircularProgressIndicator()),

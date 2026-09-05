@@ -100,6 +100,144 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @introOpenTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'前后端 100% 开源'**
+  String get introOpenTitle;
+
+  /// No description provided for @introOpenDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'从钱包界面、离线签名到后端网关，代码全部公开。让信任建立在可审查的代码上。'**
+  String get introOpenDescription;
+
+  /// No description provided for @introOpenNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看完整源码，了解资产如何被保护。公开可审查，也欢迎持续改进。'**
+  String get introOpenNote;
+
+  /// No description provided for @introSecurityTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'安全第一。\n掌控始终在你。'**
+  String get introSecurityTitle;
+
+  /// No description provided for @introFrontend.
+  ///
+  /// In zh, this message translates to:
+  /// **'客户端'**
+  String get introFrontend;
+
+  /// No description provided for @introBackend.
+  ///
+  /// In zh, this message translates to:
+  /// **'后端网关'**
+  String get introBackend;
+
+  /// No description provided for @introOnline.
+  ///
+  /// In zh, this message translates to:
+  /// **'在线钱包'**
+  String get introOnline;
+
+  /// No description provided for @introOffline.
+  ///
+  /// In zh, this message translates to:
+  /// **'离线签名端'**
+  String get introOffline;
+
+  /// No description provided for @introNext.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续'**
+  String get introNext;
+
+  /// No description provided for @introSkip.
+  ///
+  /// In zh, this message translates to:
+  /// **'跳过引导'**
+  String get introSkip;
+
+  /// No description provided for @introBack.
+  ///
+  /// In zh, this message translates to:
+  /// **'上一步'**
+  String get introBack;
+
+  /// No description provided for @introSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看开源代码'**
+  String get introSource;
+
+  /// No description provided for @introSourceHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用联网设备扫描二维码查看完整源码。此页面不会发起网络请求。'**
+  String get introSourceHint;
+
+  /// No description provided for @introCopyLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制源码地址'**
+  String get introCopyLink;
+
+  /// No description provided for @introCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'源码地址已复制'**
+  String get introCopied;
+
+  /// No description provided for @introSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'未能保存引导状态，请重试。'**
+  String get introSaveFailed;
+
+  /// No description provided for @introRole.
+  ///
+  /// In zh, this message translates to:
+  /// **'独立离线签名端'**
+  String get introRole;
+
+  /// No description provided for @introSecurityDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'私钥保存在这台离线设备上。每次签名前核对交易详情，并验证身份；助记词仅由你离线备份。'**
+  String get introSecurityDescription;
+
+  /// No description provided for @introSecurityNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启飞行模式，关闭 Wi-Fi 与蓝牙。把这台手机专用于离线签名，并始终保持离线。'**
+  String get introSecurityNote;
+
+  /// No description provided for @introPairTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'只签名。\n不联网。'**
+  String get introPairTitle;
+
+  /// No description provided for @introPairDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'在联网手机安装 KT Wallet，生成待签名交易。用本机扫码、核对、签名，再将签名二维码交回在线钱包广播。'**
+  String get introPairDescription;
+
+  /// No description provided for @introPairNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'扫码传递交易与签名结果，不传递私钥或助记词。此 App 不查询余额，也不广播交易。'**
+  String get introPairNote;
+
+  /// No description provided for @introStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置离线签名端'**
+  String get introStart;
+
   /// No description provided for @appName.
   ///
   /// In zh, this message translates to:
@@ -1003,25 +1141,25 @@ abstract class AppLocalizations {
   /// No description provided for @voidThisSignature.
   ///
   /// In zh, this message translates to:
-  /// **'作废本次签名'**
+  /// **'关闭签名二维码'**
   String get voidThisSignature;
 
   /// No description provided for @voidSignatureTitle.
   ///
   /// In zh, this message translates to:
-  /// **'作废本次签名？'**
+  /// **'关闭签名二维码？'**
   String get voidSignatureTitle;
 
   /// No description provided for @voidSignatureDesc.
   ///
   /// In zh, this message translates to:
-  /// **'作废后该签名结果二维码将失效，联网钱包将无法广播这笔交易。'**
+  /// **'仅关闭本机二维码。已被其他设备扫描或保存的签名不会被撤销，仍可能被广播。关闭页面不等于取消交易。'**
   String get voidSignatureDesc;
 
   /// No description provided for @signatureVoided.
   ///
   /// In zh, this message translates to:
-  /// **'签名已作废'**
+  /// **'二维码已关闭，未撤销签名'**
   String get signatureVoided;
 
   /// No description provided for @signResultUnavailable.
@@ -1039,7 +1177,7 @@ abstract class AppLocalizations {
   /// No description provided for @scanResultInstruction.
   ///
   /// In zh, this message translates to:
-  /// **'请使用联网钱包「扫描签名结果」读取此二维码'**
+  /// **'请在联网钱包当前交易中点击「离线设备已签名，扫描结果」，读取此二维码。'**
   String get scanResultInstruction;
 
   /// No description provided for @allAddresses.
@@ -1293,36 +1431,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'无法保存设置，当前内容未改变，请重试。'**
   String get settingsSaveFailed;
-
-  /// No description provided for @deviceMode.
-  ///
-  /// In zh, this message translates to:
-  /// **'设备模式'**
-  String get deviceMode;
-
-  /// No description provided for @deviceModeSigner.
-  ///
-  /// In zh, this message translates to:
-  /// **'离线签名器'**
-  String get deviceModeSigner;
-
-  /// No description provided for @deviceModeSwitchTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'切换设备模式'**
-  String get deviceModeSwitchTitle;
-
-  /// No description provided for @deviceModeSwitchDesc.
-  ///
-  /// In zh, this message translates to:
-  /// **'切换前请确认本机不再用作签名器。切换后将返回模式选择页。'**
-  String get deviceModeSwitchDesc;
-
-  /// No description provided for @deviceModeSaveFailed.
-  ///
-  /// In zh, this message translates to:
-  /// **'无法保存设备模式，当前模式未改变，请重试。'**
-  String get deviceModeSaveFailed;
 
   /// No description provided for @pinKeyDelete.
   ///

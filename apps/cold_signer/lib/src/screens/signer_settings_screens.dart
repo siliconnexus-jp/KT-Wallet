@@ -131,37 +131,6 @@ Future<void> _pickLanguage(BuildContext context) async {
   );
 }
 
-/// Confirms leaving signer mode; on confirm the combined installer returns to
-/// the device-mode picker. Only reachable when a [DeviceModeScope] is present
-/// (i.e. embedded in the single-installer app — never in the standalone build).
-Future<void> _confirmDeviceModeSwitch(
-  BuildContext context,
-  DeviceModeScope scope,
-) async {
-  final l10n = AppLocalizations.of(context);
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (_) => KtConfirmDialog(
-      title: l10n.deviceModeSwitchTitle,
-      message: l10n.deviceModeSwitchDesc,
-      cancelLabel: l10n.actionCancel,
-      confirmLabel: l10n.actionConfirm,
-      theme: AppTheme.signer,
-      icon: Icons.phonelink_setup_rounded,
-      iconColor: SignerColors.warn,
-    ),
-  );
-  if (confirmed != true) return;
-  try {
-    await scope.exitMode();
-  } on Object {
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(l10n.deviceModeSaveFailed)));
-  }
-}
-
 /// C18 签名记录.
 class SignerRecordsScreen extends StatefulWidget {
   const SignerRecordsScreen({super.key});
@@ -705,7 +674,6 @@ class _SignerSecuritySettingsScreenState
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final localeController = LocaleScope.of(context);
-    final modeScope = DeviceModeScope.maybeOf(context);
     final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
     Widget toggleRow(
       IconData icon,
@@ -955,50 +923,6 @@ class _SignerSecuritySettingsScreenState
                         ),
                 ),
               ),
-              // Only when embedded in the combined single-installer app: switch
-              // back to the device-mode picker. Absent in the standalone build.
-              if (modeScope != null) ...[
-                const SizedBox(height: 16),
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _confirmDeviceModeSwitch(context, modeScope),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 48),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.devices_outlined,
-                          size: 19,
-                          color: SignerColors.text2,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            l10n.deviceMode,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: SignerColors.text,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          l10n.deviceModeSigner,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: SignerColors.text2,
-                          ),
-                        ),
-                        const Icon(
-                          Icons.chevron_right,
-                          size: 16,
-                          color: SignerColors.text2,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),

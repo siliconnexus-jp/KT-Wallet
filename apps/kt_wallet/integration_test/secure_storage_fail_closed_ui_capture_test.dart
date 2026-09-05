@@ -1,9 +1,5 @@
 import 'dart:io';
 
-import 'package:cold_signer/main.dart';
-import 'package:cold_signer/src/security/secure_vault.dart';
-import 'package:cold_signer/src/state/locale_controller.dart' as signer_locale;
-import 'package:cold_signer/src/state/signer_wallet_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -15,22 +11,6 @@ import 'package:kt_wallet/src/state/locale_controller.dart';
 
 class _UnavailablePinStorage implements PinStorage {
   const _UnavailablePinStorage();
-
-  @override
-  Future<void> delete(String key) =>
-      Future<void>.error(StateError('secure storage unavailable'));
-
-  @override
-  Future<String?> read(String key) =>
-      Future<String?>.error(StateError('secure storage unavailable'));
-
-  @override
-  Future<void> write(String key, String value) =>
-      Future<void>.error(StateError('secure storage unavailable'));
-}
-
-class _UnavailableVaultStorage implements VaultStorage {
-  const _UnavailableVaultStorage();
 
   @override
   Future<void> delete(String key) =>
@@ -85,29 +65,5 @@ void main() {
     expect(find.text('安全存储不可用'), findsOneWidget);
     expect(find.text('SENSITIVE-WALLET-HOME'), findsNothing);
     await _capture(binding, tester, 'secure-storage-wallet-locked');
-  });
-
-  testWidgets('KT Cold Signer blocks onboarding when storage is unavailable', (
-    tester,
-  ) async {
-    final wallet = SignerWalletController(
-      storage: const _UnavailableVaultStorage(),
-    );
-    await tester.pumpWidget(
-      ColdSignerApp(
-        localeController: signer_locale.LocaleController(
-          initial: const Locale('en'),
-        ),
-        walletController: wallet,
-        initialLocation: '/welcome',
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.pump(const Duration(milliseconds: 500));
-
-    expect(find.text('Secure storage unavailable'), findsOneWidget);
-    expect(find.text('Create new wallet'), findsNothing);
-    expect(find.text('Import existing wallet'), findsNothing);
-    await _capture(binding, tester, 'secure-storage-signer-locked');
   });
 }

@@ -363,7 +363,7 @@ void main() {
     expect(find.text('1.25 TRX'), findsOneWidget);
   });
 
-  testWidgets('watch wallet: transfer confirm generates a sign-request QR', (
+  testWidgets('watch wallet: request QR continues directly to result scanning', (
     tester,
   ) async {
     await _openHome(tester);
@@ -372,6 +372,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('主钱包').last);
     await tester.pumpAndSettle();
+    expect(find.text('扫签名'), findsNothing);
 
     await tester.tap(find.text('转账'));
     await tester.pumpAndSettle();
@@ -387,6 +388,13 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('待签名交易'), findsOneWidget); // W6 QR screen
+    await tester.tap(find.byKey(const ValueKey('scan-signed-result-next')));
+    await tester.pumpAndSettle();
+    expect(find.text('扫描签名结果'), findsOneWidget);
+    expect(find.text('无法验证链上交易参数，签名已禁用。'), findsNothing);
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pump();
+    expect(find.text('待签名交易'), findsOneWidget);
   });
 
   // These used to open /token straight from the design gallery, which worked

@@ -9,6 +9,83 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get introOpenTitle => '100% open source.\nFront to back.';
+
+  @override
+  String get introOpenDescription =>
+      'Wallet apps, offline signing and the backend gateway. All source code is open, so trust can be built on what you can inspect.';
+
+  @override
+  String get introOpenNote =>
+      'Explore the complete source and see how your assets are protected. Open to review. Open to improvement.';
+
+  @override
+  String get introSecurityTitle => 'Security first.\nControl stays yours.';
+
+  @override
+  String get introFrontend => 'Wallet apps';
+
+  @override
+  String get introBackend => 'Backend';
+
+  @override
+  String get introOnline => 'Online wallet';
+
+  @override
+  String get introOffline => 'Offline signer';
+
+  @override
+  String get introNext => 'Continue';
+
+  @override
+  String get introSkip => 'Skip intro';
+
+  @override
+  String get introBack => 'Back';
+
+  @override
+  String get introSource => 'Explore the source code';
+
+  @override
+  String get introSourceHint =>
+      'Scan with a connected device to explore the full source. This screen makes no network requests.';
+
+  @override
+  String get introCopyLink => 'Copy source address';
+
+  @override
+  String get introCopied => 'Source address copied';
+
+  @override
+  String get introSaveFailed =>
+      'Couldn\'t save your progress. Please try again.';
+
+  @override
+  String get introRole => 'Independent offline signer';
+
+  @override
+  String get introSecurityDescription =>
+      'Private keys stay on this offline device. Review transaction details and authenticate for every signature. Keep your recovery phrase backed up offline.';
+
+  @override
+  String get introSecurityNote =>
+      'Enable airplane mode and turn off Wi-Fi and Bluetooth. Dedicate this phone to signing and keep it offline.';
+
+  @override
+  String get introPairTitle => 'Built to sign.\nKept offline.';
+
+  @override
+  String get introPairDescription =>
+      'Use KT Wallet on a connected phone to prepare a transaction. Scan, review and sign here, then return the signed QR to the online wallet for broadcast.';
+
+  @override
+  String get introPairNote =>
+      'QR codes carry transactions and signatures, never keys or recovery phrases. This app doesn\'t query balances or broadcast.';
+
+  @override
+  String get introStart => 'Set up offline signing';
+
+  @override
   String get appName => 'KT Cold Signer';
 
   @override
@@ -497,17 +574,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get signComplete => 'Signing complete';
 
   @override
-  String get voidThisSignature => 'Void this signature';
+  String get voidThisSignature => 'Close signature QR';
 
   @override
-  String get voidSignatureTitle => 'Void this signature?';
+  String get voidSignatureTitle => 'Close signature QR?';
 
   @override
   String get voidSignatureDesc =>
-      'Once voided, this signature QR code becomes invalid and the online wallet cannot broadcast the transaction.';
+      'This only closes the QR on this device. A signature already scanned or saved elsewhere is not revoked and may still be broadcast. Closing this page does not cancel the transaction.';
 
   @override
-  String get signatureVoided => 'Signature voided';
+  String get signatureVoided => 'QR closed. Signature not revoked.';
 
   @override
   String get signResultUnavailable => 'Signing result unavailable';
@@ -519,7 +596,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get scanResultInstruction =>
-      'Read this QR with the online wallet\'s “Scan signing result”';
+      'On the online wallet’s current transaction, tap “Signed offline? Scan the result” to read this QR.';
 
   @override
   String get allAddresses => 'All addresses';
@@ -659,23 +736,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsSaveFailed =>
       'The setting could not be saved. Nothing was changed; try again.';
-
-  @override
-  String get deviceMode => 'Device mode';
-
-  @override
-  String get deviceModeSigner => 'Offline Signer';
-
-  @override
-  String get deviceModeSwitchTitle => 'Switch device mode';
-
-  @override
-  String get deviceModeSwitchDesc =>
-      'Before switching, make sure this device is no longer used as a signer. You will return to the mode selection screen.';
-
-  @override
-  String get deviceModeSaveFailed =>
-      'The device mode could not be saved. Nothing was changed; try again.';
 
   @override
   String get pinKeyDelete => 'Delete last digit';

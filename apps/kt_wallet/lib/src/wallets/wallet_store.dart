@@ -435,9 +435,8 @@ class WalletStore {
 
   Future<void> deleteToken(String id) => _tokens.delete(id);
 
-  /// Closes the underlying database. Call when the store is retired (e.g.
-  /// leaving wallet mode in the combined installer); the store must not be
-  /// used afterwards.
+  /// Closes the underlying database. Call when the app retires the store;
+  /// it must not be used afterwards.
   Future<void> close() => _db.close();
 
   // ---- mapping -----------------------------------------------------------

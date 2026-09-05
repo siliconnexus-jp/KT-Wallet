@@ -30,6 +30,7 @@ Future<void> _openGallery(WidgetTester tester) async {
   final controller = buildTestWalletController();
   await tester.pumpWidget(
     MaterialApp.router(
+      theme: ktWalletTheme(),
       locale: const Locale('zh'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -85,6 +86,79 @@ String _fieldText(WidgetTester tester, int index) =>
     tester.widget<TextField>(find.byType(TextField).at(index)).controller!.text;
 
 void main() {
+  testWidgets(
+    'live fee waiting state explains insufficient balance and disables tiers',
+    (tester) async {
+      await _openLive(tester, controller: _pairedWatchController());
+      final tiers = find.byKey(const ValueKey('transfer-fee-tiers'));
+      expect(tester.widget<KtSegmented>(tiers).onChanged, isNull);
+      expect(find.text('填写有效收款地址后估算手续费'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('transfer-recipient-input')),
+        'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('输入有效转账金额后估算手续费'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('transfer-amount-input')),
+        '10',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('余额不足，暂无法估算手续费'), findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('transfer-network-fee-fiat')),
+            )
+            .data,
+        '待估算',
+      );
+      expect(tester.widget<KtSegmented>(tiers).onChanged, isNull);
+      await tester.ensureVisible(tiers);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('快'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<KtSegmented>(tiers).selected, 1);
+      expect(_nextEnabled(tester), isFalse);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('transfer-amount-input')),
+        '',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('余额不足，暂无法估算手续费'), findsNothing);
+      expect(find.text('输入有效转账金额后估算手续费'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'recipient and amount are single-layer fields in the real theme',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await _openGallery(tester);
+      for (final key in ['transfer-recipient-input', 'transfer-amount-input']) {
+        final field = tester.widget<TextField>(find.byKey(ValueKey(key)));
+        final decoration = field.decoration!;
+        expect(decoration.filled, false);
+        expect(decoration.enabledBorder, InputBorder.none);
+        expect(decoration.focusedBorder, InputBorder.none);
+      }
+      final recipient = find.byKey(const ValueKey('transfer-recipient-input'));
+      final actions = find.byKey(const ValueKey('transfer-address-actions'));
+      expect(tester.getSize(recipient).width, greaterThan(300));
+      expect(
+        tester.getTopLeft(actions).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(recipient).dy),
+      );
+      expect(find.text('粘贴'), findsOneWidget);
+      expect(find.text('扫码'), findsOneWidget);
+    },
+  );
   testWidgets('transfer input validates address and amount before 下一步', (
     tester,
   ) async {
@@ -260,7 +334,7 @@ void main() {
     expect(_nextEnabled(tester), isFalse);
 
     // Navbar scanner icon opens the address scanner screen.
-    await tester.tap(find.byIcon(Icons.qr_code_scanner).first);
+    await tester.tap(find.byTooltip('扫描地址二维码'));
     await tester.pumpAndSettle();
     expect(find.text('扫描地址二维码'), findsOneWidget);
 

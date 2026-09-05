@@ -29,7 +29,6 @@ import '../security/wallet_pin.dart';
 import '../widgets/pin_pad.dart';
 import '../widgets/rpc_probe.dart';
 import '../widgets/token_icon.dart';
-import '../widgets/tron_activation_badge.dart';
 import '../state/app_prefs.dart';
 import '../state/endpoint_policy.dart';
 import '../state/networks.dart';
@@ -95,8 +94,13 @@ Widget _sheetField(
           color: WalletColors.text,
         ),
         decoration: const InputDecoration(
+          filled: false,
           isCollapsed: true,
+          contentPadding: EdgeInsets.zero,
           border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          disabledBorder: InputBorder.none,
         ),
       ),
     ),
@@ -232,7 +236,7 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
     final nameController = TextEditingController(text: existing?.name ?? '');
     final addrController = TextEditingController(text: existing?.address ?? '');
     String? error;
-    await showModalBottomSheet<void>(
+    await showKtModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: WalletColors.surface,
@@ -365,7 +369,7 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
   Future<void> _contactMenu(Contact contact) async {
     final l10n = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context);
-    await showModalBottomSheet<void>(
+    await showKtModalBottomSheet<void>(
       context: context,
       backgroundColor: WalletColors.surface,
       shape: const RoundedRectangleBorder(
@@ -520,9 +524,13 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                     color: WalletColors.text,
                   ),
                   decoration: InputDecoration(
+                    filled: false,
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(vertical: 14),
                     border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
                     hintText: l10n.searchNameOrAddress,
                     hintStyle: const TextStyle(
                       fontSize: 14,
@@ -799,10 +807,6 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
   static String _identityKey(String symbol, String contract) =>
       '${symbol.toUpperCase()}|${_normalizedContract(contract.trim())}';
 
-  static bool _isTronNetwork(String? networkId, String label) =>
-      networkId?.startsWith('tron-') == true ||
-      label.toUpperCase().contains('TRON');
-
   bool _isOfficial(String symbol, String? contract) {
     if (contract == null || contract.trim().isEmpty) return false;
     final key = _identityKey(symbol, contract);
@@ -1015,7 +1019,7 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
     final symbolController = TextEditingController();
     final nameController = TextEditingController();
     final contractController = TextEditingController();
-    await showModalBottomSheet<void>(
+    await showKtModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: WalletColors.surface,
@@ -1036,7 +1040,7 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
               bottom: MediaQuery.of(ctx).viewInsets.bottom,
             ),
             child: SafeArea(
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1240,12 +1244,15 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
 
   Widget _sectionLabel(String label) => Padding(
     padding: const EdgeInsets.only(left: 2),
-    child: Text(
-      label,
-      style: const TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        color: WalletColors.text2,
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: WalletColors.text2,
+        ),
       ),
     ),
   );
@@ -1279,10 +1286,6 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
                       verified: verified,
                     ),
                   ),
-                  if (_isTronNetwork(token.networkId, token.network)) ...[
-                    const SizedBox(width: 6),
-                    const TronActivationBadge(),
-                  ],
                 ],
               ),
               const SizedBox(height: 3),
@@ -1348,13 +1351,6 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
                   Flexible(
                     child: _verifiedSymbol(token.symbol, l10n, verified: true),
                   ),
-                  if (_isTronNetwork(
-                    token.network,
-                    _networkLabel(token.network),
-                  )) ...[
-                    const SizedBox(width: 6),
-                    const TronActivationBadge(),
-                  ],
                 ],
               ),
               const SizedBox(height: 3),
@@ -1438,9 +1434,13 @@ class _TokenManageScreenState extends State<TokenManageScreen> {
             enableSuggestions: false,
             style: const TextStyle(fontSize: 14, color: WalletColors.text),
             decoration: InputDecoration(
+              filled: false,
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(vertical: 14),
               border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              disabledBorder: InputBorder.none,
               counterText: '',
               hintText: l10n.searchTokenHint,
               hintStyle: const TextStyle(
@@ -1700,7 +1700,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
   Future<void> _editGateway(AppPrefsController prefs) async {
     final l10n = AppLocalizations.of(context);
     final controller = TextEditingController(text: prefs.gatewayUrl ?? '');
-    await showModalBottomSheet<void>(
+    await showKtModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: WalletColors.surface,
@@ -2014,10 +2014,6 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                               ),
                             ),
                           ),
-                          if (chain == Chain.tron) ...[
-                            const SizedBox(width: 7),
-                            const TronActivationBadge(),
-                          ],
                         ],
                       ),
                     ),
@@ -2058,7 +2054,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
     Chain chain,
     String familyLabel,
   ) async {
-    await showModalBottomSheet<void>(
+    await showKtModalBottomSheet<void>(
       context: context,
       backgroundColor: WalletColors.surface,
       shape: const RoundedRectangleBorder(
@@ -2224,7 +2220,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
     var family = 0; // index into _chainTags
     var probing = false;
     String? error;
-    await showModalBottomSheet<void>(
+    await showKtModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: WalletColors.surface,
@@ -2456,7 +2452,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
   ) async {
     final l10n = AppLocalizations.of(context);
     final controller = TextEditingController(text: rpc);
-    await showModalBottomSheet<void>(
+    await showKtModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: WalletColors.surface,
@@ -2675,10 +2671,6 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                               ),
                             ),
                           ),
-                          if (coin == Coin.tron) ...[
-                            const SizedBox(width: 7),
-                            const TronActivationBadge(),
-                          ],
                         ],
                       ),
                     ),
@@ -2803,7 +2795,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     required List<String> labels,
     required int selected,
   }) async {
-    return showModalBottomSheet<int>(
+    return showKtModalBottomSheet<int>(
       context: context,
       backgroundColor: WalletColors.surface,
       shape: const RoundedRectangleBorder(
@@ -2876,7 +2868,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     required String prompt,
   }) async {
     if (!mounted) return false;
-    final verified = await showModalBottomSheet<bool>(
+    final verified = await showKtModalBottomSheet<bool>(
       context: context,
       backgroundColor: WalletColors.surface,
       isScrollControlled: true,
@@ -2973,7 +2965,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
       }
       if (!pinSet) {
         if (!mounted) return;
-        final enrolled = await showModalBottomSheet<bool>(
+        final enrolled = await showKtModalBottomSheet<bool>(
           context: context,
           backgroundColor: WalletColors.surface,
           isScrollControlled: true,
@@ -3072,7 +3064,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     }
     if (method == AuthMethod.password && !pinSet) {
       if (!mounted) return;
-      final enrolled = await showModalBottomSheet<bool>(
+      final enrolled = await showKtModalBottomSheet<bool>(
         context: context,
         backgroundColor: WalletColors.surface,
         isScrollControlled: true,
@@ -3116,7 +3108,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
       return;
     }
     if (!mounted) return;
-    final changed = await showModalBottomSheet<bool>(
+    final changed = await showKtModalBottomSheet<bool>(
       context: context,
       backgroundColor: WalletColors.surface,
       isScrollControlled: true,
@@ -3172,7 +3164,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
       ('English', const Locale('en')),
       ('日本語', const Locale('ja')),
     ];
-    await showModalBottomSheet<void>(
+    await showKtModalBottomSheet<void>(
       context: context,
       backgroundColor: WalletColors.surface,
       shape: const RoundedRectangleBorder(
@@ -3243,37 +3235,10 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     );
   }
 
-  /// Confirms leaving wallet mode; on confirm the combined installer returns
-  /// to the device-mode picker. Only reachable when a [DeviceModeScope] is
-  /// present (i.e. running inside the single-installer app).
-  Future<void> _confirmDeviceModeSwitch(DeviceModeScope scope) async {
-    final l10n = AppLocalizations.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => KtConfirmDialog(
-        title: l10n.deviceModeSwitchTitle,
-        message: l10n.deviceModeSwitchDesc,
-        cancelLabel: l10n.actionCancel,
-        confirmLabel: l10n.actionConfirm,
-        icon: Icons.phonelink_setup_rounded,
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      await scope.exitMode();
-    } on Object {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(l10n.walletUpdateFailed)));
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final localeController = LocaleScope.of(context);
-    final modeScope = DeviceModeScope.maybeOf(context);
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(
@@ -3281,13 +3246,16 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
         onBack: () => Navigator.of(context).maybePop(),
       ),
       children: [
-        Text(
-          l10n.accessControl,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-            color: WalletColors.text2,
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            l10n.accessControl,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+              color: WalletColors.text2,
+            ),
           ),
         ),
         KtCard(
@@ -3445,17 +3413,6 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                 _languageLabel(l10n, localeController.locale),
                 onTap: _pickLanguage,
               ),
-              // Only in the combined single-installer app: switch back to the
-              // device-mode picker. Hidden in standalone/test setups.
-              if (modeScope != null) ...[
-                const SizedBox(height: 16),
-                _SimpleRow(
-                  Icons.devices_outlined,
-                  l10n.deviceMode,
-                  l10n.modeWalletTitle,
-                  onTap: () => _confirmDeviceModeSwitch(modeScope),
-                ),
-              ],
             ],
           ),
         ),

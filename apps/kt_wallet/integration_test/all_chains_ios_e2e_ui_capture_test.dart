@@ -194,9 +194,9 @@ void main() {
         await _captureTransfer(binding, tester, asset, 'stable-$slug');
       }
 
-      expect(find.text('记录'), findsOneWidget);
-      await tester.tap(find.text('记录'));
-      await _waitUntil(tester, () => find.text('交易记录').evaluate().isNotEmpty);
+      expect(find.byKey(const ValueKey('home-tab-1')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('home-tab-1')));
+      await _waitUntil(tester, () => find.text('活动').evaluate().length == 2);
       await _waitUntil(
         tester,
         () => find
@@ -207,7 +207,7 @@ void main() {
       );
       await _capture(binding, tester, '18-live-wallet-history');
 
-      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.tap(find.byKey(const ValueKey('home-tab-0')));
       await tester.pumpAndSettle();
       await _openAsset(tester, AssetRef.token(usdcBaseSepoliaToken));
       await _waitUntil(

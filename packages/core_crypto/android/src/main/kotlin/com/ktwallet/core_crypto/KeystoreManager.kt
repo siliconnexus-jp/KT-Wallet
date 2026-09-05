@@ -17,7 +17,7 @@ import javax.crypto.spec.GCMParameterSpec
  * — bound to device credentials, invalidated on new biometric enrollment
  * (detailed-design.md §3.1). Stored blob layout: iv(12) || ciphertext+tag.
  */
-class KeystoreManager {
+class KeystoreManager(private val emulatorTestVault: Boolean = false) {
     companion object {
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val KEY_ALIAS_PREFIX = "kt_entropy_"
@@ -26,7 +26,9 @@ class KeystoreManager {
         private const val AUTH_VALIDITY_SECONDS = 30
     }
 
-    private fun alias(walletId: String) = "$KEY_ALIAS_PREFIX$walletId"
+    private fun alias(walletId: String) =
+        if (emulatorTestVault) "kt_debug_emulator_entropy_$walletId"
+        else "$KEY_ALIAS_PREFIX$walletId"
 
     fun exists(walletId: String): Boolean {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }

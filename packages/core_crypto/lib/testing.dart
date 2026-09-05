@@ -90,6 +90,12 @@ class _StoredWallet {
 /// Mirrors the native lockout ladder (detailed-design.md §2.4) so app-layer
 /// lockout UI can be tested without native code.
 class MockCoreCrypto implements CoreCrypto {
+  @override
+  Future<void> checkWalletCreationReady() async {
+    final state = await getAuthState();
+    if (state.locked) throw AuthLockedException(state.cooldownSec);
+  }
+
   MockCoreCrypto({
     Future<bool> Function()? authenticator,
     DateTime Function()? clock,

@@ -100,6 +100,264 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @backupQrTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'加密二维码'**
+  String get backupQrTitle;
+
+  /// No description provided for @backupFileFormat.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份文件'**
+  String get backupFileFormat;
+
+  /// No description provided for @backupQrIntro.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用独立强密码在本机加密助记词，生成带 KT Wallet 品牌的二维码图片。图片不包含明文助记词或密码。'**
+  String get backupQrIntro;
+
+  /// No description provided for @backupQrWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'我已了解：持有图片的人可以离线尝试猜测密码；忘记密码无法恢复。请将密码与图片分开保管，并保留手抄助记词。所选文件夹可能会同步到云端。'**
+  String get backupQrWarning;
+
+  /// No description provided for @backupQrImageInstruction.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要密码 · 不是收款码\n在 KT Wallet 中选择「从备份恢复」→「扫描加密二维码」或「选择二维码图片」。请勿公开此图片，密码须分开保管。'**
+  String get backupQrImageInstruction;
+
+  /// No description provided for @backupQrGenerate.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成加密二维码'**
+  String get backupQrGenerate;
+
+  /// No description provided for @backupQrSave.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存二维码图片到本地'**
+  String get backupQrSave;
+
+  /// No description provided for @backupQrScan.
+  ///
+  /// In zh, this message translates to:
+  /// **'扫描加密二维码'**
+  String get backupQrScan;
+
+  /// No description provided for @backupQrPickImage.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择二维码图片'**
+  String get backupQrPickImage;
+
+  /// No description provided for @backupQrScanHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'扫描 KT Wallet 加密备份二维码，下一步输入备份密码。'**
+  String get backupQrScanHint;
+
+  /// No description provided for @backupQrInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'未找到有效的加密备份二维码，请选择只包含一个二维码的原始 PNG/JPEG 图片。'**
+  String get backupQrInvalid;
+
+  /// No description provided for @backupQrRestoreIntro.
+  ///
+  /// In zh, this message translates to:
+  /// **'支持加密备份文件、扫描二维码或选择已保存的二维码图片。解密在本机完成，需要输入备份密码。'**
+  String get backupQrRestoreIntro;
+
+  /// No description provided for @secretAccessRiskTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看前请注意'**
+  String get secretAccessRiskTitle;
+
+  /// No description provided for @secretAccessContinue.
+  ///
+  /// In zh, this message translates to:
+  /// **'我已了解，继续'**
+  String get secretAccessContinue;
+
+  /// No description provided for @mnemonicAccessRisk.
+  ///
+  /// In zh, this message translates to:
+  /// **'助记词可以恢复整个钱包。任何人获取它，都可能转走你的资产。\n\n请在无人旁观时查看，不要截图、录屏或分享。'**
+  String get mnemonicAccessRisk;
+
+  /// No description provided for @privateKeyAccessRisk.
+  ///
+  /// In zh, this message translates to:
+  /// **'私钥可以控制对应账户。任何人获取它，都可能转走该账户的资产。\n\n请在无人旁观时查看，不要截图、录屏或分享。'**
+  String get privateKeyAccessRisk;
+
+  /// No description provided for @tabWallet.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包'**
+  String get tabWallet;
+
+  /// No description provided for @tabActivity.
+  ///
+  /// In zh, this message translates to:
+  /// **'活动'**
+  String get tabActivity;
+
+  /// No description provided for @scanSignedResultNext.
+  ///
+  /// In zh, this message translates to:
+  /// **'离线设备已签名，扫描结果'**
+  String get scanSignedResultNext;
+
+  /// No description provided for @backupCheckProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份抽查 {current} / {total}'**
+  String backupCheckProgress(int current, int total);
+
+  /// No description provided for @introOpenTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'前后端 100% 开源'**
+  String get introOpenTitle;
+
+  /// No description provided for @introOpenDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'从钱包界面、离线签名到后端网关，代码全部公开。让信任建立在可审查的代码上。'**
+  String get introOpenDescription;
+
+  /// No description provided for @introOpenNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看完整源码，了解资产如何被保护。公开可审查，也欢迎持续改进。'**
+  String get introOpenNote;
+
+  /// No description provided for @introSecurityTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'安全第一。\n掌控始终在你。'**
+  String get introSecurityTitle;
+
+  /// No description provided for @introFrontend.
+  ///
+  /// In zh, this message translates to:
+  /// **'客户端'**
+  String get introFrontend;
+
+  /// No description provided for @introBackend.
+  ///
+  /// In zh, this message translates to:
+  /// **'后端网关'**
+  String get introBackend;
+
+  /// No description provided for @introOnline.
+  ///
+  /// In zh, this message translates to:
+  /// **'在线钱包'**
+  String get introOnline;
+
+  /// No description provided for @introOffline.
+  ///
+  /// In zh, this message translates to:
+  /// **'离线签名端'**
+  String get introOffline;
+
+  /// No description provided for @introNext.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续'**
+  String get introNext;
+
+  /// No description provided for @introSkip.
+  ///
+  /// In zh, this message translates to:
+  /// **'跳过引导'**
+  String get introSkip;
+
+  /// No description provided for @introBack.
+  ///
+  /// In zh, this message translates to:
+  /// **'上一步'**
+  String get introBack;
+
+  /// No description provided for @introSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看开源代码'**
+  String get introSource;
+
+  /// No description provided for @introSourceHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用联网设备扫描二维码查看完整源码。此页面不会发起网络请求。'**
+  String get introSourceHint;
+
+  /// No description provided for @introCopyLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制源码地址'**
+  String get introCopyLink;
+
+  /// No description provided for @introCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'源码地址已复制'**
+  String get introCopied;
+
+  /// No description provided for @introSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'未能保存引导状态，请重试。'**
+  String get introSaveFailed;
+
+  /// No description provided for @introRole.
+  ///
+  /// In zh, this message translates to:
+  /// **'独立在线钱包'**
+  String get introRole;
+
+  /// No description provided for @introSecurityDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'只有一台手机？可创建本机签名钱包，由这台手机保管私钥并签名。转账前，始终核对网络、收款地址与金额。'**
+  String get introSecurityDescription;
+
+  /// No description provided for @introSecurityNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'妥善离线备份助记词，不截图、不分享。任何人索要助记词，都不要提供。'**
+  String get introSecurityNote;
+
+  /// No description provided for @introPairTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'联网管理。\n离线守护。'**
+  String get introPairTitle;
+
+  /// No description provided for @introPairDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'有两台手机？在离线手机安装 KT冷钱包，再在这里连接其公开账户。本机查询和广播，离线设备核对并签名。'**
+  String get introPairDescription;
+
+  /// No description provided for @introPairNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'两个独立 App，通过二维码协作。离线钱包的私钥不导入在线设备。'**
+  String get introPairNote;
+
+  /// No description provided for @introStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'开始使用在线钱包'**
+  String get introStart;
+
   /// No description provided for @appName.
   ///
   /// In zh, this message translates to:
@@ -235,13 +493,13 @@ abstract class AppLocalizations {
   /// No description provided for @walletKindHot.
   ///
   /// In zh, this message translates to:
-  /// **'普通'**
+  /// **'本机签名'**
   String get walletKindHot;
 
   /// No description provided for @walletKindWatch.
   ///
   /// In zh, this message translates to:
-  /// **'观察'**
+  /// **'离线签名'**
   String get walletKindWatch;
 
   /// No description provided for @walletStateBackedUp.
@@ -619,7 +877,7 @@ abstract class AppLocalizations {
   /// No description provided for @addWalletStandardSection.
   ///
   /// In zh, this message translates to:
-  /// **'普通钱包 · 便捷'**
+  /// **'本机签名 · 一台手机即可使用'**
   String get addWalletStandardSection;
 
   /// No description provided for @createNewWallet.
@@ -631,7 +889,7 @@ abstract class AppLocalizations {
   /// No description provided for @createNewWalletDesc.
   ///
   /// In zh, this message translates to:
-  /// **'在本机生成新的助记词，立即可用'**
+  /// **'在本机生成助记词，完成备份后使用'**
   String get createNewWalletDesc;
 
   /// No description provided for @importMnemonic.
@@ -649,7 +907,7 @@ abstract class AppLocalizations {
   /// No description provided for @coldWalletSection.
   ///
   /// In zh, this message translates to:
-  /// **'离线钱包组合 · 高安全'**
+  /// **'离线设备签名 · 需要两台手机'**
   String get coldWalletSection;
 
   /// No description provided for @connectColdWallet.
@@ -661,13 +919,13 @@ abstract class AppLocalizations {
   /// No description provided for @connectColdWalletDesc.
   ///
   /// In zh, this message translates to:
-  /// **'扫码配对 KT冷钱包，私钥永不进入本机'**
+  /// **'导入公开账户信息；转账需离线设备签名'**
   String get connectColdWalletDesc;
 
   /// No description provided for @createWalletTitle.
   ///
   /// In zh, this message translates to:
-  /// **'创建普通钱包'**
+  /// **'创建本机签名钱包'**
   String get createWalletTitle;
 
   /// No description provided for @showMnemonic.
@@ -769,7 +1027,7 @@ abstract class AppLocalizations {
   /// No description provided for @mnemonicChallengeHint.
   ///
   /// In zh, this message translates to:
-  /// **'从下列单词中选择正确的一项'**
+  /// **'对照手写备份选择单词；抽查不能保证整份备份无误。'**
   String get mnemonicChallengeHint;
 
   /// No description provided for @verifyWrong.
@@ -790,16 +1048,22 @@ abstract class AppLocalizations {
   /// **'钱包创建未完成，请重试。'**
   String get walletCreateFailed;
 
+  /// No description provided for @walletDeviceAuthUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统身份验证不可用。请先在系统设置中设置锁屏 PIN 或密码，再返回重试；若已设置，请检查生物识别或稍后重试。'**
+  String get walletDeviceAuthUnavailable;
+
   /// No description provided for @walletCreatedBackedUp.
   ///
   /// In zh, this message translates to:
-  /// **'钱包已创建并完成备份'**
+  /// **'钱包已创建，已通过备份抽查。请妥善保管完整助记词。'**
   String get walletCreatedBackedUp;
 
   /// No description provided for @backupVerified.
   ///
   /// In zh, this message translates to:
-  /// **'备份已验证，助记词记录正确'**
+  /// **'已记录备份确认。请确认完整助记词已按顺序保存。'**
   String get backupVerified;
 
   /// No description provided for @mnemonicInvalid.
@@ -841,7 +1105,7 @@ abstract class AppLocalizations {
   /// No description provided for @connectColdSafety.
   ///
   /// In zh, this message translates to:
-  /// **'本机永远不会接收或保存助记词、私钥或种子。'**
+  /// **'此观察账户仅导入公开信息，不导入离线钱包的助记词、私钥或种子。在线 App 中其他本机签名钱包仍在本机保管私钥。'**
   String get connectColdSafety;
 
   /// No description provided for @scanAccountHint.
@@ -1111,7 +1375,7 @@ abstract class AppLocalizations {
   /// No description provided for @privateKeyFullCopyBody.
   ///
   /// In zh, this message translates to:
-  /// **'请避免将完整私钥复制到剪贴板，防止泄露或被第三方滥用。建议使用安全复制，保障资产安全。'**
+  /// **'完整私钥会进入剪贴板，存在被其他应用读取或误粘贴的风险。确定继续复制吗？'**
   String get privateKeyFullCopyBody;
 
   /// No description provided for @privateKeyCopyAction.
@@ -1839,6 +2103,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'估算中…'**
   String get feeEstimating;
+
+  /// No description provided for @feeAwaitingInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'待估算'**
+  String get feeAwaitingInput;
+
+  /// No description provided for @feeWaitingBalance.
+  ///
+  /// In zh, this message translates to:
+  /// **'余额不足，暂无法估算手续费'**
+  String get feeWaitingBalance;
+
+  /// No description provided for @feeWaitingRecipient.
+  ///
+  /// In zh, this message translates to:
+  /// **'填写有效收款地址后估算手续费'**
+  String get feeWaitingRecipient;
+
+  /// No description provided for @feeWaitingAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入有效转账金额后估算手续费'**
+  String get feeWaitingAmount;
 
   /// No description provided for @feeUnavailable.
   ///
@@ -2698,72 +2986,6 @@ abstract class AppLocalizations {
   /// **'跟随系统'**
   String get languageSystem;
 
-  /// No description provided for @modeSelectTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'选择设备模式'**
-  String get modeSelectTitle;
-
-  /// No description provided for @modeSelectSubtitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'首次使用前，请先确定这台手机的角色'**
-  String get modeSelectSubtitle;
-
-  /// No description provided for @modeWalletTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'联网钱包'**
-  String get modeWalletTitle;
-
-  /// No description provided for @modeWalletDesc.
-  ///
-  /// In zh, this message translates to:
-  /// **'日常使用、查看余额、发起转账'**
-  String get modeWalletDesc;
-
-  /// No description provided for @modeSignerTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'离线签名器'**
-  String get modeSignerTitle;
-
-  /// No description provided for @modeSignerDesc.
-  ///
-  /// In zh, this message translates to:
-  /// **'安装在永不联网的手机上，离线保管私钥并签名'**
-  String get modeSignerDesc;
-
-  /// No description provided for @modeSignerConfirmTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'启用离线签名器'**
-  String get modeSignerConfirmTitle;
-
-  /// No description provided for @modeSignerConfirmBody.
-  ///
-  /// In zh, this message translates to:
-  /// **'此模式供离线设备使用，请开启飞行模式并保持设备永不联网。'**
-  String get modeSignerConfirmBody;
-
-  /// No description provided for @deviceMode.
-  ///
-  /// In zh, this message translates to:
-  /// **'设备模式'**
-  String get deviceMode;
-
-  /// No description provided for @deviceModeSwitchTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'切换设备模式'**
-  String get deviceModeSwitchTitle;
-
-  /// No description provided for @deviceModeSwitchDesc.
-  ///
-  /// In zh, this message translates to:
-  /// **'切换后将返回模式选择页。'**
-  String get deviceModeSwitchDesc;
-
   /// No description provided for @walletLoadErrorTitle.
   ///
   /// In zh, this message translates to:
@@ -2895,6 +3117,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'暂无交易记录'**
   String get historyEmpty;
+
+  /// No description provided for @historyEmptyDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易动态会显示在这里\n下拉刷新，或切换筛选条件查看'**
+  String get historyEmptyDescription;
+
+  /// No description provided for @transferPaste.
+  ///
+  /// In zh, this message translates to:
+  /// **'粘贴'**
+  String get transferPaste;
+
+  /// No description provided for @transferScan.
+  ///
+  /// In zh, this message translates to:
+  /// **'扫码'**
+  String get transferScan;
 
   /// No description provided for @setPinTitle.
   ///
@@ -3211,7 +3451,7 @@ abstract class AppLocalizations {
   /// No description provided for @backupEncryptedRowDesc.
   ///
   /// In zh, this message translates to:
-  /// **'通过系统文件选择器保存加密副本'**
+  /// **'使用强密码保存加密文件或二维码图片'**
   String get backupEncryptedRowDesc;
 
   /// No description provided for @backupIntro.
@@ -3301,7 +3541,7 @@ abstract class AppLocalizations {
   /// No description provided for @restoreFromBackupDesc.
   ///
   /// In zh, this message translates to:
-  /// **'打开加密的 .ktbak 文件'**
+  /// **'使用备份文件、二维码或图片恢复'**
   String get restoreFromBackupDesc;
 
   /// No description provided for @restorePickFile.

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/l10n/app_localizations.dart';
@@ -38,8 +39,16 @@ void main() {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('home-search-field')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-search-field')), findsNothing);
+    expect(find.byType(TextField), findsNothing);
     expect(find.byKey(const ValueKey('home-scan-button')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('home-scan-button')),
+        matching: find.byIcon(CupertinoIcons.qrcode),
+      ),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('home-wallet-addresses-button')),
       findsOneWidget,
@@ -50,7 +59,7 @@ void main() {
     expect(find.byKey(const ValueKey('home-tab-3')), findsNothing);
     expect(
       tester.getSize(find.byKey(const ValueKey('home-tab-background'))).height,
-      67,
+      closeTo(70.4, .01),
     );
     final firstTab = find.byKey(const ValueKey('home-tab-0'));
     final firstTabIcon = find.descendant(
@@ -59,14 +68,17 @@ void main() {
     );
     final firstTabLabel = find.descendant(
       of: firstTab,
-      matching: find.text('首页'),
+      matching: find.text('钱包'),
     );
     final selectedIcon = tester.widget<Icon>(firstTabIcon);
     expect(selectedIcon.icon, Icons.account_balance_wallet_outlined);
-    expect(selectedIcon.size, 28);
-    expect(selectedIcon.color, Colors.black);
-    expect(tester.widget<Text>(firstTabLabel).style!.fontSize, 13);
-    expect(tester.widget<Text>(firstTabLabel).style!.color, Colors.black);
+    expect(selectedIcon.size, 25);
+    expect(selectedIcon.color, WalletColors.accent);
+    expect(tester.widget<Text>(firstTabLabel).style!.fontSize, 12);
+    expect(
+      tester.widget<Text>(firstTabLabel).style!.color,
+      WalletColors.accent,
+    );
 
     final secondTab = find.byKey(const ValueKey('home-tab-1'));
     final secondTabIcon = find.descendant(
@@ -75,24 +87,16 @@ void main() {
     );
     final secondTabLabel = find.descendant(
       of: secondTab,
-      matching: find.text('资产'),
+      matching: find.text('活动'),
     );
-    expect(tester.widget<Icon>(secondTabIcon).color, const Color(0xFF8A8F98));
+    expect(tester.widget<Icon>(secondTabIcon).color, WalletColors.text2);
     expect(
       tester.widget<Text>(secondTabLabel).style!.color,
-      const Color(0xFF8A8F98),
-    );
-    expect(
-      tester.getSize(find.byKey(const ValueKey('home-search-surface'))).height,
-      40,
+      WalletColors.text2,
     );
     expect(
       tester.getSize(find.byKey(const ValueKey('home-scan-button'))),
       const Size(48, 48),
-    );
-    expect(
-      tester.getSize(find.byKey(const ValueKey('home-scan-surface'))),
-      const Size(36, 36),
     );
     expect(
       tester.getSize(find.byKey(const ValueKey('home-category-coins'))).height,
@@ -112,13 +116,7 @@ void main() {
       ),
       const Size(32, 32),
     );
-    expect(find.byKey(const ValueKey('home-tab-indicator')), findsNothing);
-    expect(
-      tester
-          .widget<TextField>(find.byKey(const ValueKey('home-search-field')))
-          .textAlignVertical,
-      TextAlignVertical.center,
-    );
+    expect(find.byKey(const ValueKey('home-tab-indicator')), findsOneWidget);
 
     final headerBottom = tester
         .getBottomLeft(find.byKey(const ValueKey('home-wallet-header')))
@@ -129,7 +127,7 @@ void main() {
       const ValueKey('home-balance-privacy-button'),
     );
     expect(find.text('总资产估值 (USD)'), findsNothing);
-    expect(tester.getTopLeft(balanceRow).dy - headerBottom, 2);
+    expect(tester.getTopLeft(balanceRow).dy - headerBottom, 35);
     expect(
       tester.getTopLeft(privacyButton).dx -
           tester.getTopRight(balanceAmount).dx,
@@ -311,21 +309,25 @@ void main() {
     );
   });
 
-  testWidgets('search filters the visible coin rows without fabricated data', (
-    tester,
-  ) async {
+  testWidgets('home has direct actions and no search keyboard', (tester) async {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
-
-    await tester.enterText(
-      find.byKey(const ValueKey('home-search-field')),
-      'sol',
-    );
-    await tester.pumpAndSettle();
-
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byKey(const ValueKey('home-search-field')), findsNothing);
+    expect(find.text('收款'), findsOneWidget);
+    expect(find.text('转账'), findsOneWidget);
+    expect(find.text('更多'), findsOneWidget);
+    expect(find.text('记录'), findsNothing);
     expect(find.text('Solana'), findsOneWidget);
-    expect(find.text('Ethereum'), findsNothing);
-    expect(find.text('USDT'), findsNothing);
+    expect(find.text('Ethereum'), findsOneWidget);
+    expect(find.text('USDT'), findsOneWidget);
+    expect(tester.testTextInput.isVisible, isFalse);
+    expect(
+      tester
+          .getSize(find.byKey(const ValueKey('home-wallet-addresses-button')))
+          .height,
+      greaterThanOrEqualTo(48),
+    );
   });
 
   testWidgets('custom category reads WalletController tokens', (tester) async {

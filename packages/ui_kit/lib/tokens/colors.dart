@@ -15,7 +15,7 @@ abstract final class WalletColors {
   static const text3 = Color(0xFF5F6B7A);
   static const accent = Color(0xFF2557E8);
   static const green = Color(0xFF06713F);
-  static const red = Color(0xFFDF3E42);
+  static const red = Color(0xFFC93439);
   static const amber = Color(0xFFB54708);
   static const border = Color(0xFFE7E9EE);
 }

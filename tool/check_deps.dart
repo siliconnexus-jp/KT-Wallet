@@ -11,6 +11,29 @@ import 'package:test_support/e2e_credentials.dart';
 void main() {
   final failures = <String>[];
 
+  // Each installer owns one role. Shared protocols belong in packages, never
+  // in a dependency on the other application's entrypoint or implementation.
+  for (final (app, other) in [
+    ('kt_wallet', 'cold_signer'),
+    ('cold_signer', 'kt_wallet'),
+  ]) {
+    final manifest = File('apps/$app/pubspec.yaml').readAsStringSync();
+    if (RegExp('^  $other:', multiLine: true).hasMatch(manifest)) {
+      failures.add('$app must not depend on the $other application');
+    }
+    for (final dir in ['lib', 'test', 'integration_test']) {
+      final sourceDir = Directory('apps/$app/$dir');
+      if (!sourceDir.existsSync()) continue;
+      for (final file
+          in sourceDir.listSync(recursive: true).whereType<File>()) {
+        if (file.path.endsWith('.dart') &&
+            file.readAsStringSync().contains('package:$other/')) {
+          failures.add('${file.path} imports the separate $other application');
+        }
+      }
+    }
+  }
+
   final pubspec = File('apps/cold_signer/pubspec.yaml');
   final violations = findWhitelistViolations(pubspec.readAsStringSync());
   if (violations.isNotEmpty) {

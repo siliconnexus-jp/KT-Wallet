@@ -55,7 +55,7 @@ future build. The detailed evidence and remaining work are linked under
 
 ## What is included
 
-KT Wallet can be used in two complementary roles:
+This repository provides two separate applications:
 
 - **Online Wallet** — manages hot wallets and watch-only accounts, reads live
   balances and history, builds transactions, broadcasts them, and follows their
@@ -64,9 +64,21 @@ KT Wallet can be used in two complementary roles:
   offline device. Transaction requests and signed responses move between
   devices through QR codes.
 
-The main `apps/kt_wallet` installer includes both roles and asks which mode the
-device should use on first launch. `apps/cold_signer` is also available as an
-independent install for a dedicated offline phone.
+The `apps/kt_wallet` installer opens the online wallet directly.
+`apps/cold_signer` is a separate installer for a dedicated offline phone.
+Neither application offers a device-mode picker or a switch to the other app.
+
+Before creating a first wallet, each app presents a three-page introduction:
+100% open-source frontend and backend, security-first practices, and the roles
+of the separate online/offline devices. The source repository QR is generated
+locally without a network request. Introduction completion is saved separately
+by each app; existing wallets go straight to their normal unlock flow.
+
+Upgrading from the former combined installer preserves existing local data but
+ignores its saved device-mode choice. An offline wallet previously created in
+that installer is not automatically transferred into KT Cold Signer: back up
+and verify its recovery phrase before upgrading, then import it on the
+dedicated offline device. Do not uninstall the old app until recovery is verified.
 
 The interface is localized in **简体中文**, **English**, and **日本語**.
 
@@ -74,8 +86,7 @@ The interface is localized in **简体中文**, **English**, and **日本語**.
 
 | Use case | Install | Network access | Private keys |
 |---|---|---|---|
-| Everyday balance, history, receive, and transfer | **KT Wallet** in Online Wallet mode | Required | Stored on this device for a hot wallet; absent for watch-only wallets |
-| One-device offline signing trial | **KT Wallet** in Cold Signer mode | Must remain offline while signing | Stored only in the native vault on this device |
+| Everyday balance, history, receive, and transfer | **KT Wallet** | Required | Stored on this device for a hot wallet; absent for watch-only wallets |
 | Dedicated air-gapped signing phone | **KT Cold Signer** | Must remain offline while signing | Stored only in the native vault on the offline phone |
 
 For the strongest separation, use KT Wallet as a watch-only wallet on the
@@ -274,10 +285,6 @@ therefore distinguishes signing, broadcasting, and chain confirmation.
   Network configuration uses one versioned snapshot, so a partial write cannot
   silently move signing or broadcasting to a different chain after restart;
   every affected screen keeps its prior value and reports a save failure.
-- The combined installer's online-wallet/offline-signer device role follows
-  the same commit-before-publish rule. Selection and exit requests are
-  serialized; a storage failure keeps the current mode on screen, reports the
-  error in the active language, and cannot silently change the role on restart.
 - Manual language overrides in both apps accept only English, Simplified
   Chinese, or Japanese and are also published only after persistence succeeds;
   invalid stored values return to the system language instead of rendering an
@@ -669,7 +676,7 @@ Launcher names follow the device language: Chinese displays **KT钱包** and
 
 | Path | Purpose |
 |---|---|
-| `apps/kt_wallet` | Online wallet and embedded Cold Signer |
+| `apps/kt_wallet` | Independently installable online wallet |
 | `apps/cold_signer` | Independently installable KT Cold Signer |
 | `packages/core_crypto` | Native mnemonic, derivation, vault, and signing bridge |
 | `packages/wallet_data` | Drift/SQLite wallets, transactions, and pending state |

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:airgap_protocol/airgap_protocol.dart';
@@ -14,6 +15,8 @@ import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/src/market/gateway_client.dart';
 import 'package:kt_wallet/src/observability/experience_metrics.dart';
 import 'package:kt_wallet/src/screens/transfer_screens.dart';
+import 'package:kt_wallet/src/security/transaction_auth.dart';
+import 'package:kt_wallet/src/state/app_prefs.dart';
 import 'package:kt_wallet/src/transfer/airgap_codec.dart';
 import 'package:kt_wallet/src/transfer/broadcast_service.dart';
 import 'package:kt_wallet/src/transfer/transfer_draft.dart';
@@ -45,6 +48,21 @@ class _FakeJsonRpc implements JsonRpcTransport {
       };
     }
     return {'jsonrpc': '2.0', 'id': map['id'], 'result': results[method]};
+  }
+}
+
+class _PendingBroadcastAuth extends TransactionAuthGate {
+  final attempts = <Completer<bool>>[];
+
+  @override
+  Future<bool> authenticate(
+    BuildContext context, {
+    required AuthMethod method,
+    required String reason,
+  }) {
+    final attempt = Completer<bool>();
+    attempts.add(attempt);
+    return attempt.future;
   }
 }
 
@@ -581,13 +599,17 @@ void main() {
       TransferSession session,
       BroadcastService service, {
       Locale locale = const Locale('zh'),
+      TransactionAuthGate authGate = const FakeTransactionAuthGate(true),
     }) {
       final router = GoRouter(
         initialLocation: '/broadcast-confirm',
         routes: [
           GoRoute(
             path: '/broadcast-confirm',
-            builder: (c, s) => BroadcastConfirmScreen(broadcaster: service),
+            builder: (c, s) => BroadcastConfirmScreen(
+              broadcaster: service,
+              authGate: authGate,
+            ),
           ),
           GoRoute(
             path: '/broadcast-result',
@@ -609,6 +631,67 @@ void main() {
           TransferSessionScope(session: session, child: child!),
         ),
       );
+    }
+
+    for (final outcome in ['cancel', 'error', 'approve', 'changed']) {
+      testWidgets('broadcast authenticates each attempt: $outcome', (
+        tester,
+      ) async {
+        final hash = _hexHash('a');
+        final transport = _FakeJsonRpc(
+          results: {'eth_sendRawTransaction': hash},
+        );
+        final gate = _PendingBroadcastAuth();
+        final session = _broadcastSession(
+          SignResult(
+            reqId: Uint8List.fromList(List.filled(AirgapLimits.reqIdLength, 3)),
+            walletId: 'w1',
+            coin: 60,
+            signedTx: Uint8List.fromList([0x02, 0xab, 0x01]),
+            signer: '0x925fEA1c0dbf3B011391bbed682E32861BE73213',
+            txHash: hash,
+          ),
+        );
+        await tester.pumpWidget(
+          app(
+            session,
+            BroadcastService(jsonRpcTransport: transport, endpoints: _endpoint),
+            authGate: gate,
+          ),
+        );
+        await tester.pump();
+        await tester.tap(find.byType(KtPrimaryButton));
+        await tester.tap(find.byType(KtPrimaryButton));
+        await tester.pump();
+        expect(gate.attempts, hasLength(1));
+        expect(transport.calls, isEmpty);
+        expect(session.broadcastTxHash, isNull);
+
+        if (outcome == 'error') {
+          gate.attempts.single.completeError(
+            StateError('auth provider failed'),
+          );
+        } else {
+          if (outcome == 'changed') session.request = null;
+          gate.attempts.single.complete(outcome != 'cancel');
+        }
+        await tester.pumpAndSettle();
+        if (outcome == 'approve') {
+          expect(transport.calls, hasLength(1));
+          expect(session.broadcastTxHash, hash);
+        } else {
+          expect(transport.calls, isEmpty);
+          expect(session.broadcastTxHash, isNull);
+          // A retry asks again, including after a provider exception.
+          await tester.tap(find.byType(KtPrimaryButton));
+          await tester.pump();
+          expect(gate.attempts, hasLength(2));
+          expect(transport.calls, isEmpty);
+          gate.attempts.last.complete(false);
+          await tester.pumpAndSettle();
+        }
+        expect(tester.takeException(), isNull);
+      });
     }
 
     testWidgets(

@@ -60,14 +60,13 @@ class TronActivationBadge extends StatelessWidget {
           color: background,
           borderRadius: BorderRadius.circular(999),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+        child: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 4,
           children: [
             Icon(icon, size: 13, color: foreground),
-            const SizedBox(width: 4),
             Text(
               label,
-              maxLines: 1,
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,

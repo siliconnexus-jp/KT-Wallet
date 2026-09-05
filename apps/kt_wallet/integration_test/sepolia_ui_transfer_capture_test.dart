@@ -125,7 +125,7 @@ void main() {
 
       await tester.tap(find.text('返回首页'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('记录'));
+      await tester.tap(find.byKey(const ValueKey('home-tab-1')));
       await tester.pump();
       final usdtRow = find.byKey(ValueKey('history-record-${usdt.hash}'));
       await _waitUntil(

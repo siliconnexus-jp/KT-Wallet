@@ -83,12 +83,13 @@ void main() {
     )) {
       expect(opacity.duration, Duration.zero);
     }
-    final scale = tester.widget<AnimatedScale>(
+    for (final scale in tester.widgetList<AnimatedScale>(
       find.descendant(
         of: find.byType(KtPrimaryButton),
         matching: find.byType(AnimatedScale),
       ),
-    );
-    expect(scale.duration, Duration.zero);
+    )) {
+      expect(scale.duration, Duration.zero);
+    }
   });
 }

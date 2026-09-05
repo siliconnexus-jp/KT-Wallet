@@ -26,6 +26,31 @@ const _mnemonic =
 /// The demo words that must never surface on a real path.
 const _demoWords = ['walnut', 'breeze', 'copper', 'stadium'];
 
+int _position(WidgetTester tester) => int.parse(
+  RegExp(r'\d+')
+      .firstMatch(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('backup-challenge-position')),
+            )
+            .data!,
+      )!
+      .group(0)!,
+);
+
+Future<void> _answerRounds(
+  WidgetTester tester,
+  List<String> words, {
+  int rounds = 3,
+}) async {
+  for (var i = 0; i < rounds; i++) {
+    await tester.tap(find.text(words[_position(tester) - 1]).last);
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('backup-check-submit')));
+    await tester.pump();
+  }
+}
+
 class _LockedStoreCoreCrypto extends MockCoreCrypto {
   final storeStarted = Completer<void>();
   final releaseStore = Completer<void>();
@@ -41,6 +66,16 @@ class _LockedStoreCoreCrypto extends MockCoreCrypto {
     await releaseStore.future;
     throw const AuthLockedException(60);
   }
+}
+
+class _UnavailableStoreCoreCrypto extends MockCoreCrypto {
+  @override
+  Future<void> storeWallet({
+    required String walletId,
+    required String mnemonic,
+    bool requireAuth = true,
+    String? kdfPassword,
+  }) async => throw const AuthUnavailableException();
 }
 
 Future<WalletController> _controller({
@@ -160,6 +195,26 @@ void main() {
 
   group('/mnemonic-verify', () {
     testWidgets(
+      'missing device authentication explains setup and keeps retry state',
+      (tester) async {
+        final controller = WalletController(
+          WalletManager(),
+          crypto: _UnavailableStoreCoreCrypto(),
+        );
+        await controller.beginCreate();
+        final words = controller.pendingMnemonic!.split(' ');
+        await _pump(tester, controller, '/mnemonic-verify');
+        await _answerRounds(tester, words);
+        await tester.pumpAndSettle();
+        expect(find.textContaining('锁屏 PIN 或密码'), findsOneWidget);
+        expect(find.text('钱包创建未完成，请重试。'), findsNothing);
+        expect(controller.count, 0);
+        expect(controller.pendingMnemonic, isNotNull);
+        expect(find.text('确认'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
       'with no pending mnemonic: route rejected, markBackedUp unreachable',
       (tester) async {
         final controller = await _controller();
@@ -181,26 +236,31 @@ void main() {
       final controller = await _controller();
       await controller.beginCreate();
       final words = controller.pendingMnemonic!.split(' ');
-      final correct = words[3]; // the quiz challenges word #4
-      final wrong = words.firstWhere((w) => w != correct);
       final before = controller.count;
       await _pump(tester, controller, '/mnemonic-verify');
-
-      expect(find.text('第 4 个单词是？'), findsOneWidget);
+      final firstPosition = _position(tester);
+      final correct = words[firstPosition - 1];
+      final wrong = words.firstWhere(
+        (w) => w != correct && find.text(w).evaluate().isNotEmpty,
+      );
       await tester.tap(find.text(wrong).last);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('确认'));
+      await tester.tap(find.byKey(const ValueKey('backup-check-submit')));
       await tester.pumpAndSettle();
-      expect(find.text('第 4 个单词是？'), findsOneWidget); // still on the quiz
+      expect(_position(tester), firstPosition);
       expect(controller.count, before); // nothing committed
 
       // Let the feedback SnackBar clear so it no longer overlays the button.
       await tester.pump(const Duration(seconds: 5));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text(correct).last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('确认'));
+      final positions = <int>{};
+      for (var i = 0; i < 3; i++) {
+        positions.add(_position(tester));
+        expect(controller.count, before);
+        await _answerRounds(tester, words, rounds: 1);
+      }
+      expect(positions, hasLength(3));
       // The durable commit clears pendingMnemonic before the router reaches
       // home. No intermediate frame may reinterpret that successful cleanup
       // as a missing phrase and flash the refusal panel.
@@ -223,13 +283,9 @@ void main() {
         final crypto = _LockedStoreCoreCrypto();
         final controller = await _controller(crypto: crypto, store: false);
         await controller.beginCreate();
-        final correct = controller.pendingMnemonic!.split(' ')[3];
+        final words = controller.pendingMnemonic!.split(' ');
         await _pump(tester, controller, '/mnemonic-verify');
-
-        await tester.tap(find.text(correct).last);
-        await tester.pump();
-        await tester.tap(find.text('确认'));
-        await tester.pump();
+        await _answerRounds(tester, words);
 
         expect(crypto.storeStarted.isCompleted, isTrue);
         expect(
@@ -278,6 +334,8 @@ void main() {
 
       await tester.tap(find.text('立即备份'));
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('mnemonic-risk-continue')));
+      await tester.pumpAndSettle();
 
       expect(find.text('无法显示助记词'), findsOneWidget);
       expect(find.textContaining('需要通过身份验证'), findsOneWidget);
@@ -300,6 +358,8 @@ void main() {
 
         await tester.tap(find.text('立即备份'));
         await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('mnemonic-risk-continue')));
+        await tester.pumpAndSettle();
         expect(find.text('无法显示助记词'), findsOneWidget);
 
         await tester.tap(find.text('重试'));
@@ -321,6 +381,8 @@ void main() {
       await _pump(tester, controller, '/wallet-detail?id=w1');
 
       await tester.tap(find.text('立即备份'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('mnemonic-risk-continue')));
       await tester.pumpAndSettle();
 
       expect(find.text('无法显示助记词'), findsOneWidget);

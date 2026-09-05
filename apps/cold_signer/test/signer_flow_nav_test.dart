@@ -257,7 +257,7 @@ void main() {
     },
   );
 
-  testWidgets('result QR: void signature confirms, snackbars, returns home', (
+  testWidgets('result QR: closing warns that it cannot revoke a scanned signature', (
     tester,
   ) async {
     final request = demoSignRequest();
@@ -293,21 +293,22 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('签名完成'), findsOneWidget);
-    await tester.tap(find.text('作废本次签名'));
+    await tester.tap(find.text('关闭签名二维码'));
     await tester.pumpAndSettle();
-    expect(find.text('作废本次签名？'), findsOneWidget); // confirm dialog
+    expect(find.text('关闭签名二维码？'), findsOneWidget);
+    expect(find.textContaining('不会被撤销'), findsOneWidget);
 
     // Cancel keeps the result screen.
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
     expect(find.text('签名完成'), findsOneWidget);
 
-    // Confirm voids and returns home with a snackbar.
-    await tester.tap(find.text('作废本次签名'));
+    // Closing the display does not mutate the signed transaction.
+    await tester.tap(find.text('关闭签名二维码'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('作废本次签名').last); // dialog's destructive action
+    await tester.tap(find.text('关闭签名二维码').last);
     await tester.pumpAndSettle();
-    expect(find.text('签名已作废'), findsOneWidget);
+    expect(find.text('二维码已关闭，未撤销签名'), findsOneWidget);
     expect(find.text('扫描待签名交易'), findsOneWidget); // C5 home
   });
 

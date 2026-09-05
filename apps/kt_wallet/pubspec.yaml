@@ -45,11 +45,6 @@ dependencies:
     path: ../../packages/ui_kit
   wallet_data:
     path: ../../packages/wallet_data
-  # The offline signer, embedded behind the first-launch device-mode picker so
-  # one installer can serve both roles. cold_signer remains independently
-  # buildable as a standalone app.
-  cold_signer:
-    path: ../cold_signer
   http: ^1.2.0
   drift: ^2.34.3
   path_provider: ^2.1.0

@@ -9,6 +9,153 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get backupQrTitle => 'Encrypted QR';
+
+  @override
+  String get backupFileFormat => 'Backup file';
+
+  @override
+  String get backupQrIntro =>
+      'Encrypt your recovery phrase on this device with a unique strong password, then save it as a KT Wallet QR image. No plaintext phrase or password is stored in the image.';
+
+  @override
+  String get backupQrWarning =>
+      'I understand: anyone with this image can attempt to guess the password offline. A lost password cannot be recovered. Keep the password separately and retain a written phrase. The chosen folder may sync to cloud storage.';
+
+  @override
+  String get backupQrImageInstruction =>
+      'PASSWORD REQUIRED • Not a receiving address.\nIn KT Wallet, choose Restore from backup → Scan encrypted QR or Choose QR image. Keep this image private and store its password separately.';
+
+  @override
+  String get backupQrGenerate => 'Generate encrypted QR';
+
+  @override
+  String get backupQrSave => 'Save QR image locally';
+
+  @override
+  String get backupQrScan => 'Scan encrypted QR';
+
+  @override
+  String get backupQrPickImage => 'Choose QR image';
+
+  @override
+  String get backupQrScanHint =>
+      'Scan a KT Wallet encrypted backup QR. You will enter its password on the next screen.';
+
+  @override
+  String get backupQrInvalid =>
+      'No valid encrypted backup QR found. Choose an original PNG/JPEG containing one QR code.';
+
+  @override
+  String get backupQrRestoreIntro =>
+      'Restore from an encrypted backup file, scan its QR, or choose a saved QR image. Decryption happens on this device and requires the backup password.';
+
+  @override
+  String get secretAccessRiskTitle => 'Before you continue';
+
+  @override
+  String get secretAccessContinue => 'I understand, continue';
+
+  @override
+  String get mnemonicAccessRisk =>
+      'Your recovery phrase can restore the entire wallet. Anyone who obtains it could move your assets.\n\nView it in private. Do not take screenshots, record your screen, or share it.';
+
+  @override
+  String get privateKeyAccessRisk =>
+      'A private key controls its account. Anyone who obtains it could move that account’s assets.\n\nView it in private. Do not take screenshots, record your screen, or share it.';
+
+  @override
+  String get tabWallet => 'Wallet';
+
+  @override
+  String get tabActivity => 'Activity';
+
+  @override
+  String get scanSignedResultNext => 'Signed offline? Scan the result';
+
+  @override
+  String backupCheckProgress(int current, int total) {
+    return 'Backup check $current / $total';
+  }
+
+  @override
+  String get introOpenTitle => '100% open source.\nFront to back.';
+
+  @override
+  String get introOpenDescription =>
+      'Wallet apps, offline signing and the backend gateway. All source code is open, so trust can be built on what you can inspect.';
+
+  @override
+  String get introOpenNote =>
+      'Explore the complete source and see how your assets are protected. Open to review. Open to improvement.';
+
+  @override
+  String get introSecurityTitle => 'Security first.\nControl stays yours.';
+
+  @override
+  String get introFrontend => 'Wallet apps';
+
+  @override
+  String get introBackend => 'Backend';
+
+  @override
+  String get introOnline => 'Online wallet';
+
+  @override
+  String get introOffline => 'Offline signer';
+
+  @override
+  String get introNext => 'Continue';
+
+  @override
+  String get introSkip => 'Skip intro';
+
+  @override
+  String get introBack => 'Back';
+
+  @override
+  String get introSource => 'Explore the source code';
+
+  @override
+  String get introSourceHint =>
+      'Scan with a connected device to explore the full source. This screen makes no network requests.';
+
+  @override
+  String get introCopyLink => 'Copy source address';
+
+  @override
+  String get introCopied => 'Source address copied';
+
+  @override
+  String get introSaveFailed =>
+      'Couldn\'t save your progress. Please try again.';
+
+  @override
+  String get introRole => 'Independent online wallet';
+
+  @override
+  String get introSecurityDescription =>
+      'Using one phone? Create a local-signing wallet that keeps your keys and signs on this phone. Always check the network, recipient and amount before sending.';
+
+  @override
+  String get introSecurityNote =>
+      'Back up your recovery phrase offline. Never screenshot or share it, even with someone claiming to be support.';
+
+  @override
+  String get introPairTitle => 'Manage online.\nSign offline.';
+
+  @override
+  String get introPairDescription =>
+      'Using two phones? Install KT Cold Signer on the offline phone, then connect its public account here. This phone checks and broadcasts; the offline device reviews and signs.';
+
+  @override
+  String get introPairNote =>
+      'Two independent apps, connected by QR codes. Keep the offline wallet\'s private keys off the online device.';
+
+  @override
+  String get introStart => 'Start using KT Wallet';
+
+  @override
   String get appName => 'KT Wallet';
 
   @override
@@ -75,10 +222,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeNoMatchingNetworks => 'No matching networks';
 
   @override
-  String get walletKindHot => 'Standard';
+  String get walletKindHot => 'Local signing';
 
   @override
-  String get walletKindWatch => 'Watch';
+  String get walletKindWatch => 'Offline signing';
 
   @override
   String get walletStateBackedUp => 'Backed up';
@@ -290,14 +437,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addWalletTitle => 'Add wallet';
 
   @override
-  String get addWalletStandardSection => 'Standard wallet · convenient';
+  String get addWalletStandardSection => 'Local signing · One phone';
 
   @override
   String get createNewWallet => 'Create new wallet';
 
   @override
   String get createNewWalletDesc =>
-      'Generate a new recovery phrase on this device, ready to use';
+      'Generate a recovery phrase here, then back it up before use';
 
   @override
   String get importMnemonic => 'Import recovery phrase';
@@ -306,17 +453,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get importMnemonicDesc => 'An existing 12 / 18 / 24-word phrase';
 
   @override
-  String get coldWalletSection => 'Offline wallet pair · high security';
+  String get coldWalletSection => 'Offline signing · Two phones';
 
   @override
   String get connectColdWallet => 'Connect offline wallet';
 
   @override
   String get connectColdWalletDesc =>
-      'Pair KT Cold Signer by QR; private keys never touch this device';
+      'Import public account information; transfers need the offline signer';
 
   @override
-  String get createWalletTitle => 'Create standard wallet';
+  String get createWalletTitle => 'Create a local-signing wallet';
 
   @override
   String get showMnemonic => 'Show recovery phrase';
@@ -377,7 +524,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get mnemonicChallengeHint => 'Pick the correct word below';
+  String get mnemonicChallengeHint =>
+      'Check your written backup. A spot-check cannot verify the entire backup.';
 
   @override
   String get verifyWrong =>
@@ -393,10 +541,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'Wallet creation could not be completed. Please try again.';
 
   @override
-  String get walletCreatedBackedUp => 'Wallet created and backed up';
+  String get walletDeviceAuthUnavailable =>
+      'System authentication is unavailable. Set a screen-lock PIN or password in system settings, then return and retry. If already configured, check biometrics or try again later.';
 
   @override
-  String get backupVerified => 'Backup verified — your phrase is correct';
+  String get walletCreatedBackedUp =>
+      'Wallet created and backup spot-check passed. Keep the complete recovery phrase safe.';
+
+  @override
+  String get backupVerified =>
+      'Backup confirmation recorded. Make sure the complete phrase is saved in order.';
 
   @override
   String get mnemonicInvalid =>
@@ -422,7 +576,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get connectColdSafety =>
-      'This device never receives or stores a phrase, private key, or seed.';
+      'This watch-only account imports public information only, never the offline wallet’s recovery phrase, private keys or seed. Other local-signing wallets in this app still keep their private keys on this device.';
 
   @override
   String get scanAccountHint => 'Aim at the KT Cold Signer address QR';
@@ -588,7 +742,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get privateKeyFullCopyBody =>
-      'Avoid placing a complete private key on the clipboard, where it may leak or be read by another app. Secure copy is recommended.';
+      'The complete private key will enter the clipboard, where it could be read by another app or pasted by mistake. Continue copying?';
 
   @override
   String get privateKeyCopyAction => 'Copy';
@@ -1016,6 +1170,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get feeEstimating => 'Estimating…';
+
+  @override
+  String get feeAwaitingInput => 'Not estimated';
+
+  @override
+  String get feeWaitingBalance =>
+      'Insufficient balance to estimate the network fee.';
+
+  @override
+  String get feeWaitingRecipient =>
+      'Enter a valid recipient address to estimate the fee.';
+
+  @override
+  String get feeWaitingAmount =>
+      'Enter a valid transfer amount to estimate the fee.';
 
   @override
   String get feeUnavailable => 'Network fee unavailable';
@@ -1491,44 +1660,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get languageSystem => 'System default';
 
   @override
-  String get modeSelectTitle => 'Choose device mode';
-
-  @override
-  String get modeSelectSubtitle =>
-      'Before first use, decide this phone\'s role';
-
-  @override
-  String get modeWalletTitle => 'Online Wallet';
-
-  @override
-  String get modeWalletDesc =>
-      'Everyday use: check balances and send transfers';
-
-  @override
-  String get modeSignerTitle => 'Offline Signer';
-
-  @override
-  String get modeSignerDesc =>
-      'Install on a phone that never goes online; keeps keys offline and signs transactions';
-
-  @override
-  String get modeSignerConfirmTitle => 'Enable offline signer';
-
-  @override
-  String get modeSignerConfirmBody =>
-      'This mode is for an offline device. Turn on airplane mode and keep this device permanently offline.';
-
-  @override
-  String get deviceMode => 'Device mode';
-
-  @override
-  String get deviceModeSwitchTitle => 'Switch device mode';
-
-  @override
-  String get deviceModeSwitchDesc =>
-      'You will return to the mode selection screen.';
-
-  @override
   String get walletLoadErrorTitle => 'Couldn\'t load wallets';
 
   @override
@@ -1603,6 +1734,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get historyEmpty => 'No transactions yet';
+
+  @override
+  String get historyEmptyDescription =>
+      'Your activity will appear here.\nPull down to refresh, or try another filter.';
+
+  @override
+  String get transferPaste => 'Paste';
+
+  @override
+  String get transferScan => 'Scan';
 
   @override
   String get setPinTitle => 'Set unlock PIN';
@@ -1782,7 +1923,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupEncryptedRowDesc =>
-      'Save an encrypted copy with the system file picker';
+      'Save an encrypted file or QR image with a strong password';
 
   @override
   String get backupIntro =>
@@ -1830,7 +1971,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get restoreFromBackup => 'Restore from backup';
 
   @override
-  String get restoreFromBackupDesc => 'Open an encrypted .ktbak file';
+  String get restoreFromBackupDesc =>
+      'Restore from a backup file, QR scan, or QR image';
 
   @override
   String get restorePickFile => 'Choose backup file';

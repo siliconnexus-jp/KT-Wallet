@@ -207,11 +207,6 @@ class SignerWelcomeScreen extends StatelessWidget {
         ],
       ),
     );
-    // Only in the combined single-installer app: an escape hatch back to the
-    // device-mode picker, so a mistaken "offline signer" choice doesn't force
-    // the user through onboarding (or a data wipe) to undo it. Nothing is
-    // configured yet at this point, so no confirmation is needed.
-    final modeScope = DeviceModeScope.maybeOf(context);
     return KtScreen(
       theme: _t,
       gap: 24,
@@ -233,25 +228,6 @@ class SignerWelcomeScreen extends StatelessWidget {
             l10n.importExistingWallet,
             onPressed: () => context.push('/mnemonic-import'),
           ),
-          if (modeScope != null) ...[
-            const SizedBox(height: 4),
-            TextButton(
-              onPressed: () async {
-                try {
-                  await modeScope.exitMode();
-                } on Object {
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(l10n.deviceModeSaveFailed)),
-                  );
-                }
-              },
-              child: Text(
-                l10n.deviceModeSwitchTitle,
-                style: const TextStyle(fontSize: 13, color: SignerColors.text2),
-              ),
-            ),
-          ],
         ],
       ),
       children: [

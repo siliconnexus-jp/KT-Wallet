@@ -11,12 +11,15 @@ import 'package:cold_signer/src/state/signer_wallet_controller.dart';
 import 'package:core_crypto/testing.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// The full live loop, end to end, on fakes (fake vault, in-memory records,
 /// seeded Random): welcome → create (REAL generated mnemonic) → verify (real
 /// word) → set PIN → home → scan the demo request → auth with the REAL PIN →
 /// result → re-scan the same request → risk screen (anti-replay).
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   SignerWalletController controller(
     InMemoryVaultStorage storage,
     InMemorySignRecordPersistence records,
@@ -88,7 +91,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // No wallet in the vault → boots to C1 welcome.
+    // First launch presents the product introduction before C1 welcome.
+    expect(find.text('前后端 100% 开源'), findsOneWidget);
+    await tester.tap(find.text('跳过引导'));
+    await tester.pumpAndSettle();
     expect(find.text('创建新钱包'), findsOneWidget);
     await tester.tap(find.text('创建新钱包'));
     await tester.pumpAndSettle();

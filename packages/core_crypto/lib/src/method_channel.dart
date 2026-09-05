@@ -37,6 +37,13 @@ class MethodChannelCoreCrypto implements CoreCrypto {
   }
 
   @override
+  Future<void> checkWalletCreationReady() async {
+    if (!await _invoke<bool>('checkWalletCreationReady')) {
+      throw const AuthUnavailableException();
+    }
+  }
+
+  @override
   Future<String> generateMnemonic({int strength = 128}) {
     CoreCryptoValidation.checkStrength(strength);
     return _invoke<String>('generateMnemonic', {'strength': strength});

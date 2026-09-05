@@ -12,7 +12,6 @@ import 'package:integration_test/integration_test.dart';
 import 'package:kt_wallet/main.dart';
 import 'package:kt_wallet/src/security/wallet_pin.dart';
 import 'package:kt_wallet/src/state/app_prefs.dart';
-import 'package:kt_wallet/src/state/device_mode.dart';
 import 'package:kt_wallet/src/state/locale_controller.dart';
 import 'package:kt_wallet/src/state/networks.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
@@ -79,7 +78,6 @@ void main() {
       // up front prevents an unscriptable out-of-process Face ID sheet from
       // interrupting a fully unattended run.
       await prefs.setAuthMethod(AuthMethod.password);
-      final mode = DeviceModeController();
       final locale = LocaleController(initial: const Locale('zh'));
       final networks = NetworkController(
         initialEnvironment: NetworkEnvironment.testnet,
@@ -118,7 +116,6 @@ void main() {
           RepaintBoundary(
             key: evidence.screenshotBoundaryKey,
             child: RootApp(
-              modeController: mode,
               localeController: locale,
               walletBootstrap: () async => wallets,
               walletPrefs: prefs,
@@ -130,19 +127,14 @@ void main() {
 
         await _waitUntil(
           tester,
-          () => find.text('选择设备模式').evaluate().isNotEmpty,
+          () => find.text('前后端 100% 开源').evaluate().isNotEmpty,
         );
-        await evidence.scanPage(binding, tester, '01 首启设备模式选择');
-        await evidence.event(
-          '点击控件',
-          details: const <String, Object?>{'label': '联网钱包'},
-        );
-        await tester.tap(find.text('联网钱包'));
+        await evidence.scanPage(binding, tester, '01 开源与安全引导');
+        await tester.tap(find.text('跳过引导'));
         await _waitUntil(
           tester,
           () => find.text('创建新钱包').evaluate().isNotEmpty,
         );
-        expect(mode.mode, DeviceMode.wallet);
         await evidence.scanPage(binding, tester, '02 空钱包添加入口');
 
         await evidence.event(
@@ -192,32 +184,31 @@ void main() {
         await tester.tap(find.text('我已手写备份，开始校验'));
         await _waitUntil(tester, () => find.text('校验备份').evaluate().isNotEmpty);
         await evidence.scanPage(binding, tester, '05 助记词校验未选择');
-        final challengeWord = displayedCreatedWords[3];
-        await evidence.event(
-          '选择助记词校验答案',
-          details: <String, Object?>{
-            'position': 4,
-            'selected_word': challengeWord,
-          },
-        );
-        final challengeOption = find.text(challengeWord).hitTestable();
-        expect(challengeOption, findsOneWidget);
-        await tester.tap(challengeOption);
-        await tester.pumpAndSettle();
-        await evidence.snapshot(
-          binding,
-          tester,
-          '06 助记词校验已选择',
-          facts: <String, Object?>{
-            'position': 4,
-            'selected_word': challengeWord,
-          },
-        );
-        final mnemonicConfirm = find
-            .widgetWithText(KtPrimaryButton, '确认')
-            .hitTestable();
-        expect(mnemonicConfirm, findsOneWidget);
-        await tester.tap(mnemonicConfirm);
+        final challengedPositions = <int>{};
+        for (var round = 0; round < 3; round++) {
+          final prompt = tester.widget<Text>(
+            find.byKey(const ValueKey('backup-challenge-position')),
+          );
+          final position = int.parse(
+            RegExp(r'\d+').firstMatch(prompt.data!)![0]!,
+          );
+          expect(challengedPositions.add(position), isTrue);
+          final challengeOption = find
+              .text(displayedCreatedWords[position - 1])
+              .hitTestable();
+          expect(challengeOption, findsOneWidget);
+          await tester.tap(challengeOption);
+          await tester.pumpAndSettle();
+          await evidence.event(
+            '选择助记词校验答案',
+            details: <String, Object?>{
+              'round': round + 1,
+              'position': position,
+            },
+          );
+          await tester.tap(find.byKey(const ValueKey('backup-check-submit')));
+          if (round < 2) await tester.pumpAndSettle();
+        }
         await _waitForWalletCreationOutcome(binding, tester, evidence);
         final createdWallet = wallets.current! as HotWallet;
         expect(createdWallet.id, createdWalletId);
@@ -454,8 +445,13 @@ void main() {
         );
 
         await tester.tap(find.text('返回首页'));
-        await _waitUntil(tester, () => find.text('记录').evaluate().isNotEmpty);
-        await _tapSemantics(tester, '记录');
+        await _waitUntil(
+          tester,
+          () => find.byKey(const ValueKey('home-tab-1')).evaluate().isNotEmpty,
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('home-tab-1')).hitTestable(),
+        );
         final outgoingUsdtRow = _historyRowForHash(usdtTransaction.hash!);
         await _waitUntil(
           tester,
@@ -506,11 +502,11 @@ void main() {
           () =>
               wallets.current?.id == fundedWallet.id &&
               _semanticsFinder(
-                '导入钱包 2, 普通',
+                '导入钱包 2, 本机签名',
               ).hitTestable().evaluate().isNotEmpty,
         );
         await evidence.snapshot(binding, tester, '61B 记录返回发送钱包首页');
-        await _tapSemantics(tester, '导入钱包 2, 普通');
+        await _tapSemantics(tester, '导入钱包 2, 本机签名');
         await _waitUntil(tester, () => find.text('钱包 1').evaluate().isNotEmpty);
         await tester.tap(find.text('钱包 1'));
         await _waitUntil(
@@ -520,7 +516,9 @@ void main() {
               wallets.current?.id == createdWallet.id,
         );
         await evidence.scanPage(binding, tester, '62 切换到收款钱包');
-        await _tapSemantics(tester, '记录');
+        await tester.tap(
+          find.byKey(const ValueKey('home-tab-1')).hitTestable(),
+        );
         final incomingUsdtRow = _historyRowForHash(usdtTransaction.hash!);
         await _waitUntil(
           tester,
@@ -605,7 +603,7 @@ Future<void> _exerciseAlignedHome(
 
   await _jumpHomeToTop(tester, scrollKey);
   final wallet = wallets.current!;
-  expect(find.byKey(searchKey).hitTestable(), findsOneWidget);
+  expect(find.byKey(searchKey), findsNothing);
   expect(find.byKey(scanKey).hitTestable(), findsOneWidget);
   expect(find.byKey(headerKey).hitTestable(), findsOneWidget);
   expect(find.byKey(coinsKey), findsOneWidget);
@@ -618,7 +616,7 @@ Future<void> _exerciseAlignedHome(
       findsOneWidget,
     );
   }
-  for (final action in const <String>['收款', '转账', '记录', '更多']) {
+  for (final action in const <String>['收款', '转账', '更多']) {
     expect(_semanticsFinder(action).hitTestable(), findsOneWidget);
   }
 
@@ -639,8 +637,8 @@ Future<void> _exerciseAlignedHome(
       'wallet_name': wallet.name,
       'wallet_backed_up': wallet is HotWallet ? wallet.backedUp : null,
       'backup_banner_expected': shouldShowBackup,
-      'quick_actions': const <String>['收款', '转账', '记录', '更多'],
-      'bottom_tabs': const <String>['首页', '资产', '设置'],
+      'quick_actions': const <String>['收款', '转账', '更多'],
+      'bottom_tabs': const <String>['钱包', '活动', '设置'],
       'selected_category': '币种',
     },
   );
@@ -661,28 +659,10 @@ Future<void> _exerciseAlignedHome(
   await tester.tap(close);
   await _waitUntil(
     tester,
-    () => find.byKey(searchKey).hitTestable().evaluate().isNotEmpty,
+    () => find.byKey(scanKey).hitTestable().evaluate().isNotEmpty,
   );
 
-  final search = find.byKey(searchKey).hitTestable();
-  await evidence.event(
-    '输入首页搜索',
-    details: const <String, Object?>{'value': '__no_such_asset__'},
-  );
-  await tester.enterText(search, '__no_such_asset__');
-  await tester.pumpAndSettle();
-  expect(find.text('没有匹配的资产'), findsOneWidget);
-  expect(
-    tester.widget<TextField>(search).controller!.text,
-    '__no_such_asset__',
-  );
-  await evidence.snapshot(binding, tester, '15 W1B 搜索无结果状态');
-  final clear = find.byTooltip('关闭').hitTestable();
-  expect(clear, findsOneWidget);
-  await tester.tap(clear);
-  await tester.pumpAndSettle();
-  expect(tester.widget<TextField>(search).controller!.text, isEmpty);
-  expect(find.text('没有匹配的资产'), findsNothing);
+  expect(find.byKey(searchKey), findsNothing);
 
   await evidence.event(
     '切换首页分类',
@@ -767,8 +747,8 @@ Future<void> _exerciseAlignedHome(
   );
 
   await tester.tap(find.byKey(const ValueKey('home-tab-1')).hitTestable());
-  await _waitUntil(tester, () => find.text('按持仓价值排序').evaluate().isNotEmpty);
-  await evidence.snapshot(binding, tester, '19A 底栏资产入口');
+  await _waitUntil(tester, () => find.text('全部类型').evaluate().isNotEmpty);
+  await evidence.snapshot(binding, tester, '19A 底栏活动入口');
   await tester.tap(find.byKey(const ValueKey('home-tab-2')).hitTestable());
   await _waitUntil(
     tester,

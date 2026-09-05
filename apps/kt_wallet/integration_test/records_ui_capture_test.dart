@@ -125,10 +125,10 @@ Future<void> _capture(
 }
 
 Future<void> _openRecords(WidgetTester tester) async {
-  expect(find.text('记录'), findsOneWidget);
-  await tester.tap(find.text('记录'));
+  expect(find.byKey(const ValueKey('home-tab-1')), findsOneWidget);
+  await tester.tap(find.byKey(const ValueKey('home-tab-1')));
   await tester.pumpAndSettle();
-  expect(find.text('交易记录'), findsOneWidget);
+  expect(find.text('活动'), findsNWidgets(2));
 }
 
 Future<void> _openToken(WidgetTester tester, AssetRef asset) async {
@@ -160,13 +160,11 @@ void main() {
       await tester.pumpWidget(_app(wallets: wallets, history: history));
       await tester.pumpAndSettle();
 
-      expect(find.text('首页'), findsOneWidget);
-      // "资产" also titles the home asset section; the bottom navigation is
-      // verified by its pie-chart icon while "记录" must exist only once as
-      // the quick action (there is no records tab anymore).
-      expect(find.byIcon(Icons.pie_chart), findsOneWidget);
+      expect(find.text('钱包'), findsOneWidget);
+      // Activity is the single top-level destination for wallet records.
+      expect(find.text('活动'), findsOneWidget);
       expect(find.text('设置'), findsOneWidget);
-      expect(find.text('记录'), findsOneWidget);
+      expect(find.byKey(const ValueKey('home-tab-1')), findsOneWidget);
       await _capture(binding, tester, '01-home-three-tabs');
 
       await _openRecords(tester);
@@ -175,7 +173,7 @@ void main() {
       expect(find.text('+0.05 ETH'), findsNothing);
       await _capture(binding, tester, '02-wallet-empty-history');
 
-      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.tap(find.byKey(const ValueKey('home-tab-0')));
       await tester.pumpAndSettle();
       results
         ..clear()
@@ -188,7 +186,7 @@ void main() {
       expect(find.text('-9 USDT'), findsOneWidget);
       await _capture(binding, tester, '03-wallet-all-history');
 
-      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.tap(find.byKey(const ValueKey('home-tab-0')));
       await tester.pumpAndSettle();
       await _openToken(tester, _usdt);
       expect(find.text('Ethereum'), findsWidgets);

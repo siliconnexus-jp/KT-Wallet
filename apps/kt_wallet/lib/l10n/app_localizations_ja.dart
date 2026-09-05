@@ -9,6 +9,151 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get backupQrTitle => '暗号化QR';
+
+  @override
+  String get backupFileFormat => 'バックアップファイル';
+
+  @override
+  String get backupQrIntro =>
+      'この端末で独自の強いパスワードを使ってリカバリーフレーズを暗号化し、KT WalletのQR画像を作成します。画像に平文のフレーズやパスワードは含まれません。';
+
+  @override
+  String get backupQrWarning =>
+      '画像の保有者はオフラインでパスワードを推測できます。忘れたパスワードは復元できません。画像とパスワードは別々に保管し、手書きのフレーズも残してください。保存先がクラウドと同期する場合があります。';
+
+  @override
+  String get backupQrImageInstruction =>
+      'パスワードが必要 · 受取用QRではありません\nKT Walletの「バックアップから復元」で「暗号化QRをスキャン」または「QR画像を選択」を使用してください。画像を公開せず、パスワードは別に保管してください。';
+
+  @override
+  String get backupQrGenerate => '暗号化QRを作成';
+
+  @override
+  String get backupQrSave => 'QR画像を端末に保存';
+
+  @override
+  String get backupQrScan => '暗号化QRをスキャン';
+
+  @override
+  String get backupQrPickImage => 'QR画像を選択';
+
+  @override
+  String get backupQrScanHint =>
+      'KT Walletの暗号化バックアップQRをスキャンしてください。次の画面でパスワードを入力します。';
+
+  @override
+  String get backupQrInvalid =>
+      '有効な暗号化バックアップQRがありません。QRが1つだけ含まれる元のPNG/JPEG画像を選択してください。';
+
+  @override
+  String get backupQrRestoreIntro =>
+      '暗号化ファイル、QRスキャン、保存済みQR画像から復元できます。復号はこの端末で行い、バックアップのパスワードが必要です。';
+
+  @override
+  String get secretAccessRiskTitle => '表示する前に';
+
+  @override
+  String get secretAccessContinue => 'リスクを理解して続ける';
+
+  @override
+  String get mnemonicAccessRisk =>
+      'リカバリーフレーズでウォレット全体を復元できます。他人に知られると、資産を移動されるおそれがあります。\n\n周囲に人がいない場所で確認し、スクリーンショット・録画・共有はしないでください。';
+
+  @override
+  String get privateKeyAccessRisk =>
+      '秘密鍵で対応するアカウントを操作できます。他人に知られると、そのアカウントの資産を移動されるおそれがあります。\n\n周囲に人がいない場所で確認し、スクリーンショット・録画・共有はしないでください。';
+
+  @override
+  String get tabWallet => 'ウォレット';
+
+  @override
+  String get tabActivity => '履歴';
+
+  @override
+  String get scanSignedResultNext => 'オフラインで署名済み：結果をスキャン';
+
+  @override
+  String backupCheckProgress(int current, int total) {
+    return 'バックアップ確認 $current / $total';
+  }
+
+  @override
+  String get introOpenTitle => 'フロントもバックも\n100% オープンソース。';
+
+  @override
+  String get introOpenDescription =>
+      'ウォレット、オフライン署名、バックエンドゲートウェイ。すべてのソースコードを公開し、検証できる信頼を目指します。';
+
+  @override
+  String get introOpenNote => '資産を守る仕組みをソースコードで確認できます。誰でも検証し、改善に参加できます。';
+
+  @override
+  String get introSecurityTitle => '安全を、最優先に。\n管理するのは、あなた。';
+
+  @override
+  String get introFrontend => 'クライアント';
+
+  @override
+  String get introBackend => 'バックエンド';
+
+  @override
+  String get introOnline => 'オンライン';
+
+  @override
+  String get introOffline => 'オフライン署名';
+
+  @override
+  String get introNext => '次へ';
+
+  @override
+  String get introSkip => 'スキップ';
+
+  @override
+  String get introBack => '戻る';
+
+  @override
+  String get introSource => 'ソースコードを見る';
+
+  @override
+  String get introSourceHint =>
+      'ネット接続のある端末で QR コードを読み取り、ソースを確認できます。この画面は通信を行いません。';
+
+  @override
+  String get introCopyLink => 'ソースの URL をコピー';
+
+  @override
+  String get introCopied => 'URL をコピーしました';
+
+  @override
+  String get introSaveFailed => 'ガイドの状態を保存できませんでした。再試行してください。';
+
+  @override
+  String get introRole => '独立したオンラインウォレット';
+
+  @override
+  String get introSecurityDescription =>
+      '1台で使う場合は、本機に秘密鍵を保管し署名するウォレットを作成できます。送金前にネットワーク・宛先・金額を確認してください。';
+
+  @override
+  String get introSecurityNote =>
+      '復元フレーズはオフラインで安全に保管。撮影・共有せず、誰に求められても渡さないでください。';
+
+  @override
+  String get introPairTitle => 'オンラインで管理。\nオフラインで署名。';
+
+  @override
+  String get introPairDescription =>
+      '2台で使う場合は、オフライン端末に KT Cold Signer をインストールし、公開アカウントをここに接続します。本機は照会と送信、オフライン端末は確認と署名を担当します。';
+
+  @override
+  String get introPairNote =>
+      '独立した 2 つのアプリが QR コードで連携。オフライン側の秘密鍵はオンライン端末に入れません。';
+
+  @override
+  String get introStart => 'KT Wallet を始める';
+
+  @override
   String get appName => 'KT Wallet';
 
   @override
@@ -75,10 +220,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homeNoMatchingNetworks => '該当するネットワークがありません';
 
   @override
-  String get walletKindHot => '通常';
+  String get walletKindHot => '本機で署名';
 
   @override
-  String get walletKindWatch => '監視';
+  String get walletKindWatch => 'オフライン署名';
 
   @override
   String get walletStateBackedUp => 'バックアップ済み';
@@ -286,13 +431,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get addWalletTitle => 'ウォレットを追加';
 
   @override
-  String get addWalletStandardSection => '通常ウォレット・手軽';
+  String get addWalletStandardSection => '本機で署名 · スマートフォン1台';
 
   @override
   String get createNewWallet => '新規ウォレットを作成';
 
   @override
-  String get createNewWalletDesc => '端末で新しいリカバリーフレーズを生成し、すぐに使えます';
+  String get createNewWalletDesc => '本機でフレーズを生成し、バックアップ後に使用';
 
   @override
   String get importMnemonic => 'リカバリーフレーズをインポート';
@@ -301,16 +446,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get importMnemonicDesc => '12 / 18 / 24 単語の既存フレーズ';
 
   @override
-  String get coldWalletSection => 'オフラインウォレット構成・高セキュリティ';
+  String get coldWalletSection => 'オフライン署名 · スマートフォン2台';
 
   @override
   String get connectColdWallet => 'オフラインウォレットを接続';
 
   @override
-  String get connectColdWalletDesc => 'QRでKT Cold Signerとペアリング。秘密鍵は端末に入りません';
+  String get connectColdWalletDesc => '公開アカウント情報を取り込み、送金時はオフライン端末で署名';
 
   @override
-  String get createWalletTitle => '通常ウォレットを作成';
+  String get createWalletTitle => '本機で署名するウォレットを作成';
 
   @override
   String get showMnemonic => 'リカバリーフレーズを表示';
@@ -366,7 +511,8 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get mnemonicChallengeHint => '下から正しい単語を選択してください';
+  String get mnemonicChallengeHint =>
+      '手書きの控えを確認してください。抜き取り確認はバックアップ全体の正しさを保証しません。';
 
   @override
   String get verifyWrong => '選択が違います。手書きバックアップを確認して再試行してください';
@@ -380,10 +526,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get walletCreateFailed => 'ウォレットの作成を完了できませんでした。もう一度お試しください。';
 
   @override
-  String get walletCreatedBackedUp => 'ウォレットを作成しバックアップしました';
+  String get walletDeviceAuthUnavailable =>
+      'システム認証を利用できません。システム設定で画面ロックの PIN またはパスワードを設定してから再試行してください。設定済みの場合は生体認証を確認するか、しばらくして再試行してください。';
 
   @override
-  String get backupVerified => 'バックアップを確認しました — フレーズは正しいです';
+  String get walletCreatedBackedUp => '作成と抜き取り確認が完了しました。フレーズ全体を安全に保管してください。';
+
+  @override
+  String get backupVerified =>
+      'バックアップの確認を記録しました。フレーズ全体が順番どおり保存されていることを確認してください。';
 
   @override
   String get mnemonicInvalid => 'リカバリーフレーズが無効です。各単語を確認して再試行してください';
@@ -406,7 +557,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get connectColdSubtitle => 'オフライン端末から公開アドレスをインポートして監視ウォレットを作成';
 
   @override
-  String get connectColdSafety => '端末はフレーズ・秘密鍵・シードを一切受信・保存しません。';
+  String get connectColdSafety =>
+      'この監視専用アカウントは公開情報のみを取り込み、オフラインウォレットのフレーズ・秘密鍵・シードを取り込みません。他の本機署名ウォレットは本機に秘密鍵を保管します。';
 
   @override
   String get scanAccountHint => 'KT Cold SignerのアドレスQRに合わせてください';
@@ -560,7 +712,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get privateKeyFullCopyBody =>
-      '秘密鍵全体をクリップボードへコピーすると、漏えいや他のアプリによる取得の危険があります。安全なコピーを推奨します。';
+      '秘密鍵全体がクリップボードに入り、他のアプリに読み取られたり、誤って貼り付けたりするリスクがあります。コピーを続けますか？';
 
   @override
   String get privateKeyCopyAction => 'コピー';
@@ -962,6 +1114,18 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get feeEstimating => '見積もり中…';
+
+  @override
+  String get feeAwaitingInput => '未見積もり';
+
+  @override
+  String get feeWaitingBalance => '残高不足のため、手数料を見積もれません。';
+
+  @override
+  String get feeWaitingRecipient => '有効な受取アドレスを入力すると手数料を見積もります。';
+
+  @override
+  String get feeWaitingAmount => '有効な送金額を入力すると手数料を見積もります。';
 
   @override
   String get feeUnavailable => 'ネットワーク手数料を取得できません';
@@ -1417,40 +1581,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get languageSystem => 'システムに従う';
 
   @override
-  String get modeSelectTitle => 'デバイスモードを選択';
-
-  @override
-  String get modeSelectSubtitle => 'はじめに、この端末の役割を選んでください';
-
-  @override
-  String get modeWalletTitle => 'オンラインウォレット';
-
-  @override
-  String get modeWalletDesc => '日常利用・残高の確認・送金の実行';
-
-  @override
-  String get modeSignerTitle => 'オフライン署名機';
-
-  @override
-  String get modeSignerDesc => 'ネットに一切接続しない端末にインストールし、秘密鍵をオフラインで保管して署名します';
-
-  @override
-  String get modeSignerConfirmTitle => 'オフライン署名機を有効化';
-
-  @override
-  String get modeSignerConfirmBody =>
-      'このモードはオフライン端末専用です。機内モードをオンにし、この端末を絶対にネットへ接続しないでください。';
-
-  @override
-  String get deviceMode => 'デバイスモード';
-
-  @override
-  String get deviceModeSwitchTitle => 'デバイスモードを切り替え';
-
-  @override
-  String get deviceModeSwitchDesc => '切り替えると、モード選択画面に戻ります。';
-
-  @override
   String get walletLoadErrorTitle => 'ウォレットを読み込めませんでした';
 
   @override
@@ -1523,6 +1653,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get historyEmpty => '取引履歴はまだありません';
+
+  @override
+  String get historyEmptyDescription =>
+      '取引履歴がここに表示されます。\n下に引いて更新するか、絞り込みを変更してください。';
+
+  @override
+  String get transferPaste => '貼り付け';
+
+  @override
+  String get transferScan => 'スキャン';
 
   @override
   String get setPinTitle => 'ロック解除パスワードを設定';
@@ -1693,7 +1833,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get backupEncryptedRow => '暗号化バックアップ';
 
   @override
-  String get backupEncryptedRowDesc => 'システムのファイル選択画面で暗号化コピーを保存';
+  String get backupEncryptedRowDesc => '強いパスワードで暗号化ファイルやQR画像を保存';
 
   @override
   String get backupIntro =>
@@ -1740,7 +1880,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get restoreFromBackup => 'バックアップから復元';
 
   @override
-  String get restoreFromBackupDesc => '暗号化された .ktbak ファイルを開く';
+  String get restoreFromBackupDesc => 'ファイル、QRスキャン、QR画像から復元';
 
   @override
   String get restorePickFile => 'バックアップファイルを選択';

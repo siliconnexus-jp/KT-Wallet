@@ -58,7 +58,7 @@ void main() {
     await tester.tap(find.text('我已手写备份，开始校验'));
     await tester.pumpAndSettle();
     expect(
-      find.text('第 4 个单词是？'),
+      find.byKey(const ValueKey('backup-challenge-position')),
       findsOneWidget,
     ); // real backup-verify challenge
   });

@@ -26,7 +26,7 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
   });
 
-  testWidgets('tab change animates the page without an extra top indicator', (
+  testWidgets('tab change crossfades the page with a glass selection capsule', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -37,7 +37,7 @@ void main() {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('home-tab-indicator')), findsNothing);
+    expect(find.byKey(const ValueKey('home-tab-indicator')), findsOneWidget);
     expect(_tabOpacity(tester, 0).opacity, 1);
     expect(_tabOpacity(tester, 1).opacity, 0);
 
@@ -49,7 +49,7 @@ void main() {
     expect(tester.hasRunningAnimations, isTrue);
 
     await tester.pumpAndSettle();
-    expect(find.text('资产'), findsWidgets);
+    expect(find.text('活动'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 

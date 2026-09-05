@@ -14,6 +14,22 @@ Future<void> _open(WidgetTester tester, String galleryEntry) async {
 }
 
 void main() {
+  testWidgets('asset search stays readable without an inner input surface', (
+    tester,
+  ) async {
+    await _open(tester, 'W2 资产列表');
+    final finder = find.byKey(const ValueKey('assets-search-input'));
+    final field = tester.widget<TextField>(finder);
+    expect(field.decoration!.filled, false);
+    expect(field.decoration!.hintText, isNotEmpty);
+    expect(field.decoration!.enabledBorder, InputBorder.none);
+    expect(field.decoration!.focusedBorder, InputBorder.none);
+    await tester.enterText(finder, 'USDT');
+    await tester.pumpAndSettle();
+    expect(find.text('USDT'), findsWidgets);
+    expect(find.text('ETH'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('mnemonic import: 导入 enables once all 12 words are typed', (
     tester,
   ) async {

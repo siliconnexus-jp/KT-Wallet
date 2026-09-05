@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../tokens/colors.dart';
 import '../tokens/dimens.dart';
+import 'glass.dart';
 
 /// Which app palette a shared screen widget renders for.
 enum AppTheme { wallet, signer }
@@ -135,7 +136,15 @@ class KtNavBar extends StatelessWidget {
                   tooltip: leadingLabel,
                   icon: Icon(leading, size: 22, color: theme.text),
                   padding: EdgeInsets.zero,
-                  alignment: Alignment.centerLeft,
+                  style: theme == AppTheme.wallet
+                      ? IconButton.styleFrom(
+                          backgroundColor: const Color(0xDFFFFFFF),
+                          side: const BorderSide(color: Colors.white),
+                        )
+                      : null,
+                  alignment: theme == AppTheme.wallet
+                      ? Alignment.center
+                      : Alignment.centerLeft,
                 ),
         ),
         Flexible(
@@ -202,6 +211,12 @@ class KtNavBar extends StatelessWidget {
                               color: trailingColor ?? theme.text2,
                             ),
                             padding: EdgeInsets.zero,
+                            style: theme == AppTheme.wallet
+                                ? IconButton.styleFrom(
+                                    backgroundColor: const Color(0xDFFFFFFF),
+                                    side: const BorderSide(color: Colors.white),
+                                  )
+                                : null,
                           )
                         : const SizedBox(),
                   ),
@@ -254,8 +269,10 @@ class KtScreen extends StatelessWidget {
         ],
       ),
     );
-    return Scaffold(
-      backgroundColor: backgroundColor ?? theme.bg,
+    final screen = Scaffold(
+      backgroundColor: theme == AppTheme.wallet
+          ? Colors.transparent
+          : backgroundColor ?? theme.bg,
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -263,7 +280,10 @@ class KtScreen extends StatelessWidget {
             KtStatusBar(theme: theme),
             if (navBar != null)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: theme == AppTheme.wallet ? 6 : 0,
+                ),
                 child: navBar!,
               ),
             Expanded(child: _scrollableContent(content)),
@@ -277,6 +297,7 @@ class KtScreen extends StatelessWidget {
         ),
       ),
     );
+    return theme == AppTheme.wallet ? KtWalletBackdrop(child: screen) : screen;
   }
 
   Widget _scrollableContent(Widget content) {
@@ -304,14 +325,16 @@ class KtCard extends StatelessWidget {
   final AppTheme theme;
   final EdgeInsets padding;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: padding,
-    decoration: BoxDecoration(
-      color: theme.surface,
-      borderRadius: BorderRadius.circular(KtDimens.radiusLg),
-    ),
-    child: child,
-  );
+  Widget build(BuildContext context) => theme == AppTheme.wallet
+      ? KtGlassSurface(padding: padding, child: child)
+      : Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: theme.surface,
+            borderRadius: BorderRadius.circular(KtDimens.radiusLg),
+          ),
+          child: child,
+        );
 }
 
 /// Circular avatar with an initial (wallet / token / contact).
@@ -375,18 +398,30 @@ class KtSegmented extends StatelessWidget {
 
   Widget _segment(int i) => Semantics(
     button: true,
+    enabled: onChanged != null,
     selected: i == selected,
     inMutuallyExclusiveGroup: true,
     child: GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onChanged == null ? null : () => onChanged!(i),
       child: Container(
-        height: 48,
+        constraints: const BoxConstraints(minHeight: 48),
         alignment: Alignment.center,
         padding: scrollable ? const EdgeInsets.symmetric(horizontal: 14) : null,
         decoration: BoxDecoration(
-          color: i == selected ? theme.text : theme.surface,
-          borderRadius: BorderRadius.circular(KtDimens.radiusSm),
+          color: theme == AppTheme.wallet
+              ? (i == selected ? Colors.white : const Color(0xB3EDF0F7))
+              : (i == selected ? theme.text : theme.surface),
+          borderRadius: BorderRadius.circular(
+            theme == AppTheme.wallet ? 24 : KtDimens.radiusSm,
+          ),
+          border: theme == AppTheme.wallet
+              ? Border.all(
+                  color: i == selected
+                      ? const Color(0xFFD4DEF2)
+                      : Colors.transparent,
+                )
+              : null,
         ),
         // Only the scrollable variant pins the label to one line — it has the
         // room to honour it. Forcing it on the even split would trade a wrap
@@ -398,7 +433,11 @@ class KtSegmented extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: i == selected ? theme.bg : theme.text2,
+            color: theme == AppTheme.wallet && i == selected
+                ? WalletColors.accent
+                : i == selected
+                ? theme.bg
+                : theme.text2,
           ),
         ),
       ),

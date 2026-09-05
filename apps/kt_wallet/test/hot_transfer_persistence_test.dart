@@ -169,10 +169,15 @@ TransferSession _legacySolanaTokenSession() {
 }
 
 class _ResponseLostService extends LocalTransferService {
-  _ResponseLostService({required this.wallets, required this.session});
+  _ResponseLostService({
+    required this.wallets,
+    required this.session,
+    this.signError,
+  });
 
   final WalletController wallets;
   final TransferSession session;
+  final CoreCryptoException? signError;
   int signCalls = 0;
   int broadcastCalls = 0;
   bool intentWasDurableBeforeSign = false;
@@ -186,6 +191,7 @@ class _ResponseLostService extends LocalTransferService {
     final row = id == null ? null : await wallets.localTransactionById(id);
     intentWasDurableBeforeSign =
         row != null && row.status == TxStatus.submitted && row.hash == null;
+    if (signError != null) throw signError!;
     return SignedTransaction(
       signedTx: Uint8List.fromList(const [10, 11, 12]),
       txHash: localHash,
@@ -327,6 +333,57 @@ void main() {
   );
 
   for (final chain in [Chain.ethereum, Chain.tron, Chain.solana]) {
+    for (final error in const [
+      AuthCancelledException(),
+      AuthUnavailableException(),
+    ]) {
+      testWidgets('${chain.name}: native $error prevents final broadcast', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        final fixture = await _fixture();
+        addTearDown(fixture.database.close);
+        final session = _session(chain);
+        final networks = NetworkController(
+          initialEnvironment: NetworkEnvironment.testnet,
+        );
+        final service = _ResponseLostService(
+          wallets: fixture.wallets,
+          session: session,
+          signError: error,
+        );
+        final router = buildRouter(
+          initialLocation: '/transfer-auth',
+          galleryMode: false,
+          walletController: fixture.wallets,
+          transferService: service,
+          transferSession: session,
+        );
+        addTearDown(router.dispose);
+        await tester.pumpWidget(
+          _app(
+            router: router,
+            wallets: fixture.wallets,
+            networks: networks,
+            session: session,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Use biometrics'));
+        await tester.pumpAndSettle();
+        expect(service.signCalls, 1);
+        expect(service.broadcastCalls, 0);
+        expect(session.broadcastTxHash, isNull);
+        expect(
+          find.byKey(const ValueKey('broadcast-result-title')),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+      });
+    }
+
     testWidgets(
       '${chain.name}: intent and local hash are durable before a response-lost broadcast',
       (tester) async {

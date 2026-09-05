@@ -9,6 +9,145 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get backupQrTitle => '加密二维码';
+
+  @override
+  String get backupFileFormat => '备份文件';
+
+  @override
+  String get backupQrIntro =>
+      '使用独立强密码在本机加密助记词，生成带 KT Wallet 品牌的二维码图片。图片不包含明文助记词或密码。';
+
+  @override
+  String get backupQrWarning =>
+      '我已了解：持有图片的人可以离线尝试猜测密码；忘记密码无法恢复。请将密码与图片分开保管，并保留手抄助记词。所选文件夹可能会同步到云端。';
+
+  @override
+  String get backupQrImageInstruction =>
+      '需要密码 · 不是收款码\n在 KT Wallet 中选择「从备份恢复」→「扫描加密二维码」或「选择二维码图片」。请勿公开此图片，密码须分开保管。';
+
+  @override
+  String get backupQrGenerate => '生成加密二维码';
+
+  @override
+  String get backupQrSave => '保存二维码图片到本地';
+
+  @override
+  String get backupQrScan => '扫描加密二维码';
+
+  @override
+  String get backupQrPickImage => '选择二维码图片';
+
+  @override
+  String get backupQrScanHint => '扫描 KT Wallet 加密备份二维码，下一步输入备份密码。';
+
+  @override
+  String get backupQrInvalid => '未找到有效的加密备份二维码，请选择只包含一个二维码的原始 PNG/JPEG 图片。';
+
+  @override
+  String get backupQrRestoreIntro =>
+      '支持加密备份文件、扫描二维码或选择已保存的二维码图片。解密在本机完成，需要输入备份密码。';
+
+  @override
+  String get secretAccessRiskTitle => '查看前请注意';
+
+  @override
+  String get secretAccessContinue => '我已了解，继续';
+
+  @override
+  String get mnemonicAccessRisk =>
+      '助记词可以恢复整个钱包。任何人获取它，都可能转走你的资产。\n\n请在无人旁观时查看，不要截图、录屏或分享。';
+
+  @override
+  String get privateKeyAccessRisk =>
+      '私钥可以控制对应账户。任何人获取它，都可能转走该账户的资产。\n\n请在无人旁观时查看，不要截图、录屏或分享。';
+
+  @override
+  String get tabWallet => '钱包';
+
+  @override
+  String get tabActivity => '活动';
+
+  @override
+  String get scanSignedResultNext => '离线设备已签名，扫描结果';
+
+  @override
+  String backupCheckProgress(int current, int total) {
+    return '备份抽查 $current / $total';
+  }
+
+  @override
+  String get introOpenTitle => '前后端 100% 开源';
+
+  @override
+  String get introOpenDescription => '从钱包界面、离线签名到后端网关，代码全部公开。让信任建立在可审查的代码上。';
+
+  @override
+  String get introOpenNote => '查看完整源码，了解资产如何被保护。公开可审查，也欢迎持续改进。';
+
+  @override
+  String get introSecurityTitle => '安全第一。\n掌控始终在你。';
+
+  @override
+  String get introFrontend => '客户端';
+
+  @override
+  String get introBackend => '后端网关';
+
+  @override
+  String get introOnline => '在线钱包';
+
+  @override
+  String get introOffline => '离线签名端';
+
+  @override
+  String get introNext => '继续';
+
+  @override
+  String get introSkip => '跳过引导';
+
+  @override
+  String get introBack => '上一步';
+
+  @override
+  String get introSource => '查看开源代码';
+
+  @override
+  String get introSourceHint => '使用联网设备扫描二维码查看完整源码。此页面不会发起网络请求。';
+
+  @override
+  String get introCopyLink => '复制源码地址';
+
+  @override
+  String get introCopied => '源码地址已复制';
+
+  @override
+  String get introSaveFailed => '未能保存引导状态，请重试。';
+
+  @override
+  String get introRole => '独立在线钱包';
+
+  @override
+  String get introSecurityDescription =>
+      '只有一台手机？可创建本机签名钱包，由这台手机保管私钥并签名。转账前，始终核对网络、收款地址与金额。';
+
+  @override
+  String get introSecurityNote => '妥善离线备份助记词，不截图、不分享。任何人索要助记词，都不要提供。';
+
+  @override
+  String get introPairTitle => '联网管理。\n离线守护。';
+
+  @override
+  String get introPairDescription =>
+      '有两台手机？在离线手机安装 KT冷钱包，再在这里连接其公开账户。本机查询和广播，离线设备核对并签名。';
+
+  @override
+  String get introPairNote => '两个独立 App，通过二维码协作。离线钱包的私钥不导入在线设备。';
+
+  @override
+  String get introStart => '开始使用在线钱包';
+
+  @override
   String get appName => 'KT钱包';
 
   @override
@@ -75,10 +214,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeNoMatchingNetworks => '没有匹配的网络';
 
   @override
-  String get walletKindHot => '普通';
+  String get walletKindHot => '本机签名';
 
   @override
-  String get walletKindWatch => '观察';
+  String get walletKindWatch => '离线签名';
 
   @override
   String get walletStateBackedUp => '已备份';
@@ -285,13 +424,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get addWalletTitle => '添加钱包';
 
   @override
-  String get addWalletStandardSection => '普通钱包 · 便捷';
+  String get addWalletStandardSection => '本机签名 · 一台手机即可使用';
 
   @override
   String get createNewWallet => '创建新钱包';
 
   @override
-  String get createNewWalletDesc => '在本机生成新的助记词，立即可用';
+  String get createNewWalletDesc => '在本机生成助记词，完成备份后使用';
 
   @override
   String get importMnemonic => '导入助记词';
@@ -300,16 +439,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get importMnemonicDesc => '已有 12 / 18 / 24 个单词的助记词';
 
   @override
-  String get coldWalletSection => '离线钱包组合 · 高安全';
+  String get coldWalletSection => '离线设备签名 · 需要两台手机';
 
   @override
   String get connectColdWallet => '连接离线钱包';
 
   @override
-  String get connectColdWalletDesc => '扫码配对 KT冷钱包，私钥永不进入本机';
+  String get connectColdWalletDesc => '导入公开账户信息；转账需离线设备签名';
 
   @override
-  String get createWalletTitle => '创建普通钱包';
+  String get createWalletTitle => '创建本机签名钱包';
 
   @override
   String get showMnemonic => '显示助记词';
@@ -363,7 +502,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get mnemonicChallengeHint => '从下列单词中选择正确的一项';
+  String get mnemonicChallengeHint => '对照手写备份选择单词；抽查不能保证整份备份无误。';
 
   @override
   String get verifyWrong => '选择有误，请对照您手写的备份重试';
@@ -377,10 +516,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get walletCreateFailed => '钱包创建未完成，请重试。';
 
   @override
-  String get walletCreatedBackedUp => '钱包已创建并完成备份';
+  String get walletDeviceAuthUnavailable =>
+      '系统身份验证不可用。请先在系统设置中设置锁屏 PIN 或密码，再返回重试；若已设置，请检查生物识别或稍后重试。';
 
   @override
-  String get backupVerified => '备份已验证，助记词记录正确';
+  String get walletCreatedBackedUp => '钱包已创建，已通过备份抽查。请妥善保管完整助记词。';
+
+  @override
+  String get backupVerified => '已记录备份确认。请确认完整助记词已按顺序保存。';
 
   @override
   String get mnemonicInvalid => '助记词无效，请检查每个单词后重试';
@@ -403,7 +546,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectColdSubtitle => '从离线手机导入公开地址，创建观察钱包';
 
   @override
-  String get connectColdSafety => '本机永远不会接收或保存助记词、私钥或种子。';
+  String get connectColdSafety =>
+      '此观察账户仅导入公开信息，不导入离线钱包的助记词、私钥或种子。在线 App 中其他本机签名钱包仍在本机保管私钥。';
 
   @override
   String get scanAccountHint => '对准 KT冷钱包的地址二维码';
@@ -554,8 +698,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get privateKeyFullCopyTitle => '完整复制';
 
   @override
-  String get privateKeyFullCopyBody =>
-      '请避免将完整私钥复制到剪贴板，防止泄露或被第三方滥用。建议使用安全复制，保障资产安全。';
+  String get privateKeyFullCopyBody => '完整私钥会进入剪贴板，存在被其他应用读取或误粘贴的风险。确定继续复制吗？';
 
   @override
   String get privateKeyCopyAction => '复制';
@@ -953,6 +1096,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get feeEstimating => '估算中…';
+
+  @override
+  String get feeAwaitingInput => '待估算';
+
+  @override
+  String get feeWaitingBalance => '余额不足，暂无法估算手续费';
+
+  @override
+  String get feeWaitingRecipient => '填写有效收款地址后估算手续费';
+
+  @override
+  String get feeWaitingAmount => '输入有效转账金额后估算手续费';
 
   @override
   String get feeUnavailable => '无法获取网络费';
@@ -1403,39 +1558,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get languageSystem => '跟随系统';
 
   @override
-  String get modeSelectTitle => '选择设备模式';
-
-  @override
-  String get modeSelectSubtitle => '首次使用前，请先确定这台手机的角色';
-
-  @override
-  String get modeWalletTitle => '联网钱包';
-
-  @override
-  String get modeWalletDesc => '日常使用、查看余额、发起转账';
-
-  @override
-  String get modeSignerTitle => '离线签名器';
-
-  @override
-  String get modeSignerDesc => '安装在永不联网的手机上，离线保管私钥并签名';
-
-  @override
-  String get modeSignerConfirmTitle => '启用离线签名器';
-
-  @override
-  String get modeSignerConfirmBody => '此模式供离线设备使用，请开启飞行模式并保持设备永不联网。';
-
-  @override
-  String get deviceMode => '设备模式';
-
-  @override
-  String get deviceModeSwitchTitle => '切换设备模式';
-
-  @override
-  String get deviceModeSwitchDesc => '切换后将返回模式选择页。';
-
-  @override
   String get walletLoadErrorTitle => '钱包加载失败';
 
   @override
@@ -1506,6 +1628,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get historyEmpty => '暂无交易记录';
+
+  @override
+  String get historyEmptyDescription => '交易动态会显示在这里\n下拉刷新，或切换筛选条件查看';
+
+  @override
+  String get transferPaste => '粘贴';
+
+  @override
+  String get transferScan => '扫码';
 
   @override
   String get setPinTitle => '设置解锁密码';
@@ -1675,7 +1806,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupEncryptedRow => '加密备份';
 
   @override
-  String get backupEncryptedRowDesc => '通过系统文件选择器保存加密副本';
+  String get backupEncryptedRowDesc => '使用强密码保存加密文件或二维码图片';
 
   @override
   String get backupIntro => '备份文件用你设置的密码加密。同时拿到文件和密码的人，就掌握了这个钱包。';
@@ -1721,7 +1852,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get restoreFromBackup => '从备份恢复';
 
   @override
-  String get restoreFromBackupDesc => '打开加密的 .ktbak 文件';
+  String get restoreFromBackupDesc => '使用备份文件、二维码或图片恢复';
 
   @override
   String get restorePickFile => '选择备份文件';

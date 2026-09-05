@@ -84,6 +84,17 @@ void main() {
       },
     );
 
+    test('creation readiness check is keyless and fails closed', () async {
+      final methods = <String>[];
+      mockNative((call) async { methods.add(call.method); return true; });
+      await api.checkWalletCreationReady();
+      expect(methods, ['checkWalletCreationReady']);
+      mockNative((call) async => false);
+      await expectLater(api.checkWalletCreationReady(), throwsA(isA<AuthUnavailableException>()));
+      mockNative((call) async => throw PlatformException(code: 'AUTH_LOCKED', details: {'cooldownSec': 60}));
+      await expectLater(api.checkWalletCreationReady(), throwsA(isA<AuthLockedException>()));
+    });
+
     test('getAuthState decodes state map', () async {
       mockNative(
         (call) async => {'locked': true, 'failCount': 5, 'cooldownSec': 42},

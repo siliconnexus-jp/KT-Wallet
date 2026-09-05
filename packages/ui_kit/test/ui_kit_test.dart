@@ -14,7 +14,7 @@ const pencilWalletVars = <String, int>{
   'w-text3': 0xFF5F6B7A,
   'w-accent': 0xFF2557E8,
   'w-green': 0xFF06713F,
-  'w-red': 0xFFDF3E42,
+  'w-red': 0xFFC93439,
   'w-amber': 0xFFB54708,
   'w-border': 0xFFE7E9EE,
 };

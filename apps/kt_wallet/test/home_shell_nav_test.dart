@@ -18,19 +18,18 @@ Future<void> _openHome(WidgetTester tester) async {
 
 void main() {
   testWidgets(
-    'bottom tab bar has home/assets/settings and records opens as a page',
+    'wallet/activity/settings tabs coexist with standalone records and assets',
     (tester) async {
       await _openHome(tester);
 
-      // "记录" exists once as a home action, not as a duplicate bottom tab.
-      expect(find.text('记录'), findsOneWidget);
-      await tester.tap(find.text('记录'));
-      await tester.pumpAndSettle();
-      expect(find.text('交易记录'), findsOneWidget);
+      // Records live in Activity; home no longer duplicates the destination.
+      expect(find.text('记录'), findsNothing);
       expect(find.text('-120.00 USDT'), findsNothing);
 
-      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.tap(find.byKey(const ValueKey('home-tab-1')));
       await tester.pumpAndSettle();
+      expect(find.text('活动'), findsNWidgets(2));
+      expect(find.text('全部类型'), findsOneWidget);
 
       // Settings tab.
       await tester.tap(find.text('设置'));
@@ -38,7 +37,7 @@ void main() {
       expect(find.text('安全设置'), findsOneWidget);
 
       // Back to home tab.
-      await tester.tap(find.text('首页'));
+      await tester.tap(find.byKey(const ValueKey('home-tab-0')));
       await tester.pumpAndSettle();
       expect(find.text('立即备份'), findsOneWidget); // home backup banner
     },

@@ -755,7 +755,19 @@ void main() {
           ),
         );
         await tester.pump();
-        expect(find.byType(CircularProgressIndicator), findsNothing);
+        // The primary button retains a muted, transparent loading layer.
+        // Only the request-level progress indicator should disappear.
+        expect(
+          find
+              .byType(CircularProgressIndicator)
+              .evaluate()
+              .where(
+                (element) =>
+                    element.findAncestorWidgetOfExactType<KtPrimaryButton>() ==
+                    null,
+              ),
+          isEmpty,
+        );
         expect(find.byType(KtQrCode), findsOneWidget);
         expect(service.calledChain, Chain.ethereum);
 

@@ -212,9 +212,9 @@ void main() {
 
     expect(
       find.byKey(const ValueKey('tron-activation-unactivated')),
-      findsWidgets,
+      findsNothing,
     );
-    expect(find.text('未激活'), findsWidgets);
+    expect(find.text('未激活'), findsNothing);
     final aggregateUsdt = find.byKey(
       const ValueKey('home-asset-USDT-aggregate'),
     );

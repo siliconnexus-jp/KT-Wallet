@@ -9,6 +9,81 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get introOpenTitle => 'フロントもバックも\n100% オープンソース。';
+
+  @override
+  String get introOpenDescription =>
+      'ウォレット、オフライン署名、バックエンドゲートウェイ。すべてのソースコードを公開し、検証できる信頼を目指します。';
+
+  @override
+  String get introOpenNote => '資産を守る仕組みをソースコードで確認できます。誰でも検証し、改善に参加できます。';
+
+  @override
+  String get introSecurityTitle => '安全を、最優先に。\n管理するのは、あなた。';
+
+  @override
+  String get introFrontend => 'クライアント';
+
+  @override
+  String get introBackend => 'バックエンド';
+
+  @override
+  String get introOnline => 'オンライン';
+
+  @override
+  String get introOffline => 'オフライン署名';
+
+  @override
+  String get introNext => '次へ';
+
+  @override
+  String get introSkip => 'スキップ';
+
+  @override
+  String get introBack => '戻る';
+
+  @override
+  String get introSource => 'ソースコードを見る';
+
+  @override
+  String get introSourceHint =>
+      'ネット接続のある端末で QR コードを読み取り、ソースを確認できます。この画面は通信を行いません。';
+
+  @override
+  String get introCopyLink => 'ソースの URL をコピー';
+
+  @override
+  String get introCopied => 'URL をコピーしました';
+
+  @override
+  String get introSaveFailed => 'ガイドの状態を保存できませんでした。再試行してください。';
+
+  @override
+  String get introRole => '独立したオフライン署名アプリ';
+
+  @override
+  String get introSecurityDescription =>
+      '秘密鍵はこのオフライン端末に保管。署名のたびに取引内容を確認し、本人認証を行います。復元フレーズはオフラインで保管してください。';
+
+  @override
+  String get introSecurityNote =>
+      '機内モードを有効にし、Wi-Fi と Bluetooth をオフに。この端末を署名専用として、常にオフラインに保ちます。';
+
+  @override
+  String get introPairTitle => '署名に専念。\n通信はしない。';
+
+  @override
+  String get introPairDescription =>
+      'ネット接続端末の KT Wallet で取引を準備。この端末で QR を読み取り、確認・署名した後、署名済み QR をオンライン側へ戻して送信します。';
+
+  @override
+  String get introPairNote =>
+      'QR で渡すのは取引と署名結果だけ。秘密鍵や復元フレーズは渡しません。残高照会・送信は行いません。';
+
+  @override
+  String get introStart => 'オフライン署名を設定';
+
+  @override
   String get appName => 'KT Cold Signer';
 
   @override
@@ -482,17 +557,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get signComplete => '署名完了';
 
   @override
-  String get voidThisSignature => 'この署名を無効化';
+  String get voidThisSignature => '署名QRコードを閉じる';
 
   @override
-  String get voidSignatureTitle => 'この署名を無効にしますか？';
+  String get voidSignatureTitle => '署名QRコードを閉じますか？';
 
   @override
   String get voidSignatureDesc =>
-      '無効にすると、この署名結果のQRコードは使用できなくなり、オンラインウォレットはこの取引をブロードキャストできません。';
+      '本機のQR表示を閉じるだけです。他の端末で読み取り・保存済みの署名は取り消されず、送信される可能性があります。この画面を閉じても取引はキャンセルされません。';
 
   @override
-  String get signatureVoided => '署名を無効にしました';
+  String get signatureVoided => 'QRを閉じました。署名は取り消されていません。';
 
   @override
   String get signResultUnavailable => '署名結果を利用できません';
@@ -503,7 +578,8 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get scanResultInstruction => 'オンラインウォレットの「署名結果をスキャン」でこのQRを読み取ってください';
+  String get scanResultInstruction =>
+      'オンラインウォレットの現在の取引で「オフラインで署名済み：結果をスキャン」を選び、このQRを読み取ってください。';
 
   @override
   String get allAddresses => 'すべてのアドレス';
@@ -638,23 +714,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsSaveFailed => '設定を保存できませんでした。内容は変更されていません。もう一度お試しください。';
-
-  @override
-  String get deviceMode => 'デバイスモード';
-
-  @override
-  String get deviceModeSigner => 'オフライン署名機';
-
-  @override
-  String get deviceModeSwitchTitle => 'デバイスモードを切り替え';
-
-  @override
-  String get deviceModeSwitchDesc =>
-      '切り替える前に、この端末を署名機として使用しないことを確認してください。切り替えるとモード選択画面に戻ります。';
-
-  @override
-  String get deviceModeSaveFailed =>
-      'デバイスモードを保存できませんでした。現在のモードは変更されていません。もう一度お試しください。';
 
   @override
   String get pinKeyDelete => '最後の桁を削除';

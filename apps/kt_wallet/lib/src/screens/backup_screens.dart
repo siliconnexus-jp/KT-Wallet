@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter/material.dart';
@@ -9,7 +10,11 @@ import '../../l10n/app_localizations.dart';
 import '../platform/file_exchange.dart';
 import '../security/secure_screen.dart';
 import '../security/wallet_backup.dart';
+import '../security/wallet_backup_qr.dart';
+import '../security/backup_qr_image.dart';
 import '../state/wallet_scope.dart';
+import '../wallets/wallet_model.dart';
+import '../widgets/scan_viewfinder.dart';
 
 /// W32 加密备份 — seals the active wallet's key material under a password the
 /// user chooses and hands the file to the system document picker, which is
@@ -19,11 +24,17 @@ import '../state/wallet_scope.dart';
 /// enters Dart: [CoreCrypto.createBackup] reads the entropy natively behind a
 /// biometric prompt and returns it already sealed.
 class BackupExportScreen extends StatefulWidget {
-  const BackupExportScreen({super.key, this.files, this.clock});
+  const BackupExportScreen({
+    super.key,
+    this.files,
+    this.clock,
+    this.qrRenderer,
+  });
 
   /// Injected in tests; production uses the platform channel.
   final FileExchange? files;
   final DateTime Function()? clock;
+  final Future<Uint8List> Function(String payload)? qrRenderer;
 
   @override
   State<BackupExportScreen> createState() => _BackupExportScreenState();
@@ -34,6 +45,9 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
   final _confirm = TextEditingController();
   bool _busy = false;
   String? _error;
+  bool _qrMode = false;
+  bool _riskAccepted = false;
+  Uint8List? _qrPng;
 
   FileExchange get _files => widget.files ?? FileExchange.instance;
   DateTime Function() get _clock => widget.clock ?? DateTime.now;
@@ -60,6 +74,8 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
 
   bool get _canSubmit =>
       !_busy &&
+      WalletScope.of(context).current is HotWallet &&
+      (!_qrMode || _riskAccepted) &&
       CoreCryptoValidation.backupPasswordIssue(_password.text) == null &&
       _confirm.text.isNotEmpty;
 
@@ -71,7 +87,7 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
     }
     final wallets = WalletScope.of(context);
     final wallet = wallets.current;
-    if (wallet == null) return;
+    if (wallet is! HotWallet || !_canSubmit) return;
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
 
     setState(() => _busy = true);
@@ -80,6 +96,21 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
         walletId: wallet.id,
         password: _password.text,
       );
+      if (!mounted) return;
+      if (_qrMode) {
+        final payload = WalletBackupQr.encode(sealed);
+        _password.clear();
+        _confirm.clear();
+        final png =
+            await (widget.qrRenderer?.call(payload) ??
+                renderBackupQrPng(
+                  payload: payload,
+                  title: l10n.backupQrTitle,
+                  instruction: l10n.backupQrImageInstruction,
+                ));
+        if (mounted) setState(() => _qrPng = png);
+        return;
+      }
       final now = _clock();
       final saved = await _files.saveFile(
         suggestedName: WalletBackupFile.suggestedFileName(now),
@@ -102,6 +133,44 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
       // The user dismissed the biometric prompt: not an error worth shouting.
     } on CoreCryptoException {
       messenger.showSnackBar(SnackBar(content: Text(l10n.backupFailed)));
+    } catch (_) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text(l10n.backupFailed)));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _saveQr() async {
+    final png = _qrPng;
+    if (png == null || _busy) return;
+    final l10n = AppLocalizations.of(context);
+    setState(() => _busy = true);
+    try {
+      final result = await _files.saveFile(
+        suggestedName: WalletBackupFile.suggestedFileName(
+          _clock(),
+        ).replaceFirst('.ktbak', '-encrypted.png'),
+        bytes: png,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(switch (result.outcome) {
+            FileExchangeOutcome.done => l10n.backupSaved,
+            FileExchangeOutcome.cancelled => l10n.backupCancelled,
+            FileExchangeOutcome.unsupported => l10n.backupUnsupported,
+            FileExchangeOutcome.failed => l10n.backupFailed,
+          }),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.backupFailed)));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -110,6 +179,37 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final qrPng = _qrPng;
+    if (qrPng != null) {
+      return SecureContent(
+        child: KtScreen(
+          navBar: KtNavBar(
+            title: l10n.backupQrTitle,
+            onBack: () => Navigator.of(context).maybePop(),
+          ),
+          bottom: KtPrimaryButton(
+            label: l10n.backupQrSave,
+            loading: _busy,
+            onPressed: _busy ? null : _saveQr,
+          ),
+          children: [
+            Image.memory(
+              qrPng,
+              key: const ValueKey('backup-qr-preview'),
+              semanticLabel: l10n.backupQrTitle,
+            ),
+            Text(
+              l10n.backupQrWarning,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.6,
+                color: WalletColors.text2,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     final passwordIssue = _password.text.isEmpty
         ? null
         : CoreCryptoValidation.backupPasswordIssue(_password.text);
@@ -127,18 +227,45 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
           onBack: () => Navigator.of(context).maybePop(),
         ),
         bottom: KtPrimaryButton(
-          label: l10n.backupCreate,
+          label: _qrMode ? l10n.backupQrGenerate : l10n.backupCreate,
+          loading: _busy,
           onPressed: _canSubmit ? _create : null,
         ),
         children: [
+          KtSegmented(
+            key: const ValueKey('backup-format'),
+            options: [l10n.backupFileFormat, l10n.backupQrTitle],
+            selected: _qrMode ? 1 : 0,
+            onChanged: _busy
+                ? null
+                : (value) => setState(() => _qrMode = value == 1),
+          ),
           Text(
-            l10n.backupIntro,
+            _qrMode ? l10n.backupQrIntro : l10n.backupIntro,
             style: const TextStyle(
               fontSize: 13,
               height: 1.6,
               color: WalletColors.text2,
             ),
           ),
+          if (_qrMode)
+            CheckboxListTile(
+              key: const ValueKey('backup-qr-risk'),
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: _riskAccepted,
+              onChanged: _busy
+                  ? null
+                  : (value) => setState(() => _riskAccepted = value ?? false),
+              title: Text(
+                l10n.backupQrWarning,
+                style: const TextStyle(
+                  fontSize: 12,
+                  height: 1.5,
+                  color: WalletColors.text2,
+                ),
+              ),
+            ),
           KtCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -178,7 +305,7 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
                     style: const TextStyle(
                       fontSize: 12,
                       height: 1.6,
-                      color: Color(0xFF8A6100),
+                      color: Color(0xFF795500),
                     ),
                   ),
                 ),
@@ -205,6 +332,7 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
       TextField(
         controller: controller,
         obscureText: true,
+        enableIMEPersonalizedLearning: false,
         enableSuggestions: false,
         autocorrect: false,
         enabled: !_busy,
@@ -221,9 +349,10 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
 /// W33 从备份恢复 — picks a `.ktbak` file, asks for its password, and hands the
 /// recovered phrase to the ordinary import path.
 class BackupRestoreScreen extends StatefulWidget {
-  const BackupRestoreScreen({super.key, this.files});
+  const BackupRestoreScreen({super.key, this.files, this.qrImages});
 
   final FileExchange? files;
+  final BackupQrImageReader? qrImages;
 
   @override
   State<BackupRestoreScreen> createState() => _BackupRestoreScreenState();
@@ -253,13 +382,27 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     super.dispose();
   }
 
-  Future<void> _pick() async {
+  Future<void> _pick({bool image = false}) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await _pickDocument(image: image);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _pickDocument({bool image = false}) async {
     final l10n = AppLocalizations.of(context);
     final PickedFile? picked;
     try {
       picked = await _files.pickFile(
-        extensions: const [WalletBackupFile.fileExtension],
-        maxBytes: WalletBackupFile.maxFileBytes,
+        extensions: image
+            ? const ['png', 'jpg', 'jpeg']
+            : const [WalletBackupFile.fileExtension],
+        maxBytes: image
+            ? BackupQrImageReader.maxFileBytes
+            : WalletBackupFile.maxFileBytes,
       );
     } on FileTooLargeException {
       if (!mounted) return;
@@ -283,6 +426,29 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       return;
     }
     if (picked == null || !mounted) return;
+    if (image || _looksLikeImage(picked.bytes)) {
+      setState(() => _busy = true);
+      try {
+        if (!_looksLikeImage(picked.bytes)) {
+          throw const BackupFormatException('not a PNG or JPEG image');
+        }
+        final value = await (widget.qrImages ?? const BackupQrImageReader())
+            .read(picked.bytes);
+        if (mounted) _acceptQr(value, name: picked.name);
+      } catch (_) {
+        if (mounted) {
+          _password.clear();
+          setState(() {
+            _picked = null;
+            _fileError = l10n.backupQrInvalid;
+            _passwordError = null;
+          });
+        }
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
+      return;
+    }
     // Validate the envelope at pick time so a wrong file is called out before
     // the user types a password that was never going to work.
     try {
@@ -306,6 +472,43 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     });
   }
 
+  bool _looksLikeImage(Uint8List bytes) =>
+      bytes.length >= 8 &&
+      ((bytes[0] == 0x89 &&
+              bytes[1] == 0x50 &&
+              bytes[2] == 0x4e &&
+              bytes[3] == 0x47) ||
+          (bytes[0] == 0xff && bytes[1] == 0xd8 && bytes[2] == 0xff));
+
+  void _acceptQr(String value, {String? name}) {
+    final backup = WalletBackupQr.decode(value);
+    _password.clear();
+    setState(() {
+      _picked = PickedFile(
+        name: name ?? AppLocalizations.of(context).backupQrTitle,
+        bytes: WalletBackupFile.encode(
+          sealed: backup.sealed,
+          createdAt: DateTime.now(),
+        ),
+      );
+      _fileError = null;
+      _passwordError = null;
+    });
+  }
+
+  Future<void> _scan() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final value = await Navigator.of(context).push<String>(
+        MaterialPageRoute(builder: (_) => const BackupQrScanScreen()),
+      );
+      if (value != null && mounted) _acceptQr(value);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _restore() async {
     final l10n = AppLocalizations.of(context);
     final picked = _picked;
@@ -323,15 +526,16 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         format: decoded.cryptoFormat,
       );
     } on BackupFormatException {
-      setState(() => _fileError = l10n.restoreNotABackup);
+      if (mounted) setState(() => _fileError = l10n.restoreNotABackup);
     } on CoreCryptoException {
       // GCM cannot tell a wrong password from a damaged file, and neither can
       // we — say both rather than guess.
-      setState(() => _passwordError = l10n.restoreWrongPassword);
+      if (mounted) setState(() => _passwordError = l10n.restoreWrongPassword);
     } finally {
       if (mounted && mnemonic == null) setState(() => _busy = false);
     }
     if (mnemonic == null || !mounted) return;
+    _password.clear();
 
     try {
       await wallets.importWallet(
@@ -348,6 +552,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       return;
     }
     if (!mounted) return;
+    _password.clear();
     messenger.showSnackBar(SnackBar(content: Text(l10n.restoreRestored)));
     context.go('/home');
   }
@@ -370,12 +575,24 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         ),
         children: [
           Text(
-            l10n.restoreFromBackupDesc,
+            l10n.backupQrRestoreIntro,
             style: const TextStyle(
               fontSize: 13,
               height: 1.6,
               color: WalletColors.text2,
             ),
+          ),
+          TextButton.icon(
+            key: const ValueKey('backup-qr-scan'),
+            onPressed: _busy ? null : _scan,
+            icon: const Icon(Icons.qr_code_2),
+            label: Text(l10n.backupQrScan),
+          ),
+          TextButton.icon(
+            key: const ValueKey('backup-qr-pick-image'),
+            onPressed: _busy ? null : () => _pick(image: true),
+            icon: const Icon(Icons.image_outlined),
+            label: Text(l10n.backupQrPickImage),
           ),
           KtCard(
             child: Semantics(
@@ -468,6 +685,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                 TextField(
                   controller: _password,
                   obscureText: true,
+                  enableIMEPersonalizedLearning: false,
                   enableSuggestions: false,
                   autocorrect: false,
                   enabled: picked != null && !_busy,
@@ -483,6 +701,54 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class BackupQrScanScreen extends StatefulWidget {
+  const BackupQrScanScreen({super.key});
+  @override
+  State<BackupQrScanScreen> createState() => _BackupQrScanScreenState();
+}
+
+class _BackupQrScanScreenState extends State<BackupQrScanScreen> {
+  bool _done = false;
+  String? _error;
+  void _scanned(String text) {
+    if (_done || !mounted) return;
+    try {
+      WalletBackupQr.decode(text);
+      _done = true;
+      Navigator.of(context).pop(text);
+    } on BackupFormatException {
+      setState(() => _error = AppLocalizations.of(context).backupQrInvalid);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return SecureContent(
+      child: KtScreen(
+        navBar: KtNavBar(
+          title: l10n.backupQrScan,
+          onBack: () => Navigator.of(context).maybePop(),
+        ),
+        children: [
+          Text(
+            l10n.backupQrScanHint,
+            style: const TextStyle(color: WalletColors.text2),
+          ),
+          ScanViewfinder(
+            height: 320,
+            frameColor: WalletColors.accent,
+            onScanned: _scanned,
+            semanticLabel: l10n.backupQrScan,
+          ),
+          if (_error != null)
+            Text(_error!, style: const TextStyle(color: WalletColors.red)),
         ],
       ),
     );

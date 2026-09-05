@@ -1,12 +1,26 @@
 # Building KT Wallet
 
+### Android emulator authentication in debug builds
+
+KT Wallet debug builds automatically skip native system-authentication prompts
+on recognized Android SDK emulators, displaying a localized test-mode warning.
+Emulator test keys and encrypted blobs use a separate namespace; they are not
+read by release/profile builds. Never send real funds to these test wallets.
+Physical devices, release/profile builds, and KT Cold Signer retain their
+normal authentication policy. This shortcut does not bypass the app PIN or
+alter existing production keys. Switching between test and normal vaults is
+not an automatic wallet migration.
+
 Two Flutter apps in a pub workspace:
 
-- `apps/kt_wallet` — **the shipping single installer**: first-launch device-mode
-  picker (online wallet / offline signer), with the signer embedded via a path
-  dependency on `cold_signer`
-- `apps/cold_signer` — the air-gapped offline signer, also independently
-  buildable as its own app for users who want a dedicated signer install
+- `apps/kt_wallet` — the online wallet, opening wallet onboarding or the saved
+  wallet directly; it does not depend on or embed `cold_signer`
+- `apps/cold_signer` — the independently installed offline signer for a
+  dedicated offline device
+
+Each app has its own package ID and application storage. They exchange public
+account information and signing requests/responses through the shared QR
+protocol, with no in-app role selection or switching.
 
 Both build for **iOS and Android**. All four targets are verified building:
 

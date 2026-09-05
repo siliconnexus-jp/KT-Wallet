@@ -276,45 +276,32 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
         onTrailing: () => context.push('/token-manage'),
       ),
       children: [
-        Container(
-          height: 52,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            color: WalletColors.surface,
-            borderRadius: BorderRadius.circular(12),
-          ),
+        KtGlassSurface(
+          radius: 18,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Row(
             children: [
               const Icon(Icons.search, size: 18, color: WalletColors.text3),
               const SizedBox(width: 8),
               Expanded(
-                // The placeholder is drawn as a plain Text (not the TextField's
-                // hint) so the idle screen renders exactly like the design.
-                child: Stack(
-                  alignment: Alignment.centerLeft,
-                  children: [
-                    if (_query.isEmpty)
-                      Text(
-                        l10n.searchAssetHint,
-                        maxLines: 1,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: WalletColors.text3,
-                        ),
-                      ),
-                    TextField(
-                      onChanged: (v) => setState(() => _query = v),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: WalletColors.text,
-                      ),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(vertical: 14),
-                        border: InputBorder.none,
-                      ),
-                    ),
-                  ],
+                child: TextField(
+                  key: const ValueKey('assets-search-input'),
+                  onChanged: (v) => setState(() => _query = v),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: WalletColors.text,
+                  ),
+                  decoration: InputDecoration(
+                    filled: false,
+                    isDense: true,
+                    hintText: l10n.searchAssetHint,
+                    hintStyle: const TextStyle(color: WalletColors.text2),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                  ),
                 ),
               ),
             ],
@@ -431,7 +418,6 @@ class _AssetTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final largeText = MediaQuery.textScalerOf(context).scale(14) >= 20;
-    final showsTronAccountState = a.$9?.isTronSelectedDeployment ?? false;
     return Semantics(
       button: true,
       label: '${a.$3}, ${a.$4}, ${a.$5}',
@@ -464,10 +450,6 @@ class _AssetTile extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            if (showsTronAccountState) ...[
-                              const SizedBox(width: 6),
-                              const TronActivationBadge(),
-                            ],
                           ],
                         ),
                         const SizedBox(height: 3),
@@ -550,10 +532,6 @@ class _AssetTile extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            if (showsTronAccountState) ...[
-                              const SizedBox(width: 6),
-                              const TronActivationBadge(),
-                            ],
                           ],
                         ),
                         const SizedBox(height: 3),
@@ -800,10 +778,6 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
                 label: ref.network ?? network.name,
                 dotColor: _chainDot[chainOf(actionCoin)]!,
               ),
-            if (actionCoin == Coin.tron) ...[
-              const SizedBox(height: 8),
-              const TronActivationBadge(),
-            ],
           ],
         ),
         Row(
@@ -951,7 +925,7 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
     AssetRef ref,
   ) async {
     final l10n = AppLocalizations.of(context);
-    await showModalBottomSheet<void>(
+    await showKtModalBottomSheet<void>(
       context: context,
       backgroundColor: WalletColors.surface,
       shape: const RoundedRectangleBorder(
@@ -1011,10 +985,6 @@ class _TokenDetailScreenState extends State<TokenDetailScreen> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (at.coin == Coin.tron) ...[
-                        const TronActivationBadge(),
-                        const SizedBox(width: 8),
-                      ],
                       if (i == _chainIndex)
                         const Icon(
                           Icons.check,
@@ -1657,7 +1627,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     final chains = _availableChains;
     var chainIndex = _selected.clamp(0, chains.length - 1);
     var choosingAsset = chains.length == 1;
-    await showModalBottomSheet<void>(
+    await showKtModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: WalletColors.surface,
@@ -1740,8 +1710,6 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                               ),
                             ),
                           ),
-                          if (chain.coin == Coin.tron)
-                            const TronActivationBadge(),
                         ],
                       ),
                     ),
@@ -1772,10 +1740,6 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (option.coin == Coin.tron) ...[
-                                  const TronActivationBadge(),
-                                  const SizedBox(width: 8),
-                                ],
                                 const Icon(
                                   Icons.chevron_right,
                                   color: WalletColors.text3,
@@ -2058,10 +2022,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
             ),
           ),
         ),
-        if (chain.coin == Coin.tron) ...[
-          const Center(child: TronActivationBadge()),
-          const TronActivationNotice(),
-        ],
+        if (chain.coin == Coin.tron) ...[const TronActivationNotice()],
         KtCard(
           padding: const EdgeInsets.all(24),
           child: Column(

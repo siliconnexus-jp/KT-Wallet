@@ -1,0 +1,3 @@
+<resources>
+    <string name="kt_emulator_test_auth">模拟器测试模式：已跳过系统验证，请勿存入真实资产。</string>
+</resources>

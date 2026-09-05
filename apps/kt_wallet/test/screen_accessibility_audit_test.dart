@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:core_crypto/core_crypto.dart';
 import 'package:core_crypto/testing.dart';
 import 'package:flutter/material.dart';
@@ -66,7 +68,7 @@ void main() {
                   localizationsDelegates:
                       AppLocalizations.localizationsDelegates,
                   supportedLocales: AppLocalizations.supportedLocales,
-                  theme: ThemeData(scaffoldBackgroundColor: WalletColors.bg),
+                  theme: ktWalletTheme(),
                   home: WalletScope(
                     controller: controller,
                     child: Builder(builder: entry.value.$2),
@@ -84,6 +86,15 @@ void main() {
                 meetsGuideline(androidTapTargetGuideline),
               );
               await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
+              final evidence = Platform.environment['KT_A11Y_QA_OUTPUT'];
+              if (evidence != null) {
+                await expectLater(
+                  find.byType(MaterialApp),
+                  matchesGoldenFile(
+                    '$evidence/${entry.value.$1.substring(1)}-${locale.languageCode}-${viewport.$1}.png',
+                  ),
+                );
+              }
               await expectLater(tester, meetsGuideline(textContrastGuideline));
             } finally {
               semantics.dispose();

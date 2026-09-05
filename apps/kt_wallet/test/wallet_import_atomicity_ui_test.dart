@@ -1,4 +1,5 @@
 import 'package:core_crypto/testing.dart';
+import 'package:core_crypto/core_crypto.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,6 +18,18 @@ class _SaveFailureStore extends WalletStore {
   @override
   Future<void> save(Wallet wallet) =>
       Future<void>.error(StateError('wallet database unavailable'));
+}
+
+class _UnavailableAuthCrypto extends MockCoreCrypto {
+  @override
+  Future<void> storeWallet({
+    required String walletId,
+    required String mnemonic,
+    bool requireAuth = true,
+    String? kdfPassword,
+  }) async {
+    throw const AuthUnavailableException();
+  }
 }
 
 Future<void> _pumpImport(
@@ -48,6 +61,24 @@ Future<void> _enterPhrase(WidgetTester tester, String mnemonic) async {
 }
 
 void main() {
+  testWidgets('unavailable authentication explains device setup on import', (
+    tester,
+  ) async {
+    final crypto = _UnavailableAuthCrypto();
+    final controller = WalletController(WalletManager(), crypto: crypto);
+    await _pumpImport(tester, controller);
+    await _enterPhrase(tester, await crypto.generateMnemonic());
+    await tester.tap(find.text('导入'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('锁屏 PIN 或密码'), findsOneWidget);
+    expect(controller.wallets, isEmpty);
+    expect(find.byType(MnemonicImportScreen), findsOneWidget);
+    expect(
+      tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+      isNotEmpty,
+    );
+  });
+
   testWidgets('duplicate import stays on screen and explains the rejection', (
     tester,
   ) async {

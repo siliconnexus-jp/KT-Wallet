@@ -1,0 +1,3 @@
+<resources>
+    <string name="kt_emulator_test_auth">エミュレーターのテストモード：システム認証を省略しました。実資産は入金しないでください。</string>
+</resources>

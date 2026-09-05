@@ -1,5 +1,6 @@
 import 'package:chains/chains.dart' show Amount, Chain;
 import 'package:core_crypto/core_crypto.dart' show Coin;
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -19,8 +20,8 @@ import '../market/market_controller.dart';
 import '../market/market_scope.dart';
 import '../market/token_balance_service.dart';
 import '../widgets/market_offline_banner.dart';
+import '../widgets/liquid_glass.dart';
 import '../widgets/token_icon.dart';
-import '../widgets/tron_activation_badge.dart';
 import '../state/app_prefs.dart';
 import '../state/networks.dart';
 import '../state/wallet_controller.dart';
@@ -129,34 +130,34 @@ class _HomeScreenState extends State<HomeScreen> {
     return BalancePrivacy(
       hidden: hidden,
       toggle: () => setState(() => _hiddenOverride = !hidden),
-      child: Scaffold(
-        backgroundColor: WalletColors.surface,
-        // The bar floats over the retained tab surfaces, but its white
-        // background deliberately includes the iOS bottom safe area. Leaving
-        // SafeArea outside the painted surface made the final asset row show
-        // through underneath the navigation controls on physical iPhones.
-        body: SafeArea(
-          bottom: false,
-          child: Stack(
-            children: [
-              _AnimatedTabStack(
-                selected: _tab,
-                children: [
-                  _HomeTab(
-                    assets: widget.assets ?? demoAssets,
-                    onViewAll: () => _selectTab(1),
-                  ),
-                  const _AssetsTab(),
-                  const _SettingsTab(),
-                ],
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: _TabBar(selected: _tab, onTap: _selectTab),
-              ),
-            ],
+      child: KtWalletBackdrop(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          // Content can scroll beneath the clipped glass; each page reserves
+          // the capsule height, margins and the device's bottom safe area.
+          body: SafeArea(
+            bottom: false,
+            child: Stack(
+              children: [
+                _AnimatedTabStack(
+                  selected: _tab,
+                  children: [
+                    _HomeTab(
+                      assets: widget.assets ?? demoAssets,
+                      onViewAll: () => context.push('/assets'),
+                    ),
+                    const RecordsScreen(tabbed: true),
+                    const _SettingsTab(),
+                  ],
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _TabBar(selected: _tab, onTap: _selectTab),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -166,14 +167,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
 /// Room a tab's scroll view must leave at the bottom so its last row is not
 /// stuck under the floating tab bar.
-const kTabBarInset = 67.0;
-const _largeTextTabBarInset = 94.0;
-const _inactiveTabColor = Color(0xFF8A8F98);
+const kTabBarInset = 94.4;
 
 double _tabBarInsetFor(BuildContext context) =>
-    MediaQuery.textScalerOf(context).scale(18) >= 29
-    ? _largeTextTabBarInset
-    : kTabBarInset;
+    LiquidWalletTabs.heightFor(context) +
+    36 +
+    MediaQuery.paddingOf(context).bottom;
 
 const _tabFadeDuration = Duration(milliseconds: 140);
 const _tabMotionCurve = Cubic(0.2, 0.8, 0.2, 1);
@@ -286,7 +285,6 @@ class _HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<_HomeTab> {
-  final _search = TextEditingController();
   _HomeAssetCategory _category = _HomeAssetCategory.coins;
   WalletController? _tokenController;
 
@@ -301,12 +299,6 @@ class _HomeTabState extends State<_HomeTab> {
     });
   }
 
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
   /// "更多" quick action: bottom sheet with the secondary destinations.
   Future<void> _showMore(BuildContext context) async {
     final l10n = AppLocalizations.of(context);
@@ -319,7 +311,7 @@ class _HomeTabState extends State<_HomeTab> {
         '/wallet-manage',
       ),
     ];
-    await showModalBottomSheet<void>(
+    await showKtModalBottomSheet<void>(
       context: context,
       backgroundColor: WalletColors.surface,
       shape: const RoundedRectangleBorder(
@@ -389,45 +381,6 @@ class _HomeTabState extends State<_HomeTab> {
     setState(() => _category = value);
   }
 
-  String get _query => _search.text.trim().toLowerCase();
-
-  bool _matches(Iterable<String?> values) {
-    final query = _query;
-    if (query.isEmpty) return true;
-    return values.any((value) => value?.toLowerCase().contains(query) ?? false);
-  }
-
-  List<AssetRow> _visibleAssets(List<AssetRow> source) => [
-    for (final asset in source)
-      if (_matches([
-        asset.name,
-        asset.sub,
-        asset.value,
-        asset.ref?.symbol,
-        asset.ref?.network,
-        asset.ref?.contract,
-        ...?asset.ref?.group.map(
-          (deployment) => '${deployment.network} ${deployment.contract ?? ''}',
-        ),
-      ]))
-        asset,
-  ];
-
-  List<Network> _visibleNetworks(NetworkController controller) => [
-    for (final chain in Chain.values)
-      if (_matches(() {
-        final network = controller.activeFor(chain);
-        return [network.name, network.symbol, network.id, chain.name];
-      }()))
-        controller.activeFor(chain),
-  ];
-
-  List<CustomToken> _visibleCustomTokens(WalletController controller) => [
-    for (final token in controller.tokens)
-      if (_matches([token.symbol, token.name, token.network, token.contract]))
-        token,
-  ];
-
   Widget _categoryContent(
     BuildContext context, {
     required List<AssetRow> assets,
@@ -437,34 +390,23 @@ class _HomeTabState extends State<_HomeTab> {
     final l10n = AppLocalizations.of(context);
     switch (_category) {
       case _HomeAssetCategory.coins:
-        final visible = _visibleAssets(assets);
-        if (visible.isEmpty) {
-          return _HomeEmptyState(
-            icon: Icons.search_off_rounded,
-            text: l10n.homeNoMatchingAssets,
-          );
-        }
-        return _HomeAssetList(assets: visible);
+        return _HomeAssetList(assets: assets);
       case _HomeAssetCategory.networks:
-        final visible = _visibleNetworks(networks);
-        if (visible.isEmpty) {
-          return _HomeEmptyState(
-            icon: Icons.search_off_rounded,
-            text: l10n.homeNoMatchingNetworks,
-          );
-        }
-        return _HomeNetworkList(networks: visible);
+        return _HomeNetworkList(
+          networks: [
+            for (final chain in Chain.values) networks.activeFor(chain),
+          ],
+        );
       case _HomeAssetCategory.custom:
-        final visible = _visibleCustomTokens(wallets);
-        if (visible.isEmpty) {
+        if (wallets.tokens.isEmpty) {
           return _HomeEmptyState(
             icon: Icons.toll_outlined,
-            text: _query.isEmpty ? l10n.tokensEmpty : l10n.noMatchingTokens,
+            text: l10n.tokensEmpty,
             actionLabel: l10n.settingsTokenManage,
             onAction: () => context.push('/token-manage'),
           );
         }
-        return _HomeCustomTokenList(tokens: visible);
+        return _HomeCustomTokenList(tokens: wallets.tokens);
     }
   }
 
@@ -512,16 +454,10 @@ class _HomeTabState extends State<_HomeTab> {
       slivers: [
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 2, 18, 0),
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _HomeSearchRow(
-                  controller: _search,
-                  onChanged: (_) => setState(() {}),
-                  onScan: () => context.push('/scan-account'),
-                ),
-                const SizedBox(height: 10),
                 _Header(
                   wallet: wallet,
                   onTapPill: () => context.push('/switcher'),
@@ -560,7 +496,7 @@ class _HomeTabState extends State<_HomeTab> {
                   const _FiatHiddenTestnetNote(),
                 ],
                 const SizedBox(height: 10),
-                _ActionRow(isHot: isHot, onMore: () => _showMore(context)),
+                _ActionRow(onMore: () => _showMore(context)),
                 if (isHot && !wallet.backedUp) ...[
                   const SizedBox(height: 10),
                   const _BackupBanner(),
@@ -609,120 +545,6 @@ class _HomeTabState extends State<_HomeTab> {
   }
 }
 
-class _HomeSearchRow extends StatelessWidget {
-  const _HomeSearchRow({
-    required this.controller,
-    required this.onChanged,
-    required this.onScan,
-  });
-
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-  final VoidCallback onScan;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return Row(
-      children: [
-        Expanded(
-          child: SizedBox(
-            height: 48,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Positioned.fill(
-                  top: 4,
-                  bottom: 4,
-                  child: DecoratedBox(
-                    key: const ValueKey('home-search-surface'),
-                    decoration: BoxDecoration(
-                      color: WalletColors.bg,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-                TextField(
-                  key: const ValueKey('home-search-field'),
-                  controller: controller,
-                  onChanged: onChanged,
-                  textAlignVertical: TextAlignVertical.center,
-                  textInputAction: TextInputAction.search,
-                  autocorrect: false,
-                  decoration: InputDecoration(
-                    hintText: l10n.homeSearchHint,
-                    hintStyle: const TextStyle(
-                      fontSize: 13,
-                      color: WalletColors.text3,
-                    ),
-                    prefixIcon: const Icon(
-                      Icons.search_rounded,
-                      size: 17,
-                      color: WalletColors.text2,
-                    ),
-                    prefixIconConstraints: const BoxConstraints(
-                      minWidth: 38,
-                      minHeight: 48,
-                    ),
-                    suffixIcon: controller.text.isEmpty
-                        ? null
-                        : IconButton(
-                            tooltip: l10n.actionClose,
-                            onPressed: () {
-                              controller.clear();
-                              onChanged('');
-                            },
-                            icon: const Icon(
-                              Icons.close_rounded,
-                              size: 18,
-                              color: WalletColors.text3,
-                            ),
-                          ),
-                    suffixIconConstraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
-                    ),
-                    isDense: true,
-                    contentPadding: EdgeInsets.zero,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: WalletColors.text,
-                        width: 1.2,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 4),
-        IconButton(
-          key: const ValueKey('home-scan-button'),
-          tooltip: l10n.scanAccountQr,
-          onPressed: onScan,
-          style: IconButton.styleFrom(
-            minimumSize: const Size.square(48),
-            maximumSize: const Size.square(48),
-            padding: EdgeInsets.zero,
-            backgroundColor: Colors.transparent,
-            foregroundColor: WalletColors.text,
-            shape: const CircleBorder(),
-          ),
-          icon: const SizedBox.square(
-            key: ValueKey('home-scan-surface'),
-            dimension: 36,
-            child: Icon(Icons.qr_code_scanner_rounded, size: 21),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _HomeCategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
   const _HomeCategoryHeaderDelegate({
     required this.category,
@@ -754,8 +576,7 @@ class _HomeCategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
     ];
     return Material(
       key: const ValueKey('home-category-header'),
-      color: WalletColors.surface,
-      shape: const Border(bottom: BorderSide(color: WalletColors.border)),
+      color: const Color(0xFFF2F5FA),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 18),
         child: Row(
@@ -860,18 +681,24 @@ class _HomeAssetList extends StatelessWidget {
   final List<AssetRow> assets;
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      for (final asset in assets) ...[
-        _PressScale(
-          onTap: asset.ref == null
-              ? null
-              : () => context.push('/token', extra: asset.ref),
-          semanticLabel: '${asset.name}, ${asset.sub}',
-          child: _HomeAssetTile(asset),
-        ),
-      ],
-    ],
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(top: 12),
+    child: KtGlassSurface(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: Column(
+        children: [
+          for (final asset in assets) ...[
+            _PressScale(
+              onTap: asset.ref == null
+                  ? null
+                  : () => context.push('/token', extra: asset.ref),
+              semanticLabel: '${asset.name}, ${asset.sub}',
+              child: _HomeAssetTile(asset),
+            ),
+          ],
+        ],
+      ),
+    ),
   );
 }
 
@@ -929,7 +756,7 @@ class _HomeAssetTile extends StatelessWidget {
 
     return SizedBox(
       key: ValueKey('home-asset-$symbol-${ref?.network ?? 'aggregate'}'),
-      height: largeText ? (isMultiChain ? 138 : 94) : 58,
+      height: largeText ? (isMultiChain ? 138 : 94) : 70,
       child: Row(
         children: [
           TokenIcon(
@@ -960,10 +787,6 @@ class _HomeAssetTile extends StatelessWidget {
                       if (isMultiChain) ...[
                         const SizedBox(width: 6),
                         multiChainLabel(),
-                      ],
-                      if (ref?.isTronSelectedDeployment ?? false) ...[
-                        const SizedBox(width: 6),
-                        const TronActivationBadge(),
                       ],
                     ],
                   ),
@@ -1071,10 +894,6 @@ class _HomeNetworkList extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            if (network.chain == Chain.tron) ...[
-                              const SizedBox(width: 7),
-                              const TronActivationBadge(),
-                            ],
                           ],
                         ),
                         const SizedBox(height: 3),
@@ -1217,68 +1036,18 @@ Color _chainColor(Chain chain) => switch (chain) {
   Chain.solana => ChainColors.solana,
 };
 
-class _AssetsTab extends StatelessWidget {
-  const _AssetsTab();
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final market = MarketScope.maybeOf(context);
-    final offline = market?.isOffline ?? false;
-    final live = market != null;
-    return ListView(
-      padding: EdgeInsets.fromLTRB(20, 8, 20, 24 + _tabBarInsetFor(context)),
-      children: [
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Text(
-              l10n.tabAssets,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: WalletColors.text,
-              ),
-            ),
-            const TestnetBadge(),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          l10n.assetsSortByValue,
-          style: const TextStyle(fontSize: 13, color: WalletColors.text3),
-        ),
-        const SizedBox(height: 20),
-        if (offline) ...[
-          const MarketOfflineBanner(),
-          const SizedBox(height: 12),
-        ],
-        if (market != null && market.showingCachedData) ...[
-          MarketFreshnessLabel(market: market),
-          const SizedBox(height: 12),
-        ],
-        _AssetsCard(
-          assets: live
-              ? preferredAssetRows(
-                  context,
-                  market,
-                  liveAssetRows(
-                    market,
-                    chainsLabel: l10n.assetOnChains,
-                    fiatFormatter: (usd) => formatFiatForContext(context, usd),
-                  ),
-                )
-              : demoAssets,
-        ),
-      ],
-    );
-  }
-}
-
 /// Real transaction history. With no [asset], this is the wallet-wide merged
 /// list used by the home action. With an [asset], records are restricted to
 /// its currently selected deployment (symbol + chain/network).
 class RecordsScreen extends StatefulWidget {
-  const RecordsScreen({super.key, this.asset, this.embedded = false});
+  const RecordsScreen({
+    super.key,
+    this.asset,
+    this.embedded = false,
+    this.tabbed = false,
+  });
+
+  final bool tabbed;
 
   final AssetRef? asset;
 
@@ -1301,6 +1070,12 @@ class _RecordsScreenState extends State<RecordsScreen> {
   bool _showUnverifiedRecords = false;
   _HistoryTypeFilter _typeFilter = _HistoryTypeFilter.transfers;
   String? _selectedNetworkId;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.tabbed) _typeFilter = _HistoryTypeFilter.all;
+  }
 
   @override
   void didChangeDependencies() {
@@ -1502,7 +1277,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
         final network = networks.activeFor(chainOf(coin));
         options.putIfAbsent(
           network.id,
-          () => _HistoryNetworkOption(network.id, network.name),
+          () => _HistoryNetworkOption(network.id, network.name, network.chain),
         );
       }
     }
@@ -1514,6 +1289,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
         () => _HistoryNetworkOption(
           id,
           networks?.byId(id)?.name ?? _fallbackNetworkName(record.coin),
+          networks?.byId(id)?.chain ?? chainOf(record.coin),
         ),
       );
     }
@@ -1574,12 +1350,26 @@ class _RecordsScreenState extends State<RecordsScreen> {
           '',
           l10n.historyAllNetworks,
           const ValueKey('history-network-option-all'),
+          leading: Container(
+            width: 32,
+            height: 32,
+            decoration: const BoxDecoration(
+              color: WalletColors.bg,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.language_rounded,
+              size: 22,
+              color: WalletColors.text2,
+            ),
+          ),
         ),
         for (final network in networks)
           _HistoryPickerOption<String>(
             network.id,
             network.label,
             ValueKey('history-network-option-${network.id}'),
+            leading: ChainIcon(chain: network.chain, size: 32),
           ),
       ],
     );
@@ -1594,7 +1384,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
     required String title,
     required T selected,
     required List<_HistoryPickerOption<T>> options,
-  }) => showModalBottomSheet<T>(
+  }) => showKtModalBottomSheet<T>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
@@ -1603,10 +1393,6 @@ class _RecordsScreenState extends State<RecordsScreen> {
     builder: (sheetContext) => Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.72,
-      ),
-      decoration: const BoxDecoration(
-        color: WalletColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1638,6 +1424,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
           const SizedBox(height: 10),
           Flexible(
             child: ListView(
+              key: const ValueKey('history-filter-options'),
               shrinkWrap: true,
               padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
               children: [
@@ -1655,6 +1442,10 @@ class _RecordsScreenState extends State<RecordsScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: Row(
                             children: [
+                              if (option.leading != null) ...[
+                                ExcludeSemantics(child: option.leading!),
+                                const SizedBox(width: 12),
+                              ],
                               Expanded(
                                 child: Text(
                                   option.label,
@@ -1695,38 +1486,59 @@ class _RecordsScreenState extends State<RecordsScreen> {
     ),
   );
 
-  Widget _historyFilterChip(AppLocalizations l10n) => Align(
-    alignment: Alignment.centerLeft,
+  Widget _historyFilterChip(AppLocalizations l10n) => _filterControl(
+    controlKey: const ValueKey('history-type-filter-button'),
+    label: _typeFilterLabel(l10n),
+    leading: const Icon(
+      CupertinoIcons.slider_horizontal_3,
+      size: 17,
+      color: WalletColors.text2,
+    ),
+    onTap: () => _showTypeFilter(l10n),
+  );
+
+  Widget _filterControl({
+    required Key controlKey,
+    required String label,
+    required Widget leading,
+    required VoidCallback onTap,
+    String? tooltip,
+  }) => Tooltip(
+    message: tooltip ?? label,
     child: Semantics(
       button: true,
-      label: _typeFilterLabel(l10n),
+      label: label,
       child: InkWell(
-        key: const ValueKey('history-type-filter-button'),
-        borderRadius: BorderRadius.circular(999),
-        onTap: () => _showTypeFilter(l10n),
+        key: controlKey,
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 36),
-          padding: const EdgeInsets.symmetric(horizontal: 11),
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: WalletColors.text.withValues(alpha: 0.055),
-            borderRadius: BorderRadius.circular(999),
+            color: const Color(0xDBFFFFFF),
+            border: Border.all(color: Colors.white),
+            borderRadius: BorderRadius.circular(18),
           ),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                _typeFilterLabel(l10n),
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: WalletColors.text,
+              ExcludeSemantics(child: leading),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: WalletColors.text,
+                  ),
                 ),
               ),
               const SizedBox(width: 4),
               const Icon(
-                Icons.arrow_drop_down_rounded,
-                size: 18,
-                color: WalletColors.text,
+                CupertinoIcons.chevron_down,
+                size: 12,
+                color: WalletColors.text2,
               ),
             ],
           ),
@@ -1735,12 +1547,74 @@ class _RecordsScreenState extends State<RecordsScreen> {
     ),
   );
 
+  Widget _filterBar(
+    AppLocalizations l10n,
+    List<_HistoryNetworkOption> networks,
+  ) {
+    final selected = _effectiveNetworkId(networks);
+    final network = networks.where((n) => n.id == selected).firstOrNull;
+    return Row(
+      key: const ValueKey('history-filter-bar'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: _historyFilterChip(l10n)),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _filterControl(
+            controlKey: const ValueKey('history-network-filter-button'),
+            label: network?.label ?? l10n.historyAllNetworks,
+            tooltip: l10n.historyNetworkFilterTitle,
+            leading: network == null
+                ? const Icon(
+                    CupertinoIcons.globe,
+                    size: 18,
+                    color: WalletColors.text2,
+                  )
+                : ChainIcon(chain: network.chain, size: 20),
+            onTap: () => _showNetworkFilter(l10n, networks),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _flatEmptyState(AppLocalizations l10n, {String? message}) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 64),
+    padding: const EdgeInsets.symmetric(vertical: 64, horizontal: 20),
     child: Center(
-      child: Text(
-        message ?? l10n.historyEmpty,
-        style: const TextStyle(fontSize: 13, color: WalletColors.text3),
+      child: Column(
+        children: [
+          const KtGlassSurface(
+            radius: 26,
+            padding: EdgeInsets.all(22),
+            child: Icon(
+              CupertinoIcons.clock,
+              size: 32,
+              color: WalletColors.text2,
+            ),
+          ),
+          const SizedBox(height: 22),
+          Text(
+            message ?? l10n.historyEmpty,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              color: WalletColors.text,
+            ),
+          ),
+          if (message == null) ...[
+            const SizedBox(height: 8),
+            Text(
+              l10n.historyEmptyDescription,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.5,
+                color: WalletColors.text2,
+              ),
+            ),
+          ],
+        ],
       ),
     ),
   );
@@ -1877,7 +1751,6 @@ class _RecordsScreenState extends State<RecordsScreen> {
       chain: chainOf(record.coin),
       isToken: record.assetContract != null,
       officialAsset: assetKind == HistoryAssetKind.official,
-      showTronActivation: record.coin == Coin.tron,
       onTap: () => local == null
           ? context.push('/tx-detail', extra: record)
           : context.push('/tx-detail?id=${Uri.encodeComponent(local.id)}'),
@@ -2228,6 +2101,42 @@ class _RecordsScreenState extends State<RecordsScreen> {
       );
     }
 
+    if (widget.tabbed) {
+      final list = ListView(
+        key: const PageStorageKey('activity-scroll'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(20, 16, 20, 24 + _tabBarInsetFor(context)),
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  l10n.tabActivity,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: WalletColors.text,
+                  ),
+                ),
+              ),
+              const TestnetBadge(),
+            ],
+          ),
+          Text(
+            WalletScope.of(context).current?.name ?? '',
+            style: const TextStyle(color: WalletColors.text2),
+          ),
+          const SizedBox(height: 20),
+          _filterBar(l10n, networks),
+          if (history != null) _cachedHistoryLabel(l10n, history),
+          flatContent,
+        ],
+      );
+      return history == null
+          ? list
+          : RefreshIndicator(onRefresh: history.refresh, child: list);
+    }
+
     return KtScreen(
       backgroundColor: WalletColors.surface,
       padding: EdgeInsets.zero,
@@ -2283,7 +2192,12 @@ class _RecordsScreenState extends State<RecordsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(children: [_historyFilterChip(l10n), const TestnetBadge()]),
+              Row(
+                children: [
+                  Expanded(child: _historyFilterChip(l10n)),
+                  const TestnetBadge(),
+                ],
+              ),
               if (history != null &&
                   history.showingCachedData &&
                   history.lastUpdatedAt != null) ...[
@@ -2300,18 +2214,20 @@ class _RecordsScreenState extends State<RecordsScreen> {
 }
 
 class _HistoryNetworkOption {
-  const _HistoryNetworkOption(this.id, this.label);
+  const _HistoryNetworkOption(this.id, this.label, this.chain);
 
   final String id;
   final String label;
+  final Chain chain;
 }
 
 class _HistoryPickerOption<T> {
-  const _HistoryPickerOption(this.value, this.label, this.key);
+  const _HistoryPickerOption(this.value, this.label, this.key, {this.leading});
 
   final T value;
   final String label;
   final Key key;
+  final Widget? leading;
 }
 
 class _FlatHistoryRecordRow extends StatelessWidget {
@@ -2326,7 +2242,6 @@ class _FlatHistoryRecordRow extends StatelessWidget {
     required this.chain,
     required this.isToken,
     required this.officialAsset,
-    required this.showTronActivation,
     required this.onTap,
   });
 
@@ -2339,7 +2254,6 @@ class _FlatHistoryRecordRow extends StatelessWidget {
   final Chain chain;
   final bool isToken;
   final bool officialAsset;
-  final bool showTronActivation;
   final VoidCallback onTap;
 
   @override
@@ -2380,10 +2294,6 @@ class _FlatHistoryRecordRow extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (showTronActivation) ...[
-                        const SizedBox(width: 6),
-                        const TronActivationBadge(),
-                      ],
                     ],
                   ),
                   const SizedBox(height: 3),
@@ -2662,10 +2572,6 @@ class _RecordRow extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (record.isTron) ...[
-                        const SizedBox(width: 6),
-                        const TronActivationBadge(),
-                      ],
                     ],
                   ),
                   const SizedBox(height: 2),
@@ -2740,20 +2646,21 @@ class _SettingsTab extends StatelessWidget {
         const SizedBox(height: 8),
         Row(
           children: [
-            Text(
-              l10n.tabSettings,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: WalletColors.text,
+            Expanded(
+              child: Text(
+                l10n.tabSettings,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: WalletColors.text,
+                ),
               ),
             ),
             const TestnetBadge(),
           ],
         ),
         const SizedBox(height: 20),
-        KtCard(
-          padding: EdgeInsets.zero,
+        KtGlassSurface(
           child: Column(
             children: [
               for (final (i, item) in items.indexed) ...[
@@ -2784,7 +2691,15 @@ class _SettingsRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: Row(
         children: [
-          Icon(item.icon, size: 20, color: WalletColors.accent),
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEDF3FF),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Icon(item.icon, size: 20, color: WalletColors.accent),
+          ),
           const SizedBox(width: 16),
           Expanded(
             child: Text(
@@ -3120,115 +3035,58 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final isHot = wallet is HotWallet;
-    final kindBadge = WalletTypeBadge(
-      kind: isHot ? WalletKind.hot : WalletKind.watch,
-      label: isHot ? l10n.walletKindHot : l10n.walletKindWatch,
-    );
-    return Row(
+    return Column(
       key: const ValueKey('home-wallet-header'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: Semantics(
-            button: true,
-            label:
-                '${wallet.name}, ${isHot ? l10n.walletKindHot : l10n.walletKindWatch}',
-            customSemanticsActions: {
-              CustomSemanticsAction(label: l10n.walletAddressesTitle): () =>
-                  _showWalletAddresses(context, wallet),
-            },
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onTapPill,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 42),
+        Row(
+          children: [
+            Expanded(
+              child: _PressScale(
+                semanticLabel:
+                    '${wallet.name}, ${isHot ? l10n.walletKindHot : l10n.walletKindWatch}',
+                onTap: onTapPill,
                 child: Row(
+                  key: const ValueKey('home-wallet-switcher'),
                   children: [
                     _Avatar(
                       color: Color(wallet.avatarColor),
                       initial: wallet.name.characters.first,
-                      size: 32,
+                      size: 40,
                     ),
-                    const SizedBox(width: 9),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          LayoutBuilder(
-                            builder: (context, constraints) {
-                              final largeText =
-                                  MediaQuery.textScalerOf(context).scale(10) >=
-                                  16;
-                              final hideBadge =
-                                  largeText && constraints.maxWidth < 210;
-                              return Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      wallet.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                        color: WalletColors.text,
-                                      ),
-                                    ),
-                                  ),
-                                  if (!hideBadge) ...[
-                                    const SizedBox(width: 6),
-                                    kindBadge,
-                                  ],
-                                  const SizedBox(width: 6),
-                                  const Icon(
-                                    Icons.keyboard_arrow_down_rounded,
-                                    size: 15,
-                                    color: WalletColors.text2,
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 2),
                           Row(
-                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Flexible(
                                 child: Text(
-                                  key: const ValueKey('home-wallet-address'),
-                                  _shortAddress(wallet.addresses.eth),
+                                  wallet.name,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
-                                    fontFamily: 'monospace',
-                                    fontSize: 10,
-                                    color: WalletColors.text3,
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.w700,
+                                    color: WalletColors.text,
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 3),
-                              ExcludeSemantics(
-                                child: Tooltip(
-                                  message: l10n.walletAddressesTitle,
-                                  child: InkResponse(
-                                    key: const ValueKey(
-                                      'home-wallet-addresses-button',
-                                    ),
-                                    onTap: () =>
-                                        _showWalletAddresses(context, wallet),
-                                    radius: 18,
-                                    child: const SizedBox.square(
-                                      dimension: 20,
-                                      child: Icon(
-                                        Icons.content_copy_rounded,
-                                        size: 14,
-                                        color: WalletColors.text3,
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                size: 20,
+                                color: WalletColors.text2,
                               ),
                             ],
+                          ),
+                          const SizedBox(height: 4),
+                          WalletTypeBadge(
+                            kind: isHot ? WalletKind.hot : WalletKind.watch,
+                            label: isHot
+                                ? l10n.walletKindHot
+                                : l10n.walletKindWatch,
                           ),
                         ],
                       ),
@@ -3237,9 +3095,66 @@ class _Header extends StatelessWidget {
                 ),
               ),
             ),
-          ),
+            const SizedBox(width: 12),
+            IconButton(
+              key: const ValueKey('home-scan-button'),
+              tooltip: l10n.scanAccountQr,
+              onPressed: () => context.push('/scan-account'),
+              style: IconButton.styleFrom(
+                minimumSize: const Size.square(48),
+                maximumSize: const Size.square(48),
+                padding: EdgeInsets.zero,
+                backgroundColor: Colors.white.withValues(alpha: .9),
+                foregroundColor: WalletColors.text,
+                side: const BorderSide(color: Colors.white),
+                shape: const CircleBorder(),
+              ),
+              icon: const Icon(CupertinoIcons.qrcode, size: 24),
+            ),
+          ],
         ),
-        const TestnetBadge(),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Expanded(
+              child: TextButton(
+                key: const ValueKey('home-wallet-addresses-button'),
+                onPressed: () => _showWalletAddresses(context, wallet),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                  padding: EdgeInsets.zero,
+                  alignment: Alignment.centerLeft,
+                  foregroundColor: WalletColors.text2,
+                ),
+                child: Semantics(
+                  label: l10n.walletAddressesTitle,
+                  excludeSemantics: true,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.list_alt_rounded, size: 17),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          _shortAddress(wallet.addresses.eth),
+                          key: const ValueKey('home-wallet-address'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.chevron_right_rounded, size: 17),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const TestnetBadge(),
+          ],
+        ),
       ],
     );
   }
@@ -3329,7 +3244,7 @@ Future<void> _showWalletAddresses(BuildContext context, Wallet wallet) async {
   final entries = _walletNetworkAddresses(context, wallet);
   final maxHeight = MediaQuery.sizeOf(context).height * 0.82;
   final desiredHeight = (146.0 + entries.length * 72.0).clamp(320.0, maxHeight);
-  await showModalBottomSheet<void>(
+  await showKtModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: WalletColors.surface,
@@ -3450,10 +3365,6 @@ class _WalletAddressesDirectoryState extends State<_WalletAddressesDirectory> {
                         ),
                       ),
                     ),
-                    if (entry.network.chain == Chain.tron) ...[
-                      const SizedBox(width: 7),
-                      TronActivationBadge(status: entry.tronActivation),
-                    ],
                   ],
                 ),
                 const SizedBox(height: 3),
@@ -3820,7 +3731,7 @@ class _BackupBanner extends StatelessWidget {
       // its authenticated recovery-phrase action instead.
       onTap: () => context.push('/wallet-detail?id=$walletId'),
       child: Container(
-        constraints: const BoxConstraints(minHeight: 42),
+        constraints: const BoxConstraints(minHeight: 48),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: const Color(0xFFFFF8E7),
@@ -3925,55 +3836,69 @@ class _Balance extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: toggle,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              key: const ValueKey('home-balance-amount-row'),
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(
-                    key: const ValueKey('home-balance-amount'),
-                    hidden ? '••••••' : amount,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.5,
-                      color: WalletColors.text,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox.square(
-                  key: const ValueKey('home-balance-privacy-button'),
-                  dimension: 44,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Icon(
-                      hidden
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                      size: 16,
-                      color: WalletColors.text3,
-                    ),
-                  ),
-                ),
-              ],
+        child: Container(
+          key: const ValueKey('home-balance-card'),
+          margin: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Colors.white, Color(0xFFE8F0FE)],
             ),
-            const SizedBox(height: 3),
-            Text(
-              key: const ValueKey('home-balance-change'),
-              hidden ? '••••' : change,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: changeColor,
+            border: Border.all(color: Colors.white),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                key: const ValueKey('home-balance-amount-row'),
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      key: const ValueKey('home-balance-amount'),
+                      hidden ? '••••••' : amount,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 38,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.5,
+                        color: WalletColors.text,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox.square(
+                    key: const ValueKey('home-balance-privacy-button'),
+                    dimension: 44,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Icon(
+                        hidden
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        size: 16,
+                        color: WalletColors.text3,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                key: const ValueKey('home-balance-change'),
+                hidden ? '••••' : change,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: changeColor,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -4030,192 +3955,62 @@ _PortfolioChangeDisplay _portfolioChangeDisplay(
 }
 
 class _ActionRow extends StatelessWidget {
-  const _ActionRow({required this.isHot, this.onMore});
-  final bool isHot;
+  const _ActionRow({this.onMore});
   final VoidCallback? onMore;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final actions = isHot
-        ? <(String, IconData, String?)>[
-            (l10n.actionReceive, Icons.qr_code, '/receive'),
-            (l10n.actionSend, Icons.north_east, '/transfer'),
-            (l10n.tabRecords, Icons.history, '/records'),
-            (l10n.actionMore, Icons.grid_view_rounded, null),
-          ]
-        : <(String, IconData, String?)>[
-            (l10n.actionReceive, Icons.qr_code, '/receive'),
-            (l10n.actionSend, Icons.north_east, '/transfer'),
-            (l10n.actionScanSign, Icons.qr_code_scanner, '/scan-result'),
-            (l10n.tabRecords, Icons.history, '/records'),
-          ];
-    Widget action(int index, (String, IconData, String?) item) {
-      final (label, icon, route) = item;
-      return _PressScale(
-        onTap: route == null ? onMore : () => context.push(route),
-        semanticLabel: label,
-        child: Column(
-          children: [
-            Container(
-              key: ValueKey('home-action-surface-$index'),
-              width: 56,
-              height: 56,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                color: Color(0xFFF4F4F5),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 24, color: WalletColors.text),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: WalletColors.text,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
+    final actions = <(String, IconData, String?)>[
+      (l10n.actionReceive, Icons.south_west_rounded, '/receive'),
+      (l10n.actionSend, Icons.north_east_rounded, '/transfer'),
+      (l10n.actionMore, Icons.more_horiz_rounded, null),
+    ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 4, 0, 2),
-      child: LayoutBuilder(
-        builder: (context, constraints) => Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            for (final (index, item) in actions.indexed)
-              if (constraints.maxWidth < 300 ||
-                  MediaQuery.textScalerOf(context).scale(12) >= 20)
-                Expanded(child: action(index, item))
-              else
-                action(index, item),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AssetsCard extends StatelessWidget {
-  const _AssetsCard({required this.assets});
-  final List<AssetRow> assets;
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: WalletColors.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            l10n.tabAssets,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: WalletColors.text,
-            ),
-          ),
-          const SizedBox(height: 18),
-          for (var i = 0; i < assets.length; i++) ...[
-            if (i > 0) const SizedBox(height: 18),
-            _PressScale(
-              // The row's own asset rides along as `extra`; without it the
-              // detail route rendered one fixed token for every row.
-              onTap: () => context.push('/token', extra: assets[i].ref),
-              semanticLabel: '${assets[i].name}, ${assets[i].sub}',
-              child: _AssetTile(assets[i]),
+          for (final (index, item) in actions.indexed) ...[
+            if (index > 0) const SizedBox(width: 10),
+            Expanded(
+              child: _PressScale(
+                onTap: item.$3 == null ? onMore : () => context.push(item.$3!),
+                semanticLabel: item.$1,
+                child: Container(
+                  key: ValueKey('home-action-surface-$index'),
+                  width: double.infinity,
+                  constraints: const BoxConstraints(minHeight: 84),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: .9),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: Colors.white),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(item.$2, size: 25, color: WalletColors.accent),
+                      const SizedBox(height: 8),
+                      Text(
+                        item.$1,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: WalletColors.text,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ],
         ],
       ),
-    );
-  }
-}
-
-class _AssetTile extends StatelessWidget {
-  const _AssetTile(this.a);
-  final AssetRow a;
-
-  @override
-  Widget build(BuildContext context) {
-    // Privacy mode has to reach the rows too — masking only the total left
-    // every per-token amount readable over the user's shoulder.
-    final hidden = BalancePrivacy.of(context);
-    return Row(
-      children: [
-        TokenIcon(
-          symbol: a.name,
-          size: 40,
-          fallbackColor: a.color,
-          fallbackInitial: a.letter,
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      a.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: WalletColors.text,
-                      ),
-                    ),
-                  ),
-                  if (a.ref?.isTronSelectedDeployment ?? false) ...[
-                    const SizedBox(width: 6),
-                    const TronActivationBadge(),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 3),
-              Text(
-                hidden ? '••••' : a.sub,
-                style: const TextStyle(fontSize: 12, color: WalletColors.text2),
-              ),
-            ],
-          ),
-        ),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              hidden ? '••••' : a.value,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: WalletColors.text,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              hidden ? '••' : a.change,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: a.changeColor,
-              ),
-            ),
-          ],
-        ),
-      ],
     );
   }
 }
@@ -4289,139 +4084,10 @@ class _TabBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final tabs = <(String, IconData)>[
-      (l10n.tabHome, Icons.account_balance_wallet_outlined),
-      (l10n.tabAssets, Icons.toll_outlined),
+      (l10n.tabWallet, Icons.account_balance_wallet_outlined),
+      (l10n.tabActivity, Icons.history_rounded),
       (l10n.tabSettings, Icons.settings_outlined),
     ];
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    final height = _tabBarInsetFor(context);
-    return Container(
-      key: const ValueKey('home-tab-background'),
-      height: height,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: const BoxDecoration(
-        color: WalletColors.surface,
-        border: Border(top: BorderSide(color: WalletColors.border)),
-      ),
-      child: Row(
-        children: [
-          for (final (i, tab) in tabs.indexed)
-            Expanded(
-              child: _TabBarItem(
-                key: ValueKey('home-tab-$i'),
-                label: tab.$1,
-                icon: tab.$2,
-                selected: i == selected,
-                reduceMotion: reduceMotion,
-                onTap: () => onTap(i),
-              ),
-            ),
-        ],
-      ),
-    );
+    return LiquidWalletTabs(items: tabs, selected: selected, onSelected: onTap);
   }
-}
-
-class _TabBarItem extends StatefulWidget {
-  const _TabBarItem({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.reduceMotion,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final bool reduceMotion;
-  final VoidCallback onTap;
-
-  @override
-  State<_TabBarItem> createState() => _TabBarItemState();
-}
-
-class _TabBarItemState extends State<_TabBarItem> {
-  bool _pressed = false;
-
-  void _setPressed(bool value) {
-    if (_pressed == value) return;
-    setState(() => _pressed = value);
-  }
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    selected: widget.selected,
-    label: widget.label,
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: (_) => _setPressed(true),
-      onTapCancel: () => _setPressed(false),
-      onTapUp: (_) => _setPressed(false),
-      onTap: () {
-        if (!widget.selected) HapticFeedback.selectionClick();
-        widget.onTap();
-      },
-      child: AnimatedScale(
-        scale: widget.reduceMotion || !_pressed ? 1 : 0.96,
-        duration: widget.reduceMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 100),
-        curve: Curves.easeOutCubic,
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(end: widget.selected ? 1 : 0),
-          duration: widget.reduceMotion
-              ? const Duration(milliseconds: 100)
-              : const Duration(milliseconds: 180),
-          curve: _tabMotionCurve,
-          builder: (context, progress, _) {
-            final color = Color.lerp(_inactiveTabColor, Colors.black, progress);
-            return Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Positioned(
-                        top: 5,
-                        left: 0,
-                        right: 0,
-                        child: Icon(widget.icon, size: 28, color: color),
-                      ),
-                      Positioned(
-                        top: MediaQuery.textScalerOf(context).scale(18) >= 29
-                            ? 55
-                            : 41,
-                        left: 0,
-                        right: 0,
-                        child: Text(
-                          widget.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 13,
-                            height: 1,
-                            fontWeight: FontWeight.lerp(
-                              FontWeight.w500,
-                              FontWeight.w700,
-                              progress,
-                            ),
-                            color: color,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    ),
-  );
 }

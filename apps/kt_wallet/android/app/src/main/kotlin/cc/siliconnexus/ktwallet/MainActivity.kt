@@ -31,7 +31,7 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 
-internal const val MAX_PICK_FILE_BYTES = 256 * 1024
+internal const val MAX_PICK_FILE_BYTES = 8 * 1024 * 1024
 
 internal class PickedFileTooLargeException : Exception()
 
@@ -422,9 +422,9 @@ class MainActivity : FlutterFragmentActivity(), CoreCryptoAuthLifecycleHost {
         pendingFileBytes = bytes
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
-            // A private extension has no registered MIME type; octet-stream
-            // keeps every provider willing to accept the file.
-            type = "application/octet-stream"
+            // Give encrypted QR images normal image previews in Files;
+            // the private .ktbak format keeps its generic binary MIME type.
+            type = if (name.endsWith(".png", ignoreCase = true)) "image/png" else "application/octet-stream"
             putExtra(Intent.EXTRA_TITLE, name)
         }
         try {

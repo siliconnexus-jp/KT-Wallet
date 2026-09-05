@@ -28,6 +28,10 @@ enum BackupPasswordIssue { tooShort, tooLong, predictable }
 /// mnemonics only cross this boundary during onboarding/backup/export flows
 /// (detailed-design.md §2).
 abstract class CoreCrypto {
+  /// Read-only capability check before onboarding. Does not authenticate,
+  /// read secrets, create a key or guarantee a later storage operation.
+  Future<void> checkWalletCreationReady();
+
   /// Generates a BIP-39 mnemonic (128/192/256 bits → 12/18/24 words).
   Future<String> generateMnemonic({int strength = 128});
 

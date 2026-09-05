@@ -11,7 +11,6 @@ import 'package:integration_test/integration_test.dart';
 import 'package:kt_wallet/main.dart';
 import 'package:kt_wallet/src/market/market_scope.dart';
 import 'package:kt_wallet/src/state/app_prefs.dart';
-import 'package:kt_wallet/src/state/device_mode.dart';
 import 'package:kt_wallet/src/state/locale_controller.dart';
 import 'package:kt_wallet/src/state/networks.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
@@ -59,7 +58,6 @@ void main() {
       final prefs = AppPrefsController();
       await prefs.load();
       await prefs.setAppLock(false);
-      final mode = DeviceModeController(initial: DeviceMode.wallet);
       final locale = LocaleController(initial: const Locale('zh'));
       final networks = NetworkController(
         initialEnvironment: NetworkEnvironment.testnet,
@@ -142,7 +140,6 @@ void main() {
         expect(live.confirmations, anyOf(isNull, greaterThan(0)));
         await evidence.setFact('phase', 'history-resume');
         await evidence.setFact('skipped_phases', <String>[
-          'device mode selection',
           'wallet creation',
           'mnemonic import',
           'receive walkthrough',
@@ -167,7 +164,6 @@ void main() {
           RepaintBoundary(
             key: evidence.screenshotBoundaryKey,
             child: RootApp(
-              modeController: mode,
               localeController: locale,
               walletBootstrap: () async => wallets,
               walletPrefs: prefs,

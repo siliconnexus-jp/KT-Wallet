@@ -6,6 +6,7 @@ import 'l10n/app_localizations.dart';
 import 'src/screens/signer_onboarding_screens.dart';
 import 'src/developer_mode.dart';
 import 'src/observability/native_incidents.dart';
+import 'src/onboarding/product_intro_app.dart';
 import 'src/signer_router.dart';
 import 'src/state/locale_controller.dart';
 import 'src/state/signer_wallet_controller.dart';
@@ -52,7 +53,7 @@ class ColdSignerApp extends StatefulWidget {
 }
 
 class _ColdSignerAppState extends State<ColdSignerApp> {
-  /// Built immediately for the gallery default; for embedded starts only
+  /// Built immediately for the gallery default; for production starts only
   /// after the vault has been read, so the first routed frame is already the
   /// right one (home vs. welcome).
   GoRouter? _router;
@@ -164,22 +165,35 @@ class _ColdSignerAppState extends State<ColdSignerApp> {
                     builder: (context, child) =>
                         KtDeviceChrome(mockStatusBar: false, child: child!),
                   )
-                : MaterialApp.router(
-                    onGenerateTitle: (context) =>
-                        AppLocalizations.of(context).appName,
-                    debugShowCheckedModeBanner: false,
-                    locale: widget.localeController.locale,
-                    localizationsDelegates:
-                        AppLocalizations.localizationsDelegates,
-                    supportedLocales: AppLocalizations.supportedLocales,
-                    theme: _theme,
-                    routerConfig: router,
-                    builder: (context, child) =>
-                        KtDeviceChrome(mockStatusBar: false, child: child!),
+                : _withIntroduction(
+                    MaterialApp.router(
+                      onGenerateTitle: (context) =>
+                          AppLocalizations.of(context).appName,
+                      debugShowCheckedModeBanner: false,
+                      locale: widget.localeController.locale,
+                      localizationsDelegates:
+                          AppLocalizations.localizationsDelegates,
+                      supportedLocales: AppLocalizations.supportedLocales,
+                      theme: _theme,
+                      routerConfig: router,
+                      builder: (context, child) =>
+                          KtDeviceChrome(mockStatusBar: false, child: child!),
+                    ),
                   ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _withIntroduction(Widget child) {
+    if (widget.initialLocation != '/welcome' ||
+        widget.walletController.hasWallet) {
+      return child;
+    }
+    return SignerIntroApp(
+      localeController: widget.localeController,
+      child: child,
     );
   }
 }
@@ -231,7 +245,11 @@ class _SignerStorageUnavailableScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              KtPrimaryButton(label: l10n.actionRetry, onPressed: onRetry),
+              KtPrimaryButton(
+                label: l10n.actionRetry,
+                style: KtButtonStyle.signer,
+                onPressed: onRetry,
+              ),
             ],
           ),
         ),

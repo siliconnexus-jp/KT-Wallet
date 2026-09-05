@@ -9,6 +9,77 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get introOpenTitle => '前后端 100% 开源';
+
+  @override
+  String get introOpenDescription => '从钱包界面、离线签名到后端网关，代码全部公开。让信任建立在可审查的代码上。';
+
+  @override
+  String get introOpenNote => '查看完整源码，了解资产如何被保护。公开可审查，也欢迎持续改进。';
+
+  @override
+  String get introSecurityTitle => '安全第一。\n掌控始终在你。';
+
+  @override
+  String get introFrontend => '客户端';
+
+  @override
+  String get introBackend => '后端网关';
+
+  @override
+  String get introOnline => '在线钱包';
+
+  @override
+  String get introOffline => '离线签名端';
+
+  @override
+  String get introNext => '继续';
+
+  @override
+  String get introSkip => '跳过引导';
+
+  @override
+  String get introBack => '上一步';
+
+  @override
+  String get introSource => '查看开源代码';
+
+  @override
+  String get introSourceHint => '使用联网设备扫描二维码查看完整源码。此页面不会发起网络请求。';
+
+  @override
+  String get introCopyLink => '复制源码地址';
+
+  @override
+  String get introCopied => '源码地址已复制';
+
+  @override
+  String get introSaveFailed => '未能保存引导状态，请重试。';
+
+  @override
+  String get introRole => '独立离线签名端';
+
+  @override
+  String get introSecurityDescription =>
+      '私钥保存在这台离线设备上。每次签名前核对交易详情，并验证身份；助记词仅由你离线备份。';
+
+  @override
+  String get introSecurityNote => '开启飞行模式，关闭 Wi-Fi 与蓝牙。把这台手机专用于离线签名，并始终保持离线。';
+
+  @override
+  String get introPairTitle => '只签名。\n不联网。';
+
+  @override
+  String get introPairDescription =>
+      '在联网手机安装 KT Wallet，生成待签名交易。用本机扫码、核对、签名，再将签名二维码交回在线钱包广播。';
+
+  @override
+  String get introPairNote => '扫码传递交易与签名结果，不传递私钥或助记词。此 App 不查询余额，也不广播交易。';
+
+  @override
+  String get introStart => '设置离线签名端';
+
+  @override
   String get appName => 'KT冷钱包';
 
   @override
@@ -476,16 +547,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get signComplete => '签名完成';
 
   @override
-  String get voidThisSignature => '作废本次签名';
+  String get voidThisSignature => '关闭签名二维码';
 
   @override
-  String get voidSignatureTitle => '作废本次签名？';
+  String get voidSignatureTitle => '关闭签名二维码？';
 
   @override
-  String get voidSignatureDesc => '作废后该签名结果二维码将失效，联网钱包将无法广播这笔交易。';
+  String get voidSignatureDesc =>
+      '仅关闭本机二维码。已被其他设备扫描或保存的签名不会被撤销，仍可能被广播。关闭页面不等于取消交易。';
 
   @override
-  String get signatureVoided => '签名已作废';
+  String get signatureVoided => '二维码已关闭，未撤销签名';
 
   @override
   String get signResultUnavailable => '签名结果不可用';
@@ -496,7 +568,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get scanResultInstruction => '请使用联网钱包「扫描签名结果」读取此二维码';
+  String get scanResultInstruction => '请在联网钱包当前交易中点击「离线设备已签名，扫描结果」，读取此二维码。';
 
   @override
   String get allAddresses => '全部地址';
@@ -628,21 +700,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsSaveFailed => '无法保存设置，当前内容未改变，请重试。';
-
-  @override
-  String get deviceMode => '设备模式';
-
-  @override
-  String get deviceModeSigner => '离线签名器';
-
-  @override
-  String get deviceModeSwitchTitle => '切换设备模式';
-
-  @override
-  String get deviceModeSwitchDesc => '切换前请确认本机不再用作签名器。切换后将返回模式选择页。';
-
-  @override
-  String get deviceModeSaveFailed => '无法保存设备模式，当前模式未改变，请重试。';
 
   @override
   String get pinKeyDelete => '删除最后一位';

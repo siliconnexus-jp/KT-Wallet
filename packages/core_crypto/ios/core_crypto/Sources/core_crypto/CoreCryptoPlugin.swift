@@ -160,6 +160,17 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
       case "getAuthState":
         result(AuthGate.shared.state)
 
+      case "checkWalletCreationReady":
+        if AuthGate.shared.remainingCooldown > 0 {
+          throw AuthGate.GateError(code: "AUTH_LOCKED", cooldownSec: AuthGate.shared.remainingCooldown)
+        }
+        let context = LAContext()
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+          throw AuthGate.GateError(code: "AUTH_UNAVAILABLE", cooldownSec: 0)
+        }
+        result(true)
+
       #if DEBUG
       // Physical-device integration tests must be able to complete without a
       // human satisfying an out-of-process Face ID sheet. These methods still

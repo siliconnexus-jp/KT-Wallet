@@ -202,6 +202,8 @@ void main() {
     // Unbacked hot wallet shows the banner; tapping opens the mnemonic sheet.
     await tester.tap(find.text('立即备份'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('mnemonic-risk-continue')));
+    await tester.pumpAndSettle();
     expect(find.text('abandon'), findsOneWidget); // real exported mnemonic
     expect(find.text('accident'), findsOneWidget);
 
@@ -211,7 +213,7 @@ void main() {
     final wallet = controller.wallets.single as HotWallet;
     expect(wallet.backedUp, isTrue);
     expect(find.text('立即备份'), findsNothing); // banner gone
-    expect(find.text('备份已验证，助记词记录正确'), findsOneWidget); // snackbar
+    expect(find.text('已记录备份确认。请确认完整助记词已按顺序保存。'), findsOneWidget);
   });
 
   testWidgets('backed-up wallet: view-mnemonic sheet has no confirm button', (
@@ -222,6 +224,8 @@ void main() {
 
     expect(find.text('立即备份'), findsNothing);
     await tester.tap(find.text('查看助记词'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('mnemonic-risk-continue')));
     await tester.pumpAndSettle();
     expect(find.text('abandon'), findsOneWidget);
     expect(find.text('我已抄写'), findsNothing);

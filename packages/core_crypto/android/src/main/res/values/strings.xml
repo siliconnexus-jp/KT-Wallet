@@ -1,0 +1,3 @@
+<resources>
+    <string name="kt_emulator_test_auth">Emulator test mode: system authentication skipped. Never use real funds.</string>
+</resources>

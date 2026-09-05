@@ -52,9 +52,8 @@ class WalletController extends ChangeNotifier {
   Future<void> _finalityMetricRefreshes = Future<void>.value();
 
   /// Releases the backing store's database connection (no-op for in-memory
-  /// controllers). Call when the controller is retired, e.g. when leaving
-  /// wallet mode in the combined installer; the controller must not be used
-  /// afterwards.
+  /// controllers). Call when the app retires the controller; it must not be
+  /// used afterwards.
   Future<void> close() async {
     // A screen can be removed immediately after initiating a rename/reorder.
     // Drain the serialized metadata queue before closing Drift, otherwise the
@@ -612,6 +611,7 @@ class WalletController extends ChangeNotifier {
 
   /// Generates a fresh mnemonic and holds it for the backup show/verify flow.
   Future<void> beginCreate() async {
+    await _crypto.checkWalletCreationReady();
     _pendingMnemonic = await _crypto.generateMnemonic();
     notifyListeners();
   }

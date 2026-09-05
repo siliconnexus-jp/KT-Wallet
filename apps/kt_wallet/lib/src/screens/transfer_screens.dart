@@ -6,6 +6,7 @@ import 'package:chains/chains.dart';
 import 'package:chains/rpc.dart' show RpcRejectionKind;
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
@@ -410,6 +411,29 @@ class _TransferAsset {
 }
 
 class _TransferInputScreenState extends State<TransferInputScreen> {
+  Widget _addressAction({
+    required Key actionKey,
+    required String label,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) => TextButton.icon(
+    key: actionKey,
+    onPressed: onPressed,
+    icon: Icon(icon, size: 17),
+    label: Text(label),
+    style: TextButton.styleFrom(
+      foregroundColor: WalletColors.accent,
+      backgroundColor: const Color(0xFFF0F4FC),
+      minimumSize: const Size(48, 48),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      textStyle: const TextStyle(
+        fontFamily: KtFonts.ui,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
   static final _demoAssets = [
     _TransferAsset.token(
       usdtTronToken,
@@ -1055,11 +1079,35 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
       ? _feeQuote?.fee
       : Amount(raw: BigInt.from(13700000), decimals: 6, symbol: 'TRX');
 
+  bool get _amountExceedsBalance {
+    try {
+      return Amount.parse(
+            _amountController.text.trim(),
+            _asset.decimals,
+            symbol: _asset.symbol,
+          ).raw >
+          _asset.availableAmount.raw;
+    } on AmountError {
+      return false;
+    }
+  }
+
+  String _feeWaitingReason(AppLocalizations l10n) {
+    if (_amountExceedsBalance) return l10n.feeWaitingBalance;
+    if (!_addrCheck.isValid) return l10n.feeWaitingRecipient;
+    return l10n.feeWaitingAmount;
+  }
+
+  bool get _feeTierEnabled =>
+      !_isLiveContext ||
+      (_currentFeeDraft() != null &&
+          _feeQuoteState != _InputFeeQuoteState.tronUnactivated);
+
   String _feeFiatLabel(AppLocalizations l10n) {
     if (!_isLiveContext) return r'≈ $1.90';
     switch (_feeQuoteState) {
       case _InputFeeQuoteState.waiting:
-        return '--';
+        return l10n.feeAwaitingInput;
       case _InputFeeQuoteState.estimating:
         return l10n.feeEstimating;
       case _InputFeeQuoteState.failed:
@@ -1098,7 +1146,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     final l10n = AppLocalizations.of(context);
     final symbol = _displayedFee?.symbol ?? _nativeFeeSymbol;
     _feeDetailsFee.value = _displayedFee;
-    await showModalBottomSheet<void>(
+    await showKtModalBottomSheet<void>(
       context: context,
       backgroundColor: WalletColors.surface,
       shape: const RoundedRectangleBorder(
@@ -1309,7 +1357,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
         .toList();
     final compatible = [...compatibleContacts, ...localWallets];
 
-    final selected = await showModalBottomSheet<Contact>(
+    final selected = await showKtModalBottomSheet<Contact>(
       context: context,
       backgroundColor: WalletColors.surface,
       shape: const RoundedRectangleBorder(
@@ -1477,7 +1525,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
     var chainIndex = chains.indexOf(_selectedChain);
     if (chainIndex < 0) chainIndex = 0;
     var choosingAsset = chains.length == 1;
-    await showModalBottomSheet<void>(
+    await showKtModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: WalletColors.surface,
@@ -1561,7 +1609,6 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                               ),
                             ),
                           ),
-                          if (chain == Chain.tron) const TronActivationBadge(),
                         ],
                       ),
                     ),
@@ -1592,10 +1639,6 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (option == Chain.tron) ...[
-                                  const TronActivationBadge(),
-                                  const SizedBox(width: 8),
-                                ],
                                 const Icon(
                                   Icons.chevron_right,
                                   color: WalletColors.text3,
@@ -1697,7 +1740,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
       navBar: KtNavBar(
         title: l10n.actionSend,
         onBack: () => Navigator.of(context).maybePop(),
-        trailing: Icons.qr_code_scanner,
+        trailing: CupertinoIcons.qrcode,
         trailingTooltip: l10n.scanAddressTitle,
         onTrailing: _scanAddress,
       ),
@@ -1762,10 +1805,6 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                                 ),
                               ),
                             ),
-                            if (_asset.chain == Chain.tron) ...[
-                              const SizedBox(width: 7),
-                              const TronActivationBadge(),
-                            ],
                           ],
                         ),
                         const SizedBox(height: 2),
@@ -1804,88 +1843,67 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              Row(
+              TextField(
+                key: const ValueKey('transfer-recipient-input'),
+                controller: _addrController,
+                onChanged: (value) {
+                  setState(() {
+                    _acknowledgedRiskAddress = null;
+                    if (_selectedContact?.address != value.trim()) {
+                      _selectedContact = null;
+                    }
+                  });
+                  _scheduleFeeEstimate();
+                },
+                autocorrect: false,
+                enableSuggestions: false,
+                minLines: 2,
+                maxLines: 3,
+                style: const TextStyle(
+                  fontSize: 16,
+                  height: 1.5,
+                  fontFamily: KtFonts.mono,
+                  color: WalletColors.text,
+                ),
+                decoration: InputDecoration(
+                  filled: false,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
+                  hintText: l10n.pasteOrEnterAddress,
+                  hintStyle: const TextStyle(
+                    fontSize: 16,
+                    fontFamily: KtFonts.ui,
+                    color: WalletColors.text3,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                key: const ValueKey('transfer-address-actions'),
+                spacing: 8,
+                runSpacing: 4,
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _addrController,
-                      onChanged: (value) {
-                        setState(() {
-                          _acknowledgedRiskAddress = null;
-                          if (_selectedContact?.address != value.trim()) {
-                            _selectedContact = null;
-                          }
-                        });
-                        _scheduleFeeEstimate();
-                      },
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      maxLines: null,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontFamily: KtFonts.mono,
-                        color: WalletColors.text,
-                      ),
-                      decoration: InputDecoration(
-                        isCollapsed: true,
-                        border: InputBorder.none,
-                        hintText: l10n.pasteOrEnterAddress,
-                        hintStyle: const TextStyle(color: WalletColors.text3),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Semantics(
-                    button: true,
+                  _addressAction(
+                    actionKey: const ValueKey('transfer-address-book'),
                     label: l10n.addressBookTitle,
-                    child: GestureDetector(
-                      key: const ValueKey('transfer-address-book'),
-                      behavior: HitTestBehavior.opaque,
-                      onTap: _pickContact,
-                      child: Tooltip(
-                        message: l10n.addressBookTitle,
-                        child: const SizedBox.square(
-                          dimension: 48,
-                          child: Icon(
-                            Icons.contacts_outlined,
-                            size: 18,
-                            color: WalletColors.accent,
-                          ),
-                        ),
-                      ),
-                    ),
+                    icon: CupertinoIcons.person_crop_rectangle,
+                    onPressed: _pickContact,
                   ),
-                  Semantics(
-                    button: true,
-                    label: l10n.pasteOrEnterAddress,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: _paste,
-                      child: const SizedBox.square(
-                        dimension: 48,
-                        child: Icon(
-                          Icons.content_paste,
-                          size: 18,
-                          color: WalletColors.accent,
-                        ),
-                      ),
-                    ),
+                  _addressAction(
+                    actionKey: const ValueKey('transfer-paste'),
+                    label: l10n.transferPaste,
+                    icon: CupertinoIcons.doc_on_clipboard,
+                    onPressed: _paste,
                   ),
-                  Semantics(
-                    button: true,
-                    label: l10n.scanAddressTitle,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: _scanAddress,
-                      child: const SizedBox.square(
-                        dimension: 48,
-                        child: Icon(
-                          Icons.qr_code_scanner,
-                          size: 18,
-                          color: WalletColors.accent,
-                        ),
-                      ),
-                    ),
+                  _addressAction(
+                    actionKey: const ValueKey('transfer-scan'),
+                    label: l10n.transferScan,
+                    icon: CupertinoIcons.qrcode,
+                    onPressed: _scanAddress,
                   ),
                 ],
               ),
@@ -2091,10 +2109,6 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                             ),
                           ),
                         ),
-                        if (_asset.chain == Chain.tron) ...[
-                          const SizedBox(width: 8),
-                          const TronActivationBadge(),
-                        ],
                       ],
                     ),
                   ),
@@ -2111,52 +2125,34 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    l10n.amountLabel,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: WalletColors.text2,
-                    ),
-                  ),
-                  Semantics(
-                    button: true,
-                    label: l10n.max,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () {
-                        setState(
-                          () => _amountController.text = _asset.available,
-                        );
-                        _scheduleFeeEstimate();
-                      },
-                      child: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: WalletColors.accent.withValues(
-                                alpha: 0.08,
-                              ),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              l10n.max,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: WalletColors.accent,
-                              ),
-                            ),
-                          ),
-                        ),
+                  Expanded(
+                    child: Text(
+                      l10n.amountLabel,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: WalletColors.text2,
                       ),
                     ),
+                  ),
+                  TextButton(
+                    key: const ValueKey('transfer-max-amount'),
+                    onPressed: () {
+                      setState(() => _amountController.text = _asset.available);
+                      _scheduleFeeEstimate();
+                    },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      textStyle: const TextStyle(
+                        fontFamily: KtFonts.ui,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    child: Text(l10n.max),
                   ),
                 ],
               ),
@@ -2166,6 +2162,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                 children: [
                   Expanded(
                     child: TextField(
+                      key: const ValueKey('transfer-amount-input'),
                       controller: _amountController,
                       onChanged: (_) {
                         setState(_normalizeAmount);
@@ -2175,14 +2172,19 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                         decimal: true,
                       ),
                       style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.5,
+                        fontSize: 40,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -1.2,
                         color: WalletColors.text,
                       ),
                       decoration: const InputDecoration(
+                        filled: false,
                         isCollapsed: true,
+                        contentPadding: EdgeInsets.zero,
                         border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        disabledBorder: InputBorder.none,
                         hintText: '0',
                         hintStyle: TextStyle(color: WalletColors.text3),
                       ),
@@ -2203,8 +2205,10 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                spacing: 12,
+                runSpacing: 6,
                 children: [
                   Builder(
                     builder: (_) {
@@ -2220,19 +2224,11 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                       );
                     },
                   ),
-                  Flexible(
-                    child: Text(
-                      l10n.availableBalance(
-                        _asset.availableLabel,
-                        _asset.symbol,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.end,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: WalletColors.text3,
-                      ),
+                  Text(
+                    l10n.availableBalance(_asset.availableLabel, _asset.symbol),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: WalletColors.text3,
                     ),
                   ),
                 ],
@@ -2250,12 +2246,14 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                 constraints: const BoxConstraints(minHeight: 62),
                 child: Row(
                   children: [
-                    Text(
-                      l10n.networkFee,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: WalletColors.text2,
+                    Flexible(
+                      child: Text(
+                        l10n.networkFee,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: WalletColors.text2,
+                        ),
                       ),
                     ),
                     Semantics(
@@ -2331,13 +2329,34 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              KtSegmented(
-                options: [l10n.feeSlow, l10n.feeStandard, l10n.feeFast],
-                selected: _fee,
-                onChanged: (i) {
-                  setState(() => _fee = i);
-                  _scheduleFeeEstimate();
-                },
+              if (_isLiveContext &&
+                  _feeQuoteState == _InputFeeQuoteState.waiting) ...[
+                Text(
+                  _feeWaitingReason(l10n),
+                  key: const ValueKey('transfer-fee-waiting-reason'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.5,
+                    color: _amountExceedsBalance
+                        ? WalletColors.red
+                        : WalletColors.text2,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              Opacity(
+                opacity: _feeTierEnabled ? 1 : 0.45,
+                child: KtSegmented(
+                  key: const ValueKey('transfer-fee-tiers'),
+                  options: [l10n.feeSlow, l10n.feeStandard, l10n.feeFast],
+                  selected: _fee,
+                  onChanged: !_feeTierEnabled
+                      ? null
+                      : (i) {
+                          setState(() => _fee = i);
+                          _scheduleFeeEstimate();
+                        },
+                ),
               ),
             ],
           ),
@@ -3071,14 +3090,6 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
             ),
             const SizedBox(height: 8),
             NetworkBadge(label: networkLabel, dotColor: dotColor),
-            if (draft?.chain == Chain.tron) ...[
-              const SizedBox(height: 8),
-              TronActivationBadge(
-                status: _tronNotActivated
-                    ? TronActivationStatus.unactivated
-                    : null,
-              ),
-            ],
           ],
         ),
         if (draft?.chain == Chain.tron)
@@ -3698,6 +3709,11 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
         trailingText: l10n.actionCancel,
         onTrailing: _cancel,
       ),
+      bottom: KtPrimaryButton(
+        key: const ValueKey('scan-signed-result-next'),
+        label: l10n.scanSignedResultNext,
+        onPressed: () => context.push('/scan-result'),
+      ),
       children: [
         KtCard(
           padding: const EdgeInsets.all(24),
@@ -3942,7 +3958,13 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
 /// localized bounded reason — the broadcastError → failed step; retry stays
 /// user-explicit (INV-15, no auto-retry).
 class BroadcastConfirmScreen extends StatefulWidget {
-  const BroadcastConfirmScreen({super.key, this.broadcaster});
+  const BroadcastConfirmScreen({
+    super.key,
+    this.broadcaster,
+    this.authGate = const LocalTransactionAuthGate(),
+  });
+
+  final TransactionAuthGate authGate;
 
   /// Injectable broadcast pipe for tests; defaults to one resolving the
   /// prefs-overridable endpoints.
@@ -3960,6 +3982,7 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
   String? _error;
 
   Future<void> _broadcast() async {
+    if (_busy) return;
     final session = TransferSessionScope.maybeOf(context);
     final result = session?.result;
     if (session == null || result == null) {
@@ -3972,6 +3995,37 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
       }
       return;
     }
+    final request = session.request;
+    final draft = session.draft;
+    final wallet = WalletScope.of(context).current;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    // An offline signature proves signing approval, not permission to send
+    // from this device now. Authenticate every attempt before persistence or
+    // any broadcast request; never reuse a previous successful verdict.
+    var authenticated = false;
+    try {
+      authenticated = await widget.authGate.authenticate(
+        context,
+        method:
+            AppPrefsScope.maybeOf(context)?.authMethod ?? AuthMethod.biometrics,
+        reason: AppLocalizations.of(context).authToConfirmTransfer,
+      );
+    } on Object {
+      // Provider errors are not approval. Keep signed data available to retry.
+    }
+    if (!mounted) return;
+    if (!authenticated ||
+        !identical(session.result, result) ||
+        !identical(session.request, request) ||
+        !identical(session.draft, draft) ||
+        !identical(WalletScope.of(context).current, wallet) ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      setState(() => _busy = false);
+      return;
+    }
     final service =
         widget.broadcaster ??
         BroadcastService(
@@ -3981,10 +4035,6 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
           ),
           gateway: prefsGatewayResolver(AppPrefsScope.maybeOf(context)),
         );
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
     try {
       await _persistAirgapTransaction(
         context,
@@ -4093,7 +4143,6 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
     var headline = '-120.00 USDT';
     var networkLabel = 'TRON · TRC-20';
     var dotColor = ChainColors.tron;
-    var displayChain = Chain.tron;
     var toValue = 'TWd4qCEU…nMxR38uQz';
     var signerValue = 'TQm9xPa2…Vb7L3kFa';
     var hashValue = '8f6d2c…a94e07';
@@ -4101,7 +4150,6 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
     if (result != null) {
       final summary = request?.summary;
       final chain = chainForCoin(result.coin);
-      displayChain = chain;
       headline = session?.draft?.operation == TxOperation.approvalRevoke
           ? l10n.approvalRevoke
           : '-${summary?[SummaryKeys.amount] ?? ''}';
@@ -4223,10 +4271,6 @@ class _BroadcastConfirmScreenState extends State<BroadcastConfirmScreen> {
             ),
             const SizedBox(height: 8),
             NetworkBadge(label: networkLabel, dotColor: dotColor),
-            if (displayChain == Chain.tron) ...[
-              const SizedBox(height: 8),
-              const TronActivationBadge(),
-            ],
           ],
         ),
         KtCard(
@@ -5697,7 +5741,7 @@ class _TxDetailScreenState extends State<TxDetailScreen>
   Future<void> _chooseReceiptExport(TransactionCardData data) async {
     if (_exportingReceipt) return;
     final l10n = AppLocalizations.of(context);
-    final action = await showModalBottomSheet<_ReceiptExportAction>(
+    final action = await showKtModalBottomSheet<_ReceiptExportAction>(
       context: context,
       useSafeArea: true,
       showDragHandle: true,
@@ -6192,10 +6236,6 @@ class _TxDetailScreenState extends State<TxDetailScreen>
               '${_statusLabel(l10n, tx)} · ${_date(tx.createdAt)}',
               style: const TextStyle(fontSize: 13, color: WalletColors.text3),
             ),
-            if (chain == Chain.tron) ...[
-              const SizedBox(height: 8),
-              const TronActivationBadge(),
-            ],
           ],
         ),
         KtCard(
@@ -6417,10 +6457,6 @@ class _TxDetailScreenState extends State<TxDetailScreen>
                 color: _chainTxStatusColor(record.status),
               ),
             ),
-            if (record.coin == Coin.tron) ...[
-              const SizedBox(height: 8),
-              const TronActivationBadge(),
-            ],
           ],
         ),
         KtCard(
@@ -6837,7 +6873,7 @@ class TransferAuthSheet extends StatelessWidget {
       return;
     }
     if (!context.mounted) return;
-    final verified = await showModalBottomSheet<bool>(
+    final verified = await showKtModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: WalletColors.surface,
@@ -7237,12 +7273,7 @@ class TransferAuthSheet extends StatelessWidget {
             child: GestureDetector(
               excludeFromSemantics: true,
               onTap: () {},
-              child: Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  color: WalletColors.surface,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                ),
+              child: KtGlassSheet(
                 child: SafeArea(
                   top: false,
                   child: ConstrainedBox(

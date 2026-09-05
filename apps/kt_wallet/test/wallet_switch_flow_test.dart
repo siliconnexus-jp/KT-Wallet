@@ -32,11 +32,11 @@ void main() {
     await tester.tap(find.text('主钱包').last);
     await tester.pumpAndSettle();
 
-    // Home now reflects the watch wallet: no backup banner, and the watch
-    // action row includes 扫签名 instead of 更多.
+    // Home reflects the watch wallet. Its stable three-action layout remains
+    // receive/send/more; scanning a signature belongs to the transfer flow.
     expect(find.text('主钱包'), findsOneWidget);
     expect(find.text('助记词尚未备份'), findsNothing);
-    expect(find.text('扫签名'), findsOneWidget);
+    expect(find.text('更多'), findsOneWidget);
   });
 
   testWidgets('switching to the backed-up hot wallet hides the backup banner', (
@@ -83,6 +83,6 @@ void main() {
       findsNothing,
       reason: 'scrim tap must dismiss the sheet',
     );
-    expect(find.text('总资产估值 (USD)'), findsOneWidget); // back on home
+    expect(find.byKey(const ValueKey('home-balance-card')), findsOneWidget);
   });
 }

@@ -16,7 +16,7 @@ internal func selectPrivacyHostWindow(
     ?? fallback
 }
 
-let maxPickedFileBytes = 256 * 1024
+let maxPickedFileBytes = 8 * 1024 * 1024
 
 enum PickedFileReadError: Error {
   case tooLarge

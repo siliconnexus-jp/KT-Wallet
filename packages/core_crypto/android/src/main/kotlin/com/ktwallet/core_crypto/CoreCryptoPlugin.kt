@@ -5,6 +5,7 @@ import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.ComponentCallbacks2
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
 import android.graphics.Typeface
 import android.os.Build
@@ -15,6 +16,7 @@ import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
 import android.widget.TextView
+import android.widget.Toast
 import androidx.annotation.NonNull
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
@@ -32,6 +34,7 @@ import java.lang.ref.WeakReference
 import java.util.UUID
 import java.util.concurrent.Executor
 import java.security.MessageDigest
+import java.io.File
 
 /**
  * Channel dispatcher for `kt/core_crypto` (detailed-design.md §2.1). Auth-bound
@@ -44,7 +47,9 @@ class CoreCryptoPlugin :
     MethodCallHandler,
     ComponentCallbacks2 {
     private lateinit var channel: MethodChannel
-    private val keystore = KeystoreManager()
+    private lateinit var keystore: KeystoreManager
+    private var emulatorTestVault = false
+    private var emulatorWarningShown = false
     private val cipher = EntropyCipher()
     private val portableBackupCipher = PortableBackupCipher()
     private lateinit var authGate: AuthGate
@@ -77,9 +82,23 @@ class CoreCryptoPlugin :
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel = MethodChannel(binding.binaryMessenger, "kt/core_crypto")
-        blobStore = BlobStore(binding.applicationContext)
-        authGate = AuthGate(PrefsAuthGateStore(binding.applicationContext))
         applicationContext = binding.applicationContext
+        emulatorTestVault = useEmulatorTestVault(
+            debugBuild = BuildConfig.DEBUG,
+            buildType = BuildConfig.BUILD_TYPE,
+            debuggableApp = applicationContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0,
+            packageName = applicationContext.packageName,
+            hardware = Build.HARDWARE,
+            model = Build.MODEL,
+            fingerprint = Build.FINGERPRINT,
+        )
+        keystore = KeystoreManager(emulatorTestVault)
+        // Never silently weaken or reuse a production vault's keys. Release
+        // builds cannot read wallets created by the emulator test shortcut.
+        blobStore = if (emulatorTestVault) {
+            BlobStore(File(applicationContext.filesDir, "kt_debug_emulator_entropy"))
+        } else BlobStore(applicationContext)
+        authGate = AuthGate(PrefsAuthGateStore(applicationContext))
         applicationContext.registerComponentCallbacks(this)
         binding.platformViewRegistry.registerViewFactory(
             "kt/private_key_view",
@@ -203,6 +222,20 @@ class CoreCryptoPlugin :
                 "createBackup" -> createBackup(call, result)
                 "readBackup" -> result.success(readBackup(call))
                 "deleteWallet" -> deleteWallet(call, result)
+                "checkWalletCreationReady" -> {
+                    if (emulatorTestVault) {
+                        result.success(true)
+                    } else {
+                        authGate.ensureNotLocked()
+                        val authenticators = androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                            androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                        val available = activity != null && androidx.biometric.BiometricManager
+                            .from(applicationContext).canAuthenticate(authenticators) ==
+                            androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
+                        if (available) result.success(true)
+                        else result.error("AUTH_UNAVAILABLE", null, null)
+                    }
+                }
                 "getAuthState" -> result.success(authGate.state())
                 else -> result.notImplemented()
             }
@@ -218,7 +251,8 @@ class CoreCryptoPlugin :
     private fun storeWallet(call: MethodCall) {
         val walletId = requireValidWalletId(call.argument<Any?>("walletId"))
         val mnemonic = requireMnemonicText(call.argument<Any?>("mnemonic"))
-        val requireAuth = optionalNativeBoolean(call.argument<Any?>("requireAuth"), true)
+        val requireAuth = optionalNativeBoolean(call.argument<Any?>("requireAuth"), true) &&
+            !emulatorTestVault
         val entropy = WalletCoreBridge.entropyFromMnemonic(mnemonic)
         val password = optionalKdfPassword(call.argument<Any?>("kdfPassword"))
         val usesKdf = !password.isNullOrEmpty()
@@ -538,6 +572,18 @@ class CoreCryptoPlugin :
      * prove that the user supplied a wrong credential.
      */
     private fun promptThen(result: Result, reason: String, action: () -> Any) {
+        if (emulatorTestVault) {
+            if (!emulatorWarningShown) {
+                Toast.makeText(applicationContext, R.string.kt_emulator_test_auth, Toast.LENGTH_LONG).show()
+                emulatorWarningShown = true
+            }
+            try {
+                result.success(action())
+            } catch (e: Exception) {
+                result.error(mapError(e), null, errorDetails(e))
+            }
+            return
+        }
         val act = activity
         if (act == null) { result.error("SIGN_FAILED", null, null); return }
         try {
@@ -616,6 +662,7 @@ class CoreCryptoPlugin :
     }
 
     private fun mapError(e: Exception): String = when (e) {
+        is AuthGate.LockedException -> "AUTH_LOCKED"
         is WalletCoreBridge.InvalidMnemonicException -> "INVALID_MNEMONIC"
         is WalletCoreBridge.InvalidInputException -> "INVALID_INPUT"
         is WalletCoreBridge.SignFailedException -> "SIGN_FAILED"

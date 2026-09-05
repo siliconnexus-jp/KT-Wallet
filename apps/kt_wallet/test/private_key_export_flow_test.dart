@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/main.dart';
+import 'package:kt_wallet/src/market/market_controller.dart';
+import 'package:ui_kit/ui_kit.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
 import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
@@ -40,32 +42,22 @@ Future<WalletController> _controller() async {
 Future<void> _pump(WidgetTester tester, WalletController controller) async {
   tester.platformDispatcher.localesTestValue = const [Locale('zh')];
   addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+  // This suite exercises export, not market refresh. Keep the TRON status
+  // deterministic instead of racing a failed HTTP request in the goldens.
+  final market = MarketController(wallets: controller, canRefresh: () => false);
+  addTearDown(market.dispose);
   await tester.pumpWidget(
-    KtWalletApp(controller: controller, initialLocation: '/private-keys?id=w1'),
+    KtWalletApp(
+      controller: controller,
+      marketController: market,
+      initialLocation: '/private-keys?id=w1',
+    ),
   );
   await tester.pump();
 }
 
-FilledButton _primaryButton(WidgetTester tester) => tester.widget<FilledButton>(
-  find.descendant(
-    of: find.byKey(const ValueKey('private-key-warning-primary')),
-    matching: find.byType(FilledButton),
-  ),
-);
-
-Future<void> _finishCountdown(WidgetTester tester) async {
-  await tester.pump(const Duration(seconds: 2));
-  expect(_primaryButton(tester).onPressed, isNull);
-  await tester.pump(const Duration(seconds: 1));
-  expect(_primaryButton(tester).onPressed, isNotNull);
-}
-
 Future<void> _openDirectory(WidgetTester tester) async {
-  for (var page = 0; page < 3; page++) {
-    await tester.pump(const Duration(seconds: 3));
-    await tester.tap(find.byKey(const ValueKey('private-key-warning-primary')));
-    await tester.pump();
-  }
+  await tester.tap(find.byKey(const ValueKey('private-key-warning-primary')));
   await tester.pumpAndSettle();
 }
 
@@ -91,44 +83,52 @@ Future<void> _precacheDirectoryIcons(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('every warning page independently gates progress for 3 seconds', (
-    tester,
-  ) async {
-    final controller = await _controller();
-    await _pump(tester, controller);
+  testWidgets(
+    'one concise risk notice gates authentication without a countdown',
+    (tester) async {
+      final controller = await _controller();
+      await _pump(tester, controller);
 
-    for (var page = 1; page <= 3; page++) {
-      expect(find.text('请注意 $page/3'), findsOneWidget);
-      expect(_primaryButton(tester).onPressed, isNull);
-      await _finishCountdown(tester);
-      await tester.tap(
-        find.byKey(const ValueKey('private-key-warning-primary')),
+      expect(find.text('查看前请注意'), findsOneWidget);
+      expect(find.text('我已了解，继续'), findsOneWidget);
+      expect(find.textContaining('请注意 1/3'), findsNothing);
+      expect(
+        tester
+            .widget<KtPrimaryButton>(
+              find.byKey(const ValueKey('private-key-warning-primary')),
+            )
+            .onPressed,
+        isNotNull,
       );
-      await tester.pump();
-    }
+      expect(
+        find.byKey(const ValueKey('private-key-directory-screen')),
+        findsNothing,
+      );
+      await _openDirectory(tester);
 
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey('private-key-directory-screen')),
-      findsOneWidget,
-    );
-    expect(find.text('账户 01'), findsOneWidget);
-    expect(find.text('EVM 网络'), findsOneWidget);
-    expect(find.text('Solana'), findsOneWidget);
-    expect(find.text('TRON'), findsOneWidget);
-    for (final id in [
-      'eth-mainnet',
-      'polygon-mainnet',
-      'base-mainnet',
-      'arbitrum-mainnet',
-      'avalanche-mainnet',
-      'bnb-mainnet',
-    ]) {
-      expect(find.byKey(ValueKey('private-key-network-$id')), findsOneWidget);
-    }
-    expect(find.text('ETH'), findsNothing);
-    expect(find.text('POL'), findsNothing);
-  });
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('private-key-directory-screen')),
+        findsOneWidget,
+      );
+      expect(find.text('账户 01'), findsOneWidget);
+      expect(find.text('EVM 网络'), findsOneWidget);
+      expect(find.text('Solana'), findsOneWidget);
+      expect(find.text('TRON'), findsOneWidget);
+      for (final id in [
+        'eth-mainnet',
+        'polygon-mainnet',
+        'base-mainnet',
+        'arbitrum-mainnet',
+        'avalanche-mainnet',
+        'bnb-mainnet',
+      ]) {
+        expect(find.byKey(ValueKey('private-key-network-$id')), findsOneWidget);
+      }
+      expect(find.text('ETH'), findsNothing);
+      expect(find.text('POL'), findsNothing);
+    },
+  );
 
   testWidgets('secure and full copy follow the OKX confirmation flow', (
     tester,

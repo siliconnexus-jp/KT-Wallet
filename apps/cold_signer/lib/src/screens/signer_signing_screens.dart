@@ -2042,9 +2042,8 @@ class _SignerResultQrScreenState extends State<SignerResultQrScreen> {
     super.dispose();
   }
 
-  /// Destructive confirm: voiding invalidates the shown signature QR, then
-  /// returns to the offline home with a confirmation snackbar.
-  Future<void> _confirmVoid(BuildContext context) async {
+  /// Closing this local display cannot revoke a signature already scanned.
+  Future<void> _confirmCloseQr(BuildContext context) async {
     final l10n = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     final confirmed = await showDialog<bool>(
@@ -2055,9 +2054,9 @@ class _SignerResultQrScreenState extends State<SignerResultQrScreen> {
         cancelLabel: l10n.actionCancel,
         confirmLabel: l10n.voidThisSignature,
         theme: AppTheme.signer,
-        icon: Icons.block_rounded,
-        iconColor: SignerColors.danger,
-        destructive: true,
+        icon: Icons.qr_code_rounded,
+        iconColor: SignerColors.text2,
+        destructive: false,
       ),
     );
     if (confirmed == true && context.mounted) {
@@ -2107,7 +2106,7 @@ class _SignerResultQrScreenState extends State<SignerResultQrScreen> {
           const SizedBox(height: 12),
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => _confirmVoid(context),
+            onTap: () => _confirmCloseQr(context),
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 48),
               child: Center(

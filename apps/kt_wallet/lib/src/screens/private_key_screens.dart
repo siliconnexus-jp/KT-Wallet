@@ -14,11 +14,11 @@ import '../state/networks.dart';
 import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
 import '../widgets/token_icon.dart';
-import '../widgets/tron_activation_badge.dart';
+import '../widgets/secret_access_risk.dart';
 
 /// OKX-aligned private-key export flow.
 ///
-/// The three warning pages and account directory are Flutter UI. Native code
+/// The single risk disclosure and account directory are Flutter UI. Native code
 /// owns authentication, derivation and clipboard writes; the complete private
 /// key never returns over the MethodChannel. Safe copy returns only the six
 /// characters intentionally withheld from the clipboard for manual entry.
@@ -33,12 +33,9 @@ class PrivateKeyExportScreen extends StatefulWidget {
 
 class _PrivateKeyExportScreenState extends State<PrivateKeyExportScreen>
     with WidgetsBindingObserver {
-  static const _countdownStart = 3;
-
-  Timer? _countdownTimer;
-  int _page = 0;
-  int _seconds = _countdownStart;
   bool _authenticating = false;
+  bool _backgrounded = false;
+  int _authAttempt = 0;
   String? _authError;
   String? _sessionId;
   CoreCrypto? _crypto;
@@ -47,7 +44,6 @@ class _PrivateKeyExportScreenState extends State<PrivateKeyExportScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _startCountdown();
   }
 
   @override
@@ -56,17 +52,19 @@ class _PrivateKeyExportScreenState extends State<PrivateKeyExportScreen>
     _crypto = WalletScope.of(context).crypto;
   }
 
+  void _endSession(String? sessionId) {
+    if (sessionId == null) return;
+    unawaited(
+      _crypto?.endPrivateKeyExport(sessionId).catchError((_) {}) ??
+          Future<void>.value(),
+    );
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _countdownTimer?.cancel();
-    final sessionId = _sessionId;
-    if (sessionId != null) {
-      unawaited(
-        _crypto?.endPrivateKeyExport(sessionId).catchError((_) {}) ??
-            Future<void>.value(),
-      );
-    }
+    _authAttempt++;
+    _endSession(_sessionId);
     super.dispose();
   }
 
@@ -75,50 +73,18 @@ class _PrivateKeyExportScreenState extends State<PrivateKeyExportScreen>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
-      _countdownTimer?.cancel();
-      final sessionId = _sessionId;
-      if (sessionId != null) {
-        _sessionId = null;
-        unawaited(
-          _crypto?.endPrivateKeyExport(sessionId).catchError((_) {}) ??
-              Future<void>.value(),
-        );
-      }
-      return;
-    }
-    if (state == AppLifecycleState.resumed && _sessionId == null) {
+      _backgrounded = true;
+      _authAttempt++;
+      _endSession(_sessionId);
       if (mounted) {
         setState(() {
-          _page = _page.clamp(0, 2);
-          _seconds = _countdownStart;
+          _sessionId = null;
           _authenticating = false;
         });
       }
-      _startCountdown();
+    } else if (state == AppLifecycleState.resumed) {
+      _backgrounded = false;
     }
-  }
-
-  void _startCountdown() {
-    _countdownTimer?.cancel();
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) return;
-      if (_seconds <= 1) {
-        timer.cancel();
-        setState(() => _seconds = 0);
-      } else {
-        setState(() => _seconds--);
-      }
-    });
-  }
-
-  void _nextWarning() {
-    if (_seconds != 0 || _page >= 2) return;
-    setState(() {
-      _page++;
-      _seconds = _countdownStart;
-      _authError = null;
-    });
-    _startCountdown();
   }
 
   HotWallet? _wallet() {
@@ -132,27 +98,28 @@ class _PrivateKeyExportScreenState extends State<PrivateKeyExportScreen>
   }
 
   Future<void> _authenticate() async {
-    if (_seconds != 0 || _authenticating) return;
+    if (_authenticating || _backgrounded) return;
     final wallet = _wallet();
-    if (wallet == null) return;
+    final crypto = _crypto;
+    if (wallet == null || crypto == null) return;
+    final attempt = ++_authAttempt;
     setState(() {
       _authenticating = true;
       _authError = null;
     });
     try {
-      final crypto = _crypto;
-      if (crypto == null) return;
       final sessionId = await crypto.beginPrivateKeyExport(wallet.id);
-      if (!mounted) {
-        unawaited(crypto.endPrivateKeyExport(sessionId));
+      // A late native callback must not reveal anything after leaving the app.
+      if (!mounted || attempt != _authAttempt || _backgrounded) {
+        _endSession(sessionId);
         return;
       }
       setState(() {
         _sessionId = sessionId;
         _authenticating = false;
       });
-    } on CoreCryptoException {
-      if (!mounted) return;
+    } catch (_) {
+      if (!mounted || attempt != _authAttempt) return;
       setState(() {
         _authenticating = false;
         _authError = AppLocalizations.of(context).privateKeyAuthFailed;
@@ -161,21 +128,14 @@ class _PrivateKeyExportScreenState extends State<PrivateKeyExportScreen>
   }
 
   void _expireSession() {
-    final sessionId = _sessionId;
-    if (sessionId != null) {
-      unawaited(
-        _crypto?.endPrivateKeyExport(sessionId).catchError((_) {}) ??
-            Future<void>.value(),
-      );
-    }
+    _endSession(_sessionId);
+    _authAttempt++;
     if (!mounted) return;
     setState(() {
       _sessionId = null;
-      _page = 2;
-      _seconds = _countdownStart;
+      _authenticating = false;
       _authError = AppLocalizations.of(context).privateKeySessionExpired;
     });
-    _startCountdown();
   }
 
   @override
@@ -196,163 +156,51 @@ class _PrivateKeyExportScreenState extends State<PrivateKeyExportScreen>
 
   Widget _warningScreen(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final titles = [
-      l10n.privateKeyWarningOneTitle,
-      l10n.privateKeyWarningTwoTitle,
-      l10n.privateKeyWarningThreeTitle,
-    ];
-    final bodies = [
-      l10n.privateKeyWarningOneBody,
-      l10n.privateKeyWarningTwoBody,
-      l10n.privateKeyWarningThreeBody,
-    ];
-    final icons = [
-      Icons.no_photography_outlined,
-      Icons.copy_all_outlined,
-      Icons.key_rounded,
-    ];
-    final primaryLabel = _page == 2
-        ? l10n.privateKeyBackupNow
-        : l10n.privateKeyAcknowledge;
-    final displayedPrimary = _seconds > 0
-        ? l10n.privateKeyCountdownButton(primaryLabel, _seconds)
-        : primaryLabel;
     return KtScreen(
       key: const ValueKey('private-key-warning-screen'),
       backgroundColor: WalletColors.surface,
       navBar: KtNavBar(
-        title: '',
+        title: l10n.viewPrivateKey,
         onBack: () => Navigator.of(context).maybePop(),
       ),
-      gap: 0,
+      gap: 20,
       bottom: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _PrivateKeyPrimaryButton(
+          KtPrimaryButton(
             key: const ValueKey('private-key-warning-primary'),
-            label: displayedPrimary,
+            label: l10n.secretAccessContinue,
             loading: _authenticating,
-            onPressed: _seconds == 0
-                ? (_page == 2 ? _authenticate : _nextWarning)
-                : null,
+            onPressed: _wallet() == null ? null : _authenticate,
           ),
-          const SizedBox(height: 10),
-          _PrivateKeySecondaryButton(
+          const SizedBox(height: 8),
+          TextButton(
             key: const ValueKey('private-key-warning-cancel'),
-            label: l10n.privateKeyNotNow,
             onPressed: _authenticating
                 ? null
                 : () => Navigator.of(context).maybePop(),
+            child: Text(l10n.actionCancel),
           ),
         ],
       ),
       children: [
-        AnimatedSwitcher(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 220),
-          child: Column(
-            key: ValueKey('private-key-warning-page-$_page'),
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 70),
-              Center(child: _WarningGraphic(icon: icons[_page])),
-              const SizedBox(height: 70),
-              Text(
-                l10n.privateKeyWarningProgress(_page + 1, 3),
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: WalletColors.text,
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                titles[_page],
-                style: const TextStyle(
-                  fontSize: 28,
-                  height: 1.24,
-                  fontWeight: FontWeight.w700,
-                  color: WalletColors.text,
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                bodies[_page],
-                style: const TextStyle(
-                  fontSize: 16,
-                  height: 1.65,
-                  color: WalletColors.text3,
-                ),
-              ),
-              if (_authError != null) ...[
-                const SizedBox(height: 18),
-                Container(
-                  key: const ValueKey('private-key-auth-error'),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: WalletColors.red.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons.lock_outline,
-                        size: 19,
-                        color: WalletColors.red,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          _authError!,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            height: 1.45,
-                            color: WalletColors.text2,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 20),
-            ],
-          ),
+        const SizedBox(height: 12),
+        const SecretAccessRisk(
+          key: ValueKey('private-key-risk-notice'),
+          kind: SecretAccessKind.privateKey,
         ),
+        if (_authError != null)
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              _authError!,
+              key: const ValueKey('private-key-auth-error'),
+              style: const TextStyle(color: WalletColors.red, height: 1.5),
+            ),
+          ),
       ],
     );
   }
-}
-
-class _WarningGraphic extends StatelessWidget {
-  const _WarningGraphic({required this.icon});
-
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 112,
-    height: 112,
-    alignment: Alignment.center,
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      gradient: RadialGradient(
-        colors: [
-          const Color(0xFFFF3D78).withValues(alpha: 0.20),
-          const Color(0xFFFF3D78).withValues(alpha: 0.04),
-          Colors.transparent,
-        ],
-      ),
-    ),
-    child: ShaderMask(
-      shaderCallback: (rect) => const LinearGradient(
-        colors: [Color(0xFFFF315F), Color(0xFFE8206C)],
-      ).createShader(rect),
-      child: Icon(icon, size: 58, color: Colors.white),
-    ),
-  );
 }
 
 class _PrivateKeyPrimaryButton extends StatelessWidget {
@@ -360,13 +208,11 @@ class _PrivateKeyPrimaryButton extends StatelessWidget {
     super.key,
     required this.label,
     required this.onPressed,
-    this.loading = false,
     this.icon,
   });
 
   final String label;
   final VoidCallback? onPressed;
-  final bool loading;
   final IconData? icon;
 
   @override
@@ -374,33 +220,22 @@ class _PrivateKeyPrimaryButton extends StatelessWidget {
     height: 54,
     width: double.infinity,
     child: FilledButton(
-      onPressed: loading ? null : onPressed,
+      onPressed: onPressed,
       style: FilledButton.styleFrom(
-        backgroundColor: WalletColors.green,
+        backgroundColor: WalletColors.accent,
         foregroundColor: Colors.white,
         disabledBackgroundColor: WalletColors.border,
         disabledForegroundColor: WalletColors.text3,
         shape: const StadiumBorder(),
         textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
       ),
-      child: loading
-          ? const SizedBox.square(
-              dimension: 22,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, size: 19),
-                  const SizedBox(width: 8),
-                ],
-                Flexible(child: Text(label, textAlign: TextAlign.center)),
-              ],
-            ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[Icon(icon, size: 19), const SizedBox(width: 8)],
+          Flexible(child: Text(label, textAlign: TextAlign.center)),
+        ],
+      ),
     ),
   );
 }
@@ -547,7 +382,7 @@ class _PrivateKeyDirectoryState extends State<_PrivateKeyDirectory> {
         mode: PrivateKeyCopyMode.safe,
       );
       if (!mounted) return;
-      await showModalBottomSheet<void>(
+      await showKtModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
@@ -566,7 +401,7 @@ class _PrivateKeyDirectoryState extends State<_PrivateKeyDirectory> {
 
   Future<void> _fullCopy(_PrivateKeyAccount account) async {
     if (_copying) return;
-    final confirmed = await showModalBottomSheet<bool>(
+    final confirmed = await showKtModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -755,10 +590,6 @@ class _PrivateKeyAccountTile extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            if (account.chain == Chain.tron) ...[
-                              const SizedBox(width: 7),
-                              const TronActivationBadge(),
-                            ],
                           ],
                         ),
                         const SizedBox(height: 3),
@@ -1064,10 +895,6 @@ class _PrivateKeySheetSurface extends StatelessWidget {
     child: Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,

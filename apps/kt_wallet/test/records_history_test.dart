@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:chains/chains.dart' show Chain;
 import 'package:core_crypto/core_crypto.dart' show ChainAddresses, Coin;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -15,10 +16,12 @@ import 'package:kt_wallet/src/market/transaction_status_service.dart';
 import 'package:kt_wallet/src/observability/experience_metrics.dart';
 import 'package:kt_wallet/src/screens/home_screen.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
+import 'package:kt_wallet/src/state/networks.dart';
 import 'package:kt_wallet/src/state/wallet_scope.dart';
 import 'package:kt_wallet/src/wallets/wallet_manager.dart';
 import 'package:kt_wallet/src/wallets/wallet_model.dart';
 import 'package:kt_wallet/src/wallets/wallet_store.dart';
+import 'package:kt_wallet/src/widgets/token_icon.dart';
 import 'package:ui_kit/ui_kit.dart';
 import 'package:wallet_data/wallet_data.dart';
 
@@ -256,6 +259,136 @@ Widget _walletApp(HistoryController controller, WalletController wallets) =>
 const _unsupported = HistoryResult.unsupported();
 
 void main() {
+  for (final locale in const [Locale('zh'), Locale('en'), Locale('ja')]) {
+    testWidgets(
+      'activity network picker has chain icons (${locale.languageCode})',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 568);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final networks = NetworkController();
+        final wallets = WalletController(
+          WalletManager(
+            initial: [
+              HotWallet(
+                id: 'icons-test',
+                name: 'Wallet',
+                avatarColor: 0xFF2557E8,
+                backedUp: true,
+                addresses: const ChainAddresses(
+                  eth: '0xa',
+                  polygon: '0xa',
+                  base: '0xa',
+                  arbitrum: '0xa',
+                  avalanche: '0xa',
+                  bnb: '0xa',
+                  tron: 'Ta',
+                  solana: 'a',
+                ),
+              ),
+            ],
+          ),
+        );
+        addTearDown(networks.dispose);
+        addTearDown(wallets.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: locale,
+            theme: ktWalletTheme(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(2)),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: WalletScope(
+                controller: wallets,
+                child: NetworkScope(
+                  controller: networks,
+                  child: const RecordsScreen(tabbed: true),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        Future<void> openPicker() async {
+          await tester.tap(
+            find.byKey(const ValueKey('history-network-filter-button')),
+          );
+          await tester.pumpAndSettle();
+        }
+
+        await openPicker();
+        final pickerScroll = find.descendant(
+          of: find.byKey(const ValueKey('history-filter-options')),
+          matching: find.byType(Scrollable),
+        );
+        final all = find.byKey(const ValueKey('history-network-option-all'));
+        expect(
+          find.descendant(
+            of: all,
+            matching: find.byIcon(Icons.language_rounded),
+          ),
+          findsOneWidget,
+        );
+        for (final chain in Chain.values) {
+          final row = find.byKey(
+            ValueKey('history-network-option-${networks.activeFor(chain).id}'),
+          );
+          await tester.scrollUntilVisible(row, 100, scrollable: pickerScroll);
+          await tester.pumpAndSettle();
+          final icon = tester.widget<ChainIcon>(
+            find.descendant(of: row, matching: find.byType(ChainIcon)),
+          );
+          expect(icon.chain, chain);
+          expect(icon.size, 32);
+          expect(ChainIcon.assetFor(chain), isNotNull);
+        }
+        final base = find.byKey(
+          ValueKey(
+            'history-network-option-${networks.activeFor(Chain.base).id}',
+          ),
+        );
+        await tester.scrollUntilVisible(base, -100, scrollable: pickerScroll);
+        await tester.pumpAndSettle();
+        await tester.tap(base);
+        await tester.pumpAndSettle();
+        await openPicker();
+        await tester.scrollUntilVisible(base, 100, scrollable: pickerScroll);
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: base,
+            matching: find.byKey(
+              const ValueKey('history-filter-selected-check'),
+            ),
+          ),
+          findsOneWidget,
+        );
+        await tester.scrollUntilVisible(all, -100, scrollable: pickerScroll);
+        await tester.pumpAndSettle();
+        await tester.tap(all);
+        await tester.pumpAndSettle();
+        await openPicker();
+        expect(
+          find.descendant(
+            of: all,
+            matching: find.byKey(
+              const ValueKey('history-filter-selected-check'),
+            ),
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   setUp(ExperienceMetrics.instance.clear);
 
   test(
@@ -1119,6 +1252,13 @@ void main() {
       expect(find.text('按网络筛选'), findsOneWidget);
       expect(find.text('全部网络'), findsOneWidget);
       expect(find.text('TRON'), findsOneWidget);
+      final tronIcon = tester.widget<ChainIcon>(
+        find.descendant(
+          of: find.byKey(const ValueKey('history-network-option-tron-mainnet')),
+          matching: find.byType(ChainIcon),
+        ),
+      );
+      expect(tronIcon.chain, Chain.tron);
       await tester.tap(
         find.byKey(const ValueKey('history-network-option-all')),
       );

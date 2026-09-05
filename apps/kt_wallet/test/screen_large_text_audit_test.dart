@@ -78,7 +78,7 @@ void main() {
                   localizationsDelegates:
                       AppLocalizations.localizationsDelegates,
                   supportedLocales: AppLocalizations.supportedLocales,
-                  theme: ThemeData(scaffoldBackgroundColor: WalletColors.bg),
+                  theme: ktWalletTheme(),
                   builder: (context, child) => MediaQuery(
                     data: MediaQuery.of(
                       context,

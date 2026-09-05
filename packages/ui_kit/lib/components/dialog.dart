@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../tokens/colors.dart';
 import '../tokens/dimens.dart';
 import 'screen_kit.dart';
+import 'glass.dart';
 
 enum KtDialogActionStyle { secondary, primary, destructive }
 
@@ -42,13 +43,8 @@ class KtDialog extends StatelessWidget {
           maxWidth: 360,
           maxHeight: MediaQuery.sizeOf(context).height - 48,
         ),
-        child: Material(
-          color: theme.surface,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(KtDimens.radiusXl),
-            side: BorderSide(color: theme.border),
-          ),
+        child: _DialogSurface(
+          theme: theme,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
             child: Column(
@@ -110,6 +106,24 @@ class KtDialog extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DialogSurface extends StatelessWidget {
+  const _DialogSurface({required this.theme, required this.child});
+  final AppTheme theme;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => theme == AppTheme.wallet
+      ? KtGlassSurface(radius: 30, blur: true, child: child)
+      : Material(
+          color: theme.surface,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(KtDimens.radiusXl),
+            side: BorderSide(color: theme.border),
+          ),
+          child: child,
+        );
 }
 
 class KtConfirmDialog extends StatelessWidget {
@@ -238,8 +252,8 @@ class _KtDialogActionState extends State<KtDialogAction> {
             ? Duration.zero
             : const Duration(milliseconds: 120),
         curve: const Cubic(0.23, 1, 0.32, 1),
-        child: SizedBox(
-          height: 48,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
           child: FilledButton(
             onPressed: widget.onPressed,
             style: FilledButton.styleFrom(
@@ -250,20 +264,18 @@ class _KtDialogActionState extends State<KtDialogAction> {
               disabledForegroundColor: foreground.withValues(alpha: 0.55),
               side: BorderSide(color: border),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(
+                  widget.theme == AppTheme.wallet ? 24 : 12,
+                ),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               textStyle: const TextStyle(
                 fontFamily: KtFonts.ui,
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
               ),
             ),
-            child: Text(
-              widget.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            child: Text(widget.label, textAlign: TextAlign.center),
           ),
         ),
       ),
