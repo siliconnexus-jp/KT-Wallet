@@ -9,6 +9,10 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get signResultSaveFailed =>
+      '署名結果を安全に保存できませんでした。送信はしていません。再スキャンしてください。';
+
+  @override
   String get settingsGeneral => '一般';
 
   @override
@@ -1609,7 +1613,17 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get walletLoadErrorDesc =>
-      '端末内のウォレットデータを読み取れませんでした。もう一度お試しください。問題が続く場合はアプリを再インストールしてください。';
+      '端末内のウォレットデータを読み取れませんでした。もう一度お試しください。問題が続く場合も、未バックアップのウォレットを失わないよう、アプリとデータを削除しないでください。';
+
+  @override
+  String get pendingDeletionAuthTitle => '削除が完了していません';
+
+  @override
+  String get pendingDeletionAuthDesc =>
+      '前回のウォレット削除には端末の本人認証が必要です。未完了の削除は保留されており、安全なストレージの破損を示すものではありません。準備ができたら認証して削除を続けてください。認証が利用できない、またはロックされている場合は、しばらく待つか端末の画面ロック設定をご確認ください。';
+
+  @override
+  String get pendingDeletionAuthAction => '認証して削除を続ける';
 
   @override
   String get walletPersistenceFailed =>

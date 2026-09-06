@@ -3,6 +3,7 @@
 library;
 
 export 'components/badges.dart';
+export 'components/branded_qr_image.dart';
 export 'components/detail_row.dart';
 export 'components/dialog.dart';
 export 'components/glass.dart';

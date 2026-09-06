@@ -60,6 +60,12 @@ final class OneShotDeviceSecurityResult {
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, UIDocumentPickerDelegate {
   private var backupImageResult: FlutterResult?
+  private var backupExportURL: URL?
+
+  private func clearBackupExport() {
+    if let url = backupExportURL { try? FileManager.default.removeItem(at: url) }
+    backupExportURL = nil
+  }
   private var privacyCover: UIView?
   private var screenSecurityChannel: FlutterMethodChannel?
   private let nativeIncidentStore = NativeIncidentStore()
@@ -130,7 +136,7 @@ final class OneShotDeviceSecurityResult {
         name: "kt/signer_backup_image", binaryMessenger: registrar.messenger())
       backupImageChannel.setMethodCallHandler { [weak self] call, result in
         guard let self else { return result(FlutterMethodNotImplemented) }
-        guard call.method == "pick" else { return result(FlutterMethodNotImplemented) }
+        guard call.method == "pick" || call.method == "save" else { return result(FlutterMethodNotImplemented) }
         guard self.backupImageResult == nil else {
           return result(FlutterError(code: "BUSY", message: nil, details: nil))
         }
@@ -141,6 +147,29 @@ final class OneShotDeviceSecurityResult {
         }
         while let presented = presenter.presentedViewController { presenter = presented }
         self.backupImageResult = result
+        if call.method == "save" {
+          guard let args = call.arguments as? [String: Any],
+                let typed = args["bytes"] as? FlutterStandardTypedData,
+                typed.data.count <= 8 * 1024 * 1024,
+                typed.data.starts(with: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) else {
+            self.backupImageResult = nil
+            return result(FlutterError(code: "INVALID_IMAGE", message: nil, details: nil))
+          }
+          let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KT-Cold-Signer-\(UUID().uuidString)-encrypted.png")
+          do {
+            try typed.data.write(to: url, options: [.atomic, .completeFileProtection])
+            self.backupExportURL = url
+            let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
+            picker.delegate = self
+            presenter.present(picker, animated: true)
+          } catch {
+            self.backupImageResult = nil
+            self.clearBackupExport()
+            result(FlutterError(code: "WRITE_FAILED", message: nil, details: nil))
+          }
+          return
+        }
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.png, .jpeg], asCopy: false)
         picker.allowsMultipleSelection = false
         picker.delegate = self
@@ -190,11 +219,19 @@ final class OneShotDeviceSecurityResult {
   func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
     let result = backupImageResult
     backupImageResult = nil
-    result?(nil)
+    let exporting = backupExportURL != nil
+    clearBackupExport()
+    result?(exporting ? false : nil)
   }
 
   func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
     guard let result = backupImageResult else { return }
+    if backupExportURL != nil {
+      backupImageResult = nil
+      clearBackupExport()
+      result(!urls.isEmpty)
+      return
+    }
     guard urls.count == 1, let url = urls.first, url.isFileURL else {
       backupImageResult = nil
       return result(FlutterError(code: "READ_FAILED", message: nil, details: nil))

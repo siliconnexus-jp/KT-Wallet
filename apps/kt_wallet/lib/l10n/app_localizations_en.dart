@@ -9,6 +9,10 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get signResultSaveFailed =>
+      'The signed result could not be saved safely. Nothing was broadcast. Scan again to retry.';
+
+  @override
   String get settingsGeneral => 'General';
 
   @override
@@ -1688,7 +1692,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get walletLoadErrorDesc =>
-      'Your on-device wallet data couldn\'t be read. Try again; if the problem persists, reinstall the app.';
+      'Your on-device wallet data couldn\'t be read. Try again. If the problem persists, keep the app and its data to avoid losing wallets that have not been backed up.';
+
+  @override
+  String get pendingDeletionAuthTitle => 'Deletion not completed';
+
+  @override
+  String get pendingDeletionAuthDesc =>
+      'Your previous wallet deletion requires device authentication. Unfinished deletions remain pending; this does not mean secure storage is damaged. When ready, authenticate to continue deleting. If authentication is unavailable or locked, try later or check your device screen-lock settings.';
+
+  @override
+  String get pendingDeletionAuthAction => 'Authenticate and continue deleting';
 
   @override
   String get walletPersistenceFailed =>

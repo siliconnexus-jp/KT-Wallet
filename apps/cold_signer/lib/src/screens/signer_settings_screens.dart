@@ -11,11 +11,7 @@ import '../state/signer_wallet_controller.dart';
 
 const _t = AppTheme.signer;
 Widget _card(Widget child, {EdgeInsets padding = const EdgeInsets.all(16)}) =>
-    KtGlassSurface(
-      dark: true,
-      padding: padding,
-      child: child,
-    );
+    KtGlassSurface(dark: true, padding: padding, child: child);
 
 Widget _switch(bool on) => Container(
   width: 44,
@@ -568,6 +564,16 @@ class _SignerWalletManageScreenState extends State<SignerWalletManageScreen> {
               _row(Icons.edit, l10n.editWalletName, '', onTap: _editName),
               const SizedBox(height: 16),
               // Backup spot-check re-enters the mnemonic show → verify flow.
+              _row(
+                Icons.qr_code_2,
+                l10n.backupQrTitle,
+                l10n.signerBackupEntryDesc,
+                onTap: () => context.push(
+                  '/qr-backup',
+                  extra: SignerWalletScope.maybeOf(context)?.localWalletId,
+                ),
+              ),
+              const SizedBox(height: 16),
               _row(
                 Icons.checklist,
                 l10n.mnemonicBackupCheck,

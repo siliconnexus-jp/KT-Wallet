@@ -56,21 +56,28 @@ Future<void> main() async {
 /// shipped binary therefore has no switch that can replace key operations.
 Future<WalletController> _bootstrapWallet() async {
   final db = openWalletDatabase();
-  final store = WalletStore(db);
-  final manager = await store.load();
-  final controller = WalletController(
-    manager,
-    crypto: MethodChannelCoreCrypto(),
-    store: store,
-  );
-  await controller.recoverPendingDeletions();
-  // Do not inspect native key material during startup. AppLockGate owns the
-  // single unlock prompt; signing/export flows validate and open the selected
-  // wallet only when the user explicitly needs its secret. Even a nominally
-  // non-interactive Keychain/Keystore probe can report device-specific access
-  // states and must not turn readable wallet metadata into a bootstrap error.
-  await controller.restoreDurableFinalityMetrics();
-  return controller;
+  try {
+    final store = WalletStore(db);
+    final manager = await store.load();
+    final controller = WalletController(
+      manager,
+      crypto: MethodChannelCoreCrypto(),
+      store: store,
+    );
+    await controller.recoverPendingDeletions();
+    // Do not inspect native key material during startup. AppLockGate owns the
+    // single unlock prompt; signing/export flows validate and open the selected
+    // wallet only when the user explicitly needs its secret. Even a nominally
+    // non-interactive Keychain/Keystore probe can report device-specific access
+    // states and must not turn readable wallet metadata into a bootstrap error.
+    await controller.restoreDurableFinalityMetrics();
+    return controller;
+  } catch (_) {
+    // A failed bootstrap never hands its controller to the widget for disposal.
+    // Release the connection before a user-driven retry; preserve the cause.
+    await db.close().catchError((Object _) {});
+    rethrow;
+  }
 }
 
 /// Resolves the locale to load [AppLocalizations] for: the manual override if
@@ -336,50 +343,65 @@ class _BootstrapErrorApp extends StatelessWidget {
           builder: (context) {
             final l10n = AppLocalizations.of(context);
             final cryptoUnavailable = error is CryptoUnavailableException;
+            final pendingDeletion =
+                error is PendingDeletionAuthenticationException;
             return Scaffold(
               backgroundColor: SignerColors.bg,
               body: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Icon(
-                        Icons.error_outline,
-                        size: 48,
-                        color: SignerColors.text2,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        cryptoUnavailable
-                            ? l10n.cryptoUnavailableTitle
-                            : l10n.walletLoadErrorTitle,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: SignerColors.text,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        cryptoUnavailable
-                            ? l10n.cryptoUnavailableDesc
-                            : l10n.walletLoadErrorDesc,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          height: 1.6,
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 24,
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Icon(
+                          pendingDeletion
+                              ? Icons.lock_outline
+                              : Icons.error_outline,
+                          size: 48,
                           color: SignerColors.text2,
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                      KtPrimaryButton(
-                        label: l10n.actionRetry,
-                        onPressed: onRetry,
-                      ),
-                    ],
+                        const SizedBox(height: 16),
+                        Text(
+                          pendingDeletion
+                              ? l10n.pendingDeletionAuthTitle
+                              : cryptoUnavailable
+                              ? l10n.cryptoUnavailableTitle
+                              : l10n.walletLoadErrorTitle,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: SignerColors.text,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          pendingDeletion
+                              ? l10n.pendingDeletionAuthDesc
+                              : cryptoUnavailable
+                              ? l10n.cryptoUnavailableDesc
+                              : l10n.walletLoadErrorDesc,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            height: 1.6,
+                            color: SignerColors.text2,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        KtPrimaryButton(
+                          label: pendingDeletion
+                              ? l10n.pendingDeletionAuthAction
+                              : l10n.actionRetry,
+                          onPressed: onRetry,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

@@ -3,6 +3,7 @@ import 'package:cold_signer/src/security/secure_vault.dart';
 import 'package:cold_signer/src/state/locale_controller.dart';
 import 'package:cold_signer/src/state/signer_wallet_controller.dart';
 import 'package:core_crypto/testing.dart';
+import 'package:core_crypto/core_crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,7 +24,53 @@ class _UnavailableVaultStorage implements VaultStorage {
       Future<void>.error(StateError('secure storage unavailable'));
 }
 
+class _AuthenticationRequiredWallet extends SignerWalletController {
+  _AuthenticationRequiredWallet(this.error)
+    : super(storage: InMemoryVaultStorage());
+  Object? error;
+  int attempts = 0;
+  @override
+  Future<void> load() async {
+    attempts++;
+    final failure = error;
+    if (failure != null) throw failure;
+    await super.load();
+  }
+}
+
 void main() {
+  for (final error in <CoreCryptoException>[
+    const AuthCancelledException(),
+    const AuthFailedException(),
+    const AuthUnavailableException(),
+    const AuthLockedException(30),
+  ]) {
+    testWidgets(
+      '${error.code} stays locked and retries without storage damage warning',
+      (tester) async {
+        final wallet = _AuthenticationRequiredWallet(error);
+        addTearDown(wallet.dispose);
+        await tester.pumpWidget(
+          ColdSignerApp(
+            walletController: wallet,
+            localeController: LocaleController(initial: const Locale('en')),
+            initialLocation: '/welcome',
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Wallet locked'), findsOneWidget);
+        expect(find.text('Secure storage unavailable'), findsNothing);
+        expect(find.text('Create new wallet'), findsNothing);
+        expect(wallet.attempts, 1);
+        wallet.error = null;
+        await tester.tap(find.text('Authenticate and unlock'));
+        await tester.pumpAndSettle();
+        expect(wallet.attempts, 2);
+        expect(find.text('Wallet locked'), findsNothing);
+      },
+    );
+  }
+
   testWidgets('secure storage failure blocks onboarding and signing', (
     tester,
   ) async {

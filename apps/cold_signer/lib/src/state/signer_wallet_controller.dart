@@ -299,6 +299,28 @@ class SignerWalletController extends ChangeNotifier {
     );
   }
 
+  /// Native authentication and encryption; plaintext entropy never enters Dart.
+  Future<Uint8List> createEncryptedBackup({
+    required String walletId,
+    required String password,
+  }) async {
+    if (!_hasWallet || _metadata?.walletId != walletId) {
+      throw StateError('wallet is not ready');
+    }
+    if (CoreCryptoValidation.backupPasswordIssue(password) != null) {
+      throw const InvalidInputException();
+    }
+    final sealed = await _crypto.createBackup(
+      walletId: walletId,
+      password: password,
+    );
+    if (!_hasWallet || _metadata?.walletId != walletId) {
+      sealed.fillRange(0, sealed.length, 0);
+      throw StateError('wallet changed');
+    }
+    return sealed;
+  }
+
   /// Builds a verification challenge over exactly the phrase being reviewed.
   QuizQuestion buildVerifyChallengeFor(List<String> words) {
     if (!const {12, 18, 24}.contains(words.length)) {

@@ -9,6 +9,109 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get signerBackupEntryDesc => '強力なパスワードで暗号化・端末に保存';
+
+  @override
+  String get backupQrTitle => '暗号化QR';
+
+  @override
+  String get backupQrIntro =>
+      'この端末で独自の強いパスワードを使ってリカバリーフレーズを暗号化し、KT WalletのQR画像を作成します。画像に平文のフレーズやパスワードは含まれません。';
+
+  @override
+  String get backupQrImageInstruction =>
+      'パスワードが必要 · 受取用QRではありません\nKT Walletの「バックアップから復元」で「暗号化QRをスキャン」または「QR画像を選択」を使用してください。画像を公開せず、パスワードは別に保管してください。';
+
+  @override
+  String get backupQrGenerate => '暗号化QRを作成';
+
+  @override
+  String get backupQrSave => 'QR画像を端末に保存';
+
+  @override
+  String get backupPasswordLabel => 'バックアップパスワード';
+
+  @override
+  String get backupPasswordConfirm => 'パスワードを再入力';
+
+  @override
+  String get backupPasswordTooShort => '14 文字以上入力してください';
+
+  @override
+  String get backupPasswordTooLong => '128 文字以内で入力してください';
+
+  @override
+  String get backupPasswordTooWeak => '繰り返し・連続・一般的なパスワードは使用できません';
+
+  @override
+  String get backupPasswordMismatch => 'パスワードが一致しません';
+
+  @override
+  String get backupFailed => 'バックアップを作成できませんでした';
+
+  @override
+  String get backupSaved => 'バックアップを保存しました';
+
+  @override
+  String get backupCancelled => 'バックアップをキャンセルしました';
+
+  @override
+  String get walletUnlockRequired => 'ウォレットはロックされています';
+
+  @override
+  String get walletUnlockRequiredDesc =>
+      'ウォレットの読み取りにはシステム認証が必要です。認証のキャンセルや期限切れでウォレットが削除されることはありません。解除して再試行してください。';
+
+  @override
+  String get walletUnlockAction => '本人認証して解除';
+
+  @override
+  String get signerBackupScope =>
+      '現在のウォレットのリカバリーフレーズのみをバックアップします。アプリのPIN、設定、署名履歴は含みません。';
+
+  @override
+  String get signerBackupLocalWarning =>
+      'QRとパスワードでリカバリーフレーズを復元できます。端末内に保存し、クラウド同期をオフにして、パスワードは別に保管してください。紛失したパスワードは復元できません。';
+
+  @override
+  String get signRejectWallet =>
+      '別のコールドウォレット宛てのリクエストです。オンライン端末で現在のウォレットを再ペアリングし、取引QRを再生成してください。';
+
+  @override
+  String get signRejectExpired => 'リクエストの有効期限が切れました。オンライン端末で取引QRを再生成してください。';
+
+  @override
+  String get signRejectClock => '端末間の時刻が一致しません。システム時刻を確認し、リクエストを再生成してください。';
+
+  @override
+  String get signRejectDuplicate => '処理済みまたは予約済みのリクエストは再署名できません。署名履歴を確認してください。';
+
+  @override
+  String get signRejectUnsupported =>
+      '取引を安全に解析できないか、ネットワークが一致しません。ネイティブ通貨・トークンの送金と approve(spender, 0) による承認取消のみ対応しています。';
+
+  @override
+  String get signRejectInvalid =>
+      '有効な署名リクエストではありません。オンラインウォレットの取引QRをスキャンしてください。';
+
+  @override
+  String get signRejectNoWallet =>
+      'コールドウォレットが利用できません。作成またはインポート後に再ペアリングしてください。';
+
+  @override
+  String get signRejectStorage => '安全な署名履歴を読み込めません。戻って再試行してください。';
+
+  @override
+  String get signRejectNoSignature => 'このリクエストには署名していません。以下の理由を確認してください。';
+
+  @override
+  String get amountPrecisionUnknown =>
+      'トークンの精度は未検証です。最小単位の数量とコントラクトアドレスを確認してください。';
+
+  @override
+  String get amountBaseUnits => '最小単位';
+
+  @override
   String get qrImportTitle => '暗号化QRから復元';
 
   @override

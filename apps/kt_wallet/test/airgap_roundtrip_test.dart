@@ -37,22 +37,37 @@ TransferDraft _draft() => TransferDraft(
   tokenContract: usdtTronContract,
 );
 
-Widget _wrap(Widget child) {
+Widget _wrap(Widget child, {String? coldWalletId}) {
   final controller = WalletController(
     WalletManager(
       initial: [
-        HotWallet(
-          id: 'airgap-test-wallet',
-          name: '日常钱包',
-          avatarColor: 0xFFF59E0B,
-          addresses: const ChainAddresses(
-            eth: '0x0000000000000000000000000000000000000001',
-            polygon: '0x0000000000000000000000000000000000000001',
-            tron: _testSignerAddress,
-            solana: '11111111111111111111111111111111',
+        if (coldWalletId != null)
+          WatchWallet(
+            id: 'online-local-id',
+            coldWalletId: coldWalletId,
+            protocolVersion: airgapVersion,
+            name: 'Paired wallet',
+            avatarColor: 0xFFF59E0B,
+            addresses: const ChainAddresses(
+              eth: '0x0000000000000000000000000000000000000001',
+              polygon: '0x0000000000000000000000000000000000000001',
+              tron: _testSignerAddress,
+              solana: '11111111111111111111111111111111',
+            ),
+          )
+        else
+          HotWallet(
+            id: 'airgap-test-wallet',
+            name: '日常钱包',
+            avatarColor: 0xFFF59E0B,
+            addresses: const ChainAddresses(
+              eth: '0x0000000000000000000000000000000000000001',
+              polygon: '0x0000000000000000000000000000000000000001',
+              tron: _testSignerAddress,
+              solana: '11111111111111111111111111111111',
+            ),
+            backedUp: true,
           ),
-          backedUp: true,
-        ),
       ],
     ),
     allowTestBypass: true,
@@ -339,6 +354,56 @@ void main() {
   });
 
   group('W6 sign-qr screen', () {
+    testWidgets('paired QR targets cold identity, not local storage ID', (
+      tester,
+    ) async {
+      final session = TransferSession()..draft = _draft();
+      await tester.pumpWidget(
+        _wrap(
+          TransferSessionScope(
+            session: session,
+            child: const SignRequestQrScreen(),
+          ),
+          coldWalletId: 'cold-device-id',
+        ),
+      );
+      await tester.pump();
+      final frames = encodeQrFrames(
+        session.request!,
+        reqId: session.request!.reqId,
+      );
+      final aggregator = FrameAggregator();
+      for (final frame in frames) {
+        aggregator.addFrame(AirgapFrame.decode(base64Url.decode(frame)));
+      }
+      final request = AirgapPayload.decode(aggregator.payload!) as SignRequest;
+      expect(request.walletId, 'cold-device-id');
+      final validator = SignRequestValidator(
+        localWalletId: 'cold-device-id',
+        records: InMemorySignRecordStore(),
+        transactionAllowed: (_) => true,
+      );
+      expect(validator.validate(request).isOk, isTrue);
+    });
+
+    testWidgets('missing paired identity fails closed without QR', (
+      tester,
+    ) async {
+      final session = TransferSession()..draft = _draft();
+      await tester.pumpWidget(
+        _wrap(
+          TransferSessionScope(
+            session: session,
+            child: const SignRequestQrScreen(),
+          ),
+          coldWalletId: '',
+        ),
+      );
+      await tester.pump();
+      expect(session.request, isNull);
+      expect(find.byType(KtQrCode), findsNothing);
+    });
+
     testWidgets('does not publish QR or session request before durable save', (
       tester,
     ) async {

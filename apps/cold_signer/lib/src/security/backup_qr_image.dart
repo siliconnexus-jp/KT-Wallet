@@ -15,6 +15,14 @@ class SignerBackupImagePicker {
     }
     return bytes;
   }
+
+  /// Returns false when the user cancels the system save dialog.
+  Future<bool> save(Uint8List png) async {
+    if (png.isEmpty || png.length > BackupQrImageReader.maxFileBytes) {
+      throw const BackupFormatException('backup image is too large');
+    }
+    return await channel.invokeMethod<bool>('save', {'bytes': png}) ?? false;
+  }
 }
 
 class BackupQrImageReader {

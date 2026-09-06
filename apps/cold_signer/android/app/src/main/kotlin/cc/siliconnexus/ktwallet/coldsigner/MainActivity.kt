@@ -36,6 +36,8 @@ class MainActivity : FlutterFragmentActivity(), CoreCryptoAuthLifecycleHost {
     private val taskPrivacyState = TaskPrivacyState()
     private var backupImageResult: MethodChannel.Result? = null
     private val backupImageRequest = 8421
+    private val backupSaveRequest = 8422
+    private var backupSaveBytes: ByteArray? = null
     private val backupImageLimit = 8 * 1024 * 1024
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,11 +57,37 @@ class MainActivity : FlutterFragmentActivity(), CoreCryptoAuthLifecycleHost {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kt/signer_backup_image")
             .setMethodCallHandler { call, result ->
-                if (call.method != "pick") {
+                if (call.method != "pick" && call.method != "save") {
                     result.notImplemented()
                 } else if (backupImageResult != null) {
                     result.error("BUSY", null, null)
                 } else {
+                    if (call.method == "save") {
+                        val bytes = call.argument<ByteArray>("bytes")
+                        val pngHeader = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)
+                        if (bytes == null || bytes.size !in 8..backupImageLimit ||
+                            !bytes.copyOfRange(0, 8).contentEquals(pngHeader)) {
+                            result.error("INVALID_IMAGE", null, null)
+                            return@setMethodCallHandler
+                        }
+                        backupImageResult = result
+                        backupSaveBytes = bytes
+                        try {
+                            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = "image/png"
+                                putExtra(Intent.EXTRA_TITLE, "KT-Cold-Signer-${System.currentTimeMillis()}-encrypted.png")
+                                putExtra(Intent.EXTRA_LOCAL_ONLY, true)
+                            }
+                            @Suppress("DEPRECATION")
+                            startActivityForResult(intent, backupSaveRequest)
+                        } catch (_: Exception) {
+                            backupImageResult = null
+                            backupSaveBytes = null
+                            result.error("WRITE_FAILED", null, null)
+                        }
+                        return@setMethodCallHandler
+                    }
                     backupImageResult = result
                     try {
                         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
@@ -140,6 +168,31 @@ class MainActivity : FlutterFragmentActivity(), CoreCryptoAuthLifecycleHost {
     @Deprecated("Activity result bridge for the bounded local document picker")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == backupSaveRequest) {
+            val result = backupImageResult ?: return
+            val bytes = backupSaveBytes
+            backupImageResult = null
+            backupSaveBytes = null
+            if (resultCode == Activity.RESULT_CANCELED) {
+                result.success(false)
+                return
+            }
+            val uri = data?.data
+            if (resultCode != Activity.RESULT_OK || uri?.scheme != "content" || bytes == null) {
+                result.error("WRITE_FAILED", null, null)
+                return
+            }
+            Thread {
+                try {
+                    contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes); it.flush() }
+                        ?: throw IllegalStateException()
+                    runOnUiThread { result.success(true) }
+                } catch (_: Exception) {
+                    runOnUiThread { result.error("WRITE_FAILED", null, null) }
+                }
+            }.start()
+            return
+        }
         if (requestCode != backupImageRequest) return
         val result = backupImageResult ?: return
         if (resultCode == Activity.RESULT_CANCELED) {

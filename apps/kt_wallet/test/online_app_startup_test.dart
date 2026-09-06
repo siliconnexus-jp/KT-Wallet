@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/main.dart';
+import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/src/onboarding/product_intro_app.dart';
 import 'package:kt_wallet/src/security/biometric_auth.dart';
 import 'package:kt_wallet/src/state/locale_controller.dart';
@@ -155,6 +156,50 @@ void main() {
     expect(find.text('日常钱包'), findsOneWidget);
     expect(calls, 2);
   });
+
+  for (final language in ['zh', 'en', 'ja']) {
+    for (final failure in const <CoreCryptoException>[
+      AuthCancelledException(),
+      AuthFailedException(),
+      AuthUnavailableException(),
+      AuthLockedException(30),
+    ]) {
+      testWidgets(
+        'pending deletion ${failure.code} is explicit and user-retried ($language)',
+        (tester) async {
+          tester.view.physicalSize = const Size(390, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          var calls = 0;
+          final l10n = lookupAppLocalizations(Locale(language));
+          await tester.pumpWidget(
+            RootApp(
+              localeController: LocaleController(initial: Locale(language)),
+              walletBootstrap: () async {
+                if (++calls == 1) {
+                  throw PendingDeletionAuthenticationException(failure);
+                }
+                return WalletController(_wallets());
+              },
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text(l10n.pendingDeletionAuthTitle), findsOneWidget);
+          expect(find.text(l10n.pendingDeletionAuthDesc), findsOneWidget);
+          expect(find.text(l10n.walletLoadErrorTitle), findsNothing);
+          expect(tester.takeException(), isNull);
+          await tester.pump(const Duration(minutes: 1));
+          expect(calls, 1);
+          await tester.tap(find.text(l10n.pendingDeletionAuthAction));
+          await tester.pumpAndSettle();
+          expect(calls, 2);
+          expect(find.text(l10n.pendingDeletionAuthTitle), findsNothing);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
 
   testWidgets('root disposal closes the wallet database', (tester) async {
     final controller = _ClosableController();

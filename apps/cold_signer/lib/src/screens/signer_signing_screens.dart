@@ -951,6 +951,18 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
   final _session = QrFrameScanSession();
   FrameAggregator get _aggregator => _session.aggregator;
   AggregatorProgress? _progress;
+  bool _processing = false;
+  int _scanEpoch = 0;
+
+  void _resetScan() {
+    _session.reset();
+    if (mounted) {
+      setState(() {
+        _progress = null;
+        _scanEpoch++;
+      });
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -989,8 +1001,12 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
   /// belong to a foreign session) are counted silently as anomalies inside
   /// [QrFrameScanSession] — a stray QR in view must not abort the scan.
   void _onScanned(String raw) {
-    if (_session.isDone) return;
+    if (_processing || _session.isDone) return;
     final progress = _session.add(raw);
+    if (_session.isFailed) {
+      _resetScan();
+      return;
+    }
     if (_session.isDone) {
       _onComplete();
       return;
@@ -999,9 +1015,30 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
   }
 
   Future<void> _onComplete() async {
+    if (_processing) return;
+    _processing = true;
+    try {
+      await _reviewCompletedRequest();
+    } catch (_) {
+      if (mounted) {
+        await context.push(
+          '/risk',
+          extra: const SignerRejection(SignerRejectionReason.storage),
+        );
+      }
+    } finally {
+      _processing = false;
+      _resetScan();
+    }
+  }
+
+  Future<void> _reviewCompletedRequest() async {
     final controller = SignerWalletScope.maybeOf(context);
     if (!kDebugMode && controller?.hasWallet != true) {
-      unawaited(context.push('/risk'));
+      await context.push(
+        '/risk',
+        extra: const SignerRejection(SignerRejectionReason.noWallet),
+      );
       return;
     }
     // Live flow: the durable drift-backed anti-replay ledger, so a reqId
@@ -1018,7 +1055,10 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
       final payload = AirgapPayload.decode(_aggregator.payload!);
       if (payload is! SignRequest) {
         // Account exports / results are not signable input.
-        unawaited(context.push('/risk'));
+        await context.push(
+          '/risk',
+          extra: const SignerRejection(SignerRejectionReason.invalidPayload),
+        );
         return;
       }
       request = payload;
@@ -1027,13 +1067,25 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
       // TRON and Solana signing envelope before the request reaches review.
       final localWalletId = controller?.localWalletId;
       if (controller?.hasWallet == true && localWalletId == null) {
-        unawaited(context.push('/risk'));
+        await context.push(
+          '/risk',
+          extra: SignerRejection(
+            SignerRejectionReason.noWallet,
+            request: request,
+          ),
+        );
         return;
       }
       final validatorWalletId =
           localWalletId ?? (kDebugMode ? demoWalletId : null);
       if (validatorWalletId == null) {
-        unawaited(context.push('/risk'));
+        await context.push(
+          '/risk',
+          extra: SignerRejection(
+            SignerRejectionReason.noWallet,
+            request: request,
+          ),
+        );
         return;
       }
       verdict = SignRequestValidator(
@@ -1042,14 +1094,22 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
         transactionAllowed: _isStructurallySupported,
       ).validate(request);
     } on PayloadError {
-      unawaited(context.push('/risk'));
+      if (!mounted) return;
+      await context.push(
+        '/risk',
+        extra: const SignerRejection(SignerRejectionReason.invalidPayload),
+      );
       return;
     }
+    if (!mounted) return;
     if (!verdict.isOk) {
-      unawaited(context.push('/risk'));
+      await context.push(
+        '/risk',
+        extra: SignerRejection.fromValidation(verdict.code, request),
+      );
       return;
     }
-    unawaited(context.push('/parse', extra: request));
+    await context.push('/parse', extra: request);
   }
 
   @override
@@ -1078,6 +1138,7 @@ class _SignerScanScreenState extends State<SignerScanScreen> {
             const SizedBox(height: 24),
             Flexible(
               child: ScanViewfinder(
+                key: ValueKey(_scanEpoch),
                 height: 360,
                 frameColor: SignerColors.ok,
                 onSimulatedTap: _captureNext,
@@ -1142,6 +1203,17 @@ class SignerParseScreen extends StatelessWidget {
     final reqLabel = req == null
         ? (kDebugMode ? 'REQ-7F3A2C' : '')
         : _reqLabel(req.reqId);
+    // Native scales are local protocol facts; QR summary metadata is untrusted.
+    final nativeAsset = parsed?.operation == TxOperation.nativeTransfer
+        ? switch (parsed!.chain) {
+            Chain.ethereum || Chain.base || Chain.arbitrum => (18, 'ETH'),
+            Chain.polygon => (18, 'POL'),
+            Chain.avalanche => (18, 'AVAX'),
+            Chain.bnb => (18, 'BNB'),
+            Chain.tron => (6, 'TRX'),
+            Chain.solana => (9, 'SOL'),
+          }
+        : null;
     final amount = req == null
         ? (kDebugMode ? '120.00 USDT' : '')
         : parsed == null
@@ -1150,7 +1222,9 @@ class SignerParseScreen extends StatelessWidget {
               : l10n.transactionParseFailed
         : parsed.operation == TxOperation.approvalRevoke
         ? l10n.approvalRevokeZeroAllowance
-        : '${_group(parsed.amountRaw.toString())} base units';
+        : nativeAsset != null
+        ? '${Amount(raw: parsed.amountRaw, decimals: nativeAsset.$1).format()} ${nativeAsset.$2}'
+        : '${_group(parsed.amountRaw.toString())} ${l10n.amountBaseUnits}';
     final rawAmount = req == null
         ? (kDebugMode ? '120,000,000' : '')
         : _group(
@@ -1161,11 +1235,13 @@ class SignerParseScreen extends StatelessWidget {
         ? (kDebugMode ? 6 : 0)
         : parsed == null && kDebugMode && testSummary['decimals'] is int
         ? testSummary['decimals']! as int
-        : 0;
+        : nativeAsset?.$1;
     final from = req == null
         ? (kDebugMode ? demoSignerAddress : '')
         : parsed?.from ??
-              (kDebugMode ? '${testSummary['from'] ?? ''}' : null) ??
+              (parsed == null && kDebugMode
+                  ? testSummary['from'] as String?
+                  : null) ??
               controller?.metadata?.addresses[_addressKeyForCoin(req.coin)] ??
               '?';
     final to = req == null
@@ -1291,7 +1367,9 @@ class SignerParseScreen extends StatelessWidget {
                 )
               else
                 Text(
-                  l10n.rawAmountPrecision(rawAmount, decimals),
+                  decimals == null
+                      ? l10n.amountPrecisionUnknown
+                      : l10n.rawAmountPrecision(rawAmount, decimals),
                   style: const TextStyle(
                     fontSize: 12,
                     fontFamily: KtFonts.mono,
@@ -1358,17 +1436,59 @@ class SignerParseScreen extends StatelessWidget {
   }
 }
 
+enum SignerRejectionReason {
+  badWallet,
+  expired,
+  clockSkew,
+  duplicate,
+  unsupportedTransaction,
+  invalidPayload,
+  noWallet,
+  storage,
+}
+
+class SignerRejection {
+  const SignerRejection(this.reason, {this.request});
+  final SignerRejectionReason reason;
+  final SignRequest? request;
+
+  factory SignerRejection.fromValidation(
+    ValidationCode code,
+    SignRequest request,
+  ) => SignerRejection(switch (code) {
+    ValidationCode.badWallet => SignerRejectionReason.badWallet,
+    ValidationCode.expired => SignerRejectionReason.expired,
+    ValidationCode.clockSkew => SignerRejectionReason.clockSkew,
+    ValidationCode.duplicate => SignerRejectionReason.duplicate,
+    ValidationCode.unsupportedTransaction =>
+      SignerRejectionReason.unsupportedTransaction,
+    ValidationCode.ok => throw ArgumentError(
+      'Cannot reject an accepted request',
+    ),
+  }, request: request);
+
+  String message(AppLocalizations l10n) => switch (reason) {
+    SignerRejectionReason.badWallet => l10n.signRejectWallet,
+    SignerRejectionReason.expired => l10n.signRejectExpired,
+    SignerRejectionReason.clockSkew => l10n.signRejectClock,
+    SignerRejectionReason.duplicate => l10n.signRejectDuplicate,
+    SignerRejectionReason.unsupportedTransaction => l10n.signRejectUnsupported,
+    SignerRejectionReason.invalidPayload => l10n.signRejectInvalid,
+    SignerRejectionReason.noWallet => l10n.signRejectNoWallet,
+    SignerRejectionReason.storage => l10n.signRejectStorage,
+  };
+}
+
 /// C17 风险警告.
 class SignerRiskScreen extends StatelessWidget {
-  const SignerRiskScreen({super.key});
+  const SignerRiskScreen({super.key, this.rejection});
+  final SignerRejection? rejection;
 
-  /// The rejected request's raw payload (canned demo data, hex-encoded).
-  static const _rawTxHex =
-      '0a021f8b220899c14e3b5d2a77e340b8b2d8a8f1335a760802126e0a3174797065'
-      '2e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572'
-      '536d617274436f6e747261637412390a15419f2d3c7a44e1b06f8c55d2e4a97b'
-      '318d6fa02c1e1215418b44f7d21c39aa66e05f2b90d34c7e81a5f30d6b188094'
-      'ebdc0370d8b2d4a8f133';
+  String get _rawTxHex =>
+      rejection?.request?.rawTx
+          .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+          .join() ??
+      '';
 
   Future<void> _showRawTx(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -1380,59 +1500,63 @@ class SignerRiskScreen extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: SignerColors.border,
-                    borderRadius: BorderRadius.circular(2),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: SignerColors.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                l10n.viewRawTxData,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: SignerColors.text,
+                const SizedBox(height: 14),
+                Text(
+                  l10n.viewRawTxData,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: SignerColors.text,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'REQ-9AB301 · TRON',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontFamily: KtFonts.mono,
-                  color: Color(0xFF5A616C),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: SignerColors.surface2,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const SelectableText(
-                  _rawTxHex,
-                  style: TextStyle(
+                const SizedBox(height: 6),
+                Text(
+                  rejection?.request == null
+                      ? ''
+                      : '${_reqLabel(rejection!.request!.reqId)} · ${_coinName(rejection!.request!.coin)}',
+                  style: const TextStyle(
                     fontSize: 12,
-                    height: 1.6,
                     fontFamily: KtFonts.mono,
-                    color: SignerColors.text2,
+                    color: Color(0xFF5A616C),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: SignerColors.surface2,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: SelectableText(
+                    _rawTxHex,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      height: 1.6,
+                      fontFamily: KtFonts.mono,
+                      color: SignerColors.text2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1476,23 +1600,24 @@ class SignerRiskScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _showRawTx(context),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 48),
-              child: Center(
-                child: Text(
-                  l10n.viewRawTxData,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: SignerColors.text2,
+          if (rejection?.request != null)
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _showRawTx(context),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Center(
+                  child: Text(
+                    l10n.viewRawTxData,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: SignerColors.text2,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
         ],
       ),
       children: [
@@ -1524,7 +1649,7 @@ class SignerRiskScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              l10n.signingBlockedDesc,
+              l10n.signRejectNoSignature,
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 14,
@@ -1549,20 +1674,15 @@ class SignerRiskScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      l10n.unknownContractCallDetected('approve'),
+                      (rejection ??
+                              const SignerRejection(
+                                SignerRejectionReason.invalidPayload,
+                              ))
+                          .message(l10n),
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         color: SignerColors.text,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      l10n.unknownContractCallDesc,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        height: 1.5,
-                        color: SignerColors.text2,
                       ),
                     ),
                   ],

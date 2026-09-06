@@ -40,6 +40,18 @@ class _DeleteFailingCrypto extends MockCoreCrypto {
   }
 }
 
+class _RetryableDeleteCrypto extends MockCoreCrypto {
+  CoreCryptoException? failure;
+  final attempts = <String>[];
+
+  @override
+  Future<void> deleteWallet(String walletId) async {
+    attempts.add(walletId);
+    if (failure case final error?) throw error;
+    await super.deleteWallet(walletId);
+  }
+}
+
 class _DeleteOnceFailingStore extends WalletStore {
   _DeleteOnceFailingStore(super.database);
 
@@ -208,6 +220,60 @@ void main() {
     expect(crypto.storedWalletCount, 1);
     expect(await failingStore.pendingDeletionIds(), isEmpty);
   });
+
+  for (final failure in const <CoreCryptoException>[
+    AuthCancelledException(),
+    AuthFailedException(),
+    AuthUnavailableException(),
+    AuthLockedException(30),
+  ]) {
+    test(
+      'pending deletion preserves data after ${failure.code} until retry',
+      () async {
+        final crypto = _RetryableDeleteCrypto()..failure = failure;
+        for (final id in ['A', 'B']) {
+          await store.save(_hot(id));
+          await store.markDeletionPending(id);
+          await crypto.storeWallet(
+            walletId: id,
+            mnemonic: await crypto.generateMnemonic(),
+          );
+        }
+        final controller = WalletController(
+          await store.load(),
+          crypto: crypto,
+          store: store,
+        );
+
+        await expectLater(
+          controller.recoverPendingDeletions(),
+          throwsA(
+            isA<PendingDeletionAuthenticationException>().having(
+              (e) => e.cause,
+              'original authentication error',
+              same(failure),
+            ),
+          ),
+        );
+        expect(crypto.attempts, ['A']);
+        expect(crypto.storedWalletCount, 2);
+        expect(await store.pendingDeletionIds(), ['A', 'B']);
+        expect(await WalletsRepository(db).listAll(), hasLength(2));
+        expect(
+          await WalletsRepository(db).scoped('A').accounts(),
+          hasLength(4),
+        );
+        expect((await store.load()).wallets, isEmpty);
+
+        crypto.failure = null;
+        await controller.recoverPendingDeletions();
+        expect(crypto.attempts, ['A', 'A', 'B']);
+        expect(crypto.storedWalletCount, 0);
+        expect(await store.pendingDeletionIds(), isEmpty);
+        expect(await WalletsRepository(db).listAll(), isEmpty);
+      },
+    );
+  }
 
   test('watch-wallet database failure keeps the in-memory wallet', () async {
     final failingStore = _DeleteOnceFailingStore(db);

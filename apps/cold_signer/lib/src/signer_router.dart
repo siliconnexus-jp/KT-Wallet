@@ -8,6 +8,7 @@ import 'screens/signer_onboarding_screens.dart';
 import 'developer_mode.dart';
 import 'screens/signer_settings_screens.dart';
 import 'screens/signer_qr_import_screen.dart';
+import 'screens/signer_qr_backup_screen.dart';
 import 'screens/signer_signing_screens.dart';
 import 'security/secure_vault.dart';
 import 'signing/mnemonic_review.dart';
@@ -89,6 +90,9 @@ final _liveOverrides = <String, Widget Function(BuildContext, GoRouterState)>{
   },
   '/set-password': (c, s) => const SignerSetPasswordScreen(),
   '/parse': (c, s) => SignerParseScreen(request: _requestExtra(s)),
+  '/risk': (c, s) => SignerRiskScreen(
+    rejection: s.extra is SignerRejection ? s.extra as SignerRejection : null,
+  ),
   '/auth': (c, s) => SignerAuthScreen(request: _requestExtra(s)),
   '/result-qr': (c, s) =>
       SignerResultQrScreen(request: _requestExtra(s), result: _resultExtra(s)),
@@ -117,6 +121,14 @@ GoRouter buildSignerRouter({String initialLocation = '/'}) {
       currentWalletId: SignerWalletScope.maybeOf(context)?.localWalletId,
     ),
     routes: [
+      GoRoute(
+        path: '/qr-backup',
+        builder: (c, s) => _SensitiveSignerContent(
+          child: SignerQrBackupScreen(
+            walletId: s.extra is String ? s.extra as String : '',
+          ),
+        ),
+      ),
       GoRoute(
         path: '/qr-import',
         builder: (c, s) =>
@@ -227,6 +239,10 @@ String? signerProductionRouteRedirect({
 }) {
   if (galleryMode) return null;
   final path = uri.path;
+  if (path == '/qr-backup' &&
+      (!hasWallet || extra is! String || extra != currentWalletId)) {
+    return hasWallet ? '/wallet' : '/welcome';
+  }
   final resumeOnboarding = switch (onboardingStage) {
     SignerOnboardingStage.mnemonicReview => '/mnemonic-show',
     SignerOnboardingStage.pinSetup => '/set-password',

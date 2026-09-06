@@ -100,6 +100,192 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @signerBackupEntryDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'强密码加密 · 保存到本地'**
+  String get signerBackupEntryDesc;
+
+  /// No description provided for @backupQrTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'加密二维码'**
+  String get backupQrTitle;
+
+  /// No description provided for @backupQrIntro.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用独立强密码在本机加密助记词，生成带 KT Wallet 品牌的二维码图片。图片不包含明文助记词或密码。'**
+  String get backupQrIntro;
+
+  /// No description provided for @backupQrImageInstruction.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要密码 · 不是收款码\n在 KT Wallet 中选择「从备份恢复」→「扫描加密二维码」或「选择二维码图片」。请勿公开此图片，密码须分开保管。'**
+  String get backupQrImageInstruction;
+
+  /// No description provided for @backupQrGenerate.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成加密二维码'**
+  String get backupQrGenerate;
+
+  /// No description provided for @backupQrSave.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存二维码图片到本地'**
+  String get backupQrSave;
+
+  /// No description provided for @backupPasswordLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份密码'**
+  String get backupPasswordLabel;
+
+  /// No description provided for @backupPasswordConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'再次输入密码'**
+  String get backupPasswordConfirm;
+
+  /// No description provided for @backupPasswordTooShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'请至少输入 14 个字符'**
+  String get backupPasswordTooShort;
+
+  /// No description provided for @backupPasswordTooLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'最多输入 128 个字符'**
+  String get backupPasswordTooLong;
+
+  /// No description provided for @backupPasswordTooWeak.
+  ///
+  /// In zh, this message translates to:
+  /// **'请勿使用重复、连续或常见密码'**
+  String get backupPasswordTooWeak;
+
+  /// No description provided for @backupPasswordMismatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'两次输入的密码不一致'**
+  String get backupPasswordMismatch;
+
+  /// No description provided for @backupFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成备份失败'**
+  String get backupFailed;
+
+  /// No description provided for @backupSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份已保存'**
+  String get backupSaved;
+
+  /// No description provided for @backupCancelled.
+  ///
+  /// In zh, this message translates to:
+  /// **'已取消备份'**
+  String get backupCancelled;
+
+  /// No description provided for @walletUnlockRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包已锁定'**
+  String get walletUnlockRequired;
+
+  /// No description provided for @walletUnlockRequiredDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要系统身份认证才能读取钱包。认证取消或过期不会删除钱包，请解锁后重试。'**
+  String get walletUnlockRequiredDesc;
+
+  /// No description provided for @walletUnlockAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'验证身份并解锁'**
+  String get walletUnlockAction;
+
+  /// No description provided for @signerBackupScope.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅备份当前钱包的助记词，不包含 App 密码、设置或签名记录。'**
+  String get signerBackupScope;
+
+  /// No description provided for @signerBackupLocalWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'二维码与密码一起等同于助记词。请选择本地保存位置，关闭云同步，密码请分开保管；遗忘密码无法恢复。'**
+  String get signerBackupLocalWarning;
+
+  /// No description provided for @signRejectWallet.
+  ///
+  /// In zh, this message translates to:
+  /// **'此请求属于另一个冷钱包。请在在线端重新配对当前冷钱包，再生成交易二维码。'**
+  String get signRejectWallet;
+
+  /// No description provided for @signRejectExpired.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易请求已过期。请在在线端重新生成交易二维码。'**
+  String get signRejectExpired;
+
+  /// No description provided for @signRejectClock.
+  ///
+  /// In zh, this message translates to:
+  /// **'两台设备的时间不一致。请检查系统时间后重新生成请求。'**
+  String get signRejectClock;
+
+  /// No description provided for @signRejectDuplicate.
+  ///
+  /// In zh, this message translates to:
+  /// **'此请求已处理或已保留，不能重复签名。请检查签名记录。'**
+  String get signRejectDuplicate;
+
+  /// No description provided for @signRejectUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法安全解析此交易或网络信息不匹配。仅支持原生币转账、Token 转账及 approve(被授权合约, 0) 撤销。'**
+  String get signRejectUnsupported;
+
+  /// No description provided for @signRejectInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'二维码不是有效的待签名交易。请扫描在线钱包生成的交易二维码。'**
+  String get signRejectInvalid;
+
+  /// No description provided for @signRejectNoWallet.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前冷钱包不可用。请先创建或导入钱包，再重新配对。'**
+  String get signRejectNoWallet;
+
+  /// No description provided for @signRejectStorage.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法读取安全签名记录。请返回后重试。'**
+  String get signRejectStorage;
+
+  /// No description provided for @signRejectNoSignature.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次请求未获签名，请查看以下原因。'**
+  String get signRejectNoSignature;
+
+  /// No description provided for @amountPrecisionUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'Token 精度未经验证，请核对原始数量与合约地址。'**
+  String get amountPrecisionUnknown;
+
+  /// No description provided for @amountBaseUnits.
+  ///
+  /// In zh, this message translates to:
+  /// **'基础单位'**
+  String get amountBaseUnits;
+
   /// No description provided for @qrImportTitle.
   ///
   /// In zh, this message translates to:

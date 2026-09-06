@@ -3356,8 +3356,14 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
       return;
     }
     final chain = (draft ?? demoDraft).chain;
-    final walletId =
-        wallet?.id ?? (developerFixturesEnabled ? demoWalletId : '');
+    // Local storage IDs and the paired signer's identity are distinct.
+    final walletId = wallet is WatchWallet
+        ? wallet.coldWalletId
+        : wallet?.id ?? (developerFixturesEnabled ? demoWalletId : '');
+    if (walletId.isEmpty) {
+      _paramsFailed = true;
+      return;
+    }
     final from = wallet == null ? '' : addressForChain(wallet.addresses, chain);
     // The ACTIVE network instance for the draft's chain: its evmChainId is
     // the signing domain the raw tx must carry (Sepolia 11155111, ...), and
@@ -3792,10 +3798,18 @@ class _SignRequestQrScreenState extends State<SignRequestQrScreen> {
 /// would display for the outstanding request are generated, aggregated and
 /// decoded back into a verified [SignResult] exactly as a real scan would be.
 class ScanResultScreen extends StatefulWidget {
-  const ScanResultScreen({super.key, this.availability});
+  const ScanResultScreen({
+    super.key,
+    this.availability,
+    this.resultPersistence,
+  });
 
   /// Camera probe override for tests; defaults to the process-wide instance.
   final CameraAvailability? availability;
+
+  /// Storage failure/latency injection for tests; never replaces verification.
+  final Future<void> Function(BuildContext, TransferSession, SignResult)?
+  resultPersistence;
 
   @override
   State<ScanResultScreen> createState() => _ScanResultScreenState();
@@ -3807,6 +3821,8 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
   final _session = QrFrameScanSession();
   AggregatorProgress? _progress;
   bool _navigated = false;
+  bool _processing = false;
+  int _scanEpoch = 0;
 
   void _simulateScan(
     BuildContext context,
@@ -3838,11 +3854,16 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
   /// Discards the current (unverifiable or failed) session and rescans.
   void _restartSession() {
     _session.reset();
-    setState(() => _progress = null);
+    if (mounted) {
+      setState(() {
+        _progress = null;
+        _scanEpoch++;
+      });
+    }
   }
 
   Future<void> _onScanned(String raw) async {
-    if (_navigated) return;
+    if (_navigated || _processing) return;
     final progress = _session.add(raw); // invalid strings: silent anomalies
     if (progress.received > 0) setState(() => _progress = progress);
     if (_session.isFailed) return _restartSession();
@@ -3854,32 +3875,59 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
       // Nothing to answer (no outstanding request): drop the payload.
       return _restartSession();
     }
-    final SignResult result;
+    _processing = true;
+    var saving = false;
+    final wallet = WalletScope.of(context).current;
+    final draft = session.draft;
     try {
-      final wallet = WalletScope.of(context).current;
       final expectedSigner = wallet == null
           ? null
           : addressForChain(wallet.addresses, chainForCoin(request.coin));
-      result = await verifySignResultCryptographically(
+      final result = await verifySignResultCryptographically(
         _session.payload!,
         expected: request,
         expectedSigner: expectedSigner,
       );
       if (!mounted) return;
+      if (!identical(session.request, request) ||
+          !identical(session.draft, draft) ||
+          WalletScope.of(context).current?.id != wallet?.id) {
+        return _restartSession();
+      }
+      saving = true;
+      final persist = widget.resultPersistence;
+      if (persist != null) {
+        await persist(context, session, result);
+      } else {
+        await _persistAirgapTransaction(
+          context,
+          session,
+          TxStatus.signed,
+          hash: result.txHash,
+        );
+      }
+      if (!mounted) return;
+      if (!identical(session.request, request) ||
+          !identical(session.draft, draft) ||
+          WalletScope.of(context).current?.id != wallet?.id) {
+        return _restartSession();
+      }
+      session.result = result;
+      _navigated = true;
+      await context.push('/broadcast-confirm');
     } on Object {
-      // Foreign or malformed payload: silently start over, keep scanning.
-      return _restartSession();
+      if (mounted && saving) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context).signResultSaveFailed),
+          ),
+        );
+      }
+    } finally {
+      _navigated = false;
+      _processing = false;
+      _restartSession();
     }
-    session.result = result;
-    await _persistAirgapTransaction(
-      context,
-      session,
-      TxStatus.signed,
-      hash: result.txHash,
-    );
-    if (!mounted) return;
-    _navigated = true;
-    unawaited(context.push('/broadcast-confirm'));
   }
 
   @override
@@ -3921,6 +3969,7 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
             const SizedBox(height: 24),
             Flexible(
               child: ScanViewfinder(
+                key: ValueKey(_scanEpoch),
                 height: 380,
                 frameColor: SignerColors.blue,
                 semanticLabel: l10n.scanSignResultTitle,

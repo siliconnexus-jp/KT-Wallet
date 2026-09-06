@@ -206,8 +206,8 @@ class CoreCryptoPlugin :
                         },
                     )
                 }
-                "deriveAddresses" -> result.success(deriveAddresses(call))
-                "derivePublicKeys" -> result.success(derivePublicKeys(call))
+                "deriveAddresses" -> readPublicData(result) { deriveAddresses(call) }
+                "derivePublicKeys" -> readPublicData(result) { derivePublicKeys(call) }
                 "signTransaction" -> signTransaction(call, result)
                 "exportMnemonic" -> exportMnemonic(call, result)
                 "beginPrivateKeyExport" -> beginPrivateKeyExport(call, result)
@@ -325,6 +325,19 @@ class CoreCryptoPlugin :
             entropy.fill(0)
             if (entropy !== payload) payload.fill(0)
         }
+    }
+
+    /** A restart can outlive the Keystore's 30-second auth window. Retry only
+     * this recoverable condition, once, behind the native strong-auth prompt.
+     * Missing/corrupted/invalidated keys must never be regenerated or bypassed.
+     */
+    private fun readPublicData(result: Result, action: () -> Any) {
+        authenticatedRead(
+            action = action,
+            requiresAuthentication = { it is android.security.keystore.UserNotAuthenticatedException },
+            authenticate = { retry -> promptThen(result, "Unlock wallet", retry) },
+            complete = { value -> result.success(value) },
+        )
     }
 
     private fun deriveAddresses(call: MethodCall): Map<String, String> {
@@ -667,6 +680,7 @@ class CoreCryptoPlugin :
     }
 
     private fun mapError(e: Exception): String = when (e) {
+        is android.security.keystore.UserNotAuthenticatedException -> "AUTH_FAILED"
         is AuthGate.LockedException -> "AUTH_LOCKED"
         is WalletCoreBridge.InvalidMnemonicException -> "INVALID_MNEMONIC"
         is WalletCoreBridge.InvalidInputException -> "INVALID_INPUT"

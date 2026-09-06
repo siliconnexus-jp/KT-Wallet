@@ -22,6 +22,14 @@ import '../observability/experience_metrics.dart';
 import '../wallets/wallet_model.dart';
 import '../wallets/wallet_store.dart';
 
+/// Authentication interrupted an already-authorized deletion, not a database
+/// load. Keep this context so retry UI can disclose the destructive operation.
+class PendingDeletionAuthenticationException implements Exception {
+  const PendingDeletionAuthenticationException(this.cause);
+
+  final CoreCryptoException cause;
+}
+
 /// App-wide wallet state. Wraps the tested [WalletManager] as a [ChangeNotifier]
 /// so screens rebuild when the current wallet changes (switch/add/rename/etc.).
 ///
@@ -136,6 +144,14 @@ class WalletController extends ChangeNotifier {
         await _crypto.deleteWallet(walletId);
       } on WalletNotFoundException {
         // The process may have died after native deletion already succeeded.
+      } on CoreCryptoException catch (error) {
+        if (error is AuthCancelledException ||
+            error is AuthFailedException ||
+            error is AuthUnavailableException ||
+            error is AuthLockedException) {
+          throw PendingDeletionAuthenticationException(error);
+        }
+        rethrow;
       }
       await store.delete(walletId);
     }

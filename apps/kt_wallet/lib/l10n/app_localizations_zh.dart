@@ -9,6 +9,9 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get signResultSaveFailed => '无法安全保存签名结果。尚未广播，请重新扫描后重试。';
+
+  @override
   String get settingsGeneral => '通用';
 
   @override
@@ -1582,7 +1585,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get walletLoadErrorTitle => '钱包加载失败';
 
   @override
-  String get walletLoadErrorDesc => '无法读取本机的钱包数据。请重试；若问题持续，请重新安装应用。';
+  String get walletLoadErrorDesc =>
+      '无法读取本机的钱包数据。请重试。若问题持续，请保留应用及其数据，以免丢失尚未备份的钱包。';
+
+  @override
+  String get pendingDeletionAuthTitle => '删除尚未完成';
+
+  @override
+  String get pendingDeletionAuthDesc =>
+      '上次删除钱包需要完成系统身份验证。未完成的删除记录已保留，这不表示安全存储损坏。准备好后，请验证身份以继续删除；若认证暂不可用或已锁定，请稍后重试或检查设备锁屏设置。';
+
+  @override
+  String get pendingDeletionAuthAction => '验证身份并继续删除';
 
   @override
   String get walletPersistenceFailed => '无法安全保存钱包，本次未添加任何钱包。请重试。';

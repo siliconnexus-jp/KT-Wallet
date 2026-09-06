@@ -1,4 +1,5 @@
 {
+  "signResultSaveFailed": "署名結果を安全に保存できませんでした。送信はしていません。再スキャンしてください。",
 "settingsGeneral": "一般",
 "generalSettingsDescription": "言語と表示通貨はアプリ全体に適用されます。ウォレットやオンチェーン資産には影響しません。",
 "backupThisWallet": "このウォレットをバックアップ",
@@ -579,7 +580,10 @@
   "deleteWatchWalletDesc": "公開アドレスとローカル記録のみ削除。資産に影響はありません",
   "languageSystem": "システムに従う",
   "walletLoadErrorTitle": "ウォレットを読み込めませんでした",
-  "walletLoadErrorDesc": "端末内のウォレットデータを読み取れませんでした。もう一度お試しください。問題が続く場合はアプリを再インストールしてください。",
+  "walletLoadErrorDesc": "端末内のウォレットデータを読み取れませんでした。もう一度お試しください。問題が続く場合も、未バックアップのウォレットを失わないよう、アプリとデータを削除しないでください。",
+  "pendingDeletionAuthTitle": "削除が完了していません",
+  "pendingDeletionAuthDesc": "前回のウォレット削除には端末の本人認証が必要です。未完了の削除は保留されており、安全なストレージの破損を示すものではありません。準備ができたら認証して削除を続けてください。認証が利用できない、またはロックされている場合は、しばらく待つか端末の画面ロック設定をご確認ください。",
+  "pendingDeletionAuthAction": "認証して削除を続ける",
   "walletPersistenceFailed": "ウォレットを安全に保存できなかったため、追加されませんでした。もう一度お試しください。",
   "walletAlreadyExists": "このウォレットはすでにこの端末にあります。",
   "cryptoUnavailableTitle": "ウォレットエンジンを利用できません",

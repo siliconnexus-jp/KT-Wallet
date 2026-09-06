@@ -1,4 +1,5 @@
 {
+  "signResultSaveFailed": "The signed result could not be saved safely. Nothing was broadcast. Scan again to retry.",
 "settingsGeneral": "General",
 "generalSettingsDescription": "Language and display currency apply across the app. They do not change your wallets or on-chain assets.",
 "backupThisWallet": "Back up this wallet",
@@ -593,7 +594,10 @@
   "deleteWatchWalletDesc": "Removes only public addresses and local records; assets unaffected",
   "languageSystem": "System default",
   "walletLoadErrorTitle": "Couldn't load wallets",
-  "walletLoadErrorDesc": "Your on-device wallet data couldn't be read. Try again; if the problem persists, reinstall the app.",
+  "walletLoadErrorDesc": "Your on-device wallet data couldn't be read. Try again. If the problem persists, keep the app and its data to avoid losing wallets that have not been backed up.",
+  "pendingDeletionAuthTitle": "Deletion not completed",
+  "pendingDeletionAuthDesc": "Your previous wallet deletion requires device authentication. Unfinished deletions remain pending; this does not mean secure storage is damaged. When ready, authenticate to continue deleting. If authentication is unavailable or locked, try later or check your device screen-lock settings.",
+  "pendingDeletionAuthAction": "Authenticate and continue deleting",
   "walletPersistenceFailed": "The wallet couldn't be saved securely. Nothing was added. Please try again.",
   "walletAlreadyExists": "This wallet is already on this device.",
   "cryptoUnavailableTitle": "Wallet engine unavailable",

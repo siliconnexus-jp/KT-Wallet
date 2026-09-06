@@ -1,4 +1,5 @@
 {
+  "signResultSaveFailed": "无法安全保存签名结果。尚未广播，请重新扫描后重试。",
 "settingsGeneral": "通用",
 "generalSettingsDescription": "语言和计价货币适用于整个 App，不影响钱包或链上资产。",
 "backupThisWallet": "备份此钱包",
@@ -754,7 +755,10 @@
   "deleteWatchWalletDesc": "仅移除公开地址与本地记录，不影响资产",
   "languageSystem": "跟随系统",
   "walletLoadErrorTitle": "钱包加载失败",
-  "walletLoadErrorDesc": "无法读取本机的钱包数据。请重试；若问题持续，请重新安装应用。",
+  "walletLoadErrorDesc": "无法读取本机的钱包数据。请重试。若问题持续，请保留应用及其数据，以免丢失尚未备份的钱包。",
+  "pendingDeletionAuthTitle": "删除尚未完成",
+  "pendingDeletionAuthDesc": "上次删除钱包需要完成系统身份验证。未完成的删除记录已保留，这不表示安全存储损坏。准备好后，请验证身份以继续删除；若认证暂不可用或已锁定，请稍后重试或检查设备锁屏设置。",
+  "pendingDeletionAuthAction": "验证身份并继续删除",
   "walletPersistenceFailed": "无法安全保存钱包，本次未添加任何钱包。请重试。",
   "walletAlreadyExists": "该钱包已存在于本机。",
   "cryptoUnavailableTitle": "钱包引擎不可用",

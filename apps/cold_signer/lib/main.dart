@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:core_crypto/core_crypto.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
@@ -58,6 +59,19 @@ class _ColdSignerAppState extends State<ColdSignerApp> {
   /// right one (home vs. welcome).
   GoRouter? _router;
   bool _storageUnavailable = false;
+  bool _unlockRequired = false;
+
+  void _handleLoadFailure(Object error) {
+    if (!mounted) return;
+    setState(() {
+      _unlockRequired =
+          error is AuthCancelledException ||
+          error is AuthFailedException ||
+          error is AuthUnavailableException ||
+          error is AuthLockedException;
+      _storageUnavailable = true;
+    });
+  }
 
   @override
   void initState() {
@@ -77,8 +91,8 @@ class _ColdSignerAppState extends State<ColdSignerApp> {
   Future<void> _loadGalleryWallet() async {
     try {
       await widget.walletController.load();
-    } on Object {
-      if (mounted) setState(() => _storageUnavailable = true);
+    } on Object catch (error) {
+      _handleLoadFailure(error);
     }
   }
 
@@ -86,8 +100,8 @@ class _ColdSignerAppState extends State<ColdSignerApp> {
     final wallet = widget.walletController;
     try {
       await wallet.load();
-    } on Object {
-      if (mounted) setState(() => _storageUnavailable = true);
+    } on Object catch (error) {
+      _handleLoadFailure(error);
       return;
     }
     if (!mounted) return;
@@ -137,6 +151,7 @@ class _ColdSignerAppState extends State<ColdSignerApp> {
                     home: Builder(
                       builder: (context) => _SignerStorageUnavailableScreen(
                         onRetry: _retrySecureStorage,
+                        unlockRequired: _unlockRequired,
                       ),
                     ),
                     builder: (context, child) =>
@@ -195,9 +210,13 @@ class _ColdSignerAppState extends State<ColdSignerApp> {
 /// a process-local password. It remains blocked until an explicit retry can
 /// access the platform-protected store again.
 class _SignerStorageUnavailableScreen extends StatelessWidget {
-  const _SignerStorageUnavailableScreen({required this.onRetry});
+  const _SignerStorageUnavailableScreen({
+    required this.onRetry,
+    this.unlockRequired = false,
+  });
 
   final VoidCallback onRetry;
+  final bool unlockRequired;
 
   @override
   Widget build(BuildContext context) {
@@ -211,14 +230,16 @@ class _SignerStorageUnavailableScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(
-                Icons.gpp_bad_outlined,
+              Icon(
+                unlockRequired ? Icons.lock_outline : Icons.gpp_bad_outlined,
                 size: 52,
-                color: SignerColors.danger,
+                color: unlockRequired ? SignerColors.ok : SignerColors.danger,
               ),
               const SizedBox(height: 18),
               Text(
-                l10n.secureStorageUnavailableTitle,
+                unlockRequired
+                    ? l10n.walletUnlockRequired
+                    : l10n.secureStorageUnavailableTitle,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 19,
@@ -228,7 +249,9 @@ class _SignerStorageUnavailableScreen extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Text(
-                l10n.secureStorageUnavailableDesc,
+                unlockRequired
+                    ? l10n.walletUnlockRequiredDesc
+                    : l10n.secureStorageUnavailableDesc,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 13,
@@ -238,7 +261,9 @@ class _SignerStorageUnavailableScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               KtPrimaryButton(
-                label: l10n.actionRetry,
+                label: unlockRequired
+                    ? l10n.walletUnlockAction
+                    : l10n.actionRetry,
                 style: KtButtonStyle.signer,
                 onPressed: onRetry,
               ),
