@@ -61,6 +61,7 @@ type Config struct {
 	BNBURLs       []string
 	SolanaURLs    []string
 	TronURL       string
+	TronAPIKey    string // Mainnet TronGrid credential; never exposed to clients.
 
 	// Testnet upstreams (one per supported non-mainnet network).
 	EthSepoliaURLs      []string
@@ -125,7 +126,7 @@ type Config struct {
 // Defaults returns the production upstream configuration.
 func Defaults() Config {
 	return Config{
-		Version:        "1.16.28",
+		Version:        "1.16.29",
 		Clock:          clock.Real{},
 		AttemptTimeout: 10 * time.Second,
 		EthURLs:        []string{"https://eth.llamarpc.com", "https://cloudflare-eth.com"},
@@ -387,7 +388,7 @@ func New(cfg Config) *Gateway {
 			"bnb-testnet":       newEVM("bnb-testnet", cfg.BNBTestnetURLs),
 		},
 		tron: map[string]*upstream.Tron{
-			"tron-mainnet": upstream.NewTron(cfg.TronURL, hc, at),
+			"tron-mainnet": upstream.NewTronWithAPIKey(cfg.TronURL, cfg.TronAPIKey, hc, at),
 			"tron-nile":    upstream.NewTron(cfg.TronNileURL, hc, at),
 		},
 		sol: map[string]*upstream.Solana{

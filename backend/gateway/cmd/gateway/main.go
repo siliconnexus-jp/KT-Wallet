@@ -79,6 +79,7 @@ func main() {
 	if v := os.Getenv("TRON_API_URL"); v != "" {
 		cfg.TronURL = v
 	}
+	cfg.TronAPIKey = strings.TrimSpace(os.Getenv("TRON_API_KEY"))
 	if v := envList("ETH_SEPOLIA_RPC_URLS"); len(v) > 0 {
 		cfg.EthSepoliaURLs = v
 	}

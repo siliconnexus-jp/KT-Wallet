@@ -48,17 +48,33 @@ type Tron struct {
 	base    string
 	client  *http.Client
 	timeout time.Duration
+	apiKey  string
 }
 
 // NewTron builds a Tron client for the given TronGrid base URL.
 func NewTron(base string, client *http.Client, attemptTimeout time.Duration) *Tron {
+	return NewTronWithAPIKey(base, "", client, attemptTimeout)
+}
+
+// NewTronWithAPIKey authenticates requests only to the configured endpoint.
+// A private client copy prevents redirect forwarding of the credential without
+// changing the redirect policy used by other chains sharing the HTTP client.
+func NewTronWithAPIKey(base, apiKey string, client *http.Client, attemptTimeout time.Duration) *Tron {
 	if client == nil {
 		client = http.DefaultClient
+	}
+	apiKey = strings.TrimSpace(apiKey)
+	if apiKey != "" {
+		owned := *client
+		owned.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+		client = &owned
 	}
 	if attemptTimeout <= 0 {
 		attemptTimeout = 10 * time.Second
 	}
-	return &Tron{base: strings.TrimRight(base, "/"), client: client, timeout: attemptTimeout}
+	return &Tron{base: strings.TrimRight(base, "/"), client: client, timeout: attemptTimeout, apiKey: apiKey}
 }
 
 func (t *Tron) unavailable(msg string) *Unavailable {
@@ -88,6 +104,9 @@ func (t *Tron) fetch(ctx context.Context, method, path string, body []byte) ([]b
 		return nil, safeRequestCreationFailure(hostOf(t.base))
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if t.apiKey != "" {
+		req.Header.Set("TRON-PRO-API-KEY", t.apiKey)
+	}
 	resp, err := t.client.Do(req)
 	if err != nil {
 		return nil, safeRequestFailure(hostOf(t.base), actx, err)

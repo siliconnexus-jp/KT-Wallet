@@ -1,9 +1,14 @@
 # KT Wallet P0/P1 可信基础钱包实施方案
 
-更新日期：2026-08-05
+更新日期：2026-09-07（Gateway 配置与发布状态）
 
-当前 Gateway 源码版本 1.16.27；当前生产 Gateway 1.16.27。生产 Gateway-first 链身份、
+当前 Gateway 源码版本 1.16.29；当前生产 Gateway 1.16.29。生产 Gateway-first 链身份、
 TRON/Solana/EVM 余额与 Portfolio 身份、Solana 交易终态、EVM 动态手续费及签名前预执行回包严格解析均已启用。
+
+本次新增服务端 `TRON_API_KEY`：仅主网请求携带认证头，不进入客户端或仓库，
+携带认证的请求禁止重定向。Go 单测、upstream/handlers race 与 vet 通过；
+发布前候选与生产实例的 TRX/USDT 余额、TRON 历史只读请求通过。
+本次未重跑下文历史记录中的全部 App、设备和审计门禁。
 
 ## 目标与边界
 

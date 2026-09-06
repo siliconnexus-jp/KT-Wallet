@@ -40,7 +40,7 @@ curl -s localhost:8080/rpc -d '{"jsonrpc":"2.0","id":1,"method":"kt_health"}'
 curl -s localhost:8080/healthz
 curl -s localhost:8080/readyz
 curl -s -H "Authorization: Bearer $METRICS_BEARER_TOKEN" localhost:8080/metrics
-# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.27"}}
+# {"jsonrpc":"2.0","id":1,"result":{"networks":["eth-mainnet","eth-sepolia",...],"ok":true,"version":"1.16.29"}}
 ```
 
 ## Environment
@@ -56,6 +56,7 @@ curl -s -H "Authorization: Bearer $METRICS_BEARER_TOKEN" localhost:8080/metrics
 | `BNB_RPC_URLS` | `https://bsc-dataseed.bnbchain.org` | `bnb-mainnet` RPC endpoints |
 | `SOLANA_RPC_URLS` | `https://api.mainnet-beta.solana.com` | `sol-mainnet` RPC endpoints |
 | `TRON_API_URL` | `https://api.trongrid.io` | `tron-mainnet` TronGrid base URL |
+| `TRON_API_KEY` | *(unset)* | Server-only mainnet TronGrid API key, sent as `TRON-PRO-API-KEY`; never sent to Nile, returned to apps, or forwarded across redirects. Configure in the protected service environment, not source control. |
 | `ETH_SEPOLIA_RPC_URLS` | `https://ethereum-sepolia-rpc.publicnode.com` | `eth-sepolia` RPC endpoints, comma-separated, tried in order |
 | `POLYGON_AMOY_RPC_URLS` | `https://polygon-amoy-bor-rpc.publicnode.com,https://polygon-amoy.drpc.org` | `polygon-amoy` RPC endpoints |
 | `BASE_SEPOLIA_RPC_URLS` | `https://sepolia.base.org` | `base-sepolia` RPC endpoints |
