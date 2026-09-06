@@ -860,22 +860,10 @@ class _HomeNetworkList extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 7),
               child: Row(
                 children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: _chainColor(network.chain).withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Text(
-                      network.symbol.characters.first,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: _chainColor(network.chain),
-                      ),
-                    ),
+                  ChainIcon(
+                    key: ValueKey('home-network-icon-${network.id}'),
+                    chain: network.chain,
+                    size: 40,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1026,17 +1014,6 @@ class _HomeEmptyState extends StatelessWidget {
     ),
   );
 }
-
-Color _chainColor(Chain chain) => switch (chain) {
-  Chain.ethereum => ChainColors.ethereum,
-  Chain.polygon => ChainColors.polygon,
-  Chain.base => ChainColors.base,
-  Chain.arbitrum => ChainColors.arbitrum,
-  Chain.avalanche => ChainColors.avalanche,
-  Chain.bnb => const Color(0xFFF0B90B),
-  Chain.tron => ChainColors.tron,
-  Chain.solana => ChainColors.solana,
-};
 
 /// Real transaction history. With no [asset], this is the wallet-wide merged
 /// list used by the home action. With an [asset], records are restricted to

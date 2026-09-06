@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:chains/chains.dart';
 import 'package:kt_wallet/l10n/app_localizations.dart';
 import 'package:kt_wallet/src/screens/home_screen.dart';
 import 'package:kt_wallet/src/state/wallet_controller.dart';
+import 'package:kt_wallet/src/widgets/token_icon.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import 'support/test_wallet_scope.dart';
@@ -159,6 +161,38 @@ void main() {
     );
     expect(find.text('Ethereum'), findsOneWidget);
     expect(find.text('BNB Smart Chain'), findsOneWidget);
+    final expected = {
+      Chain.ethereum: 'eth',
+      Chain.polygon: 'matic',
+      Chain.base: 'base',
+      Chain.arbitrum: 'arb',
+      Chain.avalanche: 'avax',
+      Chain.bnb: 'bnb',
+      Chain.tron: 'trx',
+      Chain.solana: 'sol',
+    };
+    for (final entry in expected.entries) {
+      final icon = find.byWidgetPredicate(
+        (widget) =>
+            widget is ChainIcon &&
+            widget.chain == entry.key &&
+            widget.key.toString().contains('home-network-icon-'),
+      );
+      expect(icon, findsOneWidget);
+      expect(tester.widget<ChainIcon>(icon).size, 40);
+      final logo = tester.widget<Image>(
+        find.descendant(of: icon, matching: find.byType(Image)),
+      );
+      expect(
+        (logo.image as AssetImage).assetName,
+        'assets/tokens/${entry.value}.png',
+      );
+      expect(
+        find.descendant(of: icon, matching: find.byType(Text)),
+        findsNothing,
+      );
+    }
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('wallet address sheet lists only this wallet enabled networks', (

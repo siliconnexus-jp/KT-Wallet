@@ -95,10 +95,9 @@ class TokenIcon extends StatelessWidget {
 
 /// Circular network logo, for anywhere the user picks a chain.
 ///
-/// Chains the bundled icon set covers (Ethereum, Polygon, TRON, Solana) get
-/// their real logo; the L2s it does not (Base, Arbitrum, Avalanche) fall back
-/// to a brand-coloured initial — the same treatment the home asset rows
-/// already give them, so a chain looks identical everywhere it appears.
+/// All eight supported chains use bundled artwork, including Base, Arbitrum
+/// and Avalanche. Resolve by chain identity, not its native currency symbol:
+/// several distinct networks use ETH but must not share the Ethereum logo.
 class ChainIcon extends StatelessWidget {
   const ChainIcon({super.key, required this.chain, this.size = 28});
 
