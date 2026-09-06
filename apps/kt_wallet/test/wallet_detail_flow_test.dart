@@ -58,6 +58,33 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets(
+    'encrypted backup opens for the detail wallet, not the home wallet',
+    (tester) async {
+      final controller = await _controller(backedUp: true);
+      await controller.importWallet(
+        await controller.crypto.generateMnemonic(),
+        name: 'Other wallet',
+      );
+      final selectedId = controller.current!.id;
+      await _pump(tester, controller, '/wallet-detail?id=w1');
+      final entry = find.byKey(
+        const ValueKey('wallet-detail-backup-encrypted'),
+      );
+      await tester.ensureVisible(entry);
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('backup-wallet-identity')),
+        findsOneWidget,
+      );
+      expect(find.text('w1'), findsOneWidget);
+      expect(find.text('Other wallet'), findsNothing);
+      expect(controller.current!.id, selectedId);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('manage list row opens the wallet detail screen', (tester) async {
     final controller = await _controller();
     await _pump(tester, controller, '/wallet-manage');
@@ -129,7 +156,13 @@ void main() {
     expect(find.byKey(const ValueKey('wallet-detail-delete')), findsOneWidget);
     expect(find.byIcon(Icons.key), findsNothing);
     expect(find.byIcon(Icons.delete_outline), findsNothing);
-    expect(find.byType(Divider), findsNWidgets(4));
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('wallet-detail-action-list')),
+        matching: find.byType(Divider),
+      ),
+      findsNWidgets(4),
+    );
   });
 
   testWidgets('account-address row opens the shared full-page directory', (
@@ -138,6 +171,9 @@ void main() {
     final controller = await _controller(backedUp: true);
     await _pump(tester, controller, '/wallet-detail?id=w1');
 
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('wallet-detail-account-addresses')),
+    );
     await tester.tap(
       find.byKey(const ValueKey('wallet-detail-account-addresses')),
     );
@@ -223,6 +259,7 @@ void main() {
     await _pump(tester, controller, '/wallet-detail?id=w1');
 
     expect(find.text('立即备份'), findsNothing);
+    await tester.ensureVisible(find.text('查看助记词'));
     await tester.tap(find.text('查看助记词'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('mnemonic-risk-continue')));

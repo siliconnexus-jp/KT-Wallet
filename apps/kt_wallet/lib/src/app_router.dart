@@ -63,6 +63,7 @@ final screenRegistry = <String, (String, WidgetBuilder)>{
   'W17 Token 管理': ('/token-manage', (c) => const TokenManageScreen()),
   'W18 网络设置': ('/network', (c) => const NetworkSettingsScreen()),
   'W19 安全设置': ('/security', (c) => const SecuritySettingsScreen()),
+  'W38 通用设置': ('/general', (c) => const GeneralSettingsScreen()),
   'W35 Token 授权管理': ('/approvals', (c) => const TokenApprovalsScreen()),
   'W32 加密备份': ('/backup', (c) => const BackupExportScreen()),
   'W33 从备份恢复': ('/restore', (c) => const BackupRestoreScreen()),
@@ -139,6 +140,9 @@ GoRouter buildRouter({
                 walletId: s.uri.queryParameters['id'],
               ),
               '/private-keys' => (c, s) => PrivateKeyExportScreen(
+                walletId: s.uri.queryParameters['id'],
+              ),
+              '/backup' => (c, s) => BackupExportScreen(
                 walletId: s.uri.queryParameters['id'],
               ),
               '/import-confirm' => (c, s) => ImportConfirmScreen(
@@ -246,14 +250,19 @@ String? productionRouteRedirect({
   // to the current wallet would show/export/delete the wrong account while
   // the URL still names another one.
   final requestedWalletId = uri.queryParameters['id']?.trim();
-  if ({'/wallet-detail', '/wallet-addresses', '/private-keys'}.contains(path) &&
+  if ({
+        '/wallet-detail',
+        '/wallet-addresses',
+        '/private-keys',
+        '/backup',
+      }.contains(path) &&
       requestedWalletId != null &&
       requestedWalletId.isNotEmpty &&
       !walletController.wallets.any((w) => w.id == requestedWalletId)) {
     return '/wallet-manage';
   }
 
-  if (path == '/private-keys') {
+  if (path == '/private-keys' || path == '/backup') {
     if (requestedWalletId == null || requestedWalletId.isEmpty) {
       return '/wallet-manage';
     }

@@ -1488,15 +1488,23 @@ class _RecordsScreenState extends State<RecordsScreen> {
     ),
   );
 
-  Widget _historyFilterChip(AppLocalizations l10n) => _filterControl(
-    controlKey: const ValueKey('history-type-filter-button'),
-    label: _typeFilterLabel(l10n),
-    leading: const Icon(
-      CupertinoIcons.slider_horizontal_3,
-      size: 17,
-      color: WalletColors.text2,
-    ),
-    onTap: () => _showTypeFilter(l10n),
+  Widget _historyFilterChip(AppLocalizations l10n, {bool wrapLabel = false}) =>
+      _filterControl(
+        controlKey: const ValueKey('history-type-filter-button'),
+        label: _typeFilterLabel(l10n),
+        wrapLabel: wrapLabel,
+        leading: const Icon(
+          CupertinoIcons.slider_horizontal_3,
+          size: 17,
+          color: WalletColors.text2,
+        ),
+        onTap: () => _showTypeFilter(l10n),
+      );
+
+  static const _filterLabelStyle = TextStyle(
+    fontSize: 13,
+    fontWeight: FontWeight.w600,
+    color: WalletColors.text,
   );
 
   Widget _filterControl({
@@ -1505,6 +1513,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
     required Widget leading,
     required VoidCallback onTap,
     String? tooltip,
+    bool wrapLabel = false,
   }) => Tooltip(
     message: tooltip ?? label,
     child: Semantics(
@@ -1529,11 +1538,11 @@ class _RecordsScreenState extends State<RecordsScreen> {
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: WalletColors.text,
-                  ),
+                  maxLines: wrapLabel ? null : 1,
+                  overflow: wrapLabel
+                      ? TextOverflow.clip
+                      : TextOverflow.ellipsis,
+                  style: _filterLabelStyle,
                 ),
               ),
               const SizedBox(width: 4),
@@ -1555,28 +1564,64 @@ class _RecordsScreenState extends State<RecordsScreen> {
   ) {
     final selected = _effectiveNetworkId(networks);
     final network = networks.where((n) => n.id == selected).firstOrNull;
-    return Row(
+    final networkLabel = network?.label ?? l10n.historyAllNetworks;
+    return LayoutBuilder(
       key: const ValueKey('history-filter-bar'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(child: _historyFilterChip(l10n)),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _filterControl(
-            controlKey: const ValueKey('history-network-filter-button'),
-            label: network?.label ?? l10n.historyAllNetworks,
-            tooltip: l10n.historyNetworkFilterTitle,
-            leading: network == null
-                ? const Icon(
-                    CupertinoIcons.globe,
-                    size: 18,
-                    color: WalletColors.text2,
-                  )
-                : ChainIcon(chain: network.chain, size: 20),
-            onTap: () => _showNetworkFilter(l10n, networks),
+      builder: (context, constraints) {
+        // Measure localized labels at the user's actual text scale. A fixed
+        // two-column row made Japanese wrap into uneven, oversized buttons.
+        final labelWidth = (constraints.maxWidth - 10) / 2 - 72;
+        bool fits(String label) {
+          final painter = TextPainter(
+            text: TextSpan(
+              text: label,
+              style: DefaultTextStyle.of(
+                context,
+              ).style.merge(_filterLabelStyle),
+            ),
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+            maxLines: 1,
+          )..layout();
+          final result = painter.width <= labelWidth;
+          painter.dispose();
+          return result;
+        }
+
+        final stacked = !fits(_typeFilterLabel(l10n)) || !fits(networkLabel);
+        final typeControl = _historyFilterChip(l10n, wrapLabel: stacked);
+        final networkControl = _filterControl(
+          controlKey: const ValueKey('history-network-filter-button'),
+          label: networkLabel,
+          wrapLabel: stacked,
+          tooltip: '${l10n.historyNetworkFilterTitle}: $networkLabel',
+          leading: network == null
+              ? const Icon(
+                  CupertinoIcons.globe,
+                  size: 18,
+                  color: WalletColors.text2,
+                )
+              : ChainIcon(chain: network.chain, size: 20),
+          onTap: () => _showNetworkFilter(l10n, networks),
+        );
+        if (stacked) {
+          return Column(
+            key: const ValueKey('history-filter-stacked'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [typeControl, const SizedBox(height: 10), networkControl],
+          );
+        }
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: typeControl),
+              const SizedBox(width: 10),
+              Expanded(child: networkControl),
+            ],
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -2733,6 +2778,7 @@ List<_SettingsItem> _settingsItems(AppLocalizations l10n) => [
     '/wallet-manage',
   ),
   _SettingsItem(Icons.shield_outlined, l10n.settingsSecurity, '/security'),
+  _SettingsItem(Icons.tune_rounded, l10n.settingsGeneral, '/general'),
   _SettingsItem(
     Icons.admin_panel_settings_outlined,
     l10n.settingsApprovals,

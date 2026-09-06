@@ -9,6 +9,30 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get settingsGeneral => 'General';
+
+  @override
+  String get generalSettingsDescription =>
+      'Language and display currency apply across the app. They do not change your wallets or on-chain assets.';
+
+  @override
+  String get backupThisWallet => 'Back up this wallet';
+
+  @override
+  String get backupScopeDescription =>
+      'Only this wallet’s recovery information is backed up. Other wallets, contacts and app settings are not included.';
+
+  @override
+  String get backupEncryptedOptions => 'Encrypted file or QR code';
+
+  @override
+  String get backupTargetLabel => 'Wallet being backed up';
+
+  @override
+  String get backupWalletUnavailable =>
+      'This wallet cannot be backed up. Return to wallet management to choose a wallet.';
+
+  @override
   String get backupQrTitle => 'Encrypted QR';
 
   @override
@@ -1644,7 +1668,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dataSection => 'Data';
 
   @override
-  String get fiatUnit => 'Fiat currency';
+  String get fiatUnit => 'Display currency';
 
   @override
   String get displayLanguage => 'Language';

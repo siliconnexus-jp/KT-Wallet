@@ -2187,11 +2187,9 @@ class WalletDetailScreen extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final controller = WalletScope.of(context);
     final largeText = MediaQuery.textScalerOf(context).scale(14) >= 20;
-    final wallet =
-        (walletId == null
-            ? null
-            : controller.wallets.where((w) => w.id == walletId).firstOrNull) ??
-        controller.current;
+    final wallet = walletId == null
+        ? controller.current
+        : controller.wallets.where((w) => w.id == walletId).firstOrNull;
     if (wallet == null) {
       // Wallet deleted (or none exists): render an empty shell while popping.
       return KtScreen(
@@ -2454,6 +2452,50 @@ class WalletDetailScreen extends StatelessWidget {
             ],
           ),
         ),
+        if (isHot)
+          KtGlassSurface(
+            key: const ValueKey('wallet-detail-backup-section'),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  l10n.backupThisWallet,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    color: WalletColors.text,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  l10n.backupScopeDescription,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.5,
+                    color: WalletColors.text2,
+                  ),
+                ),
+                InkWell(
+                  key: const ValueKey('wallet-detail-backup-mnemonic'),
+                  onTap: () => _showMnemonicSheet(
+                    context,
+                    wallet,
+                    offerMarkBackedUp: !backedUp,
+                  ),
+                  child: SecurityRow(l10n.backupMnemonicTitle),
+                ),
+                const Divider(height: 1, color: WalletColors.border),
+                InkWell(
+                  key: const ValueKey('wallet-detail-backup-encrypted'),
+                  onTap: () => context.push(
+                    '/backup?id=${Uri.encodeQueryComponent(wallet.id)}',
+                  ),
+                  child: SecurityRow(l10n.backupEncryptedOptions),
+                ),
+              ],
+            ),
+          ),
         KtGlassSurface(
           padding: const EdgeInsets.symmetric(horizontal: 18),
           child: Column(

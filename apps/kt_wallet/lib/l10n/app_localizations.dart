@@ -100,6 +100,48 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @settingsGeneral.
+  ///
+  /// In zh, this message translates to:
+  /// **'通用'**
+  String get settingsGeneral;
+
+  /// No description provided for @generalSettingsDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'语言和计价货币适用于整个 App，不影响钱包或链上资产。'**
+  String get generalSettingsDescription;
+
+  /// No description provided for @backupThisWallet.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份此钱包'**
+  String get backupThisWallet;
+
+  /// No description provided for @backupScopeDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅备份此钱包的恢复信息，不包含其他钱包、联系人或 App 设置。'**
+  String get backupScopeDescription;
+
+  /// No description provided for @backupEncryptedOptions.
+  ///
+  /// In zh, this message translates to:
+  /// **'加密文件或二维码'**
+  String get backupEncryptedOptions;
+
+  /// No description provided for @backupTargetLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在备份的钱包'**
+  String get backupTargetLabel;
+
+  /// No description provided for @backupWalletUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'此钱包不可备份，请返回钱包管理重新选择。'**
+  String get backupWalletUnavailable;
+
   /// No description provided for @backupQrTitle.
   ///
   /// In zh, this message translates to:
@@ -2959,7 +3001,7 @@ abstract class AppLocalizations {
   /// No description provided for @fiatUnit.
   ///
   /// In zh, this message translates to:
-  /// **'法币单位'**
+  /// **'计价货币'**
   String get fiatUnit;
 
   /// No description provided for @displayLanguage.

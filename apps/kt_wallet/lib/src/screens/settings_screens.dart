@@ -4,7 +4,6 @@ import 'package:chains/chains.dart';
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:ui_kit/ui_kit.dart';
 import 'package:wallet_data/wallet_data.dart' show Contact, CustomToken;
@@ -35,7 +34,6 @@ import '../state/networks.dart';
 import '../state/locale_controller.dart';
 import '../state/wallet_controller.dart';
 import '../state/wallet_scope.dart';
-import '../wallets/wallet_model.dart';
 
 /// Display name + badge color per validated chain (address book rows).
 const _chainTags = [
@@ -2740,6 +2738,179 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
   }
 }
 
+class GeneralSettingsScreen extends StatefulWidget {
+  const GeneralSettingsScreen({super.key});
+  @override
+  State<GeneralSettingsScreen> createState() => _GeneralSettingsScreenState();
+}
+
+class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
+  /// Write through the app-wide controller so currency changes are visible
+  /// throughout the app immediately, not just after the next restart.
+  AppPrefsController? _shared;
+
+  /// Fallback for the design gallery and goldens, where no scope is mounted.
+  /// Owned here, unlike [_shared].
+  AppPrefsController? _fallback;
+
+  AppPrefsController get _prefs => _shared ?? _fallback!;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Registers the dependency too: a change from anywhere rebuilds this
+    // screen, so the switches stay in step without a listener of their own.
+    _shared = AppPrefsScope.maybeOf(context);
+    if (_shared == null && _fallback == null) {
+      _fallback = AppPrefsController()
+        ..addListener(_onPrefsChanged)
+        ..load();
+    }
+  }
+
+  @override
+  void dispose() {
+    _fallback?.removeListener(_onPrefsChanged);
+    _fallback?.dispose();
+    super.dispose();
+  }
+
+  void _onPrefsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<int?> _pickOption({
+    required String title,
+    required List<String> labels,
+    required int selected,
+  }) => showKtModalBottomSheet<int>(
+    context: context,
+    isScrollControlled: true,
+    builder: (ctx) => SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(ctx).height * .8,
+        ),
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: WalletColors.text,
+                ),
+              ),
+            ),
+            for (var i = 0; i < labels.length; i++)
+              ListTile(
+                title: Text(
+                  labels[i],
+                  style: const TextStyle(color: WalletColors.text),
+                ),
+                trailing: i == selected
+                    ? const Icon(Icons.check, color: WalletColors.accent)
+                    : null,
+                onTap: () => Navigator.of(ctx).pop(i),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  void _showPreferenceMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _pickFiat() async {
+    final l10n = AppLocalizations.of(context);
+    final selected = await _pickOption(
+      title: l10n.fiatUnit,
+      labels: AppPrefsController.fiatOptions,
+      selected: AppPrefsController.fiatOptions.indexOf(_prefs.fiat),
+    );
+    if (selected == null || !mounted) return;
+    try {
+      await _prefs.setFiat(AppPrefsController.fiatOptions[selected]);
+    } on Object {
+      _showPreferenceMessage(l10n.walletUpdateFailed);
+    }
+  }
+
+  Future<void> _pickLanguage() async {
+    final l10n = AppLocalizations.of(context);
+    final controller = LocaleScope.of(context);
+    final options = <(String, Locale?)>[
+      (l10n.languageSystem, null),
+      ('简体中文', const Locale('zh')),
+      ('English', const Locale('en')),
+      ('日本語', const Locale('ja')),
+    ];
+    final selected = await _pickOption(
+      title: l10n.displayLanguage,
+      labels: options.map((o) => o.$1).toList(),
+      selected: options.indexWhere(
+        (o) => o.$2?.languageCode == controller.locale?.languageCode,
+      ),
+    );
+    if (selected == null || !mounted) return;
+    try {
+      await controller.setLocale(options[selected].$2);
+    } on Object {
+      _showPreferenceMessage(l10n.walletUpdateFailed);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final locale = LocaleScope.of(context);
+    return KtScreen(
+      navBar: KtNavBar(
+        title: l10n.settingsGeneral,
+        onBack: () => Navigator.of(context).maybePop(),
+      ),
+      children: [
+        KtCard(
+          child: Column(
+            children: [
+              _SimpleRow(
+                Icons.language,
+                l10n.displayLanguage,
+                _languageLabel(l10n, locale.locale),
+                onTap: _pickLanguage,
+              ),
+              const Divider(height: 32, color: WalletColors.border),
+              _SimpleRow(
+                Icons.attach_money,
+                l10n.fiatUnit,
+                _prefs.fiat,
+                onTap: _pickFiat,
+              ),
+            ],
+          ),
+        ),
+        Text(
+          l10n.generalSettingsDescription,
+          style: const TextStyle(
+            fontSize: 13,
+            height: 1.5,
+            color: WalletColors.text2,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// W19 安全设置.
 class SecuritySettingsScreen extends StatefulWidget {
   const SecuritySettingsScreen({super.key});
@@ -3000,21 +3171,6 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
       ? l10n.autoLockImmediate
       : l10n.autoLockMinutesLabel(minutes);
 
-  Future<void> _pickFiat() async {
-    final l10n = AppLocalizations.of(context);
-    final selected = await _pickOption(
-      title: l10n.fiatUnit,
-      labels: AppPrefsController.fiatOptions,
-      selected: AppPrefsController.fiatOptions.indexOf(_prefs.fiat),
-    );
-    if (selected == null || !mounted) return;
-    try {
-      await _prefs.setFiat(AppPrefsController.fiatOptions[selected]);
-    } on Object {
-      _showSecurityMessage(l10n.walletUpdateFailed);
-    }
-  }
-
   Future<void> _pickAutoLock() async {
     final l10n = AppLocalizations.of(context);
     final selected = await _pickOption(
@@ -3122,123 +3278,9 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     }
   }
 
-  /// Danger row: deletes the first watch wallet after confirmation (a watch
-  /// wallet holds only public addresses, so this never touches key material).
-  Future<void> _deleteWatchWallet() async {
-    final l10n = AppLocalizations.of(context);
-    final controller = WalletScope.of(context);
-    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
-    final watch = controller.wallets.whereType<WatchWallet>().firstOrNull;
-    if (watch == null) {
-      messenger.showSnackBar(SnackBar(content: Text(l10n.noWatchWallet)));
-      return;
-    }
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => KtConfirmDialog(
-        title: l10n.deleteWalletTitle,
-        message: l10n.deleteWalletConfirm(watch.name),
-        cancelLabel: l10n.actionCancel,
-        confirmLabel: l10n.actionDelete,
-        icon: Icons.delete_outline_rounded,
-        iconColor: WalletColors.red,
-        destructive: true,
-      ),
-    );
-    if (ok == true && mounted) {
-      await controller.remove(watch.id);
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(l10n.deletedWallet(watch.name))),
-      );
-    }
-  }
-
-  Future<void> _pickLanguage() async {
-    final l10n = AppLocalizations.of(context);
-    final controller = LocaleScope.of(context);
-    final current = controller.locale?.languageCode;
-    final options = <(String, Locale?)>[
-      (l10n.languageSystem, null),
-      ('简体中文', const Locale('zh')),
-      ('English', const Locale('en')),
-      ('日本語', const Locale('ja')),
-    ];
-    await showKtModalBottomSheet<void>(
-      context: context,
-      backgroundColor: WalletColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: WalletColors.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  Text(
-                    l10n.displayLanguage,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: WalletColors.text,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            for (final (label, locale) in options)
-              ListTile(
-                title: Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    color: WalletColors.text,
-                  ),
-                ),
-                trailing: (locale?.languageCode == current)
-                    ? const Icon(
-                        Icons.check,
-                        size: 20,
-                        color: WalletColors.accent,
-                      )
-                    : null,
-                onTap: () async {
-                  try {
-                    await controller.setLocale(locale);
-                    if (ctx.mounted) Navigator.of(ctx).pop();
-                  } on Object {
-                    if (!ctx.mounted) return;
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      SnackBar(content: Text(l10n.walletUpdateFailed)),
-                    );
-                  }
-                },
-              ),
-            const SizedBox(height: 12),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final localeController = LocaleScope.of(context);
     return KtScreen(
       gap: 16,
       navBar: KtNavBar(
@@ -3366,71 +3408,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                   onTap: _togglePrivacyMode,
                 ),
               ),
-              // Watch wallets hold no key material, so there is nothing to
-              // seal — offering the row would only lead to a dead end.
-              if (WalletScope.of(context).current is HotWallet) ...[
-                const SizedBox(height: 16),
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => context.push('/backup'),
-                  child: _row(
-                    Icons.cloud_upload_outlined,
-                    l10n.backupEncryptedRow,
-                    l10n.backupEncryptedRowDesc,
-                    const Icon(
-                      Icons.chevron_right,
-                      size: 16,
-                      color: WalletColors.text3,
-                    ),
-                  ),
-                ),
-              ],
             ],
-          ),
-        ),
-        Text(
-          l10n.dataSection,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-            color: WalletColors.text2,
-          ),
-        ),
-        KtCard(
-          child: Column(
-            children: [
-              _SimpleRow(
-                Icons.attach_money,
-                l10n.fiatUnit,
-                _prefs.fiat,
-                onTap: _pickFiat,
-              ),
-              const SizedBox(height: 16),
-              _SimpleRow(
-                Icons.language,
-                l10n.displayLanguage,
-                _languageLabel(l10n, localeController.locale),
-                onTap: _pickLanguage,
-              ),
-            ],
-          ),
-        ),
-        KtCard(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _deleteWatchWallet,
-            child: _row(
-              Icons.delete_outline,
-              l10n.deleteWatchWallet,
-              l10n.deleteWatchWalletDesc,
-              const Icon(
-                Icons.chevron_right,
-                size: 16,
-                color: WalletColors.text3,
-              ),
-              danger: true,
-            ),
           ),
         ),
       ],

@@ -15,7 +15,7 @@ import '../state/wallet_scope.dart';
 import '../wallets/wallet_model.dart';
 import '../widgets/scan_viewfinder.dart';
 
-/// W32 加密备份 — seals the active wallet's key material under a password the
+/// W32 加密备份 — seals the explicitly selected wallet's key material under a password the
 /// user chooses and hands the file to the system document picker, which is
 /// where iCloud Drive lives.
 ///
@@ -25,10 +25,15 @@ import '../widgets/scan_viewfinder.dart';
 class BackupExportScreen extends StatefulWidget {
   const BackupExportScreen({
     super.key,
+    this.walletId,
     this.files,
     this.clock,
     this.qrRenderer,
   });
+
+  /// Production routes require an explicit wallet ID. Null is reserved for
+  /// gallery/test callers, which pin the current wallet when first mounted.
+  final String? walletId;
 
   /// Injected in tests; production uses the platform channel.
   final FileExchange? files;
@@ -47,6 +52,33 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
   bool _qrMode = false;
   bool _riskAccepted = false;
   Uint8List? _qrPng;
+  String? _targetWalletId;
+  bool _targetCaptured = false;
+
+  Wallet? get _targetWallet => WalletScope.of(
+    context,
+  ).wallets.where((wallet) => wallet.id == _targetWalletId).firstOrNull;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_targetCaptured) {
+      _targetWalletId = widget.walletId ?? WalletScope.of(context).current?.id;
+      _targetCaptured = true;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant BackupExportScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.walletId != widget.walletId) {
+      _targetWalletId = widget.walletId;
+      _password.clear();
+      _confirm.clear();
+      _qrPng = null;
+      _riskAccepted = false;
+    }
+  }
 
   FileExchange get _files => widget.files ?? FileExchange.instance;
   DateTime Function() get _clock => widget.clock ?? DateTime.now;
@@ -73,7 +105,7 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
 
   bool get _canSubmit =>
       !_busy &&
-      WalletScope.of(context).current is HotWallet &&
+      _targetWallet is HotWallet &&
       (!_qrMode || _riskAccepted) &&
       CoreCryptoValidation.backupPasswordIssue(_password.text) == null &&
       _confirm.text.isNotEmpty;
@@ -85,7 +117,7 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
       return;
     }
     final wallets = WalletScope.of(context);
-    final wallet = wallets.current;
+    final wallet = _targetWallet;
     if (wallet is! HotWallet || !_canSubmit) return;
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
 
@@ -95,7 +127,7 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
         walletId: wallet.id,
         password: _password.text,
       );
-      if (!mounted) return;
+      if (!mounted || _targetWallet?.id != wallet.id) return;
       if (_qrMode) {
         final payload = WalletBackupQr.encode(sealed);
         _password.clear();
@@ -107,7 +139,9 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
                   title: l10n.backupQrTitle,
                   instruction: l10n.backupQrImageInstruction,
                 ));
-        if (mounted) setState(() => _qrPng = png);
+        if (mounted && _targetWallet?.id == wallet.id) {
+          setState(() => _qrPng = png);
+        }
         return;
       }
       final now = _clock();
@@ -143,7 +177,7 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
 
   Future<void> _saveQr() async {
     final png = _qrPng;
-    if (png == null || _busy) return;
+    if (png == null || _busy || _targetWallet is! HotWallet) return;
     final l10n = AppLocalizations.of(context);
     setState(() => _busy = true);
     try {
@@ -178,6 +212,16 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final wallet = _targetWallet;
+    if (wallet is! HotWallet) {
+      return KtScreen(
+        navBar: KtNavBar(
+          title: l10n.backupEncryptedTitle,
+          onBack: () => Navigator.of(context).maybePop(),
+        ),
+        children: [Text(l10n.backupWalletUnavailable)],
+      );
+    }
     final qrPng = _qrPng;
     if (qrPng != null) {
       return SecureContent(
@@ -192,6 +236,14 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
             onPressed: _busy ? null : _saveQr,
           ),
           children: [
+            Text(
+              wallet.name,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: WalletColors.text,
+              ),
+            ),
             Image.memory(
               qrPng,
               key: const ValueKey('backup-qr-preview'),
@@ -231,6 +283,47 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
           onPressed: _canSubmit ? _create : null,
         ),
         children: [
+          KtCard(
+            key: const ValueKey('backup-wallet-identity'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  l10n.backupTargetLabel,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: WalletColors.text2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  wallet.name,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: WalletColors.text,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  wallet.id,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: WalletColors.text2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l10n.backupScopeDescription,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.5,
+                    color: WalletColors.text2,
+                  ),
+                ),
+              ],
+            ),
+          ),
           KtSegmented(
             key: const ValueKey('backup-format'),
             options: [l10n.backupFileFormat, l10n.backupQrTitle],

@@ -9,6 +9,30 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get settingsGeneral => '一般';
+
+  @override
+  String get generalSettingsDescription =>
+      '言語と表示通貨はアプリ全体に適用されます。ウォレットやオンチェーン資産には影響しません。';
+
+  @override
+  String get backupThisWallet => 'このウォレットをバックアップ';
+
+  @override
+  String get backupScopeDescription =>
+      'このウォレットの復元情報のみを保存します。他のウォレット、連絡先、アプリ設定は含まれません。';
+
+  @override
+  String get backupEncryptedOptions => '暗号化ファイル・QRコード';
+
+  @override
+  String get backupTargetLabel => 'バックアップ対象';
+
+  @override
+  String get backupWalletUnavailable =>
+      'このウォレットはバックアップできません。ウォレット管理に戻って選び直してください。';
+
+  @override
   String get backupQrTitle => '暗号化QR';
 
   @override
@@ -331,7 +355,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get historyTypeFilterTitle => 'タイプで絞り込み';
 
   @override
-  String get historyTypeAll => 'すべてのタイプ';
+  String get historyTypeAll => '全タイプ';
 
   @override
   String get historyTypeTransfers => '送信/受信';
@@ -343,7 +367,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get historyNetworkFilterTitle => 'ネットワークで絞り込み';
 
   @override
-  String get historyAllNetworks => 'すべてのネットワーク';
+  String get historyAllNetworks => '全ネットワーク';
 
   @override
   String get historySent => '送信';
@@ -1566,7 +1590,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get dataSection => 'データ';
 
   @override
-  String get fiatUnit => '法定通貨';
+  String get fiatUnit => '表示通貨';
 
   @override
   String get displayLanguage => '表示言語';

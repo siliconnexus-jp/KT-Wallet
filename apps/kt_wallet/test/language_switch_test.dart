@@ -18,11 +18,11 @@ void main() {
     tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
     addTearDown(tester.platformDispatcher.clearLocalesTestValue);
 
-    await tester.pumpWidget(KtWalletApp(initialLocation: '/security'));
+    await tester.pumpWidget(KtWalletApp(initialLocation: '/general'));
     await tester.pumpAndSettle();
 
-    // Security screen in Chinese.
-    expect(find.text('安全设置'), findsOneWidget);
+    // General settings in Chinese.
+    expect(find.text('通用'), findsOneWidget);
     expect(find.text('显示语言'), findsOneWidget);
 
     // Open the picker and choose English.
@@ -33,7 +33,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // The whole screen is now English.
-    expect(find.text('Security'), findsOneWidget);
+    expect(find.text('General'), findsOneWidget);
     expect(find.text('Language'), findsOneWidget);
     expect(find.text('显示语言'), findsNothing);
 
@@ -44,7 +44,7 @@ void main() {
     await tester.tap(find.text('日本語'));
     await tester.pumpAndSettle();
 
-    expect(find.text('セキュリティ設定'), findsOneWidget);
+    expect(find.text('一般'), findsOneWidget);
     expect(find.text('表示言語'), findsOneWidget);
 
     // Back to "follow system" (zh) resolves to Chinese again.
@@ -53,31 +53,32 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('システムに従う'));
     await tester.pumpAndSettle();
-    expect(find.text('安全设置'), findsOneWidget);
+    expect(find.text('通用'), findsOneWidget);
   });
 
-  testWidgets('language save failure keeps the picker and current language', (
-    tester,
-  ) async {
-    tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
-    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
-    final locale = LocaleController(
-      preferencesProvider: () async => throw StateError('storage offline'),
-    );
+  testWidgets(
+    'language save failure keeps the current language and explains retry',
+    (tester) async {
+      tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
+      addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+      final locale = LocaleController(
+        preferencesProvider: () async => throw StateError('storage offline'),
+      );
 
-    await tester.pumpWidget(
-      KtWalletApp(initialLocation: '/security', localeController: locale),
-    );
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('显示语言'));
-    await tester.tap(find.text('显示语言'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('English'));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        KtWalletApp(initialLocation: '/general', localeController: locale),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('显示语言'));
+      await tester.tap(find.text('显示语言'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('English'));
+      await tester.pumpAndSettle();
 
-    expect(locale.locale, isNull);
-    expect(find.text('显示语言'), findsWidgets);
-    expect(find.text('English'), findsOneWidget);
-    expect(find.text('无法保存更改，当前内容未改变，请重试。'), findsOneWidget);
-  });
+      expect(locale.locale, isNull);
+      expect(find.text('显示语言'), findsWidgets);
+      expect(find.text('English'), findsNothing);
+      expect(find.text('无法保存更改，当前内容未改变，请重试。'), findsOneWidget);
+    },
+  );
 }

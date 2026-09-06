@@ -9,6 +9,27 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get settingsGeneral => '通用';
+
+  @override
+  String get generalSettingsDescription => '语言和计价货币适用于整个 App，不影响钱包或链上资产。';
+
+  @override
+  String get backupThisWallet => '备份此钱包';
+
+  @override
+  String get backupScopeDescription => '仅备份此钱包的恢复信息，不包含其他钱包、联系人或 App 设置。';
+
+  @override
+  String get backupEncryptedOptions => '加密文件或二维码';
+
+  @override
+  String get backupTargetLabel => '正在备份的钱包';
+
+  @override
+  String get backupWalletUnavailable => '此钱包不可备份，请返回钱包管理重新选择。';
+
+  @override
   String get backupQrTitle => '加密二维码';
 
   @override
@@ -1543,7 +1564,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dataSection => '数据';
 
   @override
-  String get fiatUnit => '法币单位';
+  String get fiatUnit => '计价货币';
 
   @override
   String get displayLanguage => '显示语言';

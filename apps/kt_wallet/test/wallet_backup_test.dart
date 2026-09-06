@@ -507,6 +507,65 @@ void main() {
   });
 
   group('export screen', () {
+    testWidgets(
+      'explicit backup target is independent of the selected wallet',
+      (tester) async {
+        final crypto = MockCoreCrypto();
+        final controller = await _controllerWithWallet(crypto);
+        final target = controller.current!;
+        final otherPhrase = await crypto.generateMnemonic();
+        await controller.importWallet(otherPhrase, name: 'Other wallet');
+        final otherId = controller.current!.id;
+        final files = FakeFileExchange();
+        await tester.pumpWidget(
+          _app(
+            BackupExportScreen(walletId: target.id, files: files),
+            controller,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text(target.name), findsOneWidget);
+        expect(find.text('Other wallet'), findsNothing);
+        controller.select(target.id);
+        controller.select(otherId);
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byType(TextField).at(0),
+          'a good long password',
+        );
+        await tester.enterText(
+          find.byType(TextField).at(1),
+          'a good long password',
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('生成备份'));
+        await tester.pumpAndSettle();
+        expect(files.saved, hasLength(1));
+        expect(
+          await crypto.readBackup(
+            blob: WalletBackupFile.decode(files.saved.single.bytes),
+            password: 'a good long password',
+            format: BackupCipherFormat.portableV2,
+          ),
+          _phrase,
+        );
+        expect(controller.current!.id, otherId);
+      },
+    );
+
+    testWidgets(
+      'missing backup target never falls back to the current wallet',
+      (tester) async {
+        final controller = await _controllerWithWallet(MockCoreCrypto());
+        await tester.pumpWidget(
+          _app(const BackupExportScreen(walletId: 'missing'), controller),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(TextField), findsNothing);
+        expect(find.text('此钱包不可备份，请返回钱包管理重新选择。'), findsOneWidget);
+      },
+    );
+
     testWidgets('seals and hands the envelope to the file picker', (
       tester,
     ) async {

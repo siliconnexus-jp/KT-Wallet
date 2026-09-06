@@ -109,6 +109,9 @@ void main() {
     expect(_redirect('/private-keys'), '/wallet-manage');
     expect(_redirect('/private-keys?id=missing'), '/wallet-manage');
     expect(_redirect('/private-keys?id=wallet-1'), isNull);
+    expect(_redirect('/backup'), '/wallet-manage');
+    expect(_redirect('/backup?id=missing'), '/wallet-manage');
+    expect(_redirect('/backup?id=wallet-1'), isNull);
   });
 
   test('private-key route rejects watch wallets', () {
@@ -134,6 +137,10 @@ void main() {
     );
     expect(
       _redirect('/private-keys?id=watch-1', wallets: wallets),
+      '/wallet-detail?id=watch-1',
+    );
+    expect(
+      _redirect('/backup?id=watch-1', wallets: wallets),
       '/wallet-detail?id=watch-1',
     );
   });

@@ -3,19 +3,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Proves the security-settings pickers (fiat currency, auto-lock) update the
+/// Proves the general/security pickers (fiat currency, auto-lock) update the
 /// rows and that the choices persist across screen instances.
-Future<void> _openSecurity(WidgetTester tester) async {
+Future<void> _openSecurity(
+  WidgetTester tester, {
+  String route = '/security',
+}) async {
   tester.platformDispatcher.localesTestValue = <Locale>[const Locale('zh')];
   addTearDown(tester.platformDispatcher.clearLocalesTestValue);
-  await tester.pumpWidget(KtWalletApp(initialLocation: '/security'));
+  await tester.pumpWidget(KtWalletApp(initialLocation: route));
   await tester.pumpAndSettle();
 }
 
 void main() {
   testWidgets('fiat picker updates the row', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    await _openSecurity(tester);
+    await _openSecurity(tester, route: '/general');
 
     expect(find.text('USD'), findsOneWidget);
     await tester.tap(find.text('USD'));
@@ -46,7 +49,7 @@ void main() {
 
   testWidgets('choices persist into a fresh screen instance', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    await _openSecurity(tester);
+    await _openSecurity(tester, route: '/general');
 
     await tester.tap(find.text('USD'));
     await tester.pumpAndSettle();
@@ -55,7 +58,8 @@ void main() {
     expect(find.text('JPY'), findsOneWidget);
 
     // A brand-new app + screen instance loads the persisted choice.
-    await tester.pumpWidget(KtWalletApp(initialLocation: '/security'));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(KtWalletApp(initialLocation: '/general'));
     await tester.pumpAndSettle();
     expect(find.text('JPY'), findsOneWidget);
     expect(find.text('USD'), findsNothing);
