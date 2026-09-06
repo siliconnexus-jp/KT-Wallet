@@ -155,6 +155,13 @@
   "signRecords": "签名记录",
   "securityCheck": "安全检查",
   "walletManage": "钱包管理",
+  "addWallet": "添加钱包",
+  "signatureIncomplete": "签名未完成",
+  "recordsLoadFailed": "无法读取签名记录，请返回后重试。",
+  "noWalletRecords": "此钱包暂无签名记录",
+  "switchWallet": "切换 / 添加钱包",
+  "walletSwitchFailed": "钱包切换未完成，请完成系统认证后重试。原钱包未更改。",
+  "multiWalletScope": "每个钱包独立保存密钥和备份，共用本机 App PIN。删除一个钱包不会删除其他钱包。",
 
   "offlineSecurityCheck": "离线安全检查",
   "checkAirplaneMode": "飞行模式",

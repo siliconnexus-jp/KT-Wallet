@@ -96,6 +96,9 @@ class MarketController extends ChangeNotifier {
   bool _refreshing = false;
   bool _hasRefreshed = false;
   bool _showingCachedData = false;
+  bool _balanceRefreshIncomplete = false;
+  bool _priceRefreshIncomplete = false;
+  bool _tronActivationIsCached = false;
   bool _disposed = false;
   DateTime? _lastUpdatedAt;
 
@@ -111,6 +114,14 @@ class MarketController extends ChangeNotifier {
   /// True once at least one refresh has completed (success or not).
   bool get hasRefreshed => _hasRefreshed;
   bool get showingCachedData => _showingCachedData;
+  bool get balanceRefreshIncomplete => _balanceRefreshIncomplete;
+  bool get priceRefreshIncomplete => _priceRefreshIncomplete;
+  bool get tronActivationIsCached => _tronActivationIsCached;
+  bool get hasFreshnessNotice =>
+      _refreshing ||
+      _showingCachedData ||
+      _balanceRefreshIncomplete ||
+      _priceRefreshIncomplete;
   DateTime? get lastUpdatedAt => _lastUpdatedAt;
 
   BalanceResult balanceFor(Coin coin) =>
@@ -211,6 +222,7 @@ class MarketController extends ChangeNotifier {
   /// True only when every deployment returned a real balance and the total is
   /// exactly zero. Unknown/error rows are never hidden as if they were empty.
   bool isDefinitelyZero(Iterable<AssetDeployment> deployments) {
+    if (_balanceRefreshIncomplete) return false;
     var sawAny = false;
     for (final deployment in deployments) {
       final result = resultFor(deployment);
@@ -230,6 +242,7 @@ class MarketController extends ChangeNotifier {
   /// this distinction to render a real `0.00` daily movement only when zero is
   /// proven; otherwise it keeps the row visible with unavailable markers.
   bool get portfolioBalanceIsDefinitelyZero {
+    if (_balanceRefreshIncomplete) return false;
     final wallet = _wallets.current;
     if (wallet == null) return false;
     var sawAny = false;
@@ -376,6 +389,9 @@ class MarketController extends ChangeNotifier {
       };
       _pricesUsd = null;
       _showingCachedData = false;
+      _balanceRefreshIncomplete = false;
+      _priceRefreshIncomplete = false;
+      _tronActivationIsCached = false;
       _lastUpdatedAt = null;
       _hasRefreshed = false;
     }
@@ -435,12 +451,11 @@ class MarketController extends ChangeNotifier {
       void revealNative(Coin coin, BalanceResult result) {
         if (generation != _generation) return;
         final previous = _results[coin];
-        if (coin == Coin.tron &&
-            result.status == BalanceStatus.error &&
+        if (result.status == BalanceStatus.error &&
             previous?.status == BalanceStatus.ok) {
-          // The TRON account-object probe is the only source of the activation
-          // bit. A failed probe must not blank the cached TRX row while the
-          // rest of this refresh is still running.
+          // Keep the last-good amount until the final merge records which
+          // requests failed. Otherwise streaming errors erase the very cache
+          // that retainLastGood below is supposed to preserve.
           return;
         }
         final visible = coin == Coin.tron
@@ -542,6 +557,14 @@ class MarketController extends ChangeNotifier {
           ) &&
           pricesComplete;
       var retainedStale = false;
+      _balanceRefreshIncomplete = requestedResults.any(
+        (result) =>
+            result == null ||
+            result.status == BalanceStatus.loading ||
+            result.status == BalanceStatus.error,
+      );
+      _priceRefreshIncomplete = !pricesComplete;
+      _tronActivationIsCached = false;
       BalanceResult retainLastGood(
         BalanceResult? previous,
         BalanceResult fresh, {
@@ -555,7 +578,9 @@ class MarketController extends ChangeNotifier {
         if (retainTronActivation) {
           final merged = _preserveKnownTronActivation(previous, fresh);
           if (merged.tronActivation != fresh.tronActivation) {
-            retainedStale = true;
+            // Activation is not a balance or price. A successful amount fetch
+            // must not be labelled stale merely because this metadata is old.
+            _tronActivationIsCached = true;
           }
           return merged;
         }
@@ -639,6 +664,8 @@ class MarketController extends ChangeNotifier {
       _refreshing = false;
       _hasRefreshed = true;
       _showingCachedData = _lastUpdatedAt != null && hasLiveBalances;
+      _balanceRefreshIncomplete = true;
+      _priceRefreshIncomplete = true;
       notifyListeners();
       ExperienceMetrics.instance.record(
         ExperienceMetricNames.marketRefresh,
@@ -669,6 +696,9 @@ class MarketController extends ChangeNotifier {
     _refreshing = false;
     _hasRefreshed = false;
     _showingCachedData = false;
+    _balanceRefreshIncomplete = false;
+    _priceRefreshIncomplete = false;
+    _tronActivationIsCached = false;
     _lastUpdatedAt = null;
     _results = {
       for (final coin in Coin.values) coin: const BalanceResult.loading(),

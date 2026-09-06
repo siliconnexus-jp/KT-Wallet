@@ -434,6 +434,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get walletManage => '钱包管理';
 
   @override
+  String get addWallet => '添加钱包';
+
+  @override
+  String get signatureIncomplete => '签名未完成';
+
+  @override
+  String get recordsLoadFailed => '无法读取签名记录，请返回后重试。';
+
+  @override
+  String get noWalletRecords => '此钱包暂无签名记录';
+
+  @override
+  String get switchWallet => '切换 / 添加钱包';
+
+  @override
+  String get walletSwitchFailed => '钱包切换未完成，请完成系统认证后重试。原钱包未更改。';
+
+  @override
+  String get multiWalletScope => '每个钱包独立保存密钥和备份，共用本机 App PIN。删除一个钱包不会删除其他钱包。';
+
+  @override
   String get offlineSecurityCheck => '离线安全检查';
 
   @override

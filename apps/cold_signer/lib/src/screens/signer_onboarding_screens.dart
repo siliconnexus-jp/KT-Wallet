@@ -243,6 +243,16 @@ class _SignerWelcomeScreenState extends State<SignerWelcomeScreen> {
     return KtScreen(
       theme: _t,
       gap: 24,
+      navBar: SignerWalletScope.maybeOf(context)?.addingWallet == true
+          ? KtNavBar(
+              title: l10n.addWallet,
+              theme: _t,
+              onBack: () {
+                SignerWalletScope.maybeOf(context)?.cancelAddWallet();
+                context.go('/wallets');
+              },
+            )
+          : null,
       bottom: Column(
         children: [
           KtPrimaryButton(
@@ -1199,10 +1209,13 @@ class SignerBiometricScreen extends StatelessWidget {
       // attempting a second wallet creation; otherwise a missing pending
       // phrase is a hard error inside completeOnboarding.
       WalletMetadata? completedWallet;
-      if (controller != null && !controller.hasWallet) {
+      if (controller != null &&
+          (!controller.hasWallet || controller.addingWallet)) {
         if (controller.pendingMnemonic != null) {
           completedWallet = await controller.completeOnboarding(
-            walletName: l10n.walletMainName,
+            walletName: controller.wallets.isEmpty
+                ? l10n.walletMainName
+                : '${l10n.walletMainName} ${controller.wallets.length + 1}',
           );
         } else if (!isFlutterTestEnv) {
           throw StateError('no wallet onboarding is active');

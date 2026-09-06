@@ -85,6 +85,72 @@ class SignerWalletController extends ChangeNotifier {
   PinLock get pinLock => _pinLock;
 
   bool _hasWallet = false;
+  List<WalletMetadata> _wallets = const [];
+  bool _addingWallet = false;
+  bool _changingWallet = false;
+  String? _pendingDeletion;
+  int _onboardingGeneration = 0;
+  List<WalletMetadata> get wallets => List.unmodifiable(_wallets);
+  bool get addingWallet => _addingWallet;
+  bool get canAddWallet =>
+      _pendingDeletion == null && _wallets.length < SecureVault.maxWallets;
+  bool get _canOnboard =>
+      _pendingDeletion == null && (!_hasWallet || _addingWallet);
+
+  void beginAddWallet() {
+    if (!canAddWallet ||
+        _changingWallet ||
+        _completeOnboardingInFlight != null) {
+      throw StateError('wallet operation in progress');
+    }
+    _addingWallet = _hasWallet;
+    _pendingMnemonic = null;
+    _onboardingGeneration++;
+    _onboardingStage = SignerOnboardingStage.idle;
+    notifyListeners();
+  }
+
+  void cancelAddWallet() {
+    if (_completeOnboardingInFlight != null) return;
+    _beginCreateInFlight = null;
+    _addingWallet = false;
+    _pendingMnemonic = null;
+    _onboardingGeneration++;
+    _onboardingStage = SignerOnboardingStage.idle;
+    notifyListeners();
+  }
+
+  Future<void> selectWallet(String walletId) async {
+    if (_pendingDeletion != null ||
+        _changingWallet ||
+        _addingWallet ||
+        _completeOnboardingInFlight != null) {
+      throw StateError('wallet operation in progress');
+    }
+    if (walletId == localWalletId) return;
+    if (!_wallets.any((w) => w.walletId == walletId)) {
+      throw StateError('unknown wallet');
+    }
+    _changingWallet = true;
+    try {
+      final candidate = _wallets.singleWhere((w) => w.walletId == walletId);
+      final addresses = await _crypto.deriveAddresses(walletId);
+      final keys = await _crypto.derivePublicKeys(walletId);
+      final refreshed = candidate.copyWith(
+        addresses: addresses.toMap(),
+        publicKeys: keys.toMap().map((k, v) => MapEntry(k, base64Encode(v))),
+      );
+      await _vault.storeMetadata(refreshed);
+      await _vault.selectWallet(walletId);
+      _wallets = await _vault.readWallets();
+      _metadata = refreshed;
+      _onboardingStage = SignerOnboardingStage.idle;
+      notifyListeners();
+    } finally {
+      _changingWallet = false;
+    }
+  }
+
   WalletMetadata? _metadata;
   List<String>? _pendingMnemonic;
   SignerOnboardingStage _onboardingStage = SignerOnboardingStage.idle;
@@ -117,9 +183,14 @@ class SignerWalletController extends ChangeNotifier {
   Future<void> load() async {
     await _vault.removeLegacyMnemonic();
     final pendingDeletion = await _vault.pendingDeletionWalletId();
+    _pendingDeletion = pendingDeletion;
     if (pendingDeletion != null) {
-      final metadata = await _vault.readMetadata();
-      if (metadata != null && metadata.walletId != pendingDeletion) {
+      final all = await _vault.readWallets();
+      final metadata = all
+          .where((w) => w.walletId == pendingDeletion)
+          .firstOrNull;
+      final nativeDone = await _vault.nativeDeletionComplete(pendingDeletion);
+      if (metadata == null && all.isNotEmpty && !nativeDone) {
         // A tombstone may only resume deletion of the exact wallet described
         // by the remaining metadata. Never let corrupted local state choose a
         // different native key for an irreversible delete.
@@ -130,11 +201,12 @@ class SignerWalletController extends ChangeNotifier {
       // but do not call deleteWallet for an unbound identifier.
       await _finishPendingDeletion(
         pendingDeletion,
-        deleteNative: metadata != null,
+        deleteNative: metadata != null && !nativeDone,
       );
-      return;
+      if (await _vault.pendingDeletionWalletId() != null) return;
     }
     final loadedMetadata = await _vault.readMetadata();
+    _wallets = await _vault.readWallets();
     if (loadedMetadata != null) {
       // A wallet without one valid, bounded PIN record is not a usable signer.
       // Validate this before native derivation or any biometric-only signing
@@ -160,6 +232,7 @@ class SignerWalletController extends ChangeNotifier {
         ),
       );
       await _vault.storeMetadata(refreshed);
+      _wallets = await _vault.readWallets();
       _metadata = refreshed;
       _hasWallet = true;
     } else {
@@ -172,7 +245,7 @@ class SignerWalletController extends ChangeNotifier {
   /// Starts the create-wallet flow: generates the real mnemonic that C3 will
   /// display and C4 will challenge.
   Future<List<String>> beginCreate() {
-    if (_hasWallet) {
+    if (!_canOnboard || !canAddWallet) {
       return Future<List<String>>.error(StateError('a wallet already exists'));
     }
     final active = _beginCreateInFlight;
@@ -198,21 +271,28 @@ class SignerWalletController extends ChangeNotifier {
   }
 
   Future<List<String>> _beginCreate() async {
+    final generation = _onboardingGeneration;
     await checkWalletCreationReady();
+    if (generation != _onboardingGeneration) {
+      throw StateError('onboarding cancelled');
+    }
     if (isFlutterTestEnv && _crypto is MethodChannelCoreCrypto) {
       _pendingMnemonic = generateMnemonic(random: _random);
       _onboardingStage = SignerOnboardingStage.mnemonicReview;
       notifyListeners();
       return List.of(_pendingMnemonic!);
     }
+    List<String> words;
     try {
-      _pendingMnemonic = (await _crypto.generateMnemonic(
-        strength: 128,
-      )).trim().split(' ');
+      words = (await _crypto.generateMnemonic(strength: 128)).trim().split(' ');
     } catch (_) {
       if (!isFlutterTestEnv) rethrow;
-      _pendingMnemonic = generateMnemonic(random: _random);
+      words = generateMnemonic(random: _random);
     }
+    if (generation != _onboardingGeneration) {
+      throw StateError('onboarding cancelled');
+    }
+    _pendingMnemonic = words;
     _onboardingStage = SignerOnboardingStage.mnemonicReview;
     notifyListeners();
     return List.of(_pendingMnemonic!);
@@ -225,7 +305,8 @@ class SignerWalletController extends ChangeNotifier {
     String password, {
     bool Function()? isActive,
   }) async {
-    if (_hasWallet || _pendingMnemonic != null) return false;
+    if (!_canOnboard || !canAddWallet || _pendingMnemonic != null) return false;
+    final generation = _onboardingGeneration;
     final backup = WalletBackupQr.decode(payload);
     try {
       await checkWalletCreationReady();
@@ -234,7 +315,9 @@ class SignerWalletController extends ChangeNotifier {
         password: password,
         format: backup.cryptoFormat,
       );
-      if (isActive?.call() == false) return false;
+      if (isActive?.call() == false || generation != _onboardingGeneration) {
+        return false;
+      }
       return await beginImport(mnemonic, isActive: isActive);
     } finally {
       backup.sealed.fillRange(0, backup.sealed.length, 0);
@@ -244,16 +327,22 @@ class SignerWalletController extends ChangeNotifier {
   /// Validates a complete BIP-39 phrase, including its checksum, without
   /// persisting anything. The native wallet is created only after PIN setup.
   Future<bool> beginImport(String mnemonic, {bool Function()? isActive}) async {
-    if (_hasWallet || _pendingMnemonic != null) return false;
+    if (!_canOnboard || !canAddWallet || _pendingMnemonic != null) return false;
+    final generation = _onboardingGeneration;
     final normalized = mnemonic.trim().toLowerCase().split(RegExp(r'\s+'));
     if (!const {12, 18, 24}.contains(normalized.length)) return false;
     if (!await _crypto.validateMnemonic(normalized.join(' '))) return false;
     await checkWalletCreationReady();
-    if (isActive?.call() == false || _hasWallet || _pendingMnemonic != null) {
+    if (isActive?.call() == false ||
+        !_canOnboard ||
+        _pendingMnemonic != null ||
+        generation != _onboardingGeneration) {
       return false;
     }
     _pendingMnemonic = normalized;
-    _onboardingStage = SignerOnboardingStage.pinSetup;
+    _onboardingStage = _hasWallet
+        ? SignerOnboardingStage.biometricSetup
+        : SignerOnboardingStage.pinSetup;
     notifyListeners();
     return true;
   }
@@ -269,12 +358,14 @@ class SignerWalletController extends ChangeNotifier {
         Iterable<int>.generate(
           pending.length,
         ).every((index) => pending[index] == words[index]);
-    if (_hasWallet ||
+    if (!_canOnboard ||
         _onboardingStage != SignerOnboardingStage.mnemonicReview ||
         !matches) {
       throw StateError('mnemonic review is not active');
     }
-    _onboardingStage = SignerOnboardingStage.pinSetup;
+    _onboardingStage = _hasWallet
+        ? SignerOnboardingStage.biometricSetup
+        : SignerOnboardingStage.pinSetup;
     notifyListeners();
   }
 
@@ -284,7 +375,7 @@ class SignerWalletController extends ChangeNotifier {
   /// retained on this controller. Invalid native output fails closed.
   Future<MnemonicReviewFlow> exportMnemonicForReview() async {
     final metadata = _metadata;
-    if (!_hasWallet || metadata == null) {
+    if (_pendingDeletion != null || !_hasWallet || metadata == null) {
       throw StateError('wallet is not ready');
     }
     final phrase = await _crypto.exportMnemonic(metadata.walletId);
@@ -292,6 +383,12 @@ class SignerWalletController extends ChangeNotifier {
     if (!const {12, 18, 24}.contains(words.length) ||
         !await _crypto.validateMnemonic(words.join(' '))) {
       throw const InvalidMnemonicException();
+    }
+    if (_pendingDeletion != null ||
+        !_hasWallet ||
+        _metadata?.walletId != metadata.walletId ||
+        _changingWallet) {
+      throw StateError('wallet changed');
     }
     return MnemonicReviewFlow(
       purpose: MnemonicReviewPurpose.backup,
@@ -304,7 +401,9 @@ class SignerWalletController extends ChangeNotifier {
     required String walletId,
     required String password,
   }) async {
-    if (!_hasWallet || _metadata?.walletId != walletId) {
+    if (_pendingDeletion != null ||
+        !_hasWallet ||
+        _metadata?.walletId != walletId) {
       throw StateError('wallet is not ready');
     }
     if (CoreCryptoValidation.backupPasswordIssue(password) != null) {
@@ -314,7 +413,9 @@ class SignerWalletController extends ChangeNotifier {
       walletId: walletId,
       password: password,
     );
-    if (!_hasWallet || _metadata?.walletId != walletId) {
+    if (_pendingDeletion != null ||
+        !_hasWallet ||
+        _metadata?.walletId != walletId) {
       sealed.fillRange(0, sealed.length, 0);
       throw StateError('wallet changed');
     }
@@ -345,17 +446,24 @@ class SignerWalletController extends ChangeNotifier {
   }
 
   Future<void> renameWallet(String name) async {
+    if (_changingWallet || _pendingDeletion != null || _addingWallet) {
+      throw StateError('wallet operation in progress');
+    }
     final metadata = _metadata;
     final normalized = name.trim();
     if (!_hasWallet || metadata == null || normalized.isEmpty) return;
     final updated = metadata.copyWith(name: normalized);
     await _vault.storeMetadata(updated);
-    _metadata = updated;
+    _wallets = await _vault.readWallets();
+    if (_metadata?.walletId == metadata.walletId) _metadata = updated;
     notifyListeners();
   }
 
   /// Stores the app PIN (C14). PBKDF2 parameters live in [PinLock].
   Future<void> setPin(String pin) async {
+    if (_addingWallet || _pendingDeletion != null) {
+      throw StateError('app PIN cannot change during a wallet operation');
+    }
     if (!_hasWallet &&
         (_pendingMnemonic == null ||
             _onboardingStage != SignerOnboardingStage.pinSetup)) {
@@ -369,14 +477,23 @@ class SignerWalletController extends ChangeNotifier {
   }
 
   Future<bool> setBiometricEnabled(bool enabled) async {
+    if (_changingWallet || _pendingDeletion != null || _addingWallet) {
+      return false;
+    }
     final metadata = _metadata;
     if (metadata == null) return false;
     if (enabled && !await BiometricAuth.instance.canAuthenticate()) {
       return false;
     }
+    if (_changingWallet ||
+        _pendingDeletion != null ||
+        _metadata?.walletId != metadata.walletId) {
+      return false;
+    }
     final updated = metadata.copyWith(biometricEnabled: enabled);
     await _vault.storeMetadata(updated);
-    _metadata = updated;
+    _wallets = await _vault.readWallets();
+    if (_metadata?.walletId == metadata.walletId) _metadata = updated;
     notifyListeners();
     return true;
   }
@@ -385,7 +502,7 @@ class SignerWalletController extends ChangeNotifier {
   /// in-memory mnemonic. A missing onboarding phrase is an invalid production
   /// state, not permission to navigate to a fake success screen.
   Future<WalletMetadata> completeOnboarding({String walletName = 'KT Wallet'}) {
-    if (_hasWallet) {
+    if (!_canOnboard || !canAddWallet) {
       return Future<WalletMetadata>.error(
         StateError('a wallet already exists'),
       );
@@ -415,7 +532,7 @@ class SignerWalletController extends ChangeNotifier {
     final words = _pendingMnemonic;
     if (words == null ||
         _onboardingStage != SignerOnboardingStage.biometricSetup ||
-        _hasWallet) {
+        !_canOnboard) {
       throw StateError('wallet onboarding is not ready to commit');
     }
     // Check before writes/compensation: an unavailable device should preserve
@@ -428,6 +545,8 @@ class SignerWalletController extends ChangeNotifier {
       createdAt: _now().millisecondsSinceEpoch ~/ 1000,
     );
     var nativeWalletStored = false;
+    final previousMetadata = _metadata;
+    final hadWallet = _hasWallet;
     try {
       await _crypto.storeWallet(
         walletId: walletId,
@@ -447,7 +566,9 @@ class SignerWalletController extends ChangeNotifier {
       _pendingMnemonic = null;
       _onboardingStage = SignerOnboardingStage.completed;
       _hasWallet = true;
+      _addingWallet = false;
       _metadata = completed;
+      _wallets = await _vault.readWallets();
       notifyListeners();
       return completed;
     } catch (error, stackTrace) {
@@ -466,15 +587,23 @@ class SignerWalletController extends ChangeNotifier {
         }
       }
       try {
-        await _vault.wipe();
+        if (hadWallet) {
+          await _vault.removeWallet(walletId);
+          if (previousMetadata != null) {
+            await _vault.selectWallet(previousMetadata.walletId);
+          }
+        } else {
+          await _vault.wipe();
+        }
       } catch (cleanup, cleanupStack) {
         cleanupError ??= cleanup;
         cleanupStackTrace ??= cleanupStack;
       }
       _pendingMnemonic = null;
       _onboardingStage = SignerOnboardingStage.idle;
-      _hasWallet = false;
-      _metadata = null;
+      _hasWallet = hadWallet;
+      _metadata = previousMetadata;
+      _addingWallet = false;
       notifyListeners();
       if (cleanupError != null) {
         Error.throwWithStackTrace(cleanupError, cleanupStackTrace!);
@@ -539,7 +668,8 @@ class SignerWalletController extends ChangeNotifier {
       expiresAt: request.expiresAt,
     );
     final metadata = _metadata;
-    if (!_hasWallet ||
+    if (_pendingDeletion != null ||
+        !_hasWallet ||
         metadata == null ||
         stableRequest.walletId != metadata.walletId) {
       throw StateError('request does not belong to this wallet');
@@ -609,6 +739,11 @@ class SignerWalletController extends ChangeNotifier {
       );
     }
     _validateFinalSigningWindow(stableRequest);
+    if (_pendingDeletion != null ||
+        localWalletId != metadata.walletId ||
+        _changingWallet) {
+      throw StateError('wallet changed before signing');
+    }
     final signed = await _crypto.signTransaction(
       walletId: metadata.walletId,
       coin: coin,
@@ -696,20 +831,41 @@ class SignerWalletController extends ChangeNotifier {
 
   /// C21: wipes the vault (mnemonic, metadata, PIN, lockout) and the
   /// anti-replay records, returning the device to the no-wallet state.
-  Future<void> deleteWallet() async {
-    final walletId = _metadata?.walletId;
-    if (walletId != null) {
-      // Persist the user's irreversible intent before touching the native
-      // vault. If the process dies after key deletion, startup sees this
-      // marker and completes every remaining cleanup step without exposing a
-      // wallet that can no longer sign.
-      await _vault.markDeletionPending(walletId);
-      await _finishPendingDeletion(walletId);
-      return;
+  Future<void> deleteWallet({String? expectedWalletId}) async {
+    if (expectedWalletId != null && expectedWalletId != localWalletId) {
+      throw StateError('wallet changed before deletion');
     }
-    await _vault.wipe();
-    await _clearRecordsBestEffort();
-    _clearWalletState();
+    if (_changingWallet ||
+        _addingWallet ||
+        _completeOnboardingInFlight != null) {
+      throw StateError('wallet operation in progress');
+    }
+    _changingWallet = true;
+    try {
+      final walletId = _metadata?.walletId;
+      if (walletId != null) {
+        // Persist the user's irreversible intent before touching the native
+        // vault. If the process dies after key deletion, startup sees this
+        // marker and completes every remaining cleanup step without exposing a
+        // wallet that can no longer sign.
+        final pending = await _vault.pendingDeletionWalletId();
+        if (pending != null && pending != walletId) {
+          throw StateError('another wallet deletion requires recovery');
+        }
+        if (pending == null) await _vault.markDeletionPending(walletId);
+        _pendingDeletion = walletId;
+        await _finishPendingDeletion(
+          walletId,
+          deleteNative: !await _vault.nativeDeletionComplete(walletId),
+        );
+        return;
+      }
+      await _vault.wipe();
+      await _clearRecordsBestEffort();
+      _clearWalletState();
+    } finally {
+      _changingWallet = false;
+    }
   }
 
   Future<void> _finishPendingDeletion(
@@ -722,6 +878,22 @@ class SignerWalletController extends ChangeNotifier {
       } on WalletNotFoundException {
         // Idempotent recovery after a crash following native key deletion.
       }
+    }
+    await _vault.markNativeDeletionComplete(walletId);
+    final remaining = (await _vault.readWallets())
+        .where((w) => w.walletId != walletId)
+        .toList();
+    if (remaining.isNotEmpty) {
+      await (await _openRecords()).clearWallet(walletId);
+      await _vault.removeWallet(walletId);
+      await _vault.clearDeletionPending();
+      _pendingDeletion = null;
+      _wallets = await _vault.readWallets();
+      _metadata = await _vault.readMetadata();
+      _hasWallet = _metadata != null;
+      _onboardingStage = SignerOnboardingStage.idle;
+      notifyListeners();
+      return;
     }
     var recordsCleared = true;
     try {
@@ -736,6 +908,7 @@ class SignerWalletController extends ChangeNotifier {
       // deliberately kept whenever any vault key remains, so a later startup
       // retries rather than presenting a broken signer wallet.
     }
+    _pendingDeletion = await _vault.pendingDeletionWalletId();
     _clearWalletState();
   }
 
@@ -747,11 +920,21 @@ class SignerWalletController extends ChangeNotifier {
     }
   }
 
+  Future<List<SignatureRecord>> recordsForCurrentWallet() async {
+    final id = localWalletId;
+    if (id == null) return const [];
+    final records = await (await _openRecords()).all();
+    return records.where((r) => r.walletId == id).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+  }
+
   void _clearWalletState() {
     _pendingMnemonic = null;
     _onboardingStage = SignerOnboardingStage.idle;
     _hasWallet = false;
     _metadata = null;
+    _wallets = const [];
+    _addingWallet = false;
     notifyListeners();
   }
 

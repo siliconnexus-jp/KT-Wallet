@@ -24,10 +24,12 @@ class KtCameraScreen extends StatelessWidget {
     this.onSimulatedScan,
     this.onScanned,
     this.availability,
+    this.onRetry,
   });
   final String title, hint;
   final VoidCallback onClose;
   final VoidCallback? onSimulatedScan;
+  final VoidCallback? onRetry;
 
   /// One decoded QR string per camera detection (consecutive duplicates are
   /// already filtered); null keeps the screen purely simulated.
@@ -73,6 +75,11 @@ class KtCameraScreen extends StatelessWidget {
               color: Colors.white,
             ),
           ),
+          if (onRetry != null)
+            TextButton(
+              onPressed: onRetry,
+              child: Text(AppLocalizations.of(context).actionRetry),
+            ),
         ],
       ),
     ),
@@ -169,6 +176,26 @@ class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
   int _received = 0;
   bool _navigated = false;
   bool _simulatedSession = false;
+  bool _invalidExport = false;
+  int _scanEpoch = 0;
+
+  void _rejectExport() {
+    _session.reset();
+    setState(() {
+      _received = 0;
+      _invalidExport = true;
+    });
+  }
+
+  void _retry() {
+    _session.reset();
+    setState(() {
+      _invalidExport = false;
+      _received = 0;
+      _simulatedSession = false;
+      _scanEpoch++;
+    });
+  }
 
   void _afterFrame(BuildContext context) {
     setState(() => _received = _session.progress.received);
@@ -178,9 +205,8 @@ class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
     try {
       decoded = AirgapPayload.decode(payload);
     } on Object {
-      // Assembled bytes that aren't a valid payload: silent anomaly, rescan.
-      _session.reset();
-      setState(() => _received = 0);
+      // Explain invalid assembled data and allow a fresh camera session.
+      _rejectExport();
       return;
     }
     if (decoded is AccountExport && context.mounted) {
@@ -196,9 +222,10 @@ class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
         _navigated = true;
         context.pushReplacement('/import-confirm', extra: decoded);
       } on PayloadError {
-        _session.reset();
-        setState(() => _received = 0);
+        _rejectExport();
       }
+    } else {
+      _rejectExport();
     }
   }
 
@@ -217,12 +244,19 @@ class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
   }
 
   void _onScanned(String raw) {
+    if (_invalidExport || _navigated) return;
     if (_simulatedSession) {
       _session.reset();
       _received = 0;
       _simulatedSession = false;
     }
-    _session.add(raw); // Invalid strings count silently as anomalies.
+    final anomalies = _session.anomalies;
+    _session.add(raw);
+    if (_session.isFailed ||
+        (_session.progress.received == 0 && _session.anomalies > anomalies)) {
+      _rejectExport();
+      return;
+    }
     _afterFrame(context);
   }
 
@@ -234,7 +268,11 @@ class _ScanAccountCameraScreenState extends State<ScanAccountCameraScreen> {
         : ' · $_received / ${_session.progress.total == 0 ? _frames.length : _session.progress.total}';
     return KtCameraScreen(
       title: l10n.scanAccountQr,
-      hint: '${l10n.scanAccountHint}$progress',
+      key: ValueKey('account-scan-$_scanEpoch'),
+      hint: _invalidExport
+          ? l10n.invalidOfflineWalletExport
+          : '${l10n.scanAccountHint}$progress',
+      onRetry: _invalidExport ? _retry : null,
       onClose: () => Navigator.of(context).maybePop(),
       onSimulatedScan: developerFixturesEnabled
           ? () => _onSimulatedScan(context)

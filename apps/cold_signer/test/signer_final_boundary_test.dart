@@ -66,6 +66,8 @@ class _FailingRecords implements SignRecordPersistence {
 
   @override
   Future<void> clear() async {}
+  @override
+  Future<void> clearWallet(String walletId) async {}
 }
 
 Future<SignerWalletController> _createWallet({

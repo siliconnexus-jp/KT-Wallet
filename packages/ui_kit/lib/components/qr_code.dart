@@ -11,6 +11,7 @@ class KtQrCode extends StatelessWidget {
     required this.data,
     this.size = 220,
     this.dark = false,
+    this.quietZone = 1,
   });
 
   /// Payload to encode (e.g. an airgap_protocol fragment or an address URI).
@@ -19,6 +20,9 @@ class KtQrCode extends StatelessWidget {
 
   /// Dark style: white modules on the signer's near-black surface.
   final bool dark;
+  /// Production optical transport should use the standard four-module zone.
+  /// One module remains the legacy gallery default for visual compatibility.
+  final int quietZone;
 
   @override
   Widget build(BuildContext context) {
@@ -28,16 +32,17 @@ class KtQrCode extends StatelessWidget {
       width: size,
       height: size,
       color: bg,
-      child: CustomPaint(painter: _KtQrCodePainter(data, ink)),
+      child: CustomPaint(painter: _KtQrCodePainter(data, ink, quietZone)),
     );
   }
 }
 
 class _KtQrCodePainter extends CustomPainter {
-  _KtQrCodePainter(this.data, this.ink) : _image = _encode(data);
+  _KtQrCodePainter(this.data, this.ink, this.quietZone) : _image = _encode(data);
 
   final String data;
   final Color ink;
+  final int quietZone;
   final QrImage _image;
 
   // Encoding is deterministic and cheap relative to frame budget, but avoid
@@ -54,10 +59,9 @@ class _KtQrCodePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final modules = _image.moduleCount;
-    // One-module quiet zone on each side keeps the code scannable against
-    // surrounding UI.
-    final cell = size.width / (modules + 2);
-    final origin = cell;
+    // Leave the requested quiet zone around every side of the symbol.
+    final cell = size.width / (modules + 2 * quietZone);
+    final origin = cell * quietZone;
     final p = Paint()..color = ink;
     for (var y = 0; y < modules; y++) {
       for (var x = 0; x < modules; x++) {
@@ -78,5 +82,5 @@ class _KtQrCodePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _KtQrCodePainter old) =>
-      old.data != data || old.ink != ink;
+      old.data != data || old.ink != ink || old.quietZone != quietZone;
 }

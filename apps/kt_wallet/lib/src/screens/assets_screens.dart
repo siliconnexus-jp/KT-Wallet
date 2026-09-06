@@ -349,7 +349,7 @@ class _AssetsListScreenState extends State<AssetsListScreen> {
             ],
           ),
         if (offline) const MarketOfflineBanner(),
-        if (market != null && market.showingCachedData)
+        if (market != null && market.hasFreshnessNotice)
           MarketFreshnessLabel(market: market),
         if (results.isEmpty)
           Padding(

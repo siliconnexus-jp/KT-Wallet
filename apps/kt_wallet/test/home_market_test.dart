@@ -352,7 +352,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('网络不可用，实时数据加载失败'), findsWidgets);
+      expect(find.text('暂时无法获取资产数据，请稍后重试'), findsWidgets);
       expect(find.text(r'$862.40'), findsNothing);
       expect(find.text('0.0842 ETH'), findsNothing);
       controller.dispose();
@@ -406,7 +406,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('网络不可用，实时数据加载失败'), findsOneWidget);
+      expect(find.text('暂时无法获取资产数据，请稍后重试'), findsOneWidget);
       expect(find.text('0.0842 ETH'), findsNothing);
       expect(find.text('3,120.00 USDT · TRON'), findsNothing);
       expect(find.text('-- ETH · 3 条链'), findsOneWidget);

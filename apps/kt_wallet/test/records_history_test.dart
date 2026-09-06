@@ -924,7 +924,7 @@ void main() {
     await tester.pumpWidget(_app(controller));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('history-cache-retry')), findsOneWidget);
-    expect(find.textContaining('真实交易记录'), findsOneWidget);
+    expect(find.textContaining('部分交易记录暂未更新'), findsOneWidget);
 
     service.results
       ..[Coin.eth] = _unsupported
@@ -1298,7 +1298,7 @@ void main() {
       await tester.pumpWidget(_app(controller));
       await tester.pumpAndSettle();
 
-      expect(find.text('网络不可用，实时数据加载失败'), findsOneWidget);
+      expect(find.text('暂时无法获取资产数据，请稍后重试'), findsOneWidget);
       expect(find.text('-120.00 USDT'), findsNothing);
       expect(find.text('+0.05 ETH'), findsNothing);
       controller.dispose();

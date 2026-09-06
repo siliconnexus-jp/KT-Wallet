@@ -649,13 +649,37 @@ abstract class AppLocalizations {
   /// No description provided for @marketCachedStale.
   ///
   /// In zh, this message translates to:
-  /// **'网络恢复前将继续显示已保存的真实余额'**
+  /// **'部分资产数据暂未更新，有缓存的项目保留上次数据'**
   String get marketCachedStale;
+
+  /// No description provided for @marketRefreshing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在更新当前钱包的资产…'**
+  String get marketRefreshing;
+
+  /// No description provided for @marketBalancesIncomplete.
+  ///
+  /// In zh, this message translates to:
+  /// **'部分余额暂未更新，有缓存的项目保留上次余额'**
+  String get marketBalancesIncomplete;
+
+  /// No description provided for @marketPricesIncomplete.
+  ///
+  /// In zh, this message translates to:
+  /// **'行情暂未完整更新，部分估值可能使用上次价格'**
+  String get marketPricesIncomplete;
+
+  /// No description provided for @historyRefreshing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在更新当前钱包的交易记录…'**
+  String get historyRefreshing;
 
   /// No description provided for @historyCachedStale.
   ///
   /// In zh, this message translates to:
-  /// **'网络恢复前将继续显示已保存的真实交易记录'**
+  /// **'部分交易记录暂未更新，当前包含上次保存的记录'**
   String get historyCachedStale;
 
   /// No description provided for @actionReceive.
@@ -3163,7 +3187,7 @@ abstract class AppLocalizations {
   /// No description provided for @marketOfflineDemo.
   ///
   /// In zh, this message translates to:
-  /// **'网络不可用，实时数据加载失败'**
+  /// **'暂时无法获取资产数据，请稍后重试'**
   String get marketOfflineDemo;
 
   /// No description provided for @actionDone.

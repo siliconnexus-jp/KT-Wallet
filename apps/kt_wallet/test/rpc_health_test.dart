@@ -150,6 +150,7 @@ void main() {
     testWidgets('a live scope shows the MEASURED latency, and a real failure', (
       tester,
     ) async {
+      final probedHosts = <String>{};
       final prefs = AppPrefsController();
       await prefs.load();
       final networks = NetworkController();
@@ -164,6 +165,7 @@ void main() {
               child: NetworkSettingsScreen(
                 // Everything answers; Solana's node 500s.
                 healthClient: MockClient((req) async {
+                  probedHosts.add(req.url.host);
                   if (req.url.host.contains('solana')) {
                     return http.Response('nope', 500);
                   }
@@ -179,9 +181,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // No literal survives; a measured badge ends in ' ms'.
-      expect(find.text('86 ms'), findsNothing);
-      expect(find.text('112 ms'), findsNothing);
+      // Real wall-clock measurements can legitimately equal the former demo
+      // values (86/112 ms). The scope-absent test above rejects fabricated
+      // values; here assert that probes ran and produced measured badges.
+      expect(probedHosts.length, greaterThan(1));
       final measured = tester
           .widgetList<Text>(find.byType(Text))
           .where((t) => (t.data ?? '').endsWith(' ms'))

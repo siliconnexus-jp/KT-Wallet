@@ -146,6 +146,13 @@
   "signRecords": "署名記録",
   "securityCheck": "安全性チェック",
   "walletManage": "ウォレット管理",
+  "addWallet": "ウォレットを追加",
+  "signatureIncomplete": "署名未完了",
+  "recordsLoadFailed": "署名履歴を読み込めませんでした。戻って再試行してください。",
+  "noWalletRecords": "このウォレットの署名履歴はありません",
+  "switchWallet": "ウォレットの切り替え / 追加",
+  "walletSwitchFailed": "切り替えが完了しませんでした。端末で認証して再試行してください。元のウォレットは変更されていません。",
+  "multiWalletScope": "鍵とバックアップはウォレットごとに独立し、端末のアプリ PIN は共通です。1 つ削除しても他のウォレットは削除されません。",
 
   "offlineSecurityCheck": "オフラインセキュリティチェック",
   "checkAirplaneMode": "機内モード",

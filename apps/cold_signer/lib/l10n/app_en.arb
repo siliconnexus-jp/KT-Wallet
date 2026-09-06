@@ -146,6 +146,13 @@
   "signRecords": "Signing records",
   "securityCheck": "Security check",
   "walletManage": "Wallet management",
+  "addWallet": "Add wallet",
+  "signatureIncomplete": "Signing incomplete",
+  "recordsLoadFailed": "Could not load signing records. Go back and retry.",
+  "noWalletRecords": "No signing records for this wallet",
+  "switchWallet": "Switch / add wallet",
+  "walletSwitchFailed": "Wallet switch was not completed. Authenticate on your device and retry. Your original wallet is unchanged.",
+  "multiWalletScope": "Each wallet has separate keys and backups. The app PIN is shared on this device. Deleting one wallet does not delete the others.",
 
   "offlineSecurityCheck": "Offline security check",
   "checkAirplaneMode": "Airplane mode",

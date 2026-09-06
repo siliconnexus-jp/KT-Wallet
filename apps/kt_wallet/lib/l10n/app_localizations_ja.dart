@@ -310,10 +310,24 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get marketCachedStale => 'ネットワークの再接続まで保存済みの実残高を表示します';
+  String get marketCachedStale => '一部の資産データを更新できませんでした。保存済みの値がある項目は前回の値を表示します。';
 
   @override
-  String get historyCachedStale => 'ネットワークの再接続まで保存済みの実取引履歴を表示します';
+  String get marketRefreshing => 'このウォレットの資産を更新中…';
+
+  @override
+  String get marketBalancesIncomplete =>
+      '一部の残高を更新できませんでした。保存済みの残高がある項目は前回の値を表示します。';
+
+  @override
+  String get marketPricesIncomplete =>
+      '一部の相場を更新できませんでした。評価額に前回の価格を使用している場合があります。';
+
+  @override
+  String get historyRefreshing => 'このウォレットの取引履歴を更新中…';
+
+  @override
+  String get historyCachedStale => '一部の取引履歴を更新できませんでした。前回保存した履歴を含んでいます。';
 
   @override
   String get actionReceive => '受取';
@@ -1681,7 +1695,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get watchWalletCreated => 'ウォッチウォレットを作成しました';
 
   @override
-  String get marketOfflineDemo => 'ネットワークに接続できず、ライブデータを取得できません';
+  String get marketOfflineDemo => '資産データを一時的に取得できません。しばらくしてから再試行してください。';
 
   @override
   String get actionDone => '完了';

@@ -472,6 +472,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get walletManage => 'Wallet management';
 
   @override
+  String get addWallet => 'Add wallet';
+
+  @override
+  String get signatureIncomplete => 'Signing incomplete';
+
+  @override
+  String get recordsLoadFailed =>
+      'Could not load signing records. Go back and retry.';
+
+  @override
+  String get noWalletRecords => 'No signing records for this wallet';
+
+  @override
+  String get switchWallet => 'Switch / add wallet';
+
+  @override
+  String get walletSwitchFailed =>
+      'Wallet switch was not completed. Authenticate on your device and retry. Your original wallet is unchanged.';
+
+  @override
+  String get multiWalletScope =>
+      'Each wallet has separate keys and backups. The app PIN is shared on this device. Deleting one wallet does not delete the others.';
+
+  @override
   String get offlineSecurityCheck => 'Offline security check';
 
   @override

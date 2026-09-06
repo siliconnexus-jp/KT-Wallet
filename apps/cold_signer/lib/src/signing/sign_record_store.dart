@@ -53,6 +53,7 @@ abstract class SignRecordPersistence {
 
   /// Erases every record (C21 delete-wallet wipe).
   Future<void> clear();
+  Future<void> clearWallet(String walletId);
 }
 
 /// In-memory persistence for tests.
@@ -102,6 +103,10 @@ class InMemorySignRecordPersistence implements SignRecordPersistence {
 
   @override
   Future<void> clear() async => _rows.clear();
+
+  @override
+  Future<void> clearWallet(String walletId) async =>
+      _rows.removeWhere((_, row) => row.walletId == walletId);
 }
 
 /// Adapts [SignRecordPersistence] to the synchronous [SignRecordStore] the

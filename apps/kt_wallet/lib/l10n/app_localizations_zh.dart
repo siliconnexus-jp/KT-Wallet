@@ -300,10 +300,22 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get marketCachedStale => '网络恢复前将继续显示已保存的真实余额';
+  String get marketCachedStale => '部分资产数据暂未更新，有缓存的项目保留上次数据';
 
   @override
-  String get historyCachedStale => '网络恢复前将继续显示已保存的真实交易记录';
+  String get marketRefreshing => '正在更新当前钱包的资产…';
+
+  @override
+  String get marketBalancesIncomplete => '部分余额暂未更新，有缓存的项目保留上次余额';
+
+  @override
+  String get marketPricesIncomplete => '行情暂未完整更新，部分估值可能使用上次价格';
+
+  @override
+  String get historyRefreshing => '正在更新当前钱包的交易记录…';
+
+  @override
+  String get historyCachedStale => '部分交易记录暂未更新，当前包含上次保存的记录';
 
   @override
   String get actionReceive => '收款';
@@ -1653,7 +1665,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get watchWalletCreated => '观察钱包已创建';
 
   @override
-  String get marketOfflineDemo => '网络不可用，实时数据加载失败';
+  String get marketOfflineDemo => '暂时无法获取资产数据，请稍后重试';
 
   @override
   String get actionDone => '完成';

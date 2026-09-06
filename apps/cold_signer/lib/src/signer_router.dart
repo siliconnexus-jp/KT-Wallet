@@ -76,6 +76,16 @@ MnemonicReviewFlow? _mnemonicFlow(BuildContext context, GoRouterState state) {
 /// registry's [WidgetBuilder]s these also see the [GoRouterState], so the
 /// signing chain can pass the decoded request between screens.
 final _liveOverrides = <String, Widget Function(BuildContext, GoRouterState)>{
+  '/welcome': (c, s) => PopScope(
+    canPop: SignerWalletScope.maybeOf(c)?.addingWallet != true,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop && SignerWalletScope.maybeOf(c)?.addingWallet == true) {
+        SignerWalletScope.maybeOf(c)?.cancelAddWallet();
+        c.go('/wallets');
+      }
+    },
+    child: const SignerWelcomeScreen(),
+  ),
   '/security-check': (c, s) => const SignerSecurityCheckScreen(),
   '/mnemonic-show': (c, s) =>
       SignerMnemonicShowScreen(flow: _mnemonicFlow(c, s)),
@@ -119,8 +129,13 @@ GoRouter buildSignerRouter({String initialLocation = '/'}) {
           SignerWalletScope.maybeOf(context)?.onboardingStage ??
           SignerOnboardingStage.idle,
       currentWalletId: SignerWalletScope.maybeOf(context)?.localWalletId,
+      addingWallet: SignerWalletScope.maybeOf(context)?.addingWallet ?? false,
     ),
     routes: [
+      GoRoute(
+        path: '/wallets',
+        builder: (c, s) => const SignerWalletListScreen(),
+      ),
       GoRoute(
         path: '/qr-backup',
         builder: (c, s) => _SensitiveSignerContent(
@@ -236,9 +251,37 @@ String? signerProductionRouteRedirect({
   bool hasWallet = false,
   SignerOnboardingStage onboardingStage = SignerOnboardingStage.idle,
   String? currentWalletId,
+  bool addingWallet = false,
 }) {
   if (galleryMode) return null;
   final path = uri.path;
+  if (addingWallet && hasWallet) {
+    if (path == '/set-password') return '/biometric';
+    if (const {
+      '/home',
+      '/scan',
+      '/parse',
+      '/auth',
+      '/result-qr',
+      '/export',
+      '/wallet',
+      '/wallets',
+      '/delete',
+      '/qr-backup',
+    }.contains(path)) {
+      return '/welcome';
+    }
+    return signerProductionRouteRedirect(
+      galleryMode: false,
+      uri: uri,
+      extra: extra,
+      hasPendingMnemonic: hasPendingMnemonic,
+      hasWallet: false,
+      onboardingStage: onboardingStage,
+      currentWalletId: currentWalletId,
+    );
+  }
+  if (path == '/wallets' && !hasWallet) return '/welcome';
   if (path == '/qr-backup' &&
       (!hasWallet || extra is! String || extra != currentWalletId)) {
     return hasWallet ? '/wallet' : '/welcome';

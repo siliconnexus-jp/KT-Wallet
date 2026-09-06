@@ -299,6 +299,13 @@ class SecureVault {
   SecureVault(this._storage);
 
   final VaultStorage _storage;
+  Future<void> _writes = Future<void>.value();
+
+  Future<void> _mutate(Future<void> Function() action) {
+    final task = _writes.then((_) => action());
+    _writes = task.catchError((Object _) {});
+    return task;
+  }
 
   /// Storage keys. `signer.pin` / `signer.pin_lockout` are written by PinLock
   /// but listed here so [wipe] erases everything the signer ever persists.
@@ -309,24 +316,114 @@ class SecureVault {
   static const pinKey = 'signer.pin';
   static const pinLockoutKey = 'signer.pin_lockout';
   static const deletionPendingKey = 'signer.wallet_delete_pending.v1';
+  static const deletionNativeCompleteKey =
+      'signer.wallet_delete_native_done.v1';
   static const maxMetadataChars = 16384;
+  static const maxWallets = 20;
 
   Future<bool> hasWallet() async => await readMetadata() != null;
 
-  Future<void> storeMetadata(WalletMetadata metadata) async {
+  Future<void> storeMetadata(WalletMetadata metadata) => _mutate(() async {
     metadata.validate();
-    await _storage.write(metadataKey, jsonEncode(metadata.toJson()));
-  }
+    final state = await _readWallets();
+    final wallets = [...state.$1];
+    final index = wallets.indexWhere((w) => w.walletId == metadata.walletId);
+    if (index < 0) {
+      if (wallets.length >= maxWallets) {
+        throw StateError('wallet limit reached');
+      }
+      wallets.add(metadata);
+    } else {
+      wallets[index] = metadata;
+    }
+    await _writeWallets(wallets, index < 0 ? metadata.walletId : state.$2!);
+  });
 
   Future<WalletMetadata?> readMetadata() async {
+    final state = await _readWallets();
+    return state.$1.where((w) => w.walletId == state.$2).firstOrNull;
+  }
+
+  Future<List<WalletMetadata>> readWallets() async => (await _readWallets()).$1;
+
+  Future<void> selectWallet(String walletId) => _mutate(() async {
+    final wallets = await readWallets();
+    if (!wallets.any((w) => w.walletId == walletId)) {
+      throw StateError('unknown wallet');
+    }
+    await _writeWallets(wallets, walletId);
+  });
+
+  Future<void> removeWallet(String walletId) => _mutate(() async {
+    final state = await _readWallets();
+    final wallets = state.$1.where((w) => w.walletId != walletId).toList();
+    if (wallets.isEmpty) {
+      await _storage.delete(metadataKey);
+    } else {
+      await _writeWallets(
+        wallets,
+        wallets.any((w) => w.walletId == state.$2)
+            ? state.$2!
+            : wallets.first.walletId,
+      );
+    }
+  });
+
+  Future<void> _writeWallets(List<WalletMetadata> wallets, String selected) =>
+      _storage.write(
+        metadataKey,
+        jsonEncode(
+          wallets.length == 1
+              ? wallets.single.toJson()
+              : {
+                  'v': 3,
+                  'selected': selected,
+                  'wallets': [for (final w in wallets) w.toJson()],
+                },
+        ),
+      );
+
+  Future<(List<WalletMetadata>, String?)> _readWallets() async {
     final raw = await _storage.read(metadataKey);
-    if (raw == null) return null;
+    if (raw == null) return (const <WalletMetadata>[], null);
     try {
-      final decoded = decodeStrictLocalJson(raw, maxChars: maxMetadataChars);
+      final decoded = decodeStrictLocalJson(
+        raw,
+        maxChars: maxMetadataChars * maxWallets,
+      );
       if (decoded is! Map || decoded.keys.any((key) => key is! String)) {
         throw const VaultStateCorruptedException();
       }
-      return WalletMetadata.fromJson(decoded.cast<String, Object?>());
+      if (!decoded.containsKey('v')) {
+        if (raw.length > maxMetadataChars) {
+          throw const VaultStateCorruptedException();
+        }
+        final legacy = WalletMetadata.fromJson(decoded.cast<String, Object?>());
+        return ([legacy], legacy.walletId);
+      }
+      if (decoded.length != 3 ||
+          decoded['v'] is! int ||
+          decoded['v'] != 3 ||
+          decoded['selected'] is! String ||
+          decoded['wallets'] is! List) {
+        throw const VaultStateCorruptedException();
+      }
+      final rows = decoded['wallets'] as List;
+      if (rows.isEmpty || rows.length > maxWallets) {
+        throw const VaultStateCorruptedException();
+      }
+      final wallets = [
+        for (final row in rows)
+          WalletMetadata.fromJson((row as Map).cast<String, Object?>()),
+      ];
+      if (wallets.map((w) => w.walletId).toSet().length != wallets.length ||
+          !wallets.any((w) => w.walletId == decoded['selected'])) {
+        throw const VaultStateCorruptedException();
+      }
+      return (
+        List<WalletMetadata>.unmodifiable(wallets),
+        decoded['selected'] as String,
+      );
     } on VaultStateCorruptedException {
       rethrow;
     } on Object {
@@ -338,7 +435,19 @@ class SecureVault {
 
   Future<void> markDeletionPending(String walletId) async {
     _validateWalletId(walletId);
+    await _storage.delete(deletionNativeCompleteKey);
     await _storage.write(deletionPendingKey, walletId);
+  }
+
+  Future<void> markNativeDeletionComplete(String walletId) =>
+      _storage.write(deletionNativeCompleteKey, walletId);
+
+  Future<bool> nativeDeletionComplete(String walletId) async =>
+      await _storage.read(deletionNativeCompleteKey) == walletId;
+
+  Future<void> clearDeletionPending() async {
+    await _storage.delete(deletionPendingKey);
+    await _storage.delete(deletionNativeCompleteKey);
   }
 
   Future<String?> pendingDeletionWalletId() async {
@@ -375,7 +484,7 @@ class SecureVault {
     // metadata row whose native key has already gone.
     if (firstError == null && !keepDeletionMarker) {
       try {
-        await _storage.delete(deletionPendingKey);
+        await clearDeletionPending();
       } catch (error, stackTrace) {
         firstError = error;
         firstStackTrace = stackTrace;

@@ -41,31 +41,29 @@ class MarketOfflineBanner extends StatelessWidget {
 
 /// Compact, non-blocking freshness copy for a retained last-good snapshot.
 ///
-/// A cached balance is still useful, but it must never look as current as a
-/// live RPC response. The timestamp is deliberately rounded down so the label
-/// remains stable instead of rebuilding every second.
+/// Do not infer device connectivity from a provider error, or describe mixed
+/// fresh/cached balances using one wallet-wide "verified" timestamp.
 class MarketFreshnessLabel extends StatelessWidget {
   const MarketFreshnessLabel({super.key, required this.market});
 
   final MarketController market;
 
-  String _relative(AppLocalizations l10n, DateTime timestamp) {
-    final age = DateTime.now().difference(timestamp);
-    if (age.inMinutes < 1) return l10n.marketCachedJustNow;
-    if (age.inHours < 1) return l10n.marketCachedMinutes(age.inMinutes);
-    return l10n.marketCachedHours(age.inHours);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final timestamp = market.lastUpdatedAt;
-    if (!market.showingCachedData || timestamp == null) {
+    if (!market.hasFreshnessNotice) {
       return const SizedBox.shrink();
     }
     final l10n = AppLocalizations.of(context);
+    final message = market.isRefreshing
+        ? l10n.marketRefreshing
+        : market.priceRefreshIncomplete && !market.balanceRefreshIncomplete
+        ? l10n.marketPricesIncomplete
+        : market.balanceRefreshIncomplete && !market.priceRefreshIncomplete
+        ? l10n.marketBalancesIncomplete
+        : l10n.marketCachedStale;
     return Semantics(
       liveRegion: true,
-      label: '${_relative(l10n, timestamp)}. ${l10n.marketCachedStale}',
+      label: message,
       child: Row(
         key: const ValueKey('market-freshness'),
         children: [
@@ -77,7 +75,7 @@ class MarketFreshnessLabel extends StatelessWidget {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              '${_relative(l10n, timestamp)} · ${l10n.marketCachedStale}',
+              message,
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
@@ -85,6 +83,14 @@ class MarketFreshnessLabel extends StatelessWidget {
               ),
             ),
           ),
+          if (!market.isRefreshing)
+            IconButton(
+              key: const ValueKey('market-freshness-retry'),
+              tooltip: l10n.actionRetry,
+              onPressed: market.refresh,
+              icon: const Icon(Icons.refresh_rounded, size: 19),
+              color: WalletColors.text2,
+            ),
         ],
       ),
     );

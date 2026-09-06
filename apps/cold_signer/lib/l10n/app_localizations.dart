@@ -916,6 +916,48 @@ abstract class AppLocalizations {
   /// **'钱包管理'**
   String get walletManage;
 
+  /// No description provided for @addWallet.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加钱包'**
+  String get addWallet;
+
+  /// No description provided for @signatureIncomplete.
+  ///
+  /// In zh, this message translates to:
+  /// **'签名未完成'**
+  String get signatureIncomplete;
+
+  /// No description provided for @recordsLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法读取签名记录，请返回后重试。'**
+  String get recordsLoadFailed;
+
+  /// No description provided for @noWalletRecords.
+  ///
+  /// In zh, this message translates to:
+  /// **'此钱包暂无签名记录'**
+  String get noWalletRecords;
+
+  /// No description provided for @switchWallet.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换 / 添加钱包'**
+  String get switchWallet;
+
+  /// No description provided for @walletSwitchFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'钱包切换未完成，请完成系统认证后重试。原钱包未更改。'**
+  String get walletSwitchFailed;
+
+  /// No description provided for @multiWalletScope.
+  ///
+  /// In zh, this message translates to:
+  /// **'每个钱包独立保存密钥和备份，共用本机 App PIN。删除一个钱包不会删除其他钱包。'**
+  String get multiWalletScope;
+
   /// No description provided for @offlineSecurityCheck.
   ///
   /// In zh, this message translates to:

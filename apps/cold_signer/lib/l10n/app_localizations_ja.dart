@@ -450,6 +450,29 @@ class AppLocalizationsJa extends AppLocalizations {
   String get walletManage => 'ウォレット管理';
 
   @override
+  String get addWallet => 'ウォレットを追加';
+
+  @override
+  String get signatureIncomplete => '署名未完了';
+
+  @override
+  String get recordsLoadFailed => '署名履歴を読み込めませんでした。戻って再試行してください。';
+
+  @override
+  String get noWalletRecords => 'このウォレットの署名履歴はありません';
+
+  @override
+  String get switchWallet => 'ウォレットの切り替え / 追加';
+
+  @override
+  String get walletSwitchFailed =>
+      '切り替えが完了しませんでした。端末で認証して再試行してください。元のウォレットは変更されていません。';
+
+  @override
+  String get multiWalletScope =>
+      '鍵とバックアップはウォレットごとに独立し、端末のアプリ PIN は共通です。1 つ削除しても他のウォレットは削除されません。';
+
+  @override
   String get offlineSecurityCheck => 'オフラインセキュリティチェック';
 
   @override

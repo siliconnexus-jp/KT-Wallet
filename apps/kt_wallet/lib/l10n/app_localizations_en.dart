@@ -313,11 +313,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get marketCachedStale =>
-      'Saved balances are shown while the network reconnects';
+      'Some asset data could not be updated. Saved values are kept where available.';
+
+  @override
+  String get marketRefreshing => 'Updating this wallet’s assets…';
+
+  @override
+  String get marketBalancesIncomplete =>
+      'Some balances could not be updated. Saved balances are kept where available.';
+
+  @override
+  String get marketPricesIncomplete =>
+      'Some market quotes could not be updated. Valuations may use previous prices.';
+
+  @override
+  String get historyRefreshing => 'Updating this wallet’s transactions…';
 
   @override
   String get historyCachedStale =>
-      'Saved transactions are shown while the network reconnects';
+      'Some transactions could not be updated. Previously saved records are included.';
 
   @override
   String get actionReceive => 'Receive';
@@ -1761,7 +1775,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get marketOfflineDemo =>
-      'Network unavailable — live data could not be loaded';
+      'Asset data is temporarily unavailable. Please try again later.';
 
   @override
   String get actionDone => 'Done';

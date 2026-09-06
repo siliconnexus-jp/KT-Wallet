@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:chains/chains.dart' show Amount;
 import 'package:core_crypto/core_crypto.dart' show ChainAddresses, Coin;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
+import 'package:kt_wallet/l10n/app_localizations.dart';
+import 'package:kt_wallet/src/widgets/market_offline_banner.dart';
 import 'package:kt_wallet/src/market/balance_service.dart';
 import 'package:kt_wallet/src/market/market_controller.dart';
 import 'package:kt_wallet/src/market/market_snapshot.dart';
@@ -621,8 +624,11 @@ void main() {
 
       await controller.refresh();
 
-      expect(controller.showingCachedData, isTrue);
-      expect(controller.lastUpdatedAt, savedAt);
+      expect(controller.showingCachedData, isFalse);
+      expect(controller.tronActivationIsCached, isTrue);
+      expect(controller.balanceRefreshIncomplete, isFalse);
+      expect(controller.priceRefreshIncomplete, isFalse);
+      expect(controller.lastUpdatedAt!.isAfter(savedAt), isTrue);
       expect(controller.balanceFor(Coin.tron).amount!.format(), '6');
       expect(controller.tronActivationStatus, TronActivationStatus.activated);
       await pumpEventQueue();
@@ -836,6 +842,111 @@ void main() {
     expect(balances.lastAddresses!.eth, '0xbbb');
     controller.dispose();
   });
+
+  test(
+    'streaming balance errors retain last-good amounts but not across wallets',
+    () async {
+      final wallets = _wallets();
+      final balances = FakeBalanceService(_okResults());
+      final controller = MarketController(
+        wallets: wallets,
+        balances: balances,
+        prices: FakePriceService(_prices),
+      );
+      addTearDown(controller.dispose);
+      await controller.refresh();
+      final previous = controller.balanceFor(Coin.eth).amount;
+      balances.results = {
+        ..._okResults(),
+        Coin.eth: const BalanceResult.error(),
+      };
+      await controller.refresh();
+      expect(controller.balanceFor(Coin.eth).amount, same(previous));
+      expect(controller.balanceRefreshIncomplete, isTrue);
+      expect(controller.priceRefreshIncomplete, isFalse);
+      expect(controller.showingCachedData, isTrue);
+
+      wallets.select('b');
+      await pumpEventQueue();
+      expect(controller.balanceFor(Coin.eth).amount, isNull);
+      expect(controller.balanceRefreshIncomplete, isTrue);
+      balances.results = _okResults();
+      await controller.refresh();
+      expect(controller.balanceRefreshIncomplete, isFalse);
+      expect(controller.showingCachedData, isFalse);
+    },
+  );
+
+  for (final language in ['zh', 'en', 'ja']) {
+    testWidgets(
+      'freshness distinguishes updating, balance and quote errors ($language)',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 568);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final wallets = _wallets();
+        final balances = FakeBalanceService(_okResults());
+        final prices = FakePriceService(_prices);
+        final controller = MarketController(
+          wallets: wallets,
+          balances: balances,
+          prices: prices,
+        );
+        addTearDown(controller.dispose);
+        final l10n = lookupAppLocalizations(Locale(language));
+        await controller.refresh();
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: Locale(language),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: MediaQuery(
+                data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+                child: ListenableBuilder(
+                  listenable: controller,
+                  builder: (_, _) => MarketFreshnessLabel(market: controller),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('market-freshness')), findsNothing);
+
+        final gate = Completer<void>();
+        balances.gate = gate;
+        wallets.select('b');
+        await tester.pump();
+        expect(find.text(l10n.marketRefreshing), findsOneWidget);
+        expect(find.text(l10n.marketCachedStale), findsNothing);
+        gate.complete();
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('market-freshness')), findsNothing);
+
+        balances.results = {
+          ..._okResults(),
+          Coin.eth: const BalanceResult.error(),
+        };
+        await controller.refresh();
+        await tester.pumpAndSettle();
+        expect(find.text(l10n.marketBalancesIncomplete), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        balances.results = _okResults();
+        await tester.tap(find.byKey(const ValueKey('market-freshness-retry')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('market-freshness')), findsNothing);
+
+        prices.prices = null;
+        await controller.refresh();
+        await tester.pumpAndSettle();
+        expect(find.text(l10n.marketPricesIncomplete), findsOneWidget);
+        expect(find.text(l10n.marketBalancesIncomplete), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   test(
     'token balances: per-token results, pegged fiat, total inclusion',

@@ -478,18 +478,7 @@ class _HomeTabState extends State<_HomeTab> {
                   change: balanceChange.text,
                   changeColor: balanceChange.color,
                 ),
-                if (live && market.isRefreshing && market.hasLiveBalances) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    l10n.marketUpdating,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: WalletColors.text3,
-                    ),
-                  ),
-                ],
-                if (live && market.showingCachedData) ...[
+                if (live && market.hasFreshnessNotice) ...[
                   const SizedBox(height: 8),
                   MarketFreshnessLabel(market: market),
                 ],
@@ -1935,17 +1924,14 @@ class _RecordsScreenState extends State<RecordsScreen> {
     if (!history.showingCachedData || timestamp == null) {
       return const SizedBox.shrink();
     }
-    final age = DateTime.now().difference(timestamp);
-    final relative = age.inMinutes < 1
-        ? l10n.marketCachedJustNow
-        : age.inHours < 1
-        ? l10n.marketCachedMinutes(age.inMinutes)
-        : l10n.marketCachedHours(age.inHours);
+    final message = history.isRefreshing
+        ? l10n.historyRefreshing
+        : l10n.historyCachedStale;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Semantics(
         liveRegion: true,
-        label: '$relative. ${l10n.historyCachedStale}',
+        label: message,
         child: Row(
           key: const ValueKey('history-cached-label'),
           children: [
@@ -1957,7 +1943,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                '$relative · ${l10n.historyCachedStale}',
+                message,
                 style: const TextStyle(fontSize: 12, color: WalletColors.text3),
               ),
             ),

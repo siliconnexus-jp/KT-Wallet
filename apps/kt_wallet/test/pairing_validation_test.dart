@@ -3,6 +3,12 @@ import 'dart:typed_data';
 import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:chains/chains.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:kt_wallet/l10n/app_localizations.dart';
+import 'package:kt_wallet/src/screens/camera_screen.dart';
+import 'package:kt_wallet/src/transfer/airgap_codec.dart';
+import 'package:kt_wallet/src/widgets/scan_viewfinder.dart';
 import 'package:kt_wallet/src/wallets/pairing_airgap.dart';
 
 Uint8List _hex(String value) => Uint8List.fromList([
@@ -73,6 +79,80 @@ AccountExport _completeExport({
 }
 
 void main() {
+  for (final invalid in ['unrecognized QR', 'incomplete export']) {
+    testWidgets('camera reports $invalid and retry accepts a complete export', (
+      tester,
+    ) async {
+      AccountExport? received;
+      final router = GoRouter(
+        initialLocation: '/scan',
+        routes: [
+          GoRoute(
+            path: '/scan',
+            builder: (_, _) => const ScanAccountCameraScreen(
+              availability: FakeCameraAvailability(false),
+            ),
+          ),
+          GoRoute(
+            path: '/import-confirm',
+            builder: (_, state) {
+              received = state.extra! as AccountExport;
+              return const Scaffold(body: Text('Pairing confirmation'));
+            },
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        MaterialApp.router(
+          routerConfig: router,
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+        ),
+      );
+      await tester.pumpAndSettle();
+      void feed(List<String> frames) {
+        final callback = tester
+            .widget<ScanViewfinder>(find.byType(ScanViewfinder))
+            .onScanned!;
+        for (final frame in frames) {
+          callback(frame);
+        }
+      }
+
+      final id = Uint8List.fromList([1, 2, 3, 4, 5, 6, 7, 8]);
+      feed(
+        invalid == 'unrecognized QR'
+            ? ['not a wallet QR']
+            : encodeQrFrames(demoAccountExport, reqId: id),
+      );
+      await tester.pumpAndSettle();
+      final camera = tester.widget<KtCameraScreen>(find.byType(KtCameraScreen));
+      expect(camera.onRetry, isNotNull);
+      expect(received, isNull);
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(KtCameraScreen)),
+      );
+      expect(find.text(l10n.invalidOfflineWalletExport), findsOneWidget);
+      await tester.tap(find.text(l10n.actionRetry));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<KtCameraScreen>(find.byType(KtCameraScreen)).key,
+        isNot(camera.key),
+      );
+      final valid = _completeExport();
+      final frames = encodeQrFrames(valid, reqId: id);
+      // Repeated/reordered frames still represent one pairing request.
+      feed([...frames.reversed, ...frames]);
+      await tester.pumpAndSettle();
+      expect(find.text('Pairing confirmation'), findsOneWidget);
+      expect(received?.walletId, valid.walletId);
+      expect(received?.accounts.length, 8);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   test('complete eight-chain export binds every address to its public key', () {
     expect(
       () => validateScannedAccountExport(_completeExport()),

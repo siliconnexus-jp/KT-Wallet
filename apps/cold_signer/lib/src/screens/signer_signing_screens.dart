@@ -305,12 +305,18 @@ class _SignerHomeScreenState extends State<SignerHomeScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    l10n.walletMainName,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: SignerColors.text,
+                  GestureDetector(
+                    onTap: SignerWalletScope.maybeOf(context)?.hasWallet == true
+                        ? () => context.push('/wallets')
+                        : null,
+                    child: Text(
+                      SignerWalletScope.maybeOf(context)?.metadata?.name ??
+                          l10n.walletMainName,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: SignerColors.text,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -2335,9 +2341,12 @@ class _SignerAddressExportScreenState extends State<SignerAddressExportScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_prepared) return;
-    _prepared = true;
     final controller = SignerWalletScope.maybeOf(context);
+    if (_prepared && _export?.walletId == controller?.localWalletId) return;
+    if (_prepared && controller == null) return;
+    _prepared = true;
+    _timer?.cancel();
+    _index = 0;
     _preview = kDebugMode && controller == null;
     if (controller?.hasWallet != true && !kDebugMode) {
       _export = null;
@@ -2351,7 +2360,7 @@ class _SignerAddressExportScreenState extends State<SignerAddressExportScreen> {
     _exportedAccounts = export.accounts.length;
     final reqId = _exportRequestId(export.walletId);
     final fragments = controller?.hasWallet == true
-        ? Fragmenter().fragment(export.encode(), reqId: reqId)
+        ? Fragmenter(chunkSize: 240).fragment(export.encode(), reqId: reqId)
         : demoAccountExportFrames();
     _frameData = [
       for (final frame in fragments) base64Url.encode(frame.encode()),
@@ -2427,9 +2436,14 @@ class _SignerAddressExportScreenState extends State<SignerAddressExportScreen> {
           ),
           child: Column(
             children: [
-              // The current frame of the animated export QR (dark style: white
-              // modules on the signer surface).
-              KtQrCode(data: frames[_index], size: 200, dark: true),
+              // Production exports use dark modules and a four-module white
+              // margin so Android and iOS cameras can detect every frame.
+              KtQrCode(
+                data: frames[_index],
+                size: _preview ? 200 : 240,
+                dark: _preview,
+                quietZone: _preview ? 1 : 4,
+              ),
               const SizedBox(height: 14),
               Text(
                 l10n.dynamicShard(_index + 1, frames.length),

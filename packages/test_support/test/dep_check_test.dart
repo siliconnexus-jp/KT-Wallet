@@ -916,14 +916,17 @@ final factor = 1 << (newFails - threshold);
   group('cold signer vault state boundary', () {
     const safeVault = '''
 static const maxMetadataChars = 16384;
-final decoded = decodeStrictLocalJson(raw, maxChars: maxMetadataChars);
+static const maxWallets = 20;
+final decoded = decodeStrictLocalJson(raw, maxChars: maxMetadataChars * maxWallets);
+if (rows.length > maxWallets) throw StateError('limit');
 const allowed = {'walletId', 'name', 'createdAt', 'version', 'addresses',
   'publicKeys', 'biometricEnabled',};
 Future<bool> hasWallet() async => await readMetadata() != null;
 CoreCryptoValidation.checkWalletId(walletId);
 ''';
     const safeController = '''
-if (metadata.walletId != pendingDeletion) throw StateError('mismatch');
+final metadata = all.where((w) => w.walletId == pendingDeletion).firstOrNull;
+if (metadata == null && all.isNotEmpty && !nativeDone) throw StateError('mismatch');
 await finish(pendingDeletion, deleteNative: metadata != null);
 if (deleteNative) await crypto.deleteWallet(walletId);
 ''';
@@ -945,6 +948,23 @@ Future<bool> hasWallet() async => await storage.read(metadataKey) != null;
       expect(issues, contains(contains('presence')));
       expect(issues, contains(contains('bind tombstone')));
       expect(issues, contains(contains('unbound native wallet')));
+    });
+
+    test('rejects a missing collection bound or tombstone identity check', () {
+      expect(
+        findSignerVaultStateBoundaryIssues(
+          safeVault.replaceAll('rows.length > maxWallets', 'false'),
+          safeController,
+        ),
+        contains(contains('wallet limit')),
+      );
+      expect(
+        findSignerVaultStateBoundaryIssues(
+          safeVault,
+          safeController.replaceAll('w.walletId == pendingDeletion', 'true'),
+        ),
+        contains(contains('bind tombstone')),
+      );
     });
   });
 

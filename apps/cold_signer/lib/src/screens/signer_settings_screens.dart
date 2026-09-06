@@ -5,6 +5,8 @@ import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../security/biometric_auth.dart';
+import '../security/secure_vault.dart';
+import '../signing/sign_record_store.dart';
 import 'signer_signing_screens.dart' show SignerPinEntrySheet;
 import '../state/locale_controller.dart';
 import '../state/signer_wallet_controller.dart';
@@ -134,6 +136,28 @@ class SignerRecordsScreen extends StatefulWidget {
 
 class _SignerRecordsScreenState extends State<SignerRecordsScreen> {
   int _filter = 0;
+  String? _walletId;
+  List<SignatureRecord>? _records;
+  bool _loadFailed = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final controller = SignerWalletScope.maybeOf(context);
+    final id = controller?.localWalletId;
+    if (id == null || id == _walletId) return;
+    _walletId = id;
+    _records = null;
+    _loadFailed = false;
+    controller!
+        .recordsForCurrentWallet()
+        .then((rows) {
+          if (mounted && _walletId == id) setState(() => _records = rows);
+        })
+        .catchError((Object _) {
+          if (mounted && _walletId == id) setState(() => _loadFailed = true);
+        });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -144,7 +168,7 @@ class _SignerRecordsScreenState extends State<SignerRecordsScreen> {
       l10n.stateRejected,
       l10n.stateExpired,
     ];
-    final all = <(IconData, String, String, String, String, Color)>[
+    final fixtures = <(IconData, String, String, String, String, Color)>[
       (
         Icons.north_east,
         'Token Transfer · TRON',
@@ -178,6 +202,30 @@ class _SignerRecordsScreenState extends State<SignerRecordsScreen> {
         SignerColors.text2,
       ),
     ];
+    final controller = SignerWalletScope.maybeOf(context);
+    final live = controller?.hasWallet == true;
+    final all = !live
+        ? fixtures
+        : [
+            for (final record in _records ?? const <SignatureRecord>[])
+              (
+                Icons.history_rounded,
+                '${record.operation} · ${record.coin}',
+                DateFormat('yyyy-MM-dd HH:mm').format(
+                  DateTime.fromMillisecondsSinceEpoch(record.date * 1000),
+                ),
+                record.amount,
+                switch (record.status.name) {
+                  'signed' => l10n.stateSigned,
+                  'rejected' => l10n.stateRejected,
+                  'expired' => l10n.stateExpired,
+                  _ => l10n.signatureIncomplete,
+                },
+                record.status.name == 'signed'
+                    ? SignerColors.ok
+                    : SignerColors.text2,
+              ),
+          ];
     final rows = _filter == 0
         ? all
         : all.where((r) => r.$5 == options[_filter]).toList();
@@ -193,6 +241,18 @@ class _SignerRecordsScreenState extends State<SignerRecordsScreen> {
         onBack: () => Navigator.of(context).maybePop(),
       ),
       children: [
+        if (live && _records == null && !_loadFailed)
+          const LinearProgressIndicator(),
+        if (_loadFailed)
+          Text(
+            l10n.recordsLoadFailed,
+            style: const TextStyle(color: SignerColors.danger),
+          ),
+        if (controller != null && _records != null && rows.isEmpty)
+          Text(
+            l10n.noWalletRecords,
+            style: const TextStyle(color: SignerColors.text2),
+          ),
         KtSegmented(
           theme: _t,
           options: options,
@@ -299,6 +359,98 @@ class _SignerRecordsScreenState extends State<SignerRecordsScreen> {
 }
 
 /// C19 钱包管理.
+class SignerWalletListScreen extends StatefulWidget {
+  const SignerWalletListScreen({super.key});
+  @override
+  State<SignerWalletListScreen> createState() => _SignerWalletListScreenState();
+}
+
+class _SignerWalletListScreenState extends State<SignerWalletListScreen> {
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _select(String id) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await SignerWalletScope.maybeOf(context)!.selectWallet(id);
+      if (mounted) context.go('/home');
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = AppLocalizations.of(context).walletSwitchFailed,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final controller = SignerWalletScope.maybeOf(context);
+    return KtScreen(
+      theme: _t,
+      navBar: KtNavBar(
+        title: l10n.walletManage,
+        theme: _t,
+        onBack: () => Navigator.of(context).maybePop(),
+      ),
+      bottom: KtPrimaryButton(
+        label: l10n.addWallet,
+        style: KtButtonStyle.signer,
+        icon: Icons.add_rounded,
+        onPressed: _busy || controller?.canAddWallet != true
+            ? null
+            : () {
+                controller!.beginAddWallet();
+                context.push('/welcome');
+              },
+      ),
+      children: [
+        Text(
+          l10n.multiWalletScope,
+          style: const TextStyle(color: SignerColors.text2, height: 1.5),
+        ),
+        if (_error != null)
+          Text(_error!, style: const TextStyle(color: SignerColors.danger)),
+        if (_busy) const LinearProgressIndicator(),
+        for (final wallet in controller?.wallets ?? const <WalletMetadata>[])
+          _card(
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(
+                Icons.account_balance_wallet_outlined,
+                color: SignerColors.accent,
+              ),
+              title: Text(
+                wallet.name,
+                style: const TextStyle(color: SignerColors.text),
+              ),
+              subtitle: Text(
+                wallet.walletId,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: SignerColors.text2, fontSize: 11),
+              ),
+              trailing: wallet.walletId == controller?.localWalletId
+                  ? const Icon(
+                      Icons.check_circle_rounded,
+                      color: SignerColors.accent,
+                    )
+                  : const Icon(Icons.chevron_right, color: SignerColors.text2),
+              onTap: _busy ? null : () => _select(wallet.walletId),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class SignerWalletManageScreen extends StatefulWidget {
   const SignerWalletManageScreen({super.key});
   @override
@@ -470,6 +622,15 @@ class _SignerWalletManageScreenState extends State<SignerWalletManageScreen> {
         onBack: () => Navigator.of(context).maybePop(),
       ),
       children: [
+        if (wallet?.hasWallet == true)
+          _card(
+            _row(
+              Icons.swap_horiz_rounded,
+              l10n.switchWallet,
+              l10n.multiWalletScope,
+              onTap: () => context.push('/wallets'),
+            ),
+          ),
         _card(
           Row(
             children: [
@@ -609,16 +770,17 @@ class _SignerWalletManageScreenState extends State<SignerWalletManageScreen> {
                   danger: true,
                   onTap: () => context.push('/delete'),
                 ),
-                const SizedBox(height: 16),
-                // No dedicated destroy-everything flow exists; the C21 delete flow
-                // is the closest destructive path in the demo signer.
-                _row(
-                  Icons.dangerous,
-                  l10n.destroyAllData,
-                  l10n.destroyAllDataDesc,
-                  danger: true,
-                  onTap: () => context.push('/delete'),
-                ),
+                // A real deletion targets this wallet, never the collection.
+                if (wallet?.hasWallet != true) ...[
+                  const SizedBox(height: 16),
+                  _row(
+                    Icons.dangerous,
+                    l10n.destroyAllData,
+                    l10n.destroyAllDataDesc,
+                    danger: true,
+                    onTap: () => context.push('/delete'),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1009,6 +1171,7 @@ class _SignerDeleteScreenState extends State<SignerDeleteScreen> {
     final controller = scopedController?.hasWallet == true
         ? scopedController
         : null;
+    final targetWalletId = controller?.localWalletId;
     if (controller != null) {
       if (!_phraseMatches(l10n) || _busy) return;
       setState(() => _busy = true);
@@ -1045,7 +1208,7 @@ class _SignerDeleteScreenState extends State<SignerDeleteScreen> {
     }
     if (controller != null) {
       try {
-        await controller.deleteWallet();
+        await controller.deleteWallet(expectedWalletId: targetWalletId);
       } catch (_) {
         if (!mounted) return;
         setState(() => _busy = false);
@@ -1056,7 +1219,7 @@ class _SignerDeleteScreenState extends State<SignerDeleteScreen> {
       }
     }
     if (!mounted) return;
-    context.go('/welcome');
+    context.go(controller?.hasWallet == true ? '/home' : '/welcome');
   }
 
   @override

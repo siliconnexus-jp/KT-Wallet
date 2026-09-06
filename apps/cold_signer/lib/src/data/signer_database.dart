@@ -122,6 +122,11 @@ class DriftSignRecordPersistence implements SignRecordPersistence {
   @override
   Future<void> clear() => _db.delete(_db.signRecords).go();
 
+  @override
+  Future<void> clearWallet(String walletId) => (_db.delete(
+    _db.signRecords,
+  )..where((row) => row.walletId.equals(walletId))).go();
+
   static SignatureRecord _toRecord(SignRecord row) => SignatureRecord(
     reqId: row.reqId,
     walletId: row.walletId,

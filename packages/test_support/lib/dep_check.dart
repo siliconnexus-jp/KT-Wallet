@@ -1263,8 +1263,14 @@ List<String> findSignerVaultStateBoundaryIssues(
   const vaultRequired = {
     'static const maxMetadataChars = 16384':
         'signer metadata JSON size is not bounded before parsing',
-    'decodeStrictLocalJson(raw, maxChars: maxMetadataChars)':
+    'decodeStrictLocalJson(':
         'signer metadata does not reject duplicate JSON members',
+    'maxChars: maxMetadataChars * maxWallets':
+        'signer wallet collection JSON size is not bounded before parsing',
+    'static const maxWallets = 20':
+        'signer wallet collection count is not bounded',
+    'rows.length > maxWallets':
+        'signer wallet collection does not enforce its wallet limit',
     "const allowed = {": 'signer metadata schema is not closed',
     "'walletId',": 'signer metadata schema omits wallet identity',
     "'biometricEnabled',":
@@ -1278,8 +1284,10 @@ List<String> findSignerVaultStateBoundaryIssues(
     if (!vaultContents.contains(entry.key)) issues.add(entry.value);
   }
   const controllerRequired = {
-    'metadata.walletId != pendingDeletion':
+    'where((w) => w.walletId == pendingDeletion)':
         'signer deletion recovery does not bind tombstone to metadata',
+    'metadata == null && all.isNotEmpty && !nativeDone':
+        'signer deletion recovery accepts an unbound unfinished tombstone',
     'deleteNative: metadata != null':
         'signer deletion recovery may delete an unbound native wallet',
     'if (deleteNative)':
