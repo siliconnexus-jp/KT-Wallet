@@ -257,6 +257,70 @@ void main() {
     expect(find.text('动态分片 1 / $expected'), findsOneWidget);
   });
 
+  for (final signedTxLength in [800, AirgapLimits.maxSignedTx]) {
+    testWidgets(
+      'result QR: production frames round-trip $signedTxLength bytes',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final demo = demoSignResult(demoSignRequest());
+        final result = SignResult(
+          reqId: demo.reqId,
+          walletId: demo.walletId,
+          coin: demo.coin,
+          signedTx: Uint8List.fromList(
+            List.generate(signedTxLength, (index) => index % 256),
+          ),
+          signer: demo.signer,
+          txHash: demo.txHash,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: const Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: SignerResultQrScreen(result: result),
+          ),
+        );
+        final aggregator = FrameAggregator();
+        var total = 1;
+        for (var index = 0; index < total; index++) {
+          final qr = tester.widget<KtQrCode>(find.byType(KtQrCode));
+          expect(qr.dark, isFalse);
+          expect(qr.quietZone, 4);
+          expect(qr.size, 240);
+          final frame = AirgapFrame.decode(base64Url.decode(qr.data));
+          total = frame.total;
+          expect(total, lessThanOrEqualTo(AirgapFrame.maxTotal));
+          expect(frame.seq, index);
+          expect(frame.reqId, result.reqId);
+          expect(frame.chunk.length, lessThanOrEqualTo(240));
+          expect(qr.data.length, lessThanOrEqualTo(348));
+          aggregator.addFrame(frame);
+          await tester.pump(const Duration(milliseconds: 600));
+        }
+        expect(aggregator.state, AggregatorState.done);
+        expect(aggregator.payload, result.encode());
+        final decoded = AirgapPayload.decode(aggregator.payload!) as SignResult;
+        expect(decoded.signedTx, result.signedTx);
+        final wrapped = tester.widget<KtQrCode>(find.byType(KtQrCode));
+        expect(AirgapFrame.decode(base64Url.decode(wrapped.data)).seq, 0);
+
+        // Keep the QR and its quiet zone inside narrow phone layouts too.
+        tester.view.physicalSize = const Size(320, 568);
+        await tester.pump();
+        final rect = tester.getRect(find.byType(KtQrCode));
+        expect(rect.left, greaterThanOrEqualTo(0));
+        expect(rect.right, lessThanOrEqualTo(320));
+        expect(rect.width, rect.height);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets('result QR: direct navigation fails closed without a result', (
     tester,
   ) async {

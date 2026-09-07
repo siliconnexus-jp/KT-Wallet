@@ -192,16 +192,22 @@ class PreparedTronTransfer {
     required this.amountRaw,
     required this.tokenContract,
     required this.maximumFeeSun,
+    BigInt? estimatedFeeSun,
     required this.referenceBlockHeight,
     required this.expiresAt,
     required Uint8List rawTx,
-  }) : _rawTx = Uint8List.fromList(rawTx);
+  }) : estimatedFeeSun = estimatedFeeSun ?? maximumFeeSun,
+       _rawTx = Uint8List.fromList(rawTx);
 
   final String from;
   final String recipient;
   final BigInt amountRaw;
   final String? tokenContract;
   final BigInt maximumFeeSun;
+
+  /// Fee using the current energy/bandwidth snapshot, including headroom.
+  /// May be lower than the signed cap when staked or rented energy is present.
+  final BigInt estimatedFeeSun;
   final int referenceBlockHeight;
   final int expiresAt;
   final Uint8List _rawTx;

@@ -2112,7 +2112,7 @@ class SignerResultQrScreen extends StatefulWidget {
   final SignResult? result;
 
   /// Test/preview seam for exercising animated multi-frame output. Production
-  /// leaves this null and uses the protocol default.
+  /// leaves this null and uses the same 240-byte target as public-address export.
   final int? fragmentChunkSize;
 
   @override
@@ -2137,11 +2137,13 @@ class _SignerResultQrScreenState extends State<SignerResultQrScreen> {
       _frameData = const [];
       return;
     }
-    final chunkSize = widget.fragmentChunkSize;
-    final fragmenter = chunkSize == null
-        ? Fragmenter()
-        : Fragmenter(chunkSize: chunkSize);
-    final fragments = fragmenter.fragment(result.encode(), reqId: result.reqId);
+    final payload = result.encode();
+    // Match public-address export density. Even the largest permitted signed
+    // transaction (34 KiB) fits comfortably within the 256-frame limit.
+    final chunkSize = widget.fragmentChunkSize ?? 240;
+    final fragments = Fragmenter(
+      chunkSize: chunkSize,
+    ).fragment(payload, reqId: result.reqId);
     _frameData = [
       for (final frame in fragments) base64Url.encode(frame.encode()),
     ];
@@ -2248,9 +2250,15 @@ class _SignerResultQrScreenState extends State<SignerResultQrScreen> {
           ),
           child: Column(
             children: [
-              // The current frame of the animated result QR (dark style: white
-              // modules on the signer surface).
-              KtQrCode(data: _frameData[_index], size: 220, dark: true),
+              // Use the same camera-friendly presentation as public-address
+              // export: dark modules on white with a four-module quiet zone.
+              LayoutBuilder(
+                builder: (context, constraints) => KtQrCode(
+                  data: _frameData[_index],
+                  size: constraints.maxWidth.clamp(0.0, 240.0),
+                  quietZone: 4,
+                ),
+              ),
               const SizedBox(height: 14),
               Text(
                 l10n.dynamicShard(_index + 1, _frameData.length),

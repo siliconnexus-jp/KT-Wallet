@@ -103,6 +103,8 @@ _fixture({
   Coin localCoin = Coin.eth,
   String localNetworkId = 'eth-mainnet',
   String? localHash,
+  String? localContract,
+  String localAmountRaw = '1000000000000000',
   Coin remoteCoin = Coin.eth,
   Set<String>? activeNetworkIds,
   int pendingCount = 1,
@@ -139,7 +141,8 @@ _fixture({
         _ => wallet.addresses.eth,
       },
       to: '0x2222222222222222222222222222222222222222',
-      amountRaw: '1000000000000000',
+      amountRaw: localAmountRaw,
+      contract: localContract,
       hash:
           localHash ??
           (index == 0
@@ -304,6 +307,34 @@ void main() {
       expect(fixture.history.records.single.status, ChainTxStatus.pending);
     },
   );
+
+  test('failed TRON transfer survives an empty remote event history', () async {
+    final fixture = await _fixture(
+      remote: HistoryResult.ok(const []),
+      hashStatus: ChainTransactionStatus.failed,
+      localCoin: Coin.tron,
+      localNetworkId: 'tron-mainnet',
+      remoteCoin: Coin.tron,
+      localHash: 'a' * 64,
+      localContract: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+      localAmountRaw: '280000000',
+    );
+    addTearDown(fixture.history.dispose);
+    addTearDown(fixture.database.close);
+    await fixture.history.refresh();
+    expect(
+      (await fixture.wallets.localTransactionById('local-pending'))?.status,
+      TxStatus.failed,
+    );
+    expect(fixture.history.records, hasLength(1));
+    expect(fixture.history.records.single.status, ChainTxStatus.failed);
+    expect(fixture.history.records.single.hash, 'a' * 64);
+    expect(fixture.history.records.single.amountText, '280 USDT');
+    // Reopening/reloading history must also include previously persisted failures.
+    await fixture.history.refresh();
+    expect(fixture.history.records, hasLength(1));
+    expect(fixture.history.records.single.status, ChainTxStatus.failed);
+  });
 
   test('only an explicit remote failure settles the row as failed', () async {
     final fixture = await _fixture(

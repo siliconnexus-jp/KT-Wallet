@@ -1745,9 +1745,78 @@ void main() {
         expect(estimate.energyRequired, 100000);
         expect(estimate.energyAvailable, 30000);
         expect(estimate.energyPriceSun, 420);
-        expect(estimate.feeLimitSun, 35280000);
+        expect(estimate.feeLimitSun, 50400000);
+        expect(estimate.maximumBurnSun, BigInt.from(37800000));
       },
     );
+
+    for (final available in [0, 50000, 130000, 200000]) {
+      test(
+        'rented energy $available reduces burn, never execution cap',
+        () async {
+          final rpc = TronRpc(
+            baseUrl: 'https://api',
+            transport: FakeRest(
+              onPost: (_, _) => {
+                'result': {'result': true},
+                'energy_used': 130000,
+              },
+            ),
+          );
+          final estimate = await rpc.estimateTokenEnergy(
+            owner: 'owner',
+            contract: 'contract',
+            parameter: '00',
+            feeState: TronFeeState(
+              energyAvailable: available,
+              stakedBandwidthAvailable: 0,
+              freeBandwidthAvailable: 0,
+              energyPriceSun: 100,
+              bandwidthPriceSun: 1000,
+              activationFeeSun: null,
+              activationBandwidthFeeSun: null,
+            ),
+          );
+          expect(estimate.feeLimitSun, 15600000);
+          expect(estimate.feeLimitSun ~/ 100, greaterThanOrEqualTo(130000));
+          expect(
+            estimate.maximumBurnSun,
+            BigInt.from((15600000 - available * 100).clamp(0, 15600000)),
+          );
+        },
+      );
+    }
+
+    for (final energy in [0, -1, 150000001, 9223372036854775807]) {
+      test('invalid or over-budget energy $energy fails closed', () async {
+        final rpc = TronRpc(
+          baseUrl: 'https://api',
+          transport: FakeRest(
+            onPost: (_, _) => {
+              'result': {'result': true},
+              'energy_used': energy,
+            },
+          ),
+        );
+        await expectLater(
+          rpc.estimateTokenEnergy(
+            owner: 'owner',
+            contract: 'contract',
+            parameter: '00',
+            feeState: const TronFeeState(
+              energyAvailable: 200000,
+              stakedBandwidthAvailable: 0,
+              freeBandwidthAvailable: 0,
+              energyPriceSun: 100,
+              bandwidthPriceSun: 1000,
+              activationFeeSun: null,
+              activationBandwidthFeeSun: null,
+            ),
+          ),
+          throwsA(isA<RpcException>()),
+        );
+      });
+    }
 
     test(
       'bandwidth uses current resources and charges nothing when covered',

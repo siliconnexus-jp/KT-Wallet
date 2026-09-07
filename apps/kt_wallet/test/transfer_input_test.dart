@@ -443,6 +443,14 @@ void main() {
     final info = find.byKey(const ValueKey('transfer-network-fee-info'));
     await tester.ensureVisible(info);
     await tester.pumpAndSettle();
+    final feeCard = tester.getRect(
+      find.byKey(const ValueKey('transfer-network-fee-card')),
+    );
+    final feeIcon = tester.getRect(
+      find.byKey(const ValueKey('transfer-network-fee-icon')),
+    );
+    // The label's loose width must not leave unused space after the fee icon.
+    expect(feeCard.right - feeIcon.right, closeTo(14, 1));
     await tester.tap(info);
     await tester.pumpAndSettle();
     expect(

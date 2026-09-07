@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:ui_kit/ui_kit.dart';
 
@@ -14,7 +16,8 @@ import 'wallet_pin.dart';
 /// [BiometricAuth] prompt succeeds — or, when biometrics are unavailable or
 /// fail, until the enrolled app PIN ([WalletPin]) is entered on the numpad.
 ///
-/// Order: biometrics if available → on failure or unavailability → PIN numpad
+/// Order: automatically prompt if available → on failure offer retry or PIN;
+/// on unavailability show the PIN numpad
 /// (with persisted-lockout messaging). There is NO pass-through: when the
 /// lock is on but the device can show no prompt AND no PIN was ever enrolled,
 /// the gate has nothing to verify against, so it stops on a PIN *enrollment*
@@ -62,7 +65,7 @@ enum _LockState {
   unlocked,
 }
 
-class _AppLockGateState extends State<AppLockGate> {
+class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
   late final AppPrefsController _prefs = widget.prefs ?? AppPrefsController();
   BiometricAuth get _auth => widget.auth ?? BiometricAuth.instance;
   WalletPin get _pin => widget.pin ?? WalletPin.instance;
@@ -70,11 +73,54 @@ class _AppLockGateState extends State<AppLockGate> {
   _LockState _state = _LockState.resolving;
   bool _pinSet = false;
   bool _prompting = false;
+  bool _automaticPromptPending = false;
+  bool _automaticPromptScheduled = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _resolve();
+  }
+
+  bool get _canPresentAuth {
+    final state = WidgetsBinding.instance.lifecycleState;
+    return state == null || state == AppLifecycleState.resumed;
+  }
+
+  void _scheduleAutomaticPrompt() {
+    if (!mounted ||
+        !_automaticPromptPending ||
+        _automaticPromptScheduled ||
+        !_canPresentAuth) {
+      return;
+    }
+    _automaticPromptScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _automaticPromptScheduled = false;
+      if (!mounted ||
+          !_automaticPromptPending ||
+          !_canPresentAuth ||
+          _state != _LockState.resolving) {
+        return;
+      }
+      // Consume before invoking native auth: Face ID itself can move iOS
+      // through inactive/resumed, which must never create a second prompt.
+      _automaticPromptPending = false;
+      unawaited(_promptBiometric());
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _scheduleAutomaticPrompt();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _resolve() async {
@@ -93,16 +139,29 @@ class _AppLockGateState extends State<AppLockGate> {
       if (mounted) setState(() => _state = _LockState.storageUnavailable);
       return;
     }
+    if (!mounted) return;
     if (_prefs.authMethod == AuthMethod.password && _pinSet) {
       setState(() => _state = _LockState.lockedPin);
       return;
     }
-    final canPrompt = await _auth.canAuthenticate();
+    bool canPrompt;
+    try {
+      canPrompt = await _auth.canAuthenticate();
+    } on Object {
+      canPrompt = false;
+    }
     if (!mounted) return;
+    if (canPrompt) {
+      // Keep wallet content and the method picker hidden until the first
+      // attempt finishes. Wait for a frame so the native presentation surface
+      // exists; rebuilding or returning from the system prompt must not retry.
+      _automaticPromptPending = true;
+      setState(() => _state = _LockState.resolving);
+      _scheduleAutomaticPrompt();
+      return;
+    }
     setState(() {
-      if (canPrompt) {
-        _state = _LockState.lockedBio;
-      } else if (_pinSet) {
+      if (_pinSet) {
         _state = _LockState.lockedPin;
       } else {
         // Nothing to prompt with and nothing to verify against: app-lock was
@@ -116,13 +175,23 @@ class _AppLockGateState extends State<AppLockGate> {
   }
 
   Future<void> _promptBiometric() async {
-    if (_prompting) return;
+    if (!mounted || _prompting) return;
     _prompting = true;
-    final l10n = await AppLocalizations.delegate.load(
-      widget.localeController.locale ?? AppLocalizations.supportedLocales.first,
-    );
-    final outcome = await _auth.authenticate(reason: l10n.appLock);
-    _prompting = false;
+    setState(() => _state = _LockState.resolving);
+    BiometricOutcome outcome;
+    try {
+      final l10n = await AppLocalizations.delegate.load(
+        widget.localeController.locale ??
+            AppLocalizations.supportedLocales.first,
+      );
+      if (!mounted) return;
+      outcome = await _auth.authenticate(reason: l10n.appLock);
+    } on Object {
+      // Unexpected provider failures must leave the gate locked and retryable.
+      outcome = BiometricOutcome.failure;
+    } finally {
+      _prompting = false;
+    }
     if (!mounted) return;
     switch (outcome) {
       case BiometricOutcome.success:
@@ -137,9 +206,9 @@ class _AppLockGateState extends State<AppLockGate> {
           () => _state = _pinSet ? _LockState.lockedPin : _LockState.enrollPin,
         );
       case BiometricOutcome.failure:
-        // A failed prompt falls back to the PIN numpad when one is enrolled;
-        // without one the button remains available for another attempt.
-        if (_pinSet) setState(() => _state = _LockState.lockedPin);
+        // Cancellation/lockout is not permission to open the wallet. Let the
+        // user choose a retry or their enrolled PIN; never auto-prompt in a loop.
+        setState(() => _state = _LockState.lockedBio);
     }
   }
 

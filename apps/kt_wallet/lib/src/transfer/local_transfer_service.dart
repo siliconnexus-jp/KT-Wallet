@@ -631,6 +631,7 @@ class LocalTransferService {
       tokenSymbol: draft.tokenContract == null ? null : draft.symbol,
     );
     int? feeLimit;
+    var energyBurn = BigInt.zero;
     TronFeeState? feeState;
     if (tokenContract != null) {
       // Energy and Bandwidth consume the same account-resource and governance
@@ -648,6 +649,7 @@ class LocalTransferService {
         feeState: feeState,
       );
       feeLimit = energy.feeLimitSun;
+      energyBurn = energy.maximumBurnSun;
     }
     final raw = TronRawTx.forTransfer(
       intent,
@@ -668,15 +670,21 @@ class LocalTransferService {
       feeState: feeState,
     );
     final maximumFee = bandwidth.maximumFeeSun + BigInt.from(feeLimit ?? 0);
+    final estimatedFee = bandwidth.maximumFeeSun + energyBurn;
     final nativeSpend = tokenContract == null ? draft.amount.raw : BigInt.zero;
-    if (balances.trx < nativeSpend + maximumFee) {
-      throw TransferInsufficientFunds('TRX', maximumNetworkFeeRaw: maximumFee);
+    // Staked/delegated energy can pay the execution budget; it does not also
+    // need to exist as liquid TRX. The signed cap still covers full execution.
+    if (balances.trx < nativeSpend + estimatedFee) {
+      throw TransferInsufficientFunds(
+        'TRX',
+        maximumNetworkFeeRaw: estimatedFee,
+      );
     }
     if (tokenContract != null &&
         (balances.token == null || balances.token! < draft.amount.raw)) {
       throw TransferInsufficientFunds(
         draft.symbol,
-        maximumNetworkFeeRaw: maximumFee,
+        maximumNetworkFeeRaw: estimatedFee,
       );
     }
     return PreparedTronTransfer(
@@ -685,6 +693,7 @@ class LocalTransferService {
       amountRaw: draft.amount.raw,
       tokenContract: tokenContract,
       maximumFeeSun: maximumFee,
+      estimatedFeeSun: estimatedFee,
       referenceBlockHeight: block.number,
       expiresAt: expiresAt,
       rawTx: raw,

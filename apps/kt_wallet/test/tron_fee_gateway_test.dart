@@ -88,6 +88,7 @@ GatewayClient gateway({
   String network = 'tron-mainnet',
   bool mismatch = false,
   List<String>? operations,
+  Map<String, Object?> Function(Map<String, dynamic>)? dataOverride,
 }) => GatewayClient(
   baseUrl: 'https://gateway.invalid',
   networks: (_) => network,
@@ -109,7 +110,7 @@ GatewayClient gateway({
           'result': {
             ...p,
             if (mismatch) 'network': 'tron-nile',
-            'data': feeData(p),
+            'data': dataOverride?.call(p) ?? feeData(p),
           },
       }),
       200,
@@ -153,6 +154,70 @@ void main() {
       },
     );
   }
+  for (final scenario in [
+    (0, 500000, false),
+    (130000, 500000, false),
+    (130000, 3500000, true),
+    (200000, 500000, true),
+  ]) {
+    final (available, balance, succeeds) = scenario;
+    test(
+      'rented energy $available / balance $balance: budget and liquid fee are independent',
+      () async {
+        final direct = _Direct();
+        final gw = gateway(
+          dataOverride: (p) {
+            if (p['operation'] == 'resources') {
+              return {'EnergyLimit': available};
+            }
+            if (p['operation'] == 'account') {
+              return {
+                'data': [
+                  {'balance': balance},
+                ],
+                'success': true,
+              };
+            }
+            return feeData(p);
+          },
+        );
+        final service = LocalTransferService(
+          gateway: () => gw,
+          restTransport: direct,
+        );
+        final quote = service.prepareTron(
+          draft: TransferDraft(
+            symbol: 'USDT',
+            networkLabel: 'TRON',
+            chain: Chain.tron,
+            recipient: recipient,
+            amount: Amount.parse('1', 6),
+            feeTier: 1,
+            tokenContract: token,
+          ),
+          from: owner,
+          expectedNetworkIdentity: null,
+        );
+        if (!succeeds) {
+          // Real energy shortfall plus Bandwidth must still have liquid backing.
+          await expectLater(quote, throwsA(isA<TransferInsufficientFunds>()));
+        } else {
+          final prepared = await quote;
+          final decoded = parseUnsignedTransfer(Chain.tron, prepared.rawTx);
+          expect(decoded.maxFeeRaw, BigInt.from(15600000));
+          expect(decoded.amountRaw, BigInt.from(1000000));
+          expect(prepared.maximumFeeSun, greaterThan(BigInt.from(15600000)));
+          expect(prepared.estimatedFeeSun, greaterThan(BigInt.zero));
+          expect(
+            prepared.estimatedFeeSun,
+            lessThanOrEqualTo(BigInt.from(balance)),
+          );
+          expect(direct.calls, 0);
+        }
+      },
+    );
+  }
+
   test('old gateway and custom network retain direct mode', () async {
     for (final gw in [
       gateway(error: -32601),

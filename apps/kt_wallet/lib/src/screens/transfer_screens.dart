@@ -1019,7 +1019,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
             from: from,
             expectedNetworkIdentity: network.networkIdentity,
           );
-          rawFee = prepared.maximumFeeSun;
+          rawFee = prepared.estimatedFeeSun;
         case Chain.solana:
           final prepared = await service.prepareSolana(
             draft: draft,
@@ -2261,33 +2261,39 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
                 constraints: const BoxConstraints(minHeight: 62),
                 child: Row(
                   children: [
-                    Flexible(
-                      child: Text(
-                        l10n.networkFee,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: WalletColors.text2,
-                        ),
-                      ),
-                    ),
-                    Semantics(
-                      button: true,
-                      label: l10n.networkFeeEstimate,
-                      child: IconButton(
-                        key: const ValueKey('transfer-network-fee-info'),
-                        tooltip: l10n.networkFeeEstimate,
-                        onPressed: _showFeeDetails,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints.tightFor(
-                          width: 44,
-                          height: 44,
-                        ),
-                        icon: const Icon(
-                          Icons.info_outline,
-                          size: 17,
-                          color: WalletColors.text3,
-                        ),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              l10n.networkFee,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: WalletColors.text2,
+                              ),
+                            ),
+                          ),
+                          Semantics(
+                            button: true,
+                            label: l10n.networkFeeEstimate,
+                            child: IconButton(
+                              key: const ValueKey('transfer-network-fee-info'),
+                              tooltip: l10n.networkFeeEstimate,
+                              onPressed: _showFeeDetails,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints.tightFor(
+                                width: 44,
+                                height: 44,
+                              ),
+                              icon: const Icon(
+                                Icons.info_outline,
+                                size: 17,
+                                color: WalletColors.text3,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -2567,10 +2573,16 @@ enum _FeeEstimate {
 }
 
 class _ConfirmNetworkFeeRow extends StatelessWidget {
-  const _ConfirmNetworkFeeRow({required this.label, required this.value});
+  const _ConfirmNetworkFeeRow({
+    required this.label,
+    required this.value,
+    this.keyPrefix = 'confirm-network-fee',
+  });
 
   final String label;
   final String value;
+
+  final String keyPrefix;
 
   @override
   Widget build(BuildContext context) {
@@ -2581,7 +2593,7 @@ class _ConfirmNetworkFeeRow extends StatelessWidget {
       color: WalletColors.text,
     );
     return Semantics(
-      key: const ValueKey('confirm-network-fee-row'),
+      key: ValueKey('$keyPrefix-row'),
       container: true,
       label: '$label, $value',
       child: ExcludeSemantics(
@@ -2600,7 +2612,7 @@ class _ConfirmNetworkFeeRow extends StatelessWidget {
                     alignment: Alignment.centerRight,
                     child: Text(
                       value,
-                      key: const ValueKey('confirm-network-fee-value'),
+                      key: ValueKey('$keyPrefix-value'),
                       textAlign: TextAlign.right,
                       style: valueStyle,
                     ),
@@ -2621,7 +2633,7 @@ class _ConfirmNetworkFeeRow extends StatelessWidget {
                       alignment: Alignment.topRight,
                       child: Text(
                         value,
-                        key: const ValueKey('confirm-network-fee-value'),
+                        key: ValueKey('$keyPrefix-value'),
                         textAlign: TextAlign.right,
                         style: valueStyle,
                       ),
@@ -2677,6 +2689,7 @@ class TransferConfirmScreen extends StatefulWidget {
 class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
   _FeeEstimate _state = _FeeEstimate.demo;
   Amount? _networkFee;
+  Amount? _tronFeeCap;
   Amount? _rentReserve;
   EvmAssetChanges? _evmAssetChanges;
   bool _requested = false;
@@ -2846,6 +2859,7 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
     _confirmFeeFailure = FeeQuoteFailure.unavailable;
     _tronNotActivated = false;
     _rentReserve = null;
+    _tronFeeCap = null;
     _evmAssetChanges = null;
     try {
       late final Amount fee;
@@ -2884,7 +2898,7 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
             expectedNetworkIdentity: expectedNetworkIdentity,
           );
           fee = Amount(
-            raw: tron.maximumFeeSun,
+            raw: tron.estimatedFeeSun,
             decimals: BalanceService.decimalsFor[Coin.tron]!,
             symbol: symbol,
           );
@@ -2906,6 +2920,9 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
       final quotedAt = DateTime.now().millisecondsSinceEpoch;
       setState(() {
         _networkFee = fee;
+        _tronFeeCap = tron != null && tron.maximumFeeSun != tron.estimatedFeeSun
+            ? Amount(raw: tron.maximumFeeSun, decimals: 6, symbol: symbol)
+            : null;
         _evmAssetChanges = evmAssetChanges;
         _rentReserve =
             solana == null || solana.rentDepositLamports == BigInt.zero
@@ -3136,6 +3153,14 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
               ),
               const SizedBox(height: 14),
               _ConfirmNetworkFeeRow(label: l10n.networkFee, value: feeValue),
+              if (_tronFeeCap case final cap?) ...[
+                const SizedBox(height: 14),
+                _ConfirmNetworkFeeRow(
+                  label: l10n.maximumNetworkFee,
+                  value: '$cap',
+                  keyPrefix: 'confirm-tron-fee-cap',
+                ),
+              ],
               if (_rentReserve case final rent?) ...[
                 const SizedBox(height: 14),
                 KtDetailRow(label: l10n.solanaRentReserve, value: '$rent'),
@@ -7098,7 +7123,7 @@ class TransferAuthSheet extends StatelessWidget {
             from: from,
             to: draft.recipient,
             amountRaw: draft.amount.raw.toString(),
-            feeRaw: approved.maximumFeeSun.toString(),
+            feeRaw: approved.estimatedFeeSun.toString(),
             status: TxStatus.submitted,
             signMode: SignMode.local,
             createdAt: createdAt,

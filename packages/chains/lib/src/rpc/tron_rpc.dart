@@ -328,9 +328,9 @@ class TronRpc {
     );
   }
 
-  /// Estimates the TRX that may be burned by a TRC-20 contract call. The
-  /// returned feeLimit includes a 20% headroom over the node's energy result
-  /// after subtracting the account's currently available staked energy.
+  /// Budgets the full TRC-20 execution, including 20% energy headroom.
+  /// TRON applies fee_limit to staked/delegated energy as well as TRX burn;
+  /// subtract available energy only when estimating the liquid TRX needed.
   Future<TronEnergyEstimate> estimateTokenEnergy({
     required String owner,
     required String contract,
@@ -359,19 +359,21 @@ class TronRpc {
       throw RpcException('TRON resource estimation failed');
     }
     final required = trigger['energy_used'] as int;
-    if (required < 0) throw RpcException('TRON energy estimation failed');
+    if (required <= 0) throw RpcException('TRON energy estimation failed');
     final available = state.energyAvailable;
     final price = state.energyPriceSun;
     if (price == null || price <= 0) {
       throw RpcException('TRON energy price unavailable');
     }
-    final burnEnergy = (required - available).clamp(0, required).toInt();
-    // At least 1 TRX prevents nodes rejecting a zero feeLimit when the
-    // account currently has enough energy but its resource state races.
-    final estimatedSun = burnEnergy * price;
-    final feeLimit = ((estimatedSun * 12 + 9) ~/ 10)
-        .clamp(1000000, 15000000000)
-        .toInt();
+    final requiredSun = BigInt.from(required) * BigInt.from(price);
+    final maxFeeLimit = BigInt.from(15000000000);
+    if (requiredSun > maxFeeLimit) {
+      throw RpcException('TRON energy requirement exceeds fee limit');
+    }
+    final feeLimit =
+        ((requiredSun * BigInt.from(12) + BigInt.from(9)) ~/ BigInt.from(10))
+            .toInt()
+            .clamp(1000000, 15000000000);
     return TronEnergyEstimate(
       energyRequired: required,
       energyAvailable: available,
@@ -500,6 +502,16 @@ class TronEnergyEstimate {
   final int energyAvailable;
   final int energyPriceSun;
   final int feeLimitSun;
+
+  /// Liquid TRX exposure within the budget, assuming the current resource
+  /// snapshot remains available. Rented/delegated energy reduces this value,
+  /// never [feeLimitSun]. A new quote must be obtained before signing.
+  BigInt get maximumBurnSun {
+    final burn =
+        BigInt.from(feeLimitSun) -
+        BigInt.from(energyAvailable) * BigInt.from(energyPriceSun);
+    return burn.isNegative ? BigInt.zero : burn;
+  }
 }
 
 /// One internally consistent resource and governance-fee snapshot used by a

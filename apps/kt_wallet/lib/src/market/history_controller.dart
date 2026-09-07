@@ -383,8 +383,9 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
       if (hash == null || hash.isEmpty || coin == null) continue;
       final identity = _transactionIdentity(transaction);
       if (identity != null && remoteIdentities.contains(identity)) continue;
-      if (transaction.status == db.TxStatus.failed ||
-          transaction.status == db.TxStatus.expired ||
+      // Failed broadcasts remain useful history even without a remote token
+      // Transfer event (e.g. a TRC-20 call reverted with OUT_OF_ENERGY).
+      if (transaction.status == db.TxStatus.expired ||
           transaction.status == db.TxStatus.dropped ||
           transaction.status == db.TxStatus.replaced) {
         continue;

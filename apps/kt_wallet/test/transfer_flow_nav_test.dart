@@ -63,6 +63,8 @@ class _TestPrices extends PriceService {
 }
 
 class _TronQuoteService extends LocalTransferService {
+  _TronQuoteService({this.rentedEnergy = false});
+  final bool rentedEnergy;
   @override
   Future<PreparedTronTransfer> prepareTron({
     required TransferDraft draft,
@@ -73,7 +75,8 @@ class _TronQuoteService extends LocalTransferService {
     recipient: draft.recipient,
     amountRaw: draft.amount.raw,
     tokenContract: draft.tokenContract,
-    maximumFeeSun: BigInt.from(1250000),
+    maximumFeeSun: BigInt.from(rentedEnergy ? 15600000 : 1250000),
+    estimatedFeeSun: BigInt.from(rentedEnergy ? 344000 : 1250000),
     referenceBlockHeight: 42,
     expiresAt: DateTime.now()
         .add(const Duration(minutes: 10))
@@ -313,6 +316,28 @@ void main() {
     },
   );
 
+  testWidgets('rented energy shows estimated fee separately from signed cap', (
+    tester,
+  ) async {
+    await _openHome(
+      tester,
+      transferService: _TronQuoteService(rentedEnergy: true),
+    );
+    await tester.tap(find.text('转账'));
+    await tester.pumpAndSettle();
+    await _enterTransfer(tester);
+    await tester.tap(find.text('下一步'));
+    await tester.pumpAndSettle();
+    final estimate = tester.widget<Text>(
+      find.byKey(const ValueKey('confirm-network-fee-value')),
+    );
+    expect(estimate.data, contains('0.344 TRX'));
+    final cap = tester.widget<Text>(
+      find.byKey(const ValueKey('confirm-tron-fee-cap-value')),
+    );
+    expect(cap.data, '15.6 TRX');
+  });
+
   testWidgets('insufficient balance keeps the real fee estimate and warns', (
     tester,
   ) async {
@@ -363,39 +388,40 @@ void main() {
     expect(find.text('1.25 TRX'), findsOneWidget);
   });
 
-  testWidgets('watch wallet: request QR continues directly to result scanning', (
-    tester,
-  ) async {
-    await _openHome(tester);
-    // Switch to the watch wallet (主钱包).
-    await tester.tap(find.text('日常钱包'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('主钱包').last);
-    await tester.pumpAndSettle();
-    expect(find.text('扫签名'), findsNothing);
+  testWidgets(
+    'watch wallet: request QR continues directly to result scanning',
+    (tester) async {
+      await _openHome(tester);
+      // Switch to the watch wallet (主钱包).
+      await tester.tap(find.text('日常钱包'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('主钱包').last);
+      await tester.pumpAndSettle();
+      expect(find.text('扫签名'), findsNothing);
 
-    await tester.tap(find.text('转账'));
-    await tester.pumpAndSettle();
-    await _enterTransfer(tester);
-    await tester.tap(find.text('下一步'));
-    await tester.pumpAndSettle();
-    // Watch confirm shows the air-gap button, not local sign.
-    expect(find.text('生成待签名二维码'), findsOneWidget);
+      await tester.tap(find.text('转账'));
+      await tester.pumpAndSettle();
+      await _enterTransfer(tester);
+      await tester.tap(find.text('下一步'));
+      await tester.pumpAndSettle();
+      // Watch confirm shows the air-gap button, not local sign.
+      expect(find.text('生成待签名二维码'), findsOneWidget);
 
-    // The QR screen runs a periodic frame-cycling timer, so pumpAndSettle
-    // would never settle; pump discrete frames instead.
-    await tester.tap(find.text('生成待签名二维码'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('待签名交易'), findsOneWidget); // W6 QR screen
-    await tester.tap(find.byKey(const ValueKey('scan-signed-result-next')));
-    await tester.pumpAndSettle();
-    expect(find.text('扫描签名结果'), findsOneWidget);
-    expect(find.text('无法验证链上交易参数，签名已禁用。'), findsNothing);
-    await tester.tap(find.byIcon(Icons.close));
-    await tester.pump();
-    expect(find.text('待签名交易'), findsOneWidget);
-  });
+      // The QR screen runs a periodic frame-cycling timer, so pumpAndSettle
+      // would never settle; pump discrete frames instead.
+      await tester.tap(find.text('生成待签名二维码'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('待签名交易'), findsOneWidget); // W6 QR screen
+      await tester.tap(find.byKey(const ValueKey('scan-signed-result-next')));
+      await tester.pumpAndSettle();
+      expect(find.text('扫描签名结果'), findsOneWidget);
+      expect(find.text('无法验证链上交易参数，签名已禁用。'), findsNothing);
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pump();
+      expect(find.text('待签名交易'), findsOneWidget);
+    },
+  );
 
   // These used to open /token straight from the design gallery, which worked
   // only because the screen ignored its arguments and rendered one fixed

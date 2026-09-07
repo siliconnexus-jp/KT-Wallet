@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +10,26 @@ import 'package:kt_wallet/src/state/app_prefs.dart';
 import 'package:kt_wallet/src/state/locale_controller.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+class _PendingBiometricAuth extends BiometricAuth {
+  var result = Completer<BiometricOutcome>();
+  int calls = 0;
+
+  @override
+  Future<bool> canAuthenticate() async => true;
+
+  @override
+  Future<BiometricOutcome> authenticate({required String reason}) {
+    calls++;
+    return result.future;
+  }
+}
+
+class _ThrowingCapabilityAuth extends _PendingBiometricAuth {
+  @override
+  Future<bool> canAuthenticate() async =>
+      throw StateError('provider unavailable');
+}
 
 class _UnavailablePinStorage implements PinStorage {
   const _UnavailablePinStorage();
@@ -41,8 +63,8 @@ class _WriteUnavailablePinStorage implements PinStorage {
 }
 
 /// Wallet-mode app lock: with the preference on the gate blocks until the
-/// (fake) biometric prompt passes — or, when biometrics are unavailable or
-/// fail, until the enrolled app PIN is entered on the numpad. There is no
+/// automatic (fake) biometric prompt passes — or the enrolled app PIN is
+/// verified after unavailability or an explicit fallback choice. There is no
 /// pass-through: with neither a usable prompt nor a PIN the gate stops on the
 /// PIN-enrollment screen.
 void main() {
@@ -82,23 +104,145 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('app lock on: gate blocks, then a successful prompt unlocks', (
+  testWidgets('startup automatically prompts and stays hidden until success', (
     tester,
   ) async {
-    // Default preference is appLock=true (persistence is dead in tests).
-    await pumpGate(
-      tester,
-      prefs: AppPrefsController(),
-      auth: const FakeBiometricAuth(BiometricOutcome.success),
-    );
+    final auth = _PendingBiometricAuth();
+    await pumpGate(tester, prefs: AppPrefsController(), auth: auth);
 
-    // Locked: the wallet is hidden behind the lock screen.
+    expect(auth.calls, 1);
     expect(find.text('WALLET-HOME'), findsNothing);
-    expect(find.text('App 锁'), findsOneWidget);
+    expect(find.text('使用生物识别验证'), findsNothing);
+    expect(find.text('使用密码解锁'), findsNothing);
 
-    await tester.tap(find.text('使用生物识别验证'));
+    auth.result.complete(BiometricOutcome.success);
     await tester.pumpAndSettle();
     expect(find.text('WALLET-HOME'), findsOneWidget);
+  });
+
+  testWidgets('failure waits for explicit retry, never loops on resume', (
+    tester,
+  ) async {
+    final auth = _PendingBiometricAuth();
+    final pin = newPin();
+    await pin.setPin('135790');
+    await pumpGate(tester, prefs: AppPrefsController(), auth: auth, pin: pin);
+    auth.result.complete(BiometricOutcome.failure);
+    await tester.pumpAndSettle();
+    expect(find.text('使用生物识别验证'), findsOneWidget);
+    expect(find.text('使用密码解锁'), findsOneWidget);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(auth.calls, 1);
+    expect(find.text('WALLET-HOME'), findsNothing);
+
+    auth.result = Completer<BiometricOutcome>();
+    await tester.tap(find.text('使用生物识别验证'));
+    await tester.pumpAndSettle();
+    expect(auth.calls, 2);
+    expect(find.text('使用密码解锁'), findsNothing);
+    auth.result.complete(BiometricOutcome.success);
+    await tester.pumpAndSettle();
+    expect(find.text('WALLET-HOME'), findsOneWidget);
+  });
+
+  testWidgets(
+    'iOS cold launch waits for foreground then auto-prompts once',
+    (tester) async {
+      addTearDown(() {
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+      });
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      final auth = _PendingBiometricAuth();
+      await pumpGate(tester, prefs: AppPrefsController(), auth: auth);
+      expect(auth.calls, 0);
+      expect(find.text('WALLET-HOME'), findsNothing);
+      expect(find.text('使用生物识别验证'), findsNothing);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(auth.calls, 1);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(auth.calls, 1);
+      auth.result.complete(BiometricOutcome.success);
+      await tester.pumpAndSettle();
+      expect(find.text('WALLET-HOME'), findsOneWidget);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(auth.calls, 1);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
+  testWidgets('capability errors fall back to PIN without opening wallet', (
+    tester,
+  ) async {
+    final auth = _ThrowingCapabilityAuth();
+    final pin = newPin();
+    await pin.setPin('135790');
+    await pumpGate(tester, prefs: AppPrefsController(), auth: auth, pin: pin);
+    expect(auth.calls, 0);
+    expect(find.text('输入密码解锁'), findsOneWidget);
+    expect(find.text('WALLET-HOME'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('explicit password preference does not auto-prompt', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = AppPrefsController();
+    await prefs.setAuthMethod(AuthMethod.password);
+    final auth = _PendingBiometricAuth();
+    final pin = newPin();
+    await pin.setPin('135790');
+    await pumpGate(tester, prefs: prefs, auth: auth, pin: pin);
+    expect(auth.calls, 0);
+    expect(find.text('输入密码解锁'), findsOneWidget);
+    expect(find.text('WALLET-HOME'), findsNothing);
+  });
+
+  testWidgets('capability lost during automatic prompt falls back to PIN', (
+    tester,
+  ) async {
+    final auth = _PendingBiometricAuth();
+    final pin = newPin();
+    await pin.setPin('135790');
+    await pumpGate(tester, prefs: AppPrefsController(), auth: auth, pin: pin);
+    auth.result.complete(BiometricOutcome.unavailable);
+    await tester.pumpAndSettle();
+    expect(find.text('输入密码解锁'), findsOneWidget);
+    expect(find.text('WALLET-HOME'), findsNothing);
+  });
+
+  testWidgets('disposing during authentication ignores its result', (
+    tester,
+  ) async {
+    final auth = _PendingBiometricAuth();
+    await pumpGate(tester, prefs: AppPrefsController(), auth: auth);
+    await tester.pumpWidget(const SizedBox());
+    auth.result.complete(BiometricOutcome.success);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('WALLET-HOME'), findsNothing);
+  });
+
+  testWidgets('unexpected auth error stays locked and offers retry', (
+    tester,
+  ) async {
+    final auth = _PendingBiometricAuth();
+    await pumpGate(tester, prefs: AppPrefsController(), auth: auth);
+    auth.result.completeError(StateError('provider failed'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('使用生物识别验证'), findsOneWidget);
+    expect(find.text('WALLET-HOME'), findsNothing);
   });
 
   testWidgets('a failed prompt with no PIN enrolled keeps the gate locked', (
@@ -139,25 +283,27 @@ void main() {
     },
   );
 
-  testWidgets('a cancelled prompt falls back to the PIN numpad when enrolled', (
-    tester,
-  ) async {
-    final pin = newPin();
-    await pin.setPin('135790');
-    await pumpGate(
-      tester,
-      prefs: AppPrefsController(),
-      auth: const FakeBiometricAuth.throwing(
-        LocalAuthException(code: LocalAuthExceptionCode.userCanceled),
-      ),
-      pin: pin,
-    );
+  testWidgets(
+    'a cancelled prompt offers biometric retry and PIN when enrolled',
+    (tester) async {
+      final pin = newPin();
+      await pin.setPin('135790');
+      await pumpGate(
+        tester,
+        prefs: AppPrefsController(),
+        auth: const FakeBiometricAuth.throwing(
+          LocalAuthException(code: LocalAuthExceptionCode.userCanceled),
+        ),
+        pin: pin,
+      );
 
-    await tester.tap(find.text('使用生物识别验证'));
-    await tester.pumpAndSettle();
-    expect(find.text('WALLET-HOME'), findsNothing);
-    expect(find.text('输入密码解锁'), findsOneWidget);
-  });
+      expect(find.text('WALLET-HOME'), findsNothing);
+      expect(find.text('使用生物识别验证'), findsOneWidget);
+      await tester.tap(find.text('使用密码解锁'));
+      await tester.pumpAndSettle();
+      expect(find.text('输入密码解锁'), findsOneWidget);
+    },
+  );
 
   testWidgets('a biometric lockout does NOT unlock either', (tester) async {
     await pumpGate(
@@ -418,7 +564,7 @@ void main() {
     expect(find.textContaining('尝试次数过多'), findsOneWidget);
   });
 
-  testWidgets('bio failure with a PIN enrolled falls back to the numpad', (
+  testWidgets('bio failure allows the user to choose PIN and unlock', (
     tester,
   ) async {
     final pin = newPin();
@@ -430,7 +576,8 @@ void main() {
       pin: pin,
     );
 
-    await tester.tap(find.text('使用生物识别验证'));
+    expect(find.text('使用生物识别验证'), findsOneWidget);
+    await tester.tap(find.text('使用密码解锁'));
     await tester.pumpAndSettle();
     expect(find.text('输入密码解锁'), findsOneWidget);
 
@@ -446,7 +593,7 @@ void main() {
       await pumpGate(
         tester,
         prefs: AppPrefsController(),
-        auth: const FakeBiometricAuth(BiometricOutcome.success),
+        auth: const FakeBiometricAuth(BiometricOutcome.failure),
         pin: pin,
       );
 
