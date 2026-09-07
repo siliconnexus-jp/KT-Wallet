@@ -1035,6 +1035,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
   /// own controller via [HistoryScope], which always wins over the lazy one.
   HistoryController? _owned;
   HistoryController? _autoRefreshRequestedFor;
+  HistoryController? _visibleHistoryController;
   bool _showUnverifiedRecords = false;
   _HistoryTypeFilter _typeFilter = _HistoryTypeFilter.transfers;
   String? _selectedNetworkId;
@@ -1050,6 +1051,10 @@ class _RecordsScreenState extends State<RecordsScreen> {
     super.didChangeDependencies();
     final shared = HistoryScope.maybeOf(context);
     if (shared != null) {
+      _updateHistoryVisibility(
+        shared,
+        enabled: HistoryScope.shouldAutoRefresh(context),
+      );
       if (HistoryScope.shouldAutoRefresh(context) &&
           !identical(_autoRefreshRequestedFor, shared)) {
         _autoRefreshRequestedFor = shared;
@@ -1109,12 +1114,32 @@ class _RecordsScreenState extends State<RecordsScreen> {
         if (mounted) controller.refreshIfNeeded();
       });
     }
+    _updateHistoryVisibility(_owned, enabled: true);
+  }
+
+  void _updateHistoryVisibility(
+    HistoryController? controller, {
+    required bool enabled,
+  }) {
+    final visible =
+        enabled &&
+        TickerMode.valuesOf(context).enabled &&
+        (ModalRoute.isCurrentOf(context) ?? true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (!identical(_visibleHistoryController, controller)) {
+        _visibleHistoryController?.setHistoryVisible(this, false);
+        _visibleHistoryController = controller;
+      }
+      controller?.setHistoryVisible(this, visible);
+    });
   }
 
   void _onHistoryChanged() => setState(() {});
 
   @override
   void dispose() {
+    _visibleHistoryController?.setHistoryVisible(this, false);
     _owned?.removeListener(_onHistoryChanged);
     _owned?.dispose();
     super.dispose();

@@ -117,6 +117,9 @@ func (t *Tron) fetch(ctx context.Context, method, path string, body []byte) ([]b
 		return nil, safeResponseReadFailure(hostOf(t.base))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden {
+			return nil, ErrTronRateLimited
+		}
 		return nil, t.unavailable(fmt.Sprintf("TronGrid returned HTTP %d", resp.StatusCode))
 	}
 	return data, nil

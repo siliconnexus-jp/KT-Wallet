@@ -2206,6 +2206,18 @@ abstract class AppLocalizations {
   /// **'无法获取网络费'**
   String get feeUnavailable;
 
+  /// No description provided for @feeRateLimited.
+  ///
+  /// In zh, this message translates to:
+  /// **'估费服务请求受限，请稍后重试'**
+  String get feeRateLimited;
+
+  /// No description provided for @feeNetworkUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法连接估费服务，请检查网络后重试'**
+  String get feeNetworkUnavailable;
+
   /// No description provided for @feeUnavailableHint.
   ///
   /// In zh, this message translates to:

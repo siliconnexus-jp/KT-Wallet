@@ -24,6 +24,7 @@ import 'package:wallet_data/wallet_data.dart'
         TxStatus;
 
 import '../../l10n/app_localizations.dart';
+import '../transfer/fee_quote_failure.dart';
 import 'home_screen.dart' show tokenRowMeta;
 import '../market/balance_service.dart'
     show BalanceService, BalanceStatus, TronActivationStatus;
@@ -728,6 +729,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
   String? _acknowledgedRiskAddress;
   int _fee = 1;
   _InputFeeQuoteState _feeQuoteState = _InputFeeQuoteState.waiting;
+  FeeQuoteFailure _inputFeeFailure = FeeQuoteFailure.unavailable;
   _InputFeeQuote? _feeQuote;
   String? _insufficientAsset;
   final ValueNotifier<Amount?> _feeDetailsFee = ValueNotifier(null);
@@ -1068,9 +1070,12 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
         _insufficientAsset = error.asset;
       });
       _feeDetailsFee.value = quote?.fee;
-    } catch (_) {
+    } catch (error) {
       if (!mounted || generation != _feeQuoteGeneration) return;
-      setState(() => _feeQuoteState = _InputFeeQuoteState.failed);
+      setState(() {
+        _feeQuoteState = _InputFeeQuoteState.failed;
+        _inputFeeFailure = classifyFeeQuoteFailure(error);
+      });
       _feeDetailsFee.value = null;
     }
   }
@@ -1111,7 +1116,7 @@ class _TransferInputScreenState extends State<TransferInputScreen> {
       case _InputFeeQuoteState.estimating:
         return l10n.feeEstimating;
       case _InputFeeQuoteState.failed:
-        return l10n.feeUnavailable;
+        return feeQuoteFailureLabel(_inputFeeFailure, l10n);
       case _InputFeeQuoteState.insufficientFunds:
         return _formattedFeeFiat();
       case _InputFeeQuoteState.tronUnactivated:
@@ -2676,6 +2681,7 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
   EvmAssetChanges? _evmAssetChanges;
   bool _requested = false;
   bool _insufficientFunds = false;
+  FeeQuoteFailure _confirmFeeFailure = FeeQuoteFailure.unavailable;
   bool _tronNotActivated = false;
   _TokenRiskUiState _tokenRisk = _TokenRiskUiState.notApplicable;
   Timer? _quoteRefreshTimer;
@@ -2837,6 +2843,7 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
       ..preparedAtMs = null
       ..preparationFailure = null;
     _insufficientFunds = false;
+    _confirmFeeFailure = FeeQuoteFailure.unavailable;
     _tronNotActivated = false;
     _rentReserve = null;
     _evmAssetChanges = null;
@@ -2952,7 +2959,10 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
     } catch (error) {
       session?.preparationFailure = '${error.runtimeType}: $error';
       if (!mounted) return;
-      setState(() => _state = _FeeEstimate.failed);
+      setState(() {
+        _state = _FeeEstimate.failed;
+        _confirmFeeFailure = classifyFeeQuoteFailure(error);
+      });
     } finally {
       ExperienceMetrics.instance.record(
         ExperienceMetricNames.transactionPrepare,
@@ -3072,7 +3082,9 @@ class _TransferConfirmScreenState extends State<TransferConfirmScreen> {
                       ? l10n.insufficientBalance
                       : _state == _FeeEstimate.estimating
                       ? l10n.feeEstimating
-                      : l10n.feeUnavailableHint)
+                      : _confirmFeeFailure == FeeQuoteFailure.unavailable
+                      ? l10n.feeUnavailableHint
+                      : feeQuoteFailureLabel(_confirmFeeFailure, l10n))
                 : (isHot ? l10n.hotConfirmHint : l10n.watchConfirmHint),
             style: TextStyle(
               fontSize: 12,

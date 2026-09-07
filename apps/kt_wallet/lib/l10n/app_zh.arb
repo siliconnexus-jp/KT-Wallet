@@ -564,6 +564,8 @@
   "feeWaitingRecipient": "填写有效收款地址后估算手续费",
   "feeWaitingAmount": "输入有效转账金额后估算手续费",
   "feeUnavailable": "无法获取网络费",
+  "feeRateLimited": "估费服务请求受限，请稍后重试",
+  "feeNetworkUnavailable": "无法连接估费服务，请检查网络后重试",
   "feeUnavailableHint": "无法估算网络费，暂时无法发送",
   "tokenRiskChecking": "正在检查 Token 身份…",
   "tokenRiskCheckingBody": "KT Wallet 正在签名前通过验证目录和独立威胁情报核对当前网络与完整合约地址。",

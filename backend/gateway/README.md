@@ -720,6 +720,24 @@ u64 values, a future transaction slot, more than one returned item, conflicting
 non-null confirmation count fail closed. A single `null` item is the only
 not-found shape and maps to `unknown`; it is not treated as a failed transfer.
 
+### `kt_getTronFeeData` `{"network": N?, "operation": O, "address": A?, "contract": C?, "selector": S?, "parameter": P?}`
+
+Uncached read-only inputs for locally constructed TRON transfers. Uses the
+server's TronGrid credential (mainnet only); credentials never reach the app.
+Allowed operations: `account`, `block`, `resources`, `parameters`, `constant`.
+`constant` permits only `balanceOf(address)` (one ABI word) and simulated
+`transfer(address,uint256)` (two ABI words). Addresses require Base58Check;
+unknown fields, arbitrary URLs/paths, other selectors, and broadcast are rejected.
+The result echoes `network`, `operation`, `address`, `contract`, `selector`, and
+`parameter` with a `data` object; clients verify that binding before consuming it.
+Unused string fields are empty. Provider HTTP 403/429 maps to `-32001`;
+HTTP-200 provider errors fail closed, never becoming zero balances.
+
+Online fee preparation uses this route for built-in networks. Direct mode,
+custom networks, and older gateways without this method keep the direct-node
+path. Rate limits or invalid responses do not trigger anonymous fallback bursts.
+Deploy the gateway before distributing the updated app.
+
 ### `kt_getHistory` `{"chain": C, "network": N?, "address": A, "limit": N?}`
 
 → `{"chain": C, "network": N, "address": A,

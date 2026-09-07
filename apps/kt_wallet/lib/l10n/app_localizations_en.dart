@@ -1232,6 +1232,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get feeUnavailable => 'Network fee unavailable';
 
   @override
+  String get feeRateLimited => 'Fee service is busy. Please retry shortly.';
+
+  @override
+  String get feeNetworkUnavailable =>
+      'Cannot connect to the fee service. Check your connection and retry.';
+
+  @override
   String get feeUnavailableHint =>
       'The network fee could not be estimated, so sending is disabled.';
 

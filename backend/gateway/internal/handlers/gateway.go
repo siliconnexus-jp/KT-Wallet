@@ -503,6 +503,7 @@ func (g *Gateway) Register(s *rpc.Server) {
 	s.Register("kt_getPortfolio", g.GetPortfolio)
 	s.Register("kt_getPrices", g.GetPrices)
 	s.Register("kt_getChainParams", g.GetChainParams)
+	s.Register("kt_getTronFeeData", g.GetTronFeeData)
 	s.Register("kt_simulateEvmTransfer", g.SimulateEVMTransfer)
 	s.Register("kt_estimateEvmGas", g.EstimateEVMGas)
 	s.Register("kt_getEvmSpendableBalances", g.GetEVMSpendableBalances)

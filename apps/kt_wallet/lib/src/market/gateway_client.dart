@@ -853,9 +853,39 @@ class GatewayClient {
     return identity;
   }
 
-  /// Exact `eth_call` through the gateway. New transfers use `pending` while
-  /// same-nonce replacements use `latest`, because the replacement is an
-  /// alternative to (not a successor of) the pending candidate.
+  /// Authenticated read-only TRON fee inputs, bound to the exact request.
+  Future<Map<Object?, Object?>> getTronFeeData({
+    required String operation,
+    String? networkOverride,
+    String address = '',
+    String contract = '',
+    String selector = '',
+    String parameter = '',
+  }) async {
+    final network = await _networkParam(
+      Coin.tron,
+      networkOverride: networkOverride,
+    );
+    final binding = <String, Object?>{
+      'network': network ?? 'tron-mainnet',
+      'operation': operation,
+      'address': address,
+      'contract': contract,
+      'selector': selector,
+      'parameter': parameter,
+    };
+    final result = await _call('kt_getTronFeeData', binding);
+    if (result is! Map ||
+        !_hasExactStringKeys(result, {...binding.keys, 'data'}) ||
+        binding.entries.any((entry) => result[entry.key] != entry.value) ||
+        result['data'] is! Map) {
+      throw const FormatException('unbound TRON fee response');
+    }
+    return result['data'] as Map<Object?, Object?>;
+  }
+
+  /// Exact `eth_call` through the gateway. Replacements use latest, ordinary
+  /// transfers use pending state.
   Future<String> simulateEvmTransfer({
     required Coin chain,
     required String from,

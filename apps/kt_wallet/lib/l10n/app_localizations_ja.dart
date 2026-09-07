@@ -1173,6 +1173,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get feeUnavailable => 'ネットワーク手数料を取得できません';
 
   @override
+  String get feeRateLimited => '手数料サービスが混み合っています。しばらくしてから再試行してください。';
+
+  @override
+  String get feeNetworkUnavailable => '手数料サービスに接続できません。通信環境を確認して再試行してください。';
+
+  @override
   String get feeUnavailableHint => 'ネットワーク手数料を見積もれないため、送信できません。';
 
   @override

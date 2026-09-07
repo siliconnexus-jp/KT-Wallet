@@ -147,7 +147,13 @@ class TronRpc {
     final resp = await transport.getJson('$baseUrl/v1/accounts/$address');
     if (resp is! Map) throw RpcException('bad account response');
     final data = resp['data'];
-    if (data is! List || data.isEmpty) {
+    if (resp['success'] == false ||
+        resp['Error'] != null ||
+        resp['error'] != null ||
+        data is! List) {
+      throw RpcException('bad account response');
+    }
+    if (data.isEmpty) {
       return TronAccountBalances(
         activated: false,
         trx: BigInt.zero,
@@ -289,20 +295,17 @@ class TronRpc {
     }
 
     final energyLimit = nonNegative('EnergyLimit');
-    final energyAvailable = (energyLimit - nonNegative('EnergyUsed')).clamp(
-      0,
-      energyLimit,
-    ).toInt();
+    final energyAvailable = (energyLimit - nonNegative('EnergyUsed'))
+        .clamp(0, energyLimit)
+        .toInt();
     final netLimit = nonNegative('NetLimit');
-    final stakedBandwidth = (netLimit - nonNegative('NetUsed')).clamp(
-      0,
-      netLimit,
-    ).toInt();
+    final stakedBandwidth = (netLimit - nonNegative('NetUsed'))
+        .clamp(0, netLimit)
+        .toInt();
     final freeNetLimit = nonNegative('freeNetLimit');
-    final freeBandwidth = (freeNetLimit - nonNegative('freeNetUsed')).clamp(
-      0,
-      freeNetLimit,
-    ).toInt();
+    final freeBandwidth = (freeNetLimit - nonNegative('freeNetUsed'))
+        .clamp(0, freeNetLimit)
+        .toInt();
 
     final chainParameters = parameters['chainParameter'];
     if (chainParameters is! List) {

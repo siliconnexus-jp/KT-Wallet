@@ -572,6 +572,7 @@ void _auditGatewayPublicRequestSchemas(List<String> failures) {
     'kt_getPortfolio': 'GetPortfolio',
     'kt_getPrices': 'GetPrices',
     'kt_getChainParams': 'GetChainParams',
+    'kt_getTronFeeData': 'GetTronFeeData',
     'kt_simulateEvmTransfer': 'SimulateEVMTransfer',
     'kt_estimateEvmGas': 'EstimateEVMGas',
     'kt_getEvmSpendableBalances': 'GetEVMSpendableBalances',
@@ -609,6 +610,7 @@ void _auditGatewayPublicRequestSchemas(List<String> failures) {
     'backend/gateway/internal/handlers/balances.go': 2,
     'backend/gateway/internal/handlers/prices.go': 1,
     'backend/gateway/internal/handlers/chainparams.go': 1,
+    'backend/gateway/internal/handlers/tron_preflight.go': 1,
     // Simulation and estimation share validatedEVMCall; spendable balances
     // has its own request object.
     'backend/gateway/internal/handlers/evm_preflight.go': 2,
@@ -731,17 +733,20 @@ void _auditGatewayUpstreamRPCEnvelope(List<String> failures) {
 }
 
 void _auditGatewayHeliusResponseSchema(List<String> failures) {
+  // Provider metadata is extensible; consumed identities/amounts remain
+  // validated. Behavioral rejection tests run in gateway-security CI, rather
+  // than assuming every harmless new provider field must break history.
   const path = 'backend/gateway/internal/upstream/history.go';
   final source = File(path).readAsStringSync();
   for (final marker in const [
     'func decodeHeliusTransfers(',
-    'decodeExactJSONObject(data, "jsonrpc", "id", "result", "error")',
+    'decodeExtensibleJSONObject(data, "jsonrpc", "id", "result", "error")',
     'version != "2.0" || id != "kt-wallet" || hasResult == hasError',
-    'decodeExactJSONObject(errorRaw, "code", "message", "data")',
-    'decodeExactJSONObject(resultRaw, "data", "paginationToken")',
+    'decodeExtensibleJSONObject(errorRaw, "code", "message")',
+    'decodeExtensibleJSONObject(resultRaw, "data")',
     'func decodeHeliusTransfer(',
     'validUnsignedProviderInteger(*wire.Amount)',
-    'hasFeeAmount != hasFeeUIAmount',
+    '*wire.Decimals < 0 || *wire.Decimals > 36',
     'transfers, rejected, err := decodeHeliusTransfers(data)',
   ]) {
     if (!source.contains(marker)) {
@@ -758,14 +763,12 @@ void _auditGatewayAlchemyResponseSchema(List<String> failures) {
   final source = File(path).readAsStringSync();
   for (final marker in const [
     'func decodeAlchemyTransfers(',
-    'decodeExactJSONObject(data, "jsonrpc", "id", "result", "error")',
-    'decodeExactJSONObject(resultRaw, "transfers", "pageKey")',
+    'decodeExtensibleJSONObject(data, "jsonrpc", "id", "result", "error")',
+    'decodeExtensibleJSONObject(resultRaw, "transfers")',
     'func decodeAlchemyTransfer(',
-    'decodeExactJSONObject(fields["rawContract"], "value", "address", "decimal")',
-    'validOptionalJSONNumber(fields["value"])',
-    'missingOrJSONNull(fields["erc721TokenId"])',
-    'missingOrJSONNull(fields["erc1155Metadata"])',
-    'missingOrJSONNull(fields["tokenId"])',
+    'decodeExtensibleJSONObject(fields["rawContract"], "value", "address", "decimal")',
+    'case "external", "internal", "erc20":',
+    'invalid Alchemy transfer category',
     'validAlchemyQuantity(*rawWire.Value)',
     'rawAmount.Sign() <= 0',
     'rawDecimals.Uint64() > 255',
@@ -796,9 +799,9 @@ void _auditGatewayExplorerResponseSchema(List<String> failures) {
   final source = File(path).readAsStringSync();
   for (final marker in const [
     'func decodeExplorerAccountEnvelope(',
-    'decodeExactJSONObject(data, "status", "message", "result")',
+    'decodeExtensibleJSONObject(data, "status", "message", "result")',
     '*status == "1" && *message == "OK"',
-    '*status == "0" && *message == "No transactions found"',
+    'case "No transactions found", "No internal transactions found", "No token transfers found":',
     'func decodeEtherscanTx(',
     'func decodeEtherscanTokenTx(',
     'func decodeEtherscanInternalTx(',
@@ -828,7 +831,7 @@ void _auditGatewayTronHistoryResponseSchema(List<String> failures) {
   final decoder = File(decoderPath).readAsStringSync();
   for (final marker in const [
     'func decodeTronHistoryEnvelope(',
-    'decodeExactJSONObject(data, "data", "success", "meta")',
+    'decodeExtensibleJSONObject(data, "data", "success")',
     'func decodeTronTRC20History(',
     'func decodeTronTRC20Transfer(',
     'typeName != "Transfer"',

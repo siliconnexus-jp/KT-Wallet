@@ -1149,6 +1149,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get feeUnavailable => '无法获取网络费';
 
   @override
+  String get feeRateLimited => '估费服务请求受限，请稍后重试';
+
+  @override
+  String get feeNetworkUnavailable => '无法连接估费服务，请检查网络后重试';
+
+  @override
   String get feeUnavailableHint => '无法估算网络费，暂时无法发送';
 
   @override

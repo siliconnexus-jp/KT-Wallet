@@ -8,6 +8,7 @@ import '../market/balance_service.dart' show RpcEndpointResolver;
 import '../market/gateway_client.dart';
 import '../observability/experience_metrics.dart';
 import '../rpc/http_transport.dart';
+import '../rpc/tron_fee_transport.dart';
 import '../wallets/wallet_model.dart';
 import 'airgap_codec.dart';
 import 'broadcast_service.dart';
@@ -127,6 +128,7 @@ class LocalTransferService {
              restTransport: restTransport,
            ),
        _endpoints = endpoints,
+       _gateway = gateway,
        _jsonRpc = jsonRpcTransport ?? HttpJsonRpcTransport(),
        _rest = restTransport ?? HttpRestTransport(),
        _identity =
@@ -143,6 +145,7 @@ class LocalTransferService {
   final ChainParamsService _params;
   final BroadcastService _broadcaster;
   final RpcEndpointResolver? _endpoints;
+  final GatewayResolver? _gateway;
   final JsonRpcTransport _jsonRpc;
   final RestTransport _rest;
   final NetworkIdentityVerifier? _identity;
@@ -591,16 +594,26 @@ class LocalTransferService {
     }
     final identity = _requiredIdentity(Chain.tron, expectedNetworkIdentity);
     if (identity != null) await _identity!.verifyTron(identity);
-    final rpc = TronRpc(baseUrl: _endpoint(Coin.tron), transport: _rest);
-    final tokenContract = draft.tokenContract;
-    final balancesFuture = rpc.getAccountBalances(
-      from,
-      tokenContract: tokenContract,
+    final endpoint = _endpoint(Coin.tron);
+    final gateway = _gateway?.call();
+    final rpc = TronRpc(
+      baseUrl: endpoint,
+      transport: gateway == null
+          ? _rest
+          : TronFeeTransport(
+              baseUrl: endpoint,
+              gateway: gateway,
+              direct: _rest,
+            ),
     );
-    final recipientFuture = tokenContract == null
-        ? rpc.getAccountBalances(draft.recipient)
-        : null;
-    final balances = await balancesFuture;
+    final tokenContract = draft.tokenContract;
+    // Observe both failures immediately; a fast recipient error must not
+    // escape as an unhandled future while the sender request is pending.
+    final accounts = await Future.wait([
+      rpc.getAccountBalances(from, tokenContract: tokenContract),
+      if (tokenContract == null) rpc.getAccountBalances(draft.recipient),
+    ]);
+    final balances = accounts.first;
     if (!balances.activated) {
       throw const TronAccountNotActivated();
     }
@@ -647,8 +660,7 @@ class LocalTransferService {
       expiration: expiresAt,
       feeLimit: feeLimit,
     ).encodeRawData();
-    final recipient = await recipientFuture;
-    final activatesRecipient = tokenContract == null && !recipient!.activated;
+    final activatesRecipient = tokenContract == null && !accounts[1].activated;
     final bandwidth = await rpc.estimateBandwidthFee(
       owner: from,
       rawDataLength: raw.length,

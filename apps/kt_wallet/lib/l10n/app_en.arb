@@ -427,6 +427,8 @@
   "feeWaitingRecipient": "Enter a valid recipient address to estimate the fee.",
   "feeWaitingAmount": "Enter a valid transfer amount to estimate the fee.",
   "feeUnavailable": "Network fee unavailable",
+  "feeRateLimited": "Fee service is busy. Please retry shortly.",
+  "feeNetworkUnavailable": "Cannot connect to the fee service. Check your connection and retry.",
   "feeUnavailableHint": "The network fee could not be estimated, so sending is disabled.",
   "tokenRiskChecking": "Checking token identity…",
   "tokenRiskCheckingBody": "KT Wallet is checking this exact network and contract against the verified catalog and independent threat intelligence before signing.",

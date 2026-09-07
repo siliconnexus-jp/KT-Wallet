@@ -162,6 +162,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     HistorySnapshotStore? snapshots,
     String Function()? snapshotScope,
     this.pollInterval = const Duration(seconds: 8),
+    this.historyRefreshInterval = const Duration(seconds: 15),
   }) : _wallets = wallets,
        _service = service ?? HistoryService(),
        _statusService =
@@ -191,6 +192,44 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   final HistoryService _service;
   final TransactionStatusService _statusService;
   final Duration pollInterval;
+  final Duration historyRefreshInterval;
+  final Set<Object> _historyViewers = {};
+  Timer? _historyTimer;
+  int _historyFailures = 0;
+  bool _foreground = true;
+
+  /// Visible history surfaces share one timer. Incoming transfers have no
+  /// local Pending row, so finality polling alone cannot discover them.
+  void setHistoryVisible(Object viewer, bool visible) {
+    if (_disposed) return;
+    final wasVisible = _historyViewers.isNotEmpty;
+    if (visible) {
+      _historyViewers.add(viewer);
+    } else {
+      _historyViewers.remove(viewer);
+    }
+    if (_historyViewers.isEmpty) {
+      _historyTimer?.cancel();
+    } else if (!wasVisible && _foreground) {
+      unawaited(refresh());
+    }
+  }
+
+  void _scheduleHistoryRefresh({required bool succeeded}) {
+    _historyTimer?.cancel();
+    _historyFailures = succeeded ? 0 : math.min(_historyFailures + 1, 3);
+    if (_disposed ||
+        !_foreground ||
+        _historyViewers.isEmpty ||
+        _wallets.current == null) {
+      return;
+    }
+    _historyTimer = Timer(historyRefreshInterval * (1 << _historyFailures), () {
+      if (!_disposed && _foreground && _historyViewers.isNotEmpty) {
+        unawaited(refresh());
+      }
+    });
+  }
 
   /// The ACTIVE network ids, re-read on every refresh: locally recorded rows
   /// from another network instance (a Sepolia transfer while mainnet is
@@ -659,6 +698,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
       _lastUpdatedAt = retainedCached ? (_lastUpdatedAt ?? now) : now;
       _pollFailureCount = 0;
       _schedulePoll();
+      _scheduleHistoryRefresh(succeeded: liveFetchSucceeded);
       notifyListeners();
 
       if (_snapshots != null &&
@@ -708,6 +748,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
         metricStopwatch.elapsed,
         success: false,
       );
+      _scheduleHistoryRefresh(succeeded: false);
     }
   }
 
@@ -829,6 +870,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   void _schedulePoll({bool retryAfterFailure = false}) {
     if (_disposed) return;
     _pollTimer?.cancel();
+    if (!_foreground) return;
     if (!_hasPendingTransactions && !retryAfterFailure) return;
     final exponent = math.min(math.max(_pollFailureCount - 1, 0), 3);
     final multiplier = retryAfterFailure ? 1 << exponent : 1;
@@ -872,6 +914,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (_disposed) return;
+    _foreground = state == AppLifecycleState.resumed;
     if (state == AppLifecycleState.resumed) {
       // Account-history indexes can lag a confirmed incoming transfer or be
       // temporarily unreachable. Polling only locally-pending rows leaves a
@@ -882,6 +925,7 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
       refresh();
     } else {
       _pollTimer?.cancel();
+      _historyTimer?.cancel();
     }
   }
 
@@ -947,6 +991,8 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     _showingCachedData = false;
     _lastUpdatedAt = null;
     _remoteLimit = HistoryService.pageSize;
+    _historyTimer?.cancel();
+    _historyFailures = 0;
     _pollTimer?.cancel();
     _pollFailureCount = 0;
     _localTransactions = const [];
@@ -978,6 +1024,8 @@ class HistoryController extends ChangeNotifier with WidgetsBindingObserver {
     // answers must never publish into a route that has already gone away.
     _generation++;
     WidgetsBinding.instance.removeObserver(this);
+    _historyTimer?.cancel();
+    _historyViewers.clear();
     _pollTimer?.cancel();
     _wallets.removeListener(_onWalletsChanged);
     _networkChanges?.removeListener(_onNetworkChanged);

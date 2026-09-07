@@ -1439,6 +1439,27 @@ void main() {
       expect(await rpc.getTrxBalance('Tabc'), BigInt.zero);
     });
 
+    test(
+      'provider errors never become an unactivated zero-balance account',
+      () async {
+        for (final response in <Map<String, Object?>>[
+          {},
+          {'Error': 'rate limited'},
+          {'success': false, 'data': <Object?>[]},
+          {'error': 'provider unavailable', 'data': <Object?>[]},
+        ]) {
+          final rpc = TronRpc(
+            baseUrl: 'https://api',
+            transport: FakeRest(onGet: (_) => response),
+          );
+          await expectLater(
+            rpc.getAccountBalances(_tronHolder),
+            throwsA(isA<RpcException>()),
+          );
+        }
+      },
+    );
+
     test('getTrxBalance parses SUN balance', () async {
       final rpc = TronRpc(
         baseUrl: 'https://api',
