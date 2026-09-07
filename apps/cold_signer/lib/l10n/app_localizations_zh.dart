@@ -9,6 +9,21 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get aboutPoweredBy => '由 Silicon Nexus LLC 提供动力';
+
+  @override
+  String get aboutTitle => '关于';
+
+  @override
+  String get aboutVersion => '版本';
+
+  @override
+  String get aboutOpenSource => '开源代码';
+
+  @override
+  String get aboutOfflineNote => '本页面完全离线运行。请在另一台联网设备上查看源代码。';
+
+  @override
   String get signerBackupEntryDesc => '强密码加密 · 保存到本地';
 
   @override

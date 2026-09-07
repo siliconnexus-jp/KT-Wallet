@@ -1,4 +1,5 @@
 {
+  "aboutPoweredBy": "由 Silicon Nexus LLC 提供动力",
   "signResultSaveFailed": "无法安全保存签名结果。尚未广播，请重新扫描后重试。",
 "settingsGeneral": "通用",
 "generalSettingsDescription": "语言和计价货币适用于整个 App，不影响钱包或链上资产。",

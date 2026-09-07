@@ -119,6 +119,7 @@ export const translations = {
     },
     "footer": {
       "tagline": "Frontend & backend, 100% open source",
+      "poweredBy": "Powered by Silicon Nexus LLC",
       "privacy": "Privacy",
       "security": "Security & risk",
       "notices": "Third-party notices"
@@ -240,6 +241,7 @@ export const translations = {
     },
     "footer": {
       "tagline": "前后端 100% 开源 · 安全第一",
+      "poweredBy": "由 Silicon Nexus LLC 提供动力",
       "privacy": "隐私政策",
       "security": "安全与风险",
       "notices": "第三方许可"
@@ -361,6 +363,7 @@ export const translations = {
     },
     "footer": {
       "tagline": "フロントエンドもバックエンドも 100% 公開",
+      "poweredBy": "Silicon Nexus LLC が提供",
       "privacy": "プライバシー",
       "security": "セキュリティとリスク",
       "notices": "第三者ライセンス"

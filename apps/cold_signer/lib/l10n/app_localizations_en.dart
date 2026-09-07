@@ -9,6 +9,22 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get aboutPoweredBy => 'Powered by Silicon Nexus LLC';
+
+  @override
+  String get aboutTitle => 'About';
+
+  @override
+  String get aboutVersion => 'Version';
+
+  @override
+  String get aboutOpenSource => 'Open source';
+
+  @override
+  String get aboutOfflineNote =>
+      'This page works entirely offline. View the source code on a separate connected device.';
+
+  @override
   String get signerBackupEntryDesc => 'Strong password · Save locally';
 
   @override

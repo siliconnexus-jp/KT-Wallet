@@ -45,6 +45,21 @@ Future<void> _sendCaptureChanged(WidgetTester tester, bool captured) async {
 }
 
 void main() {
+  testWidgets('offline settings opens About and returns to settings', (
+    tester,
+  ) async {
+    await _open(tester, 'C20 安全设置');
+    final entry = find.byKey(const ValueKey('signer-settings-about'));
+    await tester.ensureVisible(entry);
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+    expect(find.text('由 Silicon Nexus LLC 提供动力'), findsOneWidget);
+    expect(find.text(KtProductAttribution.copyright), findsOneWidget);
+    final context = tester.element(find.byType(KtProductAttribution));
+    GoRouter.of(context).pop();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('signer-settings-about')), findsOneWidget);
+  });
   testWidgets(
     'all mnemonic routes hold Android FLAG_SECURE for their lifetime',
     (tester) async {

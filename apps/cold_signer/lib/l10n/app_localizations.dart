@@ -100,6 +100,36 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @aboutPoweredBy.
+  ///
+  /// In zh, this message translates to:
+  /// **'由 Silicon Nexus LLC 提供动力'**
+  String get aboutPoweredBy;
+
+  /// No description provided for @aboutTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'关于'**
+  String get aboutTitle;
+
+  /// No description provided for @aboutVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'版本'**
+  String get aboutVersion;
+
+  /// No description provided for @aboutOpenSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'开源代码'**
+  String get aboutOpenSource;
+
+  /// No description provided for @aboutOfflineNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'本页面完全离线运行。请在另一台联网设备上查看源代码。'**
+  String get aboutOfflineNote;
+
   /// No description provided for @signerBackupEntryDesc.
   ///
   /// In zh, this message translates to:

@@ -5,6 +5,7 @@ import 'package:ui_kit/ui_kit.dart';
 
 import '../l10n/app_localizations.dart';
 import 'screens/signer_onboarding_screens.dart';
+import 'screens/signer_about_screen.dart';
 import 'developer_mode.dart';
 import 'screens/signer_settings_screens.dart';
 import 'screens/signer_qr_import_screen.dart';
@@ -14,7 +15,7 @@ import 'security/secure_vault.dart';
 import 'signing/mnemonic_review.dart';
 import 'state/signer_wallet_controller.dart';
 
-/// Registry of every Cold Signer screen (C1–C21), powering the router + gallery.
+/// Registry of Cold Signer screens (C1–C22), powering the router + gallery.
 final signerRegistry = <String, (String, WidgetBuilder)>{
   'C11 启动页': ('/splash', (c) => const SignerSplashScreen()),
   'C1 欢迎': ('/welcome', (c) => const SignerWelcomeScreen()),
@@ -45,6 +46,7 @@ final signerRegistry = <String, (String, WidgetBuilder)>{
   'C19 钱包管理': ('/wallet', (c) => const SignerWalletManageScreen()),
   'C20 安全设置': ('/security', (c) => const SignerSecuritySettingsScreen()),
   'C21 删除钱包': ('/delete', (c) => const SignerDeleteScreen()),
+  'C22 关于': ('/about', (c) => const SignerAboutScreen()),
 };
 
 /// The sign-request handed along the scan → parse → auth → result chain via

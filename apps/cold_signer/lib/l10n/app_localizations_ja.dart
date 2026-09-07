@@ -9,6 +9,22 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get aboutPoweredBy => 'Silicon Nexus LLC が提供';
+
+  @override
+  String get aboutTitle => 'このアプリについて';
+
+  @override
+  String get aboutVersion => 'バージョン';
+
+  @override
+  String get aboutOpenSource => 'ソースコード';
+
+  @override
+  String get aboutOfflineNote =>
+      'このページは完全にオフラインで動作します。ソースコードは別のオンライン端末で確認してください。';
+
+  @override
   String get signerBackupEntryDesc => '強力なパスワードで暗号化・端末に保存';
 
   @override

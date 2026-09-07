@@ -100,6 +100,12 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @aboutPoweredBy.
+  ///
+  /// In zh, this message translates to:
+  /// **'由 Silicon Nexus LLC 提供动力'**
+  String get aboutPoweredBy;
+
   /// No description provided for @signResultSaveFailed.
   ///
   /// In zh, this message translates to:

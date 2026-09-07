@@ -1,4 +1,5 @@
 {
+  "aboutPoweredBy": "Silicon Nexus LLC が提供",
   "signResultSaveFailed": "署名結果を安全に保存できませんでした。送信はしていません。再スキャンしてください。",
 "settingsGeneral": "一般",
 "generalSettingsDescription": "言語と表示通貨はアプリ全体に適用されます。ウォレットやオンチェーン資産には影響しません。",

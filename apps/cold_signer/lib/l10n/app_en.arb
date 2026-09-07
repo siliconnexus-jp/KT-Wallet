@@ -1,4 +1,9 @@
 {
+  "aboutPoweredBy": "Powered by Silicon Nexus LLC",
+  "aboutTitle": "About",
+  "aboutVersion": "Version",
+  "aboutOpenSource": "Open source",
+  "aboutOfflineNote": "This page works entirely offline. View the source code on a separate connected device.",
   "signerBackupEntryDesc": "Strong password · Save locally",
   "backupQrTitle": "Encrypted QR",
   "backupQrIntro": "Encrypt your recovery phrase on this device with a unique strong password, then save it as a KT Wallet QR image. No plaintext phrase or password is stored in the image.",

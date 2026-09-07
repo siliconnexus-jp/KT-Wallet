@@ -1,4 +1,5 @@
 {
+  "aboutPoweredBy": "Powered by Silicon Nexus LLC",
   "signResultSaveFailed": "The signed result could not be saved safely. Nothing was broadcast. Scan again to retry.",
 "settingsGeneral": "General",
 "generalSettingsDescription": "Language and display currency apply across the app. They do not change your wallets or on-chain assets.",

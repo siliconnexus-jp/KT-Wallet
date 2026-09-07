@@ -1,4 +1,9 @@
 {
+  "aboutPoweredBy": "由 Silicon Nexus LLC 提供动力",
+  "aboutTitle": "关于",
+  "aboutVersion": "版本",
+  "aboutOpenSource": "开源代码",
+  "aboutOfflineNote": "本页面完全离线运行。请在另一台联网设备上查看源代码。",
   "signerBackupEntryDesc": "强密码加密 · 保存到本地",
   "backupQrTitle": "加密二维码",
   "backupQrIntro": "使用独立强密码在本机加密助记词，生成带 KT Wallet 品牌的二维码图片。图片不包含明文助记词或密码。",

@@ -521,6 +521,7 @@ class _AboutScreenState extends State<AboutScreen> {
             ],
           ),
         ),
+        KtProductAttribution(poweredBy: l10n.aboutPoweredBy),
       ],
     );
   }

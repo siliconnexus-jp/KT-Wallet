@@ -9,6 +9,9 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get aboutPoweredBy => 'Silicon Nexus LLC が提供';
+
+  @override
   String get signResultSaveFailed =>
       '署名結果を安全に保存できませんでした。送信はしていません。再スキャンしてください。';
 

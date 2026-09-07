@@ -144,6 +144,7 @@ h2 { font-size: clamp(30px, 3.5vw, 46px); line-height: 1.22; letter-spacing: -.0
 .footer-brand span { font-size: 13px; color: var(--muted); line-height: 1.5; }
 .footer-links { display: flex; flex-wrap: wrap; gap: 20px; font-size: 14px; color: var(--muted); }
 .footer-grid > p { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--muted); }
+.footer-attribution { display: flex; flex-direction: column; gap: 4px; }
 /* Content stays visible without JavaScript. No scroll-gated opacity. */
 [data-reveal] { opacity: 1; }
 @media (max-width: 1100px) {

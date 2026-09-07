@@ -1,4 +1,9 @@
 {
+  "aboutPoweredBy": "Silicon Nexus LLC が提供",
+  "aboutTitle": "このアプリについて",
+  "aboutVersion": "バージョン",
+  "aboutOpenSource": "ソースコード",
+  "aboutOfflineNote": "このページは完全にオフラインで動作します。ソースコードは別のオンライン端末で確認してください。",
   "signerBackupEntryDesc": "強力なパスワードで暗号化・端末に保存",
   "backupQrTitle": "暗号化QR",
   "backupQrIntro": "この端末で独自の強いパスワードを使ってリカバリーフレーズを暗号化し、KT WalletのQR画像を作成します。画像に平文のフレーズやパスワードは含まれません。",

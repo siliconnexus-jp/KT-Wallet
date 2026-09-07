@@ -9,6 +9,9 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get aboutPoweredBy => '由 Silicon Nexus LLC 提供动力';
+
+  @override
   String get signResultSaveFailed => '无法安全保存签名结果。尚未广播，请重新扫描后重试。';
 
   @override

@@ -1092,6 +1092,45 @@ class _SignerSecuritySettingsScreenState
             ],
           ),
         ),
+        KtCard(
+          theme: _t,
+          child: Semantics(
+            button: true,
+            label: l10n.aboutTitle,
+            child: InkWell(
+              key: const ValueKey('signer-settings-about'),
+              onTap: () => context.push('/about'),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.info_outline_rounded,
+                      size: 19,
+                      color: SignerColors.text2,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        l10n.aboutTitle,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: SignerColors.text,
+                        ),
+                      ),
+                    ),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      size: 18,
+                      color: SignerColors.text2,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }

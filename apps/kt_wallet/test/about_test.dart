@@ -11,6 +11,7 @@ import 'package:kt_wallet/src/platform/external_actions.dart';
 import 'package:kt_wallet/src/screens/about_screen.dart';
 import 'package:kt_wallet/src/state/app_prefs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 Widget _app(Widget home, {Locale locale = const Locale('zh')}) => MaterialApp(
   debugShowCheckedModeBanner: false,
@@ -81,6 +82,18 @@ class _FakeTelemetryUploader implements DiagnosticTelemetryUploader {
 }
 
 void main() {
+  for (final lang in ['en', 'zh', 'ja']) {
+    testWidgets('about displays localized attribution and copyright in $lang', (
+      tester,
+    ) async {
+      final locale = Locale(lang);
+      final l10n = await AppLocalizations.delegate.load(locale);
+      await tester.pumpWidget(_app(const AboutScreen(), locale: locale));
+      await tester.pumpAndSettle();
+      expect(find.text(l10n.aboutPoweredBy), findsOneWidget);
+      expect(find.text(KtProductAttribution.copyright), findsOneWidget);
+    });
+  }
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
