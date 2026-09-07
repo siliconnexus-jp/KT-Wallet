@@ -139,6 +139,9 @@ Operational behavior (fixed by contract):
   noeviction instance via `BROADCAST_REDIS_URL`, or migrate the existing shared
   Redis policy. The application user needs read-only `+config|get` in addition
   to connection/get/set ACLs; the Gateway never changes Redis configuration.
+  `CONFIG` must not be disabled by `rename-command CONFIG ""`: enable the
+  command and restrict it to `GET` through ACLs instead. Keep `CONFIG SET`
+  unavailable to the application user.
   Plan memory for the full 24-hour ledger, preserve existing claims during
   migration, and do not restart/flush/reconfigure the store in a way that loses
   active claims. Capacity/storage faults must stop new submissions, not erase
