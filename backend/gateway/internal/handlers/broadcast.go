@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -128,6 +129,10 @@ func canonicalBroadcastPayload(
 		if !evmHexPayloadRe.MatchString(payload) {
 			return nil, rpc.Errorf(rpc.CodeInvalidParams,
 				`invalid params: "payload" must be a 0x-prefixed even-length hex string for EVM chains`)
+		}
+		raw, err := hex.DecodeString(payload[2:])
+		if err != nil || !validEVMBroadcastEnvelope(raw) {
+			return nil, rpc.Errorf(rpc.CodeInvalidParams, "invalid signed EVM transaction envelope")
 		}
 		return []byte(strings.ToLower(payload)), nil
 	case chain == "solana":

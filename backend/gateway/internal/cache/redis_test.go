@@ -24,6 +24,54 @@ func TestRedisStoreRequiresTLSOutsideLoopback(t *testing.T) {
 	}
 }
 
+type retentionPolicyHook struct {
+	policy string
+	err    error
+}
+
+func (h retentionPolicyHook) DialHook(next redis.DialHook) redis.DialHook { return next }
+func (h retentionPolicyHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return next
+}
+func (h retentionPolicyHook) ProcessHook(_ redis.ProcessHook) redis.ProcessHook {
+	return func(_ context.Context, cmd redis.Cmder) error {
+		args := cmd.Args()
+		if len(args) != 3 || args[0] != "config" || args[1] != "get" || args[2] != "maxmemory-policy" {
+			return errors.New("unexpected Redis command")
+		}
+		if h.err != nil {
+			return h.err
+		}
+		cmd.(*redis.MapStringStringCmd).SetVal(map[string]string{"maxmemory-policy": h.policy})
+		return nil
+	}
+}
+
+func TestBroadcastRetentionRequiresVerifiedNoEviction(t *testing.T) {
+	for _, tc := range []struct {
+		name, policy string
+		err          error
+		ok           bool
+	}{
+		{"safe", "noeviction", nil, true},
+		{"old production policy", "volatile-lru", nil, false},
+		{"all keys eviction", "allkeys-lru", nil, false},
+		{"missing policy", "", nil, false},
+		{"ACL denied", "", errors.New("NOPERM"), false},
+		{"offline", "", errors.New("offline"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := redis.NewClient(&redis.Options{Addr: "unused.invalid:6379"})
+			defer client.Close()
+			client.AddHook(retentionPolicyHook{policy: tc.policy, err: tc.err})
+			store := newRedisStore(client, time.Now, time.Second)
+			if err := store.ValidateBroadcastRetention(context.Background()); (err == nil) != tc.ok {
+				t.Fatalf("unexpected retention result: %v", err)
+			}
+		})
+	}
+}
+
 func TestRedisStoreAcceptsTLSAndLoopbackDevelopmentURLs(t *testing.T) {
 	for _, rawURL := range []string{
 		"rediss://user:secret@cache.example:6380/0",

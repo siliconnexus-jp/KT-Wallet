@@ -55,6 +55,30 @@ func main() {
 		defer func() { _ = sharedCache.Close() }()
 		log.Info("shared cache enabled")
 	}
+	// The read cache may use an evicting policy, but broadcast claims need a
+	// retention-guaranteed store before local results can be safely displaced.
+	// A dedicated instance also isolates balance/history churn from submission.
+	broadcastStore := sharedCache
+	if rawURL := strings.TrimSpace(os.Getenv("BROADCAST_REDIS_URL")); rawURL != "" {
+		var err error
+		broadcastStore, err = cache.NewRedisStore(rawURL)
+		if err != nil {
+			log.Error("invalid broadcast store configuration", "err", err)
+			os.Exit(1)
+		}
+		defer func() { _ = broadcastStore.Close() }()
+	}
+	if broadcastStore != nil {
+		checkCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		err := broadcastStore.ValidateBroadcastRetention(checkCtx)
+		cancel()
+		if err != nil {
+			log.Error("unsafe broadcast store retention", "err", err)
+			os.Exit(1)
+		}
+		cfg.BroadcastStore = broadcastStore
+		log.Info("broadcast store retention verified")
+	}
 	if v := envList("ETH_RPC_URLS"); len(v) > 0 {
 		cfg.EthURLs = v
 	}

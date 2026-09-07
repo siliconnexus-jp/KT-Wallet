@@ -91,6 +91,21 @@ func (s *RedisStore) Ping(ctx context.Context) error {
 	return err
 }
 
+// ValidateBroadcastRetention is a read-only startup check. Read caches may
+// tolerate eviction; irreversible-write claims may not. Never CONFIG SET here:
+// operators must migrate a volatile-lru read cache or supply a separate guard
+// Redis before rolling out a binary that can evict its local result cache.
+func (s *RedisStore) ValidateBroadcastRetention(ctx context.Context) error {
+	values, err := s.client.ConfigGet(ctx, "maxmemory-policy").Result()
+	if err != nil {
+		return errors.New("cannot verify broadcast Redis retention: require CONFIG GET permission for maxmemory-policy")
+	}
+	if values["maxmemory-policy"] != "noeviction" {
+		return errors.New("broadcast Redis requires maxmemory-policy=noeviction; use a dedicated BROADCAST_REDIS_URL or migrate the shared Redis")
+	}
+	return nil
+}
+
 func (s *RedisStore) Get(ctx context.Context, key string) ([]byte, error) {
 	probe, err := s.beginOperation()
 	if err != nil {

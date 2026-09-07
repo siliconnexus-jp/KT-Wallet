@@ -63,7 +63,7 @@ docker:
 	docker build --platform $(PLATFORM) -t $(IMAGE) .
 
 docker-audit: docker
-	GOTOOLCHAIN=go1.26.5+auto $(GO) run github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.2.4 scan image --format=vertical $(IMAGE)
+	GOTOOLCHAIN=go1.26.6+auto $(GO) run github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.2.4 scan image --format=vertical $(IMAGE)
 
 docker-run: docker
 	docker run --rm -p 8080:8080 $(IMAGE)

@@ -82,6 +82,7 @@ curl -s -H "Authorization: Bearer $METRICS_BEARER_TOKEN" localhost:8080/metrics
 | `OFFICIAL_TOKENS_FILE` | *(built-in catalog)* | Optional absolute path to the operator-managed verified-token JSON array |
 | `TOKEN_RISKS_FILE` | *(empty registry)* | Optional absolute path to the operator-managed malicious/spam contract registry |
 | `REDIS_URL` | *(unset)* | Shared read cache plus atomic cross-instance broadcast guard; required for a multi-instance production deployment. Remote hosts require `rediss://`, while plaintext `redis://` is accepted only on loopback; startup fails when explicitly configured but unavailable |
+| `BROADCAST_REDIS_URL` | `REDIS_URL` | Optional dedicated Redis for broadcast claims. The selected broadcast Redis must use `maxmemory-policy=noeviction`; startup checks it using read-only `CONFIG GET`. An evicting read cache cannot double as the broadcast store. |
 | `RATE_LIMIT_RPS` | `10` | Inbound token-bucket refill per client IP |
 | `RATE_LIMIT_BURST` | `20` | Inbound token-bucket burst per client IP |
 | `TRUSTED_PROXY_CIDRS` | *(unset)* | Comma-separated reverse-proxy CIDRs allowed to supply `X-Forwarded-For` / `X-Real-IP`; for same-host Nginx use `127.0.0.1/32,::1/128` |
@@ -126,6 +127,22 @@ Operational behavior (fixed by contract):
   states require their matching RPC code. Corrupt records fail closed instead
   of returning an empty success. This is the final defense against a client,
   CDN or outer proxy replaying the same POST.
+  The local 4,096-entry cache evicts only shared-persisted terminal results or
+  explicit node rejections, removing their expiry index at the same time. With
+  Redis this is not a daily submission quota. Without Redis, accepted/unknown
+  and in-flight claims stay pinned and saturation fails closed; local-only mode
+  is not a high-volume production replacement for the shared ledger. An evicted
+  explicit rejection may be checked by the node again, never assumed accepted.
+  EVM admission checks complete canonical RLP framing and signature fields;
+  it is not signature recovery or execution validation.
+  Before upgrading an old `volatile-lru` deployment, provision a separate
+  noeviction instance via `BROADCAST_REDIS_URL`, or migrate the existing shared
+  Redis policy. The application user needs read-only `+config|get` in addition
+  to connection/get/set ACLs; the Gateway never changes Redis configuration.
+  Plan memory for the full 24-hour ledger, preserve existing claims during
+  migration, and do not restart/flush/reconfigure the store in a way that loses
+  active claims. Capacity/storage faults must stop new submissions, not erase
+  the idempotency ledger. Runtime policy changes are an operator trust boundary.
 - **Caching** — prices 30 s, but only after the complete requested CoinGecko
   set passes exact-schema, freshness and cross-currency consistency checks;
   malformed or partial market responses never populate the cache. Display

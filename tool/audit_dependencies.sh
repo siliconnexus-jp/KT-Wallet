@@ -6,7 +6,7 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 # A patched Go toolchain is part of the evidence. Do not let the scanner or
 # Gateway silently fall back to an older globally installed patch release.
-export GOTOOLCHAIN=go1.26.5+auto
+export GOTOOLCHAIN=go1.26.6+auto
 
 "$REPO_ROOT/tool/audit_runtime_privacy.sh"
 "$REPO_ROOT/tool/test_bundletool_version_reader.sh"

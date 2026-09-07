@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	evmRawTx           = "0x02f87001830f4240843b9aca00850df847580082520894111111111111111111111111111111111111111187038d7ea4c6800080c001a0aa" // arbitrary even-length hex
-	solRawTx           = "AXNpZ25hdHVyZS1ieXRlcy1oZXJlLW5vdC1yZWFslgEAAQJzb2xhbmEtdHgtYnl0ZXM="                                               // valid base64
+	evmRawTx           = "0x02e2018001028252089411111111111111111111111111111111111111110180c0800101" // complete signed envelope; mock signature, never broadcast to a real node
+	solRawTx           = "AXNpZ25hdHVyZS1ieXRlcy1oZXJlLW5vdC1yZWFslgEAAQJzb2xhbmEtdHgtYnl0ZXM="       // valid base64
 	tronRawTx          = `{"raw_data":{"contract":[{"type":"TransferContract"}]},"signature":["ab12"],"txID":"deadbeef"}`
 	evmBroadcastHash   = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	solanaBroadcastSig = "1111111111111111111111111111111111111111111111111111111111111111"

@@ -30,6 +30,9 @@ type Store interface {
 // AtomicStore extends Store with the one primitive required by irreversible
 // transaction submission. SetNX must atomically create key only when it does
 // not already exist, across every Gateway process sharing the store.
+// A configured broadcast store must retain successful writes for their TTL
+// (no pressure eviction). Local terminal caches may be displaced while this
+// shared claim is authoritative. Redis production wiring verifies noeviction.
 //
 // Read caches deliberately degrade to a miss when Redis is unavailable. A
 // broadcast guard does not: without an atomic claim it cannot prove that a
