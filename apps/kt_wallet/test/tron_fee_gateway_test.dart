@@ -13,7 +13,7 @@ import 'package:kt_wallet/src/transfer/transfer_draft.dart';
 
 const owner = 'TNXoiAJ3dct8Fjg4M9fkLFh9S2v9TXc32G';
 const recipient = 'TJRabPrwbZy45sbavfcjinPJC18kjpRTv8';
-const token = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+const usdtContract = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 
 class _Direct extends RestTransport {
   int calls = 0;
@@ -119,7 +119,7 @@ GatewayClient gateway({
 );
 
 void main() {
-  for (final contract in [null, token]) {
+  for (final contract in [null, usdtContract]) {
     test(
       'complete ${contract == null ? 'TRX' : 'USDT'} quote uses gateway without direct RPC',
       () async {
@@ -193,7 +193,7 @@ void main() {
             recipient: recipient,
             amount: Amount.parse('1', 6),
             feeTier: 1,
-            tokenContract: token,
+            tokenContract: usdtContract,
           ),
           from: owner,
           expectedNetworkIdentity: null,

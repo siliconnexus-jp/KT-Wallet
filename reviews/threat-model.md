@@ -7,11 +7,11 @@ their enforcement, residual risks, and the release-hardening checklist.
 
 | # | Invariant | Enforced by | Status |
 |---|-----------|-------------|--------|
-| 1 | No key material in logs/exceptions/persistence/Dart state | code review; prod Dart never holds mnemonic | ✓ (mock is test-only) |
+| 1 | No key material in logs/exceptions; minimize transient secret state | native storage; mnemonics cross Dart during onboarding/import/export only | Not a guarantee of zero managed-memory copies |
 | 2 | Native key buffers zeroed on all paths | Swift `resetBytes`/`memset_s`, Kotlin `fill(0)` | ✓ entropy; managed key objects rely on lib dealloc (P1-4 device recheck) |
 | 3 | No AuthGate bypass on sign/export/delete | plugin dispatch routes all three through AuthGate | ✓ |
 | 4 | Android setUserAuthenticationRequired / iOS biometryCurrentSet | KeystoreManager / KeychainStore | ✓ when requireAuth=true; hot-wallet enforcement in creation flow |
-| 5 | Cold Signer double-encryption both layers required | KDF blob header, fail-closed read | ✓ |
+| 5 | Cold Signer authentication-bound native storage | Android Keystore / iOS Keychain; optional kdfPassword is not wired into onboarding | No independent App-PIN encryption layer; do not claim double encryption |
 | 6 | All decode paths total (typed error, never crash) | CBOR depth guard + overflow fix + 10k fuzz | ✓ |
 | 7 | All size/count limits rejected (send AND receive) | payload/fragmenter/aggregator caps | ✓ |
 | 8 | summary is display-only, never authoritative | validator uses parse result only | ✓ |

@@ -692,6 +692,14 @@ class SignerWalletController extends ChangeNotifier {
       if (!isFlutterTestEnv) rethrow;
       parsed = _testOnlyParsedRequest(stableRequest, coin);
     }
+    if (coin != Coin.tron && coin != Coin.solana) {
+      // Outside the test-fixture fallback: even injected/fake signing engines
+      // must not accept a mismatched or unregistered EVM domain.
+      if (parsed.networkId == null || stableRequest.chainId == null) {
+        throw StateError('missing EVM signing network');
+      }
+      validateEvmNetworkIdentity(parsed.chain, parsed.networkId!);
+    }
     if (stableRequest.chainId != null &&
         parsed.networkId != BigInt.from(stableRequest.chainId!)) {
       throw StateError('transaction chainId does not match request');

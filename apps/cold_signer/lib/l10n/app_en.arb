@@ -35,6 +35,7 @@
   "signRejectNoSignature": "This request was not signed. See the reason below.",
   "amountPrecisionUnknown": "Token precision is unverified. Check the raw amount and contract address.",
   "amountBaseUnits": "base units",
+  "offlineTokenCatalogMatch": "Name and decimals come from the built-in catalog. Check the full contract address.",
   "qrImportTitle": "Import encrypted QR",
   "qrImportDescription": "Scan a KT Wallet encrypted backup or choose its image from this device. Decryption happens entirely offline.",
   "qrImportScan": "Scan backup QR",

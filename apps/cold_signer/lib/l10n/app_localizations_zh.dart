@@ -100,7 +100,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get signRejectUnsupported =>
-      '无法安全解析此交易或网络信息不匹配。仅支持原生币转账、Token 转账及 approve(被授权合约, 0) 撤销。';
+      '无法安全解析此交易或网络信息不匹配。仅支持原生币转账、Token 转账及 approve（被授权合约，0）撤销。';
 
   @override
   String get signRejectInvalid => '二维码不是有效的待签名交易。请扫描在线钱包生成的交易二维码。';
@@ -119,6 +119,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get amountBaseUnits => '基础单位';
+
+  @override
+  String get offlineTokenCatalogMatch => '名称与精度来自内置目录，请核对完整合约地址。';
 
   @override
   String get qrImportTitle => '加密二维码导入';

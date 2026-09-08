@@ -277,7 +277,7 @@ abstract class AppLocalizations {
   /// No description provided for @signRejectUnsupported.
   ///
   /// In zh, this message translates to:
-  /// **'无法安全解析此交易或网络信息不匹配。仅支持原生币转账、Token 转账及 approve(被授权合约, 0) 撤销。'**
+  /// **'无法安全解析此交易或网络信息不匹配。仅支持原生币转账、Token 转账及 approve（被授权合约，0）撤销。'**
   String get signRejectUnsupported;
 
   /// No description provided for @signRejectInvalid.
@@ -315,6 +315,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'基础单位'**
   String get amountBaseUnits;
+
+  /// No description provided for @offlineTokenCatalogMatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'名称与精度来自内置目录，请核对完整合约地址。'**
+  String get offlineTokenCatalogMatch;
 
   /// No description provided for @qrImportTitle.
   ///

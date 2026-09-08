@@ -35,6 +35,7 @@
   "signRejectNoSignature": "このリクエストには署名していません。以下の理由を確認してください。",
   "amountPrecisionUnknown": "トークンの精度は未検証です。最小単位の数量とコントラクトアドレスを確認してください。",
   "amountBaseUnits": "最小単位",
+  "offlineTokenCatalogMatch": "名称と桁数は内蔵カタログに基づきます。コントラクトアドレス全体をご確認ください。",
   "qrImportTitle": "暗号化QRから復元",
   "qrImportDescription": "KT Walletの暗号化バックアップQRをスキャンするか、端末内の画像を選択します。復号はすべてオフラインで行います。",
   "qrImportScan": "バックアップQRをスキャン",

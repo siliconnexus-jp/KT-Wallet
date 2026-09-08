@@ -109,12 +109,13 @@ object WalletCoreBridge {
 
     data class Signed(val signedTx: ByteArray, val txHash: String)
 
-    fun sign(entropy: ByteArray, coin: String, signingInput: ByteArray): Signed {
+    fun sign(entropy: ByteArray, coin: String, signingInput: ByteArray, allowUnknownEvmNetwork: Boolean = true): Signed {
         val type = coinType(coin)
         if (type == CoinType.TRON) return signTron(entropy, signingInput)
         if (type == CoinType.SOLANA) return signSolana(entropy, signingInput)
         if (type != CoinType.ETHEREUM && type != CoinType.POLYGON) throw SignFailedException()
         val tx = decodeEip1559(signingInput)
+        if (!EvmNetworkPolicy.allows(coin, tx.chainId, allowUnknownEvmNetwork)) throw InvalidInputException()
         val key = HDWallet(entropy, "").getKeyForCoin(type)
         val keyBytes = key.data()
         try {

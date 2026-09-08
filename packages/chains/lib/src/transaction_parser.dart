@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'address.dart';
 import 'base58.dart';
 import 'evm_tx.dart';
+import 'evm_network_identity.dart';
 import 'sha256.dart';
 import 'solana_tx.dart';
 import 'tx_preview.dart';
@@ -61,6 +62,9 @@ ParsedUnsignedTransfer _parseEvm(Chain chain, Uint8List raw) {
     throw const FormatException('invalid EIP-1559 fields');
   }
   final chainId = _bigInt(fields[0].payload);
+  // Online custom RPCs remain supported, but a known network cannot be
+  // relabelled as another coin. Offline callers additionally reject unknowns.
+  validateEvmNetworkIdentity(chain, chainId, allowUnknown: true);
   final nonce = _bigInt(fields[1].payload);
   final maxPriorityFeePerGas = _bigInt(fields[2].payload);
   final maxFeePerGas = _bigInt(fields[3].payload);

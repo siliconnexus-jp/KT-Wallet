@@ -115,12 +115,16 @@ enum WalletCoreBridge {
     }
   }
 
-  static func sign(entropy: Data, coin: String, signingInput: Data) throws
+  static func sign(entropy: Data, coin: String, signingInput: Data, allowUnknownEvmNetwork: Bool = true) throws
     -> (signedTx: Data, txHash: String)
   {
     guard let type = coinType(coin) else { throw BridgeError.invalidInput }
     if type == .tron { return try signTron(entropy: entropy, rawData: signingInput) }
     if type == .solana { return try signSolana(entropy: entropy, message: signingInput) }
+    let decoded = try decodeEip1559(signingInput)
+    guard EvmNetworkPolicy.allows(coin: coin, raw: decoded.chainID, allowUnknown: allowUnknownEvmNetwork) else {
+      throw BridgeError.invalidInput
+    }
     return try signEvm(entropy: entropy, coin: type, encoded: signingInput)
   }
 

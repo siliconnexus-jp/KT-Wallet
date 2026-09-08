@@ -134,6 +134,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get amountBaseUnits => 'base units';
 
   @override
+  String get offlineTokenCatalogMatch =>
+      'Name and decimals come from the built-in catalog. Check the full contract address.';
+
+  @override
   String get qrImportTitle => 'Import encrypted QR';
 
   @override

@@ -272,60 +272,61 @@ void main() {
     },
   );
 
-  testWidgets('result QR: closing warns that it cannot revoke a scanned signature', (
-    tester,
-  ) async {
-    final request = demoSignRequest();
-    final router = GoRouter(
-      initialLocation: '/result-qr',
-      routes: [
-        GoRoute(
-          path: '/result-qr',
-          builder: (_, _) => SignerResultQrScreen(
-            request: request,
-            result: demoSignResult(request),
-            fragmentChunkSize: demoChunkSize,
+  testWidgets(
+    'result QR: closing warns that it cannot revoke a scanned signature',
+    (tester) async {
+      final request = demoSignRequest();
+      final router = GoRouter(
+        initialLocation: '/result-qr',
+        routes: [
+          GoRoute(
+            path: '/result-qr',
+            builder: (_, _) => SignerResultQrScreen(
+              request: request,
+              result: demoSignResult(request),
+              fragmentChunkSize: demoChunkSize,
+            ),
           ),
+          GoRoute(
+            path: '/home',
+            builder: (_, _) => const Scaffold(body: Text('扫描待签名交易')),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        MaterialApp.router(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: ThemeData(
+            brightness: Brightness.dark,
+            scaffoldBackgroundColor: SignerColors.bg,
+          ),
+          routerConfig: router,
         ),
-        GoRoute(
-          path: '/home',
-          builder: (_, _) => const Scaffold(body: Text('扫描待签名交易')),
-        ),
-      ],
-    );
-    addTearDown(router.dispose);
-    await tester.pumpWidget(
-      MaterialApp.router(
-        locale: const Locale('zh'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        theme: ThemeData(
-          brightness: Brightness.dark,
-          scaffoldBackgroundColor: SignerColors.bg,
-        ),
-        routerConfig: router,
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('签名完成'), findsOneWidget);
-    await tester.tap(find.text('关闭签名二维码'));
-    await tester.pumpAndSettle();
-    expect(find.text('关闭签名二维码？'), findsOneWidget);
-    expect(find.textContaining('不会被撤销'), findsOneWidget);
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('签名完成'), findsOneWidget);
+      await tester.tap(find.text('关闭签名二维码'));
+      await tester.pumpAndSettle();
+      expect(find.text('关闭签名二维码？'), findsOneWidget);
+      expect(find.textContaining('不会被撤销'), findsOneWidget);
 
-    // Cancel keeps the result screen.
-    await tester.tap(find.text('取消'));
-    await tester.pumpAndSettle();
-    expect(find.text('签名完成'), findsOneWidget);
+      // Cancel keeps the result screen.
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(find.text('签名完成'), findsOneWidget);
 
-    // Closing the display does not mutate the signed transaction.
-    await tester.tap(find.text('关闭签名二维码'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('关闭签名二维码').last);
-    await tester.pumpAndSettle();
-    expect(find.text('二维码已关闭，未撤销签名'), findsOneWidget);
-    expect(find.text('扫描待签名交易'), findsOneWidget); // C5 home
-  });
+      // Closing the display does not mutate the signed transaction.
+      await tester.tap(find.text('关闭签名二维码'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('关闭签名二维码').last);
+      await tester.pumpAndSettle();
+      expect(find.text('二维码已关闭，未撤销签名'), findsOneWidget);
+      expect(find.text('扫描待签名交易'), findsOneWidget); // C5 home
+    },
+  );
 
   testWidgets('home: settings gear opens security settings', (tester) async {
     await _open(tester, 'C5 离线首页');

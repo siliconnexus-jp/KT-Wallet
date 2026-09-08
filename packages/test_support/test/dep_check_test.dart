@@ -310,6 +310,34 @@ Gateway `1.2.2` currently exposes 16 mainnet/testnet network profiles.
     });
 
     test(
+      'dated HTML can stay historical without weakening current markers',
+      () {
+        expect(
+          findGatewayReleaseVersionIssues(
+            gatewaySource: source,
+            backendReadme: backendReadme,
+            rootReadme: rootReadme,
+            readinessPlan: readinessPlan,
+            htmlReport: 'Historical report 1.0.0',
+            validateHistoricalHtml: false,
+          ),
+          isEmpty,
+        );
+        expect(
+          findGatewayReleaseVersionIssues(
+            gatewaySource: source,
+            backendReadme: 'stale',
+            rootReadme: rootReadme,
+            readinessPlan: readinessPlan,
+            htmlReport: 'Historical report 1.0.0',
+            validateHistoricalHtml: false,
+          ),
+          contains('backend README health example is not source 1.2.3'),
+        );
+      },
+    );
+
+    test(
       'rejects stale current markers even if history mentions the version',
       () {
         final issues = findGatewayReleaseVersionIssues(

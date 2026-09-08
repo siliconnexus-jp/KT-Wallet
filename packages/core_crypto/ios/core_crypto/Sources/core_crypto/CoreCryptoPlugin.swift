@@ -294,7 +294,8 @@ public class CoreCryptoPlugin: NSObject, FlutterPlugin {
     let input = try requireSigningInput(a)
     let context = try await AuthGate.shared.authenticate(reason: "Authorize transaction signing")
     let signed = try withEntropy(a, context: context) {
-      try WalletCoreBridge.sign(entropy: $0, coin: coin, signingInput: input)
+      try WalletCoreBridge.sign(entropy: $0, coin: coin, signingInput: input,
+        allowUnknownEvmNetwork: Bundle.main.bundleIdentifier != "cc.siliconnexus.ktwallet.coldsigner")
     }
     return ["signedTx": FlutterStandardTypedData(bytes: signed.signedTx), "txHash": signed.txHash]
   }

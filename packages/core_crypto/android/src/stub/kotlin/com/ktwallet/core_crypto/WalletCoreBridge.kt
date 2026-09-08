@@ -34,6 +34,6 @@ object WalletCoreBridge {
 
     data class Signed(val signedTx: ByteArray, val txHash: String)
 
-    fun sign(entropy: ByteArray, coin: String, signingInput: ByteArray): Signed =
+    fun sign(entropy: ByteArray, coin: String, signingInput: ByteArray, allowUnknownEvmNetwork: Boolean = true): Signed =
         throw UnavailableException()
 }

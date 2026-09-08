@@ -15,6 +15,7 @@ import '../security/pin_lock.dart';
 import '../security/security_check.dart';
 import '../signing/demo_airgap.dart';
 import '../signing/frame_scan.dart';
+import '../signing/offline_token_catalog.dart';
 import '../state/signer_wallet_controller.dart';
 import '../widgets/scan_viewfinder.dart';
 
@@ -64,7 +65,18 @@ String _addressKeyForCoin(int coin) => switch (coin) {
 ParsedUnsignedTransfer? _parsedRequest(SignRequest? request) {
   if (request == null) return null;
   try {
-    return parseUnsignedTransfer(_chainForCoin(request.coin), request.rawTx);
+    final parsed = parseUnsignedTransfer(
+      _chainForCoin(request.coin),
+      request.rawTx,
+    );
+    if (parsed.networkId != null) {
+      validateEvmNetworkIdentity(parsed.chain, parsed.networkId!);
+      if (request.chainId == null ||
+          parsed.networkId != BigInt.from(request.chainId!)) {
+        return null;
+      }
+    }
+    return parsed;
   } on Object {
     return null;
   }
@@ -106,7 +118,9 @@ bool _isStructurallySupported(SignRequest request) {
   }
   final ParsedUnsignedTransfer parsed;
   try {
-    parsed = parseUnsignedTransfer(_chainForCoin(request.coin), request.rawTx);
+    final verified = _parsedRequest(request);
+    if (verified == null) return false;
+    parsed = verified;
   } on Object {
     return false;
   }
@@ -146,32 +160,48 @@ String _group(String digits) {
   return out.toString();
 }
 
-Widget _kv(String k, String v, {bool mono = false, Color? color}) => Row(
-  crossAxisAlignment: CrossAxisAlignment.start,
-  children: [
-    Flexible(
-      flex: 2,
-      child: Text(
-        k,
-        style: const TextStyle(fontSize: 14, color: SignerColors.text2),
-      ),
-    ),
-    const SizedBox(width: 16),
-    Expanded(
-      flex: 3,
-      child: Text(
-        v,
-        textAlign: TextAlign.right,
-        style: TextStyle(
-          fontSize: mono ? 13 : 14,
-          fontWeight: FontWeight.w500,
-          fontFamily: mono ? KtFonts.mono : KtFonts.ui,
-          color: color ?? SignerColors.text,
-        ),
-      ),
-    ),
-  ],
-);
+Widget _kv(String k, String v, {bool mono = false, Color? color}) =>
+    LayoutBuilder(
+      builder: (context, constraints) {
+        final stacked =
+            constraints.maxWidth < 300 ||
+            MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+        final label = Text(
+          k,
+          style: const TextStyle(
+            fontSize: 14,
+            height: 1.45,
+            color: SignerColors.text2,
+          ),
+        );
+        final value = Text(
+          v,
+          key: ValueKey('signer-detail-value-$k'),
+          textAlign: stacked ? TextAlign.start : TextAlign.end,
+          style: TextStyle(
+            fontSize: mono ? 13 : 14,
+            height: 1.45,
+            fontWeight: FontWeight.w500,
+            fontFamily: mono ? KtFonts.mono : KtFonts.ui,
+            color: color ?? SignerColors.text,
+          ),
+        );
+        if (stacked) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [label, const SizedBox(height: 4), value],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(flex: 2, child: label),
+            const SizedBox(width: 16),
+            Expanded(flex: 3, child: value),
+          ],
+        );
+      },
+    );
 
 Widget _card(Widget child) =>
     KtGlassSurface(dark: true, padding: const EdgeInsets.all(16), child: child);
@@ -1195,6 +1225,19 @@ class SignerParseScreen extends StatelessWidget {
       return _unavailableSigningState(l10n, title: l10n.confirmTxContent);
     }
     final parsed = _parsedRequest(req);
+    if (req != null &&
+        parsed == null &&
+        !(kDebugMode &&
+            req.coin == 195 &&
+            req.rawTx.isNotEmpty &&
+            req.rawTx.first == 0x7b)) {
+      return SignerRiskScreen(
+        rejection: SignerRejection(
+          SignerRejectionReason.unsupportedTransaction,
+          request: req,
+        ),
+      );
+    }
     final controller = SignerWalletScope.maybeOf(context);
     final testSummary = kDebugMode
         ? req?.summary ?? const <int, Object?>{}
@@ -1209,17 +1252,9 @@ class SignerParseScreen extends StatelessWidget {
     final reqLabel = req == null
         ? (kDebugMode ? 'REQ-7F3A2C' : '')
         : _reqLabel(req.reqId);
-    // Native scales are local protocol facts; QR summary metadata is untrusted.
-    final nativeAsset = parsed?.operation == TxOperation.nativeTransfer
-        ? switch (parsed!.chain) {
-            Chain.ethereum || Chain.base || Chain.arbitrum => (18, 'ETH'),
-            Chain.polygon => (18, 'POL'),
-            Chain.avalanche => (18, 'AVAX'),
-            Chain.bnb => (18, 'BNB'),
-            Chain.tron => (6, 'TRX'),
-            Chain.solana => (9, 'SOL'),
-          }
-        : null;
+    // Local protocol/catalog scales only; QR summary metadata is untrusted.
+    final localToken = parsed == null ? null : offlineTokenFor(parsed);
+    final asset = parsed == null ? null : offlineAssetFor(parsed);
     final amount = req == null
         ? (kDebugMode ? '120.00 USDT' : '')
         : parsed == null
@@ -1228,8 +1263,8 @@ class SignerParseScreen extends StatelessWidget {
               : l10n.transactionParseFailed
         : parsed.operation == TxOperation.approvalRevoke
         ? l10n.approvalRevokeZeroAllowance
-        : nativeAsset != null
-        ? '${Amount(raw: parsed.amountRaw, decimals: nativeAsset.$1).format()} ${nativeAsset.$2}'
+        : asset != null
+        ? '${Amount(raw: parsed.amountRaw, decimals: asset.$1).format()} ${asset.$2}'
         : '${_group(parsed.amountRaw.toString())} ${l10n.amountBaseUnits}';
     final rawAmount = req == null
         ? (kDebugMode ? '120,000,000' : '')
@@ -1241,7 +1276,7 @@ class SignerParseScreen extends StatelessWidget {
         ? (kDebugMode ? 6 : 0)
         : parsed == null && kDebugMode && testSummary['decimals'] is int
         ? testSummary['decimals']! as int
-        : nativeAsset?.$1;
+        : asset?.$1;
     final from = req == null
         ? (kDebugMode ? demoSignerAddress : '')
         : parsed?.from ??
@@ -1325,7 +1360,10 @@ class SignerParseScreen extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const _Dot(ChainColors.tron, size: 8),
+              _Dot(
+                req == null ? ChainColors.tron : _colorForCoin(req.coin),
+                size: 8,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -1353,6 +1391,7 @@ class SignerParseScreen extends StatelessWidget {
             children: [
               Text(
                 amount,
+                textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 30,
                   fontWeight: FontWeight.w700,
@@ -1376,12 +1415,25 @@ class SignerParseScreen extends StatelessWidget {
                   decimals == null
                       ? l10n.amountPrecisionUnknown
                       : l10n.rawAmountPrecision(rawAmount, decimals),
+                  textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 12,
                     fontFamily: KtFonts.mono,
                     color: SignerColors.text2,
                   ),
                 ),
+              if (localToken != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  l10n.offlineTokenCatalogMatch,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.5,
+                    color: SignerColors.text2,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -1400,8 +1452,7 @@ class SignerParseScreen extends StatelessWidget {
             ],
           ),
         ),
-        // Request metadata card — live flow only, so the gallery snapshot
-        // (and its golden) stays byte-identical.
+        // Request metadata is shown only for a decoded live request.
         if (req != null)
           _card(
             Column(
@@ -1804,9 +1855,23 @@ class SignerAuthScreen extends StatelessWidget {
       return _unavailableSigningState(l10n, title: l10n.authTitle);
     }
     final parsed = _parsedRequest(req);
+    if (req != null &&
+        parsed == null &&
+        !(kDebugMode &&
+            req.coin == 195 &&
+            req.rawTx.isNotEmpty &&
+            req.rawTx.first == 0x7b)) {
+      return SignerRiskScreen(
+        rejection: SignerRejection(
+          SignerRejectionReason.unsupportedTransaction,
+          request: req,
+        ),
+      );
+    }
     final testSummary = kDebugMode
         ? req?.summary ?? const <int, Object?>{}
         : const <int, Object?>{};
+    final asset = parsed == null ? null : offlineAssetFor(parsed);
     final amount = req == null
         ? (kDebugMode ? '120.00 USDT' : '')
         : parsed == null
@@ -1815,7 +1880,9 @@ class SignerAuthScreen extends StatelessWidget {
               : l10n.transactionParseFailed
         : parsed.operation == TxOperation.approvalRevoke
         ? l10n.approvalRevokeZeroAllowance
-        : '${_group(parsed.amountRaw.toString())} base units';
+        : asset != null
+        ? '${Amount(raw: parsed.amountRaw, decimals: asset.$1).format()} ${asset.$2}'
+        : '${_group(parsed.amountRaw.toString())} ${l10n.amountBaseUnits}';
     final reqLabel = req == null
         ? (kDebugMode ? 'REQ-7F3A2C' : '')
         : _reqLabel(req.reqId);

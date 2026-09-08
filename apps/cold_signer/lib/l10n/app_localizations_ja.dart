@@ -128,6 +128,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get amountBaseUnits => '最小単位';
 
   @override
+  String get offlineTokenCatalogMatch =>
+      '名称と桁数は内蔵カタログに基づきます。コントラクトアドレス全体をご確認ください。';
+
+  @override
   String get qrImportTitle => '暗号化QRから復元';
 
   @override

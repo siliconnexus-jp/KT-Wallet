@@ -781,6 +781,7 @@ List<String> findGatewayReleaseVersionIssues({
   required String rootReadme,
   required String readinessPlan,
   required String htmlReport,
+  bool validateHistoricalHtml = true,
 }) {
   final matches = RegExp(
     r'^\s*Version:\s*"([0-9]+\.[0-9]+\.[0-9]+)",\s*$',
@@ -825,16 +826,18 @@ List<String> findGatewayReleaseVersionIssues({
       '当前生产 Gateway $deployedVersion',
       'P0/P1 readiness plan production marker is not $deployedVersion',
     ),
-    (
-      htmlReport,
-      'Gateway 源码版本 · $sourceVersion',
-      'HTML report source marker is not $sourceVersion',
-    ),
-    (
-      htmlReport,
-      'Gateway 发布状态 · $deployedVersion 已上线',
-      'HTML report deployed section is not $deployedVersion',
-    ),
+    if (validateHistoricalHtml)
+      (
+        htmlReport,
+        'Gateway 源码版本 · $sourceVersion',
+        'HTML report source marker is not $sourceVersion',
+      ),
+    if (validateHistoricalHtml)
+      (
+        htmlReport,
+        'Gateway 发布状态 · $deployedVersion 已上线',
+        'HTML report deployed section is not $deployedVersion',
+      ),
   ];
   for (final (contents, marker, issue) in requiredMarkers) {
     if (!contents.contains(marker)) issues.add(issue);
@@ -1059,12 +1062,17 @@ List<String> findWalletDisplaySnapshotBoundaryIssues(
         'market snapshot decoder does not enforce its size bound',
     'members: rawVersion == 1 ? _topV1 : _topV2':
         'market snapshot top-level schema is not version-closed',
-    'members: _amountMembers': 'market snapshot amount schema is not closed',
     'positiveFiniteMarketNumber(entry.value)':
         'market snapshot prices are not positive finite values',
   };
   for (final entry in marketRequired.entries) {
     if (!marketContents.contains(entry.key)) issues.add(entry.value);
+  }
+  if (!marketContents.contains('members: _amountMembers') &&
+      !marketContents.contains(
+        'members: includesTronActivation ? _tronAmountMembers : _amountMembers',
+      )) {
+    issues.add('market snapshot amount schema is not closed');
   }
   const historyRequired = {
     'static const maxSnapshotChars = 1048576':

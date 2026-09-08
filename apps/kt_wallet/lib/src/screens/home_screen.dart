@@ -777,7 +777,7 @@ class _HomeAssetTile extends StatelessWidget {
                       Flexible(child: nameText()),
                       if (isMultiChain) ...[
                         const SizedBox(width: 6),
-                        multiChainLabel(),
+                        Flexible(child: multiChainLabel()),
                       ],
                     ],
                   ),

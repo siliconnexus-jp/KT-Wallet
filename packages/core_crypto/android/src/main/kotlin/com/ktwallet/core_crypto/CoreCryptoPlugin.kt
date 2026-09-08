@@ -359,7 +359,10 @@ class CoreCryptoPlugin :
         val input = requireSigningInput(call.argument<Any?>("signingInput"))
         promptThen(result, "Authorize transaction signing") {
             var signed: WalletCoreBridge.Signed? = null
-            withEntropy(call) { signed = WalletCoreBridge.sign(it, coin, input) }
+            withEntropy(call) {
+                signed = WalletCoreBridge.sign(it, coin, input,
+                    allowUnknownEvmNetwork = applicationContext.packageName != "cc.siliconnexus.ktwallet.coldsigner")
+            }
             val completed = requireNotNull(signed)
             mapOf("signedTx" to completed.signedTx, "txHash" to completed.txHash)
         }

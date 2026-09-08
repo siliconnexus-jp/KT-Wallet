@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:chains/chains.dart';
@@ -8,34 +8,42 @@ import 'package:cold_signer/src/screens/signer_signing_screens.dart';
 import 'package:cold_signer/src/signing/demo_airgap.dart';
 import 'package:cold_signer/src/widgets/scan_viewfinder.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+
+const _cjkFont = String.fromEnvironment('KT_QA_CJK_FONT');
+const _previewDirectory = String.fromEnvironment('KT_REVIEW_PREVIEW_DIR');
 
 SignRequest request({
   String walletId = demoWalletId,
   bool token = false,
+  String contract = '0x0000000000000000000000000000000000000001',
+  int networkId = 42161,
+  int tokenAmount = 12345,
+  int? createdAt,
   int? expiresAt,
 }) {
-  final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  final now = createdAt ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
   return SignRequest(
     reqId: Uint8List.fromList([1, 2, 3, 4, 5, 6, 7, 8]),
     walletId: walletId,
     coin: 42161,
-    chainId: 42161,
+    chainId: networkId,
     createdAt: now,
     expiresAt: expiresAt ?? now + 600,
     rawTx: Eip1559Tx(
-      chainId: BigInt.from(42161),
+      chainId: BigInt.from(networkId),
       nonce: BigInt.zero,
       maxPriorityFeePerGas: BigInt.one,
       maxFeePerGas: BigInt.two,
       gasLimit: BigInt.from(100000),
-      to: Eip1559Tx.addressBytes('0x0000000000000000000000000000000000000001'),
+      to: Eip1559Tx.addressBytes(contract),
       value: token ? BigInt.zero : BigInt.parse('1000000000000000'),
       data: token
           ? Erc20.transferCalldata(
               to: '0x0000000000000000000000000000000000000002',
-              amount: BigInt.from(12345),
+              amount: BigInt.from(tokenAmount),
             )
           : Uint8List(0),
     ).encodeUnsigned(),
@@ -52,6 +60,163 @@ Widget app(Widget home) => MaterialApp(
 );
 
 void main() {
+  setUpAll(() async {
+    for (final (family, path) in [
+      ('Inter', 'fonts/Inter.ttf'),
+      ('JetBrains Mono', 'fonts/JetBrainsMono.ttf'),
+      ('MaterialIcons', 'fonts/MaterialIcons-Regular.otf'),
+    ]) {
+      await (FontLoader(family)..addFont(rootBundle.load(path))).load();
+    }
+    if (_cjkFont.isNotEmpty) {
+      final data = ByteData.sublistView(await File(_cjkFont).readAsBytes());
+      await (FontLoader('CjkPreview')..addFont(Future.value(data))).load();
+    }
+  });
+  const usdc = '0xaf88d065e77c8cc2239327c5edb3a432268e5831';
+  testWidgets('authentication uses the same local token and native amounts', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      app(
+        SignerAuthScreen(
+          request: request(token: true, contract: usdc, tokenAmount: 2000000),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('2 USDC'), findsOneWidget);
+    expect(find.textContaining('FAKE'), findsNothing);
+    await tester.pumpWidget(app(SignerAuthScreen(request: request())));
+    await tester.pumpAndSettle();
+    expect(find.text('0.001 ETH'), findsOneWidget);
+    await tester.pumpWidget(
+      app(SignerAuthScreen(request: request(token: true))),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('12,345 基础单位'), findsOneWidget);
+  });
+  testWidgets('Arbitrum USDC uses local scale and ignores hostile QR hints', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      app(
+        SignerParseScreen(
+          request: request(token: true, contract: usdc, tokenAmount: 2000000),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('2 USDC'), findsOneWidget);
+    expect(find.textContaining('2,000,000'), findsOneWidget);
+    expect(find.textContaining('（精度 6）'), findsOneWidget);
+    expect(find.text('名称与精度来自内置目录，请核对完整合约地址。'), findsOneWidget);
+    expect(find.text(usdc), findsOneWidget);
+    expect(find.textContaining('FAKE'), findsNothing);
+    expect(find.text('Token 精度未经验证，请核对原始数量与合约地址。'), findsNothing);
+  });
+
+  testWidgets('same address on a testnet does not inherit mainnet decimals', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      app(
+        SignerParseScreen(
+          request: request(
+            token: true,
+            contract: usdc,
+            networkId: 421614,
+            tokenAmount: 2000000,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('2 USDC'), findsNothing);
+    expect(find.text('2,000,000 基础单位'), findsOneWidget);
+  });
+
+  for (final width in [320.0, 390.0, 430.0]) {
+    for (final scale in [1.0, 2.0]) {
+      for (final language in ['zh', 'en', 'ja']) {
+        testWidgets(
+          'live review aligns details at $width / $scale / $language',
+          (tester) async {
+            tester.view.physicalSize = Size(width, 1100);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.resetPhysicalSize);
+            addTearDown(tester.view.resetDevicePixelRatio);
+            final req = request(
+              token: true,
+              contract: usdc,
+              tokenAmount: 2000000,
+              walletId: 'w_WXp-Ha112g0VPWI0lA3hp69j',
+              createdAt:
+                  DateTime(2026, 9, 7, 9, 29, 45).millisecondsSinceEpoch ~/
+                  1000,
+            );
+            await tester.pumpWidget(
+              MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: ThemeData(
+                  brightness: Brightness.dark,
+                  fontFamily: 'Inter',
+                  fontFamilyFallback: _cjkFont.isEmpty ? null : ['CjkPreview'],
+                ),
+                locale: Locale(language),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: SignerParseScreen(request: req),
+              ),
+            );
+            await tester.pumpAndSettle();
+            final l10n = lookupAppLocalizations(Locale(language));
+            final values = [
+              l10n.requestId,
+              l10n.walletIdLabel,
+              l10n.createdAtLabel,
+              l10n.expiresAtLabel,
+              l10n.chainIdLabel,
+              l10n.tokenContractLabel,
+              l10n.maximumFeeBaseUnits,
+            ];
+            final rects = [
+              for (final label in values)
+                tester.getRect(
+                  find.byKey(ValueKey('signer-detail-value-$label')),
+                ),
+            ];
+            for (final rect in rects) {
+              expect(rect.right, closeTo(rects.first.right, 0.01));
+              expect(rect.left, closeTo(rects.first.left, 0.01));
+            }
+            expect(find.text(usdc), findsOneWidget);
+            expect(find.text(req.walletId), findsOneWidget);
+            expect(tester.takeException(), isNull);
+            if (width == 390 &&
+                scale == 1 &&
+                (language == 'en' || _previewDirectory.isNotEmpty)) {
+              await expectLater(
+                find.byType(MaterialApp),
+                matchesGoldenFile(
+                  _previewDirectory.isEmpty
+                      ? 'goldens/screens/live-token-review-en.png'
+                      : '$_previewDirectory/live-token-review-$language.png',
+                ),
+              );
+            }
+          },
+        );
+      }
+    }
+  }
+
   testWidgets(
     'Arbitrum native amount uses trusted 18 decimals, ignores summary',
     (tester) async {
