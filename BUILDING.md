@@ -193,7 +193,7 @@ falsely publishable debug-signed one. Do not commit either keystore or its
 passwords.
 
 After building, verify the exact APK or App Bundle that will leave the build
-machine. The same guard checks all three ABIs, the real Wallet Core bridge,
+machine. By default the guard checks all three ABIs, the real Wallet Core bridge,
 SQLite, final merged manifest and permissions, exported components, production
 markers, local E2E canaries, credential patterns, archive paths and signing
 identity:
@@ -209,6 +209,26 @@ tool/check_release_artifact.sh \
 tool/check_release_artifact.sh \
   apps/cold_signer/build/app/outputs/bundle/release/app-release.aab
 ```
+
+For modern ARM64 phones only, build each app with
+`flutter build apk --release --split-per-abi` and distribute only
+`app-arm64-v8a-release.apk`. Keep the default build target set: the reviewed
+Gradle runtime lock includes all three Flutter engine dependencies, so narrowing
+`--target-platform` would conflict with that lock. Splitting removes the other
+architectures from the delivered ARM64 APK without changing dependencies or the
+minimum Android SDK. Verify that APK with an explicit ABI profile:
+
+```sh
+tool/check_release_artifact.sh \
+  apps/kt_wallet/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+  cc.siliconnexus.ktwallet arm64-v8a
+tool/check_release_artifact.sh \
+  apps/cold_signer/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+  cc.siliconnexus.ktwallet.coldsigner arm64-v8a
+```
+
+The ARM64 profile requires all production native libraries for `arm64-v8a`
+and rejects any additional ABI directories; other release checks are unchanged.
 
 The bootstrap is the only networked step. It downloads the exact bundletool
 and 16 runtime JAR coordinates declared by the pinned lock and both apps'

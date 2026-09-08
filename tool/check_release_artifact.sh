@@ -3,6 +3,16 @@ set -euo pipefail
 
 release_artifact="${1:-apps/kt_wallet/build/app/outputs/flutter-apk/app-release.apk}"
 expected_package="${2:-}"
+abi_profile="${3:-universal}"
+
+case "$abi_profile" in
+  universal) expected_abis=(arm64-v8a armeabi-v7a x86_64) ;;
+  arm64-v8a) expected_abis=(arm64-v8a) ;;
+  *)
+    echo "Unsupported release ABI profile: $abi_profile" >&2
+    exit 2
+    ;;
+esac
 
 if [[ ! -f "$release_artifact" ]]; then
   echo "Release artifact not found: $release_artifact" >&2
@@ -159,9 +169,22 @@ if [[ -f "$local_e2e_file" ]]; then
   fi
 fi
 
-# A universal APK or base AAB module is accepted only when every advertised
-# ABI contains the Dart release image, real Wallet Core and pinned SQLite.
-for abi in arm64-v8a armeabi-v7a x86_64; do
+# Every ABI in the explicitly selected profile must contain the real runtime.
+# Default remains universal; an arm64-only release must opt in and must not
+# silently include other architectures (even partial native-library trees).
+for abi_directory in "$native_library_root"/*; do
+  [[ -d "$abi_directory" ]] || continue
+  actual_abi="${abi_directory##*/}"
+  allowed_abi=0
+  for abi in "${expected_abis[@]}"; do
+    if [[ "$actual_abi" == "$abi" ]]; then allowed_abi=1; fi
+  done
+  if [[ "$allowed_abi" -ne 1 ]]; then
+    echo "UNEXPECTED release ABI for $abi_profile: $actual_abi" >&2
+    failed=1
+  fi
+done
+for abi in "${expected_abis[@]}"; do
   for library in libapp.so libTrustWalletCore.so libsqlite3.so; do
     if [[ ! -f "$native_library_root/$abi/$library" ]]; then
       echo "MISSING release native library: $abi/$library" >&2
