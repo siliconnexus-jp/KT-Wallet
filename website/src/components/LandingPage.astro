@@ -263,14 +263,21 @@ const featureClasses = ['feature-wide', 'feature-tall', '', '', 'feature-wide'];
           </div>
 
           <div class="download-options">
-            <div class="download-card is-pending">
-              <div class="platform-icon" aria-hidden="true">iOS</div>
+            <a class="download-card download-card-live" href="https://apps.apple.com/us/app/kt-wallet/id6794879688" target="_blank" rel="noopener noreferrer">
+              <img class="platform-icon" src="/assets/kt-wallet-logo.png" alt="" width="44" height="44" />
               <div>
-                <strong>App Store / TestFlight</strong>
-                <span>{copy.download.iosBody}</span>
+                <strong>KT Wallet</strong>
+                <span>{copy.download.iosWalletBody}</span>
               </div>
-              <span class="pending-pill">{copy.download.pending}</span>
-            </div>
+            </a>
+
+            <a class="download-card download-card-live" href="https://apps.apple.com/us/app/kt-coldsigner/id6794806858" target="_blank" rel="noopener noreferrer">
+              <img class="platform-icon" src="/assets/kt-cold-logo.png" alt="" width="44" height="44" />
+              <div>
+                <strong>KT ColdSigner</strong>
+                <span>{copy.download.iosSignerBody}</span>
+              </div>
+            </a>
 
             <div class="download-card is-pending">
               <div class="platform-icon platform-android" aria-hidden="true">A</div>
