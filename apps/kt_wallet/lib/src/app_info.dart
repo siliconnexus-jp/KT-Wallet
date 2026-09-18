@@ -5,7 +5,7 @@
 /// not a trade this app makes. The duplication is the cost, so a test asserts
 /// the two agree — see `about_test.dart`.
 abstract final class AppInfo {
-  static const version = '1.0.0';
+  static const version = '1.0.1';
 
   /// The public repository. Shown on the about screen because a wallet asking
   /// to hold someone's keys should be able to say where its code is.
