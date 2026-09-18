@@ -156,9 +156,12 @@ void main() {
   }
   for (final scenario in [
     (0, 500000, false),
-    (130000, 500000, false),
+    (130000, 500000, true),
     (130000, 3500000, true),
     (200000, 500000, true),
+    // Delegated/rented bandwidth covers the serialized TRC-20 transaction;
+    // with no rented Energy the liquid cost is the uncovered 130k Energy.
+    (0, 14000000, true),
   ]) {
     final (available, balance, succeeds) = scenario;
     test(
@@ -168,7 +171,13 @@ void main() {
         final gw = gateway(
           dataOverride: (p) {
             if (p['operation'] == 'resources') {
-              return {'EnergyLimit': available};
+              return {
+                'EnergyLimit': available,
+                'NetLimit': 10000,
+                'NetUsed': 0,
+                'freeNetLimit': 0,
+                'freeNetUsed': 0,
+              };
             }
             if (p['operation'] == 'account') {
               return {
@@ -206,11 +215,18 @@ void main() {
           final decoded = parseUnsignedTransfer(Chain.tron, prepared.rawTx);
           expect(decoded.maxFeeRaw, BigInt.from(15600000));
           expect(decoded.amountRaw, BigInt.from(1000000));
-          expect(prepared.maximumFeeSun, greaterThan(BigInt.from(15600000)));
-          expect(prepared.estimatedFeeSun, greaterThan(BigInt.zero));
+          expect(
+            prepared.maximumFeeSun,
+            greaterThanOrEqualTo(BigInt.from(15600000)),
+          );
+          expect(prepared.estimatedFeeSun, greaterThanOrEqualTo(BigInt.zero));
           expect(
             prepared.estimatedFeeSun,
             lessThanOrEqualTo(BigInt.from(balance)),
+          );
+          expect(
+            prepared.estimatedFeeSun,
+            BigInt.from(((130000 - available).clamp(0, 130000)) * 100),
           );
           expect(direct.calls, 0);
         }

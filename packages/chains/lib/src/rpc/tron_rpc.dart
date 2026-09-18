@@ -503,14 +503,18 @@ class TronEnergyEstimate {
   final int energyPriceSun;
   final int feeLimitSun;
 
-  /// Liquid TRX exposure within the budget, assuming the current resource
-  /// snapshot remains available. Rented/delegated energy reduces this value,
-  /// never [feeLimitSun]. A new quote must be obtained before signing.
+  /// Estimated liquid TRX burned for the simulated execution, assuming the
+  /// current resource snapshot remains available. The signed [feeLimitSun]
+  /// includes headroom and is an execution cap, so it must not be used as the
+  /// expected burn amount. Rented/delegated energy covers the first
+  /// [energyAvailable] units and only the remainder is paid in TRX.
+  /// A new quote must be obtained before signing.
   BigInt get maximumBurnSun {
-    final burn =
-        BigInt.from(feeLimitSun) -
-        BigInt.from(energyAvailable) * BigInt.from(energyPriceSun);
-    return burn.isNegative ? BigInt.zero : burn;
+    final uncovered = (energyRequired - energyAvailable).clamp(
+      0,
+      energyRequired,
+    );
+    return BigInt.from(uncovered) * BigInt.from(energyPriceSun);
   }
 }
 

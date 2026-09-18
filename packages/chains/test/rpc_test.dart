@@ -1746,7 +1746,7 @@ void main() {
         expect(estimate.energyAvailable, 30000);
         expect(estimate.energyPriceSun, 420);
         expect(estimate.feeLimitSun, 50400000);
-        expect(estimate.maximumBurnSun, BigInt.from(37800000));
+        expect(estimate.maximumBurnSun, BigInt.from(29400000));
       },
     );
 
@@ -1781,7 +1781,7 @@ void main() {
           expect(estimate.feeLimitSun ~/ 100, greaterThanOrEqualTo(130000));
           expect(
             estimate.maximumBurnSun,
-            BigInt.from((15600000 - available * 100).clamp(0, 15600000)),
+            BigInt.from(((130000 - available).clamp(0, 130000)) * 100),
           );
         },
       );
