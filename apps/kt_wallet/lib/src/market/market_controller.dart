@@ -317,6 +317,54 @@ class MarketController extends ChangeNotifier {
     return total;
   }
 
+  /// Returns the last saved display-only portfolio total for another wallet.
+  /// The active wallet uses [totalUsd] directly; this lets wallet switchers
+  /// show cached previews without sharing live balances between identities.
+  /// Cached balances are valued at this session's quotes when available (the
+  /// snapshot's own quotes otherwise), and testnet holdings stay unvalued.
+  Future<double?> cachedTotalUsdFor(String walletId) async {
+    final snapshots = _snapshots;
+    if (snapshots == null) return null;
+    final MarketSnapshot? snapshot;
+    try {
+      snapshot = await snapshots.load(walletId, _snapshotScope());
+    } catch (_) {
+      return null;
+    }
+    if (snapshot == null) return null;
+    double? total;
+
+    void include(BalanceResult? result, double? price) {
+      final amount = result?.amount;
+      if (result?.status != BalanceStatus.ok ||
+          amount == null ||
+          price == null) {
+        return;
+      }
+      final value = fiatValueForDisplay(amount, price);
+      if (value == null || !value.isFinite || value < 0) return;
+      final next = (total ?? 0) + value;
+      if (next.isFinite) total = next;
+    }
+
+    for (final entry in snapshot.native.entries) {
+      if (_isTestnet(entry.key)) continue;
+      include(
+        entry.value,
+        _pricesUsd?[entry.key] ?? snapshot.nativePrices[entry.key],
+      );
+    }
+    for (final token in tokens) {
+      if (_isTestnet(token.chain)) continue;
+      include(
+        snapshot.tokens[token.id],
+        _prices.tokenPriceUsd(token.symbol) ??
+            snapshot.tokenPrices[token.symbol],
+      );
+    }
+    return total;
+  }
+
   /// Estimated 24h movement of the current portfolio caused by market prices.
   ///
   /// CoinGecko gives a percentage per asset, not the wallet's historical

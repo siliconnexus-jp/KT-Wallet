@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../market/market_scope.dart';
 import '../security/secure_screen.dart';
 import '../state/wallet_controller.dart';
 import '../state/wallet_scope.dart';
@@ -1545,14 +1546,6 @@ class ImportConfirmScreen extends StatelessWidget {
 class WalletSwitcherSheet extends StatelessWidget {
   const WalletSwitcherSheet({super.key});
 
-  // 'WLT-91A4C7' is the standalone fallback wallet (gallery / goldens).
-  static const _demoValue = {
-    'daily': r'$862.40',
-    'savings': r'$3,210.55',
-    'cold': r'$12,847.32',
-    'WLT-91A4C7': r'$862.40',
-  };
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -1766,13 +1759,7 @@ class WalletSwitcherSheet extends StatelessWidget {
                                           ],
                                         ),
                                       const SizedBox(height: 3),
-                                      Text(
-                                        _demoValue[w.id] ?? '\$0.00',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: WalletColors.text3,
-                                        ),
-                                      ),
+                                      _WalletPreviewValue(wallet: w),
                                     ],
                                   ),
                                 ),
@@ -1802,6 +1789,59 @@ class WalletSwitcherSheet extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Portfolio value shown under each wallet in the switcher. The active wallet
+/// reads the live total; other wallets show their last saved display-only
+/// snapshot (`--` when this device has never loaded that wallet).
+class _WalletPreviewValue extends StatefulWidget {
+  const _WalletPreviewValue({required this.wallet});
+
+  final Wallet wallet;
+
+  @override
+  State<_WalletPreviewValue> createState() => _WalletPreviewValueState();
+}
+
+class _WalletPreviewValueState extends State<_WalletPreviewValue> {
+  // 'WLT-91A4C7' is the standalone fallback wallet (gallery / goldens).
+  static const _demoValue = {
+    'daily': r'$862.40',
+    'savings': r'$3,210.55',
+    'cold': r'$12,847.32',
+    'WLT-91A4C7': r'$862.40',
+  };
+  static const _style = TextStyle(fontSize: 12, color: WalletColors.text3);
+
+  Future<double?>? _cached;
+  String? _loadedWalletId;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_loadedWalletId == widget.wallet.id) return;
+    _loadedWalletId = widget.wallet.id;
+    _cached = MarketScope.read(context)?.cachedTotalUsdFor(widget.wallet.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final market = MarketScope.maybeOf(context);
+    if (market == null) {
+      return Text(_demoValue[widget.wallet.id] ?? '--', style: _style);
+    }
+    if (WalletScope.of(context).current?.id == widget.wallet.id) {
+      return Text(
+        formatFiatForContext(context, market.totalUsd),
+        style: _style,
+      );
+    }
+    return FutureBuilder<double?>(
+      future: _cached,
+      builder: (context, snapshot) =>
+          Text(formatFiatForContext(context, snapshot.data), style: _style),
     );
   }
 }

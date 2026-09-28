@@ -1107,4 +1107,93 @@ void main() {
       controller.dispose();
     },
   );
+
+  group('cachedTotalUsdFor', () {
+    MarketSnapshot snapshot() => MarketSnapshot(
+      scope: 'mainnet',
+      savedAt: DateTime(2026, 9, 1),
+      native: {
+        Coin.eth: BalanceResult.ok(
+          Amount(
+            raw: BigInt.parse('500000000000000000'),
+            decimals: 18,
+            symbol: 'ETH',
+          ),
+        ),
+        Coin.solana: BalanceResult.ok(
+          Amount(raw: BigInt.from(2000000000), decimals: 9, symbol: 'SOL'),
+        ),
+      },
+      tokens: const {},
+      nativePrices: const {Coin.eth: 1000, Coin.solana: 50},
+      tokenPrices: const {},
+      nativeChanges: const {},
+      tokenChanges: const {},
+    );
+
+    test('values another wallet from its saved snapshot', () async {
+      final controller = MarketController(
+        wallets: _wallets(),
+        balances: FakeBalanceService(_okResults()),
+        prices: FakePriceService(_prices),
+        snapshots: FakeSnapshotStore(snapshot: snapshot()),
+        snapshotScope: () => 'mainnet',
+      );
+      addTearDown(controller.dispose);
+
+      // Before any live refresh, the snapshot's own quotes apply.
+      expect(await controller.cachedTotalUsdFor('b'), 600);
+
+      await controller.refresh();
+      // Once live quotes exist they take precedence over the saved ones.
+      expect(await controller.cachedTotalUsdFor('b'), 1200);
+    });
+
+    test(
+      'is null without a snapshot, on scope mismatch or on failure',
+      () async {
+        final none = MarketController(
+          wallets: _wallets(),
+          balances: FakeBalanceService(_okResults()),
+          prices: FakePriceService(_prices),
+          snapshots: FakeSnapshotStore(),
+          snapshotScope: () => 'mainnet',
+        );
+        final otherScope = MarketController(
+          wallets: _wallets(),
+          balances: FakeBalanceService(_okResults()),
+          prices: FakePriceService(_prices),
+          snapshots: FakeSnapshotStore(snapshot: snapshot()),
+          snapshotScope: () => 'testnet',
+        );
+        final throwing = MarketController(
+          wallets: _wallets(),
+          balances: FakeBalanceService(_okResults()),
+          prices: FakePriceService(_prices),
+          snapshots: ThrowingMarketSnapshotStore(),
+        );
+        addTearDown(none.dispose);
+        addTearDown(otherScope.dispose);
+        addTearDown(throwing.dispose);
+
+        expect(await none.cachedTotalUsdFor('b'), isNull);
+        expect(await otherScope.cachedTotalUsdFor('b'), isNull);
+        expect(await throwing.cachedTotalUsdFor('b'), isNull);
+      },
+    );
+
+    test('never values testnet holdings', () async {
+      final controller = MarketController(
+        wallets: _wallets(),
+        balances: FakeBalanceService(_okResults()),
+        prices: FakePriceService(_prices),
+        snapshots: FakeSnapshotStore(snapshot: snapshot()),
+        snapshotScope: () => 'mainnet',
+        isTestnet: (coin) => coin == Coin.solana,
+      );
+      addTearDown(controller.dispose);
+
+      expect(await controller.cachedTotalUsdFor('b'), 500);
+    });
+  });
 }
