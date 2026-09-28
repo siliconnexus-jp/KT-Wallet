@@ -357,6 +357,30 @@ class ChainParamsService {
     ]);
     return EvmNonceState(confirmed: values[0], pending: values[1]);
   }
+
+  /// Nonce the direct node reports for [hash] sent by [fromAddress], or null
+  /// when the node does not know the hash (dropped/evicted). Replacement flows
+  /// use it to prove the locally persisted nonce is the slot the original
+  /// actually occupies before re-signing at that nonce.
+  Future<BigInt?> fetchEvmTransactionNonce(
+    Chain chain, {
+    required String hash,
+    required String fromAddress,
+  }) async {
+    if (chain != Chain.ethereum &&
+        chain != Chain.polygon &&
+        chain != Chain.base &&
+        chain != Chain.arbitrum &&
+        chain != Chain.avalanche &&
+        chain != Chain.bnb) {
+      throw ArgumentError('not an EVM chain: $chain');
+    }
+    final evidence = await EvmRpc(
+      url: _endpoints(rpcCoinForChain(chain)),
+      transport: _jsonRpc,
+    ).getPendingTransactionEvidence(hash, expectedFrom: fromAddress);
+    return evidence?.nonce;
+  }
 }
 
 /// True only for the narrow node capability error where `latest` remains

@@ -181,6 +181,7 @@ Future<void> _runReplacementScenario({
           previousMaxFeePerGas: originalFee.maxFeePerGas,
           previousGasLimit: BigInt.from(21000),
           cancel: cancel,
+          originalHash: originalHash,
         )
         .timeout(const Duration(seconds: 30));
     expect(

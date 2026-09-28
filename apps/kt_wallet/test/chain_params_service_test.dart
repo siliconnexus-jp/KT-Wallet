@@ -234,6 +234,43 @@ Widget _wrap(Widget child) => MaterialApp(
 
 void main() {
   group('ChainParamsService', () {
+    test('original transaction nonce comes from the direct node', () async {
+      const hash =
+          '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      Object? known = {'hash': hash, 'from': _gatewayFrom, 'nonce': '0x6'};
+      final direct = _FakeJsonRpc({
+        'eth_getTransactionByHash': (params) {
+          expect(params, [hash]);
+          return known;
+        },
+      });
+      final service = ChainParamsService(
+        jsonRpcTransport: direct,
+        endpoints: (_) => 'https://direct.example',
+      );
+
+      expect(
+        await service.fetchEvmTransactionNonce(
+          Chain.ethereum,
+          hash: hash,
+          fromAddress: _gatewayFrom,
+        ),
+        BigInt.from(6),
+      );
+      known = null;
+      expect(
+        await service.fetchEvmTransactionNonce(
+          Chain.ethereum,
+          hash: hash,
+          fromAddress: _gatewayFrom,
+        ),
+        isNull,
+      );
+      expect(direct.calls.map((call) => call.$1).toSet(), {
+        'https://direct.example',
+      });
+    });
+
     test(
       'EVM simulation and gas use gateway without touching direct RPC',
       () async {

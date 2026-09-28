@@ -407,6 +407,8 @@
   "txReplacementRace": "置換取引の送信中に元の取引状態が変わりました。チェーン上の最終結果をお待ちください。",
   "txNonceAlreadyUsed": "この nonce はすでにチェーン上で使用されているため置換できません。",
   "txReplacementUnavailable": "この取引には高速化またはキャンセルに必要なチェーンパラメータがありません。",
+  "txReplacementNonceMismatch": "ネットワーク上のこの取引の nonce がローカルの記録と一致しません。二重送金を防ぐため、高速化とキャンセルを中止しました。",
+  "txReplacementNetworkUnavailable": "高速化またはキャンセルに必要なデータをネットワークノードから取得できませんでした。接続または RPC 設定を確認して、もう一度お試しください。",
   "txReplacementWrongNetwork": "この取引は {network} のものです。高速化やキャンセルの前に、そのネットワークに切り替えてください。",
   "feeEstimating": "見積もり中…",
   "feeAwaitingInput": "未見積もり",

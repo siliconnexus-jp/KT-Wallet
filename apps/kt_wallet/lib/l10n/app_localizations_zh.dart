@@ -1129,6 +1129,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get txReplacementUnavailable => '这笔交易缺少替换所需的链上参数，无法加速或取消';
 
   @override
+  String get txReplacementNonceMismatch => '链上记录的交易序号与本地不一致，为避免重复付款，已停止加速或取消';
+
+  @override
+  String get txReplacementNetworkUnavailable =>
+      '无法从网络节点获取加速或取消所需的数据，请检查网络或 RPC 设置后重试';
+
+  @override
   String txReplacementWrongNetwork(String network) {
     return '这笔交易属于 $network，请先切换回该网络再加速或取消';
   }

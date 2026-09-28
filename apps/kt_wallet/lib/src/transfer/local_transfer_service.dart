@@ -56,6 +56,22 @@ class EvmNonceAlreadyConsumed extends LocalTransferException {
   final int confirmedNonce;
 }
 
+/// The node knows the original transaction under a different nonce than the
+/// one persisted locally. Re-signing at the persisted nonce would not replace
+/// the original; a speed-up would become a second, independent payment.
+class EvmReplacementNonceMismatch extends LocalTransferException {
+  const EvmReplacementNonceMismatch({
+    required this.nonce,
+    required this.observedNonce,
+  }) : super(
+         'Original transaction uses nonce $observedNonce, '
+         'not the persisted nonce $nonce',
+       );
+
+  final BigInt nonce;
+  final BigInt observedNonce;
+}
+
 class EvmPreflightFailed extends LocalTransferException {
   const EvmPreflightFailed(String reason)
     : super('Transaction simulation failed: $reason');
@@ -416,6 +432,7 @@ class LocalTransferService {
     required BigInt previousMaxFeePerGas,
     required BigInt previousGasLimit,
     required bool cancel,
+    required String? originalHash,
   }) async {
     _requireEvm(chain);
     await _identity?.verifyEvm(chain, evmChainId);
@@ -425,6 +442,24 @@ class LocalTransferService {
         nonce: nonce.toInt(),
         confirmedNonce: nonceState.confirmed,
       );
+    }
+    // The persisted nonce is only trustworthy if the chain agrees. When the
+    // node still knows the original under another nonce, a same-"nonce"
+    // replacement would be an independent transaction, not a replacement.
+    // A hash the node no longer knows (dropped/evicted) is exactly the case
+    // replacement exists for, so only a positive mismatch is refused.
+    if (originalHash != null) {
+      final observed = await _params.fetchEvmTransactionNonce(
+        chain,
+        hash: originalHash,
+        fromAddress: from,
+      );
+      if (observed != null && observed != nonce) {
+        throw EvmReplacementNonceMismatch(
+          nonce: nonce,
+          observedNonce: observed,
+        );
+      }
     }
     final live = await _params.fetchEvmParams(chain, from);
     final fast = live.fees.fast;

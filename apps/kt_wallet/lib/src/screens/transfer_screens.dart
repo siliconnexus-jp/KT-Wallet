@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:airgap_protocol/airgap_protocol.dart';
 import 'package:chains/chains.dart';
-import 'package:chains/rpc.dart' show RpcRejectionKind;
+import 'package:chains/rpc.dart' show RpcException, RpcRejectionKind;
 import 'package:core_crypto/core_crypto.dart' show Coin;
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
@@ -5464,8 +5464,11 @@ class _TxDetailScreenState extends State<TxDetailScreen>
         chain == Chain.bnb;
     return isEvm &&
         tx.signMode == SignMode.local &&
+        // A missing RPC/mempool response must not strand the nonce. Before
+        // signing, the replacement service refuses when the confirmed nonce
+        // has moved past this slot or the node reports the original hash
+        // under a different nonce than the one persisted here.
         (tx.status == TxStatus.submitted || tx.status == TxStatus.pending) &&
-        tx.lastCheckOutcome != TxCheckOutcome.unknown &&
         tx.replacedById == null &&
         // A row with no recorded network (pre-v4 legacy) cannot be safely
         // rebuilt: we do not know which chain instance it was broadcast on.
@@ -6055,6 +6058,7 @@ class _TxDetailScreenState extends State<TxDetailScreen>
         previousMaxFeePerGas: maxFee,
         previousGasLimit: gasLimit,
         cancel: cancel,
+        originalHash: original.hash,
       );
       await controller.reserveOutgoingEvmTransaction(
         id: replacementId,
@@ -6115,6 +6119,9 @@ class _TxDetailScreenState extends State<TxDetailScreen>
     } on EvmNonceAlreadyConsumed {
       _showMessage(l10n.txNonceAlreadyUsed);
       _reload();
+    } on EvmReplacementNonceMismatch {
+      _showMessage(l10n.txReplacementNonceMismatch);
+      _reload();
     } on EvmNonceConflict {
       _showMessage(l10n.nonceConflict);
       _reload();
@@ -6151,7 +6158,7 @@ class _TxDetailScreenState extends State<TxDetailScreen>
       }
       _reload(replacementId);
       _showMessage(l10n.broadcastUnsupported);
-    } on Object {
+    } on Object catch (error) {
       if (broadcastHash != null) {
         // Broadcast already succeeded and the replacement row already holds
         // its locally derived hash. Reload it instead of inviting another
@@ -6165,6 +6172,12 @@ class _TxDetailScreenState extends State<TxDetailScreen>
       if (broadcastAttempted && signedHashPersisted) {
         _reload(replacementId);
         _showMessage(l10n.txSubmissionUnknownMessage);
+        return;
+      }
+      if (!reserved && error is RpcException) {
+        // Nothing was reserved or signed: the node could not supply the
+        // nonce, fee or original-transaction evidence replacement needs.
+        _showMessage(l10n.txReplacementNetworkUnavailable);
         return;
       }
       if (reserved) {

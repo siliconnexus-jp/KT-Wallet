@@ -1209,6 +1209,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'This transaction is missing the chain parameters required for speed-up or cancellation.';
 
   @override
+  String get txReplacementNonceMismatch =>
+      'The network reports this transaction under a different nonce than recorded locally. Speed-up and cancellation were stopped to avoid a duplicate payment.';
+
+  @override
+  String get txReplacementNetworkUnavailable =>
+      'Couldn\'t get the data needed to speed up or cancel from the network node. Check your connection or RPC settings and try again.';
+
+  @override
   String txReplacementWrongNetwork(String network) {
     return 'This transaction belongs to $network. Switch back to that network before speeding it up or cancelling.';
   }

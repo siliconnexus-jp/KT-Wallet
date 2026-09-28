@@ -297,6 +297,7 @@ Future<void> _runScenario({
           previousMaxFeePerGas: originalFee.maxFeePerGas,
           previousGasLimit: BigInt.from(item.gasLimit),
           cancel: cancel,
+          originalHash: originalHash,
         )
         .timeout(const Duration(seconds: 30));
     expect(
@@ -434,6 +435,8 @@ Future<void> _runRapidScenario({
         previousMaxFeePerGas: originalFee.maxFeePerGas,
         previousGasLimit: BigInt.from(item.gasLimit),
         cancel: cancel,
+        // Prepared before the original is broadcast; nothing to bind yet.
+        originalHash: null,
       )
       .timeout(const Duration(seconds: 30));
   expect(

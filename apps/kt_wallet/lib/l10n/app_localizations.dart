@@ -2170,6 +2170,18 @@ abstract class AppLocalizations {
   /// **'这笔交易缺少替换所需的链上参数，无法加速或取消'**
   String get txReplacementUnavailable;
 
+  /// No description provided for @txReplacementNonceMismatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'链上记录的交易序号与本地不一致，为避免重复付款，已停止加速或取消'**
+  String get txReplacementNonceMismatch;
+
+  /// No description provided for @txReplacementNetworkUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法从网络节点获取加速或取消所需的数据，请检查网络或 RPC 设置后重试'**
+  String get txReplacementNetworkUnavailable;
+
   /// No description provided for @txReplacementWrongNetwork.
   ///
   /// In zh, this message translates to:

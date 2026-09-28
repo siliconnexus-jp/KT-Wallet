@@ -220,7 +220,7 @@ void main() {
   });
 
   testWidgets(
-    'unknown chain evidence is honest and disables unsafe replacement',
+    'unknown chain evidence stays honest and still permits guarded replacement',
     (tester) async {
       await tester.pumpWidget(
         _app(_transaction(lastCheckOutcome: TxCheckOutcome.unknown)),
@@ -228,11 +228,21 @@ void main() {
 
       expect(find.text('状态暂不可用'), findsWidgets);
       expect(find.text('确认中'), findsNothing);
-      expect(find.text('加速交易'), findsNothing);
-      expect(find.text('取消交易'), findsNothing);
+      expect(find.text('加速交易'), findsOneWidget);
+      expect(find.text('取消交易'), findsOneWidget);
       expect(find.byIcon(Icons.help_outline_rounded), findsOneWidget);
     },
   );
+
+  testWidgets('a broadcast-status row does not offer replacement', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_app(_transaction(status: TxStatus.broadcast)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('加速交易'), findsNothing);
+    expect(find.text('取消交易'), findsNothing);
+  });
 
   testWidgets('finalized transaction never exposes replacement actions', (
     tester,

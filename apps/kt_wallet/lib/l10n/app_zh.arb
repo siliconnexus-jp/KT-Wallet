@@ -551,6 +551,8 @@
   "txReplacementRace": "替换交易已提交，但原交易状态同时发生变化，请等待链上最终结果",
   "txNonceAlreadyUsed": "该 nonce 已被链上交易使用，无法继续替换",
   "txReplacementUnavailable": "这笔交易缺少替换所需的链上参数，无法加速或取消",
+  "txReplacementNonceMismatch": "链上记录的交易序号与本地不一致，为避免重复付款，已停止加速或取消",
+  "txReplacementNetworkUnavailable": "无法从网络节点获取加速或取消所需的数据，请检查网络或 RPC 设置后重试",
   "txReplacementWrongNetwork": "这笔交易属于 {network}，请先切换回该网络再加速或取消",
   "@txReplacementWrongNetwork": {
     "placeholders": {

@@ -3,6 +3,7 @@ import 'package:chains/rpc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kt_wallet/src/transfer/chain_params_service.dart';
 import 'package:kt_wallet/src/transfer/local_transfer_service.dart';
+import 'package:kt_wallet/src/transfer/transfer_draft.dart';
 
 final class _ReplacementParams extends ChainParamsService {
   _ReplacementParams({
@@ -14,6 +15,7 @@ final class _ReplacementParams extends ChainParamsService {
     this.nativePending,
     this.nativeLatest,
     this.pendingAvailable = true,
+    this.originalNonce,
   });
 
   final int confirmed;
@@ -24,7 +26,21 @@ final class _ReplacementParams extends ChainParamsService {
   final BigInt? nativePending;
   final BigInt? nativeLatest;
   final bool pendingAvailable;
+
+  /// Nonce the node reports for the original hash; null = hash unknown.
+  final BigInt? originalNonce;
   String? simulatedBlockTag;
+  String? lookedUpHash;
+
+  @override
+  Future<BigInt?> fetchEvmTransactionNonce(
+    Chain chain, {
+    required String hash,
+    required String fromAddress,
+  }) async {
+    lookedUpHash = hash;
+    return originalNonce;
+  }
 
   @override
   Future<EvmNonceState> fetchEvmNonceState(
@@ -107,6 +123,7 @@ void main() {
           previousMaxFeePerGas: BigInt.from(200),
           previousGasLimit: BigInt.from(21000),
           cancel: false,
+          originalHash: null,
         );
         final parsed = parseUnsignedTransfer(
           Chain.polygon,
@@ -147,6 +164,7 @@ void main() {
         previousMaxFeePerGas: BigInt.from(40),
         previousGasLimit: BigInt.from(65000),
         cancel: false,
+        originalHash: null,
       );
       final parsed = parseUnsignedTransfer(Chain.ethereum, prepared.unsignedTx);
 
@@ -183,6 +201,7 @@ void main() {
         previousMaxFeePerGas: BigInt.from(40),
         previousGasLimit: BigInt.from(50000),
         cancel: false,
+        originalHash: null,
       );
       final parsed = parseUnsignedTransfer(Chain.ethereum, prepared.unsignedTx);
 
@@ -218,6 +237,7 @@ void main() {
         previousMaxFeePerGas: BigInt.from(40),
         previousGasLimit: BigInt.from(50000),
         cancel: true,
+        originalHash: null,
       );
       final parsed = parseUnsignedTransfer(Chain.ethereum, prepared.unsignedTx);
 
@@ -252,6 +272,7 @@ void main() {
           previousMaxFeePerGas: BigInt.from(200),
           previousGasLimit: BigInt.from(65000),
           cancel: true,
+          originalHash: null,
         );
         final parsed = parseUnsignedTransfer(Chain.base, prepared.unsignedTx);
 
@@ -288,6 +309,7 @@ void main() {
           previousMaxFeePerGas: BigInt.two,
           previousGasLimit: BigInt.from(21000),
           cancel: false,
+          originalHash: null,
         ),
         throwsA(
           isA<EvmNonceAlreadyConsumed>()
@@ -320,6 +342,7 @@ void main() {
           previousMaxFeePerGas: BigInt.from(20),
           previousGasLimit: BigInt.from(21000),
           cancel: false,
+          originalHash: null,
         );
         expect(prepared.nonce, BigInt.from(5));
 
@@ -345,6 +368,7 @@ void main() {
             previousMaxFeePerGas: BigInt.from(20),
             previousGasLimit: BigInt.from(21000),
             cancel: false,
+            originalHash: null,
           ),
           throwsA(isA<EvmPreflightFailed>()),
         );
@@ -375,6 +399,7 @@ void main() {
           previousMaxFeePerGas: BigInt.two,
           previousGasLimit: BigInt.from(21000),
           cancel: false,
+          originalHash: null,
         ),
         throwsA(isA<EvmInsufficientFunds>()),
       );
@@ -405,9 +430,68 @@ void main() {
           previousMaxFeePerGas: BigInt.two,
           previousGasLimit: BigInt.from(21000),
           cancel: false,
+          originalHash: null,
         ),
         throwsA(isA<EvmInsufficientFunds>()),
       );
+    });
+
+    group('original hash nonce binding', () {
+      const hash =
+          '0x1111111111111111111111111111111111111111111111111111111111111111';
+
+      Future<PreparedEvmTransfer> prepare(
+        _ReplacementParams params, {
+        bool cancel = false,
+      }) => LocalTransferService(params: params).prepareEvmReplacement(
+        chain: Chain.ethereum,
+        evmChainId: 1,
+        from: _from,
+        recipient: _to,
+        amountRaw: BigInt.from(1000),
+        tokenContract: null,
+        nonce: BigInt.from(5),
+        previousMaxPriorityFeePerGas: BigInt.from(10),
+        previousMaxFeePerGas: BigInt.from(20),
+        previousGasLimit: BigInt.from(21000),
+        cancel: cancel,
+        originalHash: hash,
+      );
+
+      _ReplacementParams params({BigInt? originalNonce}) => _ReplacementParams(
+        confirmed: 5,
+        pending: 7,
+        fastPriority: BigInt.from(10),
+        fastMaxFee: BigInt.from(20),
+        originalNonce: originalNonce,
+      );
+
+      for (final cancel in [false, true]) {
+        test('refuses ${cancel ? 'cancel' : 'speed-up'} when the node '
+            'reports the original under another nonce', () async {
+          final p = params(originalNonce: BigInt.from(6));
+          await expectLater(
+            prepare(p, cancel: cancel),
+            throwsA(
+              isA<EvmReplacementNonceMismatch>()
+                  .having((e) => e.nonce, 'nonce', BigInt.from(5))
+                  .having((e) => e.observedNonce, 'observed', BigInt.from(6)),
+            ),
+          );
+          expect(p.lookedUpHash, hash);
+          expect(p.simulatedBlockTag, isNull);
+        });
+      }
+
+      test('proceeds when the node reports the same nonce', () async {
+        final prepared = await prepare(params(originalNonce: BigInt.from(5)));
+        expect(prepared.nonce, BigInt.from(5));
+      });
+
+      test('proceeds when the node no longer knows the hash', () async {
+        final prepared = await prepare(params());
+        expect(prepared.nonce, BigInt.from(5));
+      });
     });
   });
 }

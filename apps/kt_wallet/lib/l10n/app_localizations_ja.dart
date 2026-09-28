@@ -1153,6 +1153,14 @@ class AppLocalizationsJa extends AppLocalizations {
       'この取引には高速化またはキャンセルに必要なチェーンパラメータがありません。';
 
   @override
+  String get txReplacementNonceMismatch =>
+      'ネットワーク上のこの取引の nonce がローカルの記録と一致しません。二重送金を防ぐため、高速化とキャンセルを中止しました。';
+
+  @override
+  String get txReplacementNetworkUnavailable =>
+      '高速化またはキャンセルに必要なデータをネットワークノードから取得できませんでした。接続または RPC 設定を確認して、もう一度お試しください。';
+
+  @override
   String txReplacementWrongNetwork(String network) {
     return 'この取引は $network のものです。高速化やキャンセルの前に、そのネットワークに切り替えてください。';
   }

@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:chains/chains.dart';
+import 'package:chains/rpc.dart' show RpcException;
 import 'package:core_crypto/core_crypto.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -65,6 +66,17 @@ Transaction _original() => const Transaction(
 );
 
 class _ResponseLostReplacementService extends LocalTransferService {
+  _ResponseLostReplacementService({
+    this.nonceMismatch = false,
+    this.prepareError,
+  });
+
+  /// Simulates the node reporting the original hash under another nonce.
+  final bool nonceMismatch;
+
+  /// Thrown from preparation, e.g. an unreachable RPC node.
+  final Object? prepareError;
+  String? preparedOriginalHash;
   int prepareCalls = 0;
   int signCalls = 0;
   int broadcastCalls = 0;
@@ -83,8 +95,17 @@ class _ResponseLostReplacementService extends LocalTransferService {
     required BigInt previousMaxFeePerGas,
     required BigInt previousGasLimit,
     required bool cancel,
+    required String? originalHash,
   }) async {
     prepareCalls++;
+    preparedOriginalHash = originalHash;
+    if (prepareError case final error?) throw error;
+    if (nonceMismatch) {
+      throw EvmReplacementNonceMismatch(
+        nonce: nonce,
+        observedNonce: nonce + BigInt.one,
+      );
+    }
     return PreparedEvmTransfer(
       chain: chain,
       evmChainId: evmChainId,
@@ -271,5 +292,104 @@ void main() {
     expect(service.prepareCalls, 0);
     expect(service.signCalls, 0);
     expect(service.broadcastCalls, 0);
+  });
+  testWidgets(
+    'a nonce mismatch on the original hash stops replacement before signing',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      SharedPreferences.setMockInitialValues({});
+      final prefs = AppPrefsController();
+      await prefs.load();
+      final service = _ResponseLostReplacementService(nonceMismatch: true);
+      final wallets = WalletController(WalletManager(initial: [_wallet()]));
+      final original = _original();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: WalletScope(
+            controller: wallets,
+            child: NetworkScope(
+              controller: NetworkController(),
+              child: AppPrefsScope(
+                controller: prefs,
+                child: TxDetailScreen(
+                  transaction: original,
+                  transferService: service,
+                  authGate: const FakeTransactionAuthGate(true),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Speed up'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('kt-dialog-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(service.preparedOriginalHash, original.hash);
+      expect(service.signCalls, 0);
+      expect(service.broadcastCalls, 0);
+      expect(
+        find.textContaining('different nonce than recorded locally'),
+        findsOneWidget,
+      );
+    },
+  );
+  testWidgets('an unreachable node explains why replacement could not start', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    SharedPreferences.setMockInitialValues({});
+    final prefs = AppPrefsController();
+    await prefs.load();
+    final service = _ResponseLostReplacementService(
+      prepareError: RpcException('RPC transport unavailable'),
+    );
+    final wallets = WalletController(WalletManager(initial: [_wallet()]));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: WalletScope(
+          controller: wallets,
+          child: NetworkScope(
+            controller: NetworkController(),
+            child: AppPrefsScope(
+              controller: prefs,
+              child: TxDetailScreen(
+                transaction: _original(),
+                transferService: service,
+                authGate: const FakeTransactionAuthGate(true),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel transaction'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('kt-dialog-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(service.prepareCalls, 1);
+    expect(service.signCalls, 0);
+    expect(service.broadcastCalls, 0);
+    expect(
+      find.textContaining('Check your connection or RPC settings'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('not submitted'), findsNothing);
   });
 }
