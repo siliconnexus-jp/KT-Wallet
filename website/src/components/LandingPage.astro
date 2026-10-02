@@ -23,6 +23,22 @@ const chains = [
 ];
 
 const featureClasses = ['feature-wide', 'feature-tall', '', '', 'feature-wide'];
+const apps = [
+  {
+    name: 'KT Wallet',
+    icon: '/assets/kt-wallet-logo.png',
+    body: copy.download.walletBody,
+    appStore: 'https://apps.apple.com/us/app/kt-wallet/id6794879688',
+    googlePlay: 'https://play.google.com/store/apps/details?id=cc.siliconnexus.ktwallet',
+  },
+  {
+    name: 'KT ColdSigner',
+    icon: '/assets/kt-cold-logo.png',
+    body: copy.download.signerBody,
+    appStore: 'https://apps.apple.com/us/app/kt-coldsigner/id6794806858',
+    googlePlay: 'https://play.google.com/store/apps/details?id=cc.siliconnexus.ktwallet.coldsigner',
+  },
+];
 ---
 
 <!doctype html>
@@ -263,30 +279,23 @@ const featureClasses = ['feature-wide', 'feature-tall', '', '', 'feature-wide'];
           </div>
 
           <div class="download-options">
-            <a class="download-card download-card-live" href="https://apps.apple.com/us/app/kt-wallet/id6794879688" target="_blank" rel="noopener noreferrer">
-              <img class="platform-icon" src="/assets/kt-wallet-logo.png" alt="" width="44" height="44" />
-              <div>
-                <strong>KT Wallet</strong>
-                <span>{copy.download.iosWalletBody}</span>
+            {apps.map((app) => (
+              <div class="download-card download-app">
+                <img class="platform-icon" src={app.icon} alt="" width="44" height="44" />
+                <div>
+                  <strong>{app.name}</strong>
+                  <span>{app.body}</span>
+                </div>
+                <div class="store-links">
+                  <a class="store-link" href={app.appStore} target="_blank" rel="noopener noreferrer" aria-label={`${app.name} – App Store`}>
+                    App Store <span aria-hidden="true">↗</span>
+                  </a>
+                  <a class="store-link" href={app.googlePlay} target="_blank" rel="noopener noreferrer" aria-label={`${app.name} – Google Play`}>
+                    Google Play <span aria-hidden="true">↗</span>
+                  </a>
+                </div>
               </div>
-            </a>
-
-            <a class="download-card download-card-live" href="https://apps.apple.com/us/app/kt-coldsigner/id6794806858" target="_blank" rel="noopener noreferrer">
-              <img class="platform-icon" src="/assets/kt-cold-logo.png" alt="" width="44" height="44" />
-              <div>
-                <strong>KT ColdSigner</strong>
-                <span>{copy.download.iosSignerBody}</span>
-              </div>
-            </a>
-
-            <div class="download-card is-pending">
-              <div class="platform-icon platform-android" aria-hidden="true">A</div>
-              <div>
-                <strong>Android APK</strong>
-                <span>{copy.download.androidBody}</span>
-              </div>
-              <span class="pending-pill">{copy.download.pending}</span>
-            </div>
+            ))}
 
             <a class="download-card download-card-live" href={repo} target="_blank" rel="noreferrer">
               <div class="platform-icon platform-source" aria-hidden="true">&lt;/&gt;</div>

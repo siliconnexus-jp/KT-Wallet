@@ -109,11 +109,9 @@ export const translations = {
     "download": {
       "titleFirst": "Start with the source.",
       "titleSecond": "Follow official releases.",
-      "body": "Both wallets are available on the App Store. Download KT Wallet for everyday use, or KT ColdSigner for offline signing on a separate device kept disconnected from the network.",
-      "iosWalletBody": "Download on the App Store · Online wallet",
-      "iosSignerBody": "Download on the App Store · Offline signing",
-      "androidBody": "Public download link pending",
-      "pending": "Not yet available",
+      "body": "Both wallets are available on the App Store and Google Play. Download KT Wallet for everyday use, or KT ColdSigner for offline signing on a separate device kept disconnected from the network.",
+      "walletBody": "Online wallet · iOS & Android",
+      "signerBody": "Offline signing · iOS & Android",
       "sourceTitle": "Source & build guides",
       "sourceBody": "Both apps, the backend and build instructions",
       "repository": "Official repository:"
@@ -232,11 +230,9 @@ export const translations = {
     "download": {
       "titleFirst": "源码，现在就能看。",
       "titleSecond": "安装，请认准官方。",
-      "body": "两款钱包现已上架 App Store。日常使用请选择 KT Wallet；离线签名请选择 KT ColdSigner，安装在独立设备上，并保持断网使用。",
-      "iosWalletBody": "从 App Store 下载 · 在线钱包",
-      "iosSignerBody": "从 App Store 下载 · 离线签名",
-      "androidBody": "公开下载链接准备中",
-      "pending": "暂未开放",
+      "body": "两款钱包现已上架 App Store 与 Google Play。日常使用请选择 KT Wallet；离线签名请选择 KT ColdSigner，安装在独立设备上，并保持断网使用。",
+      "walletBody": "在线钱包 · iOS 与 Android",
+      "signerBody": "离线签名 · iOS 与 Android",
       "sourceTitle": "源码与构建指南",
       "sourceBody": "两款应用、后端网关与完整构建说明",
       "repository": "官方仓库："
@@ -355,11 +351,9 @@ export const translations = {
     "download": {
       "titleFirst": "ソースは、今すぐ。",
       "titleSecond": "入手は、公式から。",
-      "body": "両アプリを App Store で公開しています。日常の利用には KT Wallet、オフライン署名には KT ColdSigner をお選びください。KT ColdSigner は別の端末にインストールし、ネット接続を切って使用してください。",
-      "iosWalletBody": "App Store からダウンロード · オンラインウォレット",
-      "iosSignerBody": "App Store からダウンロード · オフライン署名",
-      "androidBody": "公開ダウンロードリンクを準備中",
-      "pending": "未公開",
+      "body": "両アプリを App Store と Google Play で公開しています。日常の利用には KT Wallet、オフライン署名には KT ColdSigner をお選びください。KT ColdSigner は別の端末にインストールし、ネット接続を切って使用してください。",
+      "walletBody": "オンラインウォレット · iOS・Android",
+      "signerBody": "オフライン署名 · iOS・Android",
       "sourceTitle": "ソースとビルド手順",
       "sourceBody": "両アプリ、バックエンド、ビルドガイド",
       "repository": "公式リポジトリ："
